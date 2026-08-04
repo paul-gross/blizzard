@@ -432,11 +432,11 @@ def _worker_usage_sample(
     sample = ctx.harness.parse_usage(output, kind, model=lease.resolved_model) if output else None
     if sample is not None:
         return sample
-    if ctx.transcripts is None or lease.session_id is None:
+    if lease.session_id is None:
         return None
     fallback_workdir = bindings[0].workdir if bindings else None
     spawn_cwd = resolve_spawn_cwd(ctx.config.workspace_root, fallback_workdir)
-    lines = ctx.transcripts.read_raw_lines(lease.session_id, spawn_cwd=spawn_cwd)
+    lines = ctx.harness.transcript_source().read_raw_lines(lease.session_id, spawn_cwd=spawn_cwd)
     if not lines:
         return None
     return ctx.harness.sum_transcript_usage(lines, kind, model=lease.resolved_model)
@@ -2384,11 +2384,10 @@ def _rotation_breach(ctx: LoopContext, head: PoolHead, node: NodeConfig, spawn_c
     ):
         return "max_invocations"
 
-    if rotate.max_transcript_bytes is not None and ctx.transcripts is not None:
-        # `ctx.transcripts` is `| None` (wired at both real construction sites, absent only
-        # in a test context); treat that absence as unreadable too, exactly like a missing
-        # file — not as a zero that would make the threshold silently inert.
-        size = ctx.transcripts.size_bytes(head.session_id, spawn_cwd=spawn_cwd)
+    if rotate.max_transcript_bytes is not None:
+        # An unwired/null harness transcript source reads every size as `None`, exactly
+        # like a missing file — never a zero that would make the threshold silently inert.
+        size = ctx.harness.transcript_source().size_bytes(head.session_id, spawn_cwd=spawn_cwd)
         if size is not None and size > rotate.max_transcript_bytes:
             return "max_transcript_bytes"
 

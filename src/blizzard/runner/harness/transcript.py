@@ -5,8 +5,14 @@ knowledge — Claude Code's ``~/.claude/projects/<mangled-cwd>/<session-id>.json
 is nothing an opencode or codex adapter shares. This module is the harness-agnostic
 value shape and Protocol that knowledge sits behind
 (:meth:`~blizzard.runner.harness.adapter.IHarnessAdapter.transcript_source`), the shape
-:mod:`.usage` and :mod:`.fingerprint` already have — stdlib-only, dependency-free
-(``bzh:domain-core``).
+:mod:`.usage` and :mod:`.fingerprint` already have. The value shapes, the Protocol, and
+:class:`NullTranscriptSource` are stdlib-only, dependency-free (``bzh:domain-core``) —
+:class:`TranscriptErrorFactory` is the one deliberate exception living alongside them
+(the ``structlog`` import below is entirely its own): error logging on a source read
+failure is shared, harness-agnostic infrastructure in exactly the same sense the
+Protocol above it is (any future per-harness source reads files and can fail the same
+way), so it sits here rather than duplicated into each harness's own ``internal/``
+adapter — a documented gap in this module's own dependency purity, not an oversight.
 
 :class:`NormalizedTurn` is the turn vocabulary a per-harness source produces: ``env``/
 ``asst``/``tool`` (the panel's existing three) plus ``thinking`` — a kind the current
@@ -60,6 +66,22 @@ SidechainLink = Literal["agent-id", "uuid-chain", "prompt-timestamp", "unlinked"
 #: so it is never a member here — the panel projection widens into it instead.
 TranscriptReadReason = Literal["not_found", "unreadable"]
 
+#: Which raw shape a tool call's ``input`` was minted from — the discriminator a
+#: re-materializing consumer (the panel projection) needs to reproduce the old
+#: parser's blanket ``json.dumps(raw_input)`` exactly, rather than guessing from
+#: ``input``/``input_unparsed`` alone (ambiguous: an absent input and an empty
+#: object both leave ``input_unparsed`` ``None``; a bare string that happens to
+#: itself parse as JSON is indistinguishable from an already-serialized one).
+#: ``"object"`` — ``input`` holds the real mapping, ``input_unparsed`` is ``None``.
+#: ``"absent"`` — the record carried no ``input`` (or an explicit JSON ``null``);
+#: the old parser rendered this as ``""``, not ``"{}"``. ``"string"`` — the record's
+#: ``input`` was itself a bare JSON string, held verbatim (unquoted) on
+#: ``input_unparsed``; re-materializing it needs an explicit ``json.dumps`` to
+#: match the old parser's quoting. ``"other"`` — any other non-object value (a
+#: list, a number, a bool); ``input_unparsed`` already holds its final
+#: ``json.dumps`` form, emitted verbatim.
+ToolInputShape = Literal["object", "absent", "string", "other"]
+
 
 @dataclass(frozen=True)
 class TranscriptPosition:
@@ -80,7 +102,10 @@ class ToolCall:
     ``input`` is the parsed mapping a consumer (the analytics contract this issue
     exists for) queries directly; ``input_unparsed`` carries a non-object input
     verbatim instead of coercing it into an empty mapping, so a malformed or
-    scalar ``input`` is never silently discarded. ``output``/``output_truncated``
+    scalar ``input`` is never silently discarded. ``input_shape`` names which raw
+    shape produced the pair (:data:`ToolInputShape`) — the explicit discriminator a
+    re-materializing consumer needs, since ``input``/``input_unparsed`` alone are
+    ambiguous over two independent shape questions. ``output``/``output_truncated``
     mirror the panel's existing tool-result shape: ``output is None`` while the
     matching result has not yet arrived in the file (a live turn, not corruption).
     """
@@ -88,6 +113,7 @@ class ToolCall:
     name: str
     input: Mapping[str, Any]
     input_unparsed: str | None
+    input_shape: ToolInputShape
     tool_use_id: str | None
     output: str | None
     output_truncated: bool
@@ -168,14 +194,22 @@ class TranscriptBatch:
 
 
 class TranscriptErrorFactory:
-    """The harness seam's own injected error-logging seam.
+    """The harness seam's own injected error-logging seam (``bzh:repository-split``'s
+    exemplar shape).
 
-    A deliberate near-duplicate of
-    :class:`~blizzard.runner.transcripts.repository.TranscriptErrorFactory` (``bzh:
-    repository-split``'s exemplar shape, narrowed exactly like the sibling it
-    supersedes) — kept as two small classes rather than one shared import so the
-    harness seam never imports :mod:`blizzard.runner.transcripts`, and so the old one
-    can be deleted independently once its last caller is gone (phase 4).
+    ``from_io`` is a boundary failure: the caller's read is over, transformed into
+    ``TranscriptBatch.available=False`` (or an empty/``None`` reply on the
+    ``read_raw_lines``/``size_bytes`` siblings) — ERROR per ``bzh:structlog-logging``.
+    ``from_io_recovered`` is for a caller that reads on regardless (one sidecar among
+    several failed to open; the batch it belongs to still reports
+    ``available=True``) — WARNING, the same convention's "a recoverable condition the
+    caller continued past." ``not_found`` is DEBUG: no session file at all is this
+    seam's most routine outcome (a lease with no transcript yet), the same level the
+    replaced ``transcripts/internal/jsonl_transcript_repository.py`` logged it at —
+    surfaced here under this seam's own logger name
+    (``blizzard.runner.harness``, bound by the composition root, not the deleted
+    module's ``blizzard.runner.transcripts``) rather than the old one, so an operator
+    filter keyed on the old logger name no longer matches it.
     """
 
     def __init__(self, log: structlog.stdlib.BoundLogger) -> None:
@@ -185,6 +219,18 @@ class TranscriptErrorFactory:
         """Log ``exc`` once at ERROR with structured fields. Callers must not log it again."""
         detail = str(exc).strip()
         self._log.error(message, session_id=session_id, detail=detail)
+
+    def from_io_recovered(self, exc: Exception, message: str, *, session_id: str = "") -> None:
+        """Log ``exc`` once at WARNING: the caller is skipping this one failure and
+        continuing its read, not aborting it. Callers must not log it again."""
+        detail = str(exc).strip()
+        self._log.warning(message, session_id=session_id, detail=detail)
+
+    def not_found(self, *, session_id: str, projects_root: str) -> None:
+        """Log at DEBUG: no transcript file matched ``session_id`` under
+        ``projects_root`` — distinguishes "wrong root" from "the agent never wrote
+        one," the most likely symptom of a globbed root holding nothing."""
+        self._log.debug("transcript not found", session_id=session_id, projects_root=projects_root)
 
 
 class IHarnessTranscriptSource(Protocol):

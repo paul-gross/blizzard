@@ -82,7 +82,13 @@ def meta_record(text: str = "/context output") -> str:
 
 
 def sidechain_record(text: str = "subagent chatter") -> str:
-    """An `isSidechain` record — a subagent's spliced-in conversation, filtered."""
+    """An `isSidechain` record — a subagent's spliced-in conversation.
+
+    The normalizer routes this to inline-sidechain assembly (nested on its spawning
+    tool call, or `unlinked_sidechains` when no route resolves one) rather than
+    dropping it — the panel projection is what filters sidechains back out, not the
+    normalizer this fixture most often feeds.
+    """
     return _line(
         {"type": "assistant", "message": {"role": "assistant", "content": text}, "isSidechain": True, "uuid": "s1"}
     )

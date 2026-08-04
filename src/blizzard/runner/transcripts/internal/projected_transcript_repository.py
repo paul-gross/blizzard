@@ -37,7 +37,12 @@ what it renders today:
   blanket ``_clean`` (ANSI-strip + cap) over the serialized string, this
   re-materialization only caps — it does not re-run ANSI stripping, since a tool
   call's structured *input* practically never carries raw terminal escapes (that is a
-  tool *output* phenomenon, still stripped in the normalizer, unaffected here).
+  tool *output* phenomenon, still stripped in the normalizer, unaffected here). The
+  re-materialization itself is byte-identical with the old parser's blanket
+  ``json.dumps(raw_input)`` for every input shape, driven by
+  :attr:`~blizzard.runner.harness.transcript.ToolCall.input_shape` rather than
+  re-inspecting ``input``/``input_unparsed`` (ambiguous on its own — see that field's
+  own docstring).
 """
 
 from __future__ import annotations
@@ -131,17 +136,19 @@ def _project_turn(turn: NormalizedTurn) -> Turn:
 
 
 def _serialize_tool_input(tool: ToolCall) -> tuple[str, bool]:
-    if tool.input_unparsed is not None:
-        # A bare non-JSON string is kept as-is by the normalizer (`ToolCall`'s own
-        # contract); anything else non-object was already `json.dumps`'d there. Tell
-        # the two apart by attempting to parse, so a plain string is re-quoted exactly
-        # as the old parser's blanket `json.dumps(raw_input)` would have.
-        try:
-            json.loads(tool.input_unparsed)
-        except (json.JSONDecodeError, ValueError):
-            serialized = json.dumps(tool.input_unparsed)
-        else:
-            serialized = tool.input_unparsed
+    # `input_shape` is the explicit discriminator (`ToolInputShape`) — never guessed
+    # by re-parsing `input_unparsed`, which is ambiguous whenever a bare string
+    # happens to itself parse as JSON (`"123"`, `"true"`, ...). Byte-identical with
+    # the old parser's blanket `json.dumps(raw_input)` for every shape but "absent",
+    # which the old parser rendered as `""` rather than `json.dumps(None)`.
+    if tool.input_shape == "absent":
+        serialized = ""
+    elif tool.input_shape == "string":
+        assert tool.input_unparsed is not None
+        serialized = json.dumps(tool.input_unparsed)
+    elif tool.input_shape == "other":
+        assert tool.input_unparsed is not None
+        serialized = tool.input_unparsed
     else:
         serialized = json.dumps(tool.input)
     if len(serialized) > MAX_BLOCK_CHARS:

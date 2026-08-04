@@ -35,7 +35,6 @@ from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.loop.steps import mark_crash_resume_intents, mark_resume_intents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.transcripts.internal.projected_transcript_repository import ProjectedTranscriptRepository
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -106,10 +105,6 @@ def build_loop_context(
         runner_ceiling_window_hours=config.runner_ceiling_window_hours,
         external_usage_sample_interval_seconds=config.external_usage_sample_interval_seconds,
     )
-    # The envelope-less usage fallback's transcript read (issue #58) and the rotation
-    # signal (issue #144), projected off the harness's own source (blizzard#245) —
-    # obtained via the accessor, never constructed twice.
-    transcripts = ProjectedTranscriptRepository(harness.transcript_source())
     return LoopContext(
         store=store,
         clock=SystemClock(),
@@ -122,7 +117,6 @@ def build_loop_context(
         # its child env built from the same worker-env allowlist the harness children use.
         check_runner=SubprocessCheckRunner(env_passthrough=config.worker_env_passthrough),
         config=loop_config,
-        transcripts=transcripts,
     )
 
 

@@ -68,8 +68,8 @@ Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the
   :class:`~blizzard.runner.harness.transcript.NullTranscriptSource` (this adapter never
   constructs a real one itself, ``bzh:dependency-injection``). The composition roots
   that need real Claude Code transcript reads (``app.py``, ``loop/build.py``) inject
-  one; ``cli.py``'s resume/status construction and every test construction keep the
-  default.
+  one; ``cli.py``'s one adapter construction (the ``external-usage probe`` diagnostic)
+  and every test construction keep the default — neither reads a transcript.
 
 ``spawn``/``resume_with_message`` redirect the worker's stdout to an **injected**
 per-lease file (``preamble.stdout_path`` / the ``stdout_path`` param) rather than
@@ -315,8 +315,8 @@ class ClaudeCodeAdapter:
         # The transcript source (blizzard#245), injected — this adapter never
         # constructs its own (`bzh:dependency-injection`). Defaulted to the null
         # source so the construction sites that don't need a real one (`cli.py`'s
-        # `resume_command`/status paths, every test construction) keep building the
-        # same adapter they always have.
+        # `external-usage probe` diagnostic, every test construction) keep building
+        # the same adapter they always have.
         self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
 
     def resolve_model(self, preferences: Sequence[str]) -> str:

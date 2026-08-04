@@ -246,3 +246,33 @@ def test_max_block_chars_caps_a_serialized_tool_input_and_flags_truncated(
     assert transcript.turns[0].tool_input is not None
     assert len(transcript.turns[0].tool_input) == 10
     assert transcript.turns[0].truncated is True
+
+
+@pytest.mark.unit
+def test_absent_tool_input_serializes_to_empty_string_not_json_null(tmp_path: Path) -> None:
+    """The old parser's blanket ``json.dumps(raw_input) if raw_input is not None else
+    ""`` rendered a missing/``null`` ``input`` as ``""`` — never ``json.dumps({})``
+    (``"{}"``), which is what re-materializing off the normalizer's own
+    ``input={}`` fallback alone (with no discriminator) would produce."""
+    content = [{"type": "tool_use", "id": "t1", "name": "Bash"}]  # no `input` key at all
+    line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
+    _write(tmp_path, [line])
+    transcript = _read(tmp_path)
+
+    assert transcript.turns[0].kind == "tool"
+    assert transcript.turns[0].tool_input == ""
+
+
+@pytest.mark.unit
+def test_bare_string_tool_input_that_parses_as_json_is_still_requoted(tmp_path: Path) -> None:
+    """A bare string ``input`` (malformed relative to the tool_use schema, but seen in
+    the wild) is re-quoted on the way back out, exactly as the old parser's blanket
+    ``json.dumps(raw_input)`` would have — even when the string itself happens to
+    parse as JSON (``"123"``), which a re-parse-to-tell-apart heuristic gets wrong."""
+    content = [{"type": "tool_use", "id": "t1", "name": "Weird", "input": "123"}]
+    line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
+    _write(tmp_path, [line])
+    transcript = _read(tmp_path)
+
+    assert transcript.turns[0].kind == "tool"
+    assert transcript.turns[0].tool_input == json.dumps("123")

@@ -37,7 +37,6 @@ from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.runner.store.schema import metadata as runner_metadata
-from blizzard.runner.transcripts.repository import Transcript
 from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, RouteView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
@@ -270,10 +269,11 @@ class FakeProvider:
 
 
 class FakeTranscriptSource:
-    """A scriptable :class:`IHarnessTranscriptSource`: canned batches by session id
-    (blizzard#245), mirroring how :class:`FakeTranscripts` scripts the panel's own
-    read path. An unscripted session reads as ``not_found`` — today's null-source
-    shape — so a test only names the sessions it cares about.
+    """A scriptable :class:`IHarnessTranscriptSource`: canned batches, raw lines, and
+    sizes by session id (blizzard#245) — the one fake every consumer of the harness's
+    transcript seam scripts against, panel and loop alike (``FakeHarness.transcript_source``,
+    ``harness.transcript_source()``). An unscripted session reads as ``not_found`` — today's
+    null-source shape — so a test only names the sessions it cares about.
     """
 
     def __init__(
@@ -376,9 +376,10 @@ class FakeHarness:
         self.external_usage_snapshot = external_usage_snapshot
         self.external_usage_raises = external_usage_raises
         self.external_usage_calls = 0
-        # Scriptable, not the null source (blizzard#245) — a test that drives the
-        # projection needs canned batches, mirroring `FakeTranscripts` on the panel
-        # side. Defaults to an empty `FakeTranscriptSource` (every session `not_found`).
+        # Scriptable, not the null source (blizzard#245) — a test that drives the panel
+        # projection or the loop's usage-fallback/rotation reads needs canned batches,
+        # lines, or sizes. Defaults to an empty `FakeTranscriptSource` (every session
+        # `not_found`, no lines, no size).
         self._transcript_source: IHarnessTranscriptSource = transcript_source or FakeTranscriptSource()
 
     def spawn(
@@ -510,34 +511,6 @@ class FakeHarness:
         return self._transcript_source
 
 
-class FakeTranscripts:
-    """A scriptable :class:`IReadTranscriptRepository`: canned raw lines by session id
-    (issue #58's envelope-less usage fallback) and canned sizes (issue #144's
-    ``rotate.max_transcript_bytes``). ``read_turns`` is unused by the loop — stubbed only
-    to satisfy the Protocol.
-
-    ``sizes_by_session`` is deliberately separate from ``lines_by_session``: a rotation
-    test needs to script an *unreadable* size (a session absent from the map, reading
-    ``None``) independently of whether that session has lines."""
-
-    def __init__(
-        self,
-        lines_by_session: dict[str, list[str]] | None = None,
-        sizes_by_session: dict[str, int] | None = None,
-    ) -> None:
-        self._lines = lines_by_session or {}
-        self._sizes = sizes_by_session or {}
-
-    def read_turns(self, session_id: str, *, spawn_cwd: str | None) -> Transcript:
-        return Transcript(session_id=session_id, available=False, reason="not_found", turns=[], truncated=False)
-
-    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
-        return list(self._lines.get(session_id, []))
-
-    def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
-        return self._sizes.get(session_id)
-
-
 class FakeProbe:
     """A scriptable :class:`IProcessProbe`: an explicit set of live (pid, start)."""
 
@@ -608,7 +581,6 @@ def make_context(
     check_runner: FakeCheckRunner | None = None,
     clock: FixedClock | None = None,
     config: LoopConfig | None = None,
-    transcripts: FakeTranscripts | None = None,
 ) -> LoopContext:
     """Assemble a :class:`LoopContext` from a real store and injected fakes."""
     resolved_config = config if config is not None else LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1)
@@ -632,7 +604,6 @@ def make_context(
         worktree_git=_wt,
         check_runner=_check_runner,
         config=resolved_config,
-        transcripts=transcripts,
     )
 
 

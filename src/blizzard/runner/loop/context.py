@@ -20,7 +20,6 @@ from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.repository import IWriteRunnerStore
-from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 
 #: The retry budget a node with no ``retries.max`` falls back to (a chosen constant,
 #: not derived from a formula): an execution-attempt cap of 2 before escalation to
@@ -117,10 +116,6 @@ class LoopContext:
     process: IProcessProbe
     worktree_git: IWorktreeGit
     config: LoopConfig
-    #: The read-only transcript seam (issue #58's envelope-less usage fallback) — ``None``
-    #: when not wired (every test that does not exercise the fallback), so the loop's
-    #: other collaborators stay untouched by this addition.
-    transcripts: IReadTranscriptRepository | None = None
     #: The check-runner seam (issue #114) — runs a node's ``checks:`` at worker exit.
     #: ``None`` when not wired (loop tests that never exercise checks), so a node with no
     #: ``checks:`` still ticks with the seam absent; a node that declares ``checks:`` needs it.

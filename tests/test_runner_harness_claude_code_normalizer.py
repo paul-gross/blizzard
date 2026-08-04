@@ -175,6 +175,7 @@ def test_tool_input_survives_as_a_mapping_never_a_json_string() -> None:
     assert tool.input == {"path": "a.py", "limit": 10}
     assert not isinstance(tool.input, str)
     assert tool.input_unparsed is None
+    assert tool.input_shape == "object"
 
 
 @pytest.mark.unit
@@ -195,6 +196,27 @@ def test_non_object_tool_input_is_kept_unparsed_not_coerced() -> None:
     assert tool is not None
     assert tool.input == {}
     assert tool.input_unparsed == "raw-string-input"
+    assert tool.input_shape == "string"
+
+
+@pytest.mark.unit
+def test_absent_tool_input_is_shaped_absent_not_object() -> None:
+    """Distinct from an actual empty object (``input_shape == "object"``) — the
+    re-materializing projection treats the two differently (blizzard#245 F10)."""
+    line = json.dumps(
+        {
+            "type": "assistant",
+            "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t1", "name": "Bash"}]},
+            "uuid": "a1",
+        }
+    )
+    result = normalize_lines([line])
+
+    tool = result.turns[0].tool
+    assert tool is not None
+    assert tool.input == {}
+    assert tool.input_unparsed is None
+    assert tool.input_shape == "absent"
 
 
 # --------------------------------------------------------------------------- #
@@ -327,7 +349,8 @@ def test_unresolvable_inline_sidechain_surfaces_unlinked_not_among_top_level_tur
     (`plan-review:F5`): an isSidechain record used to yield zero turns, silently. The
     normalizer now *surfaces* it — still zero top-level turns, but present as data on
     `unlinked_sidechains` rather than dropped. The projection is what re-establishes the
-    panel's zero-turn outcome, one layer down (phase 4)."""
+    panel's zero-turn outcome, one layer down
+    (`transcripts/internal/projected_transcript_repository.py`)."""
     result = normalize_lines([fx.sidechain_record()])
 
     assert result.turns == []
