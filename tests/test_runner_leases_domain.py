@@ -307,10 +307,10 @@ def test_list_active_joins_binding_and_heartbeat(tmp_path) -> None:  # type: ign
 
 @pytest.mark.component
 def test_list_active_renders_a_just_resumed_lease_running_not_stale(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The panel reuses REAP's baseline (issue #150), so a lease resumed after a long
-    park does not render ``stale`` while REAP is (correctly) leaving it alone. Its
-    ``last_heartbeat_at`` column stays honest — the old beat, not the spawn — because it
-    reports what the *worker* last did, not when staleness is measured from."""
+    """Reuses REAP's baseline (issue #150): a lease resumed after a long park does not
+    render ``stale``. Its ``last_heartbeat_at`` stays honest — the old beat, not the
+    spawn — since it reports what the worker last did, not when staleness is measured
+    from."""
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
@@ -375,10 +375,9 @@ def test_list_recent_appends_closed_leases_after_active(tmp_path) -> None:  # ty
 
 @pytest.mark.component
 def test_list_recent_active_lease_not_crowded_out_by_newer_closed_leases(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The rejected-design bug: a single newest-N-overall read would let
-    recently-closed leases crowd a long-running active agent out of the panel.
-    Pinned here with ``recent_limit=1`` — the active lease is older than both
-    closed ones and must still appear."""
+    """A single newest-N-overall read would let recently-closed leases crowd out a
+    long-running active one. Pinned here with ``recent_limit=1`` — the active lease is
+    older than both closed ones and must still appear."""
     store = _store(tmp_path)
     old_active_at = _NOW - timedelta(hours=2)
     _seed_lease(store, chunk="ch_active", lease="lease_active", created_at=old_active_at)
@@ -428,10 +427,10 @@ def test_list_recent_closed_activity_carries_no_environment_binding(tmp_path) ->
 
 @pytest.mark.unit
 def test_last_activity_uses_a_supplied_heartbeat_without_re_reading_it(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The panel already reads `latest_heartbeat` for its own column, so it hands the
-    value in rather than making `last_activity` issue the identical query again. The
-    sentinel keeps a supplied `None` — a lease that genuinely never beat — distinct from
-    "not supplied, go read it"."""
+    """The caller may already have read `latest_heartbeat` for its own use, so it can
+    hand the value in rather than have `last_activity` issue the identical query again.
+    The sentinel keeps a supplied `None` — a lease that genuinely never beat — distinct
+    from "not supplied, go read it"."""
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_spawn("lease_1", pid=1, process_start_time="s1", session_id="sess", spawned_at=_NOW)

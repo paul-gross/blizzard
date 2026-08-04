@@ -136,9 +136,7 @@ def test_missing_feature_title_falls_back_to_the_branch_and_land_strings(
 
     assert module.main() == 0
 
-    # the PR title is the bare branch — no `blizzard: land` prefix ...
     assert _pr_title(calls) == _BRANCH
-    # ... but the merge commit body keeps the `blizzard: land <repo>` fallback.
     assert _merge_commit_message(calls) == f"blizzard: land {_REPO}"
 
 
@@ -544,13 +542,9 @@ def test_an_empty_check_runs_list_is_not_a_substantive_wait(
 def test_an_empty_commit_set_fails_the_node_instead_of_reporting_landed(
     script, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """The regression that let a fully-built feature reach `done` undelivered.
-
-    Every land policy filtered `commits` through the `merged/<repo>` markers and printed
-    `landed` when nothing remained — which is right when the markers are all present, and
-    catastrophically wrong when there were no commits to begin with. The two cases are
-    indistinguishable after the filter, so the empty *input* is caught before it.
-    """
+    """Every land policy filters `commits` through `merged/<repo>` markers before
+    deciding `landed` — indistinguishable from "already delivered" unless the empty
+    *input* case is caught before the filter."""
     monkeypatch.setenv("BZ_FORGE_URL", "http://forge")
     monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
     monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps([]))
@@ -626,9 +620,8 @@ def test_a_non_code_chunk_lands_empty_because_its_graph_promised_no_commit(
 
 @pytest.mark.parametrize("script", [land_default, land_pr_ci, land_ff], ids=["default", "pr-ci", "ff"])
 def test_an_absent_expectation_signal_is_treated_as_expected(script, monkeypatch: pytest.MonkeyPatch) -> None:
-    """An older executor injects no signal. Of the two possible defaults, failing loudly
-    on a set the policy cannot explain is the safer one — the alternative silently
-    restores the exact behavior that let a built feature reach `done` undelivered."""
+    """An older executor injects no signal; failing loudly on a set the policy cannot
+    explain is safer than silently assuming "expected"."""
     monkeypatch.setenv("BZ_FORGE_URL", "http://forge")
     monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
     monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps([]))

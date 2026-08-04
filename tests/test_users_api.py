@@ -273,10 +273,7 @@ def test_each_role_change_emits_a_user_role_changed_fact(tmp_path: Path) -> None
 
 
 def test_users_api_is_inert_under_none_mode(tmp_path: Path) -> None:
-    """Under ``none`` the implicit operator/superuser resolves everywhere and there is
-    no store-backed user to list — the route still answers (``require`` grants
-    unconditionally), but the fleet's ``services.users`` is the only real user store,
-    which under ``none`` holds nothing seeded through this route's own gate."""
+    """Under ``none`` the route still answers, but there is no store-backed user to list."""
     hub = build_hub(tmp_path)  # auth_mode defaults to "none"
     resp = hub.client.get("/api/users")
     assert resp.status_code == 200

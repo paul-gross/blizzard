@@ -6,9 +6,8 @@ last tick), ``GET /api/environments`` (the full configured pool, issue #106), ``
 (open questions), ``GET /api/escalations`` (parked escalations with their
 literal resume command), and ``GET /api/takeovers`` (open operator takeovers —
 the stranded-takeover recovery surface, issue #52) — ``blizzard runner status``'s
-five reads. Modeled on ``wire/lease.py``'s and ``wire/runner.py``'s shapes;
-datetimes are ISO-8601 strings with an explicit UTC offset, serialized via
-``foundation/store/utc.py``'s ``iso_utc`` (``bzh:utc-instants``).
+five reads. Datetimes are ISO-8601 strings with an explicit UTC offset
+(``bzh:utc-instants``).
 """
 
 from __future__ import annotations
@@ -35,8 +34,8 @@ class CapacitiesView(BaseModel):
 class HubConnectivityView(BaseModel):
     """Hub reachability (derived, not probed) plus the outbound backlog depth.
 
-    ``endpoint`` is the configured hub base URL (``RunnerConfig.hub_url``) — the
-    local panel's link out to the fleet board; connectivity facts, not a probe."""
+    ``endpoint`` is the configured hub base URL (``RunnerConfig.hub_url``) —
+    connectivity facts, not a probe."""
 
     endpoint: str
     reachable: bool
@@ -132,8 +131,8 @@ class OpenTakeoverListResponse(BaseModel):
 class FactView(BaseModel):
     """One hub-bound fact off the runner store's outbound buffer — ``GET /api/facts``.
 
-    The local fact log: the record itself minus its JSON ``payload`` (the panel
-    reads the ledger, not the bodies). ``acked_at`` null means still buffered."""
+    The local fact log: the record itself minus its JSON ``payload``. ``acked_at``
+    null means still buffered."""
 
     seq: int
     kind: str

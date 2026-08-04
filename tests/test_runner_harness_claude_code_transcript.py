@@ -196,10 +196,7 @@ def test_cold_read_of_a_live_appended_partial_record_mints_a_resumable_position(
     `next_position`, exactly as `_read_forward` does. Minting `next_offset = size`
     instead points into the middle of the record, and a forward read bootstrapped
     from that position resumes past the record's own start: once the writer
-    completes it, no call ever delivers it — a permanent loss, not a delay. (Every
-    other fixture in this file writes a trailing newline, which is exactly how this
-    escaped: no cold read ever minted a mid-record position for a forward read to
-    resume from.)"""
+    completes it, no call ever delivers it — a permanent loss, not a delay."""
     project_dir = tmp_path / "-home-user-workspace"
     project_dir.mkdir(parents=True)
     path = project_dir / "sess-1.jsonl"
@@ -519,12 +516,9 @@ def test_a_tool_use_tool_result_pair_straddling_a_batch_boundary_still_discovers
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """F1 regression: a `tool_use`/`tool_result` pair split across a forward-read
-    boundary must not permanently lose the sidecar it names. Before the fix,
-    `agent_id_by_tool_turn` (and so sidecar candidacy) was reachable only through
-    `pending_tool_index`, local to one `normalize_lines` call — a `tool_result`
+    boundary must not permanently lose the sidecar it names — a `tool_result`
     landing alone in a later call, with its spawning `tool_use` delivered in an
-    earlier one, never got its `agentId` recorded anywhere, so the sidecar was never
-    a candidate and its conversation was lost forever, not merely unlinked."""
+    earlier one, must still surface the sidecar unlinked rather than dropping it."""
     project_dir = "-home-user-workspace"
     main_lines = [
         fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}, uuid="a1"),

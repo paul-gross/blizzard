@@ -17,7 +17,7 @@ pytestmark = pytest.mark.unit
 
 
 def test_registry_enumerates_the_daemon_loop_points() -> None:
-    """discover_crash_points imports the loop modules and returns a non-empty, sorted list."""
+    """Returns a non-empty, name-sorted list of crash points."""
     points = crash.discover_crash_points()
     names = [p.name for p in points]
     assert names == sorted(names), "points must enumerate name-sorted for a stable sweep order"

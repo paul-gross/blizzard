@@ -26,9 +26,7 @@ def test_root_lists_hub_and_runner() -> None:
 
 
 def test_hub_lists_its_verbs() -> None:
-    # The operator verbs are grouped by noun (issue #104); the old flat spellings
-    # (`answer`, `ingest`, `promote`, `requeue`, ...) were removed in issue #105, so
-    # they neither show nor resolve — see test_hub_removed_flat_verbs_are_unknown.
+    # The operator verbs are grouped by noun (issue #104).
     result = CliRunner().invoke(blizzard, ["hub", "--help"])
     assert result.exit_code == 0
     for verb in ("init", "migrate", "host", "status", "chunk", "runner", "graph", "queue", "decision", "question"):
@@ -36,10 +34,10 @@ def test_hub_lists_its_verbs() -> None:
 
 
 def test_hub_removed_flat_verbs_are_unknown() -> None:
-    """The pre-#104 flat verbs were removed in issue #105: they no longer name a command
-    in `--help` (each line's own first token, not a substring match — a group's own
-    summary prose can legitimately mention e.g. "answer"), and invoking one fails with
-    click's usual unknown-command error rather than silently delegating."""
+    """Flat verbs removed in issue #105 no longer name a command in `--help` (checked by
+    each line's own first token, not a substring match — a group's summary prose may
+    legitimately mention e.g. "answer"), and invoking one fails with click's
+    unknown-command error rather than silently delegating."""
     result = CliRunner().invoke(blizzard, ["hub", "--help"])
     assert result.exit_code == 0
     listed = {line.split()[0] for line in result.output.splitlines() if line.startswith("  ") and line.split()}
@@ -73,13 +71,10 @@ def test_hub_init_and_migrate(tmp_path: Path) -> None:
 def test_hub_migrate_rejects_a_leftover_pm_source_block(tmp_path: Path) -> None:
     """`migrate` — not just `host` — must reject the pre-rename key (issue #55).
 
-    Where this check lives decides the blast radius of a stale toml, and it is deliberately
-    in the shared ``HubConfig.load`` rather than the daemon's startup path. The local
-    dogfooding deploy runs `migrate` *before* `systemctl restart`, and a failed migration
-    aborts the deploy with the fleet still up on the previous wheel. If the rejection fired
+    The check lives in the shared ``HubConfig.load``, not the daemon's startup path, since
+    the dogfooding deploy runs `migrate` before `systemctl restart`. If the rejection fired
     only at `host`, migrate would pass, the restart would take the hub down, and the runner
-    (`After=` hub) would go with it — a wedged fleet instead of an aborted deploy, for the
-    same stale config and the same error text.
+    (`After=` hub) would go with it too — a wedged fleet instead of an aborted deploy.
     """
     root = tmp_path / "hub"
     runner = CliRunner()
@@ -99,12 +94,11 @@ def test_hub_migrate_rejects_a_leftover_pm_source_block(tmp_path: Path) -> None:
 
 def test_hub_migrate_refuses_a_db_url_copied_from_elsewhere(tmp_path: Path) -> None:
     """The bug scenario in issue #234: `cp -r <live-store>/* <copy>/ && blizzard hub
-    migrate --dir <copy>` must refuse rather than silently migrate the live store —
-    this fails against the pre-#234 code, which applies no such guard.
+    migrate --dir <copy>` must refuse rather than silently migrate the live store.
 
-    `hub init` no longer embeds an absolute db_url for a *fresh* scaffold, so this
-    reproduces a config carrying one anyway — an unpatched-era init, or an operator's
-    own explicit override — the case the guard still has to catch."""
+    `hub init` doesn't embed an absolute db_url for a fresh scaffold, so this test
+    writes one in directly — an unpatched-era init, or an operator's explicit
+    override — the case the guard still has to catch."""
     runner = CliRunner()
     live = tmp_path / "live"
     assert runner.invoke(blizzard, ["hub", "init", str(live)]).exit_code == 0
@@ -126,7 +120,7 @@ def test_hub_migrate_refuses_a_db_url_copied_from_elsewhere(tmp_path: Path) -> N
 
 def test_hub_init_produces_a_config_a_copy_can_migrate_from_with_no_flags(tmp_path: Path) -> None:
     """Acceptance: a freshly-inited dir can be `cp -r`'d and driven from the copy with
-    no flags — `hub init`'s output no longer embeds the absolute default path."""
+    no flags — `hub init`'s output embeds no absolute default path."""
     runner = CliRunner()
     original = tmp_path / "original"
     assert runner.invoke(blizzard, ["hub", "init", str(original)]).exit_code == 0
@@ -301,10 +295,8 @@ def test_host_positional_and_dir_option_conflict(daemon: str, env_var: str, conf
 
 @pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
 def test_host_positional_beats_ambient_env_dir(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
-    # --dir carries its own envvar fallback, so a bare ambient $BZ_<daemon>_DIR is a
-    # ParameterSource.ENVIRONMENT value for dir_option — not a command-line one — and
-    # resolve_host_directory's conflict check only fires on a command-line tie. A
-    # positional disagreeing with the ambient env therefore wins outright, silently.
+    # A bare ambient $BZ_<daemon>_DIR doesn't trigger the conflict check (only an
+    # explicit --dir does), so a disagreeing positional wins outright, silently.
     positional = tmp_path / "positional"
     ambient = tmp_path / "ambient"
     result = CliRunner().invoke(blizzard, [daemon, "host", str(positional)], env={env_var: str(ambient)})

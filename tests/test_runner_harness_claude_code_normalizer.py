@@ -281,13 +281,10 @@ def test_agent_id_join_candidate_surfaces_for_a_tool_result_carrying_agent_id() 
 
 @pytest.mark.unit
 def test_agent_id_is_not_attributed_when_one_record_resolves_two_tool_results() -> None:
-    """`toolUseResult.agentId` is one field on the record, not one per block — a
-    record resolving more than one `tool_result` can't tell which of those tool
-    calls actually spawned the agent, so neither turn is stamped as *attached* to it
-    (F13's guard). But the id itself must still surface as a read candidate
-    (:attr:`~blizzard.runner.harness.internal.claude_code_normalizer.NormalizedFile.discovered_agent_ids`)
-    — suppressing attachment on an ambiguous record must not also suppress
-    discovery, or the sidecar this agent id names is never opened at all."""
+    """`toolUseResult.agentId` is one field on the record, not one per block, so an
+    ambiguous record with more than one `tool_result` is not stamped as *attached*
+    (F13's guard) — but must still surface as a read candidate, or the sidecar this
+    agent id names is never opened."""
     lines = [
         fx.assistant_tool_use("t1", "Task", {"prompt": "job 1"}, uuid="a1"),
         fx.assistant_tool_use("t2", "Task", {"prompt": "job 2"}, uuid="a2"),
@@ -321,12 +318,10 @@ def test_agent_id_is_not_attributed_when_one_record_resolves_two_tool_results() 
 
 @pytest.mark.unit
 def test_agent_id_is_a_discovered_candidate_even_when_its_tool_use_is_not_in_these_lines() -> None:
-    """F1 regression, at the normalizer layer: `agent_id_by_tool_turn` (attachment)
-    is reachable only via `pending_tool_index`, which is rebuilt fresh every
-    `normalize_lines` call and so never carries a `tool_use` seen in an earlier call.
-    `discovered_agent_ids` must not share that limitation — a `tool_result` naming an
-    agent id is a real candidate regardless of whether this call's own lines ever saw
-    the `tool_use` it answers."""
+    """F1: `agent_id_by_tool_turn` (attachment) is reachable only via
+    `pending_tool_index`, rebuilt fresh every `normalize_lines` call, so it never
+    carries a `tool_use` from an earlier call — `discovered_agent_ids` must not share
+    that limitation."""
     lines = [fx.tool_result("t1", "spawned", agent_id="agent-abc")]  # no matching tool_use in these lines
     result = normalize_lines(lines)
 
@@ -495,9 +490,7 @@ def test_prompt_timestamp_route_tolerates_an_offset_less_candidate_timestamp() -
 def test_unresolvable_inline_sidechain_surfaces_unlinked_not_among_top_level_turns() -> None:
     """An isSidechain record with no route to resolve its parent yields zero
     top-level turns, but surfaces as data on `unlinked_sidechains` rather than being
-    dropped silently. The projection is what re-establishes the
-    panel's zero-turn outcome, one layer down
-    (`transcripts/internal/projected_transcript_repository.py`)."""
+    dropped silently."""
     result = normalize_lines([fx.sidechain_record()])
 
     assert result.turns == []
@@ -508,17 +501,12 @@ def test_unresolvable_inline_sidechain_surfaces_unlinked_not_among_top_level_tur
 @pytest.mark.unit
 def test_group_sidechain_runs_stays_fast_and_correct_under_duplicate_uuid_values() -> None:
     """A duplicate `uuid` value shared by every record on a chain — not a shared
-    `parentUuid` alone — is what degrades a naive per-link rescan to quadratic: each
-    walk step looks up the *same* long `children_by_parent_uuid` bucket again, and a
-    rescan-with-filter re-walks its already-consumed prefix every time. Threading each
-    key's bucket from a `deque` instead means every record is dequeued at most once
-    ever, so this stays linear."""
+    `parentUuid` alone — is what degrades a naive per-link rescan to quadratic."""
     import time
 
-    # n matches the docstring's own measured figure for the quadratic
-    # implementation — 29.4s at 40,000 records — so the 5s threshold below carries
-    # ~6x headroom against a reintroduced quadratic walk even on a fast machine,
-    # while the linear implementation stays well under a second.
+    # 40,000 records — the quadratic implementation measured 29.4s here, so the 5s
+    # threshold below carries ~6x headroom against a reintroduced quadratic walk even
+    # on a fast machine, while the linear implementation stays well under a second.
     n = 40_000
     records: list[dict[str, object]] = [
         {"type": "user", "uuid": "dup", "parentUuid": "orphan", "isSidechain": True},

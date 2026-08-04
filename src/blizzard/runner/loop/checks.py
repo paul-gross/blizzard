@@ -1,13 +1,9 @@
 """The check-runner seam — the runner executes a node's ``checks:`` at worker exit (issue #114).
 
-A node may declare ``checks:`` (deterministic commands — lint, tests). Since #114 the
-runner runs them at worker exit, before the judgement is elicited, records each result
-as a durable fact, injects the results into the judgement prompt, and lets a
-``requires_checks`` choice gate on them. Running a check is deterministic-shell work
-(``bzh:deterministic-shell`` — no model call), reached only through this injected seam
-(``bzh:pluggable-seams``): the reference binding is the subprocess adapter under
-``internal/``, and loop tests inject a fake. The seam mirrors the read-only git seam
-(:class:`~blizzard.runner.loop.worktree.IWorktreeGit`) in shape.
+A node may declare ``checks:`` — deterministic commands (lint, tests). Running one is
+deterministic-shell work (``bzh:deterministic-shell`` — no model call), reached only
+through this injected seam (``bzh:pluggable-seams``): the reference binding is the
+subprocess adapter under ``internal/``, and loop tests inject a fake.
 """
 
 from __future__ import annotations
@@ -25,10 +21,9 @@ class CheckOutcome:
     """One check command's runner-executed outcome.
 
     ``passed`` is the pass/fail signal (exit 0 ⇒ passed; non-zero **and a timeout** ⇒
-    failed). ``output_tail`` is a bounded tail of the command's combined output — the
-    durable evidence the judgement-prompt injection renders and the crash-recovery read
-    hands back. It is deliberately runner-local (see the store's ``check_results`` table);
-    only ``passed`` and ``command`` ride the wire to the hub's gate (issue #114 [MF3])."""
+    failed). ``output_tail`` is a bounded tail of the command's combined output, kept
+    runner-local (the store's ``check_results`` table); only ``passed`` and ``command``
+    ride the wire to the hub (issue #114 [MF3])."""
 
     passed: bool
     output_tail: str

@@ -4,34 +4,17 @@ ONE chunk travels the whole default lifecycle — ingest -> acquire -> mock-scri
 commit -> **review (scripted PASS)** -> deliver -> landed in the bare origin — and the
 assertion holds at **both ends**: the commit is reachable from the bare origin's
 ``main`` (git truth) *and* the hub's facts derive the chunk ``done`` (fleet truth).
-This is the P6 exit criterion, extended in P7 (wave 1) to travel the full
-``build -> review -> deliver`` default shape — the review node is the new stop, and
-here it passes on the first cold-eyes look, so the chunk lands without a re-build. The two
-sibling e2e scenarios cover the review **fail** cycle (test_review_cycle_e2e) and the
-retries-exhausted **escalation** to ``needs_human`` (test_escalation_e2e); the three
-run together as ``mise run e2e``.
 
 **Self-managed, zero-token, no-network.** The test mints its own disposable fixture
-world and drives the real seams end to end, with no in-process shortcuts:
+world (bare ``file://`` origins + a real winter workspace, via ``blizzard-mock-fixture``)
+and drives the real seams — the mock forge, a real hub over a fresh sqlite store, and the
+real runner reconciliation loop stepped one synchronous
+:func:`~blizzard.runner.loop.build.run_single_tick` at a time (``bzh:steppable-loop``) —
+with no in-process shortcuts.
 
-* a real, disposable **fixture workspace** (bare ``file://`` origins + a real winter
-  workspace) minted by ``blizzard-mock``'s ``blizzard-mock-fixture`` scaffold;
-* the real **mock GitHub forge** (``blizzard-mock-forge``) fronting those same bare
-  origins — the single git truth;
-* the real **hub** (``blizzard hub host``) over a fresh sqlite store, wired to the
-  forge;
-* the real **runner reconciliation loop**, driven one synchronous
-  :func:`~blizzard.runner.loop.build.run_single_tick` pass at a time (the steppable
-  driver, ``bzh:steppable-loop``), acquiring a fixture env, spawning the
-  ``mock-claude-code`` façade whose scripted prompt makes a **real commit**, pushing
-  the branch to the ``file://`` origin, and submitting the completion that drives the
-  hub's deliver node to PR + merge the branch into bare ``main``.
-
-It is the **e2e tier** (``bzh:`` verification tiers): it needs the full live stack and
-the sibling ``blizzard-mock`` worktree, so it is **skipped unless ``BLIZZARD_E2E=1``**,
-keeping the default ``pytest`` gate (unit + component) hermetic and token-free. It is
-also skipped when the workspace layout it needs (a sibling ``blizzard-mock`` with a
-synced virtualenv, and a local winter source) is not discoverable.
+It is the **e2e tier**: **skipped unless ``BLIZZARD_E2E=1``**, and also skipped when the
+workspace layout it needs (a provisioned sibling ``blizzard-mock``, a local winter source)
+is not discoverable.
 
 Reproduce it — from the ``blizzard`` worktree in a provisioned feature env — with::
 
@@ -72,11 +55,8 @@ pytestmark = [
     ),
 ]
 
-# The fixture project repo the loop drives and the owner the forge/hub address it
-# under. The forge's git backend is permissive (``forge/internal/git_backend.py``):
-# ``blizzard/toy-api`` resolves the flat ``origins/toy-api.git`` the fixture mints,
-# and the hub qualifies the runner's bare ``toy-api`` artifact with this same owner
-# (BZ_FORGE_OWNER -> land_default.qualify_repo).
+# The fixture project repo the loop drives and the owner the forge/hub address it under
+# (BZ_FORGE_OWNER; see `hub/graphs/scripts/land_default.py`).
 OWNER = "blizzard"
 REPO_NAME = "toy-api"
 REPO = f"{OWNER}/{REPO_NAME}"
@@ -85,18 +65,12 @@ REPO = f"{OWNER}/{REPO_NAME}"
 FIXTURE_ENV = "e2e"
 RUNNER_ENV = "e1"
 
-# The mock harness's fence var (``blizzard_mock.harness.engine.FENCE_ENV_VAR``):
-# scaffolding sets it in the daemon's own ``os.environ`` before driving a tick, and the
-# adapter's spawn-environment allowlist (issue #88) only forwards it to the child because
-# every scenario's ``_runner_config``/``write_runner_config`` declares it in
-# ``worker_env_passthrough`` — the deliberate, test-only counterpart of the real
-# fleet's ``[worker] env_passthrough``.
+# The mock harness's fence var: scaffolding sets it in the daemon's own ``os.environ``
+# before driving a tick, and every scenario declares it in ``worker_env_passthrough`` so
+# the adapter's spawn-environment allowlist (issue #88) forwards it to the child.
 MOCK_HARNESS_FENCE_VAR = "BLIZZARD_MOCK_HARNESS_FENCE"
-# The vars every scripted mock-fleet scenario's worker child needs — the mock façade
-# reads its own fence plus (when a scenario overrides it) the transcripts-root
-# location straight from its process env (``blizzard_mock.harness.facades._transcript
-# .transcripts_root``), so both ride the allowlist's operator-extension knob rather
-# than the base allowlist growing mock-only names.
+# The vars every scripted mock-fleet scenario's worker child needs — mock-only names, so
+# they ride the allowlist's operator-extension knob rather than the base allowlist.
 MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT)
 
 # The env var every scenario's ``[[work_source]]`` names as its credential —
@@ -104,15 +78,10 @@ MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT)
 WORK_SOURCE_TOKEN_ENV = "BZ_WORK_SOURCE_TOKEN_TOYAPI"
 
 # Appended to every scripted build-node prompt that makes a real commit meant to be
-# delivered (issue #143, Phase 4): the runner no longer discovers or pushes the
-# produced pointer — the WORKER pushes its branch and declares it through the real
-# `blizzard runner artifact commit` verb (Phase 3's local declaration channel), which
-# the runner's ADVANCE then confirms read-only (`git ls-remote`) against the forge
-# before submitting the git_commit artifact. `--forge` is the worker's own observed
-# `origin` URL — self-describing, and trivially confirmable by the runner since it
-# reads the very same worktree's `origin`. Declaring twice for the same repo within
-# one lease is harmless (latest-wins), so scripts that make more than one commit in a
-# turn (the review-cycle addendum) can safely append this after each.
+# delivered (issue #143, Phase 4): the worker pushes its branch and declares it through
+# the real `blizzard runner artifact commit` verb. Declaring twice for the same repo
+# within one lease is harmless (latest-wins), so a script that makes more than one commit
+# in a turn can safely append this after each.
 _PUSH_AND_DECLARE_SCRIPT = (
     "_branch = subprocess.run(\n"
     '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
@@ -131,10 +100,8 @@ _PUSH_AND_DECLARE_SCRIPT = (
 )
 
 # The scripted build-node prompt: *the prompt is the program*. It runs under the mock
-# harness in the acquired env dir (which holds the repo worktrees as children), so it
-# targets the ``toy-api`` worktree explicitly, writing a file and making a real commit
-# on the env's branch, then pushing it and declaring it (:data:`_PUSH_AND_DECLARE_SCRIPT`)
-# the way a real worker now must (issue #143, Phase 4).
+# harness with the acquired env dir as cwd, so it targets the ``toy-api`` worktree by
+# relative path.
 _BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
@@ -147,29 +114,23 @@ _BUILD_SCRIPT = (
     "    check=True,\n"
     ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
-# The judgement-resume prompt: also arrives as code. It emits the tagged
-# ``<Choice>pass</Choice>`` the runner's adapter parses into the completion choice.
+# The judgement-resume prompt: also arrives as code.
 _JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
-# The review node: a fresh-session cold-eyes read that
-# produces a ``review-findings`` asset and, here, PASSES on the first look — so the
-# build commit travels straight to deliver with no re-build. The review base turn is a
-# no-op (``pass``); the verdict is elicited on the judgement resume, whose assessment
-# (the text after ``</Choice>``) becomes the produced asset's content.
+# The review node scripted to PASS on the first look, so the build commit travels straight
+# to deliver with no re-build. The base turn is a no-op; the verdict comes on the
+# judgement resume.
 _REVIEW_SCRIPT = "pass\n"
 _REVIEW_JUDGEMENT = "verdict('pass', 'cold-eyes review: the committed change is clean; ready to deliver')\n"
 
 # The pass-through scenario's distinctive work item — a body + a comment whose exact text
-# is asserted on the bare origin's main, so its presence there proves it travelled the
-# whole layered pass-through (worker -> runner proxy -> hub -> forge) and back into the
-# committed, landed change (MVP criterion 1).
+# is asserted on the bare origin's main.
 _WORK_ITEM_BODY = "PASSTHROUGH-BODY: the widget flake reproduces under load"
 _WORK_ITEM_COMMENT = "PASSTHROUGH-COMMENT: attached a failing repro in the linked gist"
 
-# build turn (prompt-is-program): read the chunk's work item through the runner's work-item
-# proxy — the *real* ``blizzard runner work-items`` verb against the local API, chunk id
-# from the spawn-injected ``BLIZZARD_CHUNK_ID`` — then commit the fetched body + comment
-# so the pass-through's output lands as git truth.
+# build turn (prompt-is-program): read the chunk's work item with the *real*
+# ``blizzard runner work-items`` verb, then commit the fetched body + comment so the
+# pass-through's output lands as git truth.
 _WORK_ITEM_BUILD_SCRIPT = (
     "import os, json, subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
@@ -194,11 +155,8 @@ _WORK_ITEM_BUILD_SCRIPT = (
 def _graph_yaml() -> str:
     """The scripted ``default-delivery`` graph — ``build -> review -> deliver``.
 
-    Named ``default-delivery`` so the hub's lazy ``ensure_default`` (POST /chunks)
-    reuses this pre-minted graph by name instead of minting the packaged
-    prose graph — the packaged prompts are LLM prose the mock cannot ``exec``. Mirrors
-    the packaged default's shape: a runner build, a
-    fresh-session runner review that ``produces`` findings, and a hub deliver node.
+    Named ``default-delivery`` so the hub's lazy default-graph mint reuses this
+    pre-minted graph by name — the packaged prompts are LLM prose the mock cannot ``exec``.
     """
     import yaml
 
@@ -303,9 +261,8 @@ def _await_http(
 
     ``log`` is the daemon's own log file (issue #145) — every spawn site here writes its
     merged output to one rather than to a pipe nothing drains, so the early-exit
-    diagnostic reads the FILE, not ``proc.stdout`` (which is now ``None``). The exit code
-    is named either way, so a daemon that died before writing anything still reports
-    something actionable.
+    diagnostic reads the file rather than ``proc.stdout``. The exit code is named either
+    way, so a daemon that died before writing anything still reports something actionable.
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -355,9 +312,9 @@ def _hub(
     }
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    # Declare the one work source every scenario ingests against — since
-    # Phase 2, ingest 422s a pointer no configured source claims. `annotate` opts
-    # this source into the forge-status label sweep (issue #179).
+    # Declare the one work source every scenario ingests against — ingest 422s a pointer
+    # no configured source claims. `annotate` opts this source into the forge-status
+    # label sweep (issue #179).
     write_work_sources(
         hub_dir,
         [
@@ -500,15 +457,12 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
 def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int) -> RunnerConfig:
     """A migrated runner runtime pointed at the fixture workspace and the mock harness.
 
-    ``host``/``port`` are bound to a genuinely free port (issue #143, Phase 4): every
-    scripted build node now declares its git commit through the worker's own
-    ``blizzard runner artifact commit`` call, which resolves the runner's local API from
-    ``BLIZZARD_RUNNER_URL`` — itself derived from this config
-    (:func:`~blizzard.runner.loop.build.run_single_tick`). The base config's own default
-    host/port happens to collide with this machine's real dogfood runner deployment
-    (``AGENTS.local.md``), so leaving it unbound here would silently POST a worker's
-    declaration at a live, unrelated daemon instead of erroring — `_drive_until_done`
-    wraps every tick in :func:`_runner_api`, which serves this exact host/port."""
+    ``host``/``port`` are bound to a genuinely free port rather than the base config's
+    default (issue #143, Phase 4): that default collides with this machine's real
+    dogfood runner deployment (``AGENTS.local.md``), so leaving it unbound would
+    silently POST a worker's artifact declaration at a live, unrelated daemon instead
+    of erroring. ``_drive_until_done`` wraps every tick in :func:`_runner_api`, which
+    serves this exact host/port."""
     base = init_runner_environment(runner_dir)  # scaffolds config + migrates the store
     return dataclasses.replace(
         base,
@@ -518,19 +472,14 @@ def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: i
         workspace_root=str(workspace),
         workspace_envs=(RUNNER_ENV,),
         harness_binary=str(bin_dir / "mock-claude-code"),
-        # The mock façade has no permission gate and rejects an unknown ``--permission-mode``
-        # flag, so it must be omitted (``None``) — the real adapter default's own contract
-        # (``bypassPermissions``): None omits the flag so the mock is unaffected.
+        # The mock façade rejects an unknown ``--permission-mode`` flag, so it must be
+        # omitted (``None``).
         harness_permission_mode=None,
-        # A path that is never created — the external-usage sampler's first soft-failure
-        # check (a missing credentials file) trips before any request is built, keeping
-        # this real daemon's no-network-access guarantee real for that step too (issue #218).
+        # A path that is never created — the external-usage sampler's missing-credentials
+        # soft failure trips before any request is built, keeping this real daemon's
+        # no-network-access guarantee real for that step too (issue #218).
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
         base_branch="main",
-        # The adapter's spawn-environment allowlist (issue #88) forwards only what is
-        # declared here — the mock's fence var and transcripts-root override are not real
-        # fleet needs, so they ride the same operator extension knob a real deployment
-        # would use for its own harness quirks.
         worker_env_passthrough=MOCK_HARNESS_ENV_PASSTHROUGH,
     )
 
@@ -542,10 +491,8 @@ def _drive_until_done(
 
     Each tick is one synchronous REAP->PULL->FILL->ADVANCE pass; the spawned mock
     worker runs asynchronously, so ticks are interleaved with short waits that let it
-    make its commit and exit before ADVANCE judges it. Wrapped in :func:`_runner_api`
-    (issue #143, Phase 4): a scripted build node now declares its git commit through the
-    worker's own ``blizzard runner artifact commit`` call, which needs a live local API
-    to POST to — `_runner_config` binds a free `host`/`port` for exactly this.
+    make its commit and exit before ADVANCE judges it. Wrapped in :func:`_runner_api` so
+    the worker's own CLI verbs have a live local API to reach (issue #143).
     """
     prior = dict(os.environ)
     os.environ.update(fenced_env)  # the runner spawns the fenced mock harness in-process
@@ -623,9 +570,8 @@ def _runner_api(config: RunnerConfig) -> Iterator[None]:
     """Serve the runner's local API in a thread — the daemon the worker's verbs POST/GET to.
 
     The reconciliation loop is still driven synchronously by the test (``run_single_tick``);
-    this only stands up the local-API surface so the real ``blizzard runner work-items`` verb
-    has a daemon to reach. It touches no store (the work-item route is a pure hub proxy), so it
-    runs alongside the tick without contention.
+    this only stands up the local-API surface. It touches no store, so it runs alongside the
+    tick without contention.
     """
     app = build_hosted_app(config)
     server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port, log_level="warning"))
@@ -651,12 +597,10 @@ def _runner_api(config: RunnerConfig) -> Iterator[None]:
 def test_build_worker_reads_work_item_through_the_passthrough(tmp_path: Path) -> None:
     """The build worker fetches its issue body + comments through the runner->hub proxy.
 
-    Criterion 1's pass-through half, end to end: the chunk's issue carries a distinctive
-    body and comment; the build node reads them with the *real* ``blizzard runner work-items``
-    verb (the runner's local API forwarding to the hub, which reads the forge with its own
-    credentials — the worker never crosses a layer), commits the fetched text, and the chunk
-    lands. The exact body and comment reachable from the bare origin's ``main`` prove the
-    contents travelled worker -> runner proxy -> hub -> forge and back into landed work.
+    The chunk's issue carries a distinctive body and comment; the build node reads them
+    with the *real* ``blizzard runner work-items`` verb, commits the fetched text, and the
+    chunk lands. The exact body and comment are then asserted reachable from the bare
+    origin's ``main``.
     """
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
@@ -698,9 +642,8 @@ def test_build_worker_reads_work_item_through_the_passthrough(tmp_path: Path) ->
         commented = forge.post(f"/repos/{REPO}/issues/{issue_number}/comments", json={"body": _WORK_ITEM_COMMENT})
         assert commented.status_code == 201, commented.text
 
-        # Ingest by {source, ref} — the source names the configured binding, and
-        # the ref is this binding's own opaque item token (the issue number); the fetch
-        # goes through the hub's own forge base URL regardless.
+        # Ingest by {source, ref} — the source names the configured binding, the ref is
+        # its opaque item token (the issue number).
         ingested = hub.post(
             "/api/chunks",
             json={"tokens": [f"{REPO_NAME}:{issue_number}"]},
@@ -709,17 +652,15 @@ def test_build_worker_reads_work_item_through_the_passthrough(tmp_path: Path) ->
         chunk_id = ingested.json()["chunk_id"]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner
 
-        # Sanity: the hub's own pass-through returns the body + comment (the runner's proxy
-        # forwards to exactly this route) — one entry per pointer.
+        # Sanity: the hub's own pass-through returns the body + comment, one entry per pointer.
         item = hub.get(f"/api/chunks/{chunk_id}/work-items")
         assert item.status_code == 200, item.text
         entry = item.json()["items"][0]
         assert entry["body"] == _WORK_ITEM_BODY
         assert entry["comments"] == [_WORK_ITEM_COMMENT]
 
-        # Drive the loop — `_runner_config` already binds a free host/port and
-        # `_drive_until_done` wraps it in `_runner_api`, so the worker's `work-items` verb
-        # (and, since issue #143 Phase 4, its `artifact commit` declaration) both land.
+        # Drive the loop — `_runner_config` binds a free host/port and `_drive_until_done`
+        # wraps it in `_runner_api`, so the worker's CLI verbs have a daemon to reach.
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
@@ -728,8 +669,7 @@ def test_build_worker_reads_work_item_through_the_passthrough(tmp_path: Path) ->
 
         assert status == "done", f"chunk did not reach done (last status {status!r})"
 
-    # Git truth: the body and comment the worker fetched through the pass-through are on
-    # the bare origin's main — the contents reached the worker and landed.
+    # Git truth: the body and comment the worker fetched are on the bare origin's main.
     landed = _git_bare(origin_bare, "show", "main:LANDED.md")
     assert _WORK_ITEM_BODY in landed, f"the fetched issue body did not reach the worker:\n{landed}"
     assert _WORK_ITEM_COMMENT in landed, f"the fetched issue comment did not reach the worker:\n{landed}"

@@ -198,7 +198,7 @@
         "type": "object"
       },
       "ChunkHeaderView": {
-        "description": "The chunk-detail dock's header aggregate (issue #185) \u2014 the identity,\nwork-item links, live state, and pause fact a header needs, projected down\nfrom :class:`ChunkDetail` rather than carrying its transition/artifact\nhistory. This is deliberately the runner machine panel's own read: pydantic's\ndefault ``extra=\"ignore\"`` lets it validate straight off a `ChunkDetail`\npayload, picking out only these fields \u2014 so the runner's chunk-detail proxy\n(``blizzard.runner.api.chunk_detail``) never pulls this module's\n:class:`EscalationView` into the runner's own OpenAPI schema, where it would\ncollide with the runner's unrelated, identically-named status escalation view.\n\n``pause`` is carried independently of ``status`` for the same reason\n:class:`ChunkDetail`'s own field is: a chunk both paused and parked on a\nquestion still derives ``waiting_on_human``.",
+        "description": "The chunk-detail dock's header aggregate (issue #185) \u2014 the identity,\nwork-item links, live state, and pause fact a header needs, projected down\nfrom :class:`ChunkDetail` rather than carrying its transition/artifact\nhistory. Pydantic's default ``extra=\"ignore\"`` lets it validate straight off a\n`ChunkDetail` payload, so the runner's chunk-detail proxy never pulls this\nmodule's :class:`EscalationView` into the runner's OpenAPI schema, where it\nwould collide with ``wire.runner_status``' identically-named view (pinned by\ntests/test_pin_wire.py::test_the_runner_spec_escalation_view_is_the_runners_own).\n\n``pause`` is carried independently of ``status`` for the same reason\n:class:`ChunkDetail`'s own field is: a chunk both paused and parked on a\nquestion still derives ``waiting_on_human``.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -250,7 +250,7 @@
         "type": "string"
       },
       "ChunkSummary": {
-        "description": "One row of the fleet chunk list \u2014 derived status + current node.\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) the\nboard renders in place of the raw ``nd_`` ULID; null when the chunk has no\ncurrent node or its pinned graph cannot resolve the id.\n\nDeliberately status-only: the summary feeds the board **card**, which is a passive\nstatus view (issue #42), so no operator *fact* is carried here. The pause fact \u2014 and\nevery other fact an operator action keys on \u2014 reaches the chunk detail dock through\n:class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live\nroute's holder, null when unrouted) is a passive where-is-it fact in that same\nsense \u2014 it lets the fleet registry list each runner's claims \u2014 not an action key.\n``environment_count`` (issue #69) is a passive where-is-it *count* in that same\nspirit: the number of environments the chunk's live route holds, so the fleet registry\ncan sum a runner's slot-bar numerator without the full ``environment_ids`` list (which\nstays out of scope on this status-only summary, reaching only\n:class:`ChunkDetail.route`).\n\nBoth are **in-progress-only** (issue #140): a chunk at a terminal status\n(``done``/``stopped``) reports ``runner_id = None`` and ``environment_count = 0`` even\nwhen its route facts still show a route, because a finished chunk holds no claim. So a\nconsumer folding these per runner \u2014 the fleet registry's claim lines and its slot-bar\nnumerator \u2014 counts only live occupancy and needs no status filter of its own. The raw\nroute fact is unfiltered on :class:`ChunkDetail.route`, which is where a \"where was\nthis worked\" read belongs.\n\n``cost`` and ``completed_at`` are the two exceptions (issues #59, #173): both are\ncheap, passive derived instants \u2014 not an operator fact \u2014 so they ride the summary\nrather than waiting for the detail fetch.\n\n``completed_at`` (issue #173) is the terminal instant \u2014 see\n:func:`~blizzard.hub.domain.work.derive_completed_at` \u2014 null for every non-terminal\nstatus. Like every wire instant it is a ``str``, populated via\n:func:`~blizzard.foundation.clock.iso_utc` at the serialization edge, never a bare\n``datetime`` (``bzh:utc-instants``).",
+        "description": "One row of the fleet chunk list \u2014 derived status + current node.\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) beside\nthe raw ``nd_`` ULID; null when the chunk has no current node or its pinned graph\ncannot resolve the id.\n\nStatus-only: the summary feeds the board **card**, a passive status view (issue #42),\nso it carries no operator *fact* \u2014 those reach the detail dock through\n:class:`ChunkDetail`. ``runner_id`` and ``environment_count`` (issue #69) are passive\nwhere-is-it facts, not action keys, and ``cost``/``completed_at`` (issues #59, #173)\nare cheap derived instants that ride along rather than waiting for the detail fetch.\n\n``runner_id``/``environment_count`` are **in-progress-only** (issue #140): a chunk at\na terminal status reads unrouted even while its route facts still show a route, so a\nper-runner fold counts live occupancy with no status filter of its own (pinned by\ntests/test_route_claim.py::test_summary_reports_a_finished_chunk_as_unrouted). The\nunfiltered route fact lives on :class:`ChunkDetail.route`.\n\n``completed_at`` (issue #173) is the terminal instant \u2014 see\n:func:`~blizzard.hub.domain.work.derive_completed_at` \u2014 null for every non-terminal\nstatus. Like every wire instant it is a ``str``, populated via\n:func:`~blizzard.foundation.clock.iso_utc` at the serialization edge, never a bare\n``datetime`` (``bzh:utc-instants``).",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -617,7 +617,7 @@
         "type": "object"
       },
       "FactView": {
-        "description": "One hub-bound fact off the runner store's outbound buffer \u2014 ``GET /api/facts``.\n\nThe local fact log: the record itself minus its JSON ``payload`` (the panel\nreads the ledger, not the bodies). ``acked_at`` null means still buffered.",
+        "description": "One hub-bound fact off the runner store's outbound buffer \u2014 ``GET /api/facts``.\n\nThe local fact log: the record itself minus its JSON ``payload``. ``acked_at``\nnull means still buffered.",
         "properties": {
           "acked_at": {
             "anyOf": [
@@ -677,7 +677,7 @@
         "type": "object"
       },
       "FleetSummaryView": {
-        "description": "The runner machine panel's fleet-pulse counts (issue #76) \u2014 every chunk's derived\nstatus folded to the four buckets the counts strip shows:\n\n* ``ready`` \u2014 chunks derived ``ready``;\n* ``running`` \u2014 ``running`` + ``delivering`` (live work, either shape);\n* ``waiting`` \u2014 ``waiting_on_human`` + ``paused`` (human-parked);\n* ``needs`` \u2014 ``needs_human``.\n\nThe remaining derived statuses (``not_ready``, ``stopped``, ``done``) count toward no\nbucket \u2014 the strip is a live-work pulse, not a total. See\n:func:`~blizzard.hub.domain.work.derive_fleet_summary` for the single canonical\nstatement of the fold, which these fields mirror.",
+        "description": "The fleet-pulse counts (issue #76) \u2014 every chunk's derived status folded to four\nbuckets:\n\n* ``ready`` \u2014 chunks derived ``ready``;\n* ``running`` \u2014 ``running`` + ``delivering`` (live work, either shape);\n* ``waiting`` \u2014 ``waiting_on_human`` + ``paused`` (human-parked);\n* ``needs`` \u2014 ``needs_human``.\n\nThe remaining derived statuses (``not_ready``, ``stopped``, ``done``) count toward no\nbucket \u2014 a live-work pulse, not a total. The fold's canonical statement:\n:func:`~blizzard.hub.domain.work.derive_fleet_summary`.",
         "properties": {
           "needs": {
             "title": "Needs",
@@ -706,7 +706,7 @@
         "type": "object"
       },
       "GitCommitDeclarationRequest": {
-        "description": "A worker's explicit git-commit declaration for one repo it touched.\n\nCarries no forge: the origin a declaration is verified against is read from the\nenvironment's repo manifest, which the workspace provider owns. A worker naming its\nown forge could name the wrong one, and did \u2014 the field's default resolved ``origin``\nin the process cwd, which for a worker spawned at the workspace root is the workspace\nrepo rather than the repo being declared.\n\n``environment_id`` is optional while a chunk holds exactly one environment (the\nrunner infers it); it is required once a chunk holds several, because the same repo\nhas a worktree in each and ``repo`` alone no longer identifies one.",
+        "description": "A worker's explicit git-commit declaration for one repo it touched.\n\nCarries no forge (issue #143): the origin a declaration is verified against is read\nfrom the environment's repo manifest, not named by the worker (pinned by\ntests/test_pin_wire.py::test_git_commit_declaration_carries_no_forge_field).\n\n``environment_id`` is optional while a chunk holds exactly one environment (the\nrunner infers it); it is required once a chunk holds several, because the same repo\nhas a worktree in each and ``repo`` alone no longer identifies one.",
         "properties": {
           "branch": {
             "title": "Branch",
@@ -816,7 +816,7 @@
         "type": "object"
       },
       "HistoryRowView": {
-        "description": "One row of a chunk's own timeline, as a worker reads it \u2014 a transition, a\ncross-graph migration, or a delivery bounce, merged oldest-first by ``recorded_at``.\n\n``from_node``/``to_node`` are human-legible labels: a transition's node names, or (for\na migration) the ``graph/node`` hop the board itself renders\n(``from_graph/from_node --choice--> to_graph/landed_node``, see ``MigrationView``).\nBoth null for a bounce, which names no node. ``epoch`` is populated only for a\ntransition row \u2014 the wire's own ``MigrationView``/``BounceView`` carry no epoch to\nproject. ``cause``/``detail`` carry a bounce's kick-back cause and its raw envelope, or\na migration's ``source`` (``authored-edge``/``intent``/``follow-latest``) in\n``detail``; both null on a transition row.",
+        "description": "One row of a chunk's own timeline, as a worker reads it \u2014 a transition, a\ncross-graph migration, or a delivery bounce, merged oldest-first by ``recorded_at``.\n\n``from_node``/``to_node`` are human-legible labels: a transition's node names, or (for\na migration) the ``graph/node`` hop\n(``from_graph/from_node --choice--> to_graph/landed_node``, see ``MigrationView``).\nBoth null for a bounce, which names no node. ``epoch`` is populated only for a\ntransition row \u2014 the wire's own ``MigrationView``/``BounceView`` carry no epoch to\nproject. ``cause``/``detail`` carry a bounce's kick-back cause and its raw envelope, or\na migration's ``source`` (``authored-edge``/``intent``/``follow-latest``) in\n``detail``; both null on a transition row.",
         "properties": {
           "cause": {
             "anyOf": [
@@ -917,7 +917,7 @@
         "type": "object"
       },
       "HubConnectivityView": {
-        "description": "Hub reachability (derived, not probed) plus the outbound backlog depth.\n\n``endpoint`` is the configured hub base URL (``RunnerConfig.hub_url``) \u2014 the\nlocal panel's link out to the fleet board; connectivity facts, not a probe.",
+        "description": "Hub reachability (derived, not probed) plus the outbound backlog depth.\n\n``endpoint`` is the configured hub base URL (``RunnerConfig.hub_url``) \u2014\nconnectivity facts, not a probe.",
         "properties": {
           "buffer_depth": {
             "title": "Buffer Depth",
@@ -953,7 +953,7 @@
         "type": "object"
       },
       "LeaseListResponse": {
-        "description": "Active leases, then recently-closed ones \u2014 the panel's list (issue #28/#29).",
+        "description": "Active leases, then recently-closed ones (issue #28/#29).",
         "properties": {
           "items": {
             "default": [],
@@ -1172,7 +1172,7 @@
         "type": "object"
       },
       "PauseView": {
-        "description": "An open pause on a chunk (issue #46) \u2014 who set it and when.\n\nPresent only while ``paused=True`` is the newest pause fact; a resume clears it.\nCarried independently of ``status``: PAUSED sits below the human-gated statuses in\nthe derivation order, so a chunk both paused and parked on a question derives\n``waiting_on_human`` \u2014 this field is the only way the runner (and the board) learn\nthe chunk is paused in that case, and it also answers \"who paused it\".",
+        "description": "An open pause on a chunk (issue #46) \u2014 who set it and when.\n\nPresent only while ``paused=True`` is the newest pause fact; a resume clears it.\nCarried independently of ``status``: PAUSED sits below the human-gated statuses in\nthe derivation order, so a chunk both paused and parked on a question derives\n``waiting_on_human`` \u2014 this field is then the only carrier of the pause fact, and it\nalso answers \"who paused it\".",
         "properties": {
           "by": {
             "title": "By",
@@ -1239,7 +1239,7 @@
         "type": "object"
       },
       "RequeueResponse": {
-        "description": "``POST /chunks/{id}/requeues`` \u2014 the local hold is cleared; the next FILL spawns\na fresh attempt at the chunk's current node.",
+        "description": "``POST /chunks/{id}/requeues`` \u2014 the local hold is cleared.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -1494,7 +1494,7 @@
         "type": "object"
       },
       "TakeoverEndResponse": {
-        "description": "``PATCH /chunks/{id}/takeovers/{tid}`` \u2014 the CLI calls this once its child exits.",
+        "description": "``PATCH /chunks/{id}/takeovers/{tid}`` \u2014 the takeover is recorded closed.",
         "properties": {
           "ended": {
             "title": "Ended",
@@ -1513,7 +1513,7 @@
         "type": "object"
       },
       "TakeoverOpenResponse": {
-        "description": "``POST /chunks/{id}/takeovers`` \u2014 the CLI execs ``command`` verbatim in ``workdir``.\n\n``env`` (issue #258) is the bounded takeover env \u2014 the lease's ``BLIZZARD_*``\nidentity (including the re-minted lease token) plus ``PATH``/``HOME`` \u2014 for the\nCLI to layer over the operator's terminal env on exec. Never the daemon's full\nchild env: no ``env_passthrough`` secret and no daemon ``TERM``/locale crosses\nthis response. It rides only this body; the ``command`` string stays\nprintable-safe.",
+        "description": "``POST /chunks/{id}/takeovers`` \u2014 the CLI execs ``command`` verbatim in ``workdir``.\n\n``env`` (issue #258) is the bounded takeover env \u2014 the lease's ``BLIZZARD_*``\nidentity (including the re-minted lease token) plus ``PATH``/``HOME`` \u2014 never the\ndaemon's full child env (pinned by\ntests/test_runner_takeover.py::test_takeover_env_is_bounded_to_identity_plus_path_and_home).\nIt rides only this body; the ``command`` string stays printable-safe.",
         "properties": {
           "command": {
             "title": "Command",
@@ -1740,7 +1740,7 @@
         "type": "object"
       },
       "WorkItemEntry": {
-        "description": "One pointer's pass-through work item \u2014 title, body + comment\nthread, vendor-native.\n\n``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its\nbrowser address \u2014 both null when no configured source names ``source``. A\nper-pointer forge failure degrades here rather than failing the whole read:\n``error`` carries the reason and ``title``/``body`` are null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
+        "description": "One pointer's pass-through work item \u2014 title, body + comment\nthread, vendor-native.\n\n``label``/``web_url`` are the legible pointer label (``blizzard#8``) and its\nbrowser address \u2014 both null when no configured source names ``source``. A\nper-pointer forge failure degrades here rather than failing the whole read:\n``error`` carries the reason and ``title``/``body`` are null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
         "properties": {
           "body": {
             "anyOf": [
@@ -1827,7 +1827,7 @@
         "type": "object"
       },
       "WorkItemsView": {
-        "description": "A chunk's pass-through work items \u2014 one entry per pointer, order preserved.\n\nEmpty when the chunk holds no pointers \u2014 the board's empty state; a grouped chunk carrying\nmany pointers yields one entry per pointer, each fetched fresh and never stored.",
+        "description": "A chunk's pass-through work items \u2014 one entry per pointer, order preserved.\n\nEmpty when the chunk holds no pointers; a grouped chunk carrying many pointers\nyields one entry per pointer, each fetched fresh and never stored.",
         "properties": {
           "items": {
             "default": [],
@@ -1842,7 +1842,7 @@
         "type": "object"
       },
       "WorkRefView": {
-        "description": "A pointer as the views render it \u2014 the raw pair plus its legible\nlabel and browser URL, both rendered by the pointer's configured source binding.\n\n``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``\nis its browser-openable address. Both null when no configured source names\n``source`` \u2014 the board then leans on the chunk's stable short id instead.",
+        "description": "A pointer as the views carry it \u2014 the raw pair plus its legible label and browser\nURL, both resolved by the pointer's configured source binding.\n\n``label`` is the legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``\nis its browser-openable address. Both null when no configured source names\n``source``.",
         "properties": {
           "label": {
             "anyOf": [

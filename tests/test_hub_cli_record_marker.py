@@ -8,14 +8,11 @@ command authorizes its write with the run's marker capability token
 route reads (issue #240) — and refuses to post at all when either the callback URL or
 the token is missing from the environment.
 
-The unit tests above stub ``httpx.post`` and only ever capture the header the CLI
-built from that constant, which proves the CLI *sends* the header the constant
-currently names but nothing about whether a real gate reads the same name — since the
-import binds them structurally, that pair can't drift, but the component test below
-still proves the live end-to-end claim directly: the CLI's write, unmodified, is
-accepted by a real ``auth.mode="oauth"`` hub and durably recorded, the same way
-``tests/test_hub_marker_auth.py``'s ``test_the_token_the_executor_injects_authorizes_the_route_it_names``
-proves the land-script side (issue #240 AC3)."""
+The unit tests above assert the CLI sends the header via the shared constant; the
+component test below proves the live end-to-end claim against a real oauth hub —
+mirroring ``tests/test_hub_marker_auth.py``'s
+``test_the_token_the_executor_injects_authorizes_the_route_it_names`` land-script
+proof (issue #240 AC3)."""
 
 from __future__ import annotations
 

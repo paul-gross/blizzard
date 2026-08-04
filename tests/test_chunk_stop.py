@@ -1,18 +1,11 @@
 """The ``/chunks/{id}/stop`` route over the HTTP surface (issue #118).
 
-Stop is the operator's terminal abandonment lever — the supported replacement for the
-hand-written ``INSERT INTO chunk_stopped`` the issue's motivating incident required.
-Unlike ``pause`` (keeps the claim) and unlike ``detach`` (releases the route but writes
-no terminal fact), stop does both in one operation: it writes the ``chunk_stopped``
-fact *and* releases any live route, so the holding runner's own detach-discovery
-(``test_runner_detach.py``'s route-only predicate) abandons the lease and frees the
-environments on its next tick — no separate ``detach`` call needed. These tests prove
-the controller wires that correctly end to end: 202/404/409, the fact written, the
-route released, a held fleet-wide hub-exec slot released, the events published, and
-that a stopped chunk never re-enters the ready queue. ``StopService``'s own refusal
-matrix is unit-tested in ``test_stop_service.py``; the end-to-end environment release
-a holding runner performs on its next tick is proven in
-``test_hub_runner_seam.py::test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick``.
+Proves the controller wires stop correctly end to end: 202/404/409, the fact written,
+the route released, a held fleet-wide hub-exec slot released, the events published, and
+that a stopped chunk never re-enters the ready queue. See ``test_stop_service.py`` for
+``StopService``'s own refusal matrix and
+``test_hub_runner_seam.py::test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick``
+for the end-to-end environment release.
 """
 
 from __future__ import annotations
@@ -211,7 +204,7 @@ def test_stop_while_waiting_on_human_with_a_parked_worker_releases_the_route(tmp
 
 
 def test_stop_with_no_live_route_still_succeeds(tmp_path: Path) -> None:
-    """Unlike detach's ``NotRouted`` 409, stop never requires a live route to release."""
+    """Stop never requires a live route to release."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER])
 
@@ -268,9 +261,8 @@ def test_stopped_chunk_with_a_stale_live_route_is_still_excluded_from_the_queue(
 
 def test_stop_releases_a_held_fleet_wide_hub_exec_slot(tmp_path: Path) -> None:
     """Consider-4 from the #118 pre-push review: a ``delivering`` chunk holding the
-    fleet-wide hub-exec slot is stoppable (stop only refuses {done, stopped}), and
-    the slot release rides the same atomic write as the terminal fact — no waiting
-    out ``stale_after`` before every other chunk's hub node can run again."""
+    fleet-wide hub-exec slot is stoppable, and the slot release rides the same atomic
+    write as the terminal fact."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER])
     chunks = _writable(hub)

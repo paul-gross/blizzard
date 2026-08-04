@@ -160,12 +160,9 @@ def test_review_fail_carries_findings_and_addendum_back_into_build(tmp_path: Pat
 
 def test_chunk_detail_exposes_the_review_fail_loop_and_findings_asset(tmp_path: Path) -> None:
     """The chunk detail (``GET /chunks/{id}``) surfaces the full transition history —
-    including the review-fail loop back to build — and the review-findings asset content.
-
-    This is the product surface behind MVP criterion 9/11 ("the hub's record shows every
-    transition"; "every chunk's node history, artifacts … render"). Without it the
-    review-fail cycle threads correctly through the envelope but is invisible to any
-    reader after the fact — exactly the gap a cold verification found."""
+    including the review-fail loop back to build — and the review-findings asset content
+    (MVP criterion 9/11: "the hub's record shows every transition"; "every chunk's node
+    history, artifacts … render")."""
     hub = build_hub(tmp_path)
     chunk_id, nodes = _mint_and_claim(hub)
 

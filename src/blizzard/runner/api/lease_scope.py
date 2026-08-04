@@ -9,11 +9,8 @@ fleet's hub-wiring state. ``upstream_detail`` unwraps the hub's own JSON error b
 (falling back to raw text) so a forwarded non-200 status carries the hub's own message
 rather than a runner-side generic one.
 
-Extracted from ``runner.api.artifacts`` (issue #127) — ``runner.api.chunk_detail``
-already duplicated ``upstream_detail`` verbatim, the lease-scoped history route
-(``runner.api.history``, issue #237) needed ``authorized_lease`` too, and
-``runner.api.attachments``'s own local copy of it is now this module's fourth consumer.
-A fourth (or third, for ``upstream_detail``) inline copy is what this module avoids.
+Extracted from ``runner.api.artifacts`` (issue #127) to give every lease-scoped route
+one shared copy of both rather than another inline duplicate.
 """
 
 from __future__ import annotations

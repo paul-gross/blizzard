@@ -12,10 +12,11 @@ current pin).
 nullable→backfill→NOT-NULL step uses ``op.batch_alter_table`` (the portable Alembic
 idiom, ``bzh:sql-portable``).
 
-**Deliberate deviation — local ``sa.Table`` literals, not ``import schema``:** like
-``20260716_1512_pm_pointer_source_ref`` (see its docstring), a revision that *reshapes*
-a table is a data migration pinned to a moment in time; importing head-of-tree
-``schema.py`` would silently change what this revision does on a future checkout.
+**Local ``sa.Table`` literals, not ``import schema``:** a revision that *reshapes* a table
+is a data migration pinned to a moment in time (``canon:no-retro``) — the reason is
+recorded in ``20260716_1512_pm_pointer_source_ref``'s docstring. Held here as a
+convention rather than a pinned behaviour: this revision's backfill reads only columns
+both shapes share, so the import would not change what it does today.
 
 **Backfill rule (config-free, deterministic — rehearsable):** each transition's
 ``graph_id`` is its chunk's current ``chunks.graph_id``. Reading no configuration, the

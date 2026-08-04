@@ -5,8 +5,8 @@ The declarative pause brake lives at the hub; the runner reads it on PULL (a
 paused = no new claims, in-flight chunks run on. When the hub is unreachable the runner
 keeps its last-mirrored directive. Driven directly against a real (tmp sqlite)
 runner store with :class:`FakeHub`/:class:`FakeHarness`/:class:`FakeProvider`/
-:class:`FakeProbe` standing in only at the seams — a domain slice over real internal
-collaborators, the harness matrix's component definition, not its one-function unit one.
+:class:`FakeProbe` standing in only at the seams — the harness matrix's component
+definition.
 """
 
 from __future__ import annotations
@@ -259,10 +259,9 @@ def test_in_flight_chunk_runs_on_while_locally_paused(tmp_path):  # type: ignore
 # The local brake reaches every spawn site, not just FILL's claim (issue #45)
 # --------------------------------------------------------------------------- #
 #
-# The hub brake keeps its claims-only meaning — checked in FILL alone. The local
-# brake also blocks restart-resume, an answer-resume, and every ``_spawn_attempt`` caller
-# (ADVANCE's next-node, a requeue, a claim-adopt/reclaim) via the shared
-# ``_spawn_suppressed`` gate, always reached before its primitive's first mutation.
+# The hub brake is claims-only. These exercise the local brake at every other spawn site:
+# restart-resume, answer-resume, and each ``_spawn_attempt`` caller (ADVANCE's next-node,
+# a requeue, a claim-adopt/reclaim).
 
 
 def _seed_running_lease(  # type: ignore[no-untyped-def]
@@ -367,13 +366,12 @@ def test_restart_resume_suppressed_while_locally_paused(tmp_path):  # type: igno
 
 
 def test_restart_resume_suppressed_then_advance_does_not_judge_or_spawn(tmp_path):  # type: ignore[no-untyped-def]
-    """The headline regression (issue #45 review): a suppressed restart-resume must not
-    leak the lease to ADVANCE. Left active with a dead pid and an open resume intent, the
-    lease is exactly the shape ADVANCE would otherwise read as an exited worker to judge —
-    and judging it both spawns a harness process (``ctx.harness.judge`` resumes the
-    session) and reads a worker killed mid-work as a done declaration. Drives a
-    full tick's worth of steps in RESUME-then-ADVANCE order, the shape a restart under a
-    standing local pause actually produces.
+    """A suppressed restart-resume must not leak the lease to ADVANCE (issue #45 review).
+
+    Left active with a dead pid and an open resume intent, the lease is exactly the shape
+    ADVANCE would otherwise read as an exited worker to judge — and judging it spawns a
+    harness process and reads a worker killed mid-work as a done declaration. Driven in
+    RESUME-then-ADVANCE order, the shape a restart under a standing local pause produces.
     """
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -611,14 +609,11 @@ def test_suppression_logged_once_per_lease_per_tick_per_site(tmp_path):  # type:
 # neither is blanket-suspended (issue #45)
 # --------------------------------------------------------------------------- #
 #
-# REAP ends an attempt (requeue-or-escalate) structurally below the shared
-# `_spawn_suppressed` gate — its exhausted-retries branch never calls a spawn
-# primitive, so the chokepoint gate cannot see it. REAP's own local_paused check is
-# narrower than the gate that once lived at its top: it guards only the stall case's
-# kill (a live worker is never killed while paused); the orphan case runs unguarded
-# because it has no process to kill and its own `_fail_attempt` call self-defers both
-# branches (requeue via the suppressed respawn, escalate via `_fail_attempt`'s own
-# local_paused gate — the one home every caller of it shares). These exercise both.
+# REAP's exhausted-retries branch never calls a spawn primitive, so the shared
+# `_spawn_suppressed` gate cannot see it. REAP's own local_paused check guards only the
+# stall case's kill (a live worker is never killed while paused); the orphan case runs
+# unguarded, having no process to kill, and self-defers both its branches. These
+# exercise both.
 
 
 def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=2, epoch=1):  # type: ignore[no-untyped-def]
@@ -641,11 +636,9 @@ def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=2, e
 
 def test_reap_orphan_requeue_respawn_suppressed_then_adopted_at_unpause(tmp_path):  # type: ignore[no-untyped-def]
     """REAP's orphan case is not suspended by the local brake — it has no process to
-    kill, so it reaps and requeues as always; only the requeue's respawn is suppressed
-    (the same self-defer every :func:`_spawn_attempt` caller gets). That leaves the chunk
-    shaped like an interrupted claim — bound, no active lease — which FILL's reconcile
-    pass adopts once the brake clears, exactly as it does for a suppressed apply-response
-    spawn."""
+    kill, so it reaps and requeues as always; only the requeue's respawn is suppressed.
+    That leaves the chunk shaped like an interrupted claim — bound, no active lease —
+    which FILL's reconcile pass adopts once the brake clears."""
     store = _store(tmp_path)
     _seed_orphan_lease(store)
     hub = FakeHub()
@@ -702,9 +695,8 @@ def test_hub_paused_only_reap_still_requeues(tmp_path):  # type: ignore[no-untyp
 def test_reap_orphan_at_exhausted_retries_defers_escalation_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
     """The must-fix-2 scenario (issue #45 review): REAP's orphan case is not blanket-
     suspended — it has no process to kill, so it reaches `_fail_attempt` even while
-    paused. At an exhausted budget that lands on the escalate branch, which is where the
-    deferral actually lives now — the one gate every `_fail_attempt` caller (REAP,
-    ADVANCE, PULL) shares, rather than three separate checks."""
+    paused. At an exhausted budget that lands on the escalate branch, where the deferral
+    lives — the one gate every `_fail_attempt` caller (REAP, ADVANCE, PULL) shares."""
     store = _store(tmp_path)
     _seed_orphan_lease(store, retries_max=0)  # exhausted on the very first attempt
     hub = FakeHub()
@@ -785,18 +777,17 @@ def test_reap_at_exhausted_retries_does_not_escalate_while_locally_paused(tmp_pa
 # The whole tick, not hand-picked steps (issue #45 review)
 # --------------------------------------------------------------------------- #
 #
-# Every test above drives the one or two steps it reasons about. That is what let the
-# original headline bug through: each step was green in isolation, and the bug lived in
-# the *hand-off* between them. These two drive the composed pass instead.
+# Every test above drives the one or two steps it reasons about, which cannot see a bug
+# living in the *hand-off* between two steps that are each green alone. These two drive
+# the composed pass instead.
 
 
 def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path):  # type: ignore[no-untyped-def]
     """The headline regression driven as a **full tick** (REAP → RESUME → PULL → FILL →
-    ADVANCE), not as the hand-picked RESUME-then-ADVANCE pair. This is the shape a real
-    restart under a standing local pause produces, and the composed pass is the only
-    driver that can catch a gap in the hand-off between two steps that are each green
-    alone — the blind spot the original bug hid in. The hub brake is **off**: the local
-    brake alone must stop every one of the four spawn primitives.
+    ADVANCE), not as the hand-picked RESUME-then-ADVANCE pair — the shape a real restart
+    under a standing local pause produces, and the only driver that can catch a gap in the
+    hand-off between two steps that are each green alone. The hub brake is **off**: the
+    local brake alone must stop every one of the four spawn primitives.
     """
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -864,15 +855,13 @@ def test_advance_does_not_judge_a_lease_resume_left_open_after_a_hub_blip(tmp_pa
     """ADVANCE's resume-intent skip is a **general** correctness rule, not a pause artifact
     — so it is proven here with **no pause anywhere**.
 
-    RESUME leaves an intent open on either of two conditions: the local brake is on, or the
-    hub was unreachable for its ownership check (:func:`_resume_marked_lease` returns early
-    rather than resuming blind). The second needs no brake at all. A transient blip — the
-    hub down for RESUME's ``get_chunk``, back up by ADVANCE's ``get_envelope`` a moment
-    later in the same tick — leaves a lease that is active, session-bearing and dead-pid:
-    exactly what ADVANCE reads as exited work. Judging it would elicit a verdict from a
-    session RESUME never re-attached and read a worker killed mid-work as a done
-    declaration. Only the resume-intent skip stops it; the judge's local-brake gate
-    cannot, because nothing here is paused.
+    A transient blip — the hub down for RESUME's ``get_chunk``, back up by ADVANCE's
+    ``get_envelope`` a moment later in the same tick — leaves an intent open with no brake
+    involved, and a lease that is active, session-bearing and dead-pid: exactly what
+    ADVANCE reads as exited work. Judging it would elicit a verdict from a session RESUME
+    never re-attached and read a worker killed mid-work as a done declaration. Only the
+    resume-intent skip stops it; the judge's local-brake gate cannot, because nothing here
+    is paused.
     """
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -913,17 +902,14 @@ def test_advance_does_not_judge_a_lease_resume_left_open_after_a_hub_blip(tmp_pa
 
 def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
     """The escalate gate's **third** caller (issue #45). ``_fail_attempt`` is shared by
-    REAP's orphan case, ADVANCE's verdict-less exit and PULL's flush rejections, and the
-    deferral sits in that one shared function — but "shared, so it must hold everywhere"
-    is exactly the by-construction reasoning that missed the judgement primitive, so each
-    *reachable* caller is proven rather than argued.
+    REAP's orphan case, ADVANCE's verdict-less exit and PULL's flush rejections, and each
+    *reachable* caller is proven rather than argued from the sharing.
 
-    Of the three, ADVANCE's is provably unreachable while locally paused (the judgement
-    gate returns before its ``_fail_attempt`` can be reached at all), and REAP's orphan
-    case is covered above. This is PULL's: a completion buffered just before the operator
-    paused is flushed during the pause, the hub rejects it as stale (a zombie fenced),
-    and the exhausted budget lands it on the escalate branch — the one-way door
-    that must not open while the runner is paused.
+    ADVANCE's is unreachable while locally paused, and REAP's orphan case is covered
+    above. This is PULL's: a completion buffered just before the operator paused is
+    flushed during the pause, the hub rejects it as stale, and the exhausted budget lands
+    it on the escalate branch — the one-way door that must not open while the runner is
+    paused.
     """
     store = _store(tmp_path)
     store.record_lease(
@@ -990,7 +976,7 @@ def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alo
       instruction about a specific chunk, and a kill is not a spawn. The park below therefore
       happens on a fully locally-paused runner, which is the first assertion here.
     * :func:`_resume_if_unpaused` **is** gated — its ``resume_with_message`` is a real (fifth)
-      spawn primitive, and landing one outside the gate is precisely how issue #45 happened.
+      spawn primitive, and a spawn primitive outside the gate is issue #45's failure mode.
 
     Driven as full ticks, since the interplay spans PULL (which parks) and ADVANCE (which
     resumes).
@@ -1350,9 +1336,8 @@ def test_ceiling_engaged_defers_reap_kill_and_suppresses_fill_in_the_same_tick(t
 def test_runner_start_clears_the_ceiling_brake_exactly_like_a_manual_pause(tmp_path):  # type: ignore[no-untyped-def]
     """`blizzard runner start` (``PATCH /api/runner`` with ``paused=False`` — the same
     write :func:`_pause_locally` makes here) clears a ceiling-engaged brake exactly as it
-    clears an operator's own pause: the ceiling reuses the one brake, so `start` needs no
-    ceiling-specific code path at all. Once cleared and the window itself no longer holds
-    the tripping spend, FILL claims again."""
+    clears an operator's own pause, with no ceiling-specific code path. Once cleared and
+    the window no longer holds the tripping spend, FILL claims again."""
     store = _store(tmp_path)
     _record_usage(store, cost=7.0, recorded_at=_NOW)
     clock = FixedClock(_NOW)
@@ -1375,9 +1360,8 @@ def test_runner_start_clears_the_ceiling_brake_exactly_like_a_manual_pause(tmp_p
     fill(ctx)
     assert hub.claims == []  # suppressed while engaged
 
-    # `blizzard runner start` — the exact PATCH /api/runner write (`_set_local_paused` in
-    # `runner/cli.py`, `patch_runner` in `runner/api/control.py`) `record_local_pause`
-    # with `paused=False`; no ceiling-aware code exists or is needed anywhere in that path.
+    # `blizzard runner start` — the exact `record_local_pause(paused=False)` write
+    # `PATCH /api/runner` makes, with no ceiling-aware code anywhere in that path.
     _pause_locally(store, ctx, paused=False)
     assert store.local_paused("r1") is False
 

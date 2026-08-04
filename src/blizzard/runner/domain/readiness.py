@@ -7,9 +7,6 @@ skew fails loud, it never serves on a mismatch). The rule imports only the
 store-status value type and the standard library; the store engine sits behind the
 injected reader seam, so this evaluates in a unit test with a fake reader and no
 database.
-
-The loop-facts business rules (leases, heartbeats, env bindings, reaping) land in
-this layer in P6; this is the seam and the composition pattern they slot into.
 """
 
 from __future__ import annotations

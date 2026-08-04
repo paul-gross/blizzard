@@ -1,9 +1,8 @@
-"""The board's Event log activity feed — ``GET /api/activity`` (issue #213).
+"""The activity feed — ``GET /api/activity`` (issue #213).
 
-The page-load backfill counterpart to the live SSE stream (``events/stream.py``): a
-bounded, merged read over the same fact-derived vocabulary a live ``chunk-changed`` /
-``event-logged`` / ``runner-changed`` frame carries, reshaped by
-:func:`blizzard.hub.domain.work.derive_activity_feed` from :class:`~blizzard.hub.domain.work.ActivityRow`.
+A bounded, merged read over the same fact-derived vocabulary a live ``chunk-changed`` /
+``event-logged`` / ``runner-changed`` frame carries — shaped by
+:func:`blizzard.hub.domain.work.derive_activity_feed`.
 """
 
 from __future__ import annotations
@@ -12,15 +11,13 @@ from pydantic import BaseModel
 
 
 class ActivityView(BaseModel):
-    """One activity-feed row on the wire — the same present-when-meaningful shape
-    :class:`~blizzard.hub.domain.work.ActivityRow` carries, absent (never placeholder
-    ``None``-as-a-present-field) wherever a source doesn't fill a field.
+    """One activity-feed row on the wire — present-when-meaningful: a field its source
+    doesn't fill is absent, never a placeholder ``None``-as-a-present-field.
 
     ``type`` is one of ``"chunk-changed"`` / ``"event-logged"`` / ``"runner-changed"``;
     ``key`` is the identity of the underlying fact, the merge's own recency tiebreak,
     never a stable frame id. ``status``/``prev_status``/``node``/``prev_node`` stay
-    absent for every row this phase produces (no graph resolution is threaded through
-    yet) — present in the shape for forward compatibility with a later phase."""
+    absent for every row this phase produces — present in the shape for a later one."""
 
     type: str
     key: str

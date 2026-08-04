@@ -1,20 +1,13 @@
 """The spawn-cwd rule — one owner (issue #29).
 
-Two independent copies of "what cwd does a worker spawn into" would desync exactly
-as ``runner/domain/leases.py`` exists to keep REAP and the panel agreeing on lease
-state: the same reasoning applies here, since both the live spawn path
+Both the live spawn path
 (:mod:`blizzard.runner.harness.internal.claude_code_adapter`) and the transcript
 source's own disambiguation hint
 (:class:`~blizzard.runner.harness.internal.claude_code_transcript.ClaudeCodeTranscriptSource`,
-issue #29, blizzard#245) need the same answer to "what was this worker's cwd" — the adapter to *set* it, the
-transcript reader to *guess* it back for Claude Code's
-``~/.claude/projects/<mangled-cwd>/`` layout.
-
-This module is that predicate's one owner. The transcript source is the second
-caller, and it legitimately gets ``None`` back for a closed lease: a closed
-lease's binding is always released by the time closure is recorded
-(:class:`~blizzard.runner.domain.leases.LeaseActivity`, the invariant's one
-owner) — there is no fact left to resolve a fallback from.
+issue #29, blizzard#245) need the same answer to "what was this worker's cwd" — the
+adapter to *set* it, the transcript reader to *guess* it back. This module is that
+predicate's one owner. The transcript source legitimately gets ``None`` back for a
+closed lease (see :class:`~blizzard.runner.domain.leases.LeaseActivity`).
 Stdlib-only (``bzh:domain-core``).
 """
 
@@ -25,9 +18,6 @@ def resolve_spawn_cwd(workspace_root: str, fallback_workdir: str | None) -> str 
     """The cwd a worker was spawned into: ``workspace_root`` if set, else the fallback.
 
     ``workspace_root`` empty (``BZ_WORKSPACE_ROOT`` unset) means the spawn cwd *is*
-    the fallback — in the live spawn path, the chunk's single acquired
-    environment's workdir; for the transcript read, a closed lease's
-    (now-released) binding workdir, or ``None`` when no binding is available at
-    all.
+    the fallback, which is itself ``None`` when the caller has none to supply.
     """
     return workspace_root or fallback_workdir

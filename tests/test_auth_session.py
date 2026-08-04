@@ -107,11 +107,9 @@ def test_pending_is_refused_ingest(tmp_path: Path) -> None:
 
 
 def test_guest_reads_chunks_and_events_but_is_refused_ingest(tmp_path: Path) -> None:
-    """The SSE stream (``GET /api/events/stream``) is gated on the same ``FLEET_VIEW``
-    permission (proven by introspection in ``test_route_classification.py`` and by the
-    route-permission matrix), so it is not separately live-called here: its handler
-    streams indefinitely and a bounded read like this one is not the seam that proves
-    gating — ``GET /api/events`` (the bounded read off the same permission) is."""
+    """The SSE stream shares the same ``FLEET_VIEW`` gate as this bounded read (see
+    ``test_route_classification.py``); it isn't called directly here since its handler
+    streams indefinitely."""
     hub = build_hub(tmp_path, auth_mode="oauth")
     guest = seed_user(hub, username="reader", role=Role.GUEST)
     token = seed_session(hub, guest)

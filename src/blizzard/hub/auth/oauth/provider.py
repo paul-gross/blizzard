@@ -17,9 +17,8 @@ class OAuthExchangeError(Exception):
     """Raised by :meth:`IOAuthProvider.exchange` on any failure to turn a presented
     ``code`` into a :class:`~blizzard.hub.auth.models.ProviderIdentity` — a rejected
     code, a network/transport failure, or a response the conformer cannot parse
-    (including a bad/unknown ``id_token`` signature for the ``oidc`` conformer). The
-    route's single catch site (``hub/api/auth_login.py``) turns this into a
-    ``login_failed`` fact and a distinct error response; it never inspects the cause."""
+    (including a bad/unknown ``id_token`` signature for the ``oidc`` conformer). See
+    ``hub/api/auth_login.py`` for the single catch site."""
 
 
 class IOAuthProvider(Protocol):

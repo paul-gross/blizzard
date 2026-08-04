@@ -3,34 +3,16 @@
 
 ``require_runner_principal`` resolves a presented ``Authorization: Bearer`` token to a
 :class:`RunnerPrincipal`, reading only through :attr:`~blizzard.hub.composition.HubServices.registry`
-(the read-only registry Protocol, held directly here exactly as ``chunks.py`` holds
-``services.chunks`` — ``bzh:controller-read-only`` permits a read-only repository at the
-edge). The lookup hashes the presented token to its sha256 hex digest and resolves it via
-``registration_for_token_hash`` — a reverse, hash-indexed read. That lookup **is** the
-match: because it selects on the stored hash column, no separate ``hmac.compare_digest``
-is load-bearing for resolution (unlike a verify-then-compare flow over a value already in
-hand).
+(``bzh:controller-read-only``). The lookup hashes the presented token to its sha256 hex
+digest and resolves it via ``registration_for_token_hash``. That lookup **is** the match:
+it selects on the stored hash column, so no separate ``hmac.compare_digest`` is
+load-bearing for resolution.
 
-``config.runner_auth_mode`` selects the rollout posture: ``warn`` (the default) logs the
-offending condition and returns ``None`` so the route still runs unauthenticated;
-``enforce`` raises 401. A missing/malformed header and an unresolved token are treated
-identically — both warn-log-and-pass, or both 401.
-
-``assert_owns`` is the separate, per-route confinement helper: a route that reads its own
-``runner_id`` out of its body/path calls it with the resolved principal to reject a token
-presented for a *different* runner — ``enforce`` raises 403, ``warn`` logs. It stays out of
-the dependency itself because a router-level dependency cannot uniformly read a declared
-``runner_id`` (body for some routes, path for others).
+``assert_owns`` stays out of the dependency itself because a router-level dependency
+cannot uniformly read a declared ``runner_id`` (body for some routes, path for others).
 
 ``reject_runner_principal`` (issue #87) is the mirror-image router-level dependency for
-every *operator* router: a runner principal is confined to the fleet router, so a bearer
-token that resolves to one on an operator verb is rejected outright — not silently treated
-as an anonymous call plus an ignored credential. It shares ``_resolve_principal`` with
-``require_runner_principal`` (both hash-lookup the same way); they differ only in which
-outcome each treats as the failure — a *missing/invalid* token for
-``require_runner_principal``, a *resolved* one for ``reject_runner_principal``. A missing or
-unresolvable token is not itself an operator-verb failure — anonymous is exactly what an
-operator call is.
+every *operator* router: a runner principal is confined to the fleet router.
 """
 
 from __future__ import annotations

@@ -1,17 +1,10 @@
 """Both graphs' ``retrospective`` node states the landing-verification duty (unit tier,
 issue #238 AC1/AC3).
 
-Retrospective is the last node standing at the last trust boundary before a chunk closes,
-and it is meant to re-derive deliver's landing report rather than take it on faith. An
-AC that only prose satisfies is an AC nothing catches regressing — a future prompt edit
-could drop the duty back to a bare assertion with no test failing. This guard pins the
-three checks mechanically, mirroring ``test_packaged_prompt_session_claims.py``'s shape:
-read straight off the loaded, inlined packaged prompt text.
-
-Scoped to what each lane can actually check: advanced-development-workflow lands via a
-per-repo PR merge (``land_pr_ci``), so its prompt names a PR-merge leg; basic-development-
-workflow lands via a fast-forwarded base ref (``land_ff``), no PR involved, so its prompt
-does not.
+The duty must be pinned mechanically against the loaded, inlined packaged prompt text, not
+left as a prose-only AC, since a future prompt edit could drop it with no test failing.
+Scoped per lane: advanced-development-workflow's prompt names a PR-merge leg (``land_pr_ci``);
+basic-development-workflow's does not, since it lands via a fast-forward (``land_ff``).
 """
 
 from __future__ import annotations

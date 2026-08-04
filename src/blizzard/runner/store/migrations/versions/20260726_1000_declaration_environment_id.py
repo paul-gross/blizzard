@@ -14,12 +14,10 @@ declaration:
   second env's declaration read as a *correction* of the first rather than a second
   fact. The read is now newest-per-``(lease_id, environment_id, repo)``.
 
-Existing rows carry no environment and a forge that never verified, so there is nothing
-to preserve: the table is dropped and recreated rather than back-filled. That is safe
-precisely because a declaration is ephemeral — it is read back within the lease that
-wrote it, and any lease old enough to predate this revision has long since closed. A
-back-fill would have to invent an ``environment_id`` for rows whose env is unknowable,
-which is worse than starting clean.
+Existing rows carry no environment and a forge that never verified, so the table is
+dropped and recreated rather than back-filled — a back-fill would have to invent an
+``environment_id`` for rows whose env is unknowable (pinned by
+``tests/test_pin_runner_store.py::test_declaration_environment_id_migration_discards_the_pre_revision_rows``).
 
 Revision ID: 20260726_1000_runner_declaration_environment_id
 Revises: 20260725_1200_runner_check_results

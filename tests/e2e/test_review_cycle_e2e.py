@@ -3,19 +3,14 @@
 The full-stack companion to the ``build -> review -> deliver`` happy-path scenario
 (test_acceptance_loop): one chunk travels the same default shape through the real
 forge + hub + runner + ``mock-claude-code`` façade, but here a **scripted review fails
-once and then passes**. It proves the P7 engine additions on the real rails, not just
-at the hub API:
+once and then passes**. Asserted on the real rails:
 
 * the review node routes the work back into build on ``fail`` and forward to deliver
   on the second ``pass``;
 * the review node ``produces`` a ``review-findings`` asset, and the fail edge carries
-  that finding plus its **prompt_addendum** back into build's re-entry envelope
-   — the addendum is executable and lands an observable
-  ``REVIEW_ADDRESSED.md`` commit *only* on the re-entry, so bare-``main`` reachability
-  is the git-truth proof the envelope carried it (the hub-API view of the same asset +
-  addendum is the component tier, test_review_cycle);
-* the runner-reported ``lease.minted`` facts keep the hub's epoch fence in lockstep
-  across the multiple runner node-steps, so no completion is rejected as stale;
+  that finding plus its **prompt_addendum** back into build's re-entry envelope — the
+  addendum is executable and lands an observable ``REVIEW_ADDRESSED.md`` commit *only*
+  on the re-entry, so bare-``main`` reachability is the git-truth proof;
 * build runs **twice** — the observable proof the cycle happened — and the delivery
   lands both build commits on the bare origin's ``main``.
 
@@ -218,11 +213,8 @@ def test_review_cycle_fails_once_then_delivers(tmp_path: Path) -> None:
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
 
-        # The chunk detail (GET /chunks/{id}) is the product surface the web app renders
-        # (MVP criterion 9/11): after the cycle it exposes the full transition history —
-        # including the review-fail loop back to build — and the review-findings asset
-        # content, on the real rails. This is exactly what a cold verification found
-        # missing: the loop threaded through the envelope but was invisible after.
+        # The chunk detail is where the cycle has to remain visible after the fact: the
+        # full transition history, and the review-findings asset content.
         detail = hub.get(f"/api/chunks/{chunk_id}").json()
         history = detail["history"]
         # The review judged fail once, routing review -> build: a visible step in the timeline.
@@ -230,7 +222,7 @@ def test_review_cycle_fails_once_then_delivers(tmp_path: Path) -> None:
         assert fail_steps, f"no review-fail step in the chunk history: {history}"
         assert any(h["choice_name"] == "pass" for h in history), f"no passing step in the history: {history}"
         # The review's findings asset — the failing visit's assessment — is inline on the
-        # detail, keyed {node}.{name}.{epoch}, content the verdict reason the fail carried back.
+        # detail, its content the verdict reason the fail carried back.
         findings = [a for a in detail["artifacts"] if a["name"] == "review-findings" and a["kind"] == "asset"]
         assert findings, f"no review-findings asset on the chunk detail: {detail['artifacts']}"
         assert any("BLOCKING" in (a["content"] or "") for a in findings), (
@@ -241,8 +233,8 @@ def test_review_cycle_fails_once_then_delivers(tmp_path: Path) -> None:
     build_md = _git_bare(origin_bare, "show", "main:BUILD.md")
     assert build_md.count("build pass") == 2, f"expected two build passes on main, got:\n{build_md}"
 
-    # The fail edge's prompt_addendum threaded into build's re-entry envelope on the real
-    # rails: its committed marker is reachable from bare main. Present only because the
-    # addendum arrived as code the re-entry build ran — git truth the findings came back.
+    # The fail edge's prompt_addendum threaded into build's re-entry envelope: its
+    # committed marker is reachable from bare main only if the addendum arrived as code
+    # the re-entry build ran.
     tree = _git_bare(origin_bare, "ls-tree", "-r", "--name-only", "main")
     assert "REVIEW_ADDRESSED.md" in tree.split(), f"re-entry addendum did not land on main:\n{tree}"

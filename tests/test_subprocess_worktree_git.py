@@ -1,21 +1,11 @@
 """Component-tier proof that the real worktree-git adapter is immune to the
-detached-HEAD wedge the inference it replaced used to hit (issue #143, Phase 6).
+detached-HEAD wedge (issue #143, Phase 6).
 
-The original bug: with a leased repo worktree in detached HEAD, the runner computed
-the branch to push as the literal string ``"HEAD"`` (``git rev-parse --abbrev-ref
-HEAD``) and ran ``git push --force-with-lease origin HEAD``, which git refuses —
-wedging the tick loop forever. Phase 4 (`blizzard.runner.loop.internal.
-subprocess_worktree_git`) deleted that inference and the push entirely, replacing them
-with a read-only ``verify`` over the worker's own DECLARED branch. This drives the real
-``git`` CLI (no fakes — this is the "real internal collaborators" tier) against a
-worktree left in detached HEAD, the exact state that used to wedge, and confirms
-``verify`` neither reads nor cares about the worktree's own HEAD at all.
-
-``verify`` is now purely remote-side: it takes the origin URL the environment's repo
-manifest names and asks ``git ls-remote`` about it, consulting no working directory at
-all. The forge-vs-``origin`` comparison it used to make is gone along with the
-worker-supplied forge that fed it, so the normalization cases that comparison needed are
-gone too — there is no longer a second opinion to reconcile.
+Drives the real ``git`` CLI (no fakes — this is the "real internal collaborators"
+tier) against a worktree left in detached HEAD, and confirms ``verify`` neither reads
+nor cares about the worktree's own HEAD: it takes the origin URL the environment's
+repo manifest names and asks ``git ls-remote`` about it, consulting no working
+directory at all.
 """
 
 from __future__ import annotations
@@ -59,8 +49,8 @@ def test_verify_confirms_a_declared_commit_against_a_detached_head_worktree(tmp_
     _git(workdir, "remote", "add", "origin", f"file://{origin}")
     _git(workdir, "push", "-u", "origin", "main")
 
-    # Detach: the exact state that used to wedge the runner — `--abbrev-ref HEAD`
-    # returns the literal string "HEAD" here, not a real branch name.
+    # Detach: `--abbrev-ref HEAD` returns the literal string "HEAD" here, not a real
+    # branch name.
     _git(workdir, "checkout", "--detach", commit)
     assert _current_branch_name(workdir) == "HEAD"
 
@@ -74,8 +64,8 @@ def test_verify_confirms_a_declared_commit_against_a_detached_head_worktree(tmp_
 
 @pytest.mark.component
 def test_verify_rejects_a_commit_the_branch_does_not_point_at(tmp_path: Path) -> None:
-    """The check that remains is the one that was always load-bearing: does this branch,
-    at this origin, point at this commit? A stale or invented sha fails it."""
+    """The load-bearing check: does this branch, at this origin, point at this commit?
+    A stale or invented sha fails it."""
     origin = tmp_path / "origin.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(origin)], check=True, capture_output=True)
 
@@ -149,11 +139,10 @@ def test_verify_needs_no_working_directory_at_all(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_subprocess_worktree_git_has_no_push_or_head_inference_methods() -> None:
-    """Structural pin (issue #143, Phase 6): the wedge's own machinery — the push and
-    the ``--abbrev-ref HEAD`` branch inference — no longer exists on either the real
-    adapter or the ``IWorktreeGit`` Protocol it binds. A re-introduction fails to
-    typecheck against the Protocol and raises ``AttributeError`` the instant it is
-    called, rather than silently reintroducing the wedge."""
+    """Structural pin (issue #143, Phase 6): the push method and the ``--abbrev-ref
+    HEAD`` branch inference do not exist on either the real adapter or the
+    ``IWorktreeGit`` Protocol it binds. A re-introduction fails to typecheck against
+    the Protocol and raises ``AttributeError`` the instant it is called."""
     adapter = SubprocessWorktreeGit()
     for missing_attr in ("push", "find_produced_artifacts", "_current_branch"):
         assert not hasattr(IWorktreeGit, missing_attr)

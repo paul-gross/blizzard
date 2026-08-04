@@ -7,14 +7,12 @@ Copies :mod:`tests.test_pause_service`'s and :mod:`tests.test_detach_service`'s
 fake-repo pattern exactly, including the ``__getattr__`` guard and the documented
 ``cast`` at the wide-Protocol call site (``bzh:repository-split``).
 
-The live route's release (and the fleet-wide hub-exec slot's) is no longer something
-:class:`StopService` orchestrates itself — must-fix 2 from the #118 pre-push review
-folded it into :meth:`~blizzard.hub.store.internal.chunk_store.ChunkStore.record_stop`,
-a single store transaction, so the domain layer only ever calls ``record_stop`` and the
-``__getattr__`` guard below is exactly what pins that: a regression that reaches for
-``route_of``/``record_route_released`` from this layer again fails loudly. The route
-release (and the hub-exec slot release) are proven end to end at the component tier
-in ``test_chunk_stop.py``.
+The route release (and the fleet-wide hub-exec slot's) lives in
+:meth:`~blizzard.hub.store.internal.chunk_store.ChunkStore.record_stop`'s own store
+transaction, not in :class:`StopService` (issue #118 must-fix 2) — the
+``__getattr__`` guard below pins that a regression reaching for
+``route_of``/``record_route_released`` from this layer fails loudly. Proven end to
+end at the component tier in ``test_chunk_stop.py``.
 """
 
 from __future__ import annotations
@@ -48,9 +46,8 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 @dataclass
 class _FakeChunkRepo:
     """Only ``load_facts``/``record_stop`` are live; anything else is a bug — including
-    ``route_of``/``record_route_released``, which moved into ``record_stop``'s own
-    store transaction (must-fix 2, see the module docstring) and so must never be
-    touched from this layer again.
+    ``route_of``/``record_route_released``, owned by ``record_stop``'s own store
+    transaction (must-fix 2, see the module docstring), never this layer.
 
     Not typed against :class:`IWriteChunkRepository` directly — pyright cannot verify
     ``__getattr__``-backed structural conformance, so callers wrap an instance in

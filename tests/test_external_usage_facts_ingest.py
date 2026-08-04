@@ -228,8 +228,7 @@ def test_get_runners_renders_the_landed_sample_with_exact_wire_field_names(tmp_p
     """The read side (issue #218 phase 4): ``GET /api/runners`` off a live hub, after a
     fact batch carrying ``external_subscription_usage.sampled`` lands, renders the exact
     wire shape ``external_subscription_usage.{sampled_at, windows[].{window,
-    utilization_pct, resets_at, window_seconds}}`` — the field names Phase 5's board
-    consumes."""
+    utilization_pct, resets_at, window_seconds}}``."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
 

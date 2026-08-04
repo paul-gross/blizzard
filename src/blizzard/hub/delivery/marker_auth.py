@@ -1,21 +1,15 @@
 """A hub command node's mid-run marker-write credential (issue #230, phase 1).
 
-A land script (``land_default.py``/``land_ff.py``/``land_pr_ci.py``) is a subprocess
-:class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` spawns — as a **child of the
-same process** that serves ``POST /chunks/{chunk_id}/hub-markers``, the marker-write
-endpoint the script's mid-run callback posts to (``blizzard hub host`` runs one
-uvicorn process, no workers, so there is exactly one process on either end of that
-call). That same-process fact is what makes an in-memory, instance-scoped authority
-sufficient here: the token this module mints is issued and verified in the same
-process, never persisted, and never needs to survive a restart.
+A land script is a subprocess of the very process serving the marker-write endpoint its
+mid-run callback posts to, so an in-memory, instance-scoped authority is sufficient: the
+token is issued and verified in one process and never needs to survive a restart.
 
-An orphaned script — one whose owning hub process was ``kill -9``'d mid-land, leaving
-the child running — presents a token minted by a process that no longer exists. Its
-later writes fail against the restarted process's fresh (empty) authority. That is
-safe: the executor's crash contract is at-least-once-per-step
-(``bzh:steppable-loop`` — see :mod:`~blizzard.hub.delivery.hub_node`'s module
-docstring), so the step re-runs and re-records the marker idempotently on the next
-attempt. No correctness property depends on an orphan's write landing.
+An orphaned script — its owning hub process killed mid-land — therefore fails against the
+restarted process's fresh, empty authority. That is safe under the executor's
+at-least-once-per-step crash contract (``bzh:steppable-loop``, see
+:mod:`~blizzard.hub.delivery.hub_node`): the step re-runs and re-records the marker
+idempotently, so no correctness property depends on an orphan's write landing. Pinned by
+``tests/test_pin_hub_delivery.py::test_a_restarted_processs_fresh_authority_refuses_a_prior_instances_token``.
 """
 
 from __future__ import annotations

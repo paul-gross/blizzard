@@ -55,10 +55,9 @@ class ProviderIdentity:
     """What an :class:`~blizzard.hub.auth.oauth.provider.IOAuthProvider` conformer
     resolves a code exchange to (issue #92) — the shape both the ``oidc`` and
     ``github`` conformers normalize onto, and the domain's own
-    :meth:`~blizzard.hub.auth.service.AuthService.link_or_mint` input. Lives here
-    (not under ``hub/auth/oauth/``) so the domain linking rule depends on it without
-    reaching into the adapter subpackage — the dependency arrow points the other way
-    (an ``IOAuthProvider`` conformer imports this from the domain, ``bzh:dependency-inversion``)."""
+    :meth:`~blizzard.hub.auth.service.AuthService.link_or_mint` input. Lives here (not
+    under ``hub/auth/oauth/``) so the dependency arrow points from the adapter subpackage
+    into the domain, never the reverse (``bzh:dependency-inversion``)."""
 
     subject: str
     handle: str
@@ -69,8 +68,7 @@ class ProviderIdentity:
 @dataclass(frozen=True)
 class AuthStateEntry:
     """A single-use ``state`` row (decision D5) — the anti-CSRF/replay token round-tripped
-    through a provider redirect. ``authorize`` writes one; ``callback`` reads-and-deletes
-    it (single-use), clock-expired. ``provider_name`` cross-checks the callback's own
+    through a provider redirect. ``provider_name`` cross-checks the callback's own
     ``{name}`` path segment so a state minted for one provider cannot be replayed against
     another's callback. ``code_challenge`` is unused in this phase — reserved for #96's
     PKCE public client, which reuses this same table."""
@@ -104,12 +102,8 @@ class AuthFact:
 @dataclass(frozen=True)
 class SuperuserBootstrap:
     """The singleton row tracking the currently configured ``auth.superuser`` bootstrap
-    target (issue #94) — durable so a later boot (or a config change to a *different*
-    email) can find the *previous* bootstrap target to demote, and so a login can check
-    whether it has just claimed an unclaimed intent. ``claimed_user_id`` is ``None``
-    while no verified user has matched ``email`` yet; set once one has, either
-    promoted directly at boot (the user already existed) or claimed by the first
-    matching verified login (``AuthService.link_or_mint``)."""
+    target (issue #94; see ``hub/auth/bootstrap.py``). ``claimed_user_id`` is ``None``
+    while no verified user has matched ``email`` yet."""
 
     email: str
     claimed_user_id: str | None
@@ -119,11 +113,9 @@ class SuperuserBootstrap:
 @dataclass(frozen=True)
 class ResolvedIdentity:
     """The request principal a human-plane edge resolves to — ``hub/api/auth_session.py``'s
-    ``resolve_identity``/``require()`` return this, never a bare ``User``, so a call
-    site never re-expands the role itself (``bzh:domain-core`` — the expansion is
-    computed once, by :func:`blizzard.auth_core.expand`). ``display_name`` rides along
-    (rather than a second ``GET /api/me`` lookup against the user row) since
-    ``AuthService.touch_session`` already loads the full ``User``."""
+    ``resolve_identity``/``require()`` return this, never a bare ``User``. It carries the
+    expanded permission set (computed once, by :func:`blizzard.auth_core.expand`) and
+    ``display_name`` so no call site re-expands the role or re-reads the user row."""
 
     user_id: str
     username: str

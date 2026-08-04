@@ -1,19 +1,10 @@
 """The worker heartbeat path — local-API endpoint + ``blizzard runner heartbeat`` verb.
 
-A worker heartbeats as a side effect of working: its
-``PostToolUse`` hook runs ``blizzard runner heartbeat`` on every tool call, and the
-verb — a pure client of the runner's local API — posts to ``POST
-/api/heartbeat`` for the lease it inherited from the spawn environment
-(``BLIZZARD_LEASE_ID`` / ``BLIZZARD_RUNNER_URL``). The daemon appends the beat to its
-store, and REAP reads the last beat to catch a stalled-but-alive worker.
-
 Two tiers, no live socket:
 
 * **component** — the endpoint over a real store (TestClient), the API + store half;
 * **unit** — the verb's identity handling and soft-fail (``httpx.post`` stubbed), the
-  CLI half. The mock ``mock-claude-code`` façade now executes ``--settings`` hook
-  commands (``blizzard-mock:src/blizzard_mock/harness/README.md`` §"Hook execution");
-  these tiers exercise the verb directly because they run without a live socket.
+  CLI half.
 """
 
 from __future__ import annotations

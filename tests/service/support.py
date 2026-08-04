@@ -138,12 +138,9 @@ def stub_idp(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterat
         _terminate(proc)
 
 
-# The scripted build node: the prompt is the program. It commits a file to the
-# toy-api worktree, then pushes the branch and declares it (issue #143, Phase 4) —
-# the runner no longer discovers or pushes the produced pointer, so the WORKER must,
-# through the real `blizzard runner artifact commit` verb (Phase 3's local
-# declaration channel), which ADVANCE's read-only verify then confirms against the
-# bare file:// origin before submitting the git_commit artifact.
+# The scripted build node: commits a file, pushes the branch, and declares it via
+# `blizzard runner artifact commit` (issue #143) — the runner no longer discovers or
+# pushes the produced pointer itself.
 BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
@@ -288,12 +285,10 @@ class SseTap:
             event_type: str | None = None
             for raw in resp.iter_lines():
                 if not self._ready.is_set():
-                    # Starlette sends ``http.response.start`` (what ``stream()`` above waits
-                    # on) before it starts iterating the body, so headers arriving is not
-                    # proof the broker subscription happened — that runs inside the body
-                    # generator (see ``blizzard.hub.api.events._stream``). The first line on
-                    # the wire, though, is only sent *after* ``broker.subscribe()`` runs, so
-                    # it's the true readiness signal.
+                    # Headers arriving only proves the response started, not that
+                    # broker.subscribe() has run (that's inside the body generator); the
+                    # first line on the wire is sent only after it has, so that's the true
+                    # readiness signal.
                     self._ready.set()
                 if self._stop.is_set():
                     return
@@ -325,14 +320,10 @@ class SseTap:
 def sse_tap(hub_port: int, *, settle: float = 2.0) -> Iterator[SseTap]:
     """A **live** SSE subscriber on the hub's ``/api/events/stream``, connected before the act.
 
-    The component tier asserts event publication by reading the broker's *replay tail*
-    (``emitted_events`` -> ``replay_since``). That proves an event was recorded, not that it
-    was **delivered**: the live fan-out leg (publish -> subscriber queue -> wire) is exactly
-    what a board watching the spine depends on, and a regression there is invisible to a
-    replay-tail assertion. This taps the wire instead.
-
-    Connects, then drains and discards whatever the broker replays on connect, so anything
-    :meth:`SseTap.collect` reports afterwards is live fan-out rather than reconnect replay.
+    The component tier's replay-tail assertion (``emitted_events`` -> ``replay_since``) proves
+    an event was recorded, not that it was **delivered** over the live fan-out leg a board
+    actually depends on; this taps the wire instead. Connects, then drains and discards the
+    broker's connect-time replay, so :meth:`SseTap.collect` reports only live fan-out.
     """
     tap = SseTap(f"http://127.0.0.1:{hub_port}")
     tap.start()

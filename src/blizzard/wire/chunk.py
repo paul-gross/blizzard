@@ -29,12 +29,12 @@ class WorkRefModel(BaseModel):
 
 
 class WorkRefView(BaseModel):
-    """A pointer as the views render it — the raw pair plus its legible
-    label and browser URL, both rendered by the pointer's configured source binding.
+    """A pointer as the views carry it — the raw pair plus its legible label and browser
+    URL, both resolved by the pointer's configured source binding.
 
-    ``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``
+    ``label`` is the legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``
     is its browser-openable address. Both null when no configured source names
-    ``source`` — the board then leans on the chunk's stable short id instead."""
+    ``source``."""
 
     source: str
     ref: str
@@ -47,9 +47,9 @@ class ChunkIngestRequest(BaseModel):
 
     Each token is resolved against the configured work sources' own grammar
     (``IWorkSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
-    Tokens only — no pre-resolved ``{source, ref}`` shape travels alongside them; a
-    second intake shape would reintroduce exactly the config-blind guess that
-    resolving against the configured sources removes."""
+    Tokens only — no pre-resolved ``{source, ref}`` shape travels alongside them, since a
+    second intake shape reintroduces the config-blind guess resolving removes (pinned by
+    tests/test_pin_wire.py::test_chunk_ingest_accepts_source_native_tokens_only)."""
 
     tokens: list[str]
 
@@ -87,9 +87,8 @@ class ChunkUsageTotalView(BaseModel):
 
 
 def _zero_usage_total() -> ChunkUsageTotalView:
-    """The all-zero, non-partial total — the default for a construction site (mostly
-    fakes in the runner-side test suite) that predates usage telemetry and never sets
-    ``cost`` itself; the real hub API always populates it from ``derive_chunk_usage``."""
+    """The all-zero, non-partial total — the default for a construction site that never
+    sets ``cost`` itself."""
     return ChunkUsageTotalView(
         input_tokens=0, output_tokens=0, cache_read_tokens=0, cache_create_tokens=0, cost_usd=0.0, cost_partial=False
     )
@@ -116,33 +115,21 @@ class ChunkUsageView(BaseModel):
 class ChunkSummary(BaseModel):
     """One row of the fleet chunk list — derived status + current node.
 
-    ``current_node_name`` is the node's human graph name (``build``, ``review``) the
-    board renders in place of the raw ``nd_`` ULID; null when the chunk has no
-    current node or its pinned graph cannot resolve the id.
+    ``current_node_name`` is the node's human graph name (``build``, ``review``) beside
+    the raw ``nd_`` ULID; null when the chunk has no current node or its pinned graph
+    cannot resolve the id.
 
-    Deliberately status-only: the summary feeds the board **card**, which is a passive
-    status view (issue #42), so no operator *fact* is carried here. The pause fact — and
-    every other fact an operator action keys on — reaches the chunk detail dock through
-    :class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live
-    route's holder, null when unrouted) is a passive where-is-it fact in that same
-    sense — it lets the fleet registry list each runner's claims — not an action key.
-    ``environment_count`` (issue #69) is a passive where-is-it *count* in that same
-    spirit: the number of environments the chunk's live route holds, so the fleet registry
-    can sum a runner's slot-bar numerator without the full ``environment_ids`` list (which
-    stays out of scope on this status-only summary, reaching only
-    :class:`ChunkDetail.route`).
+    Status-only: the summary feeds the board **card**, a passive status view (issue #42),
+    so it carries no operator *fact* — those reach the detail dock through
+    :class:`ChunkDetail`. ``runner_id`` and ``environment_count`` (issue #69) are passive
+    where-is-it facts, not action keys, and ``cost``/``completed_at`` (issues #59, #173)
+    are cheap derived instants that ride along rather than waiting for the detail fetch.
 
-    Both are **in-progress-only** (issue #140): a chunk at a terminal status
-    (``done``/``stopped``) reports ``runner_id = None`` and ``environment_count = 0`` even
-    when its route facts still show a route, because a finished chunk holds no claim. So a
-    consumer folding these per runner — the fleet registry's claim lines and its slot-bar
-    numerator — counts only live occupancy and needs no status filter of its own. The raw
-    route fact is unfiltered on :class:`ChunkDetail.route`, which is where a "where was
-    this worked" read belongs.
-
-    ``cost`` and ``completed_at`` are the two exceptions (issues #59, #173): both are
-    cheap, passive derived instants — not an operator fact — so they ride the summary
-    rather than waiting for the detail fetch.
+    ``runner_id``/``environment_count`` are **in-progress-only** (issue #140): a chunk at
+    a terminal status reads unrouted even while its route facts still show a route, so a
+    per-runner fold counts live occupancy with no status filter of its own (pinned by
+    tests/test_route_claim.py::test_summary_reports_a_finished_chunk_as_unrouted). The
+    unfiltered route fact lives on :class:`ChunkDetail.route`.
 
     ``completed_at`` (issue #173) is the terminal instant — see
     :func:`~blizzard.hub.domain.work.derive_completed_at` — null for every non-terminal
@@ -164,9 +151,9 @@ class ChunkSummary(BaseModel):
     default_model: list[str] = []
     default_effort: str | None = None
     runner_id: str | None = None
-    # The count of environments the chunk's live route holds (issue #69) — the board's
-    # slot-bar numerator, summed per runner across its chunks. 0 when unrouted. A grouped
-    # chunk holding >1 environment counts them all, so the numerator does not undercount.
+    # The count of environments the chunk's live route holds (issue #69) — 0 when
+    # unrouted. A grouped chunk holding >1 environment counts them all, so a per-runner
+    # sum does not undercount.
     environment_count: int = 0
     # The chunk's derived usage/cost total (issue #59) — see ChunkUsageTotalView.
     cost: ChunkUsageTotalView = Field(default_factory=_zero_usage_total)
@@ -189,10 +176,9 @@ class EscalationView(BaseModel):
     a later lease mint (requeue/takeover) supersedes it and this drops away.
 
     ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent of
-    ``takeover_command`` the board prefers as the primary copyable command, falling
-    back to the raw form when it's empty. Wrapped implies raw, never the reverse, and
-    whether a takeover is actually possible for this escalation is a separate
-    question from whether either is populated — see
+    ``takeover_command``, empty when none was composed. Wrapped implies raw, never the
+    reverse, and whether a takeover is actually possible for this escalation is a
+    separate question from whether either is populated — see
     https://github.com/paul-gross/blizzard-context/blob/master/domain/humans.md for
     the full account."""
 
@@ -210,9 +196,8 @@ class TransitionView(BaseModel):
     step in the timeline (MVP criterion 9/11).
 
     ``from_node_name``/``to_node_name`` are the nodes' human graph names (``build``,
-    ``review``) the board renders in place of the raw ``nd_`` ULIDs; resolved here so the
-    timeline is legible without reassembly, null when the pinned graph cannot
-    resolve the id.
+    ``review``) beside the raw ``nd_`` ULIDs; resolved here so the timeline is legible
+    without reassembly, null when the pinned graph cannot resolve the id.
 
     ``graph_id``/``graph_name`` identify the graph this step happened in (issue #90) —
     resolved per-transition against its own graph, so a chunk that later migrated still
@@ -235,8 +220,7 @@ class MigrationView(BaseModel):
 
     A judgement choice targeting another graph ends the chunk's attempt in ``from_graph``
     and re-queues it at ``landed_node`` in ``to_graph`` — its own step in the timeline,
-    never a transition (``bzh:migration-not-transition``). The board renders it as a
-    graph-to-graph hop: ``from_graph/from_node --choice--> to_graph/landed_node``. Node and
+    never a transition (``bzh:migration-not-transition``). Node and
     graph names are resolved server-side against each side's own graph (null when
     unresolvable); ``model`` is the re-pinned model, or null when the chunk kept its own.
 
@@ -265,8 +249,7 @@ class IntendedMigrationView(BaseModel):
     """A chunk's standing migration intent (issue #124) — editable at any non-terminal
     status, ``not_ready``/``ready`` included, and consulted (never applied eagerly) at
     the chunk's next transition through the common apply path. Present on
-    :class:`ChunkDetail` so the board and CLI can show a chunk is queued to move;
-    ``None`` when no intent is set.
+    :class:`ChunkDetail`; ``None`` when no intent is set.
 
     ``graph_name`` is resolved server-side from the stored ``graph_id`` the same way
     :class:`MigrationView`'s ``to_graph_name`` is (null when the target graph cannot be
@@ -306,9 +289,7 @@ class ArtifactView(BaseModel):
     code).
 
     ``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side
-    from the chunk's issue-shaped work ref so the board can link a ``git_commit``
-    to the branch on the forge; null when no forge web base is derivable — the row then
-    shows the branch name without a link (no broken link).
+    from the chunk's issue-shaped work ref; null when no forge web base is derivable.
 
     ``recorded_at`` is the instant the artifact was attached, decoded from its id's
     ULID timestamp (the store keeps no separate column); null for a malformed id."""
@@ -338,10 +319,9 @@ class PrView(BaseModel):
 class BounceView(BaseModel):
     """One recorded delivery kick-back (#64) — contention, not failure.
 
-    Surfaced on chunk detail so the bounce history is readable — including once the
-    count crosses the node's ``bounce_cap`` and the chunk derives ``needs_human`` instead
-    of routing back — without itself being (or affecting) the chunk's derived status.
-    ``envelope`` is the raw JSON kick-back payload (cause detail, etc.) verbatim."""
+    Surfaced on chunk detail so the bounce history is readable, without itself being (or
+    affecting) the chunk's derived status. ``envelope`` is the raw JSON kick-back payload
+    (cause detail, etc.) verbatim."""
 
     cause: str
     envelope: str
@@ -411,13 +391,12 @@ class ChunkPatchRequest(BaseModel):
 
     ``graph_id``/``model`` mean "leave unchanged" whether omitted or sent explicit
     ``null`` — neither is a nullable chunk property, so there is no "clear" state to
-    distinguish. ``intended_migration`` is different: it *is* nullable (clearing a
-    standing intent is a real operation, the CLI's ``--cancel``), so **omitted** ("leave
-    the intent unchanged") must be distinguishable from **explicit ``null``** ("clear
-    it") — a plain ``Optional`` default cannot tell those apart, since both decode to
-    ``None`` on this model. The controller resolves the distinction via
-    ``"intended_migration" in request.model_fields_set`` (pydantic's own record of which
-    fields the request body actually named), not this field's value alone."""
+    distinguish. ``intended_migration`` *is* nullable, so **omitted** ("leave unchanged")
+    must stay distinguishable from **explicit ``null``** ("clear it"); a plain
+    ``Optional`` default cannot, so the controller keys on
+    ``"intended_migration" in request.model_fields_set``, not this field's value (pinned
+    by tests/test_chunk_edit_api.py::test_patch_clears_an_intended_migration_via_explicit_null
+    and ::test_patch_with_intended_migration_field_absent_leaves_it_unchanged)."""
 
     graph_id: str | None = None
     default_model: list[str] | None = None
@@ -443,26 +422,24 @@ class PauseView(BaseModel):
     Present only while ``paused=True`` is the newest pause fact; a resume clears it.
     Carried independently of ``status``: PAUSED sits below the human-gated statuses in
     the derivation order, so a chunk both paused and parked on a question derives
-    ``waiting_on_human`` — this field is the only way the runner (and the board) learn
-    the chunk is paused in that case, and it also answers "who paused it"."""
+    ``waiting_on_human`` — this field is then the only carrier of the pause fact, and it
+    also answers "who paused it"."""
 
     by: str
     set_at: str
 
 
 class ChunkDetail(BaseModel):
-    """The chunk aggregate in full — the board's chunk view and envelope feed.
+    """The chunk aggregate in full.
 
-    Carries the chunk's **transition history** and its inline **artifact store** so the
-    web app can render every node it visited, the review that failed once and looped
-    back to build, and the artifacts — the branch pointers merged and the review notes."""
+    Carries the chunk's **transition history** — every node it visited, including a
+    review that failed and looped back to build — and its inline **artifact store**."""
 
     chunk_id: str
     graph_id: str
     # The pinned graph's name and mint instant (issue #102) — populated from the
     # already-loaded `Graph` at detail assembly, no extra store read. `None` together
-    # iff the graph could not be resolved; the board's compact-ref label degrades to
-    # the bare ref rather than a dangling `#`/`-`.
+    # iff the graph could not be resolved.
     graph_name: str | None = None
     graph_created_at: str | None = None
     status: ChunkStatus
@@ -489,8 +466,7 @@ class ChunkDetail(BaseModel):
     # at all (see PauseView). The runner reads this fact, not the derived status.
     pause: PauseView | None = None
     # The chunk's live gate decision — the open (waiting_on_human) or resolved-but-not-
-    # yet-transitioned one. The board renders its buttons + artifacts; the
-    # holding runner picks up a resolved decision and records the resolving transition.
+    # yet-transitioned one.
     decision: DecisionView | None = None
     history: list[TransitionView] = []
     # The chunk's cross-graph migration steps (issue #90), oldest first — woven into the
@@ -498,22 +474,18 @@ class ChunkDetail(BaseModel):
     # chunk; a migration re-pins the chunk and re-queues it under another graph.
     migrations: list[MigrationView] = []
     artifacts: list[ArtifactView] = []
-    # The chunk's questions, oldest first — open *and* answered (issue #165). A
-    # ``waiting_on_human`` chunk carries the ask a human answers with ``blizzard hub
-    # answer``; an already-answered one stays here carrying its return trail (who
-    # answered, and whether the runner has delivered it into the resumed session), which
-    # is what lets an answerer see their answer arrive instead of the row vanishing.
+    # The chunk's questions, oldest first — open *and* answered (issue #165). An
+    # already-answered one stays here carrying its return trail: who answered, and
+    # whether the answer has been delivered into the resumed session.
     questions: list[QuestionView] = []
-    # Open-pr delivery (pre-#67, kept for back-compat reads of a historical chunk): a
-    # ``delivering`` chunk whose deliver node opened a PR instead of merging was
-    # parked awaiting an external merge, with ``open_prs`` naming the PRs a human
-    # reviewed and merged. No engine path writes these facts any more — a hub command
-    # node's own ``run:`` script owns this policy now (#67).
+    # Open-pr delivery, kept for back-compat reads of a historical chunk (#67): a
+    # ``delivering`` chunk parked awaiting an external merge, with ``open_prs`` naming
+    # the PRs a human reviewed and merged. No engine path writes these facts.
     awaiting_external_merge: bool = False
     open_prs: list[PrView] = []
     # The chunk's derived usage/cost total (issue #59) — see ChunkUsageTotalView.
     cost: ChunkUsageTotalView = Field(default_factory=_zero_usage_total)
-    # Per-node-step usage history, oldest first — the board's future cost timeline.
+    # Per-node-step usage history, oldest first.
     usage: list[ChunkUsageView] = []
     # A generic hub command node's in-progress poll (#66) — non-None iff the chunk's
     # newest transition enters a hub node AND a poll fact is recorded for that visit
@@ -535,12 +507,11 @@ class ChunkHeaderView(BaseModel):
     """The chunk-detail dock's header aggregate (issue #185) — the identity,
     work-item links, live state, and pause fact a header needs, projected down
     from :class:`ChunkDetail` rather than carrying its transition/artifact
-    history. This is deliberately the runner machine panel's own read: pydantic's
-    default ``extra="ignore"`` lets it validate straight off a `ChunkDetail`
-    payload, picking out only these fields — so the runner's chunk-detail proxy
-    (``blizzard.runner.api.chunk_detail``) never pulls this module's
-    :class:`EscalationView` into the runner's own OpenAPI schema, where it would
-    collide with the runner's unrelated, identically-named status escalation view.
+    history. Pydantic's default ``extra="ignore"`` lets it validate straight off a
+    `ChunkDetail` payload, so the runner's chunk-detail proxy never pulls this
+    module's :class:`EscalationView` into the runner's OpenAPI schema, where it
+    would collide with ``wire.runner_status``' identically-named view (pinned by
+    tests/test_pin_wire.py::test_the_runner_spec_escalation_view_is_the_runners_own).
 
     ``pause`` is carried independently of ``status`` for the same reason
     :class:`ChunkDetail`'s own field is: a chunk both paused and parked on a
@@ -556,7 +527,7 @@ class WorkItemEntry(BaseModel):
     """One pointer's pass-through work item — title, body + comment
     thread, vendor-native.
 
-    ``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its
+    ``label``/``web_url`` are the legible pointer label (``blizzard#8``) and its
     browser address — both null when no configured source names ``source``. A
     per-pointer forge failure degrades here rather than failing the whole read:
     ``error`` carries the reason and ``title``/``body`` are null, so one unreachable
@@ -576,7 +547,7 @@ class WorkItemEntry(BaseModel):
 class WorkItemsView(BaseModel):
     """A chunk's pass-through work items — one entry per pointer, order preserved.
 
-    Empty when the chunk holds no pointers — the board's empty state; a grouped chunk carrying
-    many pointers yields one entry per pointer, each fetched fresh and never stored."""
+    Empty when the chunk holds no pointers; a grouped chunk carrying many pointers
+    yields one entry per pointer, each fetched fresh and never stored."""
 
     items: list[WorkItemEntry] = []

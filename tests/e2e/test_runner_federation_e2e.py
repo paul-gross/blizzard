@@ -62,14 +62,12 @@ def _bounce_state_cookie(response: Any) -> str:
     ``Set-Cookie`` header, rather than through ``BrowserContext.cookies()``.
 
     The runner mints this cookie ``Secure`` even on a loopback ``http://127.0.0.1``
-    origin (``_bounce_cookie_policy`` in ``runner/auth/federation.py`` — real
-    Chromium navigation, this scenario's own step 1, treats loopback as trustworthy
-    enough to still send it). Playwright's ``APIRequestContext`` (``page.request``)
-    does not replicate that: ``BrowserContext.cookies(url)`` never attributes a
-    ``Secure`` cookie to a plain-``http`` URL, and a later ``page.request`` call
-    does not re-attach one either. Reading the value directly off ``Set-Cookie``
-    sidesteps the first gap; callers must pass it back explicitly via a ``Cookie``
-    header (rather than relying on automatic attachment) to sidestep the second.
+    origin. Playwright's ``APIRequestContext`` (``page.request``) does not replicate
+    Chromium's loopback handling: ``BrowserContext.cookies(url)`` never attributes a
+    ``Secure`` cookie to a plain-``http`` URL, and a later ``page.request`` call does not
+    re-attach one either. Reading the value directly off ``Set-Cookie`` sidesteps the
+    first gap; callers must pass it back explicitly via a ``Cookie`` header to sidestep
+    the second.
     """
     for header in response.headers_array:
         if header["name"].lower() != "set-cookie":
@@ -140,9 +138,9 @@ def _federated_runner(runner_dir: Path, *, hub_port: int, port: int, runner_id: 
         config,
         runner_id=runner_id,
         public_url=public_url,
-        # A path that is never created — the external-usage sampler's first soft-failure
-        # check (a missing credentials file) trips before any request is built, keeping
-        # this real daemon's no-network-access guarantee real for that step too (issue #218).
+        # A path that is never created — the external-usage sampler's missing-credentials
+        # soft failure trips before any request is built, keeping this real daemon's
+        # no-network-access guarantee real for that step too (issue #218).
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
     )
     config.config_path.write_text(config.to_toml())

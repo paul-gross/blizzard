@@ -91,10 +91,8 @@ class RunnerFactsService:
 @dataclass(frozen=True)
 class FactIngestResult:
     """:meth:`FactIngestService.ingest`'s own return — the wire :class:`RunnerFactAck`
-    plus, per freshly-applied fact (issue #213), the identity of the row it wrote — not
-    a wire type: the route controller unwraps ``ack`` for the HTTP body and reads
-    ``row_id_by_seq`` to build each applied fact's own ``chunk-changed``/``event-logged``
-    frame ``key``.
+    plus, per freshly-applied fact (issue #213), the identity of the row it wrote. Not
+    a wire type.
 
     ``row_id_by_seq`` carries an entry only for a fact kind whose own id is not already
     in its payload (``escalation.recorded`` -> ``escalations.id``, ``event.recorded`` ->
@@ -191,8 +189,7 @@ class FactIngestService:
             )
             return True, escalation_id
         if kind == QUESTION_ASKED:
-            # The chunk derives waiting_on_human from the landed row; the runner
-            # authored the question_id so it can poll the answer back.
+            # The runner authors the question_id so it can poll the answer back.
             self._chunks.record_question(
                 question_id=str(payload["question_id"]),
                 chunk_id=str(payload["chunk_id"]),
@@ -206,20 +203,17 @@ class FactIngestService:
             )
             return True, None
         if kind == USAGE_RECORDED:
-            # Deliberately NO epoch fence (contrast the completion path, apply.py, which
-            # rejects a stale-epoch submission before it writes anything): a usage row
-            # whose epoch trails the chunk's latest is real spend a fenced-out zombie
-            # attempt already incurred, and it must be attributed to *its own* epoch, not
-            # dropped. The chunk-level total (derive_chunk_usage) sums every row regardless.
+            # Deliberately NO epoch fence: a usage row whose epoch trails the chunk's
+            # latest is real spend a fenced-out zombie already incurred, and it must be
+            # attributed to *its own* epoch, not dropped (pinned by
+            # tests/test_usage_facts_ingest.py::test_stale_epoch_usage_is_recorded_and_attributed_not_dropped).
             #
-            # Deliberately NOT route-token-gated either (issue #84b — do not add this kind
-            # to `_ROUTE_TOKEN_GATED_KINDS` above, notwithstanding issue #84's own
-            # acceptance-criterion list, which named `usage` among the chunk-scoped facts a
-            # non-holder's call should have rejected; that AC is overridden here). The same
-            # no-fence rationale two lines up applies to the token exactly as it does to the
-            # epoch: a fenced-out (or route-invalidated) zombie's real spend still happened
-            # and must still be attributed to its own epoch — epic #57/#60's cost figures
-            # depend on every incurred cost landing, not just the winning attempt's.
+            # Deliberately NOT route-token-gated either — do NOT add this kind to
+            # `_ROUTE_TOKEN_GATED_KINDS` above (issue #84b, overriding issue #84's own
+            # acceptance-criterion list, which named `usage` among the chunk-scoped facts
+            # a non-holder's call should have rejected). Same rationale: epic #57/#60's
+            # cost figures depend on every incurred cost landing (pinned by
+            # tests/test_route_token_authz.py::test_usage_recorded_applies_without_a_token_even_under_enforce).
             self._chunks.record_usage(
                 str(payload["chunk_id"]),
                 node_id=str(payload["node_id"]),
@@ -240,10 +234,8 @@ class FactIngestService:
             # (issue #125). Deliberately NOT epoch-fenced and NOT route-token-gated (it is
             # never added to `_ROUTE_TOKEN_GATED_KINDS` above): a failure event from a
             # fenced-out or dying worker is precisely what an operator needs to see, so
-            # gating it out would drop the signal the feature exists to surface. Idempotency
-            # rides the per-runner outbound-seq high-water mark exactly like every other
-            # fact — a seq already applied never reaches this method twice. `chunk_id` is
-            # optional (a runner-scoped event names none); `detail` is an opaque object.
+            # gating it out would drop the signal the feature exists to surface. `chunk_id`
+            # is optional (a runner-scoped event names none); `detail` is an opaque object.
             detail = payload.get("detail")
             event_id = self._chunks.record_event(
                 severity=str(payload["severity"]),
@@ -258,18 +250,17 @@ class FactIngestService:
             )
             return True, event_id
         if kind == ANSWER_DELIVERED:
-            # Board detail: the resume-with-answer ran; status flipped at question.answered.
+            # Records that the resume-with-answer ran; derives no status of its own.
             self._chunks.record_answer_delivered(
                 question_id=str(payload["question_id"]), chunk_id=str(payload["chunk_id"]), at=now
             )
             return True, None
         if kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED:
             # Runner-scoped and hub-read-only, same as the local-pause pair below: an
-            # advisory display fact for the board, never a status the hub derives
-            # anything from. Refresh-in-place (`bzh:facts-not-status`'s stated
-            # exception, `runner_external_usage`'s schema comment) — only the latest
-            # sample is ever of interest, so this upserts rather than appends. No row
-            # id to report: identity is the runner id, already known to the caller.
+            # advisory fact the hub derives no status from. Refresh-in-place
+            # (`bzh:facts-not-status`'s stated exception) — only the latest sample is
+            # ever of interest, so this upserts rather than appends. No row id to
+            # report: identity is the runner id, already known to the caller.
             self._fleet.record_external_usage(
                 runner_id,
                 sampled_at=_parse_at(payload.get("sampled_at"), now),
@@ -278,10 +269,9 @@ class FactIngestService:
             )
             return True, None
         if kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
-            # Runner-scoped and hub-read-only: the runner already stopped claiming before
-            # this arrived; landing it is what makes the brake visible on the board. Stamped
-            # with the runner's own clock off the payload — when it decided, not when the
-            # buffer drained, which may be an outage later.
+            # Runner-scoped and hub-read-only. Stamped with the runner's own clock off the
+            # payload — when it decided, not when the buffer drained, which may be an
+            # outage later.
             local_pause_id = self._fleet.record_local_pause(
                 runner_id,
                 paused=kind == RUNNER_LOCALLY_PAUSED,
@@ -328,10 +318,9 @@ def _opt_float(value: object) -> float | None:
 def _parse_at(value: object, fallback: datetime) -> datetime:
     """Read an ISO-8601 instant off a batched payload, falling back on a malformed stamp.
 
-    Coerces a naive result to UTC (``bzh:utc-instants``): a runner's outbound buffer
-     can still hold — and later deliver — a pre-fix naive stamp minted before its
-    own upgrade, since the store-and-forward replay resends whatever it already
-    buffered rather than re-minting.
+    Coerces a naive result to UTC (``bzh:utc-instants``): a buffered payload can carry
+    a naive stamp, and store-and-forward resends whatever it already buffered rather
+    than re-minting.
     """
     if isinstance(value, str):
         try:

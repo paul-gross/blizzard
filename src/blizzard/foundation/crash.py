@@ -2,8 +2,9 @@
 
 The dangerous windows of the daemon loops carry stable names in this code-owned,
 **enumerable** registry. A crash point is *declared* at module scope right beside the
-boundary it guards (so the declaration is the registration — there is no separate
-list of names to drift) and *reached* inside the step, exactly at the boundary:
+boundary it guards (the declaration is the registration; pinned by
+tests/test_crash_registry.py::test_registry_enumerates_the_daemon_loop_points) and
+*reached* inside the step, exactly at the boundary:
 
     FILL_AFTER_CLAIM = crashpoint("fill.after-claim.before-bind", "hub holds the route; ...")
     ...
@@ -22,10 +23,10 @@ production environment can never terminate a real daemon. The arming is read **o
 import** — every armed run is a fresh subprocess, so there is no re-arm-mid-process
 case to serve, and the read stays off the hot path.
 
-The sweep enumerates the registry via :func:`discover_crash_points` (which imports the
-instrumented loop modules, then returns :func:`all_points`) — it never hard-codes the
-point list, so a newly-introduced window is a registry entry the sweep picks up, not a
-silent gap (``bzh:crash-point-registry`` *Detect*).
+:func:`discover_crash_points` is the enumeration entry point — it imports the
+instrumented loop modules, then returns :func:`all_points` — so a consumer enumerates
+the registry programmatically rather than hard-coding a point list that could drift
+(``bzh:crash-point-registry`` *Detect*).
 """
 
 from __future__ import annotations

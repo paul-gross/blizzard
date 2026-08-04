@@ -7,13 +7,12 @@ and the winning claim's result carries the chunk's first node envelope so the ru
 starts working without a second round-trip.
 
 A claim from a runner the registry marks paused is refused before the race is even
-run, with the distinct :class:`ClaimDeniedPaused` (surfaced 403) — not a race loss,
-not an epoch fence, but the hub's own arbiter enforcing its pause brake rather than
-trusting the runner to have already read it back on pull (issue #44). The check reads
-:class:`~blizzard.hub.domain.registry.RunnerRegistration.hub_paused`, itself derived
-from the same ``runner_pause_facts`` the registry appends — no second source of
-truth — and only that brake: a *locally*-paused-only runner (``locally_paused``) is
-the runner's own restraint, not something the hub denies (issue #43 is that
+run, with the distinct :class:`ClaimDeniedPaused` (surfaced 403) — the hub's own
+arbiter enforcing its pause brake rather than trusting the runner to have already read
+it back on pull (issue #44). The check reads
+:class:`~blizzard.hub.domain.registry.RunnerRegistration.hub_paused`, and only that
+brake: a *locally*-paused-only runner (``locally_paused``) is the runner's own
+restraint, not something the hub denies (issue #43 is that
 mechanism). The denial stops only new claims; a route already held, and every
 transition/completion/decision against it, is untouched (``bzh:facts-not-status`` —
 pause is read at claim time, never persisted onto the chunk or the route).
@@ -32,15 +31,14 @@ winner rather than a torn read of a chunk's live-route state. Sharing the lock a
 not enough, though: the edge resolves the chunk (and its pinned graph) *before* the
 claim reaches the lock (``bzh:domain-takes-objects``), so ``_claim_locked`` re-reads
 the chunk fresh once inside it and re-resolves the graph if an edit already moved
-``graph_id`` in that window — otherwise the envelope built for the winning claim could
-still describe the graph the edit just superseded, even though the persisted column
-already shows the new one. The claim does **not** mint the
-executing lease
-: the runner mints it and reports ``lease.minted`` up through its outbound
-buffer to ``POST /events``, and the completion fence checks against that. The
-claim envelope carries the chunk's current epoch (``latest`` reported so far, or 0
-before the runner's first lease report) so the worker starts without a round-trip;
-the runner's own lease epoch — not this value — is what the fence consumes.
+``graph_id`` in that window (pinned by
+tests/test_edit_claim_race.py::test_repeated_edit_claim_races_never_yield_a_torn_graph).
+
+The claim does **not** mint the executing lease: the runner mints it and reports
+``lease.minted``, and the completion fence checks against that. The claim envelope
+carries the chunk's current epoch (``latest`` reported so far, or 0 before the runner's
+first lease report) so the worker starts without a round-trip; the runner's own lease
+epoch — not this value — is what the fence consumes.
 """
 
 from __future__ import annotations
@@ -75,13 +73,8 @@ _ROUTE_TOKEN_BYTES = 32
 # Crash point (``bzh:crash-point-registry``, issue #84b) — the claim-family boundary: the
 # route and its capability-token fact (``record_route``) are durable, but the plaintext
 # token has not yet reached the runner in the HTTP response. A kill here is recovered
-# generically by the runner's own ``_reconcile_interrupted_claims``/``_adopt_interrupted_claim``
-# (``runner/loop/steps.py``): the hub already shows the route live and held by this
-# runner, so the runner adopts rather than re-claiming, and re-keys since it has no
-# ``route_tokens`` row for the chunk. Reached by the generic build->deliver sweep
-# scenario — every claim in that scenario passes through here — so no dedicated crash
-# scenario is needed, only the module's addition to `_INSTRUMENTED_MODULES` and to the
-# bounded CI subset (`tests/crash/test_kill9_sweep.py`).
+# generically by the runner's interrupted-claim adoption (``runner/loop/steps.py``),
+# which re-keys the route rather than re-claiming it.
 _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE = crashpoint(
     "claim.after-persist.before-response",
     "the route + its route_token_minted fact are durable; the plaintext has not yet reached the runner",
@@ -100,9 +93,7 @@ class ClaimDeniedPaused(Exception):
     """The claiming runner is paused at the hub registry — refused before any race (issue #44).
 
     Distinct from :class:`ClaimConflict`: this runner did not lose to another claimant,
-    it was never eligible to claim in the first place. Closes the gap between a hub
-    pause landing and the runner's next pull mirroring it — the hub is the arbiter and
-    stops the claim itself rather than trusting the runner to have already adhered."""
+    it was never eligible to claim in the first place."""
 
     def __init__(self, *, runner_id: str) -> None:
         super().__init__(f"runner {runner_id} is paused at the hub")
@@ -112,10 +103,8 @@ class ClaimDeniedPaused(Exception):
 class ClaimDeniedTerminal(Exception):
     """The chunk is already terminal ({done, stopped}) — refused before the race,
     mirroring :class:`ClaimDeniedPaused`'s shape: this is not a race loss, the chunk
-    can never be claimed again. Closes the peek-then-claim window ``hub stop``
-    (issue #118) leaves open — the ready queue's own peek-time filter cannot see a
-    stop that lands between a runner's peek and its claim POST, so this check
-    re-derives status fresh, under the claim lock, rather than trusting the peek."""
+    can never be claimed again. Closes the peek-then-claim window (issue #118) by
+    re-deriving status fresh, under the claim lock, rather than trusting the peek."""
 
     def __init__(self, *, chunk_id: str, status: ChunkStatus) -> None:
         super().__init__(f"chunk {chunk_id} is {status.value}, not claimable")
@@ -135,7 +124,7 @@ class ClaimResult:
 
     ``route_id`` (issue #213) is the freshly-minted ``route_created.route_id`` —
     ``Route`` itself carries no id (its natural key is ``chunk_id``), so this is the
-    one place a caller can read it to build the ``claimed`` cause's activity-feed key."""
+    one place a caller can read it."""
 
     route: Route
     envelope: NodeEnvelope
@@ -156,19 +145,13 @@ class ClaimService:
         claim_lock: threading.Lock,
     ) -> None:
         self._chunks = chunks
-        # Re-resolves the chunk's graph fresh under the lock (see `_claim_locked`)
-        # when an edit repinned it after the edge resolved the caller's `graph` but
-        # before this claim reached the lock — never builds the envelope from a
-        # graph the edit already superseded.
+        # Re-resolves the chunk's graph fresh under the lock — see `_claim_locked`.
         self._graphs = graphs
         self._registry = registry
         self._clock = clock
-        # Serializes the check-live-route → record-route CAS across concurrent claims
-        # on one hub daemon, and — since issue #120 — EditService's own
-        # check-status/write over the same chunk. Injected from the composition root
-        # rather than constructed here (``bzh:dependency-injection``): one lock per
-        # hub, shared by both services, so a claim and an edit racing the same chunk
-        # can't interleave; contention is a claim-rate concern, not a correctness one.
+        # Serializes the check-live-route → record-route CAS; injected from the
+        # composition root (``bzh:dependency-injection``, issue #120) so EditService
+        # shares it — see the module docstring.
         self._claim_lock = claim_lock
 
     def claim(
@@ -205,14 +188,9 @@ class ClaimService:
         if existing is not None:
             raise ClaimConflict(held_by_runner_id=existing.runner_id)
 
-        # The edge resolved `chunk`/`graph` before this claim reached the lock
-        # (``bzh:domain-takes-objects``) — but issue #120 lets an edit's own
-        # check-then-act repin the chunk's graph (or model) in that same window,
-        # sharing this lock precisely so one of the two lands first. Re-read the
-        # chunk now, under the lock, and always build from that fresh copy: an
-        # edit that landed first may have moved `graph_id` and/or `model`, and the
-        # handed-in objects must not be what the envelope is built from — a torn
-        # read of exactly the kind this lock exists to close (see module docstring).
+        # Re-read the chunk under the lock and always build from that fresh copy: an
+        # edit that landed first (issue #120) may have moved `graph_id` and/or `model`
+        # since the edge resolved the handed-in objects — see the module docstring.
         current = self._chunks.get(chunk.chunk_id)
         if current is None:  # pragma: no cover - the chunk cannot vanish mid-claim
             raise ClaimConflict(held_by_runner_id=runner_id)
@@ -224,18 +202,14 @@ class ClaimService:
         chunk = current
 
         facts = self._chunks.load_facts(chunk.chunk_id)
-        # A stop (or, degenerately, a done) landing between this runner's peek and its
-        # claim POST is invisible to the queue's peek-time filter (issue #118) — that
-        # filter only excludes a chunk that already derived non-``ready`` when it was
-        # peeked. Re-derive fresh, here, under the claim lock, rather than trusting the
-        # peek to still hold.
+        # Re-derive status fresh under the claim lock: a stop landing between this
+        # runner's peek and its claim POST is invisible to the peek (issue #118).
         status = derive_chunk_status(facts) if facts is not None else ChunkStatus.NOT_READY
         if status in TERMINAL_STATUSES:
             raise ClaimDeniedTerminal(chunk_id=chunk.chunk_id, status=status)
 
-        # The runner mints the lease and reports its epoch via POST /events;
-        # the claim only carries the current epoch (0 before the first report) into
-        # the envelope, and does not itself write a lease fact.
+        # The claim carries the current epoch (0 before the first lease report) into the
+        # envelope and writes no lease fact of its own — see the module docstring.
         epoch = latest_epoch(facts) or 0 if facts is not None else 0
         now = self._clock.now()
 
@@ -276,11 +250,9 @@ class ClaimService:
         the prior fact); the newest-fact-wins derivation
         (:func:`~blizzard.hub.domain.work.newest_live_route_token`) supersedes the old
         token immediately, with no separate revocation step. Idempotent by
-        construction: a re-run appends another fact and the runner simply stores
-        whichever plaintext it last received. Takes the already-resolved live
-        :class:`~blizzard.hub.domain.fleet.Route` (``bzh:domain-takes-objects`` — the
-        caller confirms liveness and the requesting runner's ownership via
-        ``route_of``/``assert_owns`` before calling this)."""
+        construction: a re-run appends another fact. Takes the already-resolved live
+        :class:`~blizzard.hub.domain.fleet.Route` (``bzh:domain-takes-objects``); the
+        caller confirms liveness and ownership before calling this."""
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
         self._chunks.record_route_token(route.chunk_id, token_hash=hash_token(route_token), at=self._clock.now())
         return route_token

@@ -35,13 +35,13 @@ either.
 Deliberately a **narrowing** projection, not a widening one — the panel's contract is
 what it renders today:
 
-* ``thinking`` turns are dropped.
-* Every sidechain is dropped — both a tool turn's nested
+* ``thinking`` turns and every sidechain are dropped — both a tool turn's nested
   :attr:`~blizzard.runner.harness.transcript.NormalizedTurn.sidechain` and
   :attr:`~blizzard.runner.harness.transcript.TranscriptBatch.unlinked_sidechains`.
-  Zero sidechains keeps the panel's existing contract intact one layer down. Widening
-  the panel to show either is `epic:transcripts`'s
-  (``blizzard-product:/plans/transcripts.md``) job, not this one.
+  Widening the panel to show either is `epic:transcripts`'s
+  (``blizzard-product:/plans/transcripts.md``) job, not this one. Pinned by
+  tests/test_runner_transcripts.py::test_a_thinking_turn_produces_zero_panel_turns_not_an_empty_asst_turn
+  and ::test_a_sidecar_backed_sidechain_produces_zero_extra_panel_turns.
 * :data:`MAX_TURNS` (recency, keep-newest) lives here, not in the normalizer — a
   forward incremental read must never silently drop turns, so the recency cap belongs
   at the point where a read's turns are already fully accumulated.

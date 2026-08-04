@@ -2,14 +2,9 @@
 
 The e2e-tier proof that delivery **policy lives in YAML**: the graph minted below by
 `_graph_yaml()` differs from the default graph only in its `deliver` node's `run:` script
-(`hub/graphs/scripts/land_pr_ci.py` vs `scripts/land_default.py`) and its poll cadence —
-the same shape the `advanced-development-workflow` graph's own `deliver` node ships
-(`hub/graphs/advanced-development-workflow/graph.yaml`) — yet it expresses a wholly
-different delivery policy through the SAME generic `executor: hub` primitive, no engine
-change. `land_pr_ci` opens a PR per
-repo and routes by the PR's live `mergeable_state`, resolving what is mechanical or
-transient without ever waking the LLM. This module drives that real script end to end
-against the (extended) mock forge, one scenario per route:
+(`hub/graphs/scripts/land_pr_ci.py`) and its poll cadence, yet expresses a wholly
+different delivery policy through the same generic `executor: hub` primitive. This module
+drives that real script end to end against the mock forge, one scenario per route:
 
 * **wait** — the `checks_pending` lever makes the PR read `blocked` (required CI not yet
   green): the script prints `pending`, the executor records a poll attempt and releases
@@ -34,10 +29,8 @@ Asserted over the full live stack (mock forge + mock harness + fixture workspace
 hub/runner), exactly like the sibling e2e scenarios — fleet truth (pending/bounce/done)
 and git truth (bare `main` moves exactly once on a land, never on a pend or a bounce).
 
-The shipped `advanced-development-workflow` graph authors a production 30s
-`poll_interval`; these scenarios mint the SAME `land_pr_ci` script with a brisk 1s
-cadence so the in-process driver converges in seconds — the point proved is the
-script's policy through the generic executor, not the cadence.
+These scenarios mint the `land_pr_ci` script with a brisk 1s cadence so the in-process
+driver converges in seconds — what is asserted is the script's routing, not the cadence.
 
 Gated exactly like the sibling e2e scenarios — skipped unless `BLIZZARD_E2E=1` and the
 sibling `blizzard-mock` worktree + a local winter source are discoverable.
@@ -100,22 +93,18 @@ _BUILD_JUDGEMENT = "verdict('pass', 'committed the change; checks are green')\n"
 def _graph_yaml() -> str:
     """The PR+CI delivery policy's shape, inlined with a re-poll-every-tick cadence.
 
-    The `deliver` node names the SAME real `land_pr_ci` script and authors the SAME
-    three choice names (`landed`/`conflict`/`failure`) as the shipped
-    `advanced-development-workflow` graph, so this exercises the shipped policy's actual
-    routing behavior, not a stand-in. It deliberately differs in two ways: the brisk
-    `poll_interval`/`poll_timeout` cadence, and both `conflict` and `failure` routing
-    back to `build` — this two-node stand-in has no `resolve`/`pre-push` spine to route
-    into, where the shipped graph routes both to `resolve`. The shipped graph's own
-    `conflict` edge (`-> resolve`) is proven directly, minting the packaged graph itself,
-    by `tests/test_delivery_conflict_routing.py`."""
+    The `deliver` node names the SAME real `land_pr_ci` script and the same three choice
+    names (`landed`/`conflict`/`failure`) the shipped graph authors, so this exercises the
+    real routing rather than a stand-in. It deliberately differs in two ways: the brisk
+    `poll_interval`/`poll_timeout` cadence, and both `conflict` and `failure` routing back
+    to `build` — this two-node stand-in has no `resolve` spine to route into. The shipped
+    graph's own `conflict` edge is covered by `tests/test_delivery_conflict_routing.py`."""
     import yaml
 
     graph = {
-        # Named `default-delivery` (not `-pr-ci`) so `ensure_default` binds THIS graph at
-        # ingest: the hub resolves the default by name and takes the newest enabled one,
-        # exactly as the sibling conflict scenario does. The PR+CI policy rides its
-        # `deliver` node's `run:` script, not the graph name.
+        # Named `default-delivery` (not `-pr-ci`) so the hub's default-graph resolution
+        # binds THIS graph at ingest. The PR+CI policy rides the `deliver` node's `run:`
+        # script, not the graph name.
         "name": "default-delivery",
         "entry": "build",
         "nodes": {
@@ -193,9 +182,8 @@ def _ingest_and_promote(hub: httpx.Client, forge: httpx.Client) -> str:
 def _drive_until(config: RunnerConfig, hub: httpx.Client, chunk_id: str, env: dict[str, str], predicate, timeout=60.0):
     """Tick until `predicate(detail)` is truthy; return that detail. Raises on timeout.
 
-    Wrapped in :func:`_runner_api` (issue #143, Phase 4): the build node's scripted
-    push+declare needs a live local API to POST its ``artifact commit`` declaration to
-    — `_runner_config` binds a free `host`/`port` for exactly this.
+    Wrapped in :func:`_runner_api` so the build node's scripted push+declare has a live
+    local API to POST to (issue #143).
     """
     prior = dict(os.environ)
     os.environ.update(env)
@@ -221,13 +209,11 @@ def _fenced_env() -> dict[str, str]:
 
 
 def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
-    """Also the wait-path half of issue #232's D2/F1: `checks_pending` now also serves
-    one `in_progress` check run (Phase 1), so this scenario's blocked wait is a
-    *substantive* one, driven over several polls in one visit — the only tier that can
-    prove the wait-path `delivery-findings` write's per-epoch idempotence against the
-    real hub. Exactly one artifact must exist across repeated polls, its content naming
-    the in-flight check, unchanged by later polls — and landing must still work once the
-    lever clears, proving the wait-path write costs the happy path nothing."""
+    """A blocked PR pends over several polls, then lands once the lever clears.
+
+    Also issue #232's D2/F1 wait path: exactly one `delivery-findings` artifact must exist
+    across the repeated polls, its content naming the in-flight check and unchanged by
+    later polls."""
     bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
     main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
 
@@ -255,8 +241,8 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
         assert "ci" in first_content.lower()
 
         # ...and repeated polls within this SAME visit (still blocked, same hub epoch)
-        # must leave it unchanged — the callback's per-(chunk, node, name, epoch)
-        # idempotence, exercised against the real hub, not a scripted double.
+        # must leave it unchanged — per-(chunk, node, name, epoch) idempotence, exercised
+        # against the real hub rather than a scripted double.
         first_next_poll = pending["pending"]["next_poll_at"]
         second = _drive_until(
             config,
@@ -292,12 +278,12 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
 
 
 def test_pr_ci_routes_failure_on_a_terminally_failed_check(tmp_path: Path) -> None:
-    """Issue #232: a terminally-failed check run routes `failure` immediately, well
-    inside this scenario's 60s `_drive_until` budget — proof today's code cannot reach
-    it before the inlined `poll_timeout: 600`, since only the timeout path could route
-    `failure` before this change. Two passes: the first asserts the `delivery-findings`
-    content for a plain CI failure; a second, shorter pass also arms `base_checks_failed`
-    and asserts the findings instead name the base as already red ("not this change")."""
+    """Issue #232: a terminally-failed check run routes `failure` well inside this
+    scenario's 60s `_drive_until` budget — far short of the inlined `poll_timeout: 600`,
+    so a timeout-driven `failure` could not produce this. Two passes: the first asserts
+    the `delivery-findings` content for a plain CI failure; a second, shorter pass also
+    arms `base_checks_failed` and asserts the findings instead name the base as already
+    red ("not this change")."""
     bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
     main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
 

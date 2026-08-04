@@ -159,8 +159,8 @@ def test_load_facts_resolves_each_transition_executor_against_its_own_graph(tmp_
 
     assert facts is not None
     by_target = {t.to_node_id: t for t in facts.transitions}
-    # The gr_b hub node resolves to HUB — not the silent RUNNER fallback the single-graph
-    # (gr_a-only) filter would have produced, since nd_hub lives in gr_b, not the pin.
+    # The gr_b hub node resolves to HUB, not a raw RUNNER fallback — nd_hub lives in
+    # gr_b, not the pin.
     assert by_target["nd_hub"].to_node_executor is Executor.HUB
     assert by_target["nd_hub"].graph_id == "gr_b"
     assert by_target["nd_run"].to_node_executor is Executor.RUNNER

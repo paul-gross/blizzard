@@ -9,12 +9,6 @@ built, so these drive the marking against a real tmp store with fakes at the sea
 (``bzh:steppable-loop``), then hand off to the existing resume machinery. The routing
 counterparts — clean exit → judge, stall → reap+retry — are asserted as skips here and exercised
 end to end in ``test_runner_restart_resume.py`` / ``test_runner_loop.py``.
-
-Both qualifiers above are load-bearing, and each has a regression test here, because the facts
-alone are ambiguous at recovery time. Staleness is judged against the daemon's last liveness
-beat, not the clock at restart — else it measures the outage rather than the worker's idleness,
-and a long reboot skips every lease. Session-end is judged against the lease's newest spawn —
-else one natural exit (an ask) suppresses every later crash-resume on that lease forever.
 """
 
 from __future__ import annotations
@@ -133,12 +127,10 @@ def test_skips_stalled_worker(tmp_path):  # type: ignore[no-untyped-def]
 
 @pytest.mark.unit
 def test_marks_worker_killed_before_a_long_outage(tmp_path):  # type: ignore[no-untyped-def]
-    """The reboot case: downtime past the staleness threshold is not the worker's idleness.
-
-    A worker beating right up to the crash must resume however long the machine stays down —
-    fsck, systemd backoff, an overnight ops response. Regression: staleness measured against
-    the clock at recovery reads ``downtime + idle-at-crash``, so every in-flight lease looked
-    stalled and #13's headline scenario silently degraded to a fresh retry."""
+    """The reboot case: downtime past the staleness threshold is not the worker's
+    idleness — staleness is judged against the daemon's last liveness beat, not the
+    clock at recovery, so a worker beating right up to the crash resumes however long
+    the machine stays down."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # actively working when killed
@@ -153,12 +145,9 @@ def test_marks_worker_killed_before_a_long_outage(tmp_path):  # type: ignore[no-
 
 @pytest.mark.unit
 def test_marks_crash_after_an_earlier_session_ended(tmp_path):  # type: ignore[no-untyped-def]
-    """A lease that asked a question earlier still crash-resumes: session-end is per spawn, not per lease.
-
-    The ask/answer cycle exits the session naturally, so the SessionEnd hook writes a durable
-    session-end under this lease. The answer then re-spawns the *same* lease and session.
-    Regression: an unscoped read let that stale fact mean "declared done" forever, permanently
-    disabling crash-resume for exactly the long-running sessions a human had already invested in."""
+    """A lease that asked a question earlier still crash-resumes: session-end is scoped
+    to the spawn it belongs to, not the lease as a whole — a stale session-end fact must
+    not permanently disable crash-resume once the lease respawns."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_session_end(lease_id="lease_1", ended_at=_NOW)  # earlier session exited to ask
@@ -177,14 +166,11 @@ def test_marks_crash_after_an_earlier_session_ended(tmp_path):  # type: ignore[n
 
 @pytest.mark.unit
 def test_marks_worker_respawned_just_before_the_crash_with_no_beat_of_its_own(tmp_path):  # type: ignore[no-untyped-def]
-    """The reclassification issue #150 deliberately takes on in this classifier.
-
-    A lease resumed long after its last heartbeat — the ask/answer case, where the park
-    outlasted the staleness threshold — is killed by the daemon before its fresh worker
+    """Issue #150: a lease resumed long after its last heartbeat — the ask/answer case,
+    where the park outlasted the staleness threshold — is killed before its fresh worker
     makes its first tool call. Every heartbeat it holds belongs to the *previous*
-    generation, so the pre-#150 baseline read it as "stalled at crash time" and abandoned
-    a genuinely working session to a fresh retry. The spawn fact says otherwise, and it
-    is the one that describes the process that was actually running: it resumes."""
+    generation, so the spawn fact is what actually describes the running process: it
+    resumes."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # the pre-park generation's last beat

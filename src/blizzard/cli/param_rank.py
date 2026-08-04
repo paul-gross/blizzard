@@ -1,10 +1,9 @@
 """Click parameter-source ranking shared by the CLI's mutually-resolving flags.
 
-Winter's per-env ``[env.<name>.vars]`` band exports config ambiently across a whole
-feature env, so a param's mere presence can't mean "the operator chose it" — an envvar
-or default always *has* a value. Ranked ``COMMANDLINE > ENVIRONMENT > DEFAULT`` lets a
-command tell an explicit flag from an ambient one apart, and treat a genuine
-command-line tie — not an ambient default — as the ambiguous case worth failing on.
+A param's mere presence can't mean "the operator chose it" — an envvar or default
+always *has* a value. Ranked ``COMMANDLINE > ENVIRONMENT > DEFAULT`` lets a command
+tell an explicit flag from an ambient one apart, and treat a genuine command-line tie
+— not an ambient default — as the ambiguous case worth failing on.
 """
 
 from __future__ import annotations

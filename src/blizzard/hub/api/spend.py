@@ -10,10 +10,7 @@ double-counting or dropping the fact at either boundary; omitting it is the orig
 open-ended tail.
 
 An anonymous **operator** verb, like every other read on this router
-(``dependencies=[Depends(reject_runner_principal)]`` — issue #87): it lived at
-``GET /api/fleet/spend`` until this phase, which collides with the new
-runner-authenticated ``/api/fleet/*`` prefix (:mod:`blizzard.hub.api.fleet`), so it moved
-here to free that namespace.
+(``dependencies=[Depends(reject_runner_principal)]`` — issue #87).
 """
 
 from __future__ import annotations

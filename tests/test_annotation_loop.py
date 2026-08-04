@@ -1,19 +1,6 @@
-"""The hub's sweep-loop background driver — a thin sleep-and-call wrapper shared by the
-forge-status annotation loop (issue #179) and the delivery closure loop (issue #216).
-
-``_run_sweep_loop`` is unit-tested by direct import, mirroring
-``tests/test_events_stream.py``'s own pattern for ``_stream``: a counting fake
-reconciler stands in for :class:`~blizzard.hub.domain.forge_status.AnnotationReconciler`
-or :class:`~blizzard.hub.domain.work_closure.DeliveryClosureReconciler` (the loop is
-identical either way — it only ever sees the structural ``_Sweepable``), and a real
-``asyncio.Event`` proves the shutdown race — with zero real sleeping, since
-``interval_seconds=0`` makes the interval wait resolve immediately every pass.
-
-``_lifespan``'s own closure-task-starting condition — a task is created iff
-``work_sources.closing_names()`` names at least one opted-in source — is proven
-directly against ``_lifespan`` with a fake ``services`` object and a spy standing in
-for ``services.delivery_closure``, one context-manager entry/exit per case (no real
-HTTP, no real interval wait).
+"""Unit tests for the hub's sweep-loop background driver (``_run_sweep_loop``), shared
+by the forge-status annotation loop (issue #179) and the delivery closure loop (issue
+#216), and for ``_lifespan``'s closure-task-starting gate (issue #216).
 """
 
 from __future__ import annotations
@@ -94,8 +81,7 @@ async def test_loop_returns_promptly_when_shutdown_fires_mid_wait() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# _lifespan's closure-task-starting condition (issue #216) — mirrors the
-# already-shipped annotation task's own "at least one opted-in source" gate.
+# _lifespan's closure-task-starting condition (issue #216)
 # --------------------------------------------------------------------------- #
 
 

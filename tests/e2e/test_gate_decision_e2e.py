@@ -4,14 +4,12 @@ The other half of the human loop, end to end over the real stack: a graph whose
 ``build`` node passes into a **human gate ahead of deliver**.
 The build worker makes a real commit and its verdict transitions the chunk *into* the
 gate; the hub opens an **open Decision** carrying the build's artifacts and the chunk
-derives **waiting_on_human** — the runner holds its warm environments, spawning nothing.
-A human lists the gate with the real ``blizzard hub decision list`` and approves it with
-the real ``blizzard hub decision resolve``; the holding runner picks the resolution up on its next tick,
-records the resolving transition along the ``approve`` edge, and the hub's deliver node
-lands the build commit on the bare origin's ``main`` — the chunk reaches **done**.
+derives **waiting_on_human**. A human lists the gate with the real
+``blizzard hub decision list`` and approves it with the real
+``blizzard hub decision resolve``; the holding runner picks the resolution up on its next
+tick and the hub's deliver node lands the build commit on the bare origin's ``main`` —
+the chunk reaches **done**.
 
-This is the "sample-gate variant": the packaged ``build -> review -> deliver`` default with
-a human ``approve-gate`` minted between the work and delivery (the sample graph).
 Reuses the acceptance loop's live-stack scaffolding (forge/hub/runner harnesses, fixture
 mint, port helpers). Skipped unless ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock``
 worktree provisioned — exactly like the sibling scenarios.
@@ -53,9 +51,8 @@ pytestmark = [
     ),
 ]
 
-# build: write a file and make a real commit — the work the gate stands in front of. The
-# worker pushes the commit and declares it (issue #143, Phase 4); its verdict transitions
-# the chunk into the gate, carrying the commit as the decision's artifact.
+# build: write a file and make a real commit — the work the gate stands in front of, and
+# the artifact the gated decision must carry.
 _BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
@@ -68,18 +65,15 @@ _BUILD_SCRIPT = (
     "    check=True,\n"
     ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
-# build judgement: pass into the gate. The gate itself is human-judged — the runner never
-# executes a worker for it; the hub opens the decision on arrival.
+# build judgement: pass into the gate. The gate itself is human-judged, so no worker script.
 _JUDGEMENT_SCRIPT = "verdict('pass', 'built and committed; awaiting human sign-off to ship')\n"
 
 
 def _graph_yaml() -> str:
     """The sample-gate variant — ``build -> approve-gate (human) -> deliver``.
 
-    Named ``default-delivery`` so the hub's lazy ``ensure_default`` reuses it by name.
-    The ``approve-gate`` node is a runner node judged ``by: human``: a
-    transition into it parks the chunk on a decision; only the resolving transition
-    (carrying the decision id) may leave it.
+    Named ``default-delivery`` so the hub's lazy default-graph mint reuses it by name.
+    The ``approve-gate`` node is a runner node judged ``by: human``.
     """
     import yaml
 
@@ -126,9 +120,8 @@ def _tick_until(
 ) -> str:
     """Drive synchronous ticks until the chunk reaches one of ``targets``; return its status.
 
-    Wrapped in :func:`_runner_api` (issue #143, Phase 4): the build node's scripted
-    push+declare needs a live local API to POST its ``artifact commit`` declaration to
-    — `_runner_config` binds a free `host`/`port` for exactly this.
+    Wrapped in :func:`_runner_api` so the build node's scripted push+declare has a live
+    local API to POST to (issue #143).
     """
     prior = dict(os.environ)
     os.environ.update(fenced)  # the runner spawns the fenced mock harness in-process

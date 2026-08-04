@@ -159,12 +159,9 @@ def test_oidc_exchange_raises_on_a_signature_that_does_not_verify() -> None:
 
 
 def test_oidc_exchange_rejects_an_alg_confusion_token_when_jwk_omits_alg() -> None:
-    """A JWKS entry with no ``alg`` member (legal per RFC 7517) must never fall back
-    to the attacker-controlled token header: the accepted algorithm(s) must come from
-    a source the issuer controls (the jwk's own ``alg``, the discovery document, or the
-    ``RS256`` default), not ``header.get("alg")`` — else an attacker could pick
-    ``HS256`` and attempt an RS256-to-HS256 confusion attack, HMAC-keying off the
-    published RSA public key (pre-push must-fix, issue #92)."""
+    """A JWKS entry with no ``alg`` member (legal per RFC 7517) must not let a token's
+    ``HS256`` header pick the algorithm and HMAC-key off the published RSA public key
+    (alg-confusion attack, issue #92)."""
     _, jwk = _rsa_keypair()
     del jwk["alg"]
     public_pem = RSAAlgorithm.from_jwk(jwk).public_bytes(  # type: ignore[union-attr]

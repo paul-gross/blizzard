@@ -12,11 +12,9 @@ own to read — :meth:`RunnerStatusService.summary` derives it from how stale
 so the summary stays truthful with the hub down rather than needing a live call.
 
 Escalation resume commands are **recomputed** here from the escalated lease's
-session id and its chunk's still-held binding, via the same
-:meth:`~blizzard.runner.harness.adapter.IHarnessAdapter.resume_command` call
-``_escalate`` (``runner/loop/steps.py``) used to mint the original — not read back
-off the outbound buffer, which only holds the *unacked* tail and would go blank
-the moment the fact flushes to the hub.
+session id and its chunk's still-held binding, not read back off the outbound
+buffer, which only holds the *unacked* tail and would go blank the moment the fact
+flushes to the hub.
 """
 
 from __future__ import annotations
@@ -42,9 +40,8 @@ __all__ = [
 
 #: How stale the last successful hub contact (:meth:`IReadRunnerStore.hub_contact_at`)
 #: may read before the summary calls the hub unreachable. Deliberately generous —
-#: several ticks' worth (``DEFAULT_TICK_SECONDS`` is 30s) — the same conservative-by-design
-#: choice :data:`blizzard.runner.domain.leases.HEARTBEAT_STALENESS_THRESHOLD` makes: a
-#: single slow tick or a momentary blip must never flip this false.
+#: several ticks' worth — so a single slow tick or a momentary blip never flips this
+#: false.
 HUB_CONTACT_STALENESS_THRESHOLD = timedelta(minutes=5)
 
 
@@ -52,8 +49,7 @@ HUB_CONTACT_STALENESS_THRESHOLD = timedelta(minutes=5)
 class PauseState:
     """The pause brake's two independent surfaces, plus their effective OR.
 
-    Mirrors :class:`~blizzard.runner.api.control.RunnerControlView`'s three-value
-    shape — reported apart because they are cleared by different verbs
+    Reported apart because they are cleared by different verbs
     (``blizzard runner start`` vs. ``blizzard hub resume``)."""
 
     local: bool
@@ -191,11 +187,10 @@ class RunnerStatusService:
         )
 
     def environments(self) -> list[EnvironmentSlot]:
-        """The full configured pool (issue #106), each row joined against the same
-        ``held`` binding facts :meth:`bindings_for_chunk`/``held_environment_ids`` read —
-        held slots carry their chunk ref and since-instant, unused slots carry neither.
-        A held binding whose environment id has since fallen out of the configured pool
-        (a resized pool) still surfaces — a bound environment never silently vanishes
+        """The full configured pool (issue #106), each row joined against the held binding
+        facts — held slots carry their chunk ref and since-instant, unused slots carry
+        neither. A held binding whose environment id has since fallen out of the configured
+        pool (a resized pool) still surfaces — a bound environment never silently vanishes
         from the read.
 
         ``env_bindings`` carries no unique constraint on ``environment_id`` — a

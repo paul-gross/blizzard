@@ -19,9 +19,8 @@ temp folder). No ``subprocess``/``pathlib``/``httpx`` import lives in this file
 
 Fleet-wide serialization is a FACT (``hub_exec_slot``, ``bzh:facts-not-status``): one
 chunk's hub node runs at a time. :meth:`HubNodeExecutor.run` returns ``None`` — never
-raises, never blocks — when the slot is held elsewhere; the caller (the
-``hub-advance`` endpoint, driven by the runner's ADVANCE poll) simply tries again on a
-later tick.
+raises, never blocks — when the slot is held elsewhere; the caller simply tries again
+on a later tick.
 
 The crash contract narrows to **at-least-once per step** (not per script): the only
 re-run window is between a step's side effect and its marker record — so the rule a
@@ -164,9 +163,8 @@ class HubEnvInputs:
     marker_token: str = ""
 
 
-# The env-injection contract (mirrors the worker's own, `_spawn_env` in
-# `runner/harness/internal/claude_code_adapter.py`) — documented here as the single
-# source of truth a graph author's `run:` script reads.
+# The env-injection contract — documented here as the single source of truth a graph
+# author's `run:` script reads.
 ENV_CHUNK_ID = "BZ_HUB_CHUNK_ID"
 ENV_WORKDIR = "BZ_HUB_WORKDIR"
 ENV_NODE_ID = "BZ_HUB_NODE_ID"
@@ -184,10 +182,7 @@ ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirror
 # it can't be resolved
 ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
 # "1" when some node in this chunk's graph declares a `git_commit`-kind `produces:`, "0"
-# when none does. A delivery policy needs the difference: with no commits AND none ever
-# promised, an empty landing is the correct terminal for a non-code chunk (a review, a
-# spike) whose graph still routes through `deliver` as the uniform end; with commits
-# promised and none present, the same empty set is a defect.
+# when none does — see `graph_declares_git_commit`.
 ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
 
 
@@ -203,13 +198,9 @@ def graph_declares_git_commit(graph: Graph) -> bool:
 
 
 def _delivery_repo(row: ArtifactRow) -> str | None:
-    """How delivery addresses one repo: ``owner/name`` read from its origin, else the
-    bare name for the script's configured-owner fallback to qualify.
-
-    The bare name is not a lesser answer — a git remote and a forge coordinate are
-    decoupled by design here (the verification forge fronts flat bare origins that
-    resolve under any owner), so an origin that names no owner leaves the configured
-    default as the only truth available."""
+    """How delivery addresses one repo: ``owner/name`` read from its origin (see
+    :mod:`~blizzard.hub.delivery.repo_ref`), else the bare name for the script's
+    configured-owner fallback to qualify."""
     ref = parse_repo_ref(row.forge) if row.forge else None
     return ref.qualified if ref else row.repo
 
@@ -217,43 +208,25 @@ def _delivery_repo(row: ArtifactRow) -> str | None:
 class UnconvergedDeliveryError(RuntimeError):
     """Delivery was handed several distinct branches for one repo.
 
-    Raised rather than tie-broken: multi-repo delivery is safe because N repos have N
-    independent bases, but N branches within ONE repo share a base, so merging the first
-    invalidates the mergeability every other was checked against — the check-all-then-
-    merge-all atomicity the land scripts rely on silently degrades to checked-then-hoped.
-    Converging belongs upstream, at `pre-push`, where an agent with the change's context
-    can resolve a conflict; a hub script can only bounce."""
+    Raised rather than tie-broken: N branches within one repo share a base, so merging the
+    first invalidates the mergeability every other was checked against. Converging belongs
+    upstream at `pre-push`; a hub script can only bounce (pinned by
+    ``tests/test_hub_command_node.py::test_two_branches_for_one_repo_at_one_epoch_refuse_to_deliver``)."""
 
 
 def _latest_commit_per_repo(rows: list[ArtifactRow]) -> list[ArtifactRow]:
     """Every ``git_commit`` artifact resolved to one row per **repo**, newest epoch wins.
 
     Deliberately NOT :func:`~blizzard.hub.domain.envelope.latest_artifacts_by_name`, whose
-    ``(node_name, name)`` key is right for the envelope — a ``review-findings`` from
-    ``review`` and one from ``plan-review`` are genuinely different artifacts a worker
-    should see both of — and wrong here. Delivery's identity for a git pointer is the
-    **repo** alone: ``land_ff``/``land_default``/``land_pr_ci`` key their own
-    ``merged/<repo>`` markers on it, so two entries naming one repo are not two units of
-    work, they are one unit described twice.
+    ``(node_name, name)`` key is right for the envelope and wrong here: delivery's identity
+    for a git pointer is the **repo** alone, so a branch a later node rewrote (a ``pre-push``
+    rebase, a ``resolve``) supersedes the orphaned one instead of being delivered alongside
+    it (pinned by ``tests/test_hub_command_node.py``'s
+    ``test_a_rebased_tip_supersedes_the_pre_rebase_commit_for_the_same_repo``).
 
-    That distinction is load-bearing once any node after ``build`` rewrites a branch —
-    ``pre-push`` rebasing onto a base that moved, ``resolve`` clearing a delivery blocker.
-    Keyed per node, such a chunk hands the delivery script BOTH the pre-rebase commit and
-    the rewritten tip for the same repo; the rewrite orphaned the former, so it can never
-    fast-forward, and delivery bounces on it no matter how many times the rebase re-runs
-    (the loop is not self-healing, only bounce-capped). Keyed per repo, the rewriting
-    node's declaration simply supersedes the stale one, which is what a rebase means.
-
-    Ties — one node-step declaring the same repo twice — resolve to the later row: a
-    re-declaration within a step is a correction, not a second repo. That reading holds
-    only while a tie really is one unit described twice. It stops holding when a chunk
-    works one repo across several environments: those are two *different* branches
-    declared at the same epoch, and silently keeping whichever came last would deliver
-    half the work and report success. Such a tie raises
-    :class:`UnconvergedDeliveryError` — convergence is `pre-push`'s job (it rebases every
-    environment's work per repo into a single branch and re-declares at a later epoch,
-    which then supersedes cleanly), so reaching delivery unconverged is a defect, not a
-    coin to flip.
+    A tie at one epoch resolves to the later row — a re-declaration within a step is a
+    correction — unless the two name different branches, which raises
+    :class:`UnconvergedDeliveryError` instead.
     """
     latest: dict[str | None, ArtifactRow] = {}
     for row in rows:
@@ -288,10 +261,8 @@ def build_hub_env(inputs: HubEnvInputs) -> dict[str, str]:
     commits = [
         {
             # The forge coordinate the declaring repo's own origin encodes, when it
-            # encodes one — so a chunk spanning two owners addresses each correctly,
-            # instead of every repo being re-qualified with one workspace-wide owner.
-            # A bare or file-backed origin names no owner, and those fall through to the
-            # script's `BZ_FORGE_OWNER` qualification exactly as before.
+            # encodes one (see `_delivery_repo`) — so a chunk spanning two owners
+            # addresses each correctly.
             "repo": _delivery_repo(row),
             "branch": row.data.partition(":")[0],
             "commit": row.data.partition(":")[2],
@@ -422,9 +393,8 @@ class HubNodeExecutor:
     def run(self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int) -> HubRunResult | None:
         """Execute ``node``'s ``run:`` list once, to completion; ``None`` if deferred.
 
-        Deferred means one of two things, and either way the caller (the
-        ``hub-advance`` endpoint) simply tries again on a later poll — not an error,
-        not a retry-consuming failure: (a) the fleet-wide slot is held by a different
+        Deferred means one of two things, and either way the caller simply tries again
+        on a later poll — not an error, not a retry-consuming failure: (a) the fleet-wide slot is held by a different
         chunk right now, or (b) this exact ``(node, epoch)`` visit already recorded a
         ``pending`` outcome and ``poll_interval`` has not yet elapsed since the last
         attempt (#66). Case (b) is checked BEFORE acquiring the slot — a chunk not yet
@@ -483,8 +453,9 @@ class HubNodeExecutor:
             except UnconvergedDeliveryError as exc:
                 # A defect in what reached this node, not a fault in running it — route the
                 # node's `failure` edge exactly as a non-zero step exit would, rather than
-                # letting it escape and crash-loop the tick. The detail lands in an artifact
-                # so the reason survives where an operator reads it.
+                # letting it escape and crash-loop the tick; the detail lands in an artifact
+                # an operator can read (pinned by tests/test_pin_hub_delivery.py::
+                # test_an_unconverged_delivery_routes_the_failure_edge_instead_of_escaping_the_tick).
                 self._chunks.record_hub_artifact(
                     chunk.chunk_id,
                     node_id=node.node_id,
@@ -571,9 +542,9 @@ class HubNodeExecutor:
     def _route_pending_timeout(self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int) -> HubRunResult:
         """A pending node that exceeded its ``poll_timeout`` is a kick-back (#64), not a
         plain failure: record a bounce fact, escalate past the node's ``bounce_cap``,
-        else route the ``failure`` edge with the kick-back envelope riding along —
-        mirroring the coordinator's own ``_conflict``. Pending itself consumed no
-        retry and no bounce budget; only the timeout crossing does.
+        else route the ``failure`` edge with the kick-back envelope riding along.
+        Pending itself consumed no retry and no bounce budget; only the timeout
+        crossing does.
         """
         hub_epoch = epoch + 1
         now = self._clock.now()
@@ -628,20 +599,12 @@ class HubNodeExecutor:
         edge = graph.edge_for_choice(node.node_id, choice)
         if edge is None:
             # No authored edge for this outcome — a graph-authoring gap, not a crash;
-            # nothing is routed, so this is safely re-polled once the graph is fixed.
-            #
-            # "Safely re-polled" means re-polled *forever*, though: the node keeps its
-            # epoch, so no retry budget, no bounce budget and no escalation ever moves.
-            # Left mute that is invisible — a `deliver` whose land script died on a
-            # missing env var re-ran the identical crash every ~31s for 34 minutes in
-            # production (2026-07-30) while `docker logs` stayed clean, because a step's
-            # own log artifact is idempotent per (chunk, node, name, epoch) and so only
-            # the very first attempt ever wrote one.
-            #
-            # So announce it once per (node, epoch): the artifact is the operator-visible
-            # record in chunk detail AND the dedupe key gating one error-severity
-            # event_log row, which surfaces the gap wherever events are watched without
-            # writing a row per poll.
+            # nothing is routed, so this re-polls the identical outcome forever, moving no
+            # retry, bounce or escalation budget. Left unannounced it is a silent loop, so
+            # announce it once per (node, epoch): the artifact is the operator-visible
+            # record in chunk detail AND the dedupe key gating one error-severity event_log
+            # row, rather than a row per poll (pinned by
+            # tests/test_hub_command_node.py::test_an_unroutable_outcome_is_announced_once_per_epoch).
             now = self._clock.now()
             detail = f"no authored edge for choice `{choice}` on hub node `{node.name}`"
             authored = sorted(c.name for c in node.choices)
@@ -687,15 +650,15 @@ class HubNodeExecutor:
             )
         hub_epoch = epoch + 1
 
-        # A delivery kick-back (#64): this run's outcome is routing to a NON-terminal
-        # node while at least one of the repos this node's commits named has not
-        # landed a ``merged/<repo>`` marker — a conflict/CI-red/master-moved bounce,
-        # by the domain fact (:func:`~blizzard.hub.domain.work.landed_repos_from_markers`),
-        # never by choice name (no outcome name is privileged, #67). A fully-landed
-        # continuation into a post-merge node (an authored ``landed -> <node>`` edge,
-        # #63) is forward progress, not contention, so it never reaches here — every
-        # named repo already carries its marker. Mirrors :meth:`_route_pending_timeout`'s
-        # own bounce-then-route shape, sharing the same cap-escalation check.
+        # A delivery kick-back (#64): this run's outcome is routing to a NON-terminal node
+        # while at least one of the repos this node's commits named has not landed a
+        # ``merged/<repo>`` marker. Detected by the domain fact
+        # (:func:`~blizzard.hub.domain.work.landed_repos_from_markers`), never by choice
+        # name — no outcome name is privileged (#67), so a fully-landed continuation into a
+        # post-merge node (#63) is forward progress, not contention (pinned by
+        # tests/test_hub_command_node.py::test_a_fully_landed_non_terminal_route_records_no_bounce
+        # and ::test_a_non_terminal_route_with_nothing_landed_records_a_bounce). Mirrors
+        # :meth:`_route_pending_timeout`'s bounce-then-route shape and cap-escalation check.
         if commits and to_node_id != RESERVED_TERMINAL:
             pending_repos = {c["repo"] for c in commits}
             landed_now = landed_repos_from_markers(self._chunks.load_artifacts(chunk.chunk_id))

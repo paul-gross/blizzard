@@ -1,9 +1,7 @@
 """Reconcile ``host``'s positional DIRECTORY with its ``--dir`` option (issue #3).
 
-``init`` takes a positional DIRECTORY; ``host`` historically took only ``--dir``, so a
-user naturally mirrors ``init``'s spelling and hits click's "Got unexpected extra
-argument" error. Both daemons' ``host`` verb now accept either, reconciled here so the
-two CLIs (``blizzard.hub.cli`` / ``blizzard.runner.cli``) don't each carry their own copy
+Both daemons' ``host`` verb accept either, reconciled here so the two CLIs
+(``blizzard.hub.cli`` / ``blizzard.runner.cli``) don't each carry their own copy
 of the rule: an explicit ``--dir`` on the command line beats its own envvar/default
 fallback — the same explicit-beats-ambient ranking ``blizzard.runner.cli``'s
 ``--dir``/``--runner-url`` seam already applies (``param_rank.py``) — so a bare

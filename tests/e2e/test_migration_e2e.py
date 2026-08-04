@@ -19,10 +19,8 @@ tokens/network):
 
 Then — when a launchable Chromium is present — a **real browser** drives the served board
 over *this scenario's own* two-graph history (MUST-FIX-3): the migrated chunk's detail
-dock renders the graph-to-graph migration step with a per-graph label on every row (the
-`MigrationView`/history-union render, over real migrated data — the one surface the vitest
-timeline spec cannot reach), and the standalone `/graphs` explorer — which reads graphs,
-not chunks — still lists both graphs, unaffected by a migrated chunk. Gated like its
+dock renders the graph-to-graph migration step with a per-graph label on every row, and
+the standalone `/graphs` explorer still lists both graphs. Gated like its
 siblings — skipped unless `BLIZZARD_E2E=1` and the sibling `blizzard-mock` worktree + a
 local winter source are discoverable; the browser half additionally needs the served
 bundle (`mise run e2e` builds it) and an installed Chromium, and is skipped in place —
@@ -222,11 +220,9 @@ def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
 
         # --- The two-graph history renders on the served board (MUST-FIX-3) ------------
-        # This scenario has produced a *real* two-graph history above. When a Chromium is
-        # present, drive the served board over it to prove the MigrationView hydration
-        # renders that history — the one surface the vitest timeline spec cannot reach: the
-        # served bundle over real migrated data. When Chromium is absent the git + fleet
-        # truth below still run (the board render is covered at the vitest tier there).
+        # This scenario has produced a *real* two-graph history above; when a Chromium is
+        # present, drive the served board over it. When Chromium is absent the git + fleet
+        # truth below still run.
         if chromium_available:
             from playwright.sync_api import expect, sync_playwright
 
@@ -244,17 +240,15 @@ def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
                     expect(page.get_by_test_id("chunk-detail")).to_be_visible()
                     expect(page.get_by_test_id("detail-id")).to_have_text(chunk_id)
 
-                    # The timeline weaves in the graph-to-graph migration step, and — because
-                    # the history now spans two graphs — labels each row with the graph it
-                    # happened in (no raw-id degradation). Both are the MigrationView/history-
-                    # union render this scenario, uniquely, drives over real migrated data.
+                    # The timeline weaves in the graph-to-graph migration step and, because
+                    # the history spans two graphs, labels each row with the graph it
+                    # happened in (no raw-id degradation).
                     expect(page.get_by_test_id("history-migration-step")).to_have_count(1)
                     assert page.get_by_test_id("history-graph").count() >= 1, (
                         "the two-graph timeline rendered no per-graph label — MigrationView hydration regressed"
                     )
 
-                    # The standalone /graphs explorer is unaffected by a migrated chunk (it
-                    # reads graphs, not chunks) — it still lists both graphs of the history.
+                    # The standalone /graphs explorer still lists both graphs of the history.
                     page.goto(f"http://127.0.0.1:{hub_port}/graphs", wait_until="load")
                     expect(page.get_by_test_id("graph-explorer")).to_be_visible()
                     for name in ("default-delivery", "triage-delivery"):

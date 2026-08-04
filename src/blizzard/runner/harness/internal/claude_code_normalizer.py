@@ -2,42 +2,29 @@
 
 Pure and stdlib-only (``bzh:domain-core``): :func:`normalize_lines` takes an
 **iterable of strings** — already-read lines, never a path — which is what makes it
-unit-testable with no filesystem; the file locate/read step (including sidecar
-discovery and the file-size tail bound) lives in the sibling
-``claude_code_transcript.py``, the only module in this pair that touches
-``pathlib``/``glob``.
+unit-testable with no filesystem; the file locate/read step lives in the sibling
+``claude_code_transcript.py``.
 
 Skips ``isMeta``/control/system records, strips ANSI escapes, and collapses
 ``env``/``asst``/``tool`` records (an ``isSidechain`` record is routed to
 inline-sidechain assembly, never dropped) — plus a ``thinking`` turn kind and
-structured (never ``json.dumps``'d) tool-call input. ``MAX_TURNS`` deliberately does
-not live here: a forward incremental read must never silently drop turns, so that
-recency cap lives on the panel projection instead
-(``transcripts/internal/projected_transcript_repository.py``).
-``MAX_BLOCK_CHARS`` stays here — it caps every **string** block (assistant text,
-thinking, tool output); a tool call's *input* is a mapping at this layer, not a
-string, so there is no string here to cap; capping its serialized form moves to the
-projection, the point at which it is re-materialized as one.
+structured (never ``json.dumps``'d) tool-call input. No recency cap lives here: a
+forward incremental read must never silently drop turns. :data:`MAX_BLOCK_CHARS` does
+— it caps every **string** block (assistant text, thinking, tool output); a tool
+call's *input* is a mapping at this layer, so there is no string here to cap.
 
 Records are read in **file order**, not DAG-traversed via ``uuid``/``parentUuid`` for
 the *main* conversation — a fleet worker is ``claude -p`` (headless, ``--resume``
 appends), so no rewind/branch is ever created there. The ``uuid``/``parentUuid`` chain
 *is* consulted, but only for the narrower job of threading an inline sidechain run
-together and resolving its root to a spawning tool call (route 2 below) — the
-corpus-primary route, sidecar-file joining (route 1), is the sibling source module's
-job, since it needs a second file this module never reads.
+together and resolving its root to a spawning tool call (route 2 below).
 
 **Sidechain linking, in the order attempted, each recorded on the turn as
 :data:`~blizzard.runner.harness.transcript.SidechainLink`:**
 
 1. ``agent-id`` — resolved by ``claude_code_transcript.py``, not here; this module
-   only surfaces the *candidates*: :attr:`NormalizedFile.agent_id_by_tool_turn` (one
-   entry per tool turn a ``toolUseResult.agentId`` could be unambiguously attached
-   to, this call) and, wider, :attr:`NormalizedFile.discovered_agent_ids` (every
-   agent id this call's lines named at all, attachable or not — an agent id read off
-   a ``tool_result`` whose ``tool_use`` fell in an earlier call, or off an ambiguous
-   record naming more than one, is still a legitimate read candidate even though
-   this call has no turn to attach it to).
+   only surfaces the *candidates*, :attr:`NormalizedFile.agent_id_by_tool_turn` and
+   the wider :attr:`NormalizedFile.discovered_agent_ids`.
 2. ``uuid-chain`` — an inline ``isSidechain`` run's root record's ``parentUuid``
    resolves to exactly one tool-call turn from the assistant record that ``uuid``
    names; an ambiguous match (that record emitted more than one tool call) falls
@@ -45,9 +32,7 @@ job, since it needs a second file this module never reads.
 3. ``prompt-timestamp`` — the run's first user-role text matched against a
    candidate tool call's ``prompt``/``description`` input, nearest **preceding** call
    by timestamp winning among ties.
-4. ``unlinked`` — carried on :class:`NormalizedFile`'s own unlinked list (mirroring
-   :attr:`~blizzard.runner.harness.transcript.TranscriptBatch.unlinked_sidechains`,
-   which the source assembles this module's per-file results into).
+4. ``unlinked`` — carried on :class:`NormalizedFile`'s own unlinked list.
 """
 
 from __future__ import annotations
@@ -75,9 +60,7 @@ from blizzard.runner.harness.transcript import (
 #: normalizer's rows are told apart from this one's.
 NORMALIZER_VERSION = "claude-code-jsonl/1"
 
-#: Cap each text / thinking / tool-output string block at this many characters. A
-#: tool call's *input* is a mapping at this layer, so there is no string here to cap;
-#: that moves to the panel projection.
+#: Cap each text / thinking / tool-output string block at this many characters.
 MAX_BLOCK_CHARS = 1024 * 1024
 
 #: Control records: plumbing, never conversation. ``file-history-snapshot``/
@@ -111,22 +94,15 @@ class NormalizedFile:
 
     Internal to the Claude Code adapter (``bzh:dependency-inversion`` — not part of
     the harness-agnostic seam in ``harness/transcript.py``): ``agent_id_by_tool_turn``
-    and ``discovered_agent_ids`` are Claude-Code-specific plumbing the sibling source
-    module needs to complete the sidecar-based agent-id join (link route 1) after
-    discovering and normalizing a sidecar file of its own; nothing outside
+    and ``discovered_agent_ids`` are Claude-Code-specific plumbing; nothing outside
     ``internal/`` needs to see either.
 
     ``agent_id_by_tool_turn`` is *attachment*: an agent id resolved onto a specific
     tool turn this call's own lines contain, unambiguously. ``discovered_agent_ids``
     is strictly wider — every agent id this call's lines named at all, whether or not
     it could be attached — because discovery must not depend on the spawning
-    ``tool_use`` being co-resident in the same call: a ``toolUseResult.agentId`` is
-    read off the ``tool_result`` record alone, and that record can land in a call
-    whose own ``normalized.turns`` never contains the ``tool_use`` it answers (a
-    straddled read boundary), or can resolve more than one ``tool_result`` at once
-    (ambiguous — no single turn to attach to). Either way the id itself is still a
-    legitimate read candidate; only attachment needs the stronger guarantee. The
-    sibling source module folds both into one candidate set.
+    ``tool_use`` being co-resident in the same call. Either way the id itself is still
+    a legitimate read candidate; only attachment needs the stronger guarantee.
 
     ``frozen=True`` guards against rebinding a field on this instance — it does not
     make ``turns``/``unlinked_sidechains`` themselves immutable. The sibling source
@@ -303,13 +279,10 @@ def _collapse_user(
         agent_id = raw_agent_id if isinstance(raw_agent_id, str) and raw_agent_id else None
         if agent_id is not None:
             # A discovered agent id is always a read *candidate*, independent of
-            # whether it can be attached to a specific turn below — attachment needs
-            # a co-resident `tool_use` (this record's own `pending_tool_index`, built
-            # fresh every call) and an unambiguous record, but discovery needs
-            # neither: a straddled read boundary (the spawning `tool_use` landed in
-            # an earlier call) or an ambiguous record (more than one `tool_result`
-            # here) must still surface this id, or its sidecar conversation is never
-            # opened at all. Attachment stays best-effort; discovery does not.
+            # whether it can be attached to a specific turn below: a straddled read
+            # boundary or an ambiguous record must still surface this id, or its
+            # sidecar conversation is never opened at all. Attachment stays
+            # best-effort; discovery does not.
             discovered_agent_ids.add(agent_id)
         # `toolUseResult.agentId` is one field on the record, not one per block — only
         # attributable to a specific tool turn when this record resolves exactly one
@@ -375,12 +348,9 @@ def _new_turn(
 
 def _normalize_tool_input(raw_input: object) -> tuple[Mapping[str, Any], str | None, ToolInputShape]:
     """A tool call's ``input`` as a structured mapping, never coerced from a
-    non-object value — see :class:`~blizzard.runner.harness.transcript.ToolCall`.
-    The third element (:data:`~blizzard.runner.harness.transcript.ToolInputShape`)
-    is the explicit discriminator a re-materializing consumer needs: ``input``/
-    ``input_unparsed`` alone cannot tell "absent" from "an empty object", nor "a bare
-    string" from "an already-serialized non-object" (a plain string that itself
-    happens to parse as JSON is indistinguishable from the latter by inspection)."""
+    non-object value, plus the shape discriminator — see
+    :class:`~blizzard.runner.harness.transcript.ToolCall` and
+    :data:`~blizzard.runner.harness.transcript.ToolInputShape`."""
     if isinstance(raw_input, dict):
         return raw_input, None, "object"
     if raw_input is None:
@@ -453,23 +423,16 @@ def _group_sidechain_runs(records: list[dict[str, Any]]) -> list[list[dict[str, 
     shared run in file order rather than being silently dropped.
 
     Linear in ``len(records)`` regardless of well-formedness: a ``parentUuid`` index is
-    built once up front as a queue per key, so finding each link's successor is an
-    O(1) dequeue rather than a scan — a naive per-link rescan-with-filter is quadratic
-    whenever many links share one lookup key, measured at 29.4s for 40,000 records
-    with duplicate ``uuid`` values (a volume an in-spec ~50 MB session transcript can
-    plausibly contain), which is the shape that actually triggers it: several
-    *different* current-record ``uuid``\\ s colliding on the same string value, so
-    their walks repeatedly probe the same key's child pool. A shared ``parentUuid``
-    alone (several genuine children of one parent) does not degrade this: each is
-    still dequeued once, in file order, first-unused-wins.
+    built once up front as a queue per key, so each link's successor is an O(1) dequeue
+    rather than a scan. The naive per-link rescan is quadratic when many links share one
+    lookup key — duplicate ``uuid`` values, a shape an in-spec transcript can plausibly
+    contain (pinned by ``tests/test_runner_harness_claude_code_normalizer.py::
+    test_group_sidechain_runs_stays_fast_and_correct_under_duplicate_uuid_values``).
     """
     by_uuid = {r["uuid"]: r for r in records if isinstance(r.get("uuid"), str)}
-    # Every record indexed by its own `parentUuid` as a queue, so walking a chain
-    # forward from a root dequeues each candidate exactly once — no rescan of a shared
-    # key's pool, which is what makes a `uuid` collision (two unrelated walks probing
-    # the same key) cost the same as a clean one. More than one child sharing a
-    # `parentUuid` is possible in principle (malformed or unusual data) — resolved in
-    # file order, first-unused-wins, same as an unshared key.
+    # Every record indexed by its own `parentUuid` as a queue, so walking a chain forward
+    # from a root dequeues each candidate exactly once. Several children sharing a
+    # `parentUuid` resolve in file order, first-unused-wins.
     children_by_parent_uuid: dict[str, deque[dict[str, Any]]] = {}
     for record in records:
         parent_uuid = record.get("parentUuid")
@@ -496,11 +459,9 @@ def _group_sidechain_runs(records: list[dict[str, Any]]) -> list[list[dict[str, 
             if isinstance(current_uuid, str):
                 queue = children_by_parent_uuid.get(current_uuid)
                 if queue is not None:
-                    # Drain any front entries already consumed elsewhere (possible only
-                    # under a duplicate `uuid` — two unrelated walks probing the same
-                    # key) — each entry is drained at most once ever, across the whole
-                    # function, so this stays amortized O(1) per link rather than a
-                    # rescan.
+                    # Drain front entries already consumed elsewhere (possible only under
+                    # a duplicate `uuid`). Each entry drains at most once across the whole
+                    # function, so this stays amortized O(1) per link rather than a rescan.
                     while queue and id(queue[0]) in used:
                         queue.popleft()
                     if queue:

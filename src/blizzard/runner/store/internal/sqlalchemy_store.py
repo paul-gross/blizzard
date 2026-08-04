@@ -76,23 +76,18 @@ from blizzard.wire.facts import USAGE_RECORDED
 
 _log = get_logger("blizzard.runner.store")
 
-# The closure reason `_escalate` (`runner/loop/steps.py`) records — the vocabulary is
-# caller-owned (docstring precedent: `ClosedLeaseRecord`), this is the one place the
-# store itself reads it back to derive "open escalation" (issue #51).
+# The closure reason the loop's escalate path (`runner/loop/steps.py`) records — the
+# vocabulary is caller-owned, and this is the one place the store reads it back to derive
+# "open escalation" (issue #51).
 _ESCALATED_REASON = "escalated"
 
 
 def _binding_is_held():  # type: ignore[no-untyped-def]
     """A binding is **held** iff no release for its ``(chunk, env)`` is at or after it.
 
-    Timestamp-aware: a plain ``env_id NOT IN releases`` set-difference would mask a
-    **re-bind** — the same ``(chunk, env)`` bound again after a release (interrupted-claim
-    recovery) — leaving a valid new binding invisible forever. Comparing against the
-    release instant un-masks it: a fresh binding re-taken *after* an earlier release has no
-    release at-or-after it, so it reads as held; the original binding does, so it does not
-    (``bzh:facts-not-status``). ``>=`` keeps a same-instant release winning (a release
-    stamped with its binding's own instant is a release), while a genuine re-bind is always
-    stamped strictly later, so it is never spuriously masked."""
+    Timestamp-correlated rather than a plain ``env_id NOT IN releases`` so a re-bind of the
+    same ``(chunk, env)`` is not masked forever (``bzh:facts-not-status``; pinned by
+    tests/test_pin_runner_store.py::test_a_rebind_after_a_release_reads_as_held)."""
     return ~(
         select(binding_releases.c.id)
         .where(
@@ -107,12 +102,9 @@ def _binding_is_held():  # type: ignore[no-untyped-def]
 def _intent_is_open():  # type: ignore[no-untyped-def]
     """A resume-intent is **open** iff no clear for its lease is at or after the mark.
 
-    Timestamp-aware, exactly like :func:`_binding_is_held`: a plain ``lease_id NOT IN
-    clears`` would mask a **re-mark** — a still-in-flight lease marked again on a second
-    graceful restart above an earlier clear — leaving the new intent invisible. Comparing
-    against the clear instant un-masks it: a fresh mark stamped strictly later than its
-    clear reads as open; the consumed one does not. ``>=`` keeps a same-instant clear
-    winning (a clear stamped with its mark's own instant is a clear)."""
+    Timestamp-correlated exactly like :func:`_binding_is_held`, so a re-mark above an
+    earlier clear stays visible (pinned by
+    tests/test_runner_restart_resume.py::test_remark_across_two_restarts_reopens_the_intent)."""
     return ~(
         select(resume_clears.c.id)
         .where(
@@ -126,10 +118,9 @@ def _intent_is_open():  # type: ignore[no-untyped-def]
 def _pause_park_is_open():  # type: ignore[no-untyped-def]
     """A pause-park is open iff no resume for its lease is at or after the park instant.
 
-    Timestamp-aware exactly like _intent_is_open: a plain `lease_id NOT IN resumes` would
-    mask a re-pause — paused, resumed, paused again under one lease — leaving the second
-    pause invisible and its worker running. `>=` keeps a same-instant resume winning,
-    consistent with _binding_is_held and _intent_is_open.
+    Timestamp-correlated exactly like :func:`_intent_is_open`, so a second pause under one
+    lease is not masked by the first pause's resume (pinned by
+    tests/test_pause_park_store.py::test_repark_after_resume_on_the_same_lease_reads_as_parked).
     """
     return ~(
         select(pause_park_resumes.c.id)
@@ -144,9 +135,9 @@ def _pause_park_is_open():  # type: ignore[no-untyped-def]
 def _takeover_is_open():  # type: ignore[no-untyped-def]
     """A takeover is **open** iff no end fact names its ``takeover_id``.
 
-    A plain ``NOT IN`` is safe here, unlike ``_pause_park_is_open``'s timestamp
-    correlation: ``takeover_id`` is a fresh ULID per open (mirroring ``asks``'
-    ``question_id``), so there is no re-open-under-the-same-key hazard to mask."""
+    A plain ``NOT IN`` rather than ``_pause_park_is_open``'s timestamp correlation:
+    ``takeover_id`` is a fresh ULID per open, so there is no re-open-under-the-same-key
+    hazard to mask."""
     return takeovers.c.takeover_id.not_in(select(takeover_ends.c.takeover_id))
 
 
@@ -166,10 +157,9 @@ def _escalation_not_superseded():  # type: ignore[no-untyped-def]
 def _requeue_not_consumed():  # type: ignore[no-untyped-def]
     """A requeue mark not yet consumed by a later lease mint for the same chunk.
 
-    ``>=`` keeps a same-instant mint winning, mirroring ``_pause_park_is_open``'s and
-    ``_intent_is_open``'s timestamp correlation: the fresh spawn :func:`_reconcile_
-    interrupted_claims` triggers off this mark stamps its lease no earlier than the mark
-    itself, so a mint at or after the mark is always the one it caused."""
+    ``>=``, not ``>``: a mint at or after the mark is the spawn the mark itself triggered,
+    so it always counts as the mark's consumer (pinned by
+    tests/test_pin_runner_store.py::test_a_same_instant_mint_consumes_its_requeue_mark)."""
     return ~(
         select(leases.c.lease_id)
         .where(leases.c.chunk_id == requeues.c.chunk_id)
@@ -439,9 +429,9 @@ class SqlAlchemyRunnerStore:
         )
 
     def open_asks(self) -> list[AskRecord]:
-        # A display-level backstop (blizzard#202) independent of whichever loop path
-        # writes the retiring `park_resumes` row: an ask whose lease has already closed
-        # is never open, even if the closing path failed to retire the park fact.
+        # An ask whose lease has closed is never open — a backstop independent of whichever
+        # loop path writes the retiring `park_resumes` row (blizzard#202; pinned by
+        # tests/test_runner_status_api.py::test_an_ask_whose_lease_closed_without_a_park_resume_does_not_appear).
         stmt = (
             select(asks)
             .where(asks.c.question_id.not_in(select(park_resumes.c.question_id)))
@@ -577,11 +567,7 @@ class SqlAlchemyRunnerStore:
         return bool(rows)
 
     def check_results_for_lease(self, lease_id: str, epoch: int) -> list[CheckResultRecord]:
-        # Ordered by insert id so the results read back in the order the checks ran — the
-        # order the judgement-prompt injection renders them. A recovery re-run appends a
-        # fresh set (higher ids), so the newest run's rows are the ones ordering surfaces
-        # last; the caller only ever reads a single attempt's set (guarded by `checks_ran`),
-        # so in practice this is exactly the one run's rows.
+        # Ordered by insert id so the results read back in the order the checks ran.
         rows = self._all(
             select(check_results)
             .where(and_(check_results.c.lease_id == lease_id, check_results.c.epoch == epoch))
@@ -593,10 +579,9 @@ class SqlAlchemyRunnerStore:
         ]
 
     def session_preamble_fingerprint(self, session_id: str) -> PreambleFingerprint | None:
-        # Explicit total ordering on the autoincrement pk, not on `recorded_at`: two spawns
-        # of one session can share a clock stamp, and a newest-row read with no `order_by`
-        # happens to return insert order on sqlite while being undefined on postgres
-        # (`bzh:sql-portable`).
+        # Ordered on the autoincrement pk, not on `recorded_at` or implicit insert order
+        # (`bzh:sql-portable`; pinned by
+        # tests/test_runner_store.py::test_session_preamble_newest_row_wins_at_an_identical_stamp).
         rows = self._all(
             select(session_preamble_facts.c.blizzard_digest, session_preamble_facts.c.workspace_digest)
             .where(session_preamble_facts.c.session_id == session_id)
@@ -620,9 +605,8 @@ class SqlAlchemyRunnerStore:
         stmt = (
             select(session_ends.c.lease_id)
             .select_from(session_ends.outerjoin(newest_spawn, newest_spawn.c.lease_id == session_ends.c.lease_id))
-            # No spawn fact = a lease minted before the crash-recovery-context revision: fall back to
-            # the unscoped reading, which over-reports "declared done" and so can only suppress a
-            # resume, never invent one.
+            # No spawn fact: fall back to the unscoped reading, which over-reports
+            # "declared done" and so can only suppress a resume, never invent one.
             .where(or_(newest_spawn.c.spawned_at.is_(None), session_ends.c.ended_at >= newest_spawn.c.spawned_at))
             .distinct()
         )
@@ -751,8 +735,7 @@ class SqlAlchemyRunnerStore:
         event_payload: str | None = None,
     ) -> None:
         # The closure and (when given) its operational event land in ONE transaction —
-        # the same atomic local+outbound pairing `record_local_pause` uses (issue #125):
-        # a `_fail_attempt` failure event and the closure it describes are crash-atomic,
+        # the same atomic local+outbound pairing `record_local_pause` uses (issue #125),
         # so a `kill -9` between them can never surface an event for a closure that never
         # happened, nor drop the event for one that did.
         with self._begin() as conn:
@@ -866,11 +849,9 @@ class SqlAlchemyRunnerStore:
     def record_local_pause(
         self, runner_id: str, *, paused: bool, at: datetime, by: str, report_kind: str, report_payload: str
     ) -> None:
-        # Both inserts, one transaction: the brake and the report that makes it visible
-        # land together or not at all. Two transactions would leave a `kill -9` window
-        # where the runner has stopped claiming and the hub is never told — and nothing
-        # reconciles that afterwards, since PULL only mirrors hub->runner. The buffer
-        # delivers whenever the hub is next reachable, so this stays a local write.
+        # Both inserts, one transaction: two would leave a `kill -9` window where the runner
+        # has stopped claiming and the hub is never told (issue #43; pinned by
+        # tests/test_ingest_and_pause_verbs.py::test_pause_reports_itself_upward_atomically).
         with self._begin() as conn:
             conn.execute(local_pause_facts.insert().values(runner_id=runner_id, paused=paused, set_at=at, set_by=by))
             conn.execute(
@@ -909,10 +890,9 @@ class SqlAlchemyRunnerStore:
         _log.info("route token stashed", chunk_id=chunk_id)
 
     def record_lease_token(self, lease_id: str, token_hash: str, at: datetime) -> None:
-        # Overwrite-safe: a resume re-mints the lease's capability token (the plaintext is
-        # never persisted, so it cannot be re-injected — only re-minted), replacing the
-        # spawn-time row for this lease. delete-then-insert keeps the `lease_id` PK a single
-        # live row while re-minting invalidates the prior token by construction.
+        # Delete-then-insert: a re-mint replaces the prior row under the `lease_id` PK, so
+        # the old token is invalidated by construction (pinned by
+        # tests/test_runner_store.py::test_record_lease_token_overwrites_on_re_mint).
         with self._begin() as conn:
             conn.execute(lease_tokens.delete().where(lease_tokens.c.lease_id == lease_id))
             conn.execute(lease_tokens.insert().values(lease_id=lease_id, token_hash=token_hash, minted_at=at))
@@ -929,9 +909,8 @@ class SqlAlchemyRunnerStore:
         content: str,
         attached_at: datetime,
     ) -> None:
-        # A single committed transaction (`engine.begin()` commits on clean exit) —
-        # durable the instant this returns, so it survives a `kill -9` right after
-        # (issue #113 Phase 2's crash-sweep criterion).
+        # A single committed transaction — durable the instant this returns, so it
+        # survives a `kill -9` right after (issue #113 Phase 2).
         with self._begin() as conn:
             conn.execute(
                 attachments.insert().values(
@@ -959,9 +938,9 @@ class SqlAlchemyRunnerStore:
         commit: str,
         declared_at: datetime,
     ) -> None:
-        # A single committed transaction (`engine.begin()` commits on clean exit) —
-        # durable the instant this returns, so it survives a `kill -9` right after
-        # (issue #143 Phase 3's crash-sweep criterion, mirroring `record_attachment`).
+        # A single committed transaction — durable the instant this returns, so it
+        # survives a `kill -9` right after (issue #143 Phase 3, mirroring
+        # `record_attachment`).
         with self._begin() as conn:
             conn.execute(
                 git_commit_declarations.insert().values(
@@ -980,10 +959,7 @@ class SqlAlchemyRunnerStore:
 
     def record_nudge_fired(self, *, lease_id: str, epoch: int, at: datetime) -> None:
         # Check-then-insert in one transaction, mirroring `record_usage` — idempotent by
-        # construction rather than a DB constraint (`bzh:sql-portable`): the caller
-        # already checks `nudge_fired` first, so this only ever finds an existing row on
-        # a genuine replay (a crash between this write and whatever follows it,
-        # re-driven by the next ADVANCE pass before that pass's own read would see it).
+        # construction rather than a DB constraint (`bzh:sql-portable`).
         with self._begin() as conn:
             existing = conn.execute(
                 select(nudge_facts.c.id).where(and_(nudge_facts.c.lease_id == lease_id, nudge_facts.c.epoch == epoch))
@@ -1003,11 +979,10 @@ class SqlAlchemyRunnerStore:
         results: list[CheckResultRecord],
         at: datetime,
     ) -> None:
-        # Delete-then-insert in one transaction: a crash-recovery re-run (checks_ran unset)
-        # calls this again for the same `(lease, epoch)`, and replacing the prior set makes
-        # it truly latest-wins rather than accumulating duplicate rows — so
-        # `check_results_for_lease` always reads exactly one run's rows. Written BEFORE
-        # `record_checks_ran` so the marker never precedes its rows
+        # Delete-then-insert in one transaction: a crash-recovery re-run for the same
+        # `(lease, epoch)` is latest-wins rather than accumulating duplicate rows (pinned by
+        # tests/test_runner_checks.py::test_record_check_results_round_trips_and_is_latest_wins_on_a_rerun).
+        # Written BEFORE `record_checks_ran` so the marker never precedes its rows
         # (`runner:checks-recorded-when-marked`).
         with self._begin() as conn:
             conn.execute(
@@ -1031,8 +1006,8 @@ class SqlAlchemyRunnerStore:
     def record_checks_ran(self, *, lease_id: str, epoch: int, at: datetime) -> None:
         # Check-then-insert in one transaction, mirroring `record_nudge_fired` — idempotent
         # by construction, not a DB constraint (`bzh:sql-portable`). Written AFTER
-        # `record_check_results` and only for a node with a non-empty `checks:`, so the
-        # marker implies its result rows exist.
+        # `record_check_results`, so the marker implies its result rows exist
+        # (`runner:checks-recorded-when-marked`).
         with self._begin() as conn:
             existing = conn.execute(
                 select(checks_ran.c.id).where(and_(checks_ran.c.lease_id == lease_id, checks_ran.c.epoch == epoch))
@@ -1043,10 +1018,9 @@ class SqlAlchemyRunnerStore:
         _log.info("checks marked ran", lease_id=lease_id, epoch=epoch)
 
     def record_session_preamble(self, session_id: str, *, fingerprint: PreambleFingerprint, at: datetime) -> None:
-        # A plain append, no check-then-insert: unlike `nudge_facts`/`checks_ran` this is
-        # not a once-per-key guard, it is a per-spawn fact whose newest row is the answer.
-        # A replayed spawn re-records the same two digests, so a duplicate row reads back
-        # identically to the row it duplicates.
+        # A plain append, no check-then-insert: this is a per-spawn fact whose newest row is
+        # the answer, not a once-per-key guard (pinned by
+        # tests/test_runner_store.py::test_session_preamble_fingerprint_is_newest_row_wins).
         with self._begin() as conn:
             conn.execute(
                 session_preamble_facts.insert().values(
@@ -1120,8 +1094,8 @@ class SqlAlchemyRunnerStore:
         recorded_at: datetime,
     ) -> None:
         # Both writes, one transaction — the same atomic local+outbound pairing
-        # `record_local_pause` uses: a usage fact the hub is never told about is a chunk
-        # whose board total silently under-reports, and nothing later reconciles it.
+        # `record_local_pause` uses: a usage fact the hub is never told about is never
+        # reconciled later.
         with self._begin() as conn:
             existing = conn.execute(
                 select(usage_facts.c.id).where(
@@ -1133,9 +1107,8 @@ class SqlAlchemyRunnerStore:
                 )
             ).one_or_none()
             if existing is not None:
-                # A replay of the exact same invocation (a crash between this write and
-                # the outbound enqueue, re-run by the next tick before the completion is
-                # buffered) — the row is already durable; write nothing a second time.
+                # A replay of the exact same invocation — the row is already durable;
+                # write nothing a second time.
                 return
             conn.execute(
                 usage_facts.insert().values(
@@ -1191,9 +1164,7 @@ class SqlAlchemyRunnerStore:
     ) -> None:
         # The attempt row and (when there is a sample) its outbound report land in ONE
         # transaction — the same atomic local+outbound pairing `record_local_pause` and
-        # `record_usage` use: a sample the hub is never told about is a board that
-        # silently drifts, and nothing later reconciles it. Runner-scoped like
-        # `record_local_pause`'s report (`chunk_id=None, lease_id=None`) — this is a
+        # `record_usage` use. Runner-scoped (`chunk_id=None, lease_id=None`): this is a
         # fact about the runner's own account, not about any chunk or lease.
         with self._begin() as conn:
             conn.execute(external_usage_samples.insert().values(sampled_at=sampled_at, payload=payload))
@@ -1229,9 +1200,8 @@ class SqlAlchemyRunnerStore:
                 lease_closures.c.closed_at,
                 leases.c.epoch,
                 leases.c.session_id,
-                # The escalated lease's session stamps (issue #144) — joined here so the
-                # escalation view can name the pool and its configuration without a
-                # second read per row.
+                # The escalated lease's session stamps (issue #144) — joined here rather
+                # than read back per row.
                 lease_context.c.session_name,
                 lease_context.c.resolved_model,
                 lease_context.c.resolved_effort,
@@ -1285,9 +1255,8 @@ class SqlAlchemyRunnerStore:
             lease_context.c.node_id,
             lease_context.c.node_name,
             lease_context.c.retries_max,
-            # The session stamps (issue #144) — read by `pool_head` and by the takeover /
-            # usage-attribution consumers. Selected on the shared join rather than a
-            # second query so every lease read carries them.
+            # The session stamps (issue #144) — selected on the shared join rather than a
+            # second query, so every lease read carries them.
             lease_context.c.session_name,
             lease_context.c.resolved_model,
             lease_context.c.resolved_effort,

@@ -224,9 +224,8 @@ def test_run_on_a_runner_node_is_rejected() -> None:
 
 
 def test_a_bare_hub_node_with_no_run_and_no_judgement_is_rejected() -> None:
-    """#67 retired the deliver special case: no node name is privileged any more —
-    an ``executor: hub`` node must declare a judgement (its outcome choices) exactly
-    like a generic hub command node does, whether or not it also declares ``run:``."""
+    """An ``executor: hub`` node must declare a judgement (its outcome choices)
+    whether or not it also declares ``run:`` — no node name is privileged (#67)."""
     errors = _errors(
         {
             "build": {
@@ -484,8 +483,7 @@ def _commit_row(
     """One repo's declared git pointer, as the node at ``epoch`` recorded it.
 
     ``forge`` defaults to the origin the repo's own name implies, so a fixture naming two
-    repos describes two origins — the helper used to hardcode one regardless of ``repo``,
-    which made distinct repos indistinguishable once delivery started reading the origin."""
+    repos describes two distinct origins."""
     return ArtifactRow(
         kind=ArtifactKind.GIT_COMMIT,
         name=repo.rpartition("/")[2],  # named after the repo, never the literal produces name
@@ -559,11 +557,9 @@ def test_a_multi_repo_chunk_keeps_one_commit_per_repo() -> None:
 
 
 def test_build_hub_env_omits_the_marker_token_when_none_is_given() -> None:
-    """The shape a call after a step completes takes (issue #230): once the
-    executor's `finally` has revoked the token, the next `build_hub_env` call it
-    would make carries no `marker_token` — and the env it builds carries no
-    `BZ_HUB_MARKER_TOKEN` key, mirroring every other optional env var's
-    only-when-non-empty convention."""
+    """When `marker_token` is empty, the built env omits `BZ_HUB_MARKER_TOKEN`
+    (issue #230), mirroring every other optional env var's only-when-non-empty
+    convention."""
     _, merge_node = _reified_merge_node()
     chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
     env = build_hub_env(
@@ -685,11 +681,10 @@ def test_full_run_maps_success_to_the_authored_edge(tmp_path: Path) -> None:
     command, _cwd, env = runner.calls[0]
     assert command == "land-the-repo"
     assert env["BZ_HUB_CHUNK_ID"] == chunk_id
-    # The chunk's work ref resolves through the default FakeWorkSource — its title
-    # flows into the hub node's env for the land script to use as the PR/merge title.
+    # The chunk's work ref resolves through the default FakeWorkSource, feeding
+    # BZ_HUB_FEATURE_TITLE.
     assert env["BZ_HUB_FEATURE_TITLE"] == "issue title"
-    # The mid-run marker-write capability token (issue #230) — minted by the executor's
-    # `MarkerAuthority` ahead of this step and present in its injected env.
+    # The mid-run marker-write capability token (issue #230).
     assert env[ENV_MARKER_TOKEN]
     assert workdir.ensured == [chunk_id]
 
@@ -759,8 +754,7 @@ _UNROUTABLE_GRAPH_YAML = _HUB_CMD_GRAPH_YAML.replace(
 def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path) -> None:
     """A step exiting non-zero into an outcome the graph never authored strands the
     node — it re-polls the identical failure forever, consuming no retry or bounce
-    budget. That is safe for the store but was historically silent, which is how a
-    `deliver` crashing on a missing env var burned 34 minutes in production unnoticed.
+    budget.
 
     It must announce itself exactly once per (node, epoch): once so an operator sees
     it, only once so a 31-second poll loop does not flood the event feed.
@@ -917,9 +911,8 @@ nodes:
     chunk_id, build_node_id, graph = _to_merge_node(hub, graph_yaml=graph_yaml)
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None
-    # The repo already landed — a marker recorded ahead of this node's own run,
-    # mirroring what the mid-run callback would have written during a real script's
-    # push stage.
+    # The repo already landed — pre-record the marker as if the mid-run callback
+    # wrote it ahead of this node's own run.
     _writable(hub).record_hub_artifact(
         chunk_id,
         node_id=merge_node.node_id,
@@ -1381,8 +1374,8 @@ def test_delivery_addresses_a_repo_by_the_owner_its_own_origin_names() -> None:
 
 def test_delivery_falls_back_to_the_bare_name_for_an_origin_that_names_no_owner() -> None:
     """The verification forge fronts flat bare origins that resolve under any owner, so
-    an unqualifiable origin must leave the bare name for the script's configured-owner
-    fallback rather than inventing a coordinate."""
+    an unqualifiable origin must leave the bare name rather than inventing a
+    coordinate."""
     env = _env_with(
         [
             _commit_row(

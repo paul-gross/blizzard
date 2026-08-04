@@ -1,16 +1,8 @@
 """The ask/answer rendezvous at the hub (component tier) — MVP criterion 7.
 
-Pins the hub half of the protocol against a fully-wired store:
-
-* a forwarded ``question.asked`` (both the batched ``POST /events`` path the runner
-  uses and the typed ``POST /questions`` route) lands a durable row, and the chunk
-  derives **waiting_on_human** with the question surfaced on its detail;
-* the answer is **first-write-wins CAS** — a racing second answer loses with 409 and
-  is told who already answered — and the winning row flips the chunk back to running;
-* the **return leg** (issue #165): the runner's ``answer.delivered`` fact derives
-  ``delivered``/``delivered_at`` onto every question view, and the ``chunk-changed`` the
-  same ingest already publishes is what refreshes the board's trail live;
-* ``GET /questions`` lists only the open ones (the ``blizzard hub status`` surface).
+Pins the hub half of the protocol: asking parks the chunk on waiting_on_human,
+answering is first-write-wins CAS, the return leg (issue #165) derives
+delivered/delivered_at, and GET /questions lists only the open ones.
 """
 
 from __future__ import annotations
@@ -160,7 +152,6 @@ def test_ask_question_normalizes_a_naive_asked_at(tmp_path: Path) -> None:
 
 
 def test_question_asked_via_events_batch_lands(tmp_path: Path) -> None:
-    # The store-and-forward path the reconciliation loop actually uses.
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
     resp = hub.client.post(
@@ -191,12 +182,8 @@ def test_question_asked_via_events_batch_lands(tmp_path: Path) -> None:
 
 
 def test_question_asked_via_events_batch_normalizes_a_naive_asked_at(tmp_path: Path) -> None:
-    """Legacy-buffered-payload insurance (issue #28, ``bzh:utc-instants``).
-
-    A runner's outbound buffer can still hold — and later deliver — a naive
-    ``asked_at`` string minted before the runner's own upgrade; ``_parse_at`` coerces it
-    to UTC rather than storing (and later re-emitting) a naive instant.
-    """
+    """Legacy-buffered-payload insurance (issue #28, ``bzh:utc-instants``): a naive
+    ``asked_at`` is normalized to UTC."""
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
     resp = hub.client.post(
@@ -246,7 +233,6 @@ def test_answer_first_write_wins_second_gets_409_with_winner(tmp_path: Path) -> 
     }
     assert_all_timestamps_utc(first.json())  # bzh:utc-instants — answered_at
 
-    # A racing second answer loses the CAS and is told who already answered.
     second = hub.client.post("/api/questions/qn_1/answers", json={"answer": "graphql", "answered_by": "bob"})
     assert second.status_code == 409, second.text
     body = second.json()
@@ -254,10 +240,8 @@ def test_answer_first_write_wins_second_gets_409_with_winner(tmp_path: Path) -> 
     assert body["answered_by"] == "operator"
     assert body["answer"] == "rest"
 
-    # The winning answer flips the chunk back out of waiting_on_human. The question row
-    # itself *stays* on the detail carrying its trail (issue #165) — dropping it was what
-    # left an answerer with no evidence their answer went anywhere — but it is answered,
-    # and not yet delivered: no runner has reported the resume.
+    # The question row stays on the detail carrying its trail (issue #165); answered
+    # but not yet delivered.
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "running"
     assert [(q["question_id"], q["answered"], q["answer"], q["delivered"]) for q in detail["questions"]] == [
@@ -271,7 +255,7 @@ def test_answer_first_write_wins_second_gets_409_with_winner(tmp_path: Path) -> 
 
 
 def _deliver(hub, chunk_id: str, *, question_id: str = "qn_1", seq: int = 9):  # type: ignore[no-untyped-def]
-    """Push the runner's ``answer.delivered`` fact — the resume-with-answer ran."""
+    """Push the runner's ``answer.delivered`` fact."""
     return hub.client.post(
         "/api/fleet/events",
         json={
@@ -284,8 +268,6 @@ def _deliver(hub, chunk_id: str, *, question_id: str = "qn_1", seq: int = 9):  #
 
 
 def test_answer_delivered_fact_is_accepted(tmp_path: Path) -> None:
-    # The runner reports answer.delivered up after resuming; the hub records it (board
-    # detail) rather than rejecting an unknown kind.
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
     _ask(hub, chunk_id)
@@ -297,12 +279,7 @@ def test_answer_delivered_fact_is_accepted(tmp_path: Path) -> None:
 
 
 def test_answer_delivered_surfaces_the_return_trip_on_the_question_view(tmp_path: Path) -> None:
-    """The delivered fact is *readable*, not merely stored (issue #165).
-
-    Before this, ``answer.delivered`` landed in ``answer_deliveries`` and went no further
-    — nothing derived it onto the wire, so no client could tell a delivered answer from
-    one still sitting at the hub. Now every question surface carries the pair.
-    """
+    """The delivered fact is *readable*, not merely stored (issue #165)."""
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
     _ask(hub, chunk_id)
@@ -315,7 +292,7 @@ def test_answer_delivered_surfaces_the_return_trip_on_the_question_view(tmp_path
     assert question["delivered_at"] is not None
     assert_all_timestamps_utc(detail["questions"])  # bzh:utc-instants — delivered_at
 
-    # The runner's own answer poll renders through the same view, so it carries it too.
+    # The runner's own answer poll carries it too.
     assert hub.client.get("/api/fleet/questions/qn_1").json()["delivered"] is True
 
 
@@ -342,30 +319,20 @@ def test_a_replayed_delivery_keeps_the_first_delivered_at(tmp_path: Path) -> Non
 
 
 def test_landing_a_delivered_fact_publishes_chunk_changed_for_the_trail(tmp_path: Path) -> None:
-    """AC 2 — the delivered trail refreshes off the **existing** ``chunk-changed`` frame,
-    with no event type of its own.
-
-    A delivery moves no derived status, so the frame repeats the status the board already
-    shows. That is not a reason to mint a second event type: the ingest publishes
-    ``chunk-changed`` on the *fact*, not on a status change, and the board's live-update
-    spine keys off a frame arriving rather than off the status differing — so the chunk
-    read is staled and the dock re-reads the now-delivered question. This test pins the
-    hub half of that; ``fleet-live.spec.ts`` pins the client half against a repeated
-    status. Together they are why the dedicated frame the issue deferred is unnecessary.
-    """
+    """AC 2 — the delivered trail refreshes off the existing ``chunk-changed`` frame, with
+    no event type of its own. See ``fleet-live.spec.ts`` for the client half."""
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
     _ask(hub, chunk_id)
     hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
-    before = int(emitted_events(hub)[-1]["id"])  # the last id published before the delivery
+    before = int(emitted_events(hub)[-1]["id"])
     status_before = hub.client.get(f"/api/chunks/{chunk_id}").json()["status"]
 
     assert _deliver(hub, chunk_id).status_code == 200
 
     published = emitted_events(hub, since=before)
     frames = [(e["event"], json.loads(e["data"])) for e in published]
-    # The frame naming this chunk is what the board re-reads on — and it is the *only*
-    # frame the delivery emits, so a regression that adds a second one shows up here.
+    # The delivery emits only this one frame — a regression adding a second shows up here.
     assert [event for event, _ in frames] == [CHUNK_CHANGED]
     data = frames[0][1]
     assert data["chunk_id"] == chunk_id
@@ -378,13 +345,8 @@ def test_landing_a_delivered_fact_publishes_chunk_changed_for_the_trail(tmp_path
 
 
 def test_each_question_carries_its_own_delivery_instant(tmp_path: Path) -> None:
-    """Two questions on one chunk, delivered at different times, keep their own instants —
-    and an undelivered third stays undelivered.
-
-    The read pre-aggregates ``answer_deliveries`` per question. Aggregating without that
-    per-question grouping still yields one row and still passes a single-question test,
-    while silently smearing one arbitrary instant across every question on the chunk.
-    """
+    """Two questions on one chunk, delivered at different times, keep their own delivery
+    instants; an undelivered third stays undelivered."""
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
     for qid in ("qn_1", "qn_2", "qn_3"):
@@ -399,20 +361,13 @@ def test_each_question_carries_its_own_delivery_instant(tmp_path: Path) -> None:
     by_id = {q["question_id"]: q for q in hub.client.get(f"/api/chunks/{chunk_id}").json()["questions"]}
     assert [by_id[q]["delivered"] for q in ("qn_1", "qn_2", "qn_3")] == [True, True, False]
     assert by_id["qn_3"]["delivered_at"] is None
-    # The two delivered instants are each their own, five minutes apart — not one shared.
     assert by_id["qn_1"]["delivered_at"] != by_id["qn_2"]["delivered_at"]
     assert by_id["qn_1"]["delivered_at"] < by_id["qn_2"]["delivered_at"]
 
 
 def test_every_question_read_derives_delivery_the_same_way(tmp_path: Path) -> None:
-    """A delivery is derived, never assumed away, on all three question reads.
-
-    ``record_answer_delivered`` has no answer-row precondition and the FK is on
-    ``question_id`` alone, so a malformed or replayed runner batch *can* land a delivery
-    for a question with no answer. Nothing about that is normal — but the open-question
-    list must not answer differently from the chunk detail about the same row, which is
-    what hardcoding "open, therefore never delivered" would do.
-    """
+    """A delivery is derived, never assumed away, on all three question reads — even for
+    a question that landed a delivery with no answer."""
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
     _ask(hub, chunk_id)
@@ -424,7 +379,6 @@ def test_every_question_read_derives_delivery_the_same_way(tmp_path: Path) -> No
     on_detail = hub.client.get(f"/api/chunks/{chunk_id}").json()["questions"][0]
     poll = hub.client.get("/api/fleet/questions/qn_1").json()
 
-    # All three agree — open, and delivered — rather than the list alone claiming otherwise.
     assert [still_open[0]["answered"], on_detail["answered"], poll["answered"]] == [False, False, False]
     assert [still_open[0]["delivered"], on_detail["delivered"], poll["delivered"]] == [True, True, True]
 

@@ -7,9 +7,8 @@ disconnect → membership reconcile → clean → service teardown → reprovisi
 orchestrator probe, and mid-reset failure attribution. The component tests drive the
 **real** ``winter`` CLI + git against a minimal real workspace over ``file://``
 origins — including the stale-feature-branch reproduction (one repo connected to a
-feature branch that exists only for it, siblings unconnected) that used to stall
-``winter ws init`` with ``set-upstream-to … exit 128``. Skipped when no enclosing
-winter workspace is available to clone the framework from.
+feature branch that exists only for it, siblings unconnected — issue #16). Skipped
+when no enclosing winter workspace is available to clone the framework from.
 """
 
 from __future__ import annotations
@@ -271,9 +270,9 @@ def test_real_winter_acquire_returns_clean_worktree_and_resets(tmp_path: Path) -
 @pytest.mark.component
 @pytest.mark.skipif(_WINTER_SOURCE is None, reason="no enclosing winter workspace to clone the framework from")
 def test_real_winter_acquire_recovers_stale_feature_branch_tracking(tmp_path: Path) -> None:
-    """The r1 stall, reproduced and fixed: a previous tenant left one repo connected to a
-    feature branch that exists only for it while its sibling sits unconnected — the state
-    that made init-first preparation die on ``set-upstream-to … exit 128`` (issue #16)."""
+    """A previous tenant leaves one repo connected to a feature branch that exists only
+    for it while its sibling sits unconnected (issue #16) — re-acquire must still
+    succeed."""
     workspace = _make_workspace(tmp_path, repos=("toy-a", "toy-b"))
     _init_workspace_or_skip(workspace)
 
@@ -293,7 +292,7 @@ def test_real_winter_acquire_recovers_stale_feature_branch_tracking(tmp_path: Pa
     (repo_b / "README.md").write_text("dirtied")
     (repo_b / "junk.txt").write_text("left behind")
 
-    # Re-acquire must succeed — this is exactly where the old init-first flow stalled.
+    # Re-acquire must succeed.
     reacquired = provider.acquire("ch_2", 1, held_ids=[])
     assert Path(reacquired[0].workdir) == workdir
 

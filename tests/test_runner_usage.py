@@ -171,11 +171,9 @@ def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_gen
     """Pins the cross-generation contamination fix: a generation-2 resume that exits
     without writing its **own** result envelope must fall through to the
     transcript-sum fallback (cost-absent) — never replay generation 1's still-present
-    envelope file under the new (``lease``, ``resume``) usage key. Before the
-    per-generation stdout split, readback re-scanned the one shared per-lease file and
-    would parse generation 1's stale envelope here, over-counting its tokens and cost
-    a second time under a key the ``runner:usage-attributed-once`` invariant cannot
-    catch (it is a *distinct* key from generation 1's own fact)."""
+    envelope file under the new (``lease``, ``resume``) usage key, which the
+    ``runner:usage-attributed-once`` invariant cannot catch since it is a *distinct*
+    key from generation 1's own fact."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     # Simulate a restart/answer/pause resume that landed generation 2, same lease.

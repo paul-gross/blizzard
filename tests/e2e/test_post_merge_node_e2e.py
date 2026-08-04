@@ -177,15 +177,12 @@ def test_authored_landed_edge_runs_a_post_merge_node_after_landing(tmp_path: Pat
         assert status == "done", f"chunk did not reach done (last status {status!r})"
 
         detail = hub.get(f"/api/chunks/{chunk_id}").json()
-        # The transition history proves `verify` ran AFTER the land: the `deliver -> verify`
-        # edge is the authored non-terminal land, and `verify -> done` exists only because a
-        # real post-merge worker completed the node.
+        # The transition history is where `verify`-ran-after-the-land is observable.
         edges = [(t["from_node_name"], t["to_node_name"], t["choice_name"]) for t in detail["history"]]
         assert ("build", "deliver", "pass") in edges, edges
         assert ("deliver", "verify", "landed") in edges, edges
         # `verify -> done`: `done` is the reserved terminal, not a named graph node, so its
-        # `to_node_name` is null — match on the raw `to_node_id`. This transition exists only
-        # because a real post-merge worker completed `verify` after the land.
+        # `to_node_name` is null — match on the raw `to_node_id`.
         assert any(
             t["from_node_name"] == "verify" and t["to_node_id"] == "done" and t["choice_name"] == "pass"
             for t in detail["history"]

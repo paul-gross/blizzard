@@ -2,7 +2,7 @@
 issue #169).
 
 ``AttachmentRequest``/``AttachmentResponse`` are behind ``POST
-/api/leases/{lease_id}/attachments``, modeled on ``wire/requeue.py``'s shapes.
+/api/leases/{lease_id}/attachments``.
 ``StagedAttachment`` is behind the read counterpart, ``GET
 /api/leases/{lease_id}/attachments`` — a worker's read-back of its own node-step's
 staged (not-yet-published) submissions.

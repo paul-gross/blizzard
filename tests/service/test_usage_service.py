@@ -96,9 +96,8 @@ def _pending_total(config: RunnerConfig) -> int:
 
 
 def _status(hub: httpx.Client, chunk_id: str) -> str:
-    """The mock hub's own status read (issue #87 moved its whole hub mirror under
-    ``/api/fleet``) — distinct from the live-hub reads further down this file, which
-    stay at the real hub's anonymous ``GET /api/chunks/{id}``."""
+    """The mock hub's own status read — distinct from the live-hub reads further down
+    this file, which stay at the real hub's anonymous ``GET /api/chunks/{id}``."""
     return hub.get(f"/api/fleet/chunks/{chunk_id}").json()["status"]
 
 

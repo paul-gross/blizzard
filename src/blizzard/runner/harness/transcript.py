@@ -1,48 +1,39 @@
 """The harness transcript source seam (blizzard#245).
 
 Where a session's raw conversation lives and what its records mean is harness-specific
-knowledge — Claude Code's ``~/.claude/projects/<mangled-cwd>/<session-id>.jsonl`` layout
-is nothing an opencode or codex adapter shares. This module is the harness-agnostic
-value shape and Protocol that knowledge sits behind
-(:meth:`~blizzard.runner.harness.adapter.IHarnessAdapter.transcript_source`), the shape
-:mod:`.usage` and :mod:`.fingerprint` already have. The value shapes, the Protocol, and
-:class:`NullTranscriptSource` are stdlib-only, dependency-free (``bzh:domain-core``) —
-:class:`TranscriptErrorFactory` is the one deliberate exception living alongside them
-(the ``structlog`` import below is entirely its own): error logging on a source read
-failure is shared, harness-agnostic infrastructure in exactly the same sense the
-Protocol above it is (any future per-harness source reads files and can fail the same
-way), so it sits here rather than duplicated into each harness's own ``internal/``
-adapter — the same co-location the exemplar's own ``RepoErrorFactory``
+knowledge. This module is the harness-agnostic value shape and Protocol that knowledge
+sits behind (:meth:`~blizzard.runner.harness.adapter.IHarnessAdapter.transcript_source`),
+the shape :mod:`.usage` and :mod:`.fingerprint` already have. The value shapes, the
+Protocol, and :class:`NullTranscriptSource` are stdlib-only, dependency-free
+(``bzh:domain-core``) — :class:`TranscriptErrorFactory` is the one deliberate exception
+living alongside them (the ``structlog`` import below is entirely its own): error
+logging on a source read failure is shared, harness-agnostic infrastructure in exactly
+the same sense the Protocol above it is, the same co-location the exemplar
 (``blizzard-context:/exemplars/python/repo_pattern.py``) uses for a Protocol and its
-injected error-wrapping seam, not a gap against it. :class:`NullTranscriptSource`
-below is likewise kept at this feature-package root rather than under
-``internal/`` — it is not per-harness (every harness shares the one "nothing wired"
-shape), so it has no adapter identity to confine.
+injected error-wrapping seam. :class:`NullTranscriptSource` is likewise kept at this
+feature-package root rather than under ``internal/`` — it is not per-harness, so it has
+no adapter identity to confine.
 
 :class:`NormalizedTurn` is the turn vocabulary a per-harness source produces: ``env``/
-``asst``/``tool`` (the panel's existing three) plus ``thinking`` — a kind the panel's
-own narrowing projection drops, and this seam carries for a widening consumer
-(`epic:transcripts`). A tool call's input stays **structured data**
-(:attr:`ToolCall.input`, a ``Mapping``), never a ``json.dumps`` string — the shape a
-future analytics consumer queries. A tool call that spawned a subagent nests that
-subagent's own turns on it (:attr:`NormalizedTurn.sidechain`), linked by whichever route
-resolved it (:data:`SidechainLink`) — a sidechain whose parent could not be resolved is
-still conversation, carried on :attr:`TranscriptBatch.unlinked_sidechains` rather than
+``asst``/``tool`` plus ``thinking``. A tool call's input stays **structured data**
+(:attr:`ToolCall.input`, a ``Mapping``), never a ``json.dumps`` string. A tool call that
+spawned a subagent nests that subagent's own turns on it
+(:attr:`NormalizedTurn.sidechain`), linked by whichever route resolved it
+(:data:`SidechainLink`) — a sidechain whose parent could not be resolved is still
+conversation, carried on :attr:`TranscriptBatch.unlinked_sidechains` rather than
 dropped.
 
 :class:`TranscriptPosition` is **opaque to blizzard**: the harness mints and interprets
 it, so a codex/opencode source (``epic:adapters``) is free to use a shape that is not a
 byte offset. :meth:`IHarnessTranscriptSource.turns_since` reads **forward** from a
-position — the operation a later issue builds an outbound lane on — never backward or
-by recency; a batch that could not read everything asked reports ``complete=False`` plus
-a ``next_position`` the caller loops on.
+position, never backward or by recency; a batch that could not read everything asked
+reports ``complete=False`` plus a ``next_position`` the caller loops on.
 
 A harness with no on-disk transcript at all (or a source not yet wired at a given
 composition site) binds :class:`NullTranscriptSource` rather than making every caller
 handle ``None`` — the same precedent
-:meth:`~blizzard.runner.harness.adapter.IHarnessAdapter.resolve_effort`/
-:meth:`~blizzard.runner.harness.adapter.IHarnessAdapter.sample_external_subscription_usage`
-set for "this harness has no such knob", expressed as a binding.
+:meth:`~blizzard.runner.harness.adapter.IHarnessAdapter.resolve_effort` sets for "this
+harness has no such knob", expressed as a binding.
 """
 
 from __future__ import annotations
@@ -54,45 +45,34 @@ from typing import Any, Literal, Protocol
 
 import structlog
 
-#: The normalized turn vocabulary. ``thinking`` sits alongside the panel's own three
-#: (``env``/``asst``/``tool``, :data:`~blizzard.runner.transcripts.repository.TurnKind`),
-#: which carry no thinking-block kind.
+#: The normalized turn vocabulary
+#: (:data:`~blizzard.runner.transcripts.repository.TurnKind` carries no thinking kind).
 NormalizedTurnKind = Literal["env", "asst", "tool", "thinking"]
 
 #: How a sidechain conversation's attachment to its spawning tool call was resolved,
 #: carried as data rather than left for a reader to guess at fidelity — an open,
-#: harness-native label (the same open-string treatment
-#: :attr:`~blizzard.runner.harness.external_usage.ExternalSubscriptionUsageWindow.window`
-#: gives a harness-native vocabulary word, rather than a blizzard-defined enum a second
-#: adapter would have to satisfy). The one value every harness is expected to share is
-#: ``"unlinked"`` — no route resolved a parent at all — since that resolved/unresolved
-#: distinction is the one thing blizzard itself acts on; every other value is that
-#: harness's own route name. Claude Code currently mints ``"agent-id"`` (an exact join,
-#: a sidecar file's name/records to the spawning call's ``toolUseResult.agentId``),
-#: ``"uuid-chain"``, and ``"prompt-timestamp"`` (its two inline-layout fallbacks).
+#: harness-native label rather than a blizzard-defined enum a second adapter would have
+#: to satisfy. The one value every harness is expected to share is ``"unlinked"`` — no
+#: route resolved a parent at all — since that resolved/unresolved distinction is the one
+#: thing blizzard itself acts on; every other value is that harness's own route name.
 SidechainLink = str
 
 #: Why a *source* could not produce turns for a session — the two reasons reading a
 #: file can fail. Deliberately narrower than
-#: :data:`~blizzard.runner.transcripts.repository.TranscriptUnavailable`: ``"spawning"``
-#: (a lease with no session id yet) is the panel service's own concept, not a source's,
-#: so it is never a member here — the panel projection widens into it instead.
+#: :data:`~blizzard.runner.transcripts.repository.TranscriptUnavailable`, whose extra
+#: member is the panel service's own concept, not a source's.
 TranscriptReadReason = Literal["not_found", "unreadable"]
 
-#: Which raw shape a tool call's ``input`` was minted from — the discriminator a
-#: re-materializing consumer (the panel projection) needs to reproduce the wire
-#: contract's blanket ``json.dumps(raw_input)`` exactly, rather than guessing from
-#: ``input``/``input_unparsed`` alone (ambiguous: an absent input and an empty
-#: object both leave ``input_unparsed`` ``None``; a bare string that happens to
-#: itself parse as JSON is indistinguishable from an already-serialized one).
+#: Which raw shape a tool call's ``input`` was minted from — the explicit discriminator
+#: a re-materializing consumer needs, since ``input``/``input_unparsed`` alone are
+#: ambiguous (an absent input and an empty object both leave ``input_unparsed`` ``None``;
+#: a bare string that happens to itself parse as JSON is indistinguishable from an
+#: already-serialized one).
 #: ``"object"`` — ``input`` holds the real mapping, ``input_unparsed`` is ``None``.
-#: ``"absent"`` — the record carried no ``input`` (or an explicit JSON ``null``);
-#: the wire contract renders this as ``""``, not ``"{}"``. ``"string"`` — the record's
-#: ``input`` was itself a bare JSON string, held verbatim (unquoted) on
-#: ``input_unparsed``; re-materializing it needs an explicit ``json.dumps`` to
-#: match the wire contract's quoting. ``"other"`` — any other non-object value (a
-#: list, a number, a bool); ``input_unparsed`` already holds its final
-#: ``json.dumps`` form, emitted verbatim.
+#: ``"absent"`` — the record carried no ``input`` (or an explicit JSON ``null``).
+#: ``"string"`` — the record's ``input`` was itself a bare JSON string, held verbatim
+#: (unquoted) on ``input_unparsed``. ``"other"`` — any other non-object value (a list, a
+#: number, a bool); ``input_unparsed`` already holds its final ``json.dumps`` form.
 ToolInputShape = Literal["object", "absent", "string", "other"]
 
 
@@ -112,15 +92,12 @@ class TranscriptPosition:
 class ToolCall:
     """A tool invocation, structured — never flattened to a ``json.dumps`` string.
 
-    ``input`` is the parsed mapping a consumer (the analytics contract this issue
-    exists for) queries directly; ``input_unparsed`` carries a non-object input
-    verbatim instead of coercing it into an empty mapping, so a malformed or
-    scalar ``input`` is never silently discarded. ``input_shape`` names which raw
-    shape produced the pair (:data:`ToolInputShape`) — the explicit discriminator a
-    re-materializing consumer needs, since ``input``/``input_unparsed`` alone are
-    ambiguous over two independent shape questions. ``output``/``output_truncated``
-    mirror the panel's existing tool-result shape: ``output is None`` while the
-    matching result has not yet arrived in the file (a live turn, not corruption).
+    ``input`` is the parsed mapping a consumer queries directly; ``input_unparsed``
+    carries a non-object input verbatim instead of coercing it into an empty mapping, so
+    a malformed or scalar ``input`` is never silently discarded. ``input_shape`` names
+    which raw shape produced the pair (:data:`ToolInputShape`).
+    ``output``/``output_truncated``: ``output is None`` while the matching result has not
+    yet arrived in the file (a live turn, not corruption).
     """
 
     name: str
@@ -177,8 +154,7 @@ class NormalizedTurn:
 class TranscriptBatch:
     """:meth:`IHarnessTranscriptSource.turns_since`'s return.
 
-    ``available=False`` carries ``reason`` and empty ``turns``/``unlinked_sidechains``,
-    mirroring :class:`~blizzard.runner.transcripts.repository.Transcript`.
+    ``available=False`` carries ``reason`` and empty ``turns``/``unlinked_sidechains``.
     ``unlinked_sidechains`` is a dedicated field (not folded into ``turns``) because a
     :class:`SidechainConversation` is otherwise reachable only through a tool turn's
     ``.sidechain`` — with no spawning call to nest under, it would otherwise have to
@@ -191,15 +167,13 @@ class TranscriptBatch:
     first, ``since=None`` read of a pathological session — distinct from ``complete``,
     which reflects the *forward* batch-budget cap. ``sidechain_truncated`` is the
     parallel signal for sidecar content alone (a sidecar's own tail cap, or the shared
-    sidecar fan-out budget running out on a cold read): kept off ``truncated`` on
-    purpose, since a narrowing consumer that never renders a sidechain at all (today's
-    panel) would otherwise report a positive, operator-facing truncation banner for
-    content it never shows and never cut.
+    sidecar fan-out budget running out on a cold read), kept off ``truncated`` on
+    purpose so a consumer that never renders a sidechain never reports a truncation it
+    never cut.
 
     ``normalizer_version``/``harness_version`` stamp every batch: the former names the
-    normalizer code that produced it (bumped when output shape or semantics change, so
-    a future better normalizer's rows are told apart from this one's), the latter the
-    harness build that wrote the source records, or ``None`` when no record carried one.
+    normalizer code that produced it, the latter the harness build that wrote the source
+    records, or ``None`` when no record carried one.
     """
 
     session_id: str
@@ -221,16 +195,13 @@ class TranscriptErrorFactory:
     shape, widened here to ``not_found``: a lookup-miss carrying no exception, DEBUG
     rather than a wrapped error).
 
-    ``from_io`` is a boundary failure: the caller's read is over, transformed into
-    ``TranscriptBatch.available=False`` (or an empty/``None`` reply on the
-    ``read_raw_lines``/``size_bytes`` siblings) — ERROR per ``bzh:structlog-logging``.
-    ``from_io_recovered`` is for a caller that reads on regardless (one sidecar among
-    several failed to open; the batch it belongs to still reports
-    ``available=True``) — WARNING, the same convention's "a recoverable condition the
-    caller continued past." ``not_found`` is DEBUG: no session file at all is this
-    seam's most routine outcome (a lease with no transcript yet), surfaced under this
-    seam's own logger name (``blizzard.runner.harness.transcript``, bound by the
-    composition root) — an operator filter must be keyed on that name to match it.
+    ``from_io`` is a boundary failure — the caller's read is over — and is ERROR per
+    ``bzh:structlog-logging``. ``from_io_recovered`` is for a caller that reads on
+    regardless: WARNING, the same convention's "a recoverable condition the caller
+    continued past." ``not_found`` is DEBUG: no session file at all is this seam's most
+    routine outcome, surfaced under this seam's own logger name
+    (``blizzard.runner.harness.transcript``, bound by the composition root) — an operator
+    filter must be keyed on that name to match it.
     """
 
     def __init__(self, log: structlog.stdlib.BoundLogger) -> None:
@@ -273,11 +244,9 @@ class IHarnessTranscriptSource(Protocol):
 
     ``turns_since`` is the normalization operation (blizzard#245): the harness's raw
     session records collapsed into :class:`NormalizedTurn`\\ s, reading forward from
-    ``since`` (``None`` for "from the start"). ``read_raw_lines``/``size_bytes`` are
-    pre-existing operations relocated behind this seam, not new surface — the
-    envelope-less usage fallback and the transcript-rotation signal both need the same
-    file-location knowledge this seam already carries, and leaving them on the old
-    repository would keep that knowledge duplicated on both sides of it.
+    ``since`` (``None`` for "from the start"). ``read_raw_lines``/``size_bytes`` sit
+    here too, so the file-location knowledge this seam carries is never duplicated
+    outside it.
     """
 
     def turns_since(

@@ -1,10 +1,9 @@
 """The runner-local fleet-summary pass-through proxy — ``GET /api/fleet-summary``.
 
-The runner machine panel's hub rail shows a "Fleet · read from hub API" counts strip —
-four integers (ready / running / waiting / needs) giving the operator a fleet-level pulse
-without leaving the panel (issue #76). The panel is served by the runner and the hub API
-allows no cross-origin browser read, so the browser cannot fetch the counts from the hub
-directly: this route **forwards** the read to the hub, exactly as the work-items proxy does
+The panel needs a fleet-level counts strip without leaving the page (issue #76). It is
+served by the runner, and the hub API allows no cross-origin browser read, so the browser
+cannot fetch the counts from the hub directly: this route **forwards** the read to the hub,
+exactly as the work-items proxy does
 (:mod:`blizzard.runner.api.work_items`) — panel -> own runner -> hub, on ``config.hub_url``.
 
 Read-only over its wiring (``bzh:controller-read-only``): it forwards to the hub URL the

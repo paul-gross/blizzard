@@ -1,13 +1,10 @@
 """The external-subscription-usage domain value (issue #218, phase 1).
 
-A harness that runs under a metered subscription (Claude Code's OAuth-backed plan
-is the first) exposes its own rate-limit window utilization — how much of the
-plan's rolling 5-hour and 7-day windows this account has consumed. That figure
-comes from the harness's own account, never from blizzard's own token/cost
-tallies (:mod:`blizzard.runner.harness.usage`): a fleet's `UsageSample` totals are
-blizzard's ledger of what it spent, while this snapshot is the *subscription's*
-own view of how close the account is to being rate-limited — two different
-questions, so this is a sibling module, not an extension of `UsageSample`.
+A harness that runs under a metered subscription exposes its own rate-limit window
+utilization — how much of the plan's rolling windows this account has consumed. That
+figure comes from the harness's own account, never from blizzard's own token/cost
+tallies (:mod:`blizzard.runner.harness.usage`): two different questions, so this is a
+sibling module, not an extension of ``UsageSample``.
 
 :attr:`ExternalSubscriptionUsageWindow.utilization_pct` is **0-100, not 0-1** — a
 deliberate near-miss against a fraction, called out here because the source API

@@ -14,8 +14,8 @@ The real runner's own emission (and its store-and-forward buffering through a hu
 lands in Phase 3, where the real runner emits these facts; here the mock runner stands in
 so the hub fold + SSE fan-out are provable independently of that work.
 
-Also carries the ``GET /api/activity`` service-tier proof (issue #213, Phase 5) — the
-board's Event log backfill read on page load. This is the tier that reads
+Also carries the ``GET /api/activity`` service-tier proof (issue #213, Phase 5). This
+is the tier that reads
 :class:`~blizzard.wire.activity.ActivityView`'s field names off a live JSON response
 rather than an in-process Python object, over several distinct
 :data:`~blizzard.hub.events.broker.ChunkChangeCause` families driven through the mock

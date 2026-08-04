@@ -4,20 +4,20 @@ The ``POST /chunks`` domain rule: a caller submits one or more ``{source, ref}``
 pointers and the hub mints a chunk pinned to the configured default graph. Contents are
 never stored — only the pointer.
 
-**Ingest mints neither model nor effort default** (issue #144). A chunk's
-``default_model``/``default_effort`` start empty, meaning *express no preference*, so the
-runner's own default applies exactly as it does today. Minting a concrete model here would
-pin a harness-native name hub-side on **every** chunk — outranking every ``sessions:``
-declaration that omits ``model:``, and making a runner's own ``[models.aliases]`` default
-unreachable. Both are editable later while the chunk rests pre-claim (issue #27,
-``domain/edit.py``), which is where a deliberate preference belongs.
+**Ingest mints neither model nor effort default** (issue #144): a concrete hub-side
+model would outrank every ``sessions:`` declaration omitting ``model:`` and make a
+runner's own ``[models.aliases]`` default unreachable, so both start empty — *express no
+preference* (pinned by
+tests/test_chunk_edit_api.py::test_a_freshly_ingested_chunk_carries_the_default_graph_and_no_model_preference).
+Both are editable later while the chunk rests pre-claim (issue #27, ``domain/edit.py``),
+which is where a deliberate preference belongs.
 
 **Batch = one chunk.** The wire response carries a single ``chunk_id``, so a
-multi-pointer request mints one chunk holding all its pointers; per-pointer fan-out
-(a response of many ids) is a P7 wire change, not a walking-skeleton shape. Before
-minting, every pointer is checked for a live holder — a pointer already held by a
-non-terminal chunk rejects the whole ingest ``409``; re-ingest is legal once
-every prior holder is terminal.
+multi-pointer request mints one chunk holding all its pointers (pinned by
+tests/test_ingest_and_queue.py::test_ingest_batches_multiple_pointers_into_one_chunk);
+per-pointer fan-out is a P7 wire change. Before minting, every pointer is checked for a
+live holder — a pointer already held by a non-terminal chunk rejects the whole ingest
+``409``; re-ingest is legal once every prior holder is terminal.
 
 Holds the *write* chunk repository (``bzh:controller-read-only``); the route
 resolves the default graph and delegates here.

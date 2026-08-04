@@ -20,8 +20,9 @@ establishes. A per-ref failure is caught, recorded as a ``failed`` fact, and ret
 the next sweep — nothing raises past :meth:`sweep`. A mid-sweep crash loses nothing
 durable: the next pass re-derives the same candidate set from
 :meth:`~blizzard.hub.domain.work.IReadChunkRepository.closable_work_refs` and re-issues
-an idempotent close (see ``blizzard-context:/architecture/crash-correctness.md``'s
-recorded exemption for this sweep).
+an idempotent close (``blizzard-context:/architecture/crash-correctness.md``'s recorded
+exemption for this sweep; pinned by
+tests/test_work_closure.py::test_sweep_against_a_real_store_is_idempotent_on_a_second_pass).
 """
 
 from __future__ import annotations

@@ -3,18 +3,10 @@
 
 Behind ``POST /api/leases/{lease_id}/git-commits``: a worker durably declares a
 ``git_commit``-kind artifact for a repo it touched, authorized by the lease token minted
-at its own spawn (issue #113, Phase 1) — a structural sibling of
+at its own spawn (issue #113) — a structural sibling of
 :class:`~blizzard.runner.domain.attachments.AttachmentService`.
 :meth:`GitCommitDeclarationService.declare` is the one place the write happens
-(``bzh:controller-read-only`` — the API edge resolves the lease to an object and
-delegates here rather than writing through a store it holds itself).
-
-Nothing yet reads a declaration back — that is Phase 4's ADVANCE rewrite, which will
-verify each declared ``(forge, repo, branch, commit)`` read-only against its forge and
-collect it as a submitted artifact. This phase only makes the declaration durable,
-single-transaction (``runner/store/internal/sqlalchemy_store.py``'s
-``record_git_commit_declaration``) so it survives a ``kill -9`` between the declare and
-whatever later collection would otherwise read it back.
+(``bzh:controller-read-only``).
 """
 
 from __future__ import annotations
@@ -31,14 +23,11 @@ __all__ = [
     "GitCommitDeclarationUnknownRepo",
 ]
 
-# The dangerous window criterion 3 names (issue #113, mirrored for issue #143): the
-# declaration row is durable — its single committed txn (``record_git_commit_declaration``)
-# has returned — but the ``200`` has not, so a ``kill -9`` here is exactly "a runner dies
-# between the declare and whatever collection would read it back". Recovery owes nothing
-# but durability: the row is on disk, and a later collection (Phase 4) / the recovering
-# ADVANCE tick re-derives it via ``git_commit_declarations_for_lease``. Swept by
+# The armed crash window (issue #113, mirrored for issue #143): the declaration row is
+# durable — its single committed txn has returned — but the ``200`` has not. Recovery owes
+# nothing but durability. Swept by
 # ``tests/crash/test_kill9_sweep.py::test_kill9_at_declare_commit_crash_point``
-# (``bzh:crash-point-registry``); unarmed, ``reached()`` is one module-global compare.
+# (``bzh:crash-point-registry``).
 _CP_DECLARE_COMMIT_AFTER_RECORD = crashpoint(
     "declare-commit.after-record.before-response",
     "runner recorded the git-commit declaration durably but has not returned 200 — a kill -9 here must not lose it",
@@ -54,10 +43,8 @@ class GitCommitDeclarationUnknownRepo(Exception):
     """The declared ``(env, repo)`` is not in the lease's environments — the API edge
     maps this to ``400``.
 
-    Deliberately an error at declare time rather than a drop at collection time. The
-    worker is alive, holds the context, and can re-run the verb correctly; a declaration
-    quietly discarded three nodes later reaches nobody who can act on it, and reads
-    downstream as "this repo was never touched"."""
+    Deliberately an error at declare time rather than a drop later: the worker is alive,
+    holds the context, and can re-run the verb correctly."""
 
 
 class GitCommitDeclarationService:
@@ -92,10 +79,9 @@ class GitCommitDeclarationService:
         ``lease`` is already resolved by the caller (``bzh:domain-takes-objects``) — this
         never looks a lease id up itself. Append-and-read-newest
         (``bzh:facts-not-status``): a repeat call for the same ``(lease, env, repo)`` is a
-        correction, not an error. Keying the correction on the environment too is what
-        keeps a chunk holding several envs from having one env's declaration silently
-        overwrite another's for the same repo — under the old ``(lease, repo)`` key those
-        were one fact recorded twice rather than two facts."""
+        correction, not an error. The environment is part of that key so a chunk holding
+        several envs cannot have one env's declaration overwrite another's for the same
+        repo."""
         stored_hash = self._store.lease_token_hash(lease.lease_id)
         if not check_lease_token(presented_token=presented_token, stored_hash=stored_hash):
             raise GitCommitDeclarationRejected(f"presented token does not authorize lease {lease.lease_id}")
@@ -116,8 +102,6 @@ class GitCommitDeclarationService:
             commit=commit,
             declared_at=self._clock.now(),
         )
-        # The row is durable (the txn above committed) but the caller has not yet returned
-        # the 200 — criterion 3's kill-9 window (armed only under the crash sweep).
         _CP_DECLARE_COMMIT_AFTER_RECORD.reached()
         return resolved_env
 
@@ -125,9 +109,8 @@ class GitCommitDeclarationService:
         """The env this declaration belongs to: the named one (checked against the
         chunk's bindings), or the sole bound one when the worker named none.
 
-        Inference stops exactly where it stops being unambiguous. With one bound env the
-        worker need not repeat what cannot be anything else; with several, guessing would
-        mean silently attributing a branch to the wrong environment, so it is refused."""
+        Inference stops where it stops being unambiguous: with several bound envs, guessing
+        would silently attribute a branch to the wrong environment, so it is refused."""
         bound = [binding.environment_id for binding in self._store.bindings_for_chunk(lease.chunk_id)]
         if environment_id is not None:
             if environment_id not in bound:

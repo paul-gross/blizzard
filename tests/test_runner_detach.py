@@ -416,10 +416,8 @@ def test_tick_releases_a_detached_chunk_and_the_next_tick_does_not_reclaim_it(tm
 # A hub store reset (or any other cause of the chunk record vanishing) surfaces as a 404
 # on the same `GET /chunks/{id}` this module's detach sweep already polls every tick —
 # `ChunkNotFoundError`, not the generic `HubClientError` an unreachable hub or a 5xx
-# raises. Before blizzard#9, both were caught identically ("hub unreachable, keep
-# working"), so a held chunk the hub no longer knows about looped forever: the runner
-# never released the environment or claimed new work. The fix reads the 404 as detached
-# too, so it flows through the exact same abandon path as a genuine detach/reassignment.
+# raises. The 404 flows through the exact same abandon path as a genuine
+# detach/reassignment (blizzard#9).
 
 
 @pytest.mark.unit

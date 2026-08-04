@@ -119,13 +119,11 @@ class OidcProvider:
         raise OAuthExchangeError(f"no JWKS key matches id_token kid {kid!r} for provider {self.name!r}")
 
     def _trusted_algorithms(self, jwk: dict[str, object]) -> list[str]:
-        # The accepted algorithm(s) must come from a source the issuer controls, never
-        # the attacker-supplied token header (``jwt.get_unverified_header``) — an
-        # attacker who controls the header can otherwise pick an algorithm (e.g. an
-        # RS256-to-HS256 confusion attack, keying HMAC off the RSA public key) that
-        # turns the verification into a forgeable one. Prefer the JWKS key's own
-        # ``alg`` member, then the discovery document's advertised signing algorithms,
-        # and only fall back to ``RS256`` when neither says anything.
+        # The accepted algorithm(s) come from a source the issuer controls — the JWKS
+        # key's own ``alg``, then the discovery document, falling back to ``RS256`` —
+        # never the attacker-supplied token header, which would allow an RS256-to-HS256
+        # confusion attack (issue #92; pinned by tests/test_auth_oauth_providers.py::
+        # test_oidc_exchange_rejects_an_alg_confusion_token_when_jwk_omits_alg).
         jwk_alg = jwk.get("alg")
         if jwk_alg:
             return [str(jwk_alg)]

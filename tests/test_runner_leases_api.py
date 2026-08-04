@@ -105,13 +105,9 @@ def test_running_lease_shape_and_binding_join(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_timestamps_serialize_with_an_explicit_utc_offset(tmp_path: Path) -> None:
-    """The panel derives heartbeat age client-side; a naive string would skew it silently.
-
-    Phase 6 renders age as ``Date.now() - new Date(last_heartbeat_at)``. JavaScript reads
-    an ISO string **without** an offset as *local* time, so on any non-UTC machine every
-    age is wrong by the reader's UTC offset — a fresh beat reads hours old (UTC+) or
-    pins to zero (UTC-). Nothing on the backend would notice: the value round-trips
-    through Python fine. So pin the **literal serialized bytes**, not the parsed value.
+    """A naive (no-offset) ISO string is parsed as local time by a JS ``Date``, skewing
+    any client-side age computation — the value round-trips fine through Python, so
+    pin the **literal serialized bytes**, not just the parsed value.
     """
     app, store = _app_with_leases(tmp_path, probe=FakeProbe(alive={(100, "start-100")}))
     _seed_lease(store)

@@ -534,13 +534,10 @@ export const claimRouteApiFleetRoutesPost = <ThrowOnError extends boolean = fals
  *
  * Register a runner — runner id + workspace binding; idempotent upsert.
  *
- * Runner-auth checked (issue #86a): ``warn`` (the default) logs and proceeds on a
- * missing/invalid/mismatched token; ``enforce`` rejects. Issue #95's optional
- * ``url``/``redirect_uris`` extension rides the same authenticated write — this route
- * sits behind ``require_runner_principal`` at the router level
- * (``fleet_router``'s own ``dependencies=``), so an unauthenticated attempt to set or
- * change a runner's federation identity is rejected exactly like every other fleet
- * write, once #86 is enforced.
+ * Runner-auth checked (issue #86a) at the router level (``require_runner_principal``).
+ * Issue #95's optional ``url``/``redirect_uris`` extension rides the same
+ * authenticated write, rejected exactly like every other fleet write once #86 is
+ * enforced.
  */
 export const registerRunnerApiFleetRunnersPost = <ThrowOnError extends boolean = false>(options: Options<RegisterRunnerApiFleetRunnersPostData, ThrowOnError>): RequestResult<RegisterRunnerApiFleetRunnersPostResponses, RegisterRunnerApiFleetRunnersPostErrors, ThrowOnError> => (options.client ?? client).post<RegisterRunnerApiFleetRunnersPostResponses, RegisterRunnerApiFleetRunnersPostErrors, ThrowOnError>({
     url: '/api/fleet/runners',
@@ -739,8 +736,7 @@ export const getQueueApiQueueGet = <ThrowOnError extends boolean = false>(option
  * Replace Queue
  *
  * Idempotent whole-order replacement of the ready queue — the explicit operator
- * verb behind ``blizzard hub queue set``, no longer any client's reorder path
- * (``POST /api/queue/position`` is that path now).
+ * verb behind ``blizzard hub queue set``.
  *
  * Resolves every named id against the current ready set here (the edge concern,
  * ``bzh:domain-takes-objects``): ``409`` names the first id that is not a ready

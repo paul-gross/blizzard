@@ -1,14 +1,6 @@
 """The packaged basic-harness-workflow graph (unit tier, issue #231).
 
-``bas-hwf`` is the frontier-tier lane for harness work — the agentic harness's own
-operating rules (skills, ``blizzard-context`` rules, graph prompts, agent docs) are
-unusually high-leverage per token, so this lane pins the strongest capability tier
-rather than the mechanical ``blizzard:basic`` tier ``bas-dwf`` uses. It is the same
-lightweight shape as ``basic-development-workflow`` cut down one node further: no
-``pre-push`` node at all — a rejected fast-forward routes straight back to ``build``,
-the only station left that can rebase and revalidate.
-
-This proves it loads, inlines its prompt file references, and passes mint-time
+Proves ``bas-hwf`` loads, inlines its prompt file references, and passes mint-time
 validation clean — so a fresh hub's ``POST /graphs`` of it can never be rejected.
 """
 

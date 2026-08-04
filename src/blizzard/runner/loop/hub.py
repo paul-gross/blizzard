@@ -47,11 +47,9 @@ class ChunkNotFoundError(HubClientError):
     the two chunk-identified GET reads: a 404 there means the chunk no longer exists
     at the hub (e.g. after a store reset), which is a different outcome from every
     other :class:`HubClientError` cause (unreachable, 5xx, malformed body) — those
-    stay retryable, "hub unreachable, try next tick". A reconcile step that reads a
-    chunk it holds treats this subtype as the chunk's tenure having ended out from
-    under it: reap any live worker and release the held environments rather than
-    retrying the read forever. Still an instance of :class:`HubClientError`, so a
-    caller with no special handling for it degrades to the existing retry behavior.
+    stay retryable, "hub unreachable, try next tick". Still an instance of
+    :class:`HubClientError`, so a caller with no special handling for it degrades to
+    the existing retry behavior.
     """
 
 
@@ -114,18 +112,12 @@ class IHubClient(Protocol):
         """``POST /api/fleet/chunks/{id}/hub-advance`` — drive a chunk parked at a generic
         hub command node one step (#65/#66).
 
-        A no-op at the hub (``ran=False``) when the chunk is not currently parked at a
-        generic hub command node, when the fleet-wide serialization slot is busy, or
-        when a prior ``pending`` outcome's ``poll_interval`` has not yet elapsed —
-        every case simply retried on a later :func:`~blizzard.runner.loop.steps.advance`
-        tick (:func:`~blizzard.runner.loop.steps._advance_held_chunk`)."""
+        ``ran=False`` means the hub declined to run a step this call — simply retried on a
+        later :func:`~blizzard.runner.loop.steps.advance` tick."""
         ...
 
     def get_question(self, question_id: str) -> QuestionView:
-        """``GET /api/fleet/questions/{id}`` — the runner's answer poll.
-
-        A parked chunk's runner polls its forwarded question by id; once ``answered`` is
-        true the answer is delivered by resuming the dormant session around it."""
+        """``GET /api/fleet/questions/{id}`` — the runner's answer poll, by question id."""
         ...
 
     def register_runner(
@@ -139,36 +131,27 @@ class IHubClient(Protocol):
     ) -> None:
         """``POST /api/fleet/runners`` — register into the fleet registry.
 
-        Idempotent upsert: the runner registers on startup and re-registers each pull,
-        which refreshes its ``last_seen_at`` — the runner-level liveness heartbeat the
-        board's fleet column derives online/offline from. Called before the paused
-        read so the runner is registered by the time it reads its state back.
+        Idempotent upsert, and the runner-level liveness heartbeat: the runner registers on
+        startup and re-registers each pull. Called before the paused read so the runner is
+        registered by the time it reads its state back.
 
-        ``env_capacity`` (issue #69) reports the runner's configured environment-pool size
-        (``len(workspace_envs)``) so the board can render a ``used/total`` slot bar; because
-        re-registration is the heartbeat, a changed pool converges on the next pull.
-
-        ``url``/``redirect_uris`` (issue #95) are this runner's own optional federation
-        identity — its browser-reachable base URL and the callback(s) the hub's IdP
-        authorize endpoint may bounce a browser to. Reported the same way: an
-        unconditional overwrite on every (re-)registration, so a changed
-        ``public_url`` converges on the next pull exactly like ``env_capacity``."""
+        ``env_capacity`` (issue #69) is the runner's configured environment-pool size
+        (``len(workspace_envs)``); ``url``/``redirect_uris`` (issue #95) are its optional
+        federation identity — its browser-reachable base URL and the callback(s) the hub's
+        IdP authorize endpoint may bounce a browser to. All three are unconditional
+        overwrites on every (re-)registration, so a change converges on the next pull."""
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
         """``GET /api/fleet/runners/{id}`` — the runner's declarative pause brake.
 
-        Read on the outbound pull and adhered to by FILL (paused = no new claims;
-        in-flight chunks run on). Never a push into the box."""
+        Read on the outbound pull; never a push into the box."""
         ...
 
     def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
         """``POST /api/fleet/chunks/{id}/leases`` — a ``lease.minted`` fact.
 
-        Reported at every node-step spawn so the hub's epoch fence tracks the runner's:
-        a chunk that visits a second runner node (review) submits its completion under a
-        fresh epoch the hub must already know, and a requeue's mint is what closes an
-        escalation by supersession."""
+        Reported at every node-step spawn so the hub's epoch fence tracks the runner's."""
         ...
 
     def report_escalation(

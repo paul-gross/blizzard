@@ -12,18 +12,15 @@ the runner-auth check applied to registration.
 
 Registration (``POST /runners``), the runner's own pull read
 (``GET /fleet/runners/{id}``), and the heartbeat (``POST /runners/{id}/heartbeats``)
-moved to the runner-authenticated fleet router (:mod:`blizzard.hub.api.fleet`, issue
-#87) — no board or CLI caller ever reached them. :func:`runner_view` stays here,
-public, so the fleet router's own ``get_runner`` reuses this module's rendering rather
-than duplicating it; the two coexist at different prefixes with different auth
-(this router rejects a runner's bearer token, the fleet router requires one).
+live on the runner-authenticated fleet router (:mod:`blizzard.hub.api.fleet`, issue
+#87). :func:`runner_view` stays here, public, so the fleet router's own ``get_runner``
+reuses this module's rendering rather than duplicating it.
 
 Controllers stay read-only over the store and delegate the writes to
 :class:`~blizzard.hub.domain.registry.FleetService` (``bzh:controller-read-only``). A
 registry state change re-broadcasts ``runner-changed`` so the board's fleet column
-live-updates. ``dependencies=[Depends(reject_runner_principal)]`` rejects a runner's
-bearer token on this router rather than treating it as anonymous-plus-credential — a
-runner's token is confined to the fleet router.
+live-updates. ``dependencies=[Depends(reject_runner_principal)]`` confines a runner's
+bearer token to the fleet router.
 """
 
 from __future__ import annotations

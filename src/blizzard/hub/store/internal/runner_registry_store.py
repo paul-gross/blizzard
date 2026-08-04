@@ -114,14 +114,11 @@ class RunnerRegistryStore:
             ActivityRow(
                 type="runner-changed",
                 key=f"runner_local_pause_facts:{r.id}",
-                # `set_at` is the runner-machine's own clock (see this table's schema
-                # docstring, `runner_local_pause_facts`), arriving via the outbound
-                # store-and-forward buffer — the hub is a reader of it, never its
-                # author, and stamps no receipt/arrival instant of its own for this
-                # fact. Using it for the sort/window key risks a skewed runner clock
-                # floating a row to the top or out of the feed's window; no hub-side
-                # instant is recoverable here without a schema change, out of this
-                # phase's scope — a documented skew-risk gap, not assumed away.
+                # `set_at` is the runner-machine's own clock (see `runner_local_pause_facts`
+                # in `hub/store/schema.py`); the hub stamps no arrival instant of its own
+                # for this fact. Using it for the sort/window key risks a skewed runner
+                # clock floating a row to the top or out of the feed's window — a known
+                # skew-risk gap, not recoverable without a schema change.
                 at=r.set_at,
                 runner_id=r.runner_id,
                 kind="locally-paused" if r.paused else "locally-resumed",

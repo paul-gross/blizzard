@@ -1,15 +1,9 @@
 """Scaffolding for the kill-9 sweep (``blizzard:crash-sweep``).
 
 The sweep runs the daemons as **real subprocesses** so a crash point can SIGKILL a
-whole process the way ``kill -9`` would — the one thing the in-process component tier
-cannot do. It reuses the e2e stack (mock forge + mock harness + fixture workspace +
-real hub/runner), but drives the runner as a hosted daemon (``blizzard runner host``)
-rather than in-process ticks, and arms a registry crash point via the environment.
-
-The daemons converge on their own once restarted unarmed: the runner ticks on a fast
-interval and its startup pass is REAP; the hub re-applies a re-flushed completion
-idempotently. The sweep asserts the invariant checker after the crash and again after
-convergence, plus exactly-once delivery.
+whole process the way ``kill -9`` would. It reuses the e2e stack (mock forge + mock
+harness + fixture workspace + real hub/runner), drives the runner as a hosted daemon
+(``blizzard runner host``), and arms a registry crash point via the environment.
 """
 
 from __future__ import annotations
@@ -41,9 +35,8 @@ RUNNER_ENV = "e1"
 # A brisk tick so a scenario converges in seconds, not the daemon's 30s production cadence.
 TICK_SECONDS = "0.3"
 
-# The env var every scenario's ``[[work_source]]`` names as its credential —
-# shared across every source this support module declares, since the mock forge checks
-# no token: one env var suffices regardless of how many sources are configured.
+# The env var every scenario's ``[[work_source]]`` names as its credential — one suffices
+# for every source this module declares, since the mock forge checks no token.
 WORK_SOURCE_TOKEN_ENV = "BZ_WORK_SOURCE_TOKEN_CRASH"
 
 
@@ -109,12 +102,9 @@ def winter_source() -> Path | None:
 
 
 def build_script(landed_file: str) -> str:
-    """A scripted build node that makes a real commit adding ``landed_file``, then
-    pushes its branch and declares it (issue #143, Phase 4) — the runner no longer
-    discovers or pushes the produced pointer, so the WORKER must, through the real
-    `blizzard runner artifact commit` verb (Phase 3's local declaration channel).
-    There is no `--forge`: the origin the runner verifies against comes from the
-    environment's repo manifest, so `--repo` is the only coordinate the worker supplies."""
+    """A scripted build node that makes a real commit adding ``landed_file``, then pushes
+    its branch and declares it through the real `blizzard runner artifact commit` verb
+    (issue #143, Phase 4)."""
     return (
         "import subprocess, pathlib\n"
         f"repo = {REPO_NAME!r}\n"
@@ -146,26 +136,19 @@ def build_script(landed_file: str) -> str:
 _JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
 # The migrate scenario's source-graph judgement (#90): the build node hands the chunk to
-# the `triage-delivery` graph instead of delivering in place. Its build prompt is a no-op
-# (`pass`) so the source node commits nothing — the real landing commit is made by the
-# TARGET graph's own `build` node after the migration re-queues the chunk there, keeping
-# the sweep's exactly-once-on-`main` assertion honest (no source branch to double-merge).
+# the `triage-delivery` graph instead of delivering in place.
 _MIGRATE_JUDGEMENT_SCRIPT = "verdict('migrate', 'hand the chunk to the triage-delivery graph')\n"
 
 
 # The generic sweep's ``deliver`` node command — a real merge-to-main, not a ``true``
-# no-op. The worker pushes each build commit to a feature branch and declares it (issue
-# #143, Phase 4); this step opens a PR per submitted branch and merges it to the base by
-# pinned SHA against the mock forge, so
-# the change actually LANDS on bare ``main`` and the sweep's exactly-once-on-``main``
-# assertion is meaningful (before #67 the ``deliver`` node was the coordinator's own
-# ``mode: merge-to-main`` — a bare ``true`` after the retirement never merged anything and
-# left every "landed once on bare main" assertion asserting against an unmoved ``main``).
-# Driven entirely off the injected env (``BZ_FORGE_URL`` / ``BZ_HUB_GIT_COMMITS`` /
-# ``BZ_HUB_BASE_BRANCH``), never a typed forge seam (policy-in-YAML, #67); idempotent by
-# construction — re-merging an already-merged head is a git "Already up to date" no-op, so
-# a crash-recovery re-run lands nothing twice. It prints a non-choice line, so the
-# executor's outcome mapping falls through to the node's default ``success`` edge.
+# no-op: it opens a PR per submitted branch and merges it to the base by pinned SHA
+# against the mock forge, so the change actually LANDS on bare ``main`` and the sweep's
+# exactly-once-on-``main`` assertion is meaningful. Driven entirely off the injected env
+# (``BZ_FORGE_URL`` / ``BZ_HUB_GIT_COMMITS`` / ``BZ_HUB_BASE_BRANCH``), never a typed
+# forge seam (policy-in-YAML, #67); idempotent by construction — re-merging an
+# already-merged head is a git "Already up to date" no-op, so a crash-recovery re-run
+# lands nothing twice. It prints a non-choice line so the outcome mapping falls through
+# to the node's default ``success`` edge.
 LAND_STEP = """python3 - <<'PYEOF'
 import json, os, urllib.error, urllib.request
 
@@ -207,12 +190,10 @@ PYEOF
 def graph_yaml(landed_file: str) -> str:
     """A minimal ``build -> deliver`` graph, named ``default-delivery`` so ingest reuses it.
 
-    Shorter than the packaged build→review→deliver shape — every GENERIC crash point
-    (reap, pull, fill, spawn, advance, flush) is still traversed; ``deliver`` is a generic
-    hub command node (#67) whose ``run:`` step (:data:`LAND_STEP`) actually merges every
-    submitted branch to bare ``main`` against the mock forge, so the sweep's
-    exactly-once-on-``main`` assertion is real. Each scenario lands a **unique** file so
-    successive points never collide in the shared origins.
+    Every GENERIC crash point (reap, pull, fill, spawn, advance, flush) is traversed;
+    ``deliver`` is a hub command node whose ``run:`` step (:data:`LAND_STEP`) merges every
+    submitted branch to bare ``main``. Each scenario lands a **unique** file so successive
+    points never collide in the shared origins.
     """
     import yaml
 
@@ -251,13 +232,10 @@ def graph_yaml(landed_file: str) -> str:
 
 def checks_graph_yaml(landed_file: str) -> str:
     """:func:`graph_yaml`'s ``build -> deliver`` shape, plus a real ``checks:`` on ``build``
-    (issue #114) — the condition the runner's checks-at-exit step runs before eliciting the
-    judgement, opening the `checks.*` crash windows the dedicated scenario arms.
+    (issue #114) — what opens the `checks.*` crash windows the dedicated scenario arms.
 
-    The check is ``true`` — a shell builtin that always exits 0, so it is a green check that
-    names no toolchain and runs in any env. Its content is immaterial to the crash points:
-    they fire around the *recording* of the result and its marker, whatever the check
-    returned. Named ``default-delivery`` like :func:`graph_yaml` so ingest resolves to it."""
+    The check is ``true``: a green check that names no toolchain and runs in any env. Named
+    ``default-delivery`` like :func:`graph_yaml` so ingest resolves to it."""
     import yaml
 
     graph = {
@@ -295,28 +273,19 @@ def checks_graph_yaml(landed_file: str) -> str:
 
 
 #: The nudge scenario's unattached `produces:` name (issue #113, Phase 4) — the build
-#: node declares it but the mock worker's judgement script never attaches it (real
-#: harnesses would; scripting a conditional attach-on-nudge reply is not what the
-#: `nudge.*` crash points need proven — the "at most one nudge" property they guard
-#: holds regardless of whether the worker ever complies).
+#: node declares it and the mock worker's judgement script never attaches it, which is
+#: what keeps the `nudge.*` windows open on every pass.
 NUDGE_PRODUCES_NAME = "finding"
 
 
 def nudge_graph_yaml(landed_file: str) -> str:
     """:func:`graph_yaml`'s ``build -> deliver`` shape, plus one unattached
-    ``produces:`` name on ``build`` (issue #113, Phase 4) — the condition
-    :func:`~blizzard.runner.loop.steps._advance_exited_worker`'s nudge-once checks
-    before ever eliciting it: no pushed git commit is named :data:`NUDGE_PRODUCES_NAME`
-    and the mock worker never attaches it, so every pass through ``build`` opens the
-    `nudge.*` windows the dedicated scenario arms.
+    ``produces:`` name on ``build`` (issue #113, Phase 4) — no pushed git commit is named
+    :data:`NUDGE_PRODUCES_NAME` and the mock worker never attaches it, so every pass
+    through ``build`` opens the `nudge.*` windows the dedicated scenario arms.
 
-    Named ``default-delivery`` like :func:`graph_yaml` — not a distinct name — because
-    ingest (``POST /api/chunks`` with no explicit ``graph_id``) resolves to the newest
-    *enabled* graph of the hub's configured default name via ``ensure_default``
-    (``hub/api/chunks.py``), minting the packaged ``default.yaml`` shape under that name
-    if none enabled yet exists. A differently-named custom graph is simply never picked
-    up by ingest; sharing the name is what makes this scenario's mint the one ingest
-    resolves to, exactly as :func:`graph_yaml`'s own docstring already relies on."""
+    Named ``default-delivery`` like :func:`graph_yaml` so ingest resolves to it
+    (``hub/api/chunks.py``); a differently-named graph would never be picked up."""
     import yaml
 
     graph = {
@@ -357,10 +326,10 @@ def migrate_source_yaml() -> str:
     """A source graph (`default-delivery`, so ingest pins it) whose `build` node migrates
     the chunk to the `triage-delivery` graph (#90) rather than delivering in place.
 
-    The build prompt is a no-op: the migration re-queues the chunk at the target graph's
-    own `build` node (name-match-else-entry), which does the real commit + deliver. So the
-    only landing branch is the target's — a source branch that could double-merge never
-    exists, keeping the exactly-once-on-`main` assertion meaningful."""
+    The build prompt is a no-op: the real commit + deliver happens at the target graph's
+    own `build` node after the migration re-queues the chunk there. So the only landing
+    branch is the target's — a source branch that could double-merge never exists, keeping
+    the exactly-once-on-`main` assertion meaningful."""
     import yaml
 
     graph = {
@@ -385,8 +354,7 @@ def migrate_source_yaml() -> str:
 
 def migrate_target_yaml(landed_file: str) -> str:
     """The migration target (`triage-delivery`, #90) — a standard `build -> deliver` graph
-    whose `build` node name-matches the source's, so the migration lands there and the
-    chunk runs to `done` under the new graph."""
+    whose `build` node name-matches the source's, so the migration lands there."""
     return graph_yaml(landed_file).replace("name: default-delivery", "name: triage-delivery", 1)
 
 
@@ -394,20 +362,17 @@ def migrate_hub_source_yaml() -> str:
     """A source graph (`default-delivery`, so ingest pins it) whose `build` migrates to the
     hub-landing target `triage-hub` (issue #111) rather than the runner-landing
     `triage-delivery` :func:`migrate_source_yaml` uses. Same no-op build prompt: the source
-    node commits nothing, so the target's landing hub node has no branches to merge (the
-    exactly-once assertion is on convergence, not a landed file — see the test)."""
+    node commits nothing, so the target's landing hub node has no branches to merge — the
+    scenario asserts on convergence, not a landed file (see the test)."""
     return migrate_source_yaml().replace("graph:triage-delivery", "graph:triage-hub", 1)
 
 
 def migrate_hub_target_yaml() -> str:
     """The hub-landing migration target (`triage-hub`, issue #111): its **entry** node
     `build` — which name-matches the source's migrating `build`, so the migration lands
-    there — is **hub-executed**, not a runner node. A migration re-pinning a chunk onto a
-    hub node is retained by the hub exactly as a transition into one is: it derives
-    `delivering` (never runner-claimable `ready`) and the landed hub node is driven by the
-    holding runner's ADVANCE poll to `done`. The hub node reuses :data:`LAND_STEP`, which
-    with no submitted branches (the source committed nothing) is a clean no-op that prints
-    its success line and routes the default `success` edge to `done`."""
+    there — is **hub-executed**, not a runner node. It reuses :data:`LAND_STEP`, which with
+    no submitted branches (the source committed nothing) is a clean no-op that prints its
+    success line and routes the default `success` edge to `done`."""
     import yaml
 
     graph = {
@@ -431,14 +396,10 @@ def migrate_hub_target_yaml() -> str:
 
 def intended_migrate_source_yaml() -> str:
     """A plain single-graph source (`default-delivery`, so ingest pins it) for the
-    **intended**-migration crash scenario (issue #124) — unlike :func:`migrate_source_yaml`,
-    no edge here is a `graph:<name>` cross-graph edge at all; this is an entirely ordinary
-    graph. The migration is driven out of band: a claimed chunk's PATCHed
-    `intended_migration` (set before the runner ever claims it — the window is open at
-    `ready` too) is consulted at the ordinary `build -pass-> deliver` transition below.
-    `deliver` is a dummy hub node, never actually reached: the scenario arms a `forced`
-    intent naming the migration target's own `build` node, which fires unconditionally
-    regardless of this transition's own destination name."""
+    **intended**-migration crash scenario (issue #124) — no `graph:<name>` cross-graph edge
+    anywhere, unlike :func:`migrate_source_yaml`; the migration is driven out of band by a
+    PATCHed `intended_migration`. `deliver` is a dummy hub node, never actually reached:
+    the scenario arms a `forced` intent naming the migration target's own `build` node."""
     import yaml
 
     graph = {
@@ -602,18 +563,16 @@ def write_runner_config(runner_dir: Path, *, workspace: Path, bin_dir: Path, hub
         workspace_root=str(workspace),
         workspace_envs=(RUNNER_ENV,),
         harness_binary=str(bin_dir / "mock-claude-code"),
-        # The mock façade has no permission gate and rejects an unknown ``--permission-mode``
-        # flag, so it must be omitted here (``None``) — the contract of the real adapter's
-        # default (``bypassPermissions``): None omits the flag so the mock is unaffected.
+        # The mock façade rejects an unknown ``--permission-mode`` flag, so it must be
+        # omitted here — ``None`` omits it.
         harness_permission_mode=None,
         # A path that is never created — the external-usage sampler's first soft-failure
         # check (a missing credentials file) trips before any request is built, keeping
         # this real daemon's no-network-access guarantee real for that step too (issue #218).
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
         base_branch="main",
-        # `start_runner` sets `ENV_HARNESS_FENCE` in the daemon subprocess's own env; the
-        # adapter's spawn-environment allowlist (issue #88) only forwards it to a worker
-        # because it is declared here, mirroring the real fleet's `[worker] env_passthrough`.
+        # `start_runner` sets `ENV_HARNESS_FENCE` in the daemon subprocess's own env; it
+        # reaches a worker only because it is declared here (issue #88).
         worker_env_passthrough=(ENV_HARNESS_FENCE,),
     )
     config.config_path.write_text(config.to_toml())

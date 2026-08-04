@@ -1,12 +1,9 @@
 """The session repository seam — read/write Protocols (issue #91,
 ``bzh:repository-split``).
 
-``resolve_identity`` (``hub/api/auth_session.py``) is the edge's read: it looks up a
-session by its **hashed** id via the read Protocol, then hands the loaded
-:class:`~blizzard.hub.auth.models.Session` object into
-:meth:`~blizzard.hub.auth.service.AuthService.touch_session` for the sliding-expiry
-write (``bzh:domain-takes-objects``) — the edge never mutates directly
-(``bzh:controller-read-only``).
+Sessions are looked up by their **hashed** id via the read Protocol; the write side is
+reserved for :class:`~blizzard.hub.auth.service.AuthService` (``bzh:controller-read-only``
+— the edge never mutates directly).
 """
 
 from __future__ import annotations
@@ -34,6 +31,5 @@ class IWriteSessionRepository(IReadSessionRepository, Protocol):
         ...
 
     def delete(self, id_hash: str) -> None:
-        """Revoke a session outright (logout, #92) — landed now so the Protocol
-        surface is stable; nothing calls it in this phase."""
+        """Revoke a session outright (logout, #92)."""
         ...

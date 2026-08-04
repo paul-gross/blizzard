@@ -184,11 +184,8 @@ class GraphMintService:
         graph must not be silently skipped as "unchanged".
 
         Graphs live in the store, not on disk: the hub resolves a *minted* graph per
-        chunk and never re-reads the packaged YAML. Nothing minted at startup and
-        ``graph mint`` was operator-only, so shipping a changed graph in a new wheel did
-        not change fleet behavior — the deploy went green, the daemons came up healthy,
-        and every new chunk kept running the previous definition, with no error, log line
-        or status output saying so.
+        chunk and never re-reads the packaged YAML, so a changed graph shipped in a new
+        wheel only reaches the fleet once this re-mints it.
 
         ``minted`` is the newest-minted definition of this name **re-parsed back into an
         authoring doc**, or ``None`` for a name never minted (a fresh store, or a newly
@@ -196,16 +193,12 @@ class GraphMintService:
         which is also where YAML parsing lives, keeping this a pure taker-of-objects
         (``bzh:domain-takes-objects``); :mod:`blizzard.hub.graph_sync` is that caller.
 
-        Comparing the *parsed* docs is what makes "only if changed" correct:
-
-        * ``mint`` inlines every ``prompt`` / ``prompt_addendum`` file reference into the
-          stored definition, so an edit confined to a ``prompts/*.md`` file changes the
-          minted graph while leaving ``graph.yaml`` byte-identical. Diffing the source
-          file would miss exactly the change most likely to be made.
-        * :class:`GraphDoc` and everything under it are frozen dataclasses, so ``==`` is a
-          total structural comparison, indifferent to YAML formatting — quoting, block
-          style, key order, the re-serialization ``inline_graph_yaml`` itself performs. A
-          reformat does not churn the lineage, and a real change is not hidden by one.
+        Comparing the *parsed* docs — not the source YAML — is what makes "only if
+        changed" correct: ``mint`` inlines every ``prompt``/``prompt_addendum`` file
+        reference, so a ``prompts/*.md``-only edit is a real change (pinned by
+        tests/test_graph_sync.py::test_a_prompt_only_edit_is_detected_and_minted), while
+        :class:`GraphDoc`'s frozen-dataclass ``==`` makes a pure reformat none (pinned by
+        tests/test_graph_sync.py::test_reformatting_the_yaml_is_not_a_change).
         """
         if minted is not None and minted == doc:
             return None
@@ -218,14 +211,11 @@ class GraphMintService:
         Idempotent by name: a fresh hub mints the packaged default on first use, and
         re-checks are no-ops. Graphs stay immutable — this never edits an existing one.
 
-        ``get_enabled_by_name`` returning ``None`` is ambiguous by itself — no graph of
-        this name was ever minted, or every one that was has since been retired
-        (issue #101). Those two must not collapse to the same "mint a fresh copy"
-        outcome: retiring every version of the default graph is an operator's
-        deliberate brake, and it must survive a restart rather than be silently undone
-        the next time this runs (a re-mint would be immediately effective, since a
-        freshly minted graph starts enabled). :meth:`list_all` disambiguates by
-        checking whether *any* graph of this name exists at all, retired or not.
+        ``get_enabled_by_name`` returning ``None`` is ambiguous — never minted, or every
+        version since retired (issue #101) — so :meth:`list_all` disambiguates: retiring
+        every version is an operator's deliberate brake and must survive a restart rather
+        than be undone by a re-mint here (pinned by
+        tests/test_graph_lifecycle_api.py::test_retiring_every_version_of_the_default_graph_survives_a_restart).
         """
         existing = self._graphs.get_enabled_by_name(doc.name)
         if existing is not None:

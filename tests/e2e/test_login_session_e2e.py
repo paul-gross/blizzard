@@ -14,26 +14,22 @@ beyond the two local subprocesses:
    freshly-minted ``pending`` identity (the bottom, no-access role; role assignment
    is #94), it lands on the **pending lobby** ("signed in, awaiting access"), not a
    broken board — itself proof the dance produced a real, working session cookie.
-2. **Promoted to `guest`, the board is reachable read-only.** #93 lands no
-   role-assignment surface (#94's own slice), so the role is set directly in the
-   hub's sqlite store, the one seam available before #94 exists, exactly as this
-   suite already mints fixture state no API yet exposes. A `guest` reads everything
-   and mutates nothing (issue #210): the browser reloads (same session cookie, no
-   re-login) and reaches the real board — the pending lobby gone — but a seeded
-   not-ready chunk's card renders with **no Promote control**, the end-to-end proof
-   that "read-only" is not merely a unit-tier claim.
+2. **Promoted to `guest`, the board is reachable read-only.** With no
+   role-assignment surface yet (#94's own slice), the role is set directly in the
+   hub's sqlite store. A `guest` reads everything and mutates nothing (issue #210):
+   the browser reloads (same session cookie, no re-login) and reaches the real board
+   — the pending lobby gone — but a seeded not-ready chunk's card renders with **no
+   Promote control**.
 3. **Promoted to `contributor`, the write control appears.** The same reload, the
    same card, now with its Promote control back — the control's presence is a
    function of the resolved permission, not of anything else that changed.
 4. **A session expiring mid-SSE-stream surfaces as a login redirect within one
    reconnect cycle.** The hub is stopped, the session row is deleted (an
-   unambiguous stand-in for "expired" — the resolve path treats a missing/expired
-   session identically, ``hub/api/auth_session.py``), and restarted. Killing the hub
-   process force-drops the open stream; the client's own reconnect (the fetch-based
-   transport's one seam that can see a status code at all, ``sse.service.ts``) lands
-   on the new hub with an invalid session, receives ``401`` on that **one reconnect
-   attempt**, and the app routes to ``/login`` — proving the auth-failure channel end
-   to end rather than an unbounded retry loop.
+   unambiguous stand-in for "expired"; see :func:`_expire_session`), and restarted.
+   Killing the hub process force-drops the open stream; the client's own reconnect
+   lands on the new hub with an invalid session, receives ``401`` on that **one
+   reconnect attempt**, and the app routes to ``/login`` — a bounded auth-failure
+   channel, not an unbounded retry loop.
 
 It is the **e2e tier**: it needs the full live stack, the sibling ``blizzard-mock``
 worktree, and an installed Chromium, so it is **skipped unless ``BLIZZARD_E2E=1``**
@@ -119,9 +115,8 @@ def _db_path(hub_dir: Path) -> Path:
 
 
 def _set_role(hub_dir: Path, username: str, role: str) -> None:
-    """The stand-in for #94's not-yet-landed role-assignment API — direct store
-    access, the same "mint what the API cannot yet" pattern this suite already uses
-    for fixture state (``mint_fixture``, forge seeding)."""
+    """The stand-in for #94's not-yet-landed role-assignment API — direct store access,
+    the same "mint what the API cannot yet" pattern this suite uses for fixture state."""
     con = sqlite3.connect(_db_path(hub_dir))
     try:
         con.execute("UPDATE users SET role = ? WHERE username = ?", (role, username))
@@ -150,9 +145,8 @@ def _seed_not_ready_chunk(hub_dir: Path, *, chunk_id: str, graph_id: str) -> Non
 
 
 def _expire_session(hub_dir: Path) -> None:
-    """Delete every session row — an unambiguous stand-in for "expired": the resolve
-    path (``hub/api/auth_session.py``) treats a missing and an expired session
-    identically, so this exercises exactly the branch a real expiry would."""
+    """Delete every session row — an unambiguous stand-in for "expired", since the
+    resolve path treats a missing and an expired session identically."""
     con = sqlite3.connect(_db_path(hub_dir))
     try:
         con.execute("DELETE FROM sessions")
@@ -214,8 +208,7 @@ def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> No
             expect(page.get_by_test_id("board-shell")).to_be_visible()
             expect(page.get_by_test_id("pending-lobby")).to_have_count(0)
             # The seeded chunk's card is visible — a guest reads everything — but its
-            # Promote control is not: the end-to-end proof of "read-only", not merely
-            # a unit-tier claim.
+            # Promote control is not.
             expect(page.locator(f'[data-chunk="{chunk_id}"]')).to_be_visible()
             expect(page.get_by_test_id("promote-chunk")).to_have_count(0)
 

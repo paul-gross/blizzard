@@ -186,11 +186,10 @@ def test_re_enabling_restores_effective(tmp_path: Path) -> None:
 
 
 def test_retiring_every_version_of_the_default_graph_survives_a_restart(tmp_path: Path) -> None:
-    """``ensure_default`` mints the packaged default the first time it is needed and
-    reuses it by name thereafter. Retiring that one and only version is the
-    operator's deliberate brake — it must not be undone by a second ``ensure_default``
-    call against a **fresh** ``HubServices``/engine wired over the very same on-disk
-    store, i.e. across a hub restart, rather than merely within the same process."""
+    """Retiring the packaged default graph's one and only version is the operator's
+    deliberate brake — it must not be undone by a second ``ensure_default`` call
+    against a fresh ``HubServices``/engine over the same on-disk store, i.e. across a
+    hub restart."""
     hub = build_hub(tmp_path)
     doc = hub.services.default_graph_doc
     graph = hub.services.graph_mint.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)

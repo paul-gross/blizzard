@@ -1,36 +1,20 @@
 """Graph-explorer diagram browser e2e — scenario 7 of the standing e2e smoke.
 
-The browser half of the e2e tier (blizzard-context ``verification/blizzard.md`` test
-tiers) for the **graph explorer's static DAG diagram** (issue #75 phase 4). A **real
-Chromium**, driven by Playwright, over the **served mission-control board**
-(``blizzard hub host`` mounts the built Angular app at ``/``, deep routes falling back
-to it): it visits ``/graphs``, opens a minted graph's detail from the explorer, and
-proves the ``<fleet-graph-diagram>`` SVG DAG renders against the *built* bundle from
-real minted data — the one surface no unit test reaches, since the diagram's layout
-runs ``@dagrejs/dagre`` and a canvas text-measurer that jsdom (the vitest DOM) cannot
-execute (``graph-diagram.ts`` stubs both there). It also names the ever-present
-fallback path (``graph-diagram-fallback``): a layout failure shows an unobtrusive
-notice, never a broken page.
-
-Because the canvas measurer only exists in a real browser, this is also the **only**
-tier that can prove it measures the type the SVG actually draws (issue #157): a canvas
-``font`` string is a CSS shorthand *value*, so a ``var(--mono)`` in it never substitutes
-and the context silently keeps its ``10px sans-serif`` default; and canvas applies no
-tracking unless asked, so a kind whose CSS sets ``letter-spacing`` measures short.
+The browser half of the e2e tier for the **graph explorer's static DAG diagram** (issue
+#75 phase 4). A **real Chromium**, driven by Playwright, over the **served mission-control
+board**: it visits ``/graphs``, opens a minted graph's detail from the explorer, and
+asserts the ``<fleet-graph-diagram>`` SVG DAG renders against the *built* bundle from real
+minted data — the one surface no unit test reaches, since the layout runs
+``@dagrejs/dagre`` and a canvas text-measurer jsdom cannot execute. It also covers the
+ever-present fallback path (``graph-diagram-fallback``).
 
 ``test_diagram_geometry_matches_the_rendered_text`` runs **every shipped seed graph**
 (``src/blizzard/hub/graphs/*/graph.yaml``) plus a name-row-bound graph through the
-rendered board. Every assertion is driven by geometry the **production** measurer
-produced — box widths, label-background widths, glyph positions — recomputed against
-what the browser actually rendered. It deliberately does *not* re-measure with a canvas
-context of its own: that would assert a property of Chromium (canvas and SVG agree on a
-resolved font) rather than of the code under test, and would pass against any measurer
-at all. See ``_MEASURE_DIAGRAM_JS`` for which kind each assertion binds on.
+rendered board, asserting the laid-out geometry against what the browser drew — see that
+test's own docstring, and ``_MEASURE_DIAGRAM_JS`` for which kind each assertion binds on.
 
-Unlike the board scenario (scenario 6) this needs **no runner and no forge traffic** —
-a diagram is a pure read of an immutable ``GraphView`` already at the hub. So it stands
-up only the served hub and POSTs one graph, keeping the scenario cheap and its skip
-surface small: it needs the live served bundle and an installed Chromium, nothing more.
+This needs **no runner and no forge traffic** — a diagram is a pure read of an immutable
+graph already at the hub — so it stands up only the served hub and POSTs one graph.
 
 It is the **e2e tier**: it drives the **built** bundle ``blizzard hub host`` serves out
 of ``src/blizzard/static/`` (never the sources), so ``mise run e2e`` runs it with
@@ -67,18 +51,16 @@ pytestmark = [
 def _graph_yaml() -> str:
     """A valid ``build -> review -> deliver`` graph, the same shape scenario 6 mints.
 
-    It gives the diagram everything the render exercises: an **entry** node (build), an
-    **advance** edge (build -> review, review -> deliver), a **retry** back-edge
-    (review -> build, whose target is declared no later than its source), a **self-loop**
-    retry edge (build's own ``retry`` choice targeting itself, blizzard#159's selection
-    scenario needs one exercised for real), and **mixed executors** (runner build/review,
-    hub deliver) that drive the two stripe/badge colour classes. A known-valid shape
-    dagre lays out cleanly — the diagram, not the fallback, is the expected render here.
+    It gives the diagram everything the render exercises: an **entry** node, **advance**
+    edges, a **retry** back-edge, a **self-loop** retry edge (blizzard#159's selection
+    scenario needs one exercised for real), and **mixed executors** driving the two
+    stripe/badge colour classes. A known-valid shape dagre lays out cleanly, so the
+    diagram — not the fallback — is the expected render here.
 
     ``review`` additionally carries a **targeted resume** (``session: resume:build``,
     issue #115) and a **three-name ``produces``** list, so its meta line is both long
-    enough to wrap onto a second line and rich enough to prove the authored
-    ``resume:<node>`` form survives to the render (issue #158).
+    enough to wrap onto a second line and rich enough to exercise the authored
+    ``resume:<node>`` form in the render (issue #158).
     """
     import yaml
 
@@ -156,26 +138,22 @@ def test_graphs_diagram_renders_in_the_browser(tmp_path: Path, chromium_availabl
                 # --- Open the graph's detail from the explorer --------------------------
                 # Groups render collapsed; expanding one already selects its effective
                 # version (issue #152), and clicking the version row selects it explicitly.
-                # Either navigates to /graphs/:graphId (GraphsPage keeps the list mounted
-                # beside the detail — the master/detail contract), mounting GraphDetail.
+                # Either navigates to /graphs/:graphId.
                 group.get_by_test_id("graph-explorer-group-toggle").click()
                 expect(page).to_have_url(f"http://127.0.0.1:{hub_port}/graphs/{graph_id}")
                 row = group.locator(f'[data-testid="graph-explorer-row"][data-graph-id="{graph_id}"]')
                 expect(row).to_be_visible()
                 row.click()
 
-                # The detail resolves the deep-linked id and mounts the diagram above its
-                # ever-present structured table (the fallback surface, unaffected by layout).
                 expect(page).to_have_url(f"http://127.0.0.1:{hub_port}/graphs/{graph_id}")
                 expect(page.get_by_test_id("graph-detail-graph-id")).to_have_text(graph_id)
                 diagram = page.get_by_test_id("graph-diagram")
                 expect(diagram).to_be_visible()
 
                 # --- Assert the diagram (or its fallback) rendered ----------------------
-                # A layout failure or degenerate graph shows `graph-diagram-fallback`
-                # instead of the SVG, never a broken page. This graph is a known-valid
-                # DAG-with-back-edge dagre lays out cleanly, so the SVG — not the fallback
-                # — is the expected render; a fallback here would flag a layout regression.
+                # This graph is a known-valid DAG-with-back-edge dagre lays out cleanly,
+                # so the SVG — not the fallback — is the expected render; a fallback here
+                # would flag a layout regression.
                 if diagram.get_by_test_id("graph-diagram-fallback").count() > 0:
                     expect(diagram.get_by_test_id("graph-diagram-fallback")).to_be_visible()
                     raise AssertionError(
@@ -192,9 +170,8 @@ def test_graphs_diagram_renders_in_the_browser(tmp_path: Path, chromium_availabl
                 # Forward edges are drawn and labelled with their firing choice.
                 advance_edges = svg.locator('[data-testid="graph-diagram-edge"][data-edge-kind="advance"]')
                 assert advance_edges.count() >= 1, "no advance edge rendered"
-                # The review -> build back-edge is derived `retry` (target declared no
-                # later than its source) — a structural kind no unit-tested wire field
-                # carries; the browser layout is the only place it is proven end to end.
+                # The review -> build back-edge is derived `retry` — a structural kind no
+                # wire field carries, so the browser layout is where it is observable.
                 retry_edges = svg.locator('[data-testid="graph-diagram-edge"][data-edge-kind="retry"]')
                 assert retry_edges.count() >= 1, "the review -> build back-edge was not derived as a retry edge"
                 # Node names are legible text, not char-count-estimated boxes.
@@ -223,12 +200,10 @@ _OFFSET_POINT_ON_PATH_JS = """
 def test_graphs_diagram_selection_in_the_browser(tmp_path: Path, chromium_available: bool) -> None:
     """Node/edge/self-loop selection and the detail pane, in a real browser (blizzard#159).
 
-    The unit tier (`graph-diagram.spec.ts`) proves the *mechanism* — a companion path per
-    edge carrying the visible path's own `d`, a transparent 14px stroke, `pointer-events:
-    stroke` — but jsdom does no geometry or hit-testing, so it cannot prove a click merely
-    *near* a curve actually selects it. This is the tier that can: it clicks a point on the
-    rendered curve derived from the path's own `getPointAtLength`, offset from the midpoint
-    the label pill sits near, and asserts the edge selects.
+    jsdom does no geometry or hit-testing, so the unit tier cannot see whether a click
+    merely *near* a curve selects it. This tier can: it clicks a point on the rendered
+    curve derived from the path's own `getPointAtLength`, offset from the midpoint the
+    label pill sits near, and asserts the edge selects.
     """
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
@@ -259,10 +234,8 @@ def test_graphs_diagram_selection_in_the_browser(tmp_path: Path, chromium_availa
                 build_node = build_name.locator("xpath=ancestor::*[@data-testid='graph-diagram-node']")
                 build_node.click()
                 expect(build_node).to_have_attribute("data-selected", "true")
-                # build's incident geometry: the build->review advance edge, the
-                # review->build and deliver->build back-edges, and build's own
-                # self-loop retry — four distinct incident groups (three
-                # `graph-diagram-edge`, one self-loop).
+                # build's incident geometry: three `graph-diagram-edge` groups plus its
+                # own self-loop retry.
                 expect(svg.locator('[data-testid="graph-diagram-edge"][data-incident="true"]')).to_have_count(3)
                 expect(svg.locator('[data-testid="graph-diagram-self-loop"][data-incident="true"]')).to_have_count(1)
 
@@ -394,10 +367,9 @@ def _assert_node_geometry(seed_name: str, node: dict) -> None:
 def _seed_graph_yamls() -> dict[str, str]:
     """Every graph blizzard **ships** — ``src/blizzard/hub/graphs/*/graph.yaml``.
 
-    The real corpus, not a fixture: issue #157's reported overflow (``resume retries 2 →
-    plan, retrospective``) is a node of the shipped advanced workflow, and these are the
-    graphs an operator actually opens in the explorer. Discovered from the tree rather
-    than listed, so a newly shipped graph is covered the day it lands.
+    The real corpus, not a fixture (issue #157's reported overflow was on a shipped
+    graph). Discovered from the tree rather than listed, so a newly shipped graph is
+    covered the day it lands.
     """
     seed_dir = Path(__file__).resolve().parents[2] / "src" / "blizzard" / "hub" / "graphs"
     yamls = {path.parent.name: path.read_text() for path in sorted(seed_dir.glob("*/graph.yaml"))}
@@ -444,25 +416,13 @@ def _name_bound_graph_yaml() -> str:
 def test_diagram_geometry_matches_the_rendered_text(tmp_path: Path, chromium_available: bool) -> None:
     """Every box the measurer sized fits the text the browser drew (issue #157).
 
-    Two ways the measurer can measure type the SVG does not draw, both invisible to
-    every tier below this one (jsdom has no canvas backend at all, and the component
-    specs stub the measurer):
-
-    - a ``var(--mono)`` left in the canvas ``font`` shorthand never substitutes, so the
-      context keeps its ``10px sans-serif`` default — boxes came out ~80% short;
-    - canvas applies no tracking unless asked, so ``.node-badge``'s ``letter-spacing:
-      0.06em`` went unmeasured — 0.6px per character short.
-
-    Rather than re-measure with a canvas of its own — which would assert that Chromium's
-    canvas and SVG agree, a fact about the browser that holds for *any* measurer — this
-    reconstructs each box from the rendered advance widths and asserts the laid-out
-    geometry matches. Coverage per kind: ``meta`` and ``label`` bind on every graph;
-    ``name`` and ``badge`` bind on the name-row-bound graph, whose nodes are deliberately
-    sized by their name row (the shipped graphs' meta lines otherwise dominate and hide
-    those two kinds entirely).
-
-    One hub and one browser serve every graph: a diagram is a pure read, so the marginal
-    cost of another graph is one navigation.
+    Reconstructs each box from the rendered SVG advance widths rather than re-measuring
+    with a canvas of its own, because a canvas-vs-SVG comparison would only assert that
+    Chromium's own canvas and SVG measurements agree — a fact about the browser, true
+    for any measurer, not a fact about this app's layout. Coverage per kind: ``meta``
+    and ``label`` bind on every graph; ``name`` and ``badge`` bind only on the
+    name-row-bound graph, whose nodes are deliberately sized by their name row (the
+    shipped graphs' meta lines otherwise dominate and hide those two kinds entirely).
     """
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")

@@ -162,13 +162,12 @@ def test_downgrade_reconstructs_a_structurally_canonical_url(tmp_path: Path) -> 
 def test_down_then_up_returns_the_identical_source_ref_rows(tmp_path: Path) -> None:
     """The property that makes the pointer-identity revision rehearsable despite the lossy owner.
 
-    ``downgrade()`` cannot restore the original bytes, so byte-exactness is not the bar.
-    The bar is that the *pointer identity* — the ``(source, ref)`` the whole system keys
-    on (uniqueness, dedup, the registry lookup) — survives a down-then-up
-    cycle unchanged. It does because the forward rule reads only the repo tail and the
-    issue number, and the placeholder-owner reconstruction preserves both; the owner it
-    fabricates is the one segment the forward rule already discards. Without this, a
-    rollback-and-reapply would silently re-key live chunks.
+    ``downgrade()`` can't restore the original bytes, so byte-exactness is not the bar —
+    the bar is that the pointer identity, ``(source, ref)`` (uniqueness, dedup, the
+    registry lookup), survives a down-then-up cycle unchanged. It does because the forward
+    rule reads only the repo tail and the issue number, both of which the placeholder-owner
+    reconstruction preserves; without this, a rollback-and-reapply would silently re-key
+    live chunks.
     """
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
@@ -214,18 +213,16 @@ def test_upgrade_is_idempotent_over_an_already_reshaped_store(tmp_path: Path) ->
 
 
 def test_a_fresh_store_reaches_0013_in_the_pre_reshape_shape(tmp_path: Path) -> None:
-    """The walking-skeleton revision must materialize ``{provider, url}``, not head-of-tree ``schema.py``'s shape.
+    """The walking-skeleton revision must materialize ``{provider, url}``, not head-of-tree
+    ``schema.py``'s shape.
 
-    The walking-skeleton revision creates ``chunk_pm_pointers``; it once did so by importing the live
-    ``schema.py`` table object. Once ``schema.py`` gained ``{source, ref}`` that import
-    would have made a *fresh* store materialize the post-reshape columns at the
-    walking-skeleton revision — and the pointer-identity revision's
-    ``if "url" not in columns: return`` guard would then fire, so its
-    backfill would be dead on every fresh store (i.e. every test store) while the live
-    store still needed it. A revision pinned in time must not read a moving shape, so
-    the walking-skeleton revision now carries its own frozen literal. This asserts the freeze holds from both
-    ends: the pre-reshape shape exists at the walking-skeleton revision, and the
-    pointer-identity revision genuinely reshapes it away.
+    It declares its own frozen ``sa.Table`` literal for ``chunk_pm_pointers`` rather than
+    importing ``schema.py``'s live table object, since ``schema.py`` is head-of-tree: a
+    fresh store would otherwise materialize post-reshape columns at this pre-reshape
+    revision, silently disabling the pointer-identity revision's ``if "url" not in
+    columns: return`` backfill guard. This asserts the freeze holds from both ends: the
+    pre-reshape shape exists here, and the pointer-identity revision genuinely reshapes it
+    away.
     """
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))

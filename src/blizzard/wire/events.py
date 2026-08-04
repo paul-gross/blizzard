@@ -1,10 +1,8 @@
 """Operational event-log wire bodies — the ``GET /api/events`` read (issue #125).
 
-The hub's durable operational event feed: a typed, severity-ranked record of the
-operationally-significant things that happen to runners and workers (non-clean worker
-exits, spawn/push/attach failures, stalls), unified at read time with the currently-open
-escalations so ``needs_human`` is one event kind in the same feed rather than a separate
-surface. The board's **Events tab** renders these newest-and-most-severe first.
+A typed, severity-ranked record of the operationally-significant things that happen to
+runners and workers (non-clean worker exits, spawn/push/attach failures, stalls), with
+the currently-open escalations projected into the same feed as one more event kind.
 
 A projected escalation row carries a **negative** ``id`` (it is not an ``event_log``
 row) — see :func:`blizzard.hub.domain.work.derive_event_feed`.
@@ -21,9 +19,8 @@ class EventView(BaseModel):
     """One operational event on the wire — an ``event_log`` row or a projected open
     escalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped
     event; ``runner_id`` is absent for a projected escalation, which names no runner
-    (issue #155 — ``null``, never ``""``, so a consumer building a runner universe out
-    of the feed reads it as "no runner" by type rather than filtering a sentinel);
-    ``detail`` is the event-specific JSON payload the fixed fields don't carry."""
+    (issue #155 — ``null``, never ``""``); ``detail`` is the event-specific JSON payload
+    the fixed fields don't carry."""
 
     id: int
     recorded_at: str  # iso-utc

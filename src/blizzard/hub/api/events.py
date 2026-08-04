@@ -12,8 +12,8 @@ event live until it disconnects. A periodic keepalive comment keeps intermediari
 idling the connection out. Ids are monotonic, so the replay-then-live handoff dedupes by
 id — an event caught in both the replay and the live queue is emitted once.
 
-The runner's store-and-forward fact push (``POST /events``) moved to the
-runner-authenticated fleet router (:mod:`blizzard.hub.api.fleet`, issue #87) — this
+The runner's store-and-forward fact push (``POST /events``) lives on the
+runner-authenticated fleet router (:mod:`blizzard.hub.api.fleet`, issue #87); this
 stream is the board's own read, human-plane gated on ``fleet:view`` (issue #91): a
 ``pending`` (or unauthenticated) identity is refused here exactly as on every other
 board read; a ``guest`` reaches it like any other reader. Identity is resolved
@@ -71,8 +71,8 @@ async def _stream(
     each live-wait races it against the queue read instead of waiting on the queue alone, so
     the generator returns promptly on shutdown rather than on its next keepalive wake. A
     caller with no shutdown signal to offer (the store-free export/unit app, or a direct
-    test call) gets a private ``Event`` that is never set — the race then behaves exactly
-    like the old bare queue wait. The generator unsubscribes on any exit: client disconnect,
+    test call) gets a private ``Event`` that is never set, so the race degrades to a plain
+    queue wait. The generator unsubscribes on any exit: client disconnect,
     cancellation, or this shutdown signal.
     """
     if broker is None:

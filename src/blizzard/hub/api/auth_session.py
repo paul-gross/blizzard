@@ -3,21 +3,18 @@ the human-plane edge seam (issue #91).
 
 Mirrors ``hub/api/auth.py``'s runner-bearer-token seam in shape: a presented
 credential is hashed and resolved via the **read** repository
-(``services.sessions.get_by_hash``, the same read-at-the-edge pattern
-``require_runner_principal`` uses over ``registration_for_token_hash``), and the
-sliding-expiry write is delegated to the domain (``services.auth.touch_session`` —
-``bzh:controller-read-only``: no mutation happens here). Unlike the runner seam there
-is no ``warn``/``enforce`` rollout brake — human auth is gated outright once
-``auth.mode = "oauth"`` is configured; ``mode = "none"`` (the default) is the rollout
-brake, short-circuiting every resolution to the implicit operator/superuser identity
-with **no store read at all**, so the store-free export/unit app and every existing
-test stay unaffected.
+(``services.sessions.get_by_hash``), and the sliding-expiry write is delegated to the
+domain (``services.auth.touch_session`` — ``bzh:controller-read-only``: no mutation
+happens here). There is no ``warn``/``enforce`` rollout brake: ``mode = "none"`` (the
+default) is the brake, short-circuiting every resolution to the implicit
+operator/superuser identity with **no store read at all**.
 
-``require(permission)`` deliberately does **not** declare ``Depends(get_services)`` as
-a parameter — it checks ``auth.mode`` first and only reaches for services under
-``oauth``, so a route gated under the default ``none`` mode never 503s on an unwired
-store (the SSE stream, ``hub/api/events.py``, is dependency-free on the store-free app
-and must stay that way).
+``require(permission)`` deliberately does **not** declare ``Depends(get_services)`` as a
+parameter — it checks ``auth.mode`` first and only reaches for services under ``oauth``,
+so a route gated under the default ``none`` mode never 503s on an unwired store (the SSE
+stream, ``hub/api/events.py``, is dependency-free on the store-free app and must stay
+that way). Both are pinned by
+``tests/test_pin_hub_api.py::test_require_grants_the_implicit_operator_with_no_store_wired``.
 """
 
 from __future__ import annotations

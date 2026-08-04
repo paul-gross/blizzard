@@ -8,45 +8,36 @@ Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the
   the pre-assigned ``--session-id``, so the returned session id is the hint; the pid
   and its start time are stamped from the parent right after launch. A node-entry
   resume (issue #115, ``resume_from`` set) swaps ``--session-id <sid>`` for
-  ``--resume <resume_from>`` instead — real ``claude``'s plain ``--resume`` reuses
-  the original session id in place (forking is opt-in via ``--fork-session``, never
-  passed here), so the returned session id is ``resume_from`` itself. Everything
-  else about the spawn (preamble, identity env, stdout redirect, cwd, model,
-  settings, permission mode) is unchanged — a node-entry resume gets the full spawn
-  treatment.
+  ``--resume <resume_from>`` instead — plain ``--resume`` reuses the original session
+  id in place (forking is opt-in via ``--fork-session``, never passed here), so the
+  returned session id is ``resume_from`` itself. Everything else about the spawn is
+  unchanged.
 * **judge** — ``<binary> -p --output-format json --resume <sid> [--permission-mode
   <mode>] <prompt>`` run synchronously, returning the raw reply for
-  :meth:`parse_verdict` (the two-phase judgement elicitation). Kill-then-resume:
-  never run against a live process. ``--permission-mode`` is reasserted on this
-  resume exactly as ``spawn``/``resume_with_message`` do: the flag is per-invocation,
-  not session-sticky, so a resume that omits it drops the session back to the
-  settings-resolved default — silently denying the judgement turn's own
-  ``blizzard runner attach`` (the ``retrospective`` a node's ``judgement_prompt``
-  elicits) in a headless session that has no one to approve it. That same attach
-  needs the per-lease identity env, so ``judge`` takes the ``preamble``/``chunk_id``
-  pair ``resume_with_message`` does (a freshly re-minted token; ``--resume``
-  inherits no spawn env) — but never ``--settings``: a ``SessionEnd`` hook firing
-  on the synchronous judge exit would record a spurious done-signal for the lease.
-* **resume_with_message** — the fire-and-forget resume (answer delivery / CI, P7).
-  Carries ``--settings <worker-settings>`` exactly as ``spawn`` does: it re-enters a
-  long-lived session that later exits on its own, so it needs the ``PostToolUse``
-  heartbeat and ``SessionEnd`` hooks re-attached — ``--resume`` alone does not inherit
-  them. ``judge`` deliberately omits them (its synchronous exit must not fire a
-  ``SessionEnd``).
+  :meth:`parse_verdict`. Kill-then-resume: never run against a live process.
+  ``--permission-mode`` is reasserted on this resume exactly as
+  ``spawn``/``resume_with_message`` do: the flag is per-invocation, not
+  session-sticky, so a resume that omits it drops the session back to the
+  settings-resolved default. It takes the ``preamble``/``chunk_id`` pair
+  ``resume_with_message`` does (a freshly re-minted token; ``--resume`` inherits no
+  spawn env) — but never ``--settings``: a ``SessionEnd`` hook firing on the
+  synchronous judge exit would record a spurious done-signal for the lease.
+* **resume_with_message** — the fire-and-forget resume. Carries ``--settings
+  <worker-settings>`` exactly as ``spawn`` does: it re-enters a long-lived session that
+  later exits on its own, so it needs the worker hooks re-attached — ``--resume`` alone
+  does not inherit them. ``judge`` deliberately omits them (its synchronous exit must
+  not fire a ``SessionEnd``).
 * **resume_command** — the literal interactive takeover command, in two compositions
-  (issue #258). ``attended=True`` is the takeover door's exec'd command: it reasserts
-  ``--permission-mode`` (per-invocation, not session-sticky) so a ``bypassPermissions``
-  worker is not demoted to per-tool approval prompts, and travels with the identity
-  env. The default is the advertised paste string (the escalation record, ``runner
-  status``): a human runs it in a bare terminal with no identity env, so it stays at
-  the interactive permission default. Neither composition carries ``--settings`` — a
-  takeover installs **no** heartbeat/``SessionEnd`` hooks, deliberately, for ``judge``'s
-  reason: a ``SessionEnd`` firing when the operator quits would record a spurious
-  done-signal against the lease. The identity env is never baked into the printable
-  string — ``TakeoverService`` carries it via :meth:`identity_env` so the lease token
-  never appears on a display surface.
+  (issue #258). ``attended=True`` reasserts ``--permission-mode`` (per-invocation, not
+  session-sticky) so a ``bypassPermissions`` worker is not demoted to per-tool approval
+  prompts, and travels with the identity env. The default is the advertised paste
+  string: a human runs it in a bare terminal with no identity env, so it stays at the
+  interactive permission default. Neither composition carries ``--settings`` — a
+  takeover installs **no** hooks, deliberately, for ``judge``'s reason. The identity env
+  is never baked into the printable string (it travels via :meth:`identity_env`), so the
+  lease token never appears on a display surface.
 * **parse_verdict** — extract the ``<Choice>{name}</Choice>`` from the harness-native
-  output; missing/unparseable → ``None`` (a failure to the core).
+  output; missing/unparseable → ``None``.
 * **parse_usage** — a result envelope's ``usage`` + ``total_cost_usd``, translated
   into a :class:`~blizzard.runner.harness.usage.UsageSample`; ``None`` when no
   envelope is present. **sum_transcript_usage** is the envelope-less fallback,
@@ -59,68 +50,33 @@ Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the
   ExternalSubscriptionUsageSnapshot`. **Never refreshes and never writes** the
   credential file — Claude Code itself owns refresh, and every worker this runner
   spawns shares that one file, so a second writer risks corrupting it out from under
-  a live session. Every failure path (unreadable/malformed credentials, missing or
-  expired token, a non-2xx/unreachable/timed-out request, an unparseable response,
-  or a response with no parseable window) logs one warning and returns ``None`` —
-  never a raise, since a diagnostic sample is inherently best-effort.
+  a live session. Every failure path logs one warning and returns ``None`` — never a
+  raise, since a diagnostic sample is inherently best-effort.
 * **transcript_source** (blizzard#245) — returns the injected
   :class:`~blizzard.runner.harness.transcript.IHarnessTranscriptSource`, defaulted to
   :class:`~blizzard.runner.harness.transcript.NullTranscriptSource` (this adapter never
-  constructs a real one itself, ``bzh:dependency-injection``). The composition roots
-  that need real Claude Code transcript reads (``app.py``, ``loop/build.py``) inject
-  one; ``cli.py``'s one adapter construction (the ``external-usage probe`` diagnostic)
-  and every test construction keep the default — neither reads a transcript.
+  constructs a real one itself, ``bzh:dependency-injection``).
 
 ``spawn``/``resume_with_message`` redirect the worker's stdout to an **injected**
 per-lease file (``preamble.stdout_path`` / the ``stdout_path`` param) rather than
 discarding it, so a killed/reaped worker's result envelope survives the process for
-``parse_usage`` to read back later; empty keeps the prior discard/inherit behavior.
-
-In verification ``binary`` points at the ``blizzard-mock`` ``mock-claude-code``
-façade (the prompt is a behavior script it ``exec``s), so the seam is exercised
-against a realistic CLI with no tokens. The identity variables ride the spawn
-environment (``BLIZZARD_LEASE_ID`` / ``BLIZZARD_SESSION_ID`` / ``BLIZZARD_ENV_IDS``);
-the mock fence variable (``BLIZZARD_MOCK_HARNESS_FENCE``) is supplied by the test
-scaffolding's declared ``worker_env_passthrough``, not by this adapter.
-Confined to ``internal/`` (``bzh:dependency-inversion``).
+``parse_usage`` to read back later; empty discards/inherits instead.
 
 Every child env — spawn, judge, resume — is built from :func:`_allowlisted_env`
-(``bzh:worker-env-allowlist``): a fixed base allowlist plus the operator's declared
-``env_passthrough``, never a full ``os.environ`` copy, so a daemon secret (foremost
-``BZ_HUB_TOKEN``) is absent from a worker/judge/resume child by construction. The
+(``bzh:worker-env-allowlist``, owned by ``runner/harness/env_allowlist.py``); the
 identity-carrying variants add only the ``BLIZZARD_*`` vars on top of it.
+Confined to ``internal/`` (``bzh:dependency-inversion``).
 
 The ``workdir`` first positional of ``judge`` / ``resume_with_message`` /
-``resume_command`` is the provider-returned path the runner resolves from the
-chunk→env binding and supplies for the op.
+``resume_command`` is the path the caller supplies for the op.
 
-**Model/effort application, and each harness's stickiness trap (issue #144).**
-``--model`` is passed at **session mint only**; every resume path omits it and leans on
-Claude Code restoring the session's own model, verified empirically against a differing
-settings default (CLI 2.1.220). That is what makes a cross-model resume — and its
-full-history prompt-cache rewrite, measured at 3,683 cache-creation tokens against 23 for
-the identical same-model resume — structurally impossible, and what preserves an
-operator's deliberate in-session model switch during a takeover.
-
-``--effort`` is passed on **every** invocation instead, because the D5 probe (same CLI)
-found effort is *not* sticky: a session spawned ``--effort low`` against a ``high``
-settings default ran ``high`` on a bare ``--resume``, while its model stayed put across
-the same resume. Mint-only would therefore silently drop a declared effort on every
-member of a resuming pool. Reasserting it is cheap and measured: 249 cache-creation
-tokens against 17 for the bare resume.
-
-Model stickiness is a **deployment requirement**, not just an observation — each target
-harness has a configuration that defeats it, and a deployment that trips one runs the
-mechanical lineage on the wrong model with every test tier still green:
-
-* **Claude Code** — a worker must not see the ``ANTHROPIC_MODEL`` family of env vars,
-  which override the session's restored model. Confirmed absent from
-  ``runner/harness/env_allowlist.py``'s base allowlist, and an operator must not add one
-  through ``[worker] env_passthrough``.
-* **opencode** — an adapter must not pin ``agent.<name>.model``; it outranks session
-  stickiness.
-* **codex** — an adapter must keep ``model`` out of ``config.toml`` (it overrides every
-  resume), and requires a state-DB-era codex to restore a thread's model at all.
+The mint-only ``--model`` / every-invocation ``--effort`` application contract (issue
+#144) is stated on the seam, :class:`~blizzard.runner.harness.adapter.IHarnessAdapter`;
+``spawn`` below applies it. This binding's own stickiness trap: a worker must not see the
+``ANTHROPIC_MODEL`` family of env vars, which overrides the session's restored model —
+kept out of ``runner/harness/env_allowlist.py``'s base allowlist, and out of ``[worker]
+env_passthrough`` (pinned by
+``tests/test_runner_harness_adapter.py::test_the_base_allowlist_carries_no_anthropic_model_override``).
 """
 
 from __future__ import annotations
@@ -157,10 +113,9 @@ _log = get_logger("blizzard.runner.harness")
 _CHOICE_OPEN = "<Choice>"
 _CHOICE_CLOSE = "</Choice>"
 
-# The worker spawn-environment allowlist (`bzh:worker-env-allowlist`) now lives in one
-# shared owner — `runner/harness/env_allowlist.py` — because the check-runner adapter
-# (issue #114) builds its child env from the same allowlist. Imported here rather than
-# re-declared so the two seams cannot drift (`bzh:one-owner`).
+# The worker spawn-environment allowlist (`bzh:worker-env-allowlist`) has one owner,
+# `runner/harness/env_allowlist.py`. Imported here rather than re-declared so the seams
+# that build a child env from it cannot drift (`bzh:one-owner`).
 _allowlisted_env = allowlisted_env
 
 
@@ -178,20 +133,18 @@ _TIER_PREFIX = "blizzard:"
 
 # This adapter's built-in tier mappings, so a zero-config runner resolves the three
 # standard tiers with no ``[models.aliases]`` at all. Overridden entry-by-entry by the
-# runner's own table. Deliberately **unordered roles, not a scale**: nothing substitutes
-# downward when a tier is unmapped — the author's preference list is the only fallback.
+# runner's own table. Unordered roles, not a scale — see :meth:`IHarnessAdapter.resolve_model`.
 _BUILTIN_TIERS = {
     "blizzard:frontier": "fable",
     "blizzard:advanced": "opus",
     "blizzard:basic": "sonnet",
 }
 
-# The native model names this adapter recognizes without a tier alias. Short aliases the
-# ``claude`` CLI itself accepts, plus the ``claude-`` family prefix for a fully-qualified
-# id. The point of recognizing at all is to **skip** what belongs to another harness: an
-# author's ``["blizzard:basic", "gpt-5.3-codex"]`` must fall past the codex entry here
-# rather than hand a CLI a name it would reject and turn a preference into a spawn
-# failure.
+# The native model names this adapter recognizes without a tier alias: the short names
+# the ``claude`` CLI itself accepts, plus the ``claude-`` family prefix. Recognizing them
+# is what lets an unrecognized name be **skipped** as another harness's rather than
+# handed to a CLI that would reject it (pinned by
+# tests/test_runner_harness_adapter.py::test_resolve_model_skips_a_native_name_belonging_to_another_harness).
 _NATIVE_SHORT_NAMES = frozenset({"fable", "opus", "sonnet", "haiku"})
 _NATIVE_PREFIX = "claude-"
 
@@ -279,8 +232,6 @@ class ClaudeCodeAdapter:
     ) -> None:
         self._binary = binary
         self._settings_path = settings_path
-        # The model a spawn falls back to when no preference resolves. Pinned so a worker
-        # never falls through to the operator's ambient default; defaults to Opus.
         self._model = model
         # The runner's own tier tables (issue #144, ``[models.aliases]`` /
         # ``[effort.aliases]``), overriding this adapter's built-ins entry by entry.
@@ -293,30 +244,23 @@ class ClaudeCodeAdapter:
         # worker has no one to approve tool use, so ``default`` mode blocks every edit and
         # non-trivial bash — the worker can inspect but never build. A workspace-isolated
         # runner sets ``bypassPermissions`` so the sandboxed worktree worker can edit,
-        # run git/checks, commit, and push unattended. ``None`` omits the flag (the
-        # ``mock-claude-code`` façade takes no such flag).
+        # run git/checks, commit, and push unattended. ``None`` omits the flag.
         self._permission_mode = permission_mode
         # The operator's declared extension to the spawn-environment allowlist (issue
-        # #88, `RunnerConfig.worker_env_passthrough`) — forwarded to every worker/judge/
-        # resume child alongside the fixed base allowlist.
+        # #88), forwarded to every worker/judge/resume child alongside the fixed base
+        # allowlist.
         self._env_passthrough = tuple(env_passthrough)
-        # The subscription-usage seam (issue #218), all defaulted so every existing
-        # call site keeps building the same adapter it always has. ``credentials_path``
-        # is where Claude Code's own OAuth login writes the shared credential file —
-        # read-only here (see ``sample_external_subscription_usage``'s docstring for
-        # why this adapter never refreshes or writes it). The ``httpx.Client`` is
-        # constructed lazily so an adapter built for spawn/judge/resume alone (the
-        # overwhelming majority of callers) never opens a connection pool it never
-        # uses.
+        # The subscription-usage seam (issue #218). ``credentials_path`` is read-only
+        # here — see ``sample_external_subscription_usage``'s docstring. The
+        # ``httpx.Client`` is constructed lazily so an adapter built for
+        # spawn/judge/resume alone never opens a connection pool it never uses.
         self._credentials_path = credentials_path or DEFAULT_CREDENTIALS_PATH
         self._usage_api_base = usage_api_base
         self._http_client = http_client
         self._clock: IClock = clock or SystemClock()
         # The transcript source (blizzard#245), injected — this adapter never
-        # constructs its own (`bzh:dependency-injection`). Defaulted to the null
-        # source so the construction sites that don't need a real one (`cli.py`'s
-        # `external-usage probe` diagnostic, every test construction) keep building
-        # the same adapter they always have.
+        # constructs its own (`bzh:dependency-injection`); defaulted to the null source
+        # for the construction sites that need no real one.
         self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
@@ -385,39 +329,25 @@ class ClaudeCodeAdapter:
     ) -> WorkerHandle:
         if not preamble.environments:
             raise HarnessSpawnError("spawn requires at least one acquired environment")
-        # `resume_from` (issue #115, node-entry resume) is the prior session id a
-        # graph transition continues. Real `claude`'s plain `--resume <sid>` reuses
-        # the original session id in place (forking is opt-in via `--fork-session`,
-        # never passed here — see plan Q1), so the continuation stays under
-        # `resume_from` itself; `session_hint` is irrelevant on this path.
-        # `resume_from is None` is today's unchanged fresh spawn: `session_hint`
-        # mints/honors a brand-new id via `--session-id`.
+        # `--resume <sid>` reuses the original session id in place (forking is opt-in
+        # via `--fork-session`, never passed here), so a node-entry resume (issue #115)
+        # continues under `resume_from` itself and `session_hint` is irrelevant.
         session_id = resume_from or session_hint or ""
         # Spawn cwd is the winter workspace root (issue #17) so the worker loads the
-        # workspace's shared context (CLAUDE.md/AGENTS.md, .winter/, every repo and env)
-        # like an interactive agent there; the held env(s) are named in the preamble
-        # prompt instead. Falls back to the first env's workdir when no root is supplied.
-        # `resolve_spawn_cwd` is the rule's one owner (issue #29) — the transcript
-        # locator is its second caller. `preamble.environments` was checked non-empty
-        # above, so the fallback is always a real workdir here; `| None` on the return
-        # type is for that second caller, whose fallback can legitimately be absent.
+        # workspace's shared context like an interactive agent there; the held env(s) are
+        # named in the preamble prompt instead. `resolve_spawn_cwd` is the rule's one
+        # owner (issue #29). `preamble.environments` was checked non-empty above, so the
+        # fallback is always a real workdir here.
         workdir = resolve_spawn_cwd(preamble.workspace_root, preamble.environments[0].workdir)
         cmd = [self._binary, "-p", "--output-format", "json"]
-        # `--model` at MINT ONLY (issue #144). Claude Code restores a session's model on
-        # `--resume` even against a differing settings default (verified empirically,
-        # CLI 2.1.220), and a cross-model resume forces a full-history cache rewrite —
-        # measured 3,683 cache-creation tokens against 23 for the identical same-model
-        # resume. So the resume path passes no model and leans on that stickiness, which
-        # also preserves an operator's deliberate in-session switch during a takeover.
+        # `--model` at MINT ONLY: a resume leans on Claude Code restoring the session's
+        # own, which is what keeps a cross-model resume (and its full-history cache
+        # rewrite) from happening. `--effort` on EVERY invocation, because effort is not
+        # sticky the same way — mint-only would silently drop a declared effort on every
+        # member of a resuming pool. (issue #144; pinned by
+        # tests/test_runner_harness_adapter.py::test_spawn_on_a_resume_carries_the_effort_but_never_the_model)
         if not resume_from:
             cmd += ["--model", model or self._model]
-        # `--effort` on EVERY invocation, unlike `--model` — the D5 probe (CLI 2.1.220)
-        # found effort is **not** sticky: a session spawned `--effort low` against a
-        # `high` settings default ran `high` on a bare `--resume`, while its model stayed
-        # put across the same resume. Mint-only would therefore silently drop a declared
-        # effort on every member of a resuming pool. The cost of reasserting it is small
-        # and measured: 249 cache-creation tokens against 17 for the bare resume, nothing
-        # like a cross-model resume's full-history rewrite.
         if effort:
             cmd += ["--effort", effort]
         if resume_from:
@@ -428,18 +358,16 @@ class ClaudeCodeAdapter:
             cmd += ["--settings", self._settings_path]
         if self._permission_mode:
             cmd += ["--permission-mode", self._permission_mode]
-        # The runner's workspace prompt + machine-local info table, prepended to the hub's
-        # node prompt (issue #17). The preamble is composed in the core; the adapter only
-        # concatenates it ahead of the envelope prompt (``bzh:deterministic-shell``).
+        # The preamble is composed in the core; the adapter only concatenates it ahead of
+        # the envelope prompt (``bzh:deterministic-shell``, issue #17).
         cmd.append("\n\n".join(part for part in (preamble.prompt_prefix, envelope.prompt or "") if part))
 
         env = self._spawn_env(envelope, preamble, session_id)
-        # Stdout rides to the injected per-lease file (epic #57) so the result
-        # envelope survives the process for `parse_usage` — never computed here
-        # (`bzh:dependency-injection`); empty keeps today's DEVNULL behavior.
-        # stderr rides the same injected-per-lease-file mechanism as stdout (issue #125,
-        # change L(iii)) — reusing `_stdout_target` (SF Note 1) so the file-descriptor
-        # cleanup-on-failed-Popen guarantee holds for both; empty path keeps DEVNULL.
+        # Stdout and stderr ride to injected per-lease files (epic #57; issue #125,
+        # change L(iii)) so a killed worker's output survives the process — never
+        # computed here (`bzh:dependency-injection`). Both go through `_stdout_target` so
+        # the file-descriptor cleanup-on-failed-Popen guarantee holds for each; an empty
+        # path is DEVNULL.
         with _stdout_target(preamble.stdout_path) as stdout_file, _stdout_target(preamble.stderr_path) as stderr_file:
             try:
                 proc = subprocess.Popen(
@@ -477,13 +405,11 @@ class ClaudeCodeAdapter:
         if self._permission_mode:
             cmd += ["--permission-mode", self._permission_mode]
         cmd.append(judgement_prompt)
-        # The judgement turn is asked to do more than answer: a node's judgement prompt
-        # elicits its own `blizzard runner attach` (the `retrospective`), so the child
-        # needs the per-lease identity a resume gets — `--resume` inherits none of the
-        # spawn env, and the caller re-mints the token (plaintext never persisted).
-        # Identity only: `--settings` stays off, so no `SessionEnd` hook can fire on the
-        # synchronous exit and record a spurious done-signal. Absent a preamble (the
-        # selftest, which speaks to no live lease) this stays the identity-less allowlist.
+        # The judgement turn needs the per-lease identity a resume gets — `--resume`
+        # inherits none of the spawn env, and the caller re-mints the token (plaintext
+        # never persisted). Identity only: `--settings` stays off, so no `SessionEnd`
+        # hook can fire on the synchronous exit and record a spurious done-signal.
+        # Absent a preamble this stays the identity-less allowlist.
         env = (
             self.identity_env(preamble, chunk_id, session_id)
             if preamble is not None
@@ -508,25 +434,20 @@ class ClaudeCodeAdapter:
         # As on `judge`: no `--model` (sticky), `--effort` reasserted (not sticky).
         if effort:
             cmd += ["--effort", effort]
-        # Re-attach the worker hook set, exactly as `spawn` does. `--resume` alone does
-        # not carry the original spawn's `--settings`, so a resumed session would run with
-        # no `PostToolUse` heartbeat and no `SessionEnd` hook: it would stop beating (blinding
-        # REAP's stall detector) and record no session-end on exit (misleading startup
-        # crash-recovery). This op re-enters a long-lived session that later exits on its own
-        # — the same lifecycle as `spawn` — so it needs the same hooks. `judge` deliberately
-        # does not: it is a synchronous verdict elicitation the runner reads directly, and a
-        # `SessionEnd` firing on its exit would record a spurious done-signal for the lease.
+        # Re-attach the worker hook set, exactly as `spawn` does: `--resume` alone does
+        # not carry the original spawn's `--settings`, and this op re-enters a long-lived
+        # session that later exits on its own — the same lifecycle as `spawn`. `judge`
+        # deliberately does not: a `SessionEnd` firing on its synchronous exit would
+        # record a spurious done-signal for the lease.
         if self._settings_path:
             cmd += ["--settings", self._settings_path]
         if self._permission_mode:
             cmd += ["--permission-mode", self._permission_mode]
         cmd.append(message)
-        # Re-supply the per-lease identity so the resumed worker can `blizzard runner attach`
-        # and its heartbeat/SessionEnd hooks can post — `--resume` inherits none of the spawn
-        # env. The caller passes a `preamble` carrying the lease id, runner URL, held envs, and
-        # a **freshly re-minted** capability token (the plaintext is never persisted, so it is
-        # re-minted rather than recovered). Absent a preamble this stays the identity-less
-        # allowlist — the selftest/CI resume, which speaks to no live lease.
+        # Re-supply the per-lease identity — `--resume` inherits none of the spawn env.
+        # The caller's `preamble` carries a **freshly re-minted** capability token (the
+        # plaintext is never persisted, so it is re-minted rather than recovered). Absent
+        # a preamble this stays the identity-less allowlist.
         env = (
             self.identity_env(preamble, chunk_id, session_id)
             if preamble is not None
@@ -547,13 +468,12 @@ class ClaudeCodeAdapter:
         attended: bool = False,
     ) -> str:
         # `--permission-mode` is asserted only for the ATTENDED composition — the takeover
-        # door's exec'd command, where the identity env travels alongside it (issue #258):
-        # there, dropping the flag would demote a bypassPermissions worker to per-tool
-        # approval prompts mid-task. The default composition is the advertised paste
-        # string (the escalation record, `runner status`), which a human runs in a bare
-        # terminal with none of the identity env — handing that session permission bypass
-        # as well would compound the missing identity, so it stays at the interactive
-        # default.
+        # door's exec'd command, where the identity env travels alongside it. The default
+        # composition is the advertised paste string a human runs in a bare terminal with
+        # none of that identity, so it stays at the interactive default rather than
+        # compounding the missing identity with a permission bypass. (issue #258; pinned by
+        # tests/test_runner_harness_adapter.py::test_attended_resume_command_reasserts_the_permission_mode
+        # and ::test_the_advertised_paste_string_never_carries_the_permission_mode)
         mode = self._permission_mode if attended else None
         parts = (("model", model), ("effort", effort), ("permission-mode", mode))
         flags = "".join(f" --{name} {value}" for name, value in parts if value)
@@ -802,14 +722,10 @@ class ClaudeCodeAdapter:
 
     def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
         """The child env carrying this lease's worker identity: the allowlist plus the
-        ``BLIZZARD_*`` vars a worker's CLI (``blizzard runner attach``/``ask``) and its
-        heartbeat/SessionEnd hooks read to reach the runner for this lease. ``spawn``,
-        ``resume_with_message``, and ``TakeoverService`` (via the seam, issue #258) all
-        build from this — though a takeover forwards only a bounded subset and installs
-        no hooks (no ``--settings``), so its identity serves the CLI verbs alone, not a
-        heartbeat. A daemon resume is as fully
-        identified as a fresh one — a resume that omits it leaves the worker unable to
-        attach or beat, since ``--resume`` does not inherit the original spawn env."""
+        ``BLIZZARD_*`` vars a worker's CLI and its hooks read to reach the runner for
+        this lease. ``spawn``, ``resume_with_message``, and a takeover (via the seam,
+        issue #258) all build from this, so a daemon resume is as fully identified as a
+        fresh one — ``--resume`` does not inherit the original spawn env."""
         env = _allowlisted_env(self._env_passthrough)
         env["BLIZZARD_ENV_IDS"] = ",".join(e.environment_id for e in preamble.environments)
         env["BLIZZARD_ENV_WORKDIRS"] = ",".join(e.workdir for e in preamble.environments)
@@ -820,11 +736,9 @@ class ClaudeCodeAdapter:
         env["BLIZZARD_LEASE_ID"] = preamble.lease_id
         env["BLIZZARD_RUNNER_URL"] = preamble.local_api_url
         env["BLIZZARD_LEASE_TOKEN"] = preamble.lease_token
-        # The ask channel: the worker records an undecidable choice by
-        # running ``blizzard runner ask`` against the local API above, then exits. Real
-        # Claude Code invokes it per the node-prompt convention; the blizzard-mock façade
-        # shells out to whatever ``BLIZZARD_RUNNER_ASK_CMD`` names, so wiring the real
-        # command here is what lets the mock exercise the true ask path (verified e2e).
+        # The ask channel: the command a worker runs to record an undecidable choice
+        # against the local API above. `setdefault`, so a caller that already named one
+        # keeps it.
         env.setdefault("BLIZZARD_RUNNER_ASK_CMD", "blizzard runner ask")
         return env
 

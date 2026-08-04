@@ -3,7 +3,6 @@
 Phase 1 of #144 is schema and wire only: a graph gains named session declarations
 carrying a prioritized ``model`` preference list, an ``effort`` value, and ``rotate:``
 thresholds, and its nodes may reference one by name (``fresh:<name>`` / ``resume:<name>``).
-Nothing here changes runtime behavior — the runner's resolution and rotation come later.
 
 The equality tests are load-bearing rather than incidental:
 :meth:`~blizzard.hub.domain.graph_authoring.GraphMintService.mint_if_changed` compares
@@ -231,8 +230,8 @@ def test_an_unrecognized_effort_value_is_accepted_by_the_hub() -> None:
 
 
 def test_an_unrecognized_model_preference_is_accepted_by_the_hub() -> None:
-    # Same reason: a model entry is an opaque preference string hub-side. Left-to-right
-    # resolution — and skipping what does not resolve — belongs to the adapter.
+    # Same reason: a model entry is an opaque preference string hub-side; resolution
+    # belongs to the adapter.
     result = validate_graph(parse_graph_doc(_doc(sessions={"code": {"model": ["not-a-real-model"]}})))
     assert result.ok, result.errors
 

@@ -226,10 +226,7 @@ def test_nudge_fires_once_and_picks_up_a_git_commit_declared_mid_nudge(tmp_path:
     spec: a worker nudged for a missing declaration that pushes and declares
     (``blizzard runner artifact commit``) in response must have that declaration
     verified and folded into THIS attempt's completion — not just land durably in the
-    store for some later, uncorrelated ADVANCE pass to notice. Before the fix, only
-    ``attachments_for_lease`` was re-read after the nudge; ``_verify_and_collect_git_commits``
-    was never re-run, so a git-commit compliance was silently dropped under the shipped
-    ``warn`` mode."""
+    store for some later, uncorrelated ADVANCE pass to notice."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(_NOW)
     _seed_exited_lease(store, lease_id="lease_r", chunk_id="ch_1", node_id="nd_build", epoch=1)

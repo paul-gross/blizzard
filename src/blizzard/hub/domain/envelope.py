@@ -15,10 +15,8 @@ Three engine rules live here:
   5 — :func:`_required_artifacts_block`), rendered ``#``-prefixed for the same
   harness-inertness reason as the judgement tail below;
 * the **judgement prompt** is the node's authored judgement prose *only*; the
-  generated elicitation tail naming the choice set — ``select exactly one and output
-  <Choice>{name}</Choice>`` — is appended by the runner from the envelope's carried
-  choice set when it delivers the judgement into the session, rendered harness-inert
-  so a mock behavior script still ``exec``s (runner ``steps._elicitation_tail``).
+  generated elicitation tail naming the choice set is appended by the runner when it
+  delivers the judgement into the session (runner ``steps._elicitation_tail``).
 
 Artifacts are resolved **latest-by-epoch per name**: a node re-run under a
 higher epoch supersedes its own earlier output, and the envelope carries one entry
@@ -99,14 +97,11 @@ def _required_artifacts_block(node: Node) -> str:
 def _judgement_prompt(node: Node) -> str | None:
     """The node's **authored** judgement prose; ``None`` at a node with no verdict.
 
-    The author writes only the prose; the engine-generated
-    elicitation tail (``select exactly one and output <Choice>{name}</Choice>``) is
-    appended by the runner from ``node.choices`` (carried on the envelope config) when
-    it delivers the judgement into the session — the runner renders it harness-inert
-    (``#``-prefixed) so a mock behavior *script* still ``exec``s cleanly (runner
-    ``steps._elicitation_tail``). Baking a prose tail here too would both
-    duplicate it and break the mock's ``exec``. ``None`` at a node with no worker
-    judgement (a hub node or a human gate carries no verdict elicitation).
+    The author writes only the prose; the engine-generated elicitation tail is
+    appended by the runner when it delivers the judgement (runner
+    ``steps._elicitation_tail``). Baking a prose tail here too would both duplicate
+    it and break the mock's ``exec``. ``None`` at a node with no worker judgement
+    (a hub node or a human gate carries no verdict elicitation).
     """
     if not node.choices:
         return None
@@ -136,9 +131,10 @@ def _effective_session(
     """Resolve the node's effective session declaration (issue #144).
 
     Precedence is **session declaration > chunk default**, merged *field by field* rather
-    than whole-record: a declaration that names a ``model`` but no ``effort`` takes the
-    chunk's effort, not nothing. The runner's own default is the last resort and is
-    applied there, so this never invents one.
+    than whole-record (pinned by
+    tests/test_envelope.py::test_a_declaration_outranks_the_chunk_default_field_by_field).
+    The runner's own default is the last resort and is applied there, so this never
+    invents one.
 
     Resolved hub-side because the hub owns both halves — the graph and the chunk. Two
     tiers of "no declaration" reach here and both are legitimate:
@@ -181,11 +177,10 @@ def build_node_envelope(
 ) -> NodeEnvelope:
     """Assemble the envelope a runner works ``node`` from.
 
-    ``graph`` is required and carries no default (issue #144): the node's session
-    declaration is resolved against it, and a caller that forgot the argument silently
-    getting the pre-#144 "no declaration, no chunk default" envelope back — with no type
-    error — is exactly the drift this would otherwise invite. Every call site already
-    holds it.
+    ``graph`` is required and carries no default (issue #144), so a caller that omits it
+    gets a ``TypeError`` rather than the pre-#144 "no declaration, no chunk default"
+    envelope (pinned by
+    tests/test_pin_hub_domain.py::test_build_node_envelope_requires_graph_explicitly).
     """
     prompt = node.prompt
     if arrival_addendum:

@@ -52,16 +52,11 @@ def satisfied_produces_names(artifacts: list[SubmittedArtifact]) -> set[str]:
     the judgement-assessment fallback (``attached=False``, kind ``ASSET``) is excluded —
     that is exactly the gap both callers below watch for.
 
-    The **one** shared home for this coverage predicate: the runner's nudge check
-    (:func:`~blizzard.runner.loop.steps._missing_produces`) and the hub's produces
-    backstop (:func:`~blizzard.hub.domain.produces_auth.check_produces`) both call this
-    rather than each re-deriving "covered", so the two cannot drift apart again — the bug
-    this function fixes was exactly that drift (the hub backstop rejecting a
-    git-commit-covered name the runner's own model already treats as satisfied). Lives
-    here, not in either domain package, because ``wire`` is the one module both the hub
-    and runner layers already import without crossing each other (``bzh:screaming-
-    architecture`` keeps hub and runner as separate top-level packages neither importing
-    the other's domain)."""
+    The **one** shared home for this coverage predicate — the runner's nudge check and
+    the hub's produces backstop both call it rather than re-deriving "covered" (agreement
+    pinned by tests/test_produces_coverage_agreement.py). It lives in ``wire``, not in
+    either domain package, because ``wire`` is the one module both layers already import
+    without crossing each other (``bzh:screaming-architecture``)."""
     return {a.name for a in artifacts if a.attached or a.kind == ArtifactKind.GIT_COMMIT}
 
 
@@ -89,8 +84,7 @@ def produces_coverage[P: _ProducesLike](specs: Sequence[P], artifacts: list[Subm
 
     - An ``asset`` spec is met by an artifact of **its own name** present in
       :func:`satisfied_produces_names` — an explicit ``blizzard runner attach``, or a
-      ``GIT_COMMIT`` artifact that happens to share the name (today's asset logic,
-      unchanged).
+      ``GIT_COMMIT`` artifact that happens to share the name.
     - A ``git_commit`` spec is met by **any** ``GIT_COMMIT``-kind artifact being present
       at all — a *kind* match, not a name match. The worker declares one git-commit
       artifact per repo it touched, named after that repo (``blizzard``,
@@ -113,17 +107,10 @@ def produces_coverage[P: _ProducesLike](specs: Sequence[P], artifacts: list[Subm
 class CheckResult(BaseModel):
     """One deterministic check's **runner-executed** outcome (issue #114).
 
-    Since #114 the runner runs a node's ``checks:`` at worker exit and records each
-    command's pass/fail as a durable fact; this is the wire projection the completion
-    carries to the hub so the hub's ``requires_checks`` backstop can gate on it. It carries
-    only ``(command, passed)`` — the hub needs nothing more to gate. The ``output_tail`` the
-    runner captures stays **runner-local** (a column on the runner's ``check_results``
-    table, read by the runner's own judgement-prompt injection); it deliberately does not
-    ride the wire, so no mock counterpart or board surfacing is owed. Should a future change
-    want the tail hub-side, that is a *new* wire field (re-triggering ``bzh:wire-change-extends-mock``).
-
-    Before #114 this field carried the worker's own in-session self-assessment and was sent
-    empty (``[]``) — the hub read it nowhere. #114 repurposes it to runner-executed facts."""
+    Carries only ``(command, passed)`` — nothing more is needed to gate the hub's
+    ``requires_checks`` backstop. The runner's captured ``output_tail`` deliberately does
+    not ride the wire; wanting it hub-side would be a *new* wire field (re-triggering
+    ``bzh:wire-change-extends-mock``)."""
 
     command: str
     passed: bool
@@ -150,9 +137,8 @@ def checks_gate_violated(requires_checks: bool, check_results: Sequence[_HasPass
 
     Reads ``passed`` only: an ungated choice (``requires_checks=False``) is never violated,
     and a gated choice is violated iff at least one recorded check is red. A node with no
-    checks records none, so ``check_results`` is empty and the gate is vacuously satisfied —
-    the validator already forbids ``requires_checks`` on a node with no ``checks:``, so a
-    gated-but-checkless choice cannot reach here."""
+    checks records none, so ``check_results`` is empty and the gate is vacuously
+    satisfied."""
     return requires_checks and any(not r.passed for r in check_results)
 
 
@@ -163,10 +149,9 @@ class CompletionSubmission(BaseModel):
     epoch: int  # the executing lease's fence, checked against the chunk's latest
     runner_id: str
     from_node_id: str
-    # The runner-executed check facts (issue #114) — the runner runs the node's ``checks:``
-    # at worker exit and populates this from its durable ``check_results`` facts, carrying
-    # ``(command, passed)`` per command. The hub's ``requires_checks`` backstop gates on it.
-    # Empty for a node with no ``checks:`` (and for every pre-#114 completion).
+    # The runner-executed check facts (issue #114) — ``(command, passed)`` per command.
+    # The hub's ``requires_checks`` backstop gates on it. Empty for a node with no
+    # ``checks:``.
     check_results: list[CheckResult] = []
     artifacts: list[SubmittedArtifact] = []
     # Set only on a gate-resolving transition: the decision this transition

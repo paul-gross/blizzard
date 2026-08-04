@@ -3,22 +3,12 @@ the retrospective fold on what happens to a superseded round's undisposed findin
 fold has a non-filing outcome for a finding whose target is an immutable artifact (unit tier,
 issue #259 AC1-AC4).
 
-``docket.md`` is not inlined into the graph — the loader only inlines ``prompt`` /
-``prompt_addendum`` *reference values*, and a markdown link inside already-inlined prose is
-left as a link (``_inline_prompts`` / ``_looks_like_ref`` in ``blizzard.hub.graphs``). So the
-docket reaches a worker only because the blizzard repo happens to be worktreed in the
-environment, and a worker acts on what its own node's delivered prompt says, not on
-``docket.md`` directly. This guard therefore reads the rule text from two places: the loaded,
-inlined ``GraphDoc`` for what a worker is actually told, and a direct read of ``docket.md`` for
-the shared format the delivered prompts all point at instead of restating.
-
-Before this change, ``build.from-review.md`` and ``plan.from-plan-review.md`` both promised a
-re-entering node "the retrospective node folds the docket and catches whatever is still open" —
-false once a round is superseded, since the fold only enumerates the newest asset of each kind.
-This guard pins the corrected, agreed text mechanically, mirroring
-``test_packaged_retrospective_landing_verification.py``'s shape, so a future edit that
-reintroduces the disproven promise in one file without the other goes red rather than silently
-drifting the two apart again.
+``docket.md`` is not inlined into the graph — a worker reaches it only because the
+blizzard repo happens to be worktreed in the environment, and acts on what its own
+node's delivered prompt says, not on ``docket.md`` directly. This guard therefore reads
+the rule text from two places: the loaded, inlined ``GraphDoc`` for what a worker is
+actually told, and a direct read of ``docket.md`` for the shared format the delivered
+prompts all point at instead of restating.
 """
 
 from __future__ import annotations

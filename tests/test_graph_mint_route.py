@@ -82,7 +82,6 @@ def test_mint_malformed_yaml_is_422(tmp_path: Path) -> None:
 def test_mint_default_graph_yaml_validates_clean(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     resp = hub.client.post("/api/graphs", json={"definition_yaml": default_graph_yaml()})
-    # The packaged default-graph YAML (build -> deliver) parses and validates cleanly.
     assert resp.status_code == 201, resp.text
     assert resp.json()["name"] == "default-delivery"
 
@@ -120,13 +119,7 @@ nodes:
 def test_mint_round_trips_node_produces_and_checks_through_the_store(tmp_path: Path) -> None:
     """A node's ``produces``/``checks`` survive a store reload — both authored forms
     (D1, issue #143): the bare-string ``review-findings`` (``kind=asset``, every
-    pre-#143 graph's shape) and the mapping ``{name: commit, kind: git_commit}``.
-
-    The graph store must persist and reify these: a review node reloaded from the store
-    with an empty ``produces`` never emits its ``review-findings`` asset, so the review
-    fail has nothing to carry back into build — the real-rails gap behind the missing
-    findings. This pins the round trip at the component tier so it can't regress
-    silently (the e2e proves the asset actually lands)."""
+    pre-#143 graph's shape) and the mapping ``{name: commit, kind: git_commit}``."""
     hub = build_hub(tmp_path)
     minted = hub.client.post("/api/graphs", json={"definition_yaml": _PRODUCES_GRAPH})
     assert minted.status_code == 201, minted.text

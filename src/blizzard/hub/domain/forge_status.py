@@ -14,8 +14,9 @@ Dependency-free (``bzh:domain-core``): both collaborators are injected Protocols
 a single, complete, directly-callable step (``bzh:steppable-loop``) — the background
 driver (``blizzard.hub.app``) is a thin sleep-and-call wrapper around it. There is no
 hub-side annotation state, which is what makes a mid-sweep crash self-healing: the
-next sweep re-diffs from scratch and re-converges (no ``blizzard:crash-sweep`` work is
-owed here — see ``blizzard-context:/architecture/crash-correctness.md``'s scope note).
+next sweep re-diffs from scratch and re-converges
+(``blizzard-context:/architecture/crash-correctness.md``'s scope note; pinned by
+tests/test_forge_status.py::test_sweep_reconverges_after_a_simulated_mid_sweep_crash).
 """
 
 from __future__ import annotations

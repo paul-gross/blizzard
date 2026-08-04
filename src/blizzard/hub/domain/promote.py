@@ -10,23 +10,21 @@ Holds the *write* chunk repository (``bzh:controller-read-only``) — which is a
 :class:`~blizzard.hub.domain.work.IReadChunkRepository`, so no separate read seam is
 needed to check whether a chunk is already promoted before writing anything.
 
-Promotion also stamps an explicit tail queue position (issue #137), so the chunk lands
-after every currently-ready chunk rather than sorting by mint order alone. That is two
-writes, not one — ``record_promote`` then ``record_queue_position`` — so the service
-guards the whole op on the chunk's *current* promoted-ness (read first, via
+Promotion also stamps an explicit tail queue position (issue #137). That is two writes,
+not one — ``record_promote`` then ``record_queue_position`` — so the service guards the
+whole op on the chunk's *current* promoted-ness (read first, via
 :meth:`~blizzard.hub.domain.work.IReadChunkRepository.load_facts`) rather than relying on
-``record_promote``'s own idempotency: an already-ready chunk must be a complete no-op —
-including no tail-stamp — or a repeated promote (a double board click, a CLI retry) would
-keep shoving an already-ready chunk to the back of the queue.
+``record_promote``'s own idempotency: a repeated promote (a double board click, a CLI
+retry) must not keep shoving an already-ready chunk to the back of the queue (pinned by
+tests/test_promote_service.py::test_promote_is_a_complete_no_op_on_an_already_promoted_chunk).
 
-Crash safety for the two-write op itself (``bzh:crash-correctness``): a crash or lost ack
-between the two writes leaves the ``chunk.promoted`` fact recorded but no explicit queue
-position stamped. That is never a safety break, only a self-healing degrade —
-:meth:`~blizzard.hub.domain.queue.QueueService._effective_position`'s fallback (this same
-phase) then sorts the chunk by its ``chunk_promoted.promoted_at``, a real-world timestamp
-far larger than any small explicit-position float ever assigned to another chunk, so it
-still lands at the tail of the ready queue — just as the missed explicit stamp would have
-put it. See ``blizzard-context:/architecture/crash-correctness.md``'s recorded exemptions.
+Crash safety for the two-write op itself (``bzh:crash-correctness``): a crash between the
+two writes leaves the ``chunk.promoted`` fact recorded with no explicit position, which
+self-heals —
+:meth:`~blizzard.hub.domain.queue.QueueService._effective_position`'s fallback sorts by
+``chunk_promoted.promoted_at`` and still lands the chunk at the tail (pinned by
+tests/test_queue_service.py::test_promoted_but_unmoved_chunk_falls_back_to_promoted_at_not_minted_at).
+See ``blizzard-context:/architecture/crash-correctness.md``'s recorded exemptions.
 """
 
 from __future__ import annotations

@@ -2,18 +2,14 @@
 
 A **dependency-free** domain package — no FastAPI, no SQLAlchemy (``bzh:domain-core``):
 the role/permission model is a domain rule, so it does not live in
-:mod:`blizzard.foundation` (whose own module contract states it carries "no domain
-rules"). It is placed in the hub's phase (#91) so the runner's later SSO federation
-slice (#95) *imports* this exact module rather than reforking a copy — the epic
-invariant that reshaping a role touches only :data:`ROLE_PERMISSIONS`, never a call
-site on either daemon.
+:mod:`blizzard.foundation`. It is placed in the hub's phase (#91) so the runner's later
+SSO federation slice (#95) imports this exact module rather than reforking a copy.
 
 :class:`Role` is a total order — ``superuser > admin > contributor > guest > pending`` —
 carried declaratively as :data:`ROLE_PERMISSIONS`, a **static, code-only map**
 (never DB-stored — the epic's out-of-scope guardrail). :class:`Permission` is a
-string-newtype (``NewType("Permission", str)``) rather than an enum: the wire and the
-route dependency (``hub/api/auth_session.py``'s ``require(<permission>)``) both want a
-plain string a route can name literally, and a newtype gives that a static type distinct
+string-newtype (``NewType("Permission", str)``) rather than an enum: routes and the wire
+both want a plain string named literally, and a newtype gives that a static type distinct
 from an arbitrary ``str`` without an enum's member-identity ceremony.
 """
 
@@ -36,8 +32,7 @@ class Role(StrEnum):
 Permission = NewType("Permission", str)
 
 #: All board reads, including the SSE stream (``GET /api/events/stream``) — belongs to
-#: ``guest``+. Reads are gated one tier below writes (superseding issue #91's "reads are
-#: gated exactly like writes": ``guest`` now reads everything and mutates nothing).
+#: ``guest``+.
 FLEET_VIEW = Permission("fleet:view")
 #: Ingest a chunk (``POST /chunks``).
 CHUNK_INGEST = Permission("chunk:ingest")
@@ -56,9 +51,9 @@ RUNNER_PAUSE = Permission("runner:pause")
 #: Mint, edit (retire/enable), or otherwise author a workflow graph.
 GRAPH_EDIT = Permission("graph:edit")
 #: Administer users and their roles (#94) — the permission the admin page is gated on.
-#: Held by ``admin``+ (an ``admin`` *uses* the admin page): the epic's "only
-#: ``superuser`` may grant ``admin``" is a **per-action rule inside** user management
-#: (landing with the role-assignment route in #94), not the tier of this permission.
+#: Held by ``admin``+ (an ``admin`` *uses* the admin page): the epic's "only ``superuser``
+#: may grant ``admin``" is a per-action rule inside user management, not the tier of this
+#: permission (pinned by tests/test_auth_core.py::test_user_manage_is_admin_and_above).
 USER_MANAGE = Permission("user:manage")
 
 #: ``guest`` — read everything, mutate nothing. The whole "read-only" story is this one
@@ -85,18 +80,12 @@ _ADMIN_PERMISSIONS: frozenset[Permission] = _CONTRIBUTOR_PERMISSIONS | frozenset
     {RUNNER_PAUSE, GRAPH_EDIT, USER_MANAGE}
 )
 
-#: ``superuser`` holds every permission that exists. In #91 that is exactly the
-#: ``admin`` bundle: the one thing ``superuser`` can do that ``admin`` cannot — **grant
-#: the ``admin`` role** — is a per-action rule inside the (not-yet-landed, #94)
-#: role-assignment route, not a distinct permission bit, so the two bundles are equal
-#: here. A later permission that is genuinely superuser-only would be added to this set.
+#: ``superuser`` holds every permission that exists — in #91 that is exactly the
+#: ``admin`` bundle (see :data:`USER_MANAGE`'s note on the grant-admin rule).
 _SUPERUSER_PERMISSIONS: frozenset[Permission] = _ADMIN_PERMISSIONS
 
 #: The static role -> permission-bundle map (``bzh:domain-core``) — code, never DB.
-#: ``pending`` holds no permissions at all (the lobby: only ``GET /api/me``, logout, and
-#: the login surface are reachable, and those are public/self routes, not
-#: permission-gated). ``guest`` holds exactly :data:`FLEET_VIEW` — read everything,
-#: mutate nothing.
+#: ``pending`` holds no permissions at all; ``guest`` holds exactly :data:`FLEET_VIEW`.
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.PENDING: frozenset(),
     Role.GUEST: _GUEST_PERMISSIONS,
@@ -107,6 +96,5 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
 
 
 def expand(role: Role) -> frozenset[Permission]:
-    """The full, expanded permission set a ``role`` carries — the one seam ``require()``
-    and ``GET /api/me`` both call, so a role's bundle is computed in exactly one place."""
+    """The full, expanded permission set a ``role`` carries — computed in exactly one place."""
     return ROLE_PERMISSIONS[role]

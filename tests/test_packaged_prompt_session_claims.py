@@ -1,19 +1,11 @@
-"""No packaged node prompt claims "cold eyes" unless its node actually runs fresh (unit tier).
+"""No packaged node prompt claims "cold eyes" unless its node actually runs fresh (unit
+tier, issue #148).
 
-Issue #148: ``pre-push``'s prompt opened by telling the worker it was working "with cold
-eyes", while the node is ``session: resume:build`` (basic) / ``resume:verify`` (advanced) —
-the prompt asserted the opposite of its own node's configured session, and of the rationale
-comment sitting on that very ``session:`` line. A worker told it holds no prior context
-re-learns the codebase it is standing in, and triages the rebase as if it had never seen the
-work; nothing in graph loading or validation objects, because a prompt is opaque prose to the
-parser.
-
-This guard ties the claim to the configured value: for every packaged ``*/graph.yaml``, a
-runner node whose **main** prompt says "cold eyes" must be ``session: fresh``. Scope is the
-main prompt deliberately — a judgement prompt describes the nodes its choices route *to*
-(``pre-push.judgement.md`` correctly says the rebased result "rides back into review for cold
-eyes"), so that text is a statement about another node, not a claim about the worker reading
-it.
+For every packaged ``*/graph.yaml``, a runner node whose **main** prompt says "cold
+eyes" must be ``session: fresh``; nothing in graph loading or validation objects,
+because a prompt is opaque prose to the parser. Scope is the main prompt deliberately
+— a judgement prompt describes the nodes its choices route *to*, which is a statement
+about another node, not a claim about the worker reading it.
 
 Runs under the ``blizzard:unit-test`` tier (``uv run pytest -m unit``), alongside the
 declaration-CLI prompt guards in ``test_packaged_prompts_attach.py``.

@@ -4,10 +4,9 @@
 Enforcement is structural, not per-route: ``dependencies=[Depends(require_runner_principal)]``
 on this router (attached once in :func:`~blizzard.hub.app.create_app`, not repeated per
 route) means a fleet verb is authenticated *because of where it is mounted* — the same
-``warn``/``enforce`` rollout posture :mod:`blizzard.hub.api.auth` already defines
-(``warn``, the default, logs a missing/invalid token and lets the call proceed;
-``enforce`` rejects it with 401). A route whose body/path declares its own ``runner_id``
-additionally calls :func:`~blizzard.hub.api.auth.assert_owns` against the resolved
+rollout posture :mod:`blizzard.hub.api.auth` already defines. A route whose body/path
+declares its own ``runner_id`` additionally calls
+:func:`~blizzard.hub.api.auth.assert_owns` against the resolved
 principal, so a fleet write for another runner's chunk/registration is rejected (403
 under ``enforce``, warn-logged under ``warn``) rather than merely authenticated.
 
@@ -15,8 +14,8 @@ Two shapes of route live here:
 
 * **Moved wholesale** — a verb only a runner ever called (claim, completion, decision,
   lease, escalation, envelope read, event push, registration, heartbeat, the runner's own
-  pull read, the hub-command-node advance) is defined here outright; it no longer exists
-  at its old anonymous path. ``hub-advance`` (#65/#66) postdates issue #87's own route
+  pull read, the hub-command-node advance) is defined here outright.
+  ``hub-advance`` (#65/#66) postdates issue #87's own route
   inventory — driven by the runner's ADVANCE poll (``ctx.hub.hub_advance``), never the
   board or CLI, so it belongs here on the same "runner-only write" grounds as the rest of
   this list.
@@ -125,14 +124,12 @@ def _resolve_intended_migration_target(services: HubServices, chunk: Chunk) -> G
     retired.
 
     Resolved here, at the edge, so :class:`~blizzard.hub.domain.apply.ApplyService` stays
-    a pure taker-of-objects holding no graph repo of its own (``bzh:domain-takes-objects``),
-    the same convention :func:`_resolve_cross_graph_target` follows for a #90 migration
-    edge's target. Unlike that helper's name lookup, the intent stores a resolved graph
-    **id** (request-time resolution, ``EditService``/``chunks.py``), so this resolves by
-    id via ``services.graphs.get`` and folds a retired target into the same ``None``
-    bucket ``get_enabled_by_name`` already does for #90 — the consult (``apply.py``)
-    treats an unresolvable target as a deferred no-op: the transition applies unchanged
-    and the intent stays set for the operator to see on ``GET``."""
+    a pure taker-of-objects holding no graph repo of its own (``bzh:domain-takes-objects``).
+    The intent stores a resolved graph **id** (request-time resolution,
+    ``EditService``/``chunks.py``), so this resolves by id and folds a retired target into
+    the same ``None`` bucket — the consult (``apply.py``) then treats it as a deferred
+    no-op, leaving the intent set for the operator to see on ``GET`` (pinned by
+    ``tests/test_intended_migration_apply.py::test_forced_target_retired_at_consult_is_skipped``)."""
     intent = chunk.intended_migration
     if intent is None:
         return None
@@ -147,15 +144,12 @@ def _resolve_follow_latest_target(
 ) -> Graph | None:
     """The newer same-name mint a follow-latest chunk drifts to, or ``None`` (issue #164).
 
-    Migration is otherwise explicit and per-chunk: an operator sets a standing
-    ``intended_migration``, and when they name a *graph name* the hub resolves it to the
-    newest enabled mint **at request time** and stores the resolved id, so a later mint
-    under the same name never silently redirects the chunk. That safety default is right
-    for a targeted move, but it means every workflow edit strands the fleet on old mints
-    until each chunk is migrated by hand. ``follow_latest`` is the standing policy that
-    says "chunks on this graph always drift to the newest enabled mint of the same name",
-    resolved here, at the edge, so :class:`~blizzard.hub.domain.apply.ApplyService` stays
-    a taker-of-objects (``bzh:domain-takes-objects``) like its two sibling resolvers.
+    ``follow_latest`` is the standing policy that says "chunks on this graph always drift
+    to the newest enabled mint of the same name" — the counterweight to migration being
+    otherwise explicit and per-chunk, which strands the fleet on old mints until each
+    chunk is moved by hand. Resolved here, at the edge, so
+    :class:`~blizzard.hub.domain.apply.ApplyService` stays a taker-of-objects
+    (``bzh:domain-takes-objects``) like its two sibling resolvers.
 
     ``None`` — the policy is a no-op, and the transition applies unchanged — in every one
     of these cases:
@@ -163,7 +157,9 @@ def _resolve_follow_latest_target(
     * the chunk carries an explicit ``intended_migration``. The explicit intent wins and
       the policy is **not consulted at all**, including when that intent is an ``auto``
       that falls through this transition for want of a name match: an operator who aimed a
-      chunk somewhere has said where it goes.
+      chunk somewhere has said where it goes (pinned by
+      ``tests/test_follow_latest_policy.py::test_an_explicit_intent_takes_precedence_over_the_policy``
+      and its ``..._auto_intent_that_falls_through_still_blocks_the_policy`` sibling).
     * the effective policy resolves ``false`` — the graph's own tri-state, else the hub
       default (:func:`~blizzard.hub.domain.graph.resolve_follow_latest`).
     * the name resolves to nothing, or to a mint that is not strictly newer than the
@@ -186,17 +182,14 @@ def _resolve_cross_graph_target(services: HubServices, graph: Graph, submission:
     or its ``graph:<name>`` names no enabled graph.
 
     Resolved at the edge so :class:`~blizzard.hub.domain.apply.ApplyService` stays a pure
-    taker-of-objects holding no graph repo (``bzh:domain-takes-objects``, MUST-FIX 2), the
-    codebase's own "controller resolves the graph, passes it in" convention. Deliberately
-    **total** (A3): a missing node/edge/choice returns ``None`` — it never raises, since
-    those are ``apply()``'s authoritative ``_failure`` returns, not a second validation
-    site that would 500 the controller. ``get_enabled_by_name`` folds a **retired**
-    target into this same ``None`` bucket (issue #101): a chunk mid-workflow taking a
-    migration edge whose named target has since been retired degrades to the same
-    apply-failure path as a target that was never minted, rather than a distinct
-    refusal — an explicit choice, not an oversight, though it means a retired
-    cross-graph target is indistinguishable from an unminted one from the chunk's own
-    apply-failure detail."""
+    taker-of-objects holding no graph repo (``bzh:domain-takes-objects``). Deliberately
+    **total**: a missing node/edge/choice — and, via ``get_enabled_by_name``, a **retired**
+    target (issue #101) — returns ``None`` rather than raising, so ``apply()``'s
+    ``_failure`` returns stay the one authoritative failure path instead of a second
+    validation site 500ing the controller. The cost is that a retired target is
+    indistinguishable from an unminted one in the chunk's apply-failure detail. Pinned by
+    ``tests/test_migration_apply.py::test_an_unresolvable_cross_graph_target_escalates_to_needs_human``
+    and ``::test_a_retired_cross_graph_target_escalates_to_needs_human_exactly_like_an_absent_one``."""
     from_node = graph.node_by_id(submission.from_node_id)
     if from_node is None:
         return None
@@ -417,8 +410,7 @@ def claim_route(
         conflict = RouteClaimConflict(chunk_id=claim.chunk_id, held_by_runner_id=exc.held_by_runner_id)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
     # Hardcoded literal, not a derivation — a fresh claim always lands the chunk at
-    # `running` and re-deriving here would be a behavior change outside this change's
-    # scope (see `chunk_events.publish_chunk_changed`'s docstring).
+    # `running` (see `chunk_events.publish_chunk_changed`'s docstring).
     chunk_events.publish_chunk_changed(
         services,
         chunk.chunk_id,
@@ -713,13 +705,10 @@ def register_runner(
 ) -> RunnerRegistrationResponse:
     """Register a runner — runner id + workspace binding; idempotent upsert.
 
-    Runner-auth checked (issue #86a): ``warn`` (the default) logs and proceeds on a
-    missing/invalid/mismatched token; ``enforce`` rejects. Issue #95's optional
-    ``url``/``redirect_uris`` extension rides the same authenticated write — this route
-    sits behind ``require_runner_principal`` at the router level
-    (``fleet_router``'s own ``dependencies=``), so an unauthenticated attempt to set or
-    change a runner's federation identity is rejected exactly like every other fleet
-    write, once #86 is enforced."""
+    Runner-auth checked (issue #86a) at the router level (``require_runner_principal``).
+    Issue #95's optional ``url``/``redirect_uris`` extension rides the same
+    authenticated write, rejected exactly like every other fleet write once #86 is
+    enforced."""
     assert_owns(principal, request.runner_id, mode=_mode(http_request))
     first = services.fleet.register(
         request.runner_id,

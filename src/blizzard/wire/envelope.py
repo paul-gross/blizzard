@@ -7,8 +7,7 @@ handed back by the claim response, by ``POST /chunks/{id}/completions`` (the nex
 node), and by the idempotent ``GET /chunks/{id}/envelope`` re-read.
 
 The **apply-response** is the completion's reply: the next envelope, or a signal
-that a hub node took over, or a failure — the advancement checkpoint that lets the
-runner continue in place.
+that a hub node took over, or a failure — the advancement checkpoint.
 """
 
 from __future__ import annotations
@@ -43,8 +42,8 @@ class EnvelopeChoice(BaseModel):
     name: str
     description: str
     # Whether this choice is gated on green checks (issue #114) — see
-    # ``blizzard.hub.domain.graph.Choice.requires_checks``. The runner's local gate reads
-    # this off the selected choice; default `False` keeps every existing choice ungated.
+    # ``blizzard.hub.domain.graph.Choice.requires_checks``. Default `False` leaves a
+    # choice ungated.
     requires_checks: bool = False
 
 
@@ -52,8 +51,7 @@ class RotatePolicyView(BaseModel):
     """The declared session's rotation bounds (issue #144).
 
     The wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`, carried on
-    :class:`NodeConfig` so the runner can decide at spawn time whether the pool's head is
-    still resumable. ``max_invocations`` counts **harness invocations** (spawn, resume,
+    :class:`NodeConfig`. ``max_invocations`` counts **harness invocations** (spawn, resume,
     judge, nudge), not node-steps — one node-step burns two or three of them."""
 
     max_context_tokens: int | None = None
@@ -74,11 +72,9 @@ class NodeConfig(BaseModel):
     session_source: str | None = None
     # The **effective** session declaration for this node-step (issue #144), resolved
     # hub-side because the hub owns both halves of the precedence it settles: a graph's
-    # `sessions:` declaration over the chunk's own defaults, field by field. The runner
-    # applies only its own default as the last resort, so it never needs the graph.
+    # `sessions:` declaration over the chunk's own defaults, field by field.
     #
-    # ``session_name`` is the declared pool this node-step belongs to — the key the
-    # runner's pool-head lookup and its `lease_context` stamp use. ``None`` for a node
+    # ``session_name`` is the declared pool this node-step belongs to. ``None`` for a node
     # whose `session:` names a NODE (`resume:<node>`) or is bare: those carry no pool, but
     # still carry the chunk's defaults below, which is the precedence rule's intended
     # reach.

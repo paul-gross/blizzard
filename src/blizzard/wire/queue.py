@@ -1,9 +1,8 @@
 """The ready-queue peek — the read a runner's FILL step does before a claim.
 
 ``GET /api/queue`` (and the runner's fleet-side ``GET /api/fleet/queue/peek``) returns
-the hub-ordered ready queue (chunks with no live route), read-only. FILL peeks it,
-acquires environments for a candidate, then claims via ``POST /routes``. The ordering
-mechanism is the queue-ordering open question; order derives from appended facts.
+the hub-ordered ready queue (chunks with no live route), read-only. Order derives from
+appended facts.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ class QueuePeekEntry(BaseModel):
 
 
 class QueuePeekResponse(BaseModel):
-    """The ready queue as peeked by FILL, in the hub's explicit order."""
+    """The ready queue, in the hub's explicit order."""
 
     entries: list[QueuePeekEntry] = []
 
@@ -54,7 +53,7 @@ class QueuePositionRequest(BaseModel):
 
 
 class ChunkGroupRequest(BaseModel):
-    """Merge unacquired chunks into one — the board's Group control.
+    """Merge unacquired chunks into one.
 
     ``merge_chunk_ids`` are the ready chunks folded into the path's survivor chunk; the
     survivor absorbs the union of their work refs and the merged chunks are discarded as

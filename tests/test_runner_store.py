@@ -518,8 +518,7 @@ def test_attachments_for_lease_is_scoped_per_lease(tmp_path):  # type: ignore[no
 @pytest.mark.unit
 def test_session_preamble_fingerprint_is_none_for_an_unrecorded_session(tmp_path):  # type: ignore[no-untyped-def]
     """The back-compat read (issue #149): a session nothing was ever recorded for reads
-    back ``None``, which is what makes the renderer send all three layers in full — the
-    pre-change behaviour every pre-existing session inherits with no data migration."""
+    back ``None`` — every pre-existing session inherits this with no data migration."""
     store = _store(tmp_path)
     assert store.session_preamble_fingerprint("sess_never_seen") is None
 

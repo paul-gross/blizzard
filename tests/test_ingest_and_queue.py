@@ -94,13 +94,10 @@ def test_ingest_batches_multiple_pointers_into_one_chunk(tmp_path: Path) -> None
 
 
 def test_list_row_is_board_legible(tmp_path: Path) -> None:
-    # The fleet list resolves the current node's human name and each pointer's
-    # `{source}#{ref}` label server-side, so the board renders `build` and `default#1`
-    # without reassembly. A pointer naming no configured source degrades
-    # to a null label/web_url rather than erroring — minted straight through the domain
-    # service (ingest's 422 already rejects an unconfigured source at the front door, so
-    # a board row carrying one can only arise from a chunk minted before its source was
-    # dropped from config).
+    # Each pointer's `{source}#{ref}` label is resolved server-side. A pointer naming no
+    # configured source degrades to a null label/web_url rather than erroring — minted
+    # straight through the domain service, since ingest's 422 already rejects an
+    # unconfigured source at the front door.
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     graph = hub.services.graph_mint.ensure_default(
@@ -118,8 +115,6 @@ def test_list_row_is_board_legible(tmp_path: Path) -> None:
 
 
 def test_ingest_rests_not_ready_and_promote_makes_it_claimable(tmp_path: Path) -> None:
-    # Ingest mints not-ready: visible on the fleet list, absent from the ready queue,
-    # so no runner claims it. Promoting flips it to ready and admits it to the queue.
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "not_ready"
@@ -163,9 +158,8 @@ def test_a_paused_chunk_still_holds_its_pointer_live(tmp_path: Path) -> None:
     """Pausing must not read as terminal (issue #46): ``_TERMINAL`` stays ``{stopped, done}``.
 
     The live-pointer conflict is keyed on the holder being non-terminal, so admitting
-    ``paused`` to ``_TERMINAL`` would let this re-ingest mint a **second** chunk for the same
-    issue — two chunks racing one pointer, from an operator merely pressing pause. Nothing
-    else pins that: pause is a new status and every other test predates it.
+    ``paused`` to ``_TERMINAL`` would let this re-ingest mint a **second** chunk for the
+    same issue.
     """
     hub = build_hub(tmp_path)
     first = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]

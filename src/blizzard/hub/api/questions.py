@@ -9,12 +9,12 @@ loser) — the board's person answering it; and ``GET /questions`` lists the ope
 writes to :class:`~blizzard.hub.domain.questions.QuestionService`
 (``bzh:controller-read-only``).
 
-The runner's own answer poll (``GET /questions/{id}``) moved to the
-runner-authenticated fleet router (:mod:`blizzard.hub.api.fleet`, issue #87) — no board
-or CLI caller ever reached it. :func:`question_view` stays here, public, so the fleet
-router's own poll reuses this module's rendering rather than duplicating it.
-``dependencies=[Depends(reject_runner_principal)]`` rejects a runner's bearer token on
-this router rather than treating it as anonymous-plus-credential.
+The runner's own answer poll (``GET /questions/{id}``) lives on the
+runner-authenticated fleet router (:mod:`blizzard.hub.api.fleet`, issue #87).
+:func:`question_view` stays here, public, so the fleet router's own poll reuses this
+module's rendering rather than duplicating it.
+``dependencies=[Depends(reject_runner_principal)]`` confines a runner's bearer token to
+the fleet router.
 """
 
 from __future__ import annotations

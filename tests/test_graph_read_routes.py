@@ -113,8 +113,7 @@ def test_list_graphs_marks_newest_per_name_effective(tmp_path: Path) -> None:
     assert by_id[new_id]["entry_node_id"]
     assert by_id[new_id]["created_at"]
 
-    # Newest-first ordering — the client groups by name and renders lineage
-    # newest-first without re-deriving the rule.
+    # Newest-first ordering — the route's own contract.
     created_ats = [row["created_at"] for row in body]
     assert created_ats == sorted(created_ats, reverse=True)
 

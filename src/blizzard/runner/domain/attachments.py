@@ -2,17 +2,8 @@
 
 Behind ``POST /api/leases/{lease_id}/attachments``: a worker durably submits an
 explicit artifact for a ``produces:`` name, authorized by the lease token minted at
-its own spawn (Phase 1). :meth:`AttachmentService.attach` is the one place the write
-happens (``bzh:controller-read-only`` — the API edge resolves the lease to an object
-and delegates here rather than writing through a store it holds itself, mirroring
-:class:`~blizzard.runner.domain.takeover.TakeoverService` /
-:class:`~blizzard.runner.domain.requeue.RequeueService`).
-
-Nothing yet reads an attachment back to prefer it over the judgement assessment —
-that is completion assembly's own rewrite (Phase 3). This phase only makes the
-attach durable, single-transaction (``runner/store/internal/sqlalchemy_store.py``'s
-``record_attachment``) so it survives a ``kill -9`` between the attach and whatever
-submission would otherwise read it back.
+its own spawn. :meth:`AttachmentService.attach` is the one place the write happens
+(``bzh:controller-read-only``).
 """
 
 from __future__ import annotations
@@ -24,14 +15,10 @@ from blizzard.runner.store.repository import IWriteRunnerStore, LeaseRecord
 
 __all__ = ["AttachmentRejected", "AttachmentService"]
 
-# The dangerous window criterion 3 names (issue #113): the attach row is durable — its
-# single committed txn (``record_attachment``) has returned — but the ``200`` has not, so
-# a ``kill -9`` here is exactly "a runner dies between the attach and whatever submission
-# would read it back". Recovery owes nothing but durability: the row is on disk, and a
-# later completion (Phase 3) / the recovering ADVANCE tick re-derives it via
-# ``attachments_for_lease``. Swept by ``tests/crash/test_kill9_sweep.py::
-# test_kill9_at_attach_crash_point`` (``bzh:crash-point-registry``); unarmed, ``reached()``
-# is one module-global compare.
+# The armed crash window (issue #113): the attach row is durable — its single committed
+# txn has returned — but the ``200`` has not. Recovery owes nothing but durability.
+# Swept by ``tests/crash/test_kill9_sweep.py::test_kill9_at_attach_crash_point``
+# (``bzh:crash-point-registry``).
 _CP_ATTACH_AFTER_RECORD = crashpoint(
     "attach.after-record.before-response",
     "runner recorded the attachment durably but has not returned 200 — a kill -9 here must not lose it",
@@ -70,6 +57,4 @@ class AttachmentService:
             content=content,
             attached_at=self._clock.now(),
         )
-        # The row is durable (the txn above committed) but the caller has not yet returned
-        # the 200 — criterion 3's kill-9 window (armed only under the crash sweep).
         _CP_ATTACH_AFTER_RECORD.reached()

@@ -49,22 +49,19 @@ def build_loop_context(
     The hub client is passed in so the caller owns the ``httpx.Client`` lifecycle
     (a tick opens and closes it; the daemon keeps one for the driver's lifetime).
 
-    ``workspace_prompt``/``runner_prompt`` are the caller's **already-resolved**
-    values (``RunnerConfig.resolved_workspace_prompt()``/``resolved_runner_prompt()``),
-    not re-derived here: both can raise ``ConfigError`` on a configured-but-missing
-    prompt file, and resolving them on the caller's own thread — before this ever runs
-    on :class:`PeriodicDriver`'s background thread — is what lets ``host`` turn that
-    into a startup ``ClickException`` instead of a silently-killed loop thread.
+    ``workspace_prompt``/``runner_prompt`` are the caller's **already-resolved** values,
+    not re-derived here: both can raise ``ConfigError`` on a configured-but-missing prompt
+    file, and resolving them on the caller's own thread is what lets ``host`` turn that into
+    a startup ``ClickException`` instead of a silently-killed loop thread. Pinned by
+    ``tests/test_pin_runner_loop.py::test_build_loop_context_uses_the_injected_prompts_and_never_re_derives_them``.
     """
     engine = create_engine_from_url(config.db_url)
     store = SqlAlchemyRunnerStore(engine)
     provider = WinterWorkspaceProvider(
         config.workspace_root, env_pool=config.workspace_envs, base_branch=config.base_branch
     )
-    # The envelope-less usage fallback's transcript read (issue #58) and the harness's
-    # own transcript source (blizzard#245) share one file layout — resolved once here,
-    # mirroring `runner/app.py`'s own construction of the panel's transcript seam
-    # (issue #29): `transcripts_root` empty means Claude Code's own default.
+    # Resolved once here for both readers (issue #58, blizzard#245; see also
+    # `runner/app.py`, issue #29): `transcripts_root` empty means Claude Code's own default.
     projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
     harness_transcript_source = ClaudeCodeTranscriptSource(
         projects_root, HarnessTranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
@@ -89,7 +86,7 @@ def build_loop_context(
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
         base_branch=config.base_branch,
-        env_capacity=len(config.workspace_envs),  # issue #69 — the board's slot-bar total
+        env_capacity=len(config.workspace_envs),  # issue #69
         public_url=config.public_url,  # issue #95 — this runner's own federation identity
         redirect_uris=config.redirect_uris,
         local_api_url=config.local_api_url,
@@ -114,8 +111,7 @@ def build_loop_context(
         harness=harness,
         process=LinuxProcessProbe(),
         worktree_git=SubprocessWorktreeGit(),
-        # The check-runner seam (issue #114) — runs a node's `checks:` at worker exit,
-        # its child env built from the same worker-env allowlist the harness children use.
+        # The check-runner seam (issue #114) — see `runner/loop/checks.py`.
         check_runner=SubprocessCheckRunner(env_passthrough=config.worker_env_passthrough),
         config=loop_config,
         # The same source just injected into `harness` above, declared here too so the
@@ -139,10 +135,8 @@ def run_single_tick(config: RunnerConfig) -> None:
 def mark_resume_intents_on_shutdown(config: RunnerConfig) -> int:
     """Mark in-flight leases for restart-resume as the daemon exits gracefully.
 
-    Store-only — it needs neither the hub nor the workspace provider — so it opens just
-    the runner store and delegates the which-leases decision to :func:`mark_resume_intents`.
-    Called from the ``host`` command's shutdown path (a graceful SIGTERM lets uvicorn return
-    and this run); an ungraceful ``kill -9`` never reaches it, which is the intended scope
+    Store-only — no hub, no workspace provider. Called from the ``host`` command's graceful
+    shutdown path; an ungraceful ``kill -9`` never reaches it, which is the intended scope
     boundary."""
     engine = create_engine_from_url(config.db_url)
     store = SqlAlchemyRunnerStore(engine)
@@ -157,11 +151,8 @@ def mark_crash_resume_intents_on_startup(config: RunnerConfig) -> int:
 
     The ungraceful counterpart of :func:`mark_resume_intents_on_shutdown`: an involuntary
     ``kill -9`` / OOM / reboot never ran the shutdown marker, so ``host`` calls this once
-    before starting the loop to find the interrupted sessions and route them to the same
-    startup RESUME. It needs the runner store plus a process probe (the liveness check that
-    tells a killed worker from an orphaned-but-alive one) — no hub, no workspace provider —
-    so it opens just the store and delegates the which-leases decision to
-    :func:`mark_crash_resume_intents`."""
+    before starting the loop. Needs the runner store plus a process probe — no hub, no
+    workspace provider."""
     engine = create_engine_from_url(config.db_url)
     store = SqlAlchemyRunnerStore(engine)
     try:
@@ -181,12 +172,11 @@ class PeriodicDriver:
     def __init__(self, config: RunnerConfig, *, interval_seconds: float) -> None:
         self._config = config
         self._interval = interval_seconds
-        # Resolved eagerly here, on the constructing (``host``) thread, rather than
-        # inside `_run` on the background loop thread it starts: a configured-but-
-        # missing prompt file raises ``ConfigError`` from these calls, so the
-        # constructor call in ``host`` — which turns it into a ``ClickException``
-        # before any socket binds — is where that failure now surfaces, not a
-        # silently-killed loop thread while uvicorn keeps serving ``/api/health`` 200s.
+        # Resolved eagerly here, on the constructing (``host``) thread, rather than inside
+        # `_run` on the background loop thread: a configured-but-missing prompt file must
+        # fail the daemon's startup, not silently kill the loop thread while uvicorn keeps
+        # serving. Pinned by `tests/test_runner_loop_build.py::
+        # test_periodic_driver_resolves_prompts_eagerly_at_construction`.
         self._workspace_prompt = config.resolved_workspace_prompt()
         self._runner_prompt = config.resolved_runner_prompt()
         self._stop = threading.Event()
@@ -199,14 +189,11 @@ class PeriodicDriver:
     def stop(self) -> None:
         """Signal the loop to stop and wait for any in-flight tick to finish before returning.
 
-        The join is **unbounded** on purpose: the graceful-shutdown resume marking runs
-        right after this returns and must not race a live tick writing the same store. A tick
-        cannot run forever — every seam it touches is timeout-bounded (the hub client's
-        ``_HTTP_TIMEOUT``), so the in-flight tick drains in at most about one tick's work and the
-        thread then exits on the ``_stop`` check. systemd's ``TimeoutStopSec`` is the ultimate
-        backstop: a wedged tick is SIGKILLed, which is simply the ungraceful-crash path (the
-        unmarked workers fall back to REAP). A fixed timeout here, by contrast, could return while
-        a slow tick was still running and let the marking race it."""
+        The join is **unbounded** on purpose: the graceful-shutdown resume marking runs right
+        after this returns and must not race a live tick writing the same store, which a fixed
+        timeout would allow. A tick cannot run forever — every seam it touches is
+        timeout-bounded — and systemd's ``TimeoutStopSec`` is the backstop: a wedged tick is
+        SIGKILLed, i.e. the ungraceful-crash path REAP already recovers."""
         self._stop.set()
         self._thread.join()
 

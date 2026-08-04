@@ -329,8 +329,7 @@ def _json_list(value: str | None) -> list[str]:
     """Decode a JSON-encoded ``list[str]`` node column (``checks``).
 
     ``None`` (a row predating the graph-node-produces-checks revision, or a fresh
-    column default) reads as the empty list — the same value the walking skeleton
-    hardcoded before these were round-tripped."""
+    column default) reads as the empty list."""
     return [str(x) for x in json.loads(value)] if value else []
 
 

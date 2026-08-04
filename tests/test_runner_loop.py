@@ -193,8 +193,7 @@ def test_spawn_preamble_carries_lease_and_local_api(tmp_path):  # type: ignore[n
 def test_route_token_never_reaches_the_worker_preamble_or_prompt(tmp_path):  # type: ignore[no-untyped-def]
     """Containment (issue #84a): the route token lives only in the runner store and
     stamped outbound payloads — never in ``WorkerPreamble``, so it can never reach the
-    worker's environment or its rendered prompt (``WorkerPreamble`` carries no such
-    field by construction; this pins the behavior, not just the shape)."""
+    worker's environment or its rendered prompt."""
     store = _store(tmp_path)
     hub = FakeHub()
     env = _build_envelope()
@@ -354,10 +353,10 @@ def test_fill_conflict_releases_and_does_not_bind(tmp_path):  # type: ignore[no-
 
 @pytest.mark.unit
 def test_fill_paused_denial_releases_and_stops_filling(tmp_path):  # type: ignore[no-untyped-def]
-    """A 403 (issue #44) is a distinct outcome from a 409 conflict: the hub's registry
-    already has this runner paused, so the claim was refused outright rather than lost
-    to another runner — FILL releases the binding and stops trying further slots this
-    tick rather than keep racing claims the hub will refuse the same way."""
+    """A 403 (issue #44) is a distinct outcome from a 409 conflict: the claim was refused
+    outright rather than lost to another runner, so FILL releases the binding and stops
+    trying further slots this tick rather than keep racing claims that will be refused the
+    same way."""
     from blizzard.runner.loop.hub import RouteClaimOutcome
     from blizzard.wire.route import RouteClaimPausedDenial
 
@@ -462,14 +461,13 @@ def test_fill_respects_max_agents(tmp_path):  # type: ignore[no-untyped-def]
 @pytest.mark.unit
 def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path):  # type: ignore[no-untyped-def]
     """blizzard#202: FILL's crash reconciler (``_reconcile_interrupted_claims``) must not
-    fall through silently on a held binding whose chunk the hub now reports with no live
-    route in a status that is neither ``ready`` nor ``running`` (e.g. detached and stopped
-    hub-side) — before the fix, this shape matched no branch and the binding, plus the
-    environment slot, leaked indefinitely.
+    fall through silently on a held binding whose chunk the hub reports with no live route
+    in a status that is neither ``ready`` nor ``running`` (e.g. detached and stopped
+    hub-side) — an unmatched shape leaks the binding and its environment slot indefinitely.
     """
     store = _store(tmp_path)
     # A binding survives with no lease at all — the chunk's last lease already closed
-    # (e.g. `transitioned`), exactly the observed-in-production shape.
+    # (e.g. `transitioned`), the observed-in-production shape.
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkDetail(
@@ -553,10 +551,9 @@ def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path)
     moved ref — issue #143, Phase 4) is treated as *not covered*: the completion carries
     **no** ``git_commit`` artifact, which drives the Phase-2 kind-coverage nudge.
 
-    It is also *reported*. A clean ``False`` used to be silent, on the reasoning that
-    non-coverage was enough to catch it — which held right up until the coverage check
-    could not see the ``git_commit`` spec, at which point nothing was left to notice and
-    a chunk reached `done` having delivered nothing."""
+    It is also *reported*: non-coverage alone is not enough, because a coverage check that
+    cannot see the ``git_commit`` spec leaves nothing to notice and a chunk reaches `done`
+    having delivered nothing."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_git_commit_declaration(
@@ -594,24 +591,16 @@ def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path)
 
 @pytest.mark.unit
 def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path):  # type: ignore[no-untyped-def]
-    """The original bug (issue #143): with a leased repo worktree in detached HEAD,
-    the runner computed the branch to push as the literal string ``"HEAD"``
-    (``git rev-parse --abbrev-ref HEAD``) and ran ``git push --force-with-lease origin
-    HEAD``, which git refuses — wedging the tick loop forever. Phase 4 deleted that
-    inference and the push entirely: ADVANCE now drives only the read-only
-    ``verify(forge, branch, commit)`` against the worker's own DECLARED branch, read
-    from the durable declaration store — never anything derived from the worktree's own
-    ambient HEAD. A worktree the worker left detached (the exact state that used to
-    wedge) is therefore simply inert, not a wedge: this test never even models a real
-    git repo, because the runner no longer looks at one to find a branch name at all.
+    """ADVANCE drives only the read-only ``verify(forge, branch, commit)`` against the
+    worker's own DECLARED branch, read from the durable declaration store — never anything
+    derived from the worktree's ambient HEAD, which under a detached HEAD infers the
+    literal branch name ``"HEAD"`` and wedges the tick loop on a push git refuses
+    (issue #143). No real git repo is modelled, because no branch name is ever read off one.
 
-    Pinned structurally, not just behaviorally: neither :class:`IWorktreeGit` (the
-    seam's own Protocol) nor :class:`FakeWorktreeGit` (the fake this test injects,
-    standing in for the real subprocess-git adapter) carries a ``push``,
-    ``find_produced_artifacts``, or ``_current_branch`` method any longer — a
-    re-introduction of the old push-driven inference fails to typecheck against the
-    Protocol and raises ``AttributeError`` the instant this test's fake is asked to run
-    it, rather than silently passing."""
+    Pinned structurally as well: neither :class:`IWorktreeGit` nor
+    :class:`FakeWorktreeGit` carries a ``push``, ``find_produced_artifacts``, or
+    ``_current_branch`` method, so a re-introduced push-driven inference raises
+    ``AttributeError`` rather than silently passing."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_git_commit_declaration(
@@ -644,8 +633,7 @@ def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path):
     _chunk_id, submission = hub.completions[0]
     assert submission.artifacts[0].branch_name == "feature/worker-declared"
 
-    # Structural guard: none of the wedge's own machinery still exists on either the
-    # Protocol or the fake seam this test injects.
+    # Structural guard: neither the Protocol nor the injected fake carries the machinery.
     for missing_attr in ("push", "find_produced_artifacts", "_current_branch"):
         assert not hasattr(IWorktreeGit, missing_attr)
         assert not hasattr(wt, missing_attr)
@@ -983,8 +971,7 @@ def test_resume_with_unchanged_prose_elides_and_keeps_eliding(tmp_path):  # type
     The **third** spawn is the load-bearing one: it is what distinguishes digesting the
     resolved layer inputs from digesting the emitted output. Two spawns pass under either
     reading, because a fingerprint recorded off the collapse banner only misfires on the
-    spawn *after* the first elision — which on `advanced-development-workflow` means from
-    the second resume onward, at build, verify, pre-push, resolve and retrospective."""
+    spawn *after* the first elision."""
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -1127,10 +1114,9 @@ def test_an_announced_change_is_announced_once_and_then_elided(tmp_path):  # typ
 
     That false alarm is precisely what this issue exists to prevent, and it is the mirror of
     what `test_resume_with_a_whitespace_only_workspace_replace_announces_nothing` guards from
-    the other side. No existing test covers it: scenario 2's third spawn discriminates the
-    *digest source* but not the *write frequency* (with nothing changing, spawn 2's record is
-    byte-identical to spawn 1's, so skipping it is unobservable), and scenarios 3 and 4 change
-    something but stop at two spawns — one short of where a missing write shows."""
+    the other side. Scenario 2's third spawn discriminates the *digest source* but not the
+    *write frequency*; scenarios 3 and 4 change something but stop at two spawns — one short
+    of where a missing write shows."""
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -1216,15 +1202,10 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # ty
 @pytest.mark.unit
 def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path):  # type: ignore[no-untyped-def]
     """A node whose `produces:` is `[review-findings]` (a bare string, D1's `kind=asset`
-    normalization) drives **no** git-commit declaration, verify, or push at all — issue
-    #143's declare-and-verify model is entirely opt-in per repo the worker touches, and a
-    review-only worker never runs `blizzard runner artifact commit` for any repo. With no
-    declaration in the store, :func:`_verify_and_collect_git_commits`
-    (`git_commit_declarations_for_lease`) iterates zero times: ``verify`` is never
-    invoked, no ``GIT_COMMIT`` artifact is ever produced, and the node's findings ride
-    the asset attach/fallback path (:func:`_collect_asset_artifacts`) exactly as before
-    — proving the two paths (git-commit declare-and-verify vs. asset attach/fallback)
-    stay fully independent per node."""
+    normalization) drives **no** git-commit declaration or verify at all: with nothing
+    declared for the lease, ``verify`` is never invoked and no ``GIT_COMMIT`` artifact is
+    produced, while the node's findings still ride the asset attach/fallback path — the
+    two paths stay fully independent per node (issue #143)."""
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -1305,7 +1286,7 @@ def test_collect_asset_artifacts_multi_asset_node_does_not_alias_attached_and_un
     assert by_name["review-findings"].attached is True
     assert by_name["review-diary"].content == "the shared assessment"
     assert by_name["review-diary"].attached is False
-    # The exact bug: before this phase both names aliased to the same assessment string.
+    # The exact bug: the two names aliasing to the same assessment string.
     assert by_name["review-findings"].content != by_name["review-diary"].content
 
 
@@ -1329,9 +1310,7 @@ def test_collect_asset_artifacts_git_commit_precedence_over_an_attachment():  # 
 def test_collect_asset_artifacts_git_commit_spec_never_yields_a_phantom_asset():  # type: ignore[no-untyped-def]
     """A `git_commit`-kind `produces` spec is skipped by kind, not name — even when no
     git-commit artifact actually covers it (a build node whose worker declared nothing
-    yet). Before this fix, an uncovered `git_commit` spec's name fell through to the
-    `else` branch and was aliased to the judgement assessment as a bogus `commit`
-    ASSET on every build completion; this asserts the phantom cannot reappear."""
+    yet), so its name is never aliased to the judgement assessment as a phantom ASSET."""
     envelope = make_envelope(
         "ch_1",
         "build",
@@ -1771,13 +1750,11 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path):  # type: ignore[n
 @pytest.mark.unit
 def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path):  # type: ignore[no-untyped-def]
     """A lease escalated before it ever recorded a session (`session_id` still `None`)
-    composes no takeover command at all — with nothing to resume, there's no raw
-    command to build and so nothing for the wrapped verb (issue #251) to wrap, even
-    though `runner_dir` is configured and bindings exist. This is the one case where
-    the two fields track together: wrapped non-empty always implies raw non-empty,
-    but the reverse doesn't hold — see
-    `test_cost_cap_park_leaves_wrapped_empty_without_runner_dir` below, where an unset
-    `runner_dir` leaves wrapped empty alongside a present raw command."""
+    composes no takeover command at all — with nothing to resume there is no raw command
+    to build and so nothing for the wrapped verb (issue #251) to wrap, even though
+    `runner_dir` is configured and bindings exist. The converse case, wrapped empty
+    alongside a present raw command, is
+    `test_cost_cap_park_leaves_wrapped_empty_without_runner_dir` below."""
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -2113,11 +2090,9 @@ def test_cost_cap_raised_then_requeued_resumes_normally(tmp_path):  # type: igno
     pull(ctx)
     assert store.active_lease_for_chunk("ch_1") is None  # parked
 
-    # The operator raises the cap and requeues at the hub — the hub closes the escalation
-    # by supersession and the chunk's route stays live (`_has_live_route`), so it re-derives
-    # `running` with no active lease here: exactly FILL's interrupted-claim shape. The hub's
-    # current node is now `review` (the completion already applied before the park), so its
-    # idempotent envelope re-read reflects that.
+    # The operator raises the cap and requeues at the hub: `running` with a live route and
+    # no active lease here — exactly FILL's interrupted-claim shape. The hub's current node
+    # is `review`, the completion having applied before the park.
     hub.envelopes["ch_1"] = next_env
     hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=7.0, status=ChunkStatus.RUNNING, route_runner_id="r1")
     ctx2 = make_context(
@@ -2327,15 +2302,13 @@ def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: 
 def test_an_empty_resume_from_is_not_treated_as_a_resume(tmp_path):  # type: ignore[no-untyped-def]
     """The core's "is this a resume?" predicate matches the ADAPTER's (issue #149).
 
-    `claude_code_adapter` uses `if resume_from:` — an empty string falls through to
-    `--session-id`, i.e. a brand-new session. If the core used `is not None` it would look
-    up a fingerprint for `""` and could elide, handing a session that has never seen the
-    prose a line saying its standing instructions are unchanged.
+    The adapter treats an empty `resume_from` as a brand-new session. A core keyed on
+    `is not None` would instead look up a fingerprint for `""` and could elide, handing a
+    session that has never seen the prose a line saying its standing instructions are
+    unchanged.
 
-    Not reachable through today's callers (`_spawn_attempt` always passes a uuid
-    `session_hint`, and `latest_session_id` returns a real id or `None`), so this drives
-    `_spawn_attempt` directly — the point is to pin the two predicates together, since a
-    divergence that is safe only by accident is one refactor away from not being."""
+    Not reachable through today's callers, so this drives `_spawn_attempt` directly — the
+    point is to pin the two predicates together."""
     store = _CountingPreambleStore(_engine_for(tmp_path))
     hub = FakeHub()
     envelope = _build_envelope()

@@ -1,27 +1,15 @@
 """Board cost/usage live-over-SSE e2e — scenario 7 of the standing e2e smoke (issue #60).
 
 The browser half of the cost/usage feature: a **real Chromium**, driven by Playwright,
-over the **served mission-control board** (``blizzard hub host`` mounts the built Angular
-app at ``/``) wired to a live hub over a minted ``blizzard-mock`` fixture. Scenario 6
-(``test_board_browser_e2e``) proves the operator *controls* live over SSE; this scenario
-proves the **cost/usage figures** the P4 render adds are (a) rendered end to end from a
-real ``GET /api/chunks`` + ``GET /api/spend`` off the live hub, and (b) **updated
-live over SSE with no reload** when a fresh ``usage.recorded`` fact lands — the one claim
-only a real browser over the real SSE spine can make, and the one the component tiers
-(``chunk-detail-panel.spec.ts``, ``board-header.spec.ts``, ``board-shell.spec.ts``,
-``fleet-live.spec.ts``, ``test_usage_facts_ingest.py``) each prove only a slice of.
+over the **served mission-control board** wired to a live hub over a minted
+``blizzard-mock`` fixture. It asserts the **cost/usage figures** are (a) rendered end to
+end off the live hub, and (b) **updated live with no reload** when a fresh
+``usage.recorded`` fact lands — the card's cost badge, the header's spend-today figure,
+and the open detail dock's total all moving in place.
 
-The live path exercised: a usage fact arrives at ``POST /api/fleet/events`` (``kind:
-usage.recorded``), the hub re-broadcasts ``chunk-changed`` over ``GET /api/events/stream``
-(SSE), the ``FleetLiveUpdates`` spine invalidates the chunk read **and** the fleet
-spend-since read (``hubFleetSpendKey``), and the board re-derives — the card's cost badge,
-the header's spend-today figure, and the open detail dock's total all move **in place**.
-
-No runner is driven: the chunk is claimed straight through ``POST /api/fleet/routes`` (the same
-claim the runner's FILL makes) so it derives ``running`` and shows on the board, then usage
-facts are pushed straight through the hub's own ``POST /api/fleet/events`` — the runner's real
-store-and-forward destination. That keeps the scenario about the *render + SSE* surface
-this phase added, not a re-proof of the reconciliation loop scenario 6 already carries.
+No runner is driven: the chunk is claimed straight through ``POST /api/fleet/routes`` and
+usage facts pushed straight through ``POST /api/fleet/events``, keeping the scenario about
+the render + SSE surface rather than re-proving the reconciliation loop scenario 6 carries.
 
 It is the **e2e tier**: it needs the full live stack, the sibling ``blizzard-mock``
 worktree, a local winter source, and an installed Chromium, so it is **skipped unless
@@ -171,9 +159,9 @@ def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_a
                 expect(page.get_by_test_id("spend-today-value")).to_have_text("$0.00")
                 expect(card.get_by_test_id("card-cost")).to_have_count(0)
 
-                # --- A usage fact lands at the hub → chunk-changed over SSE → the board
-                #     re-derives with NO reload. Playwright's assertions poll, so these
-                #     succeed only once the SSE spine has invalidated and re-read. --------
+                # --- A usage fact lands at the hub → the board re-derives with NO reload.
+                #     Playwright's assertions poll, so these succeed only once the live
+                #     update has landed. ------------------------------------------------
                 _push_usage(
                     hub,
                     chunk_id=chunk_id,
@@ -187,8 +175,7 @@ def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_a
                 )
 
                 # The card's cost badge appears live, and the header spend-today figure
-                # moves off zero live — both off the same fact, invalidated together
-                # (hubChunkKey + hubFleetSpendKey).
+                # moves off zero live — both off the same fact.
                 expect(card.get_by_test_id("card-cost")).to_have_text("$0.42")
                 expect(page.get_by_test_id("spend-today-value")).to_have_text("$0.42")
 
@@ -214,7 +201,7 @@ def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_a
                 _push_usage(hub, chunk_id=chunk_id, node_id=node_id, seq=2, cost_usd=None)
 
                 # Marked live, no reload: the detail total, the card badge, and the header
-                # spend-today figure all gain the leading `~` (formatCost's lower-bound mark).
+                # spend-today figure all gain the leading `~` lower-bound mark.
                 expect(page.get_by_test_id("cost-partial-badge")).to_have_count(1)
                 expect(page.get_by_test_id("cost-total-usd")).to_contain_text("~$0.42")
                 expect(card.get_by_test_id("card-cost")).to_have_text("~$0.42")

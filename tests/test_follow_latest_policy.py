@@ -1,15 +1,8 @@
 """The standing follow-latest migration policy (issue #164).
 
-Migration is otherwise explicit and per-chunk: an operator sets an `intended_migration`,
-and a graph *name* is resolved to a mint id at request time so a later mint never
-silently redirects the chunk. Right for a targeted move — but it strands the fleet on old
-mints after every workflow edit. `follow_latest` is the standing policy that says "chunks
-on this graph always drift to the newest enabled mint of the same name", consulted at
-each transition through the same deferred path #124 built.
-
-Two tiers. The precedence rule itself (`resolve_follow_latest`) is a pure function and
-sits at the **unit** tier; the policy's effect on a real transition is driven over the
-live HTTP surface at the **component** tier, mirroring `test_intended_migration_apply.py`.
+Two tiers: the precedence rule (`resolve_follow_latest`) is a pure function at the unit
+tier; the policy's effect on a real transition is driven over the live HTTP surface at
+the component tier.
 """
 
 from __future__ import annotations
@@ -224,13 +217,8 @@ def test_an_explicit_intent_takes_precedence_over_the_policy(tmp_path: Path) -> 
 
 @pytest.mark.component
 def test_an_auto_intent_that_falls_through_still_blocks_the_policy(tmp_path: Path) -> None:
-    """The precedence is "an intent exists", not "an intent fired".
-
-    An `auto` intent whose target has no same-named destination node falls through and
-    stays set for the transition after. The policy must not step in behind it and move
-    the chunk somewhere the operator did not aim it — the chunk takes an ordinary
-    transition and both the intent and the policy are still there next time.
-    """
+    """The precedence is "an intent exists", not "an intent fired": a falling-through
+    `auto` intent still blocks the policy, and both stay set for next time."""
     hub = build_hub(tmp_path, follow_latest=True)
     chunk_id, build_node, _v2 = _arm(hub)
     pinned = hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"]
@@ -269,12 +257,9 @@ def test_a_newer_mint_that_is_retired_moves_nothing(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_the_policy_never_drags_a_chunk_backwards_onto_an_older_mint(tmp_path: Path) -> None:
-    """The chunk's own mint is retired, so name resolution answers with an *older* one.
-
-    `get_enabled_by_name` returns the newest **non-retired** mint, which after retiring
-    the chunk's own is v1 — behind it. Following that would rewind the chunk onto a
-    definition it has already moved past; following latest must only move forward.
-    """
+    """The chunk's own mint is retired, so name resolution answers with an *older* one
+    (`get_enabled_by_name` returns v1) — following latest must only move forward, never
+    rewind onto it."""
     hub = build_hub(tmp_path, follow_latest=True)
     v1 = _mint(hub, _YAML.format(name="default-delivery", prompt="Build."))
     hub.clock.advance(timedelta(minutes=1))
@@ -290,9 +275,8 @@ def test_the_policy_never_drags_a_chunk_backwards_onto_an_older_mint(tmp_path: P
 
 @pytest.mark.component
 def test_a_newer_mint_without_the_destination_node_lands_on_its_entry(tmp_path: Path) -> None:
-    # The entry-node fallback, and where the policy differs from a #124 `auto` intent:
-    # a standing policy has nothing to stay set *for*, so falling through would defer it
-    # forever on exactly the graph whose shape changed enough to drop the node.
+    # The entry-node fallback (#124): unlike an `auto` intent, the policy has nothing
+    # to stay set for, so it lands on the target's entry node instead of deferring.
     hub = build_hub(tmp_path, follow_latest=True)
     chunk_id, build_node, v2 = _arm(hub, newer=_YAML_NO_DELIVER)
 
@@ -347,18 +331,7 @@ def test_the_policy_and_the_retire_brake_are_independent(tmp_path: Path) -> None
 
 @pytest.mark.component
 def test_the_terminal_transition_is_never_hijacked_by_the_policy(tmp_path: Path) -> None:
-    """A chunk one submission from `done` must finish, not restart on the newer mint.
-
-    The regression this pins: `RESERVED_TERMINAL` is the string `"done"`, no graph has a
-    node named `done`, and the policy's landing rule is name-match-**else-entry** — so the
-    final transition resolved to the target's *entry node*, and a chunk that had finished
-    its whole workflow came back `ready` at `build` to run the entire thing again. The
-    consult sits ahead of `_respond`'s terminal check, so the policy won.
-
-    The mint ordering is the point: v2 appears while the chunk sits at `deliver`, so the
-    one transition left for it to take is the terminal one. That is the ordinary state of
-    affairs after any deploy that touches a graph, now that #146 reconciles automatically.
-    """
+    """A chunk one submission from `done` must finish, not restart on the newer mint."""
     hub = build_hub(tmp_path, follow_latest=True)
     v1 = _mint(hub, _YAML.format(name="default-delivery", prompt="Build."))
     chunk_id, build_node = _claimed_chunk(hub)
@@ -390,13 +363,8 @@ def test_the_terminal_transition_is_never_hijacked_by_the_policy(tmp_path: Path)
 
 @pytest.mark.component
 def test_a_policy_migration_is_attributed_to_the_policy_in_history(tmp_path: Path) -> None:
-    """The move is recorded as the policy's, not as an operator's.
-
-    All three migration paths write the same fact, and same-name is not a tell (`hub chunk
-    migrate` by name also resolves to a newer same-name mint). The policy is the only one
-    that moves a chunk with nobody having asked, so an operator finding a chunk on a graph
-    it did not start on has to be able to read *why* off the history.
-    """
+    """The move is recorded as the policy's, not as an operator's — same-name alone
+    isn't a tell, since `hub chunk migrate` by name also resolves to a newer mint."""
     hub = build_hub(tmp_path, follow_latest=True)
     chunk_id, build_node, _v2 = _arm(hub)
 
@@ -405,7 +373,6 @@ def test_a_policy_migration_is_attributed_to_the_policy_in_history(tmp_path: Pat
     facts = hub.services.chunks.load_facts(chunk_id)
     assert facts is not None
     assert [m.source for m in facts.migrations] == [MigrationSource.FOLLOW_LATEST]
-    # And it is surfaced, not merely stored — the board/CLI history renders it.
     migrations = hub.client.get(f"/api/chunks/{chunk_id}").json()["migrations"]
     assert [m["source"] for m in migrations] == ["follow-latest"]
 

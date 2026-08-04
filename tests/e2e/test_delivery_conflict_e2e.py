@@ -1,12 +1,8 @@
 """A conflict at the default graph's `deliver` node lands ZERO repos (#67).
 
-The e2e-tier proof that the default graph's authored `land_default.py` script's
-check-then-push atomicity is real: with the mock forge's `merge_conflict` lever armed
-for the fixture repo, the script's check stage finds the freshly-opened PR NOT cleanly
-mergeable and prints `conflict` before ever attempting a push — nothing lands, the
-bounce fact + envelope routes the chunk back to `build` (#64), and the route is
-retained (environments held, the runner keeps the chunk running rather than
-finalizing).
+With the mock forge's `merge_conflict` lever armed for the fixture repo, the default
+graph's `deliver` node finds the freshly-opened PR not cleanly mergeable — so nothing
+lands, the bounce routes the chunk back to `build` (#64), and the route is retained.
 
 Asserted at both ends over the full live stack (mock forge + mock harness + fixture
 workspace + real hub/runner), exactly like the sibling e2e scenarios:
@@ -112,9 +108,8 @@ def _drive_one_bounce(config: RunnerConfig, hub: httpx.Client, chunk_id: str, fe
     bounce is contention, not failure), so this stops on the FIRST bounce rather than
     driving to `done`, which a repo armed to always conflict would never reach.
 
-    Wrapped in :func:`_runner_api` (issue #143, Phase 4): the build node's scripted
-    push+declare needs a live local API to POST its ``artifact commit`` declaration to
-    — `_runner_config` binds a free `host`/`port` for exactly this.
+    Wrapped in :func:`_runner_api` so the build node's scripted push+declare has a live
+    local API to POST to (issue #143).
     """
     prior = dict(os.environ)
     os.environ.update(fenced_env)

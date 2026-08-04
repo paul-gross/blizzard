@@ -94,9 +94,7 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
     # detail round-trips.
     assert next(e for e in feed if e["kind"] == "attempt-failed")["detail"] == {"via": "advance"}
     # The projected escalation names its chunk — and, naming no runner, serves
-    # `runner_id: null` rather than `""` (issue #155: the board derives its runner-filter
-    # chip universe from these raw ids, and an empty string became a blank chip whose
-    # value collided with the "All" reset sentinel).
+    # `runner_id: null` rather than `""` (issue #155).
     projected = next(e for e in feed if e["kind"] == "needs-human")
     assert projected["chunk_id"] == "ch_c"
     assert projected["runner_id"] is None
@@ -121,11 +119,8 @@ def test_malformed_since_422s(tmp_path: Path) -> None:
 
 def test_naive_since_with_open_escalation_does_not_500(tmp_path: Path) -> None:
     # A well-formed but tz-NAIVE `since` (an offset-less ISO string — an ordinary client /
-    # date-picker input) must not 500 when the feed projects an open escalation. The
-    # escalation's `recorded_at` is tz-aware, so an un-coerced naive `since` raised
-    # `TypeError: can't compare offset-naive and offset-aware datetimes` at the projection
-    # filter; the store half was masked by `UtcDateTime`, so this only surfaced with an
-    # escalation present. The controller now coerces `since` with `as_utc`.
+    # date-picker input) must not 500 when the feed projects an open escalation, whose
+    # `recorded_at` is tz-aware.
     hub = build_hub(tmp_path)
     store = ChunkStore(hub.engine, hub.clock)
     t0 = hub.clock.now()

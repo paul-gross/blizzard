@@ -136,8 +136,7 @@ def test_pause_returns_200_writes_a_fact_and_the_detail_carries_it(tmp_path: Pat
     assert detail["status"] == "paused"
     # Pinned field by field against the clock the hub was built with — not compared to
     # itself. `set_at` is a wire timestamp, so it carries an explicit UTC offset
-    # (`bzh:utc-instants`); `assert_all_timestamps_utc` sweeps the whole payload the way
-    # the other route tests (test_gates, test_runner_leases_api, …) do.
+    # (`bzh:utc-instants`); `assert_all_timestamps_utc` sweeps the whole payload.
     assert detail["pause"] == {"by": "alice", "set_at": iso_utc(hub.clock.now())}
     assert_all_timestamps_utc(detail)
 
@@ -231,14 +230,8 @@ def _ask(hub, chunk_id: str, *, question_id: str = "qn_1") -> None:  # type: ign
 
 
 def test_pause_view_is_carried_even_when_the_status_hides_the_pause(tmp_path: Path) -> None:
-    """THE keystone for P4: paused **and** parked on a question — status hides it, `pause` does not.
-
-    `waiting_on_human` outranks `paused` in the derivation (§0.3 keeps the lever broad, so
-    this overlap is reachable by design), which makes `status` a **lossy** read of "is this
-    paused". `ChunkDetail.pause` is the runner's only non-lossy source, and P4 keys its
-    kill-and-park on it. Proven here off a real HTTP response, over the real store: if this
-    fails, P4 resumes paused workers on the answer (§3.3).
-    """
+    """``waiting_on_human`` outranks `paused` in the derivation, so `status` alone is a
+    **lossy** read of "is this paused" — `pause` stays legible behind it."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER])
     assert (
@@ -260,11 +253,7 @@ def test_pause_view_is_carried_even_when_the_status_hides_the_pause(tmp_path: Pa
 
 
 def test_resume_clears_the_pause_view_behind_a_hiding_status(tmp_path: Path) -> None:
-    """The inverse of the keystone: the still-parked chunk's `pause` clears on resume.
-
-    Guards the other half — an `open_pause` that ignored the newest fact's `paused` flag
-    would keep reporting a pause here forever, and P4 would never restart the worker.
-    """
+    """The inverse of the keystone: the still-parked chunk's `pause` clears on resume."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER])
     _ask(hub, chunk_id)

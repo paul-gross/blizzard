@@ -377,10 +377,9 @@ class FakeHarness:
         self.resolved_effort: str | None = None
         # The scripted `sample_external_subscription_usage` reply (issue #218, phase 2):
         # `external_usage_snapshot` is returned verbatim; `external_usage_raises`, when
-        # set, is raised instead — the fake's way of exercising the loop step's own
-        # second-line-of-defense `except Exception`, since the real adapter contract
-        # promises never to raise. `external_usage_calls` counts every invocation so a
-        # test can assert the cadence gate skipped (or did not skip) sampling.
+        # set, is raised instead, though the real adapter contract promises never to
+        # raise. `external_usage_calls` counts every invocation so a test can assert the
+        # cadence gate skipped (or did not skip) sampling.
         self.external_usage_snapshot = external_usage_snapshot
         self.external_usage_raises = external_usage_raises
         self.external_usage_calls = 0

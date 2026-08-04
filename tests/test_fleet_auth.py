@@ -164,11 +164,8 @@ def test_moved_read_verbs_are_gone_from_the_route_inventory(tmp_path: Path) -> N
     inventory rather than over HTTP because what a dead GET path serves depends on
     whether the SPA bundle is built (catch-all HTML) or not (a JSON 404).
 
-    ``/api/runners/{runner_id}`` is excluded from this table (issue #104, S5): it was
-    reintroduced as the operator's own detail read (``reject_runner_principal``-gated,
-    reusing ``runner_view``) — see ``test_runners_api.py`` — coexisting with the
-    runner-authenticated ``/api/fleet/runners/{runner_id}`` (the runner's own pull
-    read) at a different prefix."""
+    ``/api/runners/{runner_id}`` is excluded from this table (issue #104, S5) — see
+    ``test_runners_api.py``."""
     hub = build_hub(tmp_path)
     app = hub.client.app
     assert isinstance(app, FastAPI)

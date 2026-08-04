@@ -6,11 +6,11 @@ URL is the single portability knob (``bzh:sql-portable``): the sqlite default
 lives under the data dir, and postgres is the same config with a different URL.
 The bind port falls back to the winter service band's ``BZ_HUB_PORT`` (band +2).
 
-``[[work_source]]`` is the zero-or-more configured work sources: each a
-named, credentialed forge binding the composition root (``hub/work_sources/internal/factory.py``)
-turns into one ``httpx.Client`` + adapter instance. ``tomllib`` parses the array of
-tables for free; there is no stdlib TOML writer, so :meth:`HubConfig.to_toml` hand-rolls
-the emit in the same string-concat style as the rest of this file.
+``[[work_source]]`` is the zero-or-more configured work sources: each a named,
+credentialed forge binding (``hub/work_sources/internal/factory.py``). ``tomllib``
+parses the array of tables for free; there is no stdlib TOML writer, so
+:meth:`HubConfig.to_toml` hand-rolls the emit in the same string-concat style as the
+rest of this file.
 """
 
 from __future__ import annotations
@@ -39,12 +39,10 @@ ENV_PORT = "BZ_HUB_PORT"
 ENV_DB_URL = "BZ_HUB_DB_URL"
 
 # The runner-authentication rollout brake (issue #86a) — `warn` logs a missing/invalid/
-# mismatched bearer token and lets the request proceed; `enforce` rejects it. Ship
-# defaulting to `warn`; the dogfooding fleet flips to `enforce` once its runtime env
-# files carry enrolled tokens (an operator step, out of scope here). Named
-# `runner_auth_mode` for the *runner-identity* brake specifically — #84 adds a
-# separate `route_token_mode` for the per-acquisition route capability token, so the
-# two enforce independently.
+# mismatched bearer token and lets the request proceed; `enforce` rejects it. Defaults to
+# `warn` so a fleet can enroll tokens before enforcing. Scoped to *runner identity*
+# specifically: `route_token_mode` below is a separate brake, so the two enforce
+# independently.
 RUNNER_AUTH_WARN = "warn"
 RUNNER_AUTH_ENFORCE = "enforce"
 _KNOWN_RUNNER_AUTH_MODES = {RUNNER_AUTH_WARN, RUNNER_AUTH_ENFORCE}
@@ -53,24 +51,17 @@ _KNOWN_RUNNER_AUTH_MODES = {RUNNER_AUTH_WARN, RUNNER_AUTH_ENFORCE}
 # `runner_auth_mode` above, so route-token authorization enforces independently of
 # runner identity (a fleet can flip one on before the other). `warn` logs a
 # missing/mismatched route token and lets the chunk-scoped write/fact proceed;
-# `enforce` rejects it as a semantic failure, before the epoch fence. Ship `warn`; the
-# operator flips to `enforce` once outbound buffers carrying pre-upgrade,
-# token-less facts have drained (no separate grace period is needed — `warn` covers
-# that window).
+# `enforce` rejects it as a semantic failure, before the epoch fence. Defaults to
+# `warn`, which covers the window while token-less facts drain.
 ROUTE_TOKEN_WARN = "warn"
 ROUTE_TOKEN_ENFORCE = "enforce"
 _KNOWN_ROUTE_TOKEN_MODES = {ROUTE_TOKEN_WARN, ROUTE_TOKEN_ENFORCE}
 
-# The produces-artifact rollout brake (issue #113 phase 5) — a **separate** flag from
-# ``route_token_mode``/``runner_auth_mode`` above, gating the hub-side backstop on top of
-# the runner's own nudge-once (issue #113 phase 4): completion assembly already prefers an
-# explicit ``blizzard runner attach`` over the judgement-assessment fallback, so a
-# `produces:` name still lacking an explicit attachment at submission time is a signal the
-# nudge did not resolve. `warn` logs the missing-explicit-artifact names and lets the
-# completion proceed unchanged (assessment fallback still lands, exactly as before this
-# phase); `enforce` rejects the completion as a semantic failure, before the transition is
-# recorded. Ship `warn`; the operator flips to `enforce` once packaged prompts (phase 6)
-# and the runner nudge (phase 4, already landed) have had time to drive worker behavior.
+# The produces-artifact rollout brake (issue #113) — a **separate** flag from
+# ``route_token_mode``/``runner_auth_mode`` above, gating the hub-side backstop for a
+# `produces:` name lacking an explicit attachment at submission time. `warn` logs the
+# missing names and lets the completion proceed; `enforce` rejects it as a semantic
+# failure, before the transition is recorded. Defaults to `warn`.
 PRODUCES_WARN = "warn"
 PRODUCES_ENFORCE = "enforce"
 _KNOWN_PRODUCES_MODES = {PRODUCES_WARN, PRODUCES_ENFORCE}
@@ -80,30 +71,24 @@ _KNOWN_PRODUCES_MODES = {PRODUCES_WARN, PRODUCES_ENFORCE}
 _KNOWN_WORK_SOURCE_PROVIDERS = {"github"}
 _REQUIRED_WORK_SOURCE_KEYS = ("name", "provider", "repo", "token_env")
 
-# `[[work_source]]`'s pre-rename name (issue #55). Deliberately *not* aliased: a hub
-# whose config still says `[[pm_source]]` parses as zero configured sources, which is a
-# legal-looking hub whose every work-item read 503s and whose every board label renders
-# null. Config is operator-owned and versionless, so the rename fails the daemon fast
-# with a message naming the new key — the opposite call from the HTTP `/pm-items` alias,
-# which stays because its clients can skew across deploys.
+# `[[work_source]]`'s pre-rename name (issue #55). Deliberately *not* aliased: the key
+# would parse as zero configured sources, a legal-looking hub that serves nothing, so
+# the load fails fast naming the new key (pinned by
+# `tests/test_config.py::test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key`).
 RENAMED_WORK_SOURCE_KEY = "pm_source"
 
-# The human-auth rollout knob (issue #91) — `none` (the default, and it stays the
-# shipped default until epic #89 completes) resolves every request to the implicit
-# `operator`/`superuser` identity with no store read; `oauth` activates the session/
-# permission seam. Validated exactly like `runner_auth_mode`.
+# The human-auth rollout knob (issue #91) — `none` (the default) resolves every request
+# to the implicit `operator`/`superuser` identity with no store read; `oauth` activates
+# the session/permission seam. Validated exactly like `runner_auth_mode`.
 AUTH_MODE_NONE = "none"
 AUTH_MODE_OAUTH = "oauth"
 _KNOWN_AUTH_MODES = {AUTH_MODE_NONE, AUTH_MODE_OAUTH}
 
-# `[[auth.oauth.provider]]` required keys — parsed-and-carried in #91 (this issue) so
-# the config schema is stable for #92, which is the phase that actually *consumes* a
-# provider entry (resolving its secret, validating `type`/`issuer`). #91 only checks
-# structural presence.
+# `[[auth.oauth.provider]]` required keys — structural presence only (issue #91);
+# secret resolution and `type`/`issuer` validation happen where a provider is consumed.
 _REQUIRED_OAUTH_PROVIDER_KEYS = ("name", "type", "display_name", "client_id", "client_secret_env")
 
-# A fresh scaffold has no configured source, and without one `work-items` 503s and board
-# pointer labels go null (you cannot render `{source}#{ref}` without a source name) — so
+# A fresh scaffold has no configured source, and without one `work-items` 503s — so
 # `to_toml()` emits this as a comment rather than leaving the block undiscoverable.
 _WORK_SOURCE_EXAMPLE_COMMENT = """
 # Uncomment and edit to configure a work source — without at least one
@@ -127,7 +112,7 @@ _WORK_SOURCE_EXAMPLE_COMMENT = """
 
 # Mirrors `_WORK_SOURCE_EXAMPLE_COMMENT` — emitted when `[auth]` carries no configured
 # login provider, so the block stays discoverable even though `mode = "none"` needs
-# none to function (issue #91 parses-and-carries this; #92 consumes it).
+# none to function (issue #91).
 _AUTH_OAUTH_PROVIDER_EXAMPLE_COMMENT = """
 # Uncomment and edit to declare an OAuth login provider — consumed once `mode =
 # "oauth"` and a login mechanism exist (issue #92); parsed-and-carried here so the
@@ -161,7 +146,7 @@ class WorkSourceConfig:
     environment variable carrying the credential — never the secret itself.
     ``api_base``/``web_base`` override the provider's default API/web origins (required
     to reach a self-hosted forge, e.g. GHE); ``web_base`` derives from ``api_base`` when
-    omitted — the adapter's own knowledge, not this dataclass's.
+    omitted.
     """
 
     name: str
@@ -183,15 +168,12 @@ class WorkSourceConfig:
 
 @dataclass(frozen=True)
 class OAuthProviderConfig:
-    """One configured OAuth login provider — parsed-and-carried by #91, *consumed*
-    (secret resolution, ``type``/``issuer`` validation) by #92. ``client_secret_env``
+    """One configured OAuth login provider (issues #91, #92). ``client_secret_env``
     names the environment variable carrying the secret — never the secret itself,
     mirroring :class:`WorkSourceConfig`'s ``token_env``. ``api_base`` overrides the
-    provider's default host (mirroring ``WorkSourceConfig.api_base``'s own GHE-override
-    precedent) — unused by the ``oidc`` conformer (whose ``issuer`` already names its
-    own host); the ``github`` conformer uses it to point both its authorize and API
-    calls at a self-hosted/stub origin (e.g. the ``blizzard-mock`` stub IdP) instead of
-    real GitHub."""
+    provider's default host — unused by the ``oidc`` conformer (whose ``issuer`` already
+    names its own host), and how the ``github`` conformer is pointed at a
+    self-hosted/stub origin instead of real GitHub."""
 
     name: str
     type: str
@@ -206,10 +188,9 @@ class OAuthProviderConfig:
 class AuthConfig:
     """Resolved ``[auth]`` config (issue #91) — the human-auth rollout knob.
 
-    ``mode`` defaults to :data:`AUTH_MODE_NONE` and stays the shipped default until
-    epic #89 completes. ``superuser`` (a nullable email) is parsed-and-carried here but
-    consumed only by #94's bootstrap lifecycle. ``oauth_providers`` is parsed-and-carried
-    here but consumed only by #92."""
+    ``mode`` defaults to :data:`AUTH_MODE_NONE`. ``superuser`` is a nullable email,
+    consumed by the bootstrap lifecycle (#94); ``oauth_providers`` is consumed by the
+    provider-login seam (#92)."""
 
     mode: str = AUTH_MODE_NONE
     superuser: str | None = None
@@ -230,12 +211,9 @@ class HubConfig:
     produces_mode: str = PRODUCES_WARN
     #: The fleet-wide **follow-latest** default (issue #164): whether a chunk drifts to
     #: the newest enabled mint of its own graph's name at its next transition. ``False``
-    #: — today's pin-by-id behavior — is the shipped default, so adopting the policy is
-    #: a deliberate act. A graph's own ``follow_latest`` tri-state overrides this for
-    #: chunks pinned to that mint; ``null`` there (every mint's default) inherits it.
-    #: Not a `*_mode` string like the three above: those name a rollout ramp
-    #: (off/warn/enforce), while this is a plain on/off with no intermediate state to
-    #: warn about.
+    #: is the default, so adopting the policy is a deliberate act. A graph's own
+    #: ``follow_latest`` tri-state overrides this for chunks pinned to that mint. A plain
+    #: on/off rather than a `*_mode` ramp: there is no intermediate state to warn about.
     follow_latest: bool = False
     #: The forge-status reconciler's sweep cadence, in seconds (issue #179) — a flat
     #: scalar following ``follow_latest``'s own precedent rather than a dedicated
@@ -423,9 +401,9 @@ def _sqlite_db_path(db_url: str) -> Path | None:
 def _guard_db_url_within_root(root: Path, db_url: str, *, allow_external_db: bool) -> None:
     """Refuse a ``db_url`` whose sqlite path resolves outside ``root`` (issue #234).
 
-    ``hub init`` used to write an absolute store path into a fresh runtime's config, so
-    copying that directory elsewhere (a snapshot, a safe-inspection copy) copied a live
-    pointer back to the original database with it — the exact trap this guard closes.
+    A config carrying an absolute store path from another runtime root would silently
+    operate on that original database when the directory is copied elsewhere (a
+    snapshot, a safe-inspection copy) — the trap this guard closes.
     A relative sqlite path is left alone: it resolves against the process's cwd at open
     time, not against ``root``, so there is nothing here to compare it to.
     """

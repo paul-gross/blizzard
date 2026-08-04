@@ -1,12 +1,10 @@
 """Deriving a forge coordinate from a repo's own origin URL — unit tier.
 
-The coordinate delivery addresses a repo by used to be *reconstructed*: a bare worktree
-name plus one workspace-wide ``BZ_FORGE_OWNER``. That is wrong the moment a chunk touches
-repos under two owners, and it discards what the declaring repo's ``origin`` already
-says. These pin both halves of the replacement: what a URL yields when it encodes an
-owner, and — just as load-bearing — that a URL encoding none yields ``None`` rather than
-a guess, so the configured fallback still governs the bare/file-backed origins the
-verification forge fronts.
+A repo's forge coordinate must be derived by parsing its own origin URL, not reconstructed
+from a bare worktree name plus a single workspace-wide ``BZ_FORGE_OWNER`` — the latter breaks
+the moment a chunk touches repos under two owners. These pin both halves: what a URL yields
+when it encodes an owner, and that a URL encoding none yields ``None`` rather than a guess,
+so the configured fallback still governs.
 """
 
 from __future__ import annotations

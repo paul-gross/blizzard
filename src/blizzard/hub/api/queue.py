@@ -7,9 +7,9 @@ is an explicit hub-side property. A runner's FILL step peeks the same ready queu
 through its own fleet-side counterpart (``GET /api/fleet/queue/peek``,
 :mod:`blizzard.hub.api.fleet`) rather than this route — both share :func:`_entries`.
 ``PUT /api/queue`` is the explicit whole-order operator verb behind ``blizzard hub queue
-set`` — no longer any client's reorder path, now that ``POST /api/queue/position``
-(issue #137) is the single-chunk fractional write the board's drag-and-drop and
-``blizzard hub queue move`` both drive. ``POST /chunks/{id}/group`` is the Group
+set``. ``POST /api/queue/position`` (issue #137) is the single-chunk fractional write
+the board's drag-and-drop and ``blizzard hub queue move`` both drive.
+``POST /chunks/{id}/group`` is the Group
 control. Controllers stay read-only over the store and delegate the writes to the
 queue-shaping domain services (``bzh:controller-read-only``).
 
@@ -68,8 +68,7 @@ def replace_queue(
     request: QueueReplaceRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> QueuePeekResponse:
     """Idempotent whole-order replacement of the ready queue — the explicit operator
-    verb behind ``blizzard hub queue set``, no longer any client's reorder path
-    (``POST /api/queue/position`` is that path now).
+    verb behind ``blizzard hub queue set``.
 
     Resolves every named id against the current ready set here (the edge concern,
     ``bzh:domain-takes-objects``): ``409`` names the first id that is not a ready

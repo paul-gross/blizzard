@@ -109,10 +109,8 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
     assert detach.status_code == 202, detach.text
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
 
-    # The live runner learns of it on its own next PULL, driven against the REAL hub
-    # app in-process: `HttpHubClient` (the production `IHubClient` adapter) wraps the
-    # hub's own `TestClient`, which is itself an `httpx.Client` — no fake, no mock
-    # transport, the real ASGI app end to end.
+    # The live runner learns of it on its own next PULL, against the REAL hub app
+    # in-process, end to end.
     provider = FakeProvider({"e1": "/ws/e1"})
     probe = FakeProbe(alive={(100, "start-100")})
     ctx = LoopContext(

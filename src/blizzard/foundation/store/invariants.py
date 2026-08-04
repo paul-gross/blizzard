@@ -154,25 +154,13 @@ def check_runner_store(engine: Engine) -> list[Violation]:
             )
 
         # NOT checked, deliberately: "a pause-parked lease has no closure" (issue #46 plan §7).
-        # It reads like the natural companion to the rule above, and it is **false on a legal
-        # history**: pause a chunk, then detach it. `_reconcile_leases` abandons the lease —
-        # closure `released`, envs freed — and records no pause-park resume, so the park is still
-        # open over a closed lease. The plan wants detach to win there, so that history is
-        # correct and the invariant, not the loop, is what is wrong. An invariant must hold at
-        # every instant of every legal history (this checker runs after arbitrary kill -9s), so a
-        # rule with a legitimate counterexample cannot live here at any strength: scoping it to
-        # unclosed leases makes it the tautology "an unclosed lease has no closure".
-        #
-        # The property it was reaching for — `_kill_and_park_paused` must not close the lease it
-        # parks, which is what FILL's `_reconcile_interrupted_claims` and ADVANCE's
-        # `_advance_held_chunk` rest on when they skip a chunk with an active lease — is a
-        # statement about **loop behavior**, not about durable facts, and its home is the
-        # component tier: `tests/test_chunk_pause.py` asserts it directly and independently per
-        # seam. Nor is a stale park over a closed lease a leak to plug: every reader of
-        # `pause_parked_lease_ids()` / `parked_lease_ids()` first iterates `list_active_leases()`,
-        # so a park is only ever consulted for a live lease — the same property the older
-        # ask-park (`park_facts`) has always rested on, with the identical exposure and no
-        # invariant of its own.
+        # It is false on a legal history — pause a chunk, then detach it: `_reconcile_leases`
+        # abandons the lease and records no pause-park resume, leaving the park open over a
+        # closed lease — and an invariant must hold at every instant of every legal history.
+        # Pinned by
+        # tests/test_pin_foundation.py::test_an_open_pause_park_over_a_closed_lease_is_not_a_violation.
+        # The loop-behavior property it was reaching for (`_kill_and_park_paused` must not close
+        # the lease it parks) belongs to the component tier: `tests/test_chunk_pause.py`.
     return violations
 
 
@@ -338,10 +326,10 @@ def check_hub_store(engine: Engine) -> list[Violation]:
                 )
 
         # hub:one-live-exec-slot — at most one hub_exec_slot row is live
-        # (``released_at IS NULL``) at a time (#65): the fleet-wide serialization slot
-        # is a FACT, not an in-process lock, precisely so this is assertable after any
-        # crash — two live slots would mean two chunks' hub command nodes could run
-        # concurrently, the exact hazard the slot exists to close.
+        # (``released_at IS NULL``) at a time (#65): the fleet-wide serialization slot is a
+        # durable FACT, not an in-process lock, precisely so this stays assertable after any
+        # crash (pinned by
+        # tests/test_pin_foundation.py::test_two_live_hub_exec_slots_are_a_violation).
         live_slots = conn.execute(
             select(func.count()).select_from(hub.hub_exec_slot).where(hub.hub_exec_slot.c.released_at.is_(None))
         ).scalar()
@@ -440,23 +428,13 @@ def _check_migrations(engine: Engine) -> list[Violation]:
                         f"chunk {chunk_id} pinned {chunk.graph_id} but its newest migration targets {m.to_graph_id}",  # type: ignore[attr-defined]
                     )
                 )
-            # Issue #144 retargeted the migration's model re-pin from `chunks.model` (now
-            # retained-and-unread) to `chunks.default_model`, so this comparison moves with
-            # the write — left pointing at `chunks.model`, it would fire on EVERY
-            # model-carrying migration, and the crash sweep runs this checker after every
-            # recovery.
-            #
-            # **Membership**, not equality against `[model_after]`. `model_after` is a single
-            # string and `default_model` a prioritized list, and the two shapes admit a
-            # legitimate divergence the old scalar field barely did: a migration re-queues the
-            # chunk to `ready`, which reopens the pre-claim edit window, so an operator can
-            # then add a fallback entry or reorder the list without undoing the re-pin. What
-            # this invariant is actually for is catching a **torn write** — the durable
-            # migration fact with the pin never applied — and a torn write leaves
-            # `default_model` empty or at its pre-migration value, which fails membership
-            # exactly as it fails equality. Membership therefore detects the same tear with a
-            # strictly narrower false-positive surface. Removing `model_after` from the list
-            # outright still trips it, which is the residual, deliberate limitation.
+            # **Membership**, not equality against `[model_after]` (issue #144): a migration
+            # re-queues the chunk to `ready`, reopening the pre-claim edit window, so an
+            # operator may legitimately extend or reorder the prioritized `default_model` list
+            # afterwards. The torn write this is for — the migration fact with the pin never
+            # applied — leaves `default_model` empty or pre-migration, failing membership just
+            # as it fails equality (pinned by tests/test_invariant_checker.py::
+            # test_a_migration_whose_repin_survives_a_later_default_model_edit_is_not_a_violation).
             elif m.model_after is not None and m.model_after not in _deserialize_default_model(chunk.default_model):  # type: ignore[attr-defined]
                 violations.append(
                     Violation(

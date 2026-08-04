@@ -1,8 +1,7 @@
 """The runner-local chunk-detail pass-through proxy — ``GET /api/chunks/{id}``, ``POST
 .../pause``, ``POST .../resume`` (issue #185).
 
-The machine panel's chunk-detail dock renders in the hub board's own vocabulary — full
-chunk id, work-item links, live state, and a working Pause/Resume — so it reads the
+The machine panel's chunk-detail dock reads the
 :class:`~blizzard.wire.chunk.ChunkDetail` aggregate the board renders, projected down to
 :class:`~blizzard.wire.chunk.ChunkHeaderView` (see that class for why), forwarded here
 exactly as ``blizzard.runner.api.work_items`` forwards the work-items read: the runner

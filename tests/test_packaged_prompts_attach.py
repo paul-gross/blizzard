@@ -5,9 +5,9 @@ Issue #113, Phase 6 (criterion 7) established this guard for the asset kind: a r
 that declares a ``produces:`` asset gets that asset from the worker running
 ``blizzard runner artifact create --name <name>`` (content on stdin) — the store-backed
 submission path the completion assembly consults before the git-commit fallback. Issue
-#143, Phase 5 extends it to the ``git_commit`` kind now that the worker (not the runner)
-pushes and declares its own commits: a ``produces:`` entry of kind ``git_commit`` must have
-its node's prompt name ``blizzard runner artifact commit``. If a packaged prompt instead
+#143, Phase 5 extends it to the ``git_commit`` kind: the worker (not the runner) pushes and
+declares its own commits, so a ``produces:`` entry of kind ``git_commit`` must have its
+node's prompt name ``blizzard runner artifact commit``. If a packaged prompt instead
 tells the worker to "write the asset as the judgement payload", write a file, or names the
 DEPRECATED ``blizzard runner attach`` alias, the declaration never happens and the node
 silently falls back — a regression no graph-load or validation test would catch, because
@@ -120,9 +120,10 @@ def test_git_commit_producing_node_prompt_names_the_artifact_commit_cli(
     graph_name: str, node: NodeDoc, name: str
 ) -> None:
     """The node's prompt names ``artifact commit`` — the worker's own push-then-declare
-    channel (issue #143, Phase 3-5). The runner no longer infers or pushes the branch: a
-    ``git_commit``-kind node whose prompt never names this verb leaves the worker with no
-    instruction to declare what it pushed, and the node's coverage silently stays unmet."""
+    channel (issue #143, Phase 3-5): the runner only verifies, never infers or pushes the
+    branch, so a ``git_commit``-kind node whose prompt never names this verb leaves the
+    worker with no instruction to declare what it pushed, and the node's coverage
+    silently stays unmet."""
     text = _node_prompt_text(node)
     assert "artifact commit" in text, (
         f"{graph_name}: node {node.name!r} declares a git_commit produces entry {name!r} but its "

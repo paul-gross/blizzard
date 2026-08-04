@@ -1,8 +1,7 @@
 """The identity-spine SQLAlchemy adapters — real store, injected errors (component
 tier, issue #91).
 
-Mirrors ``tests/test_runner_enrollment.py``'s own real-store shape for the fleet
-registry: each adapter is exercised over a migrated sqlite engine, with the injected
+Each adapter is exercised over a migrated sqlite engine, with the injected
 :class:`~blizzard.hub.auth.errors.RepoErrorFactory` proven to wrap a raced/unexpected
 ``IntegrityError`` into the domain :class:`~blizzard.hub.auth.errors.RepoError`.
 """
@@ -67,10 +66,8 @@ def test_user_create_and_get_round_trip(engine, errors: RepoErrorFactory) -> Non
 
 def test_user_role_round_trips_for_every_role_member(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
     """A stored row's ``role`` string reads back as the same :class:`Role` member for
-    every declared role — including a row written as ``"guest"`` before this change,
-    which must read back as ``Role.GUEST`` rather than being silently demoted (issue
-    #210's "no user is silently demoted" AC — there is no migration to prove this
-    against, so the round trip itself is the proof)."""
+    every declared role — no role is silently demoted on read (issue #210's AC; there
+    is no migration to prove this against, so the round trip itself is the proof)."""
     repo = UserRepository(engine, errors)
     for i, role in enumerate(Role):
         user = User(
@@ -268,8 +265,7 @@ def test_auth_state_consume_is_idempotently_none_the_second_time(engine, errors:
 
 
 def test_auth_state_consume_is_single_use_under_concurrent_callers(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    """Two racing ``consume`` calls on the same state must not both win (issue #92
-    pre-push fix): the DELETE is the gate, not the preceding SELECT."""
+    """Two racing ``consume`` calls on the same state must not both win (issue #92)."""
     repo = AuthStateRepository(engine, errors)
     repo.create(
         AuthStateEntry(

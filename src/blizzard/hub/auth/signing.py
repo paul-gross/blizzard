@@ -3,28 +3,23 @@
 The hub becomes the fleet's identity provider only under ``auth.mode = "oauth"``: this
 service owns the RS256 keypair a runner's federation bounce is minted/verified against
 (``hub/api/idp.py``), the JWKS a runner fetches to verify a ``kid``, and rotation. Under
-``auth.mode = "none"`` no instance of this service is ever constructed (``hub/app.py``'s
-``build_hosted_app``) — there is no keypair on disk, no JWKS, no IdP surface, mirroring
-#92's own "no login mechanism under none".
+``auth.mode = "none"`` no instance of this service is ever constructed — there is no
+keypair on disk, no JWKS, no IdP surface.
 
 **Storage.** The private key material lives in the hub's own data dir
 (``config.data_dir / "auth" / "signing-keys"``), never in the store, never in config,
-never in the DB — owner-only permissions throughout (``0700`` dir, ``0600`` files),
-mirroring ``runner/listeners.py``'s own "filesystem permissions are the access control"
-posture for its unix socket. A small ``meta.json`` names which ``kid`` is ``current``
-and which (if any) is ``previous``; each keypair's private key is its own
-``<kid>.pem`` file. Generated lazily on first use (a fresh deployment mints its first
-keypair the first time a signing service is constructed under ``oauth`` mode) —
-idempotent across restarts, since ``meta.json`` already naming a ``current`` kid is
-read back rather than regenerated.
+never in the DB — owner-only permissions throughout (``0700`` dir, ``0600`` files). A
+small ``meta.json`` names which ``kid`` is ``current`` and which (if any) is
+``previous``; each keypair's private key is its own ``<kid>.pem`` file. Generated
+lazily on first use, idempotent across restarts, since ``meta.json`` already naming a
+``current`` kid is read back rather than regenerated.
 
 **Rotation** (``rotate()``, driven by ``blizzard hub rotate-signing-key``) mints a fresh
 keypair, demotes the old ``current`` to ``previous`` (dropping whatever ``previous`` key
 existed before — the JWKS publishes at most two generations), and persists the new
 ``meta.json`` before returning. A runner picks up the new key with **no restart**: its
-own JWKS cache (``runner/auth/jwks.py``) re-fetches on an unknown ``kid``, and this
-service's own in-memory state is mutated in place by the very call the CLI verb makes
-against the live hub process — there is no separate reload step.
+own JWKS cache re-fetches on an unknown ``kid``, and this service's own in-memory state
+is mutated in place directly by the CLI verb's call against the live hub process.
 """
 
 from __future__ import annotations

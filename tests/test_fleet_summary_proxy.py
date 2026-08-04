@@ -1,12 +1,10 @@
 """The runner-local fleet-summary pass-through proxy — ``GET /api/fleet-summary`` (issue #76).
 
-The layered pass-through behind the machine panel's counts strip: the panel reads the
-fleet's four bucket counts through the runner's own route, which **forwards** to the hub's
-fleet-router summary (``/api/fleet/summary``) — the browser never crosses to the hub
-directly. The hub half (the fold) is covered by ``test_fleet_summary_api``; this proves the
-*runner's* half — that it forwards with the loop's own bearer credential, that a hub outage
-surfaces as a distinct error the strip degrades on rather than empty counts, and that an
-unwired runner 503s instead of pretending.
+Forwards to the hub's fleet-router summary (``/api/fleet/summary``) — the browser never
+crosses to the hub directly. The hub half is covered by ``test_fleet_summary_api``; this
+proves the *runner's* half — that it forwards with the loop's own bearer credential, that a
+hub outage surfaces as a distinct error rather than empty counts, and that an unwired
+runner 503s instead of pretending.
 """
 
 from __future__ import annotations
@@ -58,7 +56,6 @@ def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path, monkeypatch: pytest.
 
     assert resp.status_code == 200, resp.text
     assert resp.json() == _COUNTS
-    # It forwarded to the hub's fleet-router summary — the panel never crosses a layer.
     assert seen == [f"{_HUB_URL}/api/fleet/summary"]
 
 
@@ -100,8 +97,7 @@ def test_proxy_sends_no_authorization_header_when_no_token_is_configured(
 
 @pytest.mark.component
 def test_proxy_passes_through_the_hub_status(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A hub 5xx surfaces with the hub's own status — a distinct error, not empty counts,
-    so the strip degrades to its last-known/dimmed state on the real reason."""
+    """A hub 5xx surfaces with the hub's own status — a distinct error, not empty counts."""
 
     def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
         return _FakeHubResponse(500, {"detail": "hub store error"})
@@ -129,8 +125,7 @@ def test_proxy_502_when_the_hub_is_unreachable(tmp_path: Path, monkeypatch: pyte
 
 @pytest.mark.component
 def test_proxy_503_when_the_runner_is_not_wired_to_a_hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """No ``hub_url`` (never enrolled) 503s before any outbound call — the strip degrades,
-    the rest of the panel stays lit."""
+    """No ``hub_url`` (never enrolled) 503s before any outbound call."""
     attempted = False
 
     def fake_get(*args: object, **kwargs: object) -> _FakeHubResponse:

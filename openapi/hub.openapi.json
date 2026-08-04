@@ -17,7 +17,7 @@
         "type": "object"
       },
       "ActivityView": {
-        "description": "One activity-feed row on the wire \u2014 the same present-when-meaningful shape\n:class:`~blizzard.hub.domain.work.ActivityRow` carries, absent (never placeholder\n``None``-as-a-present-field) wherever a source doesn't fill a field.\n\n``type`` is one of ``\"chunk-changed\"`` / ``\"event-logged\"`` / ``\"runner-changed\"``;\n``key`` is the identity of the underlying fact, the merge's own recency tiebreak,\nnever a stable frame id. ``status``/``prev_status``/``node``/``prev_node`` stay\nabsent for every row this phase produces (no graph resolution is threaded through\nyet) \u2014 present in the shape for forward compatibility with a later phase.",
+        "description": "One activity-feed row on the wire \u2014 present-when-meaningful: a field its source\ndoesn't fill is absent, never a placeholder ``None``-as-a-present-field.\n\n``type`` is one of ``\"chunk-changed\"`` / ``\"event-logged\"`` / ``\"runner-changed\"``;\n``key`` is the identity of the underlying fact, the merge's own recency tiebreak,\nnever a stable frame id. ``status``/``prev_status``/``node``/``prev_node`` stay\nabsent for every row this phase produces \u2014 present in the shape for a later one.",
         "properties": {
           "at": {
             "title": "At",
@@ -282,7 +282,7 @@
         "type": "string"
       },
       "ArtifactView": {
-        "description": "One entry of a chunk's inline artifact store.\n\n``key`` is the store key ``{node}.{artifact-name}.{epoch}`` \u2014 append-only, so\nevery re-run's entry is retained and latest-by-epoch resolution is the reader's.\n``content`` carries an **asset's** text verbatim (a review's findings\ndocument); the ``repo``/``branch_name``/``commit_hash`` trio carries a\n``git_commit`` artifact's pinned reference (the hub stores the reference, never the\ncode).\n\n``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side\nfrom the chunk's issue-shaped work ref so the board can link a ``git_commit``\nto the branch on the forge; null when no forge web base is derivable \u2014 the row then\nshows the branch name without a link (no broken link).\n\n``recorded_at`` is the instant the artifact was attached, decoded from its id's\nULID timestamp (the store keeps no separate column); null for a malformed id.",
+        "description": "One entry of a chunk's inline artifact store.\n\n``key`` is the store key ``{node}.{artifact-name}.{epoch}`` \u2014 append-only, so\nevery re-run's entry is retained and latest-by-epoch resolution is the reader's.\n``content`` carries an **asset's** text verbatim (a review's findings\ndocument); the ``repo``/``branch_name``/``commit_hash`` trio carries a\n``git_commit`` artifact's pinned reference (the hub stores the reference, never the\ncode).\n\n``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side\nfrom the chunk's issue-shaped work ref; null when no forge web base is derivable.\n\n``recorded_at`` is the instant the artifact was attached, decoded from its id's\nULID timestamp (the store keeps no separate column); null for a malformed id.",
         "properties": {
           "branch_name": {
             "anyOf": [
@@ -387,7 +387,7 @@
         "type": "object"
       },
       "BounceView": {
-        "description": "One recorded delivery kick-back (#64) \u2014 contention, not failure.\n\nSurfaced on chunk detail so the bounce history is readable \u2014 including once the\ncount crosses the node's ``bounce_cap`` and the chunk derives ``needs_human`` instead\nof routing back \u2014 without itself being (or affecting) the chunk's derived status.\n``envelope`` is the raw JSON kick-back payload (cause detail, etc.) verbatim.",
+        "description": "One recorded delivery kick-back (#64) \u2014 contention, not failure.\n\nSurfaced on chunk detail so the bounce history is readable, without itself being (or\naffecting) the chunk's derived status. ``envelope`` is the raw JSON kick-back payload\n(cause detail, etc.) verbatim.",
         "properties": {
           "cause": {
             "title": "Cause",
@@ -411,7 +411,7 @@
         "type": "object"
       },
       "CheckResult": {
-        "description": "One deterministic check's **runner-executed** outcome (issue #114).\n\nSince #114 the runner runs a node's ``checks:`` at worker exit and records each\ncommand's pass/fail as a durable fact; this is the wire projection the completion\ncarries to the hub so the hub's ``requires_checks`` backstop can gate on it. It carries\nonly ``(command, passed)`` \u2014 the hub needs nothing more to gate. The ``output_tail`` the\nrunner captures stays **runner-local** (a column on the runner's ``check_results``\ntable, read by the runner's own judgement-prompt injection); it deliberately does not\nride the wire, so no mock counterpart or board surfacing is owed. Should a future change\nwant the tail hub-side, that is a *new* wire field (re-triggering ``bzh:wire-change-extends-mock``).\n\nBefore #114 this field carried the worker's own in-session self-assessment and was sent\nempty (``[]``) \u2014 the hub read it nowhere. #114 repurposes it to runner-executed facts.",
+        "description": "One deterministic check's **runner-executed** outcome (issue #114).\n\nCarries only ``(command, passed)`` \u2014 nothing more is needed to gate the hub's\n``requires_checks`` backstop. The runner's captured ``output_tail`` deliberately does\nnot ride the wire; wanting it hub-side would be a *new* wire field (re-triggering\n``bzh:wire-change-extends-mock``).",
         "properties": {
           "command": {
             "title": "Command",
@@ -430,7 +430,7 @@
         "type": "object"
       },
       "ChunkDetail": {
-        "description": "The chunk aggregate in full \u2014 the board's chunk view and envelope feed.\n\nCarries the chunk's **transition history** and its inline **artifact store** so the\nweb app can render every node it visited, the review that failed once and looped\nback to build, and the artifacts \u2014 the branch pointers merged and the review notes.",
+        "description": "The chunk aggregate in full.\n\nCarries the chunk's **transition history** \u2014 every node it visited, including a\nreview that failed and looped back to build \u2014 and its inline **artifact store**.",
         "properties": {
           "artifacts": {
             "default": [],
@@ -666,7 +666,7 @@
         "type": "object"
       },
       "ChunkGroupRequest": {
-        "description": "Merge unacquired chunks into one \u2014 the board's Group control.\n\n``merge_chunk_ids`` are the ready chunks folded into the path's survivor chunk; the\nsurvivor absorbs the union of their work refs and the merged chunks are discarded as\nephemeral. Self-references and duplicates are ignored; a non-ready member is\nrejected ``409``.",
+        "description": "Merge unacquired chunks into one.\n\n``merge_chunk_ids`` are the ready chunks folded into the path's survivor chunk; the\nsurvivor absorbs the union of their work refs and the merged chunks are discarded as\nephemeral. Self-references and duplicates are ignored; a non-ready member is\nrejected ``409``.",
         "properties": {
           "merge_chunk_ids": {
             "items": {
@@ -713,7 +713,7 @@
         "type": "object"
       },
       "ChunkIngestRequest": {
-        "description": "Ingest by source-native token \u2014 specific items always, batch fine.\n\nEach token is resolved against the configured work sources' own grammar\n(``IWorkSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.\nTokens only \u2014 no pre-resolved ``{source, ref}`` shape travels alongside them; a\nsecond intake shape would reintroduce exactly the config-blind guess that\nresolving against the configured sources removes.",
+        "description": "Ingest by source-native token \u2014 specific items always, batch fine.\n\nEach token is resolved against the configured work sources' own grammar\n(``IWorkSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.\nTokens only \u2014 no pre-resolved ``{source, ref}`` shape travels alongside them, since a\nsecond intake shape reintroduces the config-blind guess resolving removes (pinned by\ntests/test_pin_wire.py::test_chunk_ingest_accepts_source_native_tokens_only).",
         "properties": {
           "tokens": {
             "items": {
@@ -744,7 +744,7 @@
         "type": "object"
       },
       "ChunkPatchRequest": {
-        "description": "The multi-field ``PATCH /chunks/{id}`` body (issue #124, in #104's shape) \u2014 every\nfield independently optional, applied all-or-nothing by ``EditService.edit``.\n\n``graph_id``/``model`` mean \"leave unchanged\" whether omitted or sent explicit\n``null`` \u2014 neither is a nullable chunk property, so there is no \"clear\" state to\ndistinguish. ``intended_migration`` is different: it *is* nullable (clearing a\nstanding intent is a real operation, the CLI's ``--cancel``), so **omitted** (\"leave\nthe intent unchanged\") must be distinguishable from **explicit ``null``** (\"clear\nit\") \u2014 a plain ``Optional`` default cannot tell those apart, since both decode to\n``None`` on this model. The controller resolves the distinction via\n``\"intended_migration\" in request.model_fields_set`` (pydantic's own record of which\nfields the request body actually named), not this field's value alone.",
+        "description": "The multi-field ``PATCH /chunks/{id}`` body (issue #124, in #104's shape) \u2014 every\nfield independently optional, applied all-or-nothing by ``EditService.edit``.\n\n``graph_id``/``model`` mean \"leave unchanged\" whether omitted or sent explicit\n``null`` \u2014 neither is a nullable chunk property, so there is no \"clear\" state to\ndistinguish. ``intended_migration`` *is* nullable, so **omitted** (\"leave unchanged\")\nmust stay distinguishable from **explicit ``null``** (\"clear it\"); a plain\n``Optional`` default cannot, so the controller keys on\n``\"intended_migration\" in request.model_fields_set``, not this field's value (pinned\nby tests/test_chunk_edit_api.py::test_patch_clears_an_intended_migration_via_explicit_null\nand ::test_patch_with_intended_migration_field_absent_leaves_it_unchanged).",
         "properties": {
           "default_effort": {
             "anyOf": [
@@ -885,7 +885,7 @@
         "type": "object"
       },
       "ChunkSummary": {
-        "description": "One row of the fleet chunk list \u2014 derived status + current node.\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) the\nboard renders in place of the raw ``nd_`` ULID; null when the chunk has no\ncurrent node or its pinned graph cannot resolve the id.\n\nDeliberately status-only: the summary feeds the board **card**, which is a passive\nstatus view (issue #42), so no operator *fact* is carried here. The pause fact \u2014 and\nevery other fact an operator action keys on \u2014 reaches the chunk detail dock through\n:class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live\nroute's holder, null when unrouted) is a passive where-is-it fact in that same\nsense \u2014 it lets the fleet registry list each runner's claims \u2014 not an action key.\n``environment_count`` (issue #69) is a passive where-is-it *count* in that same\nspirit: the number of environments the chunk's live route holds, so the fleet registry\ncan sum a runner's slot-bar numerator without the full ``environment_ids`` list (which\nstays out of scope on this status-only summary, reaching only\n:class:`ChunkDetail.route`).\n\nBoth are **in-progress-only** (issue #140): a chunk at a terminal status\n(``done``/``stopped``) reports ``runner_id = None`` and ``environment_count = 0`` even\nwhen its route facts still show a route, because a finished chunk holds no claim. So a\nconsumer folding these per runner \u2014 the fleet registry's claim lines and its slot-bar\nnumerator \u2014 counts only live occupancy and needs no status filter of its own. The raw\nroute fact is unfiltered on :class:`ChunkDetail.route`, which is where a \"where was\nthis worked\" read belongs.\n\n``cost`` and ``completed_at`` are the two exceptions (issues #59, #173): both are\ncheap, passive derived instants \u2014 not an operator fact \u2014 so they ride the summary\nrather than waiting for the detail fetch.\n\n``completed_at`` (issue #173) is the terminal instant \u2014 see\n:func:`~blizzard.hub.domain.work.derive_completed_at` \u2014 null for every non-terminal\nstatus. Like every wire instant it is a ``str``, populated via\n:func:`~blizzard.foundation.clock.iso_utc` at the serialization edge, never a bare\n``datetime`` (``bzh:utc-instants``).",
+        "description": "One row of the fleet chunk list \u2014 derived status + current node.\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) beside\nthe raw ``nd_`` ULID; null when the chunk has no current node or its pinned graph\ncannot resolve the id.\n\nStatus-only: the summary feeds the board **card**, a passive status view (issue #42),\nso it carries no operator *fact* \u2014 those reach the detail dock through\n:class:`ChunkDetail`. ``runner_id`` and ``environment_count`` (issue #69) are passive\nwhere-is-it facts, not action keys, and ``cost``/``completed_at`` (issues #59, #173)\nare cheap derived instants that ride along rather than waiting for the detail fetch.\n\n``runner_id``/``environment_count`` are **in-progress-only** (issue #140): a chunk at\na terminal status reads unrouted even while its route facts still show a route, so a\nper-runner fold counts live occupancy with no status filter of its own (pinned by\ntests/test_route_claim.py::test_summary_reports_a_finished_chunk_as_unrouted). The\nunfiltered route fact lives on :class:`ChunkDetail.route`.\n\n``completed_at`` (issue #173) is the terminal instant \u2014 see\n:func:`~blizzard.hub.domain.work.derive_completed_at` \u2014 null for every non-terminal\nstatus. Like every wire instant it is a ``str``, populated via\n:func:`~blizzard.foundation.clock.iso_utc` at the serialization edge, never a bare\n``datetime`` (``bzh:utc-instants``).",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -1193,7 +1193,7 @@
         "type": "object"
       },
       "DecisionChoiceModel": {
-        "description": "One selectable gate outcome \u2014 a button on the board/bot.",
+        "description": "One selectable gate outcome.",
         "properties": {
           "description": {
             "title": "Description",
@@ -1303,7 +1303,7 @@
         "type": "object"
       },
       "DecisionView": {
-        "description": "A gate decision in full \u2014 the board's card and the runner's pickup.\n\n``resolved_choice`` is set once a person has decided; ``transitioned`` is true once\nthe holding runner has recorded the resolving transition. The runner acts on a\ndecision that is resolved but not yet transitioned.",
+        "description": "A gate decision in full.\n\n``resolved_choice`` is set once a person has decided; ``transitioned`` is true once\nthe resolving transition has been recorded.",
         "properties": {
           "choices": {
             "default": [],
@@ -1513,7 +1513,7 @@
         "type": "object"
       },
       "EscalationView": {
-        "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) so a\nhuman can resume the parked session. Present only while the escalation is open \u2014\na later lease mint (requeue/takeover) supersedes it and this drops away.\n\n``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent of\n``takeover_command`` the board prefers as the primary copyable command, falling\nback to the raw form when it's empty. Wrapped implies raw, never the reverse, and\nwhether a takeover is actually possible for this escalation is a separate\nquestion from whether either is populated \u2014 see\nhttps://github.com/paul-gross/blizzard-context/blob/master/domain/humans.md for\nthe full account.",
+        "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) so a\nhuman can resume the parked session. Present only while the escalation is open \u2014\na later lease mint (requeue/takeover) supersedes it and this drops away.\n\n``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent of\n``takeover_command``, empty when none was composed. Wrapped implies raw, never the\nreverse, and whether a takeover is actually possible for this escalation is a\nseparate question from whether either is populated \u2014 see\nhttps://github.com/paul-gross/blizzard-context/blob/master/domain/humans.md for\nthe full account.",
         "properties": {
           "epoch": {
             "title": "Epoch",
@@ -1537,7 +1537,7 @@
         "type": "object"
       },
       "EventView": {
-        "description": "One operational event on the wire \u2014 an ``event_log`` row or a projected open\nescalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped\nevent; ``runner_id`` is absent for a projected escalation, which names no runner\n(issue #155 \u2014 ``null``, never ``\"\"``, so a consumer building a runner universe out\nof the feed reads it as \"no runner\" by type rather than filtering a sentinel);\n``detail`` is the event-specific JSON payload the fixed fields don't carry.",
+        "description": "One operational event on the wire \u2014 an ``event_log`` row or a projected open\nescalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped\nevent; ``runner_id`` is absent for a projected escalation, which names no runner\n(issue #155 \u2014 ``null``, never ``\"\"``); ``detail`` is the event-specific JSON payload\nthe fixed fields don't carry.",
         "properties": {
           "chunk_id": {
             "anyOf": [
@@ -1757,7 +1757,7 @@
         "type": "object"
       },
       "FleetSummaryView": {
-        "description": "The runner machine panel's fleet-pulse counts (issue #76) \u2014 every chunk's derived\nstatus folded to the four buckets the counts strip shows:\n\n* ``ready`` \u2014 chunks derived ``ready``;\n* ``running`` \u2014 ``running`` + ``delivering`` (live work, either shape);\n* ``waiting`` \u2014 ``waiting_on_human`` + ``paused`` (human-parked);\n* ``needs`` \u2014 ``needs_human``.\n\nThe remaining derived statuses (``not_ready``, ``stopped``, ``done``) count toward no\nbucket \u2014 the strip is a live-work pulse, not a total. See\n:func:`~blizzard.hub.domain.work.derive_fleet_summary` for the single canonical\nstatement of the fold, which these fields mirror.",
+        "description": "The fleet-pulse counts (issue #76) \u2014 every chunk's derived status folded to four\nbuckets:\n\n* ``ready`` \u2014 chunks derived ``ready``;\n* ``running`` \u2014 ``running`` + ``delivering`` (live work, either shape);\n* ``waiting`` \u2014 ``waiting_on_human`` + ``paused`` (human-parked);\n* ``needs`` \u2014 ``needs_human``.\n\nThe remaining derived statuses (``not_ready``, ``stopped``, ``done``) count toward no\nbucket \u2014 a live-work pulse, not a total. The fold's canonical statement:\n:func:`~blizzard.hub.domain.work.derive_fleet_summary`.",
         "properties": {
           "needs": {
             "title": "Needs",
@@ -2022,7 +2022,7 @@
         "type": "object"
       },
       "GraphPolicyRequest": {
-        "description": "Set a graph's follow-latest policy \u2014 the tri-state (issue #164).\n\n``follow_latest`` is required and all three values are meaningful: ``true``/``false``\noverride the hub-level setting for chunks pinned to this mint, and explicit ``null``\nreverts to inheriting it. It carries no default, so \"clear the override\" is something\na caller asks for by naming ``null`` rather than something an omitted field does by\naccident; ``by`` is recorded on the appended fact, exactly as retire/re-enable do.",
+        "description": "Set a graph's follow-latest policy \u2014 the tri-state (issue #164).\n\n``follow_latest`` is required and all three values are meaningful: ``true``/``false``\noverride the hub-level setting for chunks pinned to this mint, and explicit ``null``\nreverts to inheriting it. It carries no default, so clearing the override is asked\nfor by naming ``null`` rather than done by an omitted field (pinned by\ntests/test_pin_wire.py::test_graph_policy_request_follow_latest_carries_no_default);\n``by`` is recorded on the appended fact, exactly as retire/re-enable do.",
         "properties": {
           "by": {
             "default": "operator",
@@ -2193,7 +2193,7 @@
         "type": "object"
       },
       "GraphView": {
-        "description": "A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.\n\n``enabled`` is ``not retired`` \u2014 the graph's own lifecycle state (issue #101),\nindependent of whether it is currently the newest of its name. ``retired`` is the\nsame fact spelled out explicitly for a board that wants to distinguish \"retired\"\nfrom \"merely superseded by a newer version\" (:class:`GraphSummaryView`'s\n``effective``). Deliberately two wire fields for one fact, not drift: the only\nconstructor, :func:`~blizzard.hub.api.graphs._graph_view`, sets both from the same\n``retired`` bool in one call (``enabled=not retired, retired=retired``) \u2014 there is\nno second call site that could set one and forget the other.\n\n``follow_latest`` is the stored **tri-state** (issue #164), served as-is: ``true`` /\n``false`` override the hub-level setting for chunks pinned to this mint, and ``null``\n\u2014 every mint's default \u2014 inherits it. Deliberately the stored value rather than the\nresolved one, so a reader can tell \"this graph says nothing\" from \"this graph says\nfalse\"; the resolution against `HubConfig.follow_latest` happens at the transition,\nwhere the hub setting is in hand.",
+        "description": "A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.\n\n``enabled`` is ``not retired`` \u2014 the graph's own lifecycle state (issue #101),\nindependent of whether it is currently the newest of its name. ``retired`` is the\nsame fact spelled out explicitly, distinguishing \"retired\" from \"merely superseded\nby a newer version\" (:class:`GraphSummaryView`'s ``effective``). Two wire fields for\none fact, not drift: the only constructor,\n:func:`~blizzard.hub.api.graphs._graph_view`, sets both from the same ``retired``\nbool in one call (pinned by\ntests/test_graph_lifecycle_api.py::test_retire_returns_202_and_the_view_reports_retired\nand ::test_a_freshly_minted_graph_reports_enabled_and_not_retired).\n\n``follow_latest`` is the stored **tri-state** (issue #164), served as-is: ``true`` /\n``false`` override the hub-level setting for chunks pinned to this mint, and ``null``\n\u2014 every mint's default \u2014 inherits it. Deliberately the stored value rather than the\nresolved one, so a reader can tell \"this graph says nothing\" from \"this graph says\nfalse\"; the resolution against `HubConfig.follow_latest` happens at the transition,\nwhere the hub setting is in hand.",
         "properties": {
           "edges": {
             "default": [],
@@ -2401,7 +2401,7 @@
         "type": "object"
       },
       "IntendedMigrationView": {
-        "description": "A chunk's standing migration intent (issue #124) \u2014 editable at any non-terminal\nstatus, ``not_ready``/``ready`` included, and consulted (never applied eagerly) at\nthe chunk's next transition through the common apply path. Present on\n:class:`ChunkDetail` so the board and CLI can show a chunk is queued to move;\n``None`` when no intent is set.\n\n``graph_name`` is resolved server-side from the stored ``graph_id`` the same way\n:class:`MigrationView`'s ``to_graph_name`` is (null when the target graph cannot be\nresolved). ``node_name`` is the ``forced`` mode's unconditional landing target;\nnull for ``auto`` (the landing name is derived at consult time from the\ntransition's own destination, never carried here).",
+        "description": "A chunk's standing migration intent (issue #124) \u2014 editable at any non-terminal\nstatus, ``not_ready``/``ready`` included, and consulted (never applied eagerly) at\nthe chunk's next transition through the common apply path. Present on\n:class:`ChunkDetail`; ``None`` when no intent is set.\n\n``graph_name`` is resolved server-side from the stored ``graph_id`` the same way\n:class:`MigrationView`'s ``to_graph_name`` is (null when the target graph cannot be\nresolved). ``node_name`` is the ``forced`` mode's unconditional landing target;\nnull for ``auto`` (the landing name is derived at consult time from the\ntransition's own destination, never carried here).",
         "properties": {
           "graph_id": {
             "title": "Graph Id",
@@ -2515,7 +2515,7 @@
         "type": "string"
       },
       "MigrationView": {
-        "description": "One cross-graph migration step in a chunk's history (issue #90).\n\nA judgement choice targeting another graph ends the chunk's attempt in ``from_graph``\nand re-queues it at ``landed_node`` in ``to_graph`` \u2014 its own step in the timeline,\nnever a transition (``bzh:migration-not-transition``). The board renders it as a\ngraph-to-graph hop: ``from_graph/from_node --choice--> to_graph/landed_node``. Node and\ngraph names are resolved server-side against each side's own graph (null when\nunresolvable); ``model`` is the re-pinned model, or null when the chunk kept its own.\n\n``source`` (issue #164) says **what** moved the chunk \u2014 ``authored-edge`` (a #90\njudgement choice), ``intent`` (an operator's #124 standing intent), or\n``follow-latest`` (the standing policy). It is the only one of the three a human did\nnot ask for, so this is how a reader learns why a chunk sits on a graph it did not\nstart on. Null on a migration recorded before the discriminator existed \u2014 unrecorded,\nnot defaulted, since a legacy row's two operator sources are indistinguishable.",
+        "description": "One cross-graph migration step in a chunk's history (issue #90).\n\nA judgement choice targeting another graph ends the chunk's attempt in ``from_graph``\nand re-queues it at ``landed_node`` in ``to_graph`` \u2014 its own step in the timeline,\nnever a transition (``bzh:migration-not-transition``). Node and\ngraph names are resolved server-side against each side's own graph (null when\nunresolvable); ``model`` is the re-pinned model, or null when the chunk kept its own.\n\n``source`` (issue #164) says **what** moved the chunk \u2014 ``authored-edge`` (a #90\njudgement choice), ``intent`` (an operator's #124 standing intent), or\n``follow-latest`` (the standing policy). It is the only one of the three a human did\nnot ask for, so this is how a reader learns why a chunk sits on a graph it did not\nstart on. Null on a migration recorded before the discriminator existed \u2014 unrecorded,\nnot defaulted, since a legacy row's two operator sources are indistinguishable.",
         "properties": {
           "choice_name": {
             "anyOf": [
@@ -2875,7 +2875,7 @@
         "type": "object"
       },
       "PauseView": {
-        "description": "An open pause on a chunk (issue #46) \u2014 who set it and when.\n\nPresent only while ``paused=True`` is the newest pause fact; a resume clears it.\nCarried independently of ``status``: PAUSED sits below the human-gated statuses in\nthe derivation order, so a chunk both paused and parked on a question derives\n``waiting_on_human`` \u2014 this field is the only way the runner (and the board) learn\nthe chunk is paused in that case, and it also answers \"who paused it\".",
+        "description": "An open pause on a chunk (issue #46) \u2014 who set it and when.\n\nPresent only while ``paused=True`` is the newest pause fact; a resume clears it.\nCarried independently of ``status``: PAUSED sits below the human-gated statuses in\nthe derivation order, so a chunk both paused and parked on a question derives\n``waiting_on_human`` \u2014 this field is then the only carrier of the pause fact, and it\nalso answers \"who paused it\".",
         "properties": {
           "by": {
             "title": "By",
@@ -2979,7 +2979,7 @@
         "type": "object"
       },
       "QuestionAsked": {
-        "description": "A ``question.asked`` fact the runner forwards to the hub.\n\n``question_id`` is runner-minted (``qn_<ulid>``) so the runner can poll the answer\nback by it; ``epoch`` is the parked lease's fence, ``session_id`` the dormant\nsession to resume around the answer, and ``options`` the choices the board renders.",
+        "description": "A ``question.asked`` fact the runner forwards to the hub.\n\n``question_id`` is runner-minted (``qn_<ulid>``) so the runner can poll the answer\nback by it; ``epoch`` is the parked lease's fence, ``session_id`` the dormant\nsession to resume around the answer, and ``options`` the offered choices.",
         "properties": {
           "asked_at": {
             "title": "Asked At",
@@ -3048,7 +3048,7 @@
         "type": "object"
       },
       "QuestionView": {
-        "description": "A question row with its derived answer *and delivery* state \u2014 the surfacing shape.\n\nBehind ``GET /questions`` (open only), ``GET /questions/{id}`` (the runner's answer\npoll), and the chunk detail's questions list. ``answered`` and the answer fields\nderive from the presence of the answer row; ``delivered``/``delivered_at`` derive\nfrom the ``answer.delivered`` fact the runner mints once the resume-with-answer ran\n(issue #165) \u2014 the return leg that lets the board say *delivered, agent resumed*\nrather than leaving an answerer guessing whether the answer arrived.",
+        "description": "A question row with its derived answer *and delivery* state \u2014 the surfacing shape.\n\nBehind ``GET /questions`` (open only), ``GET /questions/{id}``, and the chunk\ndetail's questions list. ``answered`` and the answer fields derive from the presence\nof the answer row; ``delivered``/``delivered_at`` derive from the\n``answer.delivered`` fact (issue #165).",
         "properties": {
           "answer": {
             "anyOf": [
@@ -3203,7 +3203,7 @@
         "type": "object"
       },
       "QueuePeekResponse": {
-        "description": "The ready queue as peeked by FILL, in the hub's explicit order.",
+        "description": "The ready queue, in the hub's explicit order.",
         "properties": {
           "entries": {
             "default": [],
@@ -3355,7 +3355,7 @@
         "type": "object"
       },
       "RouteClaimResponse": {
-        "description": "The winning claim's reply \u2014 the route, its first node envelope, and the\nroute's plaintext capability token (issue #84a), returned exactly once here. The\nrunner stashes it and presents it on every subsequent chunk-scoped write.",
+        "description": "The winning claim's reply \u2014 the route, its first node envelope, and the\nroute's plaintext capability token (issue #84a), returned exactly once here.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -3578,7 +3578,7 @@
         "type": "object"
       },
       "RunnerRegistrationRequest": {
-        "description": "Register a runner into the fleet \u2014 runner id + workspace binding.\n\n``env_capacity`` is the runner's configured environment-pool size (the length of its\n``workspace_envs``) \u2014 the denominator the board's slot bar renders ``used/total``\nagainst. Absent (``None``) from an older runner binary that predates this field, in\nwhich case the hub stores/reports null and the board omits the bar rather than\nguessing a total. Re-registration is the runner's heartbeat, so a ``workspace_envs``\nchange converges on the next pull (the stored value is overwritten unconditionally).",
+        "description": "Register a runner into the fleet \u2014 runner id + workspace binding.\n\n``env_capacity`` is the runner's configured environment-pool size (the length of its\n``workspace_envs``); ``None`` when the client reports none, never a guessed total.\nRe-registration overwrites the stored value unconditionally, so a ``workspace_envs``\nchange converges on the next one.",
         "properties": {
           "env_capacity": {
             "anyOf": [
@@ -3646,7 +3646,7 @@
         "type": "object"
       },
       "RunnerView": {
-        "description": "One fleet-registry row \u2014 derived liveness, both brakes, and (issue #218) an\nadvisory external-usage snapshot.\n\nA runner can be paused by two different parties for two different reasons, so the two\nare reported separately rather than collapsed into one ``paused`` (issue #43): the\nboard shows *which*. A reader that wants \"is it claiming?\" ORs them; since issue #45\nthe two diverge past claiming \u2014 ``hub_paused`` keeps its claims-only meaning, while\n``locally_paused`` alone answers \"is it spawning anything at all?\". ``external_subscription_usage``\nis a third, unrelated kind of thing carried on the same row: a read-only diagnostic\nof the harness's own subscription rate-limit windows, never a brake and never\nconsulted by scheduling or claiming.",
+        "description": "One fleet-registry row \u2014 derived liveness, both brakes, and (issue #218) an\nadvisory external-usage snapshot.\n\nA runner can be paused by two different parties for two different reasons, so the two\nare reported separately rather than collapsed into one ``paused`` (issues #43, #45).\nA reader that wants \"is it claiming?\" ORs them; ``hub_paused`` is claims-only, while\n``locally_paused`` alone answers \"is it spawning anything at all?\". ``external_subscription_usage``\nis a third, unrelated kind of thing carried on the same row: a read-only diagnostic\nof the harness's own subscription rate-limit windows, never a brake and never\nconsulted by scheduling or claiming.",
         "properties": {
           "env_capacity": {
             "anyOf": [
@@ -3820,7 +3820,7 @@
         "type": "object"
       },
       "TransitionView": {
-        "description": "One accepted transition in a chunk's history.\n\nThe edge a node-step took \u2014 its origin node, the judgement choice that routed it,\nand its destination \u2014 oldest first on the detail. This is what makes the review-fail\nloop legible: a ``review -> build`` entry with ``choice_name = \"fail\"`` is a visible\nstep in the timeline (MVP criterion 9/11).\n\n``from_node_name``/``to_node_name`` are the nodes' human graph names (``build``,\n``review``) the board renders in place of the raw ``nd_`` ULIDs; resolved here so the\ntimeline is legible without reassembly, null when the pinned graph cannot\nresolve the id.\n\n``graph_id``/``graph_name`` identify the graph this step happened in (issue #90) \u2014\nresolved per-transition against its own graph, so a chunk that later migrated still\nlabels its old-graph steps with the graph they belong to rather than the current pin;\nboth null for a step predating graph-provenance (never backfilled with a name).",
+        "description": "One accepted transition in a chunk's history.\n\nThe edge a node-step took \u2014 its origin node, the judgement choice that routed it,\nand its destination \u2014 oldest first on the detail. This is what makes the review-fail\nloop legible: a ``review -> build`` entry with ``choice_name = \"fail\"`` is a visible\nstep in the timeline (MVP criterion 9/11).\n\n``from_node_name``/``to_node_name`` are the nodes' human graph names (``build``,\n``review``) beside the raw ``nd_`` ULIDs; resolved here so the timeline is legible\nwithout reassembly, null when the pinned graph cannot resolve the id.\n\n``graph_id``/``graph_name`` identify the graph this step happened in (issue #90) \u2014\nresolved per-transition against its own graph, so a chunk that later migrated still\nlabels its old-graph steps with the graph they belong to rather than the current pin;\nboth null for a step predating graph-provenance (never backfilled with a name).",
         "properties": {
           "choice_name": {
             "anyOf": [
@@ -3912,7 +3912,7 @@
         "type": "object"
       },
       "UserIdentityView": {
-        "description": "One linked provider identity, as the admin page's row renders it.",
+        "description": "One linked provider identity.",
         "properties": {
           "handle": {
             "title": "Handle",
@@ -3931,7 +3931,7 @@
         "type": "object"
       },
       "UserView": {
-        "description": "One ``users`` row \u2014 the admin page's own listing/assignment response shape.",
+        "description": "One ``users`` row \u2014 the listing/assignment response shape.",
         "properties": {
           "created_at": {
             "title": "Created At",
@@ -4025,7 +4025,7 @@
         "type": "object"
       },
       "WorkItemEntry": {
-        "description": "One pointer's pass-through work item \u2014 title, body + comment\nthread, vendor-native.\n\n``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its\nbrowser address \u2014 both null when no configured source names ``source``. A\nper-pointer forge failure degrades here rather than failing the whole read:\n``error`` carries the reason and ``title``/``body`` are null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
+        "description": "One pointer's pass-through work item \u2014 title, body + comment\nthread, vendor-native.\n\n``label``/``web_url`` are the legible pointer label (``blizzard#8``) and its\nbrowser address \u2014 both null when no configured source names ``source``. A\nper-pointer forge failure degrades here rather than failing the whole read:\n``error`` carries the reason and ``title``/``body`` are null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
         "properties": {
           "body": {
             "anyOf": [
@@ -4112,7 +4112,7 @@
         "type": "object"
       },
       "WorkItemsView": {
-        "description": "A chunk's pass-through work items \u2014 one entry per pointer, order preserved.\n\nEmpty when the chunk holds no pointers \u2014 the board's empty state; a grouped chunk carrying\nmany pointers yields one entry per pointer, each fetched fresh and never stored.",
+        "description": "A chunk's pass-through work items \u2014 one entry per pointer, order preserved.\n\nEmpty when the chunk holds no pointers; a grouped chunk carrying many pointers\nyields one entry per pointer, each fetched fresh and never stored.",
         "properties": {
           "items": {
             "default": [],
@@ -4146,7 +4146,7 @@
         "type": "object"
       },
       "WorkRefView": {
-        "description": "A pointer as the views render it \u2014 the raw pair plus its legible\nlabel and browser URL, both rendered by the pointer's configured source binding.\n\n``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``\nis its browser-openable address. Both null when no configured source names\n``source`` \u2014 the board then leans on the chunk's stable short id instead.",
+        "description": "A pointer as the views carry it \u2014 the raw pair plus its legible label and browser\nURL, both resolved by the pointer's configured source binding.\n\n``label`` is the legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``\nis its browser-openable address. Both null when no configured source names\n``source``.",
         "properties": {
           "label": {
             "anyOf": [
@@ -4187,7 +4187,7 @@
         "type": "object"
       },
       "blizzard__wire__envelope__RotatePolicyView": {
-        "description": "The declared session's rotation bounds (issue #144).\n\nThe wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`, carried on\n:class:`NodeConfig` so the runner can decide at spawn time whether the pool's head is\nstill resumable. ``max_invocations`` counts **harness invocations** (spawn, resume,\njudge, nudge), not node-steps \u2014 one node-step burns two or three of them.",
+        "description": "The declared session's rotation bounds (issue #144).\n\nThe wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`, carried on\n:class:`NodeConfig`. ``max_invocations`` counts **harness invocations** (spawn, resume,\njudge, nudge), not node-steps \u2014 one node-step burns two or three of them.",
         "properties": {
           "max_context_tokens": {
             "anyOf": [
@@ -6245,7 +6245,7 @@
     },
     "/api/fleet/runners": {
       "post": {
-        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth checked (issue #86a): ``warn`` (the default) logs and proceeds on a\nmissing/invalid/mismatched token; ``enforce`` rejects. Issue #95's optional\n``url``/``redirect_uris`` extension rides the same authenticated write \u2014 this route\nsits behind ``require_runner_principal`` at the router level\n(``fleet_router``'s own ``dependencies=``), so an unauthenticated attempt to set or\nchange a runner's federation identity is rejected exactly like every other fleet\nwrite, once #86 is enforced.",
+        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth checked (issue #86a) at the router level (``require_runner_principal``).\nIssue #95's optional ``url``/``redirect_uris`` extension rides the same\nauthenticated write, rejected exactly like every other fleet write once #86 is\nenforced.",
         "operationId": "register_runner_api_fleet_runners_post",
         "requestBody": {
           "content": {
@@ -6868,7 +6868,7 @@
         ]
       },
       "put": {
-        "description": "Idempotent whole-order replacement of the ready queue \u2014 the explicit operator\nverb behind ``blizzard hub queue set``, no longer any client's reorder path\n(``POST /api/queue/position`` is that path now).\n\nResolves every named id against the current ready set here (the edge concern,\n``bzh:domain-takes-objects``): ``409`` names the first id that is not a ready\nchunk, ``422`` rejects a duplicate id. A ready chunk not named keeps its current\nrelative order, appended after the named ones, so the replacement is total and\nidempotent.",
+        "description": "Idempotent whole-order replacement of the ready queue \u2014 the explicit operator\nverb behind ``blizzard hub queue set``.\n\nResolves every named id against the current ready set here (the edge concern,\n``bzh:domain-takes-objects``): ``409`` names the first id that is not a ready\nchunk, ``422`` rejects a duplicate id. A ready chunk not named keeps its current\nrelative order, appended after the named ones, so the replacement is total and\nidempotent.",
         "operationId": "replace_queue_api_queue_put",
         "requestBody": {
           "content": {

@@ -40,10 +40,8 @@ def publish_chunk_changed(
     already-fetched copies are not reused, since not every call site holds one. The
     current status is :func:`~blizzard.hub.domain.work.derive_chunk_status` over those
     facts unless ``status`` is supplied, which two sites (``claim_route``,
-    ``resolve_decision``) do: both already knew their post-mutation status ("running")
-    before this helper existed, and re-deriving there is a behavior change outside this
-    change's scope — the override keeps that literal while still enriching every other
-    field.
+    ``resolve_decision``) do: both already knew their post-mutation status ("running");
+    the override keeps that literal while still enriching every other field.
 
     ``key`` (issue #213) names the identity of the durable fact the caller's own
     mutation just wrote — e.g. ``f"transitions:{transition_id}"`` — matching

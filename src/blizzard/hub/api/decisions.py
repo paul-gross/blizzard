@@ -98,8 +98,7 @@ def resolve_decision(
         key = f"decision_resolutions:{decision_id}"
         services.events.publish_decision_resolved(decision.chunk_id, decision_id, key=key)
         # Hardcoded literal, not a derivation — a resolution always lands the chunk
-        # back at `running` and re-deriving here would be a behavior change outside
-        # this change's scope (see `chunk_events.publish_chunk_changed`'s docstring).
+        # back at `running` (see `chunk_events.publish_chunk_changed`'s docstring).
         chunk_events.publish_chunk_changed(
             services,
             decision.chunk_id,

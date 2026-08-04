@@ -15,12 +15,10 @@ because the lease closed (escalated / gate-parked) or is merely dormant (ask-par
 
 The **fact-before-command** ordering (``bzh:crash-correctness``) holds regardless of
 ``force``: :meth:`open` records the takeover fact — which is what makes the chunk
-unreachable to every loop step (``ctx.store.open_takeover_chunk_ids()``, read by REAP
-and ADVANCE) — before it kills anything or composes the interactive command, so no
-supervisor tick can race the human for the chunk. ``force`` additionally kills the live
-worker's pid (the reap machinery's own best-effort ``SIGKILL``) *after* the fact lands,
-and reports a bumped epoch to the hub exactly like a reaped lease's requeue would — but
-records no execution-attempt fact (no ``lease_context`` row, no closure), so the kill
+unreachable to every loop step — before it kills anything or composes the interactive
+command, so no supervisor tick can race the human for the chunk. ``force`` additionally
+kills the live worker's pid *after* the fact lands and reports a bumped epoch to the hub,
+but records no execution-attempt fact (no ``lease_context`` row, no closure), so the kill
 consumes no retry and triggers no escalation: the attempt is superseded, not failed.
 """
 
@@ -60,9 +58,8 @@ __all__ = [
 
 def wrapped_takeover_command(chunk_id: str, runner_dir: str) -> str:
     """The ``blizzard runner takeover`` CLI invocation an escalation composes when it
-    can — the wrapped, supported entry point this module's own :class:`TakeoverService`
-    answers to, so the composed form lives beside the concept it names rather than
-    inline at each call site. Both operands are shell-quoted: a hub-minted chunk id
+    can — composed here so the form lives beside the concept it names rather than inline
+    at each call site. Both operands are shell-quoted: a hub-minted chunk id
     never needs it (``foundation/ids.py`` grammar), but the composed string is pasted
     into a shell, so neither operand rides unquoted on that assumption."""
     return f"blizzard runner takeover {shlex.quote(chunk_id)} --dir {shlex.quote(runner_dir)}"
@@ -144,9 +141,6 @@ class TakeoverService:
         if live and not force:
             raise LiveWorkerConflict(f"chunk {chunk_id} has a live worker attempt — pass --force to take it over")
         if live and force and active is not None and active.lease_id in self._store.pending_submission_lease_ids():
-            # A fence minted now buffers *behind* the already-queued completion (or
-            # gate decision) — FIFO PULL flushes the submission first, advancing the
-            # node before the fence could take effect. Not force-fencible.
             raise SubmissionPending(f"chunk {chunk_id}'s attempt already submitted — let it land, then `requeue`")
 
         reference: LeaseRecord | None = active if active is not None else self._store.latest_lease_for_chunk(chunk_id)
@@ -198,12 +192,9 @@ class TakeoverService:
         )
         # The taken-over session's worker identity (issue #258): ``--resume`` inherits no
         # spawn env, so without these vars its ``blizzard runner`` verbs (attach/ask/
-        # artifact) cannot reach the runner. Identity is all it gets — the command above
-        # carries no ``--settings``, so no heartbeat/SessionEnd hook is installed. The
-        # token plaintext is never persisted, so it is **re-minted** here — invalidating
-        # the prior one — exactly as the loop's ``_resume_preamble`` does for
-        # daemon-driven resumes. The env rides the API response and the CLI's exec,
-        # never the printable ``command`` above.
+        # artifact) cannot reach the runner. The token plaintext is never persisted, so it
+        # is **re-minted** here, invalidating the prior one. The env rides the API response
+        # and the CLI's exec, never the printable ``command`` above.
         lease_token, token_hash = mint_lease_token()
         self._store.record_lease_token(reference.lease_id, token_hash, now)
         preamble = WorkerPreamble(

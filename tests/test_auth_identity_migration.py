@@ -73,9 +73,7 @@ def test_username_is_unique(tmp_path: Path) -> None:
 
 def test_email_is_unique_only_when_set(tmp_path: Path) -> None:
     """Decision D2 — the partial unique index (``WHERE email IS NOT NULL``): two
-    ``NULL`` emails coexist (sqlite would otherwise treat every ``NULL`` as distinct
-    under a plain unique column too, but this pins the *index* is the one doing the
-    work — a duplicate non-null email collides)."""
+    ``NULL`` emails coexist, a duplicate non-null email collides."""
     engine = _upgrade_existing_store_to_head(tmp_path)
     with engine.begin() as conn:
         conn.execute(

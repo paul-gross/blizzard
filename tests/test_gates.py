@@ -413,11 +413,8 @@ def test_detach_an_escalated_chunk_succeeds_and_the_escalation_survives(tmp_path
 
 
 def test_detach_publishes_chunk_changed_and_queue_changed(tmp_path: Path) -> None:
-    """The board learns of a detach live, as it does of a requeue.
-
-    Both events matter and for different reasons: ``chunk-changed`` carries the chunk's
-    re-derived status to any open detail view, and ``queue-changed`` tells the queue view a
-    new entry is claimable — a detached chunk re-enters the ready queue."""
+    """Detach publishes ``chunk-changed`` (carrying the re-derived status) followed by
+    ``queue-changed`` — the same pair a requeue publishes."""
     hub = build_hub(tmp_path)
     chunk_id, _ = _ingest(hub, _PLAIN_YAML)
     _claim_and_lease(hub, chunk_id)

@@ -13,13 +13,12 @@ default applies. Filling ``default_model`` in from ``chunks.model`` would be wor
 nothing: it would pin a Claude-native name on every historical chunk in a field that
 outranks every session declaration omitting ``model:``.
 
-**``chunks.model`` is retained and no longer read.** The domain stopped reading it and
-ingest stopped writing it, so every post-#144 row takes the column's ``server_default``
-(the literal ``claude-opus-4-8`` that ``20260717_2318_chunk_model_selection`` set)
-regardless of what its sessions actually ran under. That makes the column meaningful for
-**pre-#144 rows only** — it is kept for that history, not as a current fact, and must not
-be trusted on a new row. It is left in place rather than dropped because dropping it
-would destroy the one record of what those older chunks ran.
+**``chunks.model`` is retained and no longer read.** Nothing reads or writes it, so every
+post-#144 row takes its ``server_default`` and the column is meaningful for **pre-#144
+rows only**; it is left in place rather than dropped because dropping it would destroy the
+one record of what those older chunks ran. Both halves — the retained column and the
+absent backfill — are pinned by
+``tests/test_pin_hub_api.py::test_chunk_defaults_retains_model_and_backfills_no_default_model``.
 
 Guarded on the columns already being present, like the other in-place column adds in this
 tree, so a fresh ``base -> head`` (where ``schema``'s live metadata already declares them)

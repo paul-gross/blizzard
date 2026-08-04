@@ -6,11 +6,9 @@ surfacing (unit tier, issue #143 Phase 3), mirroring ``tests/test_runner_attach_
 Like ``artifact create``, this does not soft-fail: a rejection must reach the worker as
 a non-zero exit so it learns the declaration was not durable.
 
-The verb carries no ``--forge``. The origin a declaration is verified against comes from
-the environment's repo manifest, so there is no worker-supplied value to get wrong — the
-flag this file used to exercise defaulted to ``git remote get-url origin`` in the process
-cwd, and since workers are spawned at the workspace root it resolved to the workspace
-repo for every repo alike.
+The verb carries no ``--forge``: the origin a declaration is verified against comes
+from the environment's repo manifest, so there is no worker-supplied value to get
+wrong.
 """
 
 from __future__ import annotations
@@ -58,8 +56,7 @@ def test_commit_verb_posts_inherited_identity_and_declaration_body(monkeypatch: 
 
 
 def test_commit_verb_omits_the_environment_key_when_not_named(monkeypatch: pytest.MonkeyPatch) -> None:
-    """No ``--env`` sends no ``environment_id`` at all, rather than an explicit null —
-    the runner infers it when the chunk holds exactly one environment."""
+    """No ``--env`` sends no ``environment_id`` key at all, rather than an explicit null."""
     calls: list[dict] = []
 
     def fake_post(url: str, *, json: dict, headers: dict, timeout: float) -> _FakeResponse:

@@ -4,8 +4,8 @@ issue #94).
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the domain
 sees only :class:`~blizzard.hub.auth.models.SuperuserBootstrap`. There is at most one
 row at rest: :meth:`upsert` deletes-then-inserts within one transaction rather than an
-``ON CONFLICT`` upsert, keeping this adapter inside SQLAlchemy's portable DDL/DML
-surface across the sqlite/postgres dialects this store targets.
+``ON CONFLICT`` upsert, keeping this adapter inside SQLAlchemy's portable DDL/DML surface
+(``bzh:sql-portable``). No tier can pin that half — the suite runs sqlite only.
 """
 
 from __future__ import annotations

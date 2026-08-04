@@ -272,10 +272,9 @@ def test_resume_with_message_child_env_excludes_the_hub_token_and_an_unlisted_se
 
 @pytest.mark.component
 def test_resume_with_message_injects_the_lease_identity_when_given_a_preamble(tmp_path: Path) -> None:
-    # A resumed worker needs the same per-lease identity a fresh spawn gets, or its CLI
-    # (`blizzard runner attach`) and heartbeat/SessionEnd hooks cannot reach the runner for
-    # this lease — `--resume` inherits none of the spawn env. The caller passes a preamble
-    # with a freshly re-minted token; the resume child env must carry it, mirroring spawn.
+    # A resumed worker needs the same per-lease identity a fresh spawn gets, since
+    # `--resume` inherits none of the spawn env. The caller passes a preamble with a
+    # freshly re-minted token; the resume child env must carry it, mirroring spawn.
     dump_script = tmp_path / "dump-env"
     dump_script.write_text(_ENV_DUMP_HARNESS)
     dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
@@ -339,7 +338,7 @@ def test_spawn_env_still_carries_the_base_allowlist_and_deliberate_blizzard_vars
 ) -> None:
     # The allowlist is not a denylist rewrite in disguise: PATH/HOME (needed to locate
     # and run the binary) and the adapter's own BLIZZARD_* additions still ride the
-    # child env exactly as before.
+    # child env.
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
     monkeypatch.setenv("HOME", "/home/worker")
     adapter = ClaudeCodeAdapter(binary="claude")
@@ -540,11 +539,8 @@ def test_judge_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -
 @pytest.mark.component
 def test_resume_with_message_carries_the_worker_settings_hooks(tmp_path: Path) -> None:
     # ``--resume`` does not inherit the original spawn's ``--settings``, so a resumed
-    # session would run with no ``PostToolUse`` heartbeat and no ``SessionEnd`` hook — it
-    # would stop beating (blinding REAP's stall detector) and record no session-end on exit
-    # (misleading startup crash-recovery). ``resume_with_message`` re-enters a long-lived
-    # session that later exits on its own, the same lifecycle as ``spawn``, so it must
-    # re-attach the worker hook file exactly as ``spawn`` does.
+    # session would lose its ``PostToolUse`` heartbeat and ``SessionEnd`` hook unless
+    # ``resume_with_message`` re-attaches the worker hook file exactly as ``spawn`` does.
     binary = _fake_binary(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
@@ -859,7 +855,7 @@ def test_spawn_redirects_stdout_to_the_injected_stdout_path(tmp_path: Path) -> N
 
 @pytest.mark.component
 def test_spawn_without_a_stdout_path_still_discards_output(tmp_path: Path) -> None:
-    # Empty `stdout_path` keeps today's behavior (DEVNULL) — nothing is left on disk.
+    # Empty `stdout_path` discards output (DEVNULL) — nothing is left on disk.
     binary = _fake_binary_with_usage(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
@@ -918,9 +914,9 @@ def test_resume_with_message_passes_output_format_json_so_cost_is_real(tmp_path:
 @pytest.mark.component
 def test_resume_without_output_format_json_yields_no_envelope(tmp_path: Path) -> None:
     """The other side of the regression: a resume invocation that omits
-    ``--output-format json`` (the bug ``resume_with_message`` used to carry) emits
-    plain text, not an envelope — so ``parse_usage`` returns ``None`` and the
-    caller's transcript-summation fallback (cost absent) is what sets the cost."""
+    ``--output-format json`` emits plain text, not an envelope — so ``parse_usage``
+    returns ``None`` and the caller's transcript-summation fallback (cost absent) is
+    what sets the cost."""
     binary = _fake_binary_with_usage(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
@@ -1006,7 +1002,7 @@ def test_an_all_unresolvable_list_falls_back_to_the_adapter_default_with_a_note(
 
 @pytest.mark.unit
 def test_an_empty_preference_list_is_the_adapter_default() -> None:
-    # The pre-#144 world and every chunk that expresses no preference.
+    # A chunk that expresses no preference (issue #144).
     assert ClaudeCodeAdapter(binary="claude", model="claude-opus-5").resolve_model([]) == "claude-opus-5"
 
 
@@ -1125,9 +1121,8 @@ def test_resume_with_message_carries_the_effort_but_never_the_model(monkeypatch:
 
 
 # --------------------------------------------------------------------------- #
-# Usage attribution (issue #144). Before per-session resolution the adapter's one
-# pinned model was always the right guess for an invocation the harness reported
-# no model for; now it is not, so the caller supplies what it resolved.
+# Usage attribution (issue #144): the caller supplies the model it resolved for an
+# invocation the harness itself reports none for.
 # --------------------------------------------------------------------------- #
 
 

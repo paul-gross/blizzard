@@ -52,9 +52,7 @@ def test_default_graph_triage_is_a_fresh_advanced_tier_cold_read() -> None:
     doc = load_default_graph_doc()
     triage = doc.node("triage")
     assert triage is not None
-    # Every entry is a fresh cold read through the declared pool: advanced tier
-    # preferred, frontier the author-written fallback (tiers are unordered roles,
-    # so nothing substitutes implicitly).
+    # Every entry is a fresh cold read: advanced tier preferred, frontier the fallback.
     assert triage.session is SessionMode.FRESH
     assert triage.session_source == "gate"
     assert doc.sessions["gate"].model == ["blizzard:advanced", "blizzard:frontier"]

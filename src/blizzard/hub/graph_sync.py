@@ -1,23 +1,16 @@
 """Reconcile the packaged graph set against the store — ``blizzard hub graph sync`` (#146).
 
-The gap this closes. Graphs live in the hub's **store**, not on disk: the hub resolves a
-minted graph per chunk and never re-reads the packaged YAML under
-:mod:`blizzard.hub.graphs`. Minting was an operator verb only, and nothing minted at
-startup — so shipping a changed graph in a new wheel did not change fleet behavior. The
-deploy succeeded, the daemons came up healthy, and every new chunk kept running the
-previous definition, with no error, log line, or status output saying so. It cost a real
-deploy: ``bas-dwf`` gained a ``retrospective`` node, the wheel was built, installed,
-migrated and restarted with every check green, and the running hub went on serving the
-four-node lane. The drift was caught only by hand-diffing ``hub graph show`` against the
-source.
+The gap this closes: a graph the hub serves lives in its **store**, so shipping a changed
+graph in a new wheel changes no fleet behavior until something mints it — silently, with
+every deploy check green.
 
 This module is the **edge half** of the fix: it walks the packaged set, loads and inlines
 each ``graph.yaml`` (filesystem + PyYAML, both outside the domain — ``bzh:domain-core``),
 re-parses what the store already holds, and hands both to
 :meth:`~blizzard.hub.domain.graph_authoring.GraphMintService.mint_if_changed`, which owns
 the mint-only-if-changed rule itself. It is deliberately not a route body: the same
-function is what an at-startup reconciliation would call, so the two delivery shapes the
-issue weighs share one implementation rather than two that must agree.
+function is what an at-startup reconciliation would call, so both delivery shapes share
+one implementation rather than two that must agree.
 
 **Per-graph isolation.** One packaged graph failing to load, parse, or validate must not
 stop the others reconciling — a wheel that ships one bad graph should still converge the
@@ -25,10 +18,8 @@ rest and say plainly which one it could not. Every outcome, good or bad, is repo
 only a :attr:`GraphSyncStatus.FAILED` row makes the caller's exit non-zero.
 
 **Additive, never re-pinning.** A mint appends a new definition and supersedes the prior
-one for *future* resolution; a chunk in flight stays on the definition it started under,
-because a chunk pins its graph by id at mint (``chunks.graph_id``) and nothing here
-touches a chunk. Deliberate migration of in-flight work is issue #124's standing intent
-and #164's follow-latest policy, not this.
+one for *future* resolution; nothing here touches a chunk. Deliberate migration of
+in-flight work is issue #124's standing intent and #164's follow-latest policy, not this.
 """
 
 from __future__ import annotations

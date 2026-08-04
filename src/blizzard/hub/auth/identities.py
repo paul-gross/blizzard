@@ -1,13 +1,9 @@
 """The identity-link repository seam — read/write Protocols (issue #91,
 ``bzh:repository-split``).
 
-The write Protocol landed in #91 ahead of a login mechanism so the schema and
-repository shape were stable for #92's linking rule; #92 is the first caller of
-:meth:`IWriteIdentityRepository.link` (and its own
-:meth:`~IWriteIdentityRepository.update_handle`, the handle-refresh half of "subject
-mapping wins" — a provider rename never re-mints a user), plus
-:meth:`IReadIdentityRepository.distinct_provider_names`, the boot-time
-provider-immutability check's read (``hub/app.py``'s ``build_hosted_app``).
+:meth:`~IWriteIdentityRepository.update_handle` is the handle-refresh half of "subject
+mapping wins" (a provider rename never re-mints a user); :meth:`IReadIdentityRepository.
+distinct_provider_names` backs the boot-time provider-immutability check.
 """
 
 from __future__ import annotations

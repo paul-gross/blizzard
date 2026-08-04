@@ -204,8 +204,7 @@ def test_derive_event_feed_sorts_severity_then_recency() -> None:
     projected = next(e for e in feed if e.kind == "needs-human")
     assert projected.id < 0
     assert projected.chunk_id == "ch_z"
-    # …and names no runner as `None`, never `""` — a consumer building a runner universe
-    # out of the feed reads absence by type rather than filtering a sentinel (issue #155).
+    # …and names no runner as `None`, never `""` (issue #155).
     assert projected.runner_id is None
 
 
@@ -214,7 +213,7 @@ def test_derive_event_feed_escalation_message_does_not_overclaim_resume() -> Non
     a runner-composed escalation holds a real resume command and a hub-authored one's
     raw field can be operator prose (cross-graph-unresolvable), and neither string may
     leak into the message itself — the two-branch wording keys only on whether the raw
-    field is populated (round-2 regression, previously untested)."""
+    field is populated."""
     runner_composed = EscalationOpen(
         chunk_id="ch_a", recorded_at=_at(1), takeover_command="cd /ws/e1 && claude --resume sess-a"
     )

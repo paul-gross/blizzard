@@ -45,8 +45,8 @@ class SubprocessWorktreeGit:
 
     def _git(self, *args: str) -> str:
         # No `-C`: `ls-remote <url>` is answered by the remote, so this runs without a
-        # local repository at all. That is the point — consulting a working directory
-        # here is what let the wrong directory's `origin` masquerade as the right one.
+        # local repository at all — the seam takes no working directory to consult
+        # (`blizzard.runner.loop.worktree`).
         result = subprocess.run(
             ["git", *args],
             capture_output=True,

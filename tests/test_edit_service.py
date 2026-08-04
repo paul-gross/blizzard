@@ -184,7 +184,7 @@ def _done_facts() -> ChunkFacts:
 
 
 # --------------------------------------------------------------------------- #
-# set_graph / set_defaults — unchanged behavior, now thin wrappers over edit().
+# set_graph / set_defaults — thin wrappers over edit().
 # --------------------------------------------------------------------------- #
 
 

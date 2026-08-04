@@ -9,13 +9,11 @@ its own credentialed client — never the delivery forge's.
 
 The pointer carries its own ``source`` name and an opaque ``ref`` (this binding's
 own item token — a GitHub issue number): ``fetch``/``label``/``web_url`` trust
-``pointer.ref`` directly rather than re-deriving it from a URL, unlike the Phase 1/2
-shape this binding grew from (``pm/label.py``'s issue-URL grammar, now gone).
+``pointer.ref`` directly rather than re-deriving it from a URL.
 
-``parse``'s production caller is ``POST /chunks``, via the registry's ``resolve``. The
-URL grammar `cli.py` used to carry (a config-blind guess that a source's name equals
-its repo tail) now lives here instead, checked against *this binding's own configured*
-``repo`` — the hub's own configuration, not a client-side heuristic.
+``parse``'s production caller is ``POST /chunks``, via the registry's ``resolve``,
+checked against *this binding's own configured* ``repo`` — the hub's own
+configuration, not a client-side heuristic.
 """
 
 from __future__ import annotations

@@ -6,18 +6,13 @@ as stalled — two independent copies of this predicate would let the panel say
 ``running`` while REAP is reaping the same lease. This module is that predicate's one
 owner; both callers import it rather than re-deriving it.
 
-It also holds the panel's read model: :func:`derive_lease_state` — a pure function
-mirroring :func:`blizzard.hub.domain.registry.derive_online` — and
-:class:`LocalLeaseService`, the domain service that reads the store and process probe
-and returns each active lease's derived state (``bzh:facts-not-status``): no status
-column is read or written, the state is computed at read time from facts.
+It also holds the panel's read model: :func:`derive_lease_state` and
+:class:`LocalLeaseService`, which returns each active lease's state derived at read
+time from facts (``bzh:facts-not-status``) — no status column is read or written.
 
 This layer imports no FastAPI, no SQLAlchemy, no click — only stdlib and the seam
 Protocols (``bzh:dependency-inversion``) it reads leases, heartbeats, and process
-liveness through. It does not import from ``runner/loop/`` — :class:`IProcessProbe`
-below is a narrower Protocol this module owns for the one method it needs
-(structural typing: the loop's ``LinuxProcessProbe``/``FakeProbe`` satisfy it with no
-shared base class), not a re-export of the loop's own seam.
+liveness through, including its own :class:`IProcessProbe` rather than the loop's.
 """
 
 from __future__ import annotations
@@ -53,9 +48,7 @@ HEARTBEAT_STALENESS_THRESHOLD = timedelta(hours=1)
 #: The panel's recently-closed-lease list length (issue #29) — a
 #: **list-length affordance**, not a retention policy: it bounds how many closed rows
 #: :meth:`LocalLeaseService.list_recent` returns, not how long a closure fact or its
-#: transcript lives on disk (a separate, undecided product question). Mirrors
-#: :data:`HEARTBEAT_STALENESS_THRESHOLD` as a documented module constant rather than a
-#: config knob, and is injectable the same way (``LocalLeaseService(..., recent_limit=…)``).
+#: transcript lives on disk (a separate, undecided product question).
 #: ``MAX_AGENTS`` is ~4, so 20 closed leases covers several hours of fleet activity.
 RECENT_LEASE_LIMIT = 20
 
@@ -88,22 +81,12 @@ def last_activity(
 ) -> datetime:
     """A lease's staleness baseline: the newest of its heartbeat, its spawn, and its mint.
 
-    The docstring's promise — *a freshly spawned worker is never read as stalled inside
-    the threshold window* — has to hold for **every** spawn generation, not just the
-    first (issue #150). Heartbeats ride tool calls, so a worker that ask-parks stops
-    beating the moment it exits. REAP correctly skips a parked lease, but the instant a
-    resume respawns the worker the lease is live again while the baseline is still the
-    pre-park beat (or the original mint). Any question left unanswered longer than
-    :data:`HEARTBEAT_STALENESS_THRESHOLD` therefore produced a worker that was stale at
-    birth: reaped on the next tick, seconds into a healthy first inference turn, before
-    a single tool call could land a fresh beat. Since the reap funnels into the retry
-    budget, the operator's *answer* got silently converted into an escalation.
-
-    Folding the newest ``lease_spawns`` row into the baseline closes it for every resume
-    path that reuses a lease — answer-resume, pause-resume, restart-resume, crash-resume
-    — with no new write and no new fact: :meth:`IWriteRunnerStore.record_spawn` already
-    records it atomically at each of those sites, so the fix is crash-safe by
-    construction and lives in one read-side function.
+    The promise — *a freshly spawned worker is never read as stalled inside the threshold
+    window* — has to hold for **every** spawn generation, not just the first (issue #150):
+    heartbeats ride tool calls, so a resumed lease whose baseline was still its pre-park
+    beat would be stale at birth and reaped seconds into a healthy first inference turn.
+    Folding the newest ``lease_spawns`` row in closes that for every resume path that
+    reuses a lease, with no new write and no new fact.
 
     Deliberately **not** a fabricated heartbeat row. Heartbeats are worker-originated —
     they prove the worker is making tool calls — and a runner-written beat would make
@@ -116,12 +99,9 @@ def last_activity(
     "activity". ``created_at`` is the floor for a lease that has neither.
 
     ``heartbeat`` lets a caller that has **already** read ``latest_heartbeat`` pass it in
-    rather than have this issue the identical query a second time —
-    :meth:`LocalLeaseService.list_active` reads it anyway for the panel's heartbeat-age
-    column, and its N+1 is bounded by ``MAX_AGENTS``, so growing it per lease for no new
-    information is pure waste. The sentinel distinguishes "not supplied, go read it" from
-    a supplied ``None`` (a lease that has genuinely never beaten), which a plain ``None``
-    default could not.
+    rather than have this issue the identical query a second time. The sentinel
+    distinguishes "not supplied, go read it" from a supplied ``None`` (a lease that has
+    genuinely never beaten), which a plain ``None`` default could not.
     """
     beat = store.latest_heartbeat(lease.lease_id) if isinstance(heartbeat, _Unread) else heartbeat
     facts = (beat, store.latest_spawn(lease.lease_id))
@@ -132,19 +112,16 @@ def _staleness_exceeded(last_activity_at: datetime, now: datetime, *, threshold:
     """Pure comparison: True iff ``last_activity_at`` is older than ``threshold`` as of ``now``.
 
     Split out of :func:`is_heartbeat_stale` so :class:`LocalLeaseService` can reuse the
-    exact comparison after doing its own store read, without either copying the rule or
-    forcing :func:`derive_lease_state` to take a store (``bzh:domain-core``). What both
-    callers pass is :func:`last_activity`'s result, so the panel's ``stale`` and REAP's
-    reap decision cannot disagree.
+    exact comparison after doing its own store read, without copying the rule or forcing
+    :func:`derive_lease_state` to take a store (``bzh:domain-core``).
     """
     return now - as_utc(last_activity_at) > threshold
 
 
 # ``as_utc`` re-exported from ``foundation/store/utc.py`` (issue #28, ``bzh:utc-instants``):
-# kept importable from here — ``runner/api/leases.py`` and existing callers depend on the
-# name at this path — but this module no longer owns its own copy. Every store column is
-# ``UtcDateTime``-typed, so the coercion here is a defensive no-op, kept because this
-# module's inputs are not guaranteed to come from the store (``bzh:domain-core``).
+# kept importable from here because callers depend on the name at this path. The coercion
+# is defensive — this module's inputs are not guaranteed to come from the store
+# (``bzh:domain-core``).
 
 
 # --------------------------------------------------------------------------- #
@@ -156,15 +133,12 @@ def _staleness_exceeded(last_activity_at: datetime, now: datetime, *, threshold:
 class LeaseActivity:
     """A lease with its derived state and joined binding facts — the panel's read model.
 
-    Mirrors :class:`blizzard.hub.domain.registry.RunnerLiveness`: it nests the raw
-    :class:`LeaseRecord` alongside what the store never stores. ``environment_id`` /
-    ``workdir`` come from the chunk's binding join; ``last_heartbeat_at`` is the newest
-    heartbeat, or ``None`` if the lease has never beaten (the Phase 3 wire model maps
-    this facts-plus-derivation shape onto ``LeaseView``). ``closed_at`` / ``closure_reason``
-    (issue #29) are ``None`` iff the lease is active — a closed lease also carries
-    ``environment_id is None`` and ``workdir is None``, because its bindings are always
-    released by the time closure is recorded (``bindings_for_chunk`` returns only
-    *unreleased* bindings); there is no fact left to reconstruct them from.
+    It nests the raw :class:`LeaseRecord` alongside what the store never stores.
+    ``environment_id`` / ``workdir`` come from the chunk's binding join;
+    ``last_heartbeat_at`` is the newest heartbeat, or ``None`` if the lease has never
+    beaten. ``closed_at`` / ``closure_reason`` (issue #29) are ``None`` iff the lease is
+    active — a closed lease also carries ``environment_id is None`` and ``workdir is
+    None``, because its bindings are always released by the time closure is recorded.
     """
 
     lease: LeaseRecord
@@ -202,13 +176,9 @@ def derive_lease_state(
        too old.
     6. **running** — otherwise.
 
-    ``is_closed``, ``is_alive``, and ``is_stale`` are facts the caller
-    (:class:`LocalLeaseService`) resolved beforehand — a closure-fact read, a
-    process-probe read, and a heartbeat read, respectively — exactly the seam
-    :func:`is_heartbeat_stale` already draws between the store read and the pure
-    comparison. :meth:`LocalLeaseService.list_active` always passes ``is_closed=False``
-    (its source read, ``list_active_leases``, is unclosed *by definition*), so this
-    addition is zero blast radius on the existing five-state path.
+    ``is_closed``, ``is_alive``, and ``is_stale`` are facts the caller resolved
+    beforehand — a closure-fact read, a process-probe read, and a heartbeat read — which
+    is what keeps this function pure (``bzh:domain-core``).
     """
     if is_closed:
         return "closed"
@@ -226,12 +196,10 @@ def derive_lease_state(
 class IProcessProbe(Protocol):
     """The one process-liveness read this service needs.
 
-    Narrower than the loop's full seam (``runner/loop/process.py``'s ``IProcessProbe``,
-    which also carries ``start_time``/``kill``) so this domain module can own its own
-    Protocol without importing across the ``runner/loop`` boundary (``bzh:domain-core``,
-    ``bzh:dependency-inversion``: the domain declares the seam it needs). Both the
-    loop's ``LinuxProcessProbe`` and ``tests/runner_fakes.py``'s ``FakeProbe`` satisfy
-    this structurally — Protocol typing needs no shared base class.
+    Narrower than the loop's seam (``runner/loop/process.py``) so this domain module can
+    own its own Protocol without importing across the ``runner/loop`` boundary
+    (``bzh:domain-core``, ``bzh:dependency-inversion``: the domain declares the seam it
+    needs). Implementations satisfy it structurally — no shared base class.
     """
 
     def is_alive(self, pid: int, process_start_time: str) -> bool: ...
@@ -240,10 +208,9 @@ class IProcessProbe(Protocol):
 class LocalLeaseService:
     """Derive every active lease's state at read time — the panel's list (issue #28).
 
-    Mirrors :class:`blizzard.hub.domain.registry.FleetService`: a status the store
-    never stores, computed here from facts plus the injected clock and process probe.
-    Holds only :class:`IReadRunnerStore` (``bzh:repository-split``) — this is a read
-    path, so it is safe for a controller to hold this service directly
+    A status the store never stores, computed here from facts plus the injected clock and
+    process probe. Holds only :class:`IReadRunnerStore` (``bzh:repository-split``) — this
+    is a read path, so it is safe for a controller to hold this service directly
     (``bzh:controller-read-only``).
     """
 
@@ -266,15 +233,12 @@ class LocalLeaseService:
 
         Reads ``parked_lease_ids()`` once (not per-lease) and, per lease (N+1 bounded
         by ``MAX_AGENTS``, ~4 — accepted rather than extending the repository, which
-        would be speculative): ``latest_heartbeat`` for the panel's heartbeat-age column,
-        :func:`last_activity` for the staleness read, and ``bindings_for_chunk`` for the
-        environment join.
+        would be speculative): ``latest_heartbeat``, :func:`last_activity` for the
+        staleness read, and ``bindings_for_chunk`` for the environment join.
 
-        The column and the staleness baseline are different questions — the column shows
-        what the *worker* last did, while staleness is measured against the spawn too
-        (issue #150), so a just-resumed lease renders ``running`` with an honestly old
-        last-beat rather than ``stale`` — but they share the one heartbeat read, handed to
-        :func:`last_activity` rather than issued twice.
+        The reported heartbeat and the staleness baseline are different questions — the
+        former is what the *worker* last did, the latter is measured against the spawn too
+        (issue #150) — but they share the one heartbeat read rather than issuing it twice.
         """
         now = self._clock.now()
         parked = self._store.parked_lease_ids()
@@ -306,13 +270,10 @@ class LocalLeaseService:
     def list_recent(self) -> list[LeaseActivity]:
         """Active leases, then the most recently closed — the panel's list (issue #29).
 
-        Ordering is server-owned (one owner) so the UI just renders: every active
-        lease first (:meth:`list_active`'s own order — unbounded, so a long-running
-        agent can never be crowded out), then up to ``recent_limit`` closed leases,
-        newest-closed first (:meth:`IReadRunnerStore.list_closed_leases`'s own order).
-        A single ``list_recent(limit)`` read merging both would let recently-closed
-        leases crowd an older active one out of a shared cap — this keeps the active
-        side unbounded-correct and only the closed side bounded.
+        Ordering is server-owned (one owner): every active lease first — unbounded, so a
+        long-running agent can never be crowded out — then up to ``recent_limit`` closed
+        leases, newest-closed first. Pinned by ``tests/test_runner_leases_domain.py::
+        test_list_recent_active_lease_not_crowded_out_by_newer_closed_leases``.
         """
         return self.list_active() + self._list_closed()
 
@@ -320,11 +281,10 @@ class LocalLeaseService:
         """The recent-closed half of :meth:`list_recent` — no probe, no heartbeat read.
 
         ``closed`` wins :func:`derive_lease_state`'s precedence unconditionally, so the
-        process-liveness and staleness reads :meth:`list_active` makes would be wasted
-        I/O here — and the pid read would be actively misleading (a closed lease's pid
-        may have been reused by an unrelated process). ``environment_id``/``workdir``
-        are ``None``: a closed lease's bindings are always released by the time closure
-        is recorded, so there is no unreleased binding left to join (issue #29).
+        process-liveness and staleness reads would be wasted I/O here — and the pid read
+        would be actively misleading (a closed lease's pid may have been reused by an
+        unrelated process). ``environment_id``/``workdir`` are ``None``: a closed lease's
+        bindings are always released by the time closure is recorded (issue #29).
         """
         return [
             LeaseActivity(

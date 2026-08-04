@@ -1,10 +1,9 @@
 """The session-id hasher — shared by mint and resolve so the two can never drift onto
 different digests of the same plaintext (issue #91).
 
-Mirrors ``hub/domain/enrollment.py``'s ``hash_token`` exactly (sha256 hex digest);
-kept as its own function here (rather than imported from there) because a session id
-and a runner bearer token are different credential kinds that happen to share a
-hashing scheme — a caller importing ``hub.auth.hashing`` should not also pull in the
+Its own function rather than an import of ``hub/domain/enrollment.py``'s ``hash_token``:
+a session id and a runner bearer token are different credential kinds that happen to share
+a hashing scheme, and importing ``hub.auth.hashing`` should not pull in the
 runner-enrollment domain module.
 """
 

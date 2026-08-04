@@ -181,9 +181,3 @@ def test_cross_graph_edge_round_trips_through_the_store(tmp_path: Path) -> None:
     assert edge.target_graph == "triage"
     assert edge.to_node_name == "graph:triage"
     assert edge.model == "claude-sonnet-5"
-
-
-# The Phase 2→4 interim (a cross-graph choice falling through to a clean ``apply``
-# failure before the migration branch existed) is superseded once Phase 4 lands the
-# apply path: the choice now migrates, or escalates on an unresolvable target. That
-# end-to-end behaviour is covered by ``tests/test_migration_apply.py``.

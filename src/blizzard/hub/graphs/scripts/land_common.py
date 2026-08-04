@@ -1,7 +1,4 @@
-"""Shared helpers for the land scripts (issue #230) — the one home instead of
-:mod:`~blizzard.hub.graphs.scripts.land_default` being the accidental source
-:mod:`~blizzard.hub.graphs.scripts.land_ff` and :mod:`~blizzard.hub.graphs.scripts.land_pr_ci`
-happened to import from.
+"""Shared helpers for the land scripts (issue #230).
 
 Pure stdlib, exactly like the scripts that import from here (``bzh:deterministic-shell``):
 ``forge_request`` is the one HTTP seam every land script talks to the forge (and the
@@ -9,9 +6,9 @@ mid-run marker callback) through; ``qualify_repo``/``pr_title``/``refuse_empty_d
 are the small pure helpers their policies share; ``require_env``/``require_json_env`` turn
 a missing or malformed injected env var into a named diagnostic instead of a raw traceback;
 ``post_marker`` is the durable-write wrapper around the marker callback POST — a
-dropped or unconfirmed marker write used to be silently discarded (the closure's return
-value was never even checked), which is exactly how a merge could land with no durable
-record of it. A confirmed write (any 2xx, including the idempotent ``recorded: false``
+dropped or unconfirmed marker write must never be silently discarded, since that is
+exactly how a merge could land with no durable record of it. A confirmed write (any 2xx,
+including the idempotent ``recorded: false``
 replay) is the only success; anything else is retried a bounded number of times and, if
 still unconfirmed, raises :class:`MarkerWriteError` rather than letting the script print
 ``landed`` over an unrecorded merge. ``marker_recorder`` is ``post_marker`` specialized to
@@ -72,22 +69,15 @@ def refuse_empty_delivery(commits: list[dict[str, str]]) -> None:
     """Exit non-zero when a delivery node is handed nothing to deliver **and the graph
     promised something**.
 
-    "Nothing to deliver" and "everything already delivered" are not the same outcome,
-    and every land policy used to answer both with ``landed``: the marker filter below
-    yields an empty pending list either way, so a chunk whose ``git_commit`` artifacts
-    never materialized printed ``landed`` without contacting the forge at all. That is
-    how a fully-built feature reached `done` with no PR, no merge, and a delivery log
-    three lines long.
+    Emptiness alone cannot tell a lost ``git_commit`` from a non-code chunk that promised
+    none (MVP criterion 10), so the graph's own intent decides, injected as
+    ``BZ_HUB_EXPECT_GIT_COMMITS``. Absent (an older executor) it reads as "expected":
+    failing loudly on a set the policy cannot explain is the safer default.
 
-    But an empty set is not always wrong. A non-code chunk — a review, a spike — declares
-    no ``git_commit`` anywhere in its graph and still routes through ``deliver`` as the
-    uniform terminal (MVP criterion 10): landing nothing is its correct outcome. The two
-    are told apart by the graph's own statement of intent, injected as
-    ``BZ_HUB_EXPECT_GIT_COMMITS``, not by the emptiness alone — which is the same
-    information every caller of this function lacked on its own.
-
-    Absent (an older executor), the var reads as "expected": a delivery policy that fails
-    loudly on a set it cannot explain is the safer default of the two.
+    Pinned by ``tests/test_land_scripts.py``'s
+    ``test_an_empty_commit_set_fails_the_node_instead_of_reporting_landed``,
+    ``test_a_non_code_chunk_lands_empty_because_its_graph_promised_no_commit`` and
+    ``test_an_absent_expectation_signal_is_treated_as_expected``.
     """
     if commits:
         return
@@ -175,9 +165,8 @@ def post_marker(
     request: Callable[..., tuple[int, Any]],
 ) -> Callable[[str, str], None]:
     """Build the generic ``post(name, content)`` durable-marker-write closure (issue
-    #232) — the retry/auth logic :func:`marker_recorder` used to own directly, extracted
-    so a second marker kind (``delivery-findings``) can share it without a bespoke,
-    unauthenticated, unretried ``forge_request``/``api`` call of its own.
+    #232), so a second marker kind (``delivery-findings``) can share it without a
+    bespoke, unauthenticated, unretried ``forge_request``/``api`` call of its own.
 
     A confirmed write (any 2xx, including an idempotent replay) is the only success;
     anything else is retried a bounded number of times and, if still unconfirmed, raises
@@ -227,15 +216,13 @@ def marker_recorder(
     request: Callable[..., tuple[int, Any]],
 ) -> Callable[[str, str], None]:
     """Build the ``record(repo, commit_hash)`` closure a land script calls immediately
-    after each repo lands, mid-run (issue #65) — now durable (issue #230): a write that
-    is never confirmed raises :class:`MarkerWriteError` instead of being silently
-    discarded, and every write carries the run's marker capability token as
-    :data:`_MARKER_TOKEN_HEADER`.
+    after each repo lands, mid-run (issue #65, issue #230): a write that is never
+    confirmed raises :class:`MarkerWriteError`, and every write carries the run's
+    marker capability token as :data:`_MARKER_TOKEN_HEADER`.
 
     A falsy ``callback_url`` is not fatal by itself — a chunk with nothing pending never
-    calls ``record`` at all, and that stays a silent no-op exactly as before. It is fatal
-    only once a repo that genuinely needs a marker recorded reaches this closure with
-    nowhere to send it.
+    calls ``record`` at all, and that stays a silent no-op. It is fatal only once a repo
+    that genuinely needs a marker recorded reaches this closure with nowhere to send it.
 
     Delegates its retry/auth logic to :func:`post_marker`, prepending the
     ``merged/`` marker-name prefix.

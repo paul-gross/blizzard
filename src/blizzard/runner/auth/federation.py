@@ -330,24 +330,14 @@ _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 def _bounce_cookie_policy(request: Request) -> tuple[Literal["lax", "none"], bool]:
     """``SameSite``/``Secure`` for the two short-lived bounce cookies.
 
-    The hub returns the federation token by ``response_mode=form_post`` — a POST issued
-    from the *hub's* origin to this runner's callback. When the hub does not share a
-    site with the runner (a hosted hub against a loopback runner, say), that POST is
-    **cross-site**, and a ``SameSite=Lax`` cookie is not sent on it: the callback then
-    sees no state and refuses the login as "bad or expired state". Surviving that POST
-    requires ``SameSite=None``, which browsers only honor together with ``Secure``.
+    ``None`` + ``Secure`` wherever a browser will accept ``Secure`` (an https origin, or a
+    loopback one), so the cookie survives the hub's cross-site ``form_post`` callback;
+    ``Lax`` elsewhere, since a plain-http non-loopback runner cannot hold a ``Secure``
+    cookie at all. The CSRF property is unchanged either way: the cookie stays
+    ``HttpOnly`` and the callback still requires a posted ``state`` matching it.
 
-    ``Secure`` is minted only where a browser will actually accept it — an https origin,
-    or a loopback one (potentially trustworthy by definition, which is what makes this
-    work for a plain-http ``127.0.0.1`` runner). Anywhere else, fall back to ``Lax``:
-    a plain-http non-loopback runner cannot hold a ``Secure`` cookie at all, so claiming
-    ``None`` there would drop the cookie outright and break the same-site deployment
-    that works today.
-
-    Relaxing to ``None`` does not weaken the CSRF property this cookie exists for. It
-    stays ``HttpOnly`` and short-lived, and the callback still requires a posted
-    ``state`` that matches it — which an attacker who cannot read the cookie cannot
-    produce.
+    Pinned by tests/test_runner_federation.py::test_bounce_cookies_are_samesite_none_secure_on_a_loopback_runner
+    and ::test_bounce_cookies_stay_lax_on_a_plain_http_non_loopback_runner.
     """
     if _cookie_is_secure(request) or (request.url.hostname or "").lower() in _LOOPBACK_HOSTS:
         return "none", True

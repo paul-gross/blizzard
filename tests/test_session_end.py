@@ -1,18 +1,9 @@
 """The worker session-end path — local-API endpoint + ``blizzard runner session-end`` verb.
 
-A worker's ``SessionEnd`` hook runs ``blizzard runner session-end`` when its Claude session
-exits: the verb — a pure client of the runner's local API
- — posts to ``POST /api/leases/{lease_id}/session-end`` for the lease it inherited from
-the spawn environment (``BLIZZARD_LEASE_ID`` / ``BLIZZARD_RUNNER_URL``). The daemon appends the
-"declared done" fact (exit-is-done), and startup crash-recovery reads its *absence* to
-tell a worker killed mid-work from one that cleanly exited.
-
-Mirrors ``test_heartbeat.py`` — the same two tiers with no live socket: **component** exercises
-the endpoint over a real store (TestClient); **unit** exercises the verb's identity handling and
-soft-fail (``httpx.post`` stubbed). The mock ``mock-claude-code`` façade now executes
-``--settings`` hook commands (``blizzard-mock:src/blizzard_mock/harness/README.md``
-§"Hook execution"); these tiers exercise the verb directly because they run without a live
-socket. A third block asserts the settings document actually wires the hook.
+Mirrors ``test_heartbeat.py`` — the same two tiers with no live socket: **component**
+exercises the endpoint over a real store (TestClient); **unit** exercises the verb's
+identity handling and soft-fail (``httpx.post`` stubbed). A third block asserts the
+settings document actually wires the hook.
 """
 
 from __future__ import annotations

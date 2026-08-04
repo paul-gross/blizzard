@@ -1,8 +1,8 @@
 """``blizzard hub graph list|show|retire|enable|mint|sync`` (unit tier) — pure clients of
 the graph lifecycle, mint, and reconciliation endpoints, driven here with ``httpx``
-stubbed (issue #101, issue #104, issue #123, issue #146). ``mint`` supersedes the former
-``upload`` — same file-inlining behavior, plus stdin (``-``) support and a fuller
-validation report; ``sync`` is the deploy verb, reconciling the **hub's** packaged set.
+stubbed (issue #101, issue #104, issue #123, issue #146). ``mint`` inlines referenced
+prompt files and accepts stdin (``-``); ``sync`` is the deploy verb, reconciling the
+**hub's** packaged set.
 """
 
 from __future__ import annotations

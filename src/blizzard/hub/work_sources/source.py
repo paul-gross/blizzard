@@ -10,8 +10,7 @@ carrying its own credentialed client.
 
 The seam reaches beyond ``fetch``: a binding also owns parsing its own ingest-token
 form, rendering the board-legible label, and deriving the pointer's/a branch's browser
-address — grammar that used to live in the domain-layer ``pm/label.py`` module (a
-``bzh:domain-core`` violation once there was more than one provider). The
+address — kept out of the domain layer (``bzh:domain-core``). The
 :class:`IWorkSourceRegistry` replaces the single ``work_source: IWorkSource | None``
 seam slot: the hub builds one binding per declared source, and an empty registry is a
 legal hub with no work-source reach.
@@ -27,8 +26,7 @@ every binding, and the route is what raises/reports when nothing claims it (422)
 :class:`~blizzard.wire.chunk.WorkItemEntry` with the pointer, its label, and a ``fetched_at``.
 
 The pointer carries its own ``source`` name, so finding a pointer's binding is a
-plain registry lookup (``registry.get(pointer.source)``) — the older repo-matching
-that owned this seam while the pointer had no source name of its own is retired.
+plain registry lookup (``registry.get(pointer.source)``).
 """
 
 from __future__ import annotations

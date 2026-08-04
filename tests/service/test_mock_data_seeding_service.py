@@ -138,9 +138,7 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
         # --- 1. seed via the real hub's own runtime dir, live, no restart ------------ #
         board_stdout = _mock_data(bin_dir, "scenario", "board", "--chunks", "9", "--stress", "--dir", str(hub_dir))
         intended = _parse_scenario_chunks(board_stdout)
-        # 9 base chunks (one of every derived status) + --stress's 2 extra chunks
-        # (a second waiting_on_human carrying 3 open questions, and a running chunk on
-        # a deliberately long custom node name) — scenario_seed.py's own module docstring.
+        # 9 base chunks + --stress's 2 extra chunks (scenario_seed.py's own module docstring).
         assert len(intended) == 11, board_stdout
         ceiling_runner_id = _parse_ceiling_paused_runner(board_stdout)
 
@@ -201,8 +199,8 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
 
         # --- 3. GET /api/chunks/{id} — cost-partial, multi-question, delivered, refs - #
 
-        # Chunk 0 (always the first "ready" entry) is the guaranteed cost-partial one
-        # (scenario_seed.py's module docstring): one usage fact with a genuine NULL cost.
+        # Chunk 0 (the first "ready" entry) is the guaranteed cost-partial one
+        # (scenario_seed.py's module docstring).
         cost_partial_chunk_id, cost_partial_status = intended[0]
         assert cost_partial_status == "ready", intended[0]
         cost_partial_detail = _chunk_detail(hub, cost_partial_chunk_id)
@@ -211,11 +209,9 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
         assert cost_partial_detail["cost"]["input_tokens"] == 400, cost_partial_detail["cost"]
         assert cost_partial_detail["cost"]["output_tokens"] == 90, cost_partial_detail["cost"]
 
-        # Position 9 (0-indexed) is --stress's own extra waiting_on_human chunk — the
-        # multi-question one (3 independent open trails: chunk_seed's own park question
-        # plus 2 more compose_question calls). Position 3 is ALSO waiting_on_human (the
-        # base i % 9 distribution) but carries only the one park question — position,
-        # not status, is what disambiguates the two.
+        # Position 9 (0-indexed) is --stress's own extra multi-question waiting_on_human
+        # chunk; position 3 is also waiting_on_human but carries only one question —
+        # position, not status, disambiguates the two (scenario_seed.py).
         multi_question_chunk_id, multi_question_status = intended[9]
         assert multi_question_status == "waiting_on_human", intended[9]
         multi_question_detail = _chunk_detail(hub, multi_question_chunk_id)

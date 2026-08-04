@@ -33,11 +33,7 @@ from blizzard.wire.runner import RunnerRegistrationRequest, RunnerView
 
 _log = get_logger("blizzard.runner.hub")
 
-#: Every runner->hub call (issue #87) — the fleet router mounts `require_runner_principal`
-#: once at router level, so the runner's whole outbound surface moved under this prefix in
-#: one atomic wire migration (runner and hub ship from one repo). ``hub_advance``
-#: (#65/#66) joined the rest here once its own runner-only-caller status was confirmed —
-#: it postdated issue #87's original route inventory.
+#: The prefix every runner->hub call in this client goes under (issue #87).
 _FLEET_API = "/api/fleet"
 
 

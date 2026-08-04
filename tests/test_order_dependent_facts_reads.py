@@ -15,9 +15,8 @@ AST-walks (not grep: the shapes below span statements) two layers, mirroring
 1. Every domain module (``*/domain/*.py``, hub and runner) for an ``x.NAME[-1]`` or
    ``x.NAME[0]`` subscript — the shape a consumer takes when it depends on a facts
    field's row order without deriving it defensively itself. Collects the field names
-   (``NAME``) this pattern is found on — currently just ``pauses``
-   (``derive_chunk_status``'s ``facts.pauses[-1]``, via ``open_pause``). This collection
-   is deliberately over-broad: it takes *any* ``x.NAME[-1]``/``[0]`` attribute subscript
+   (``NAME``) this pattern is found on — currently just ``pauses``. This collection is
+   deliberately over-broad: it takes *any* ``x.NAME[-1]``/``[0]`` attribute subscript
    in the domain layer, not just ones proven to read a facts field, so an unrelated
    ``self.history[-1]`` on some non-facts object would seed a field name this guard then
    polices in step 2. That risks a false-positive violation on a store-internal variable
@@ -31,9 +30,8 @@ AST-walks (not grep: the shapes below span statements) two layers, mirroring
    fails, naming the assignment site.
 
 Scoped to the variable-name-matches-field-name shape every ``load_facts``-style reader in
-this codebase uses consistently (``chunk_store.load_facts`` is the reference instance,
-e.g. its local ``pauses = [...]`` feeding ``ChunkFacts(..., pauses=pauses, ...)``) — a
-reader that builds the same list under a different local variable name than the field
+this codebase uses consistently (``chunk_store.load_facts`` is the reference instance) —
+a reader that builds the same list under a different local variable name than the field
 it's assigned to escapes this guard. That narrower gap is judged acceptable next to the
 false-positive risk of a blanket "every select needs an order_by" rule, which would fail
 legitimate unordered reads (existence checks, aggregate counts, set-builders) that make up

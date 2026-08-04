@@ -1,19 +1,13 @@
 """Fleet-wide wire views — reads that span every chunk rather than one.
 
-``FleetSpendView`` is the ``GET /api/spend`` read's shape (issue #60, relocated from
-``/api/fleet/spend`` by issue #87 to free that prefix for the runner-authenticated
-fleet router): a
+``FleetSpendView`` is the ``GET /api/spend`` read's shape (issues #60, #87): a
 fleet-wide usage/cost total, summed at read time over every usage fact recorded at or
 after a caller-chosen instant (:func:`~blizzard.hub.domain.work.derive_fleet_usage`) —
-never a stored column, same as a chunk's own derived total
-(:class:`~blizzard.wire.chunk.ChunkUsageTotalView`).
+never a stored column.
 
-``FleetSummaryView`` is the runner machine panel's fleet-pulse read (issue #76): every
-chunk's derived status folded to the four buckets the counts strip shows
-(:func:`~blizzard.hub.domain.work.derive_fleet_summary`). The runner reaches it through
-its own local pass-through (:mod:`blizzard.runner.api.fleet_summary`), which forwards to
-the fleet router's ``GET /api/fleet/summary`` — the same layered read as the work-items
-proxy, four integers on the wire rather than the chunk list.
+``FleetSummaryView`` is the ``GET /api/fleet/summary`` fleet-pulse read (issue #76):
+every chunk's derived status folded to four buckets
+(:func:`~blizzard.hub.domain.work.derive_fleet_summary`).
 """
 
 from __future__ import annotations
@@ -39,8 +33,8 @@ class FleetSpendView(BaseModel):
 
 
 class FleetSummaryView(BaseModel):
-    """The runner machine panel's fleet-pulse counts (issue #76) — every chunk's derived
-    status folded to the four buckets the counts strip shows:
+    """The fleet-pulse counts (issue #76) — every chunk's derived status folded to four
+    buckets:
 
     * ``ready`` — chunks derived ``ready``;
     * ``running`` — ``running`` + ``delivering`` (live work, either shape);
@@ -48,9 +42,8 @@ class FleetSummaryView(BaseModel):
     * ``needs`` — ``needs_human``.
 
     The remaining derived statuses (``not_ready``, ``stopped``, ``done``) count toward no
-    bucket — the strip is a live-work pulse, not a total. See
-    :func:`~blizzard.hub.domain.work.derive_fleet_summary` for the single canonical
-    statement of the fold, which these fields mirror."""
+    bucket — a live-work pulse, not a total. The fold's canonical statement:
+    :func:`~blizzard.hub.domain.work.derive_fleet_summary`."""
 
     ready: int
     running: int

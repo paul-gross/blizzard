@@ -40,9 +40,10 @@ class GraphPolicyRequest(BaseModel):
 
     ``follow_latest`` is required and all three values are meaningful: ``true``/``false``
     override the hub-level setting for chunks pinned to this mint, and explicit ``null``
-    reverts to inheriting it. It carries no default, so "clear the override" is something
-    a caller asks for by naming ``null`` rather than something an omitted field does by
-    accident; ``by`` is recorded on the appended fact, exactly as retire/re-enable do."""
+    reverts to inheriting it. It carries no default, so clearing the override is asked
+    for by naming ``null`` rather than done by an omitted field (pinned by
+    tests/test_pin_wire.py::test_graph_policy_request_follow_latest_carries_no_default);
+    ``by`` is recorded on the appended fact, exactly as retire/re-enable do."""
 
     follow_latest: bool | None
     by: str = "operator"
@@ -148,12 +149,13 @@ class GraphView(BaseModel):
 
     ``enabled`` is ``not retired`` — the graph's own lifecycle state (issue #101),
     independent of whether it is currently the newest of its name. ``retired`` is the
-    same fact spelled out explicitly for a board that wants to distinguish "retired"
-    from "merely superseded by a newer version" (:class:`GraphSummaryView`'s
-    ``effective``). Deliberately two wire fields for one fact, not drift: the only
-    constructor, :func:`~blizzard.hub.api.graphs._graph_view`, sets both from the same
-    ``retired`` bool in one call (``enabled=not retired, retired=retired``) — there is
-    no second call site that could set one and forget the other.
+    same fact spelled out explicitly, distinguishing "retired" from "merely superseded
+    by a newer version" (:class:`GraphSummaryView`'s ``effective``). Two wire fields for
+    one fact, not drift: the only constructor,
+    :func:`~blizzard.hub.api.graphs._graph_view`, sets both from the same ``retired``
+    bool in one call (pinned by
+    tests/test_graph_lifecycle_api.py::test_retire_returns_202_and_the_view_reports_retired
+    and ::test_a_freshly_minted_graph_reports_enabled_and_not_retired).
 
     ``follow_latest`` is the stored **tri-state** (issue #164), served as-is: ``true`` /
     ``false`` override the hub-level setting for chunks pinned to this mint, and ``null``

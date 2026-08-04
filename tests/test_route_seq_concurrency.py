@@ -70,10 +70,7 @@ def test_next_route_seq_locks_the_chunk_row_for_update() -> None:
 
     assert len(conn.statements) == 4  # the lock, then the three per-table max reads
     lock_stmt = conn.statements[0]
-    assert isinstance(lock_stmt, Update)  # a write, not a SELECT — see the allocator's
-    # own docstring for why: sqlite silently drops SELECT ... FOR UPDATE, and even a
-    # locked SELECT only takes sqlite's non-exclusive SHARED read lock. An UPDATE is
-    # the one statement shape that forces a write-exclusive lock on both dialects.
+    assert isinstance(lock_stmt, Update)  # a write, not a SELECT — see the allocator's own docstring for why
     pg_sql = str(lock_stmt.compile(dialect=postgresql.dialect()))
     sqlite_sql = str(lock_stmt.compile(dialect=sqlite.dialect()))
     assert pg_sql.startswith("UPDATE chunks SET")

@@ -2,24 +2,19 @@
 
 ``blizzard hub stop <chunk_id>`` appends the ``chunk_stopped`` fact the schema has
 reserved since the walking skeleton (``derive_chunk_status`` honors it first, above
-every other state — ``bzh:facts-not-status``); nothing wrote it before this service.
-Unlike :mod:`~blizzard.hub.domain.pause` (which keeps the claim) and unlike
-:mod:`~blizzard.hub.domain.detach` (which only releases the route, no terminal fact),
-stop does **both** in one operation: the fact is written and, if the chunk holds a
-live route, it is released too — so the holding runner's existing detach-discovery
-(``_reconcile_leases`` / ``_abandon_reassigned``, ``blizzard.runner.loop.steps``)
-abandons the lease and frees the environments on its own next tick, with no separate
-``detach`` call required. A chunk with no live route (``not_ready``, ``ready``, or
-already-detached) is stopped just the same — the route release is conditional, not
-required, the one way ``stop`` differs from ``detach``'s own ``NotRouted`` refusal.
+every other state — ``bzh:facts-not-status``). The fact is written and, if the chunk
+holds a live route, it is released too — so the holding runner discovers the release on
+its own next tick (``blizzard.runner.loop.steps``) and frees the environments. A chunk
+with no live route (``not_ready``, ``ready``, or already-detached) is stopped just the
+same: the route release is conditional, not required.
+
 Both facts (and a held fleet-wide hub-exec slot, if any) land in **one** store
 transaction (:meth:`~blizzard.hub.store.internal.chunk_store.ChunkStore.record_stop`)
 — a ``kill -9`` cannot leave the chunk stopped with its route still live, the
 partial-stop failure mode the verb exists to prevent (issue #118, pre-push must-fix 2).
 
 Stopping is not retroactive un-delivery: a chunk already ``done`` or ``stopped`` is
-refused, mirroring :class:`~blizzard.hub.domain.pause.ChunkNotPausable`'s terminal
-guard. Reviving a stopped chunk is out of scope (issue #118) — there is no ``un-stop``.
+refused. Reviving a stopped chunk is out of scope (issue #118) — there is no ``un-stop``.
 
 Holds the *write* chunk repository (``bzh:controller-read-only``); the route resolves
 the chunk and delegates here.

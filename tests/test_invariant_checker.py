@@ -1,24 +1,16 @@
 """Component coverage for the facts-level invariant checker (``bzh:invariant-checker``).
 
 Migrates real hub + runner stores, asserts a clean store yields no violations, then
-injects each kind of corruption and asserts the matching invariant is named. This is the
-library the kill-9 sweep asserts after every armed crash — here it is exercised without
-subprocesses so the default gate covers it.
+injects each kind of corruption and asserts the matching invariant is named.
 
-Every corruption is injected on a **head-migrated** store, because that is the only
-shape the checker is contracted to read: it runs against real stores, and a daemon
-refuses to start on a revision mismatch (``bzh:manual-migrations``), so a store it
-ever sees is at head.
+Every corruption is injected on a **head-migrated** store — the only shape the checker
+is contracted to read: a daemon refuses to start on a revision mismatch
+(``bzh:manual-migrations``), so a store it ever sees is at head.
 
-``hub:pr-opened-idempotent`` needs one extra step to honor that. The violation it
-guards is one ``uq_delivery_pr_opened_chunk_repo`` (20260716_2206_hub_pr_opened_idempotent)
-makes impossible to *write* at head — a raw two-insert seed the way every sibling
-check does it dies on the constraint instead of producing a violation. So that test
-drops the constraint on an otherwise head-shaped store (via the same
-``batch_alter_table`` the pr-opened-idempotent revision adds it with) and then seeds the duplicate: the check is
-defense in depth *behind* the constraint, and this is what proves it still fires if
-the constraint is ever absent. Seeding an older revision instead would leave the
-store missing columns that other checks in the same pass read.
+``hub:pr-opened-idempotent``'s violation is what ``uq_delivery_pr_opened_chunk_repo``
+(20260716_2206_hub_pr_opened_idempotent) makes impossible to *write* at head, so that
+test drops the constraint on an otherwise head-shaped store before seeding the
+duplicate.
 """
 
 from __future__ import annotations
@@ -184,10 +176,8 @@ def test_duplicate_repo_land_is_a_violation(tmp_path: Path) -> None:
 
 
 def test_duplicate_pr_opened_is_a_violation(tmp_path: Path) -> None:
-    """Head-migrated, then the constraint dropped (see the module docstring):
-    ``uq_delivery_pr_opened_chunk_repo`` makes this duplicate unwritable at head, so the
-    check behind it is only observable with the constraint gone. The store stays
-    head-shaped, so every other check in the same pass still reads its own columns."""
+    """See the module docstring — the constraint is dropped so the check behind it is
+    observable."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         batch_op = Operations(MigrationContext.configure(conn))
@@ -248,14 +238,11 @@ def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> 
 
 
 def test_landed_fact_without_terminal_transition_is_a_two_state_violation(tmp_path: Path) -> None:
-    """``hub:merge-queue-single-state`` — #63's "a merged chunk is never left non-terminal".
-
-    A whole-chunk ``delivery.landed`` fact paired with a NON-terminal newest transition is a
-    chunk that is merged yet not-terminal — read as both landed and mid-flight (two states at
-    once), the un-merged corruption. The checker fires: this is the facts-level embodiment of
-    "DONE derives from *reaching* the terminal transition, not from the landed fact." A real
-    store never writes this shape (``finalize_delivery`` writes the landed fact and the terminal
-    transition atomically), so the check is defense-in-depth behind that atomic write."""
+    """``hub:merge-queue-single-state`` — #63's "a merged chunk is never left non-terminal":
+    a whole-chunk ``delivery.landed`` fact paired with a non-terminal newest transition
+    reads as both landed and mid-flight. A real store never writes this shape
+    (``finalize_delivery`` writes both atomically); the check is defense-in-depth behind
+    that."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
@@ -280,13 +267,9 @@ def test_landed_fact_without_terminal_transition_is_a_two_state_violation(tmp_pa
 
 
 def test_merged_into_post_merge_node_is_not_a_violation(tmp_path: Path) -> None:
-    """#63's legal shape: a chunk merged into a post-merge node is clean, never flagged.
-
-    Per-repo ``delivery.repo_landed`` facts (the merge happened), a NON-terminal newest
-    transition into the post-merge node, and NO whole-chunk ``delivery.landed`` fact. The
-    chunk is merged-but-running: it carries no whole-chunk terminal fact, so it derives its
-    live status rather than DONE, and the checker must not read it as un-merged/two-state.
-    This is the exact shape #63's coordinator ``_landed`` non-terminal branch produces."""
+    """#63's legal shape: a chunk merged into a post-merge node is clean, never flagged —
+    it carries per-repo ``delivery.repo_landed`` facts but no whole-chunk
+    ``delivery.landed`` fact, so it derives its live status rather than DONE."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
@@ -350,14 +333,8 @@ def test_open_pause_parks_on_different_leases_are_not_a_violation(tmp_path: Path
 
 
 def test_a_double_park_after_a_repause_is_still_a_violation(tmp_path: Path) -> None:
-    """The ``>=`` correlation in the checker's mirror is load-bearing.
-
-    A checker that treated *any* resume on the lease as closing *every* park would read
-    this lease as unparked and miss the breach — so a dropped PULL guard would go
-    undetected on any lease that had ever been resumed, which is every long-lived one.
-    The checker must agree with the store's ``_pause_park_is_open``: only a resume at or
-    after a given park closes *that* park.
-    """
+    """The ``>=`` correlation in the checker's mirror is load-bearing: only a resume at
+    or after a given park closes *that* park, not any resume on the lease."""
     engine = _runner_engine(tmp_path)
     t1 = datetime(2026, 7, 14, 1, tzinfo=UTC)
     t2 = datetime(2026, 7, 14, 2, tzinfo=UTC)
@@ -382,16 +359,11 @@ def _seed_migration(
     release_route: bool = True,
     landed_executor: str | None = None,
 ) -> None:
-    """A chunk pinned to (pin_graph, pin_default_model) with one migration targeting to_graph (#90).
-
-    A runner-landing ``record_migration`` releases the route in the migration's own
-    transaction, so a consistent migration always carries its ``route_released``;
-    ``release_route=False`` seeds the torn write where the fact landed but the release did
-    not. ``landed_executor`` seeds a ``graph_nodes`` row for the landing node so the
-    ``hub:migration-route-released`` check can resolve its executor: a ``"hub"`` landing
-    (issue #111) retains the route by design and is exempt from that assertion. Left None,
-    the landing node has no node row (an unknown/runner landing), so the assertion applies.
-    """
+    """A chunk pinned to (pin_graph, pin_default_model) with one migration targeting
+    to_graph (#90). ``release_route=False`` seeds a torn write where the migration fact
+    landed but the route release did not. ``landed_executor`` seeds a ``graph_nodes``
+    row for the landing node; a ``"hub"`` landing (issue #111) is exempt from the
+    route-released check — left None, the assertion applies."""
     # `chunks.model` is retained-and-unread since #144; the re-pin the invariant checks
     # lands in `default_model`, so that is what a seeded pin has to carry.
     conn.execute(
@@ -464,13 +436,9 @@ def test_a_migration_without_its_model_repin_is_a_violation(tmp_path: Path) -> N
 
 
 def test_a_migration_whose_repin_survives_a_later_default_model_edit_is_not_a_violation(tmp_path: Path) -> None:
-    """Issue #144 — the check is **membership**, not equality against ``[model_after]``.
-
-    A migration re-queues the chunk to ``ready``, which reopens the pre-claim edit window,
-    so an operator can legitimately add a fallback entry or reorder the list afterwards
-    without undoing the re-pin. What this invariant exists to catch is a torn write — the
-    durable fact with the pin never applied — and that leaves ``default_model`` empty or
-    at its pre-migration value, which fails membership just as it fails equality."""
+    """Issue #144 — the check is **membership**, not equality against ``[model_after]``:
+    an operator may add a fallback entry to ``default_model`` after the re-pin without
+    re-triggering the check."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         _seed_migration(
@@ -504,9 +472,8 @@ def test_a_migration_without_its_route_release_is_a_violation(tmp_path: Path) ->
 def test_a_hub_landing_migration_retains_its_route_and_is_not_a_violation(tmp_path: Path) -> None:
     """``hub:migration-route-released`` exempts a migration landing on a **hub-executed**
     node (issue #111): it deliberately retains the route so the hub keeps the chunk and
-    drives the landed hub node via the holding runner's ADVANCE poll. A retained route on a
-    hub landing is the intended shape, not the torn ``migrate.`` write the runner-landing
-    case above catches — so no violation, even with no ``route_released``."""
+    drives it via the holding runner's ADVANCE poll — no violation, even with no
+    ``route_released``."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         _seed_migration(

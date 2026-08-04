@@ -156,12 +156,9 @@ def test_proxy_sends_no_authorization_header_when_no_token_is_configured(
 def test_proxy_carries_a_degraded_entry_through_rather_than_500ing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A hub-degraded entry (null ``title``/``body`` + ``error``) rides through as a 200.
-
-    The hub degrades a per-pointer forge failure to an ``error`` entry rather than failing the
-    whole read; the proxy re-validates that payload through ``WorkItemsView``. A wire model that
-    rejected a null ``title`` here would turn a harmless degrade into a proxy ``502``/``500`` —
-    the exact blinding the wire model forbids — so the degrade is pinned at the proxy, not just the hub."""
+    """A hub-degraded entry (null ``title``/``body`` + ``error``) rides through as a 200 —
+    the proxy re-validates the payload through ``WorkItemsView``, which must accept the
+    null fields rather than 500ing on a harmless degrade."""
     degraded: dict[str, object] = {
         "items": [
             {

@@ -117,7 +117,7 @@ def test_registry_changes_emit_runner_changed_events(tmp_path: Path) -> None:
 # The runner reports its configured `len(workspace_envs)` as `env_capacity` on `POST
 # /runners`; the hub stores it and returns it on every `RunnerView`. Re-registration is
 # the runner's heartbeat, so a changed pool converges on the next pull. A client that
-# predates the field omits it, and the hub reports null — the board omits the slot bar.
+# predates the field omits it, and the hub reports null.
 
 
 def test_env_capacity_reported_on_register_lands_on_the_view(tmp_path: Path) -> None:
@@ -141,7 +141,7 @@ def test_env_capacity_converges_on_reregistration(tmp_path: Path) -> None:
 
 def test_env_capacity_absent_reports_null(tmp_path: Path) -> None:
     """A runner registered by a client that predates the field omits it; the hub stores and
-    returns null, and the board omits the bar rather than guessing a total."""
+    returns null."""
     hub = build_hub(tmp_path)
     _register(hub)  # no env_capacity in the body
 
@@ -164,9 +164,8 @@ def test_env_capacity_resets_to_null_when_a_newer_reregister_omits_it(tmp_path: 
 # --------------------------------------------------------------------------- #
 #
 # The hub never sets this one — it arrives as a fact through the runner's outbound buffer
-#  and the hub only reads it. These assert it lands, that it is genuinely separate
-# from the fleet's brake, and that the board is told (the hub can only render what it
-# holds, and a fact that lands invisibly is a runner shown as claiming when it has stopped).
+# and the hub only reads it. These assert it lands and that it is genuinely separate
+# from the fleet's brake.
 
 
 def _report_local_pause(
@@ -298,11 +297,9 @@ def test_a_replayed_local_pause_is_not_reapplied(tmp_path: Path) -> None:
 
 
 def test_a_local_pause_from_an_unregistered_runner_is_kept(tmp_path: Path) -> None:
-    """The buffer replays an outage in FIFO order, so a pause can precede its registration.
-
-    Dropping it would lose the brake exactly when the board most needs it — so it lands,
-    and the registration that follows finds it already there.
-    """
+    """The buffer replays an outage in FIFO order, so a pause can precede its
+    registration — dropping it would lose the brake, so it lands, and the registration
+    that follows finds it already there."""
     hub = build_hub(tmp_path)
     assert _report_local_pause(hub, paused=True, runner_id="runner-late")["applied"] == [1]
 

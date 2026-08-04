@@ -21,15 +21,13 @@ from sqlalchemy import Column, MetaData, String, Table
 
 from blizzard.foundation.store.engine import create_engine_from_url
 
-# Alembic's own auto-created `alembic_version` table hardcodes `version_num
-# String(32)` (`alembic.ddl.impl.DefaultImpl.version_table_impl`) — this project's
-# revision ids (`YYYYMMDD_HHMM_slug`) already exceed 32 chars, which sqlite's
-# typeless storage silently tolerates but postgres enforces
-# (`StringDataRightTruncation`, caught by `blizzard:compose-smoke`, issue #191).
-# Alembic's per-dialect `version_table_impl` hook is the sanctioned override point
-# but needs a registered `DefaultImpl` subclass per dialect; pre-creating the
-# table ourselves — a no-op once it exists — is the one portable fix that needs
-# no per-dialect code (`bzh:sql-portable`).
+# Alembic's own auto-created `alembic_version` hardcodes `version_num String(32)`, which
+# this project's `YYYYMMDD_HHMM_slug` revision ids exceed — sqlite's typeless storage
+# tolerates it, postgres raises `StringDataRightTruncation` (issue #191). Pre-creating the
+# table wide ourselves — a no-op once it exists — is the portable fix; Alembic's sanctioned
+# `version_table_impl` hook would need a registered `DefaultImpl` subclass per dialect
+# (`bzh:sql-portable`; pinned by
+# tests/test_pin_foundation.py::test_the_version_table_admits_this_projects_revision_ids).
 _VERSION_TABLE_COLUMN_LENGTH = 255
 
 

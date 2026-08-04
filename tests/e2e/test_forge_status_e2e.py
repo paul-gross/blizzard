@@ -15,10 +15,8 @@ observable within the test's real wall-clock budget rather than the operator def
   own, so a label removed out of band comes back on the next sweep rather than staying
   gone.
 * **A down forge degrades to a skip, then re-converges** — the forge's own
-  ``unreachable`` lever (not a process kill, which would also wipe the forge's
-  in-memory issue/label state and defeat "re-converges once the forge returns")
-  stands in for an outage: the hub keeps serving, the sweep logs a skip, and the label
-  lands once the lever clears.
+  ``unreachable`` lever stands in for an outage: the hub keeps serving, the sweep logs a
+  skip, and the label lands once the lever clears.
 
 Skipped unless ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock`` worktree
 provisioned — exactly like the other acceptance-loop scenarios.

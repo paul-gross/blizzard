@@ -35,11 +35,8 @@ as ``land_default``'s check stage runs before its push stage. Where a pending re
 current ref already reads as the chunk's own target commit — the crash-recovery case, where
 a prior run's update landed but the kill hit before its marker became durable — that repo is
 treated as an immediate, no-op SUCCESS and its marker is (re-)recorded; no PATCH is issued
-for it. This is not a special case bolted on to paper over an error: the forge's own
-fast-forward semantics already treat an X-\\>X update as a no-op success, so a naive retry
-would converge to the same place — resolving it during pre-flight just spares a redundant
-network call and keeps the update stage itself simple (every repo it visits genuinely needs
-a ref moved).
+for it, sparing a redundant network call the forge would answer as a no-op anyway (pinned by
+``tests/test_land_ff.py::test_crash_recovery_treats_an_already_advanced_ref_as_success_not_conflict``).
 
 Same env contract as :mod:`~blizzard.hub.graphs.scripts.land_default`
 (``BZ_FORGE_URL``/``BZ_FORGE_TOKEN``/``BZ_FORGE_OWNER``/``BZ_HUB_BASE_BRANCH``/
@@ -84,21 +81,13 @@ _ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
 _ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"
 
 # Test-only instrumentation for the mid-script crash sweep
-# (``tests/crash/test_kill9_sweep.py::test_kill9_between_ff_graph_repo_pushes``) — the
-# same mechanism and env var as ``land_default``'s own hook
-# (:func:`~blizzard.hub.graphs.scripts.land_default._test_pause_after_first_marker`),
-# duplicated here rather than shared because this script's update stage has its own
-# loop and its own no-op (already-advanced) branch to pause after. Because this script
-# loops over an arbitrary, chunk-dynamic number of repos inside ONE ``run:`` step —
-# recording each ``merged/<repo>`` marker through the mid-run callback, not the
-# executor's static per-step ``produces:`` — its "kill between two repos' updates"
-# window is a WALL-CLOCK race an external ``kill -9`` of the hub daemon must land
-# inside, not a named in-process ``hubnode.*`` registry point. When set to a positive
-# number of seconds, the script pauses that long immediately after recording the FIRST
-# repo's marker on a multi-repo run, widening that window so the kill is deterministic.
-# It fires at most once and never on a crash-recovery re-run (which updates only the
-# still-unmarked remainder, so ``pending_count`` is then 1), and is wholly inert unless
-# the env var is set — never present in a production land.
+# (``tests/crash/test_kill9_sweep.py::test_kill9_between_ff_graph_repo_pushes``): the
+# between-repo-updates window is a wall-clock race an external ``kill -9`` must land
+# inside, not a named in-process registry point, so a positive number of seconds here
+# widens it. Duplicates ``land_default``'s own hook
+# (:func:`~blizzard.hub.graphs.scripts.land_default._test_pause_after_first_marker`)
+# rather than sharing it, because this script's update stage has its own loop and its
+# own no-op (already-advanced) branch to pause after.
 _ENV_TEST_PAUSE_AFTER_FIRST_MARKER = "BZ_HUB_LAND_TEST_PAUSE_SECONDS"
 
 

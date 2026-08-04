@@ -2,18 +2,15 @@
 
 ``HistoryRowView`` is a flat, kind-discriminated row — ``transition`` | ``migration`` |
 ``bounce`` — merged oldest-first across all three of a chunk's own hub-side histories
-(``ChunkDetail.history``/``.migrations``/``.bounces``). Deliberately not a mount of
-``list[TransitionView]``: a bounce fact carries no epoch to join it onto a transition row
-(see ``BounceView``'s own docstring), so it is emitted as its own row instead of a field
-bolted onto one; and a flat model built fresh here, rather than the board's own views
-reused directly as a runner ``response_model``, keeps ``wire.chunk``'s ``EscalationView``
-(which collides on name with ``wire.runner_status.EscalationView`` — see
-``ChunkHeaderView``) out of the runner's OpenAPI spec.
+(``ChunkDetail.history``/``.migrations``/``.bounces``). Built fresh here rather than
+mounting the board's own views as the runner's ``response_model``: a bounce carries no
+epoch to join it onto a transition row, and a fresh flat row keeps ``wire.chunk``'s views
+out of the runner's OpenAPI spec (pinned by
+tests/test_pin_wire.py::test_the_runner_spec_carries_no_chunk_detail_history_views).
 
 ``ChunkHistoryView`` is the internal projection this route validates the hub's full
 ``ChunkDetail`` payload down to before ``history_rows`` runs — never a FastAPI
-``response_model``, so despite referencing ``wire.chunk``'s views it never enters the
-runner's own spec.
+``response_model``.
 """
 
 from __future__ import annotations
@@ -29,13 +26,9 @@ class ChunkHistoryView(BaseModel):
     """The slice of a hub ``ChunkDetail`` payload ``history_rows`` needs — validated with
     pydantic's default ``extra="ignore"``, so it decodes straight off the full aggregate
     without duplicating every other field. The three fields are **required**, not
-    defaulted — the hub's own ``ChunkDetail`` always emits all three keys (each defaults
-    to ``[]`` there too, but a default is still a present key in the serialized JSON), so
-    a missing key here means one of the three was renamed out from under this mirror.
-    Failing loudly on that beats defaulting to ``[]``: `retrospective.judgement.md`'s
-    delivery-incomplete loop bound reads an empty result as "no history yet" and would
-    otherwise silently re-take an already-taken edge into a hub node that mutates the
-    forge, on a field-drift a reader has no way to notice."""
+    defaulted to ``[]`` (issue #237), so a hub-side rename fails loudly here instead of
+    decoding as "no history yet" (pinned by
+    tests/test_pin_wire.py::test_chunk_history_view_requires_all_three_history_lists)."""
 
     history: list[TransitionView]
     migrations: list[MigrationView]
@@ -47,7 +40,7 @@ class HistoryRowView(BaseModel):
     cross-graph migration, or a delivery bounce, merged oldest-first by ``recorded_at``.
 
     ``from_node``/``to_node`` are human-legible labels: a transition's node names, or (for
-    a migration) the ``graph/node`` hop the board itself renders
+    a migration) the ``graph/node`` hop
     (``from_graph/from_node --choice--> to_graph/landed_node``, see ``MigrationView``).
     Both null for a bounce, which names no node. ``epoch`` is populated only for a
     transition row — the wire's own ``MigrationView``/``BounceView`` carry no epoch to
@@ -99,8 +92,7 @@ def _bounce_row(b: BounceView) -> HistoryRowView:
 
 def history_rows(detail: ChunkHistoryView) -> list[HistoryRowView]:
     """The chunk's transitions, migrations, and bounces merged into one kind-discriminated
-    timeline, oldest-first by ``recorded_at`` — the worker-facing counterpart of the hub's
-    own board timeline (``hub.api.chunks._history_views``/``_migration_views``). Each
+    timeline, oldest-first by ``recorded_at``. Each
     input list already arrives oldest-first, so a stable sort on ``recorded_at`` alone
     preserves each kind's own order and only interleaves across kinds."""
     rows = (

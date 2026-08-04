@@ -72,10 +72,9 @@ def get_work_items(chunk_id: str, request: Request) -> WorkItemsView:
 # unconditionally to the hub's canonical `/work-items`: a runner and its hub are one
 # wheel (`docs/deployment.md`), so there is no older hub on the other side of this call.
 #
-# Note this alias is **not** what keeps a pre-rename graph prompt working: such a worker
-# invokes the CLI, not this route, and `blizzard runner pm-items` is the alias that
-# catches it (`runner/cli.py`). This one is here so the two daemons present the same
-# path surface to an external caller.
+# Not what keeps a pre-rename graph prompt working — that's `runner/cli.py`'s own
+# `pm-items` alias. This one exists so the two daemons present the same path surface
+# to an external caller.
 router.add_api_route(
     "/chunks/{chunk_id}/pm-items",
     get_work_items,

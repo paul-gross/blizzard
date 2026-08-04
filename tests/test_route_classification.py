@@ -6,8 +6,7 @@ Mirrors ``reject_runner_principal``'s own structural-confinement shape
 **fleet** (mounted under ``/api/fleet/*``, gated by ``require_runner_principal`` at
 router level — issue #87), or **public** (no permission gate at all). A route this
 table does not name — or a route whose live gating no longer matches its named
-plane — fails the suite, the same "no route unclassified" guarantee
-``test_fleet_auth.py`` already gives the fleet/operator split.
+plane — fails the suite.
 
 The table is asserted **exhaustive in both directions**: every live route must appear
 in the table (catches a newly added, unclassified route) and every table entry must
@@ -150,10 +149,9 @@ def _api_routes(app: FastAPI) -> list[APIRoute]:
     routes: list[APIRoute] = []
     for route in app.routes:
         if isinstance(route, APIRoute):
-            # The web root is the SPA shell, not an API surface: with a built bundle
-            # it is a Starlette Mount (never an APIRoute), without one it is
-            # foundation/web.py's placeholder GET / — public by construction either
-            # way, and environment-dependent, so it stays out of the plane table.
+            # The web root is the SPA shell, not an API surface — public by
+            # construction either way and environment-dependent, so it stays out of
+            # the plane table.
             if route.path == "/":
                 continue
             routes.append(route)

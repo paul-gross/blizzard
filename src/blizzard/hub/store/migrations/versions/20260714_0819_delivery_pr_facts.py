@@ -8,15 +8,13 @@ The ``open-pr`` deliver-mode facts:
   writes when the PR reaches a terminal state; ``merged`` distinguishes the two dispositions
   and ``landed_commit`` carries the merge commit where one exists.
 
-``delivery_pr_opened`` is the one exception (as of ``20260716_2206_hub_pr_opened_idempotent``):
-importing it from ``schema.py`` here would mean this revision's *historical* shape
-silently follows whatever ``schema.py`` says today — exactly the bug 0013's own
-docstring names and refuses to repeat (``0002_walking_skeleton_facts`` treats
-``chunk_pm_pointers`` the same way for the same reason). This revision instead declares
-its own frozen literal — no ``uq_delivery_pr_opened_chunk_repo`` — so upgrading from
-``base`` always recreates the shape this revision actually shipped with; 0014 is the one
-revision that adds the constraint from there. ``delivery_pr_closed`` is untouched by any
-later revision, so it is still safely imported from ``schema.py``.
+``delivery_pr_opened`` is the one exception: it is a frozen local literal — no
+``uq_delivery_pr_opened_chunk_repo`` — rather than a ``schema.py`` import, so upgrading
+from ``base`` recreates the shape this revision shipped with and ``0014`` stays the one
+revision that adds the constraint (``canon:no-retro``; pinned by
+``tests/test_pin_hub_api.py::test_delivery_pr_opened_gains_its_uniqueness_only_at_the_revision_that_adds_it``).
+``delivery_pr_closed`` is untouched by any later revision, so it is still safely imported
+from ``schema.py``.
 
 Revision ID: 20260714_0819_hub_delivery_pr_facts
 Revises: 20260713_1947_hub_runner_registry

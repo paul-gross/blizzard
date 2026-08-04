@@ -199,8 +199,8 @@ def test_migrate_json_prints_the_raw_response_body(monkeypatch: pytest.MonkeyPat
 
 @pytest.mark.unit
 def test_set_sends_repeated_default_model_flags_as_an_ordered_list(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`--default-model` is repeatable and ORDERED — the first entry that resolves at
-    session mint wins, so the CLI must preserve the operator's flag order verbatim."""
+    """`--default-model` is repeatable and ORDERED — the CLI must preserve the
+    operator's flag order verbatim."""
     calls: list[tuple[str, object]] = []
 
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -246,8 +246,7 @@ def test_set_sends_repeated_default_model_flags_as_an_ordered_list(monkeypatch: 
 
 @pytest.mark.unit
 def test_set_omits_a_field_the_operator_did_not_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An unnamed field must not reach the body at all — "not supplied" is what keeps
-    the server's "leave unchanged" reachable."""
+    """An unnamed field must not reach the body at all."""
     calls: list[object] = []
 
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -307,8 +306,8 @@ def test_show_reads_both_defaults_back_in_text_mode(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.unit
 def test_show_dashes_a_chunk_expressing_no_preference(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The minted state — "express no preference", so the runner default applies — reads
-    as a dash rather than as unknown or as a fabricated model name."""
+    """No preference set reads as a dash rather than as unknown or as a fabricated
+    model name."""
 
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(

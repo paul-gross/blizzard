@@ -94,8 +94,7 @@ def test_ingest_frame_carries_graph_id_and_omits_runner_id(tmp_path: Path) -> No
     assert "prev_status" not in frame
     assert "prev_node" not in frame
     assert "graph_id" in frame
-    # `key` (issue #213) names the mint fact itself — the chunk's own natural key,
-    # matching `ActivityRow`'s `chunks:{chunk_id}` format exactly.
+    # `key` (issue #213) matches `ActivityRow`'s `chunks:{chunk_id}` format.
     assert frame["key"] == f"chunks:{chunk_id}"
 
 
@@ -121,12 +120,8 @@ def test_claim_carries_cause_claimed_and_runner_id(tmp_path: Path) -> None:
 
 
 def test_node_completion_carries_prev_node_node_and_status_change(tmp_path: Path) -> None:
-    """``_BUILD_DELIVER_YAML``'s ``deliver`` hub node runs synchronously on landing
-    (``run: [true]``, its own judgement auto-picks ``success``), so one ``pass``
-    completion at ``build`` drives the chunk all the way to the terminal ``done`` in the
-    same request — the newest recorded transition is ``deliver -> done``, so ``prev_node``
-    is ``deliver`` and ``node`` is omitted (``done`` is the reserved terminal, not a real
-    node — the same convention the chunk-detail's own ``current_node_name`` follows)."""
+    """Driving to the terminal ``done`` in one request: ``prev_node`` is ``deliver`` and
+    ``node`` is omitted — ``done`` is the reserved terminal, not a real node."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claimed(hub)
     before = _latest_event_id(hub)
@@ -149,9 +144,8 @@ def test_node_completion_carries_prev_node_node_and_status_change(tmp_path: Path
     assert "node" not in frame
     assert frame["status"] == "done"
     assert frame["prev_status"] != frame["status"]
-    # The terminal transition releases the route (`bzh:facts-not-status`'s
-    # `holds_claim`), so `route_of` answers None and the frame omits `runner_id` too —
-    # AC 5's "no placeholder junk" holds even on the frame that ends the chunk's life.
+    # The terminal transition releases the route (`bzh:facts-not-status`), so
+    # `runner_id` is omitted too.
     assert "runner_id" not in frame
     # `key` (issue #213) names the freshly-recorded transition (`deliver -> done`).
     assert frame["key"].startswith("transitions:")
@@ -247,9 +241,8 @@ def test_lease_minted_via_events_batch_carries_cause_claimed(tmp_path: Path) -> 
     assert resp.status_code == 200, resp.text
     frames = _chunk_changed_frames(hub, since=before)
     assert frames[-1]["cause"] == "claimed"
-    # `key` (issue #213) names the SAME live route both sites' frames describe — the
-    # route-claim's own direct publish and this later lease-mint ingest publish must
-    # carry an identical key so Phase 4's frontend dedup recognizes them as one fact.
+    # `key` (issue #213) is identical across the route-claim's direct publish and this
+    # later lease-mint ingest publish — same live route, same key.
     assert frames[-1]["key"] == claim_key
 
 
@@ -283,9 +276,9 @@ def test_promote_carries_chunk_promoted_key_and_omits_it_on_idempotent_replay(tm
     # `key` (issue #213) names the freshly-written `chunk_promoted` row.
     assert frames[-1]["key"].startswith("chunk_promoted:")
 
-    # A double-promote is a harmless no-op (already-ready) — the frame still fires
-    # (existing behavior, unchanged by this phase), but nothing fresh was recorded, so
-    # `key` is genuinely absent rather than pointing at the earlier row.
+    # A double-promote is a harmless no-op (already-ready) — the frame still fires, but
+    # nothing fresh was recorded, so `key` is genuinely absent rather than pointing at
+    # the earlier row.
     before2 = _latest_event_id(hub)
     second = hub.client.post(f"/api/chunks/{chunk_id}/promote")
     assert second.status_code == 202, second.text

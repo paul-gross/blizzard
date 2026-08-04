@@ -1,7 +1,6 @@
 """The ``--json`` output shape on the noun-group operator verbs (issue #104): a read
 verb prints the raw response body, and a write verb echoes its typed response the same
-way. The noun-group surface is the only operator surface — the pre-#104 flat aliases and
-the ``--url`` flag alias were removed in issue #105.
+way.
 """
 
 from __future__ import annotations

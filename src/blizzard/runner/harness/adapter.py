@@ -3,13 +3,11 @@
 Four operations cover every headless-run + persisted-session + resume harness:
 
 * ``spawn`` starts a headless worker pointed at the chunk's environments, primed
-  with the node envelope plus the runner's machine-local preamble — the held env
-  ids and their workdirs — and returns the **actual** session id with the
-  pid and process start time, recorded as facts at spawn-return.
+  with the node envelope plus the runner's machine-local preamble, and returns the
+  **actual** session id with the pid and process start time, recorded as facts at
+  spawn-return.
 * ``resume_with_message`` delivers a message into an existing session headlessly
-  and returns the new pid — the operation behind the judgement prompt,
-  answer delivery, and the CI feedback loop. Never run against a live
-  process — kill first.
+  and returns the new pid. Never run against a live process — kill first.
 * ``resume_command`` returns the literal shell command a human runs to resume the
   session interactively (the escalation record's takeover command).
 * ``parse_verdict`` parses the judgement-resume reply into the selected choice name
@@ -19,18 +17,13 @@ Four operations cover every headless-run + persisted-session + resume harness:
 Two more (epic #57) translate harness output into cost/token telemetry, never
 recording anything themselves: ``parse_usage`` reads a result envelope's own
 ``usage`` + ``total_cost_usd``; ``sum_transcript_usage`` is the envelope-less
-fallback, summing per-message ``usage`` off the raw session transcript. Cost always
-comes from the harness — blizzard never maintains a pricing table.
+fallback — see :mod:`blizzard.runner.harness.usage`.
 
-One more (issue #218) samples the harness's own **subscription** rate-limit
-utilization, distinct from the cost/token telemetry above: ``sample_external_
-subscription_usage`` reads the account's own view of how much of its metered
-window it has consumed, never derived from blizzard's own usage tallies.
+``sample_external_subscription_usage`` (issue #218) samples the harness's own
+**subscription** rate-limit utilization, distinct from the cost/token telemetry above
+— see :mod:`blizzard.runner.harness.external_usage`.
 
-One more (blizzard#245) exposes the harness's **transcript source**:
-``transcript_source`` returns the seam behind normalized-turn reads (thinking,
-sidechain nesting, structured tool input) and the two pre-existing raw reads the
-usage fallback and rotation signal need — see
+``transcript_source`` (blizzard#245) exposes the harness's **transcript source** — see
 :mod:`blizzard.runner.harness.transcript` for the shape.
 
 Adapters stay dumb (``bzh:deterministic-shell``): ``parse_verdict`` returns the
@@ -54,9 +47,7 @@ class HarnessSpawnError(RuntimeError):
     """The harness binary could not be launched (missing binary, bad workdir).
 
     Part of the adapter contract (``spawn`` raises it), so it lives on the public seam
-    rather than an internal adapter: the loop catches it at the spawn site to surface a
-    ``command-failed`` operational event (issue #125, change L(iii)) before the failure
-    propagates on."""
+    rather than an internal adapter (issue #125, change L(iii))."""
 
 
 @dataclass(frozen=True)
@@ -67,35 +58,30 @@ class WorkerPreamble:
     local-API URL — never sent to the hub; all machine-local execution truth.
     ``BLIZZARD_ENV_IDS`` rides the spawn environment from ``environments``;
     ``BLIZZARD_LEASE_ID`` and ``BLIZZARD_RUNNER_URL`` ride it from ``lease_id`` and
-    ``local_api_url`` so the worker's ``PostToolUse`` heartbeat hook posts to the
-    right lease with no arguments.
+    ``local_api_url``.
 
     ``workspace_root`` is the spawn **cwd** (issue #17): the worker is launched at the
     winter workspace root — not an env subdir — so it loads the workspace's shared
     context the way an interactive agent there does; empty falls back to the first
-    environment's workdir (legacy behavior). ``prompt_prefix`` is the runner-composed
-    workspace prompt + info table the adapter prepends to the envelope prompt (rendered
-    by :func:`blizzard.runner.harness.preamble.render_worker_preamble`); empty prepends
+    environment's workdir. ``prompt_prefix`` is the runner-composed workspace prompt +
+    info table the adapter prepends to the envelope prompt (rendered by
+    :func:`blizzard.runner.harness.preamble.render_worker_preamble`); empty prepends
     nothing.
 
     ``stdout_path`` (epic #57) is the per-lease file the spawned worker's stdout is
     redirected to, so a killed/reaped worker's result envelope survives the process
     for :meth:`IHarnessAdapter.parse_usage` to read back later — the path is
-    **injected**, never computed inside the adapter (``bzh:dependency-injection`);
-    the runner composition root resolves the concrete path (phase 2 of issue #58).
-    Empty keeps today's behavior (stdout discarded).
+    **injected**, never computed inside the adapter (``bzh:dependency-injection``;
+    issue #58). Empty discards stdout.
 
     ``lease_token`` (issue #113) is the lease's minted capability-token plaintext,
-    ridden into the spawn env as ``BLIZZARD_LEASE_TOKEN`` alongside ``BLIZZARD_
-    LEASE_ID`` — a per-spawn identity var scoped to this worker's own lease, never
-    a daemon secret (``bzh:worker-env-allowlist``). This phase mints and carries it
-    only; no caller yet authorizes anything against it.
+    ridden into the spawn env as ``BLIZZARD_LEASE_TOKEN`` — a per-spawn identity var
+    scoped to this worker's own lease, never a daemon secret
+    (``bzh:worker-env-allowlist``).
 
     ``stderr_path`` (issue #125, change L(iii)) is the sibling per-lease file the spawned
-    worker's **stderr** is redirected to, replacing the old ``DEVNULL`` discard — so a
-    worker that launched then crashed to stderr leaves a readable tail the runner folds into
-    its ``worker-lost`` operational event. Injected exactly like ``stdout_path``; empty keeps
-    today's ``DEVNULL`` behavior.
+    worker's **stderr** is redirected to, so a worker that launched then crashed to stderr
+    leaves a readable tail. Injected exactly like ``stdout_path``; empty discards stderr.
     """
 
     environments: list[AcquiredEnvironment]
@@ -135,30 +121,21 @@ class IHarnessAdapter(Protocol):
         ``model``/``effort`` (issue #144) are the already-resolved native values — the
         caller ran them through :meth:`resolve_model`/:meth:`resolve_effort` first, so the
         adapter applies rather than resolves. Both ``None`` keeps the adapter's own
-        default, which is what makes a caller that supplies neither behave exactly as
-        before.
+        default.
 
-        **Application contract.** ``model`` is applied at **mint only**: a spawn with
-        ``resume_from`` set passes no model flag and leans on the harness restoring the
-        session's own — verified for all three target harnesses, so a cross-model resume
-        (and its full-history cache rewrite) is structurally impossible, and an operator's
-        deliberate in-session switch during a takeover survives. ``effort`` is applied on
-        **every** invocation, because Claude Code's effort is *not* sticky (D5 probe, CLI
-        2.1.220): a session spawned at one effort reverts to the settings default on a
-        bare resume, so mint-only would silently drop a declared effort on every member
-        of a resuming pool. The escape hatch for a hypothetical non-sticky-*model*
-        harness is the same one: pass the flag on every invocation.
+        **Application contract** (issue #144). ``model`` is applied at **mint only** — a
+        spawn with ``resume_from`` set passes no model flag and leans on the harness
+        restoring the session's own — while ``effort`` is applied on **every** invocation,
+        because effort is not session-sticky the way model is (pinned by
+        ``tests/test_runner_harness_adapter.py::test_spawn_on_a_resume_carries_the_effort_but_never_the_model``).
 
-        **Each harness carries a stickiness trap a deployment must avoid**, or the
-        mint-only model contract is silently defeated: a Claude Code worker must not see
-        `ANTHROPIC_MODEL`-family env vars, an opencode adapter must not pin
-        `agent.<name>.model` (it outranks session stickiness), and a codex adapter must
-        keep `model` out of `config.toml` (it overrides every resume) and requires a
-        state-DB-era codex.
+        A harness's own configuration can defeat that model stickiness, so mint-only is a
+        deployment requirement rather than a preference; each adapter states its own trap
+        (:mod:`blizzard.runner.harness.internal.claude_code_adapter` for Claude Code).
 
         ``resume_from`` (issue #115) is the prior session id a node-entry resume
-        continues; ``None`` is today's fresh spawn (``session_hint`` mints/honors a
-        brand-new id). The returned :class:`WorkerHandle`'s ``session_id`` is the
+        continues; ``None`` is a fresh spawn (``session_hint`` mints/honors a brand-new
+        id). The returned :class:`WorkerHandle`'s ``session_id`` is the
         **authoritative continuation id** the runner records — whichever id the
         harness actually continued under, fork or in-place.
         """
@@ -177,21 +154,18 @@ class IHarnessAdapter(Protocol):
     ) -> int:
         """Headless resume-with-message; returns the new pid. Kill first.
 
-        The fire-and-forget resume behind answer delivery and the CI feedback loop
-        (P7). The two-phase judgement elicitation — which needs the reply captured
-        synchronously for :meth:`parse_verdict` — is :meth:`judge`.
+        The fire-and-forget resume; :meth:`judge` is the elicitation that needs the
+        reply captured synchronously.
 
         ``stdout_path`` (epic #57) is the injected per-lease file the resumed
         worker's stdout is redirected to, mirroring :attr:`WorkerPreamble.stdout_path`
         — this operation has no preamble to carry it on, so it rides as a direct
-        param instead. Empty keeps today's behavior (stdout inherited).
+        param instead. Empty inherits stdout.
 
         ``preamble`` re-supplies the per-lease worker identity (lease id, runner URL,
-        held envs, and a freshly re-minted capability token) so the resumed worker can
-        ``blizzard runner attach`` and its heartbeat/SessionEnd hooks can post —
-        ``--resume`` inherits none of the spawn env. ``chunk_id`` names the lease's
-        chunk for ``BLIZZARD_CHUNK_ID``. Both omitted (the selftest/CI resume, which
-        speaks to no live lease) keeps the identity-less allowlist env.
+        held envs, and a freshly re-minted capability token), because ``--resume``
+        inherits none of the spawn env. ``chunk_id`` names the lease's chunk for
+        ``BLIZZARD_CHUNK_ID``. Both omitted keeps the identity-less allowlist env.
         """
         ...
 
@@ -209,9 +183,8 @@ class IHarnessAdapter(Protocol):
         """Deliver the judgement prompt into the session and return the raw reply.
 
         The synchronous half of the two-phase node judgement: resumes the session
-        headlessly with the engine-composed judgement prompt (base prose + the
-        ``<Choice>`` elicitation tail) and returns the harness-native output the
-        loop hands to :meth:`parse_verdict`. Separated from
+        headlessly with the caller-composed judgement prompt and returns the
+        harness-native output for :meth:`parse_verdict`. Separated from
         :meth:`resume_with_message` because the verdict elicitation must capture the
         reply, where async message delivery only needs the new pid.
 
@@ -220,13 +193,8 @@ class IHarnessAdapter(Protocol):
         invocation's usage; it is never passed to the harness, which restores the
         session's own.
 
-        ``preamble`` re-supplies the per-lease worker identity exactly as it does on
-        :meth:`resume_with_message` — the judgement turn runs its own
-        ``blizzard runner attach`` (a node's ``judgement_prompt`` elicits the
-        ``retrospective``), and ``--resume`` inherits none of the spawn env, so
-        without it the attach cannot reach the runner. ``chunk_id`` names the
-        lease's chunk for ``BLIZZARD_CHUNK_ID``. Both omitted (the selftest, which
-        speaks to no live lease) keeps the identity-less allowlist env.
+        ``preamble``/``chunk_id`` re-supply the per-lease worker identity exactly as on
+        :meth:`resume_with_message`. Both omitted keeps the identity-less allowlist env.
         """
         ...
 
@@ -251,11 +219,10 @@ class IHarnessAdapter(Protocol):
 
         ``model``/``effort`` (issue #144) are the session's **stamped** values — what it
         actually ran under, read back rather than re-resolved — and are appended to the
-        command when given. This is a deliberate exception to the mint-only model contract
-        above, which exists for prompt-cache efficiency on *runner-driven* resumes: an
-        operator's interactive takeover is neither cache-sensitive nor implicit, and
-        landing them in a session whose configuration silently differs from the one the
-        fleet ran is the worse failure.
+        command when given: a deliberate exception to the mint-only model contract above,
+        because an operator's interactive takeover is neither cache-sensitive nor implicit
+        (pinned by ``tests/test_runner_harness_adapter.py::
+        test_resume_command_appends_the_sessions_stamped_model_and_effort``).
 
         Both ``None`` — a session predating the stamps, so *unknown* — renders today's
         bare command rather than guessing at a default and presenting it as fact.
@@ -265,16 +232,10 @@ class IHarnessAdapter(Protocol):
     def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
         """The per-lease worker-identity child env spawn/judge/resume are built from.
 
-        Exposed on the seam (issue #258) so ``TakeoverService`` can hand an operator's
-        exec'd interactive session the lease identity its ``blizzard runner`` verbs
-        (``attach``/``ask``/``artifact``) read to reach the runner — ``--resume``
-        inherits no spawn env. Identity is all a takeover gets: the exec'd command
-        carries no ``--settings``, so no heartbeat/``SessionEnd`` hook is installed
-        (deliberately — an operator quitting would otherwise fire a spurious
-        done-signal), and the takeover door forwards only a bounded subset of this
-        env, never the full daemon child env. The env travels in the takeover API
-        response and the CLI's exec, never in the printable ``resume_command``
-        string: the lease token stays off display surfaces.
+        Exposed on the seam (issue #258) so a takeover can hand an operator's exec'd
+        interactive session the lease identity — ``--resume`` inherits no spawn env.
+        The env travels in the takeover API response and the CLI's exec, never in the
+        printable ``resume_command`` string: the lease token stays off display surfaces.
         """
         ...
 
@@ -295,8 +256,9 @@ class IHarnessAdapter(Protocol):
         was skipped.
 
         The aliases are deliberately **unordered roles, not an ordered scale**: nothing
-        substitutes downward when a tier is unmapped. The list itself is the only
-        fallback mechanism, so every degradation is author-written.
+        substitutes downward when a tier is unmapped, so every degradation is
+        author-written (pinned by
+        ``tests/test_pin_runner_harness.py::test_an_unmapped_tier_alias_never_substitutes_downward``).
         """
         ...
 
@@ -323,10 +285,8 @@ class IHarnessAdapter(Protocol):
         """Parse the judgement reply's free-text assessment — the payload after the Choice.
 
         The verdict reply is ``<Choice>{name}</Choice>`` plus the worker's prose
-        assessment of the node's checks. A node that
-        ``produces`` an **asset** (the review node's findings) carries that assessment
-        as the asset's content; the core harvests it into the completion. Empty string
-        when the reply carries no assessment."""
+        assessment of the node's checks. Empty string when the reply carries no
+        assessment."""
         ...
 
     def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
@@ -341,10 +301,9 @@ class IHarnessAdapter(Protocol):
         off the harness's own ``total_cost_usd``.
 
         ``model`` (issue #144) is the model this invocation actually ran under, used
-        **only** when the harness reports none of its own. Before per-session resolution
-        the adapter's single pinned model was always the right guess; now it is not, so
-        the caller — which knows what it resolved, or what the session's own stamp says —
-        supplies it. ``None`` keeps the adapter default, the pre-#144 behavior.
+        **only** when the harness reports none of its own — supplied by the caller,
+        which knows what it resolved or what the session's own stamp says. ``None``
+        keeps the adapter default.
         """
         ...
 
@@ -355,9 +314,8 @@ class IHarnessAdapter(Protocol):
         produces a result envelope, its transcript still carries a ``usage`` object
         on every assistant message — summed here into token counts with
         ``cost_usd=None`` (a transcript carries no dollar figure). Takes
-        already-read lines, mirroring :meth:`IHarnessTranscriptSource.read_raw_lines`'s
-        ``list[str]`` shape (:mod:`blizzard.runner.harness.transcript`), so the file
-        locate/read step is never duplicated here.
+        already-read lines, mirroring :meth:`IHarnessTranscriptSource.read_raw_lines`,
+        so the file locate/read step is never duplicated here.
 
         ``model`` is the same attribution fallback :meth:`parse_usage` takes, applying
         when no transcript line names a model either.
@@ -382,11 +340,8 @@ class IHarnessAdapter(Protocol):
 
         An accessor, not three methods folded onto this Protocol directly: the
         transcript source is a cohesive sub-seam with its own configuration
-        (a projects root) and its own lifetime, the same shape
-        :meth:`resolve_effort`/:meth:`sample_external_subscription_usage` already
-        gave "this harness has no such knob". A harness with no on-disk transcript
-        binds :class:`~blizzard.runner.harness.transcript.NullTranscriptSource`,
-        whose three reads return exactly what an absent-but-healthy transcript
-        returns today — a caller never needs a null check of its own.
+        (a projects root) and its own lifetime. A harness with no on-disk transcript
+        binds :class:`~blizzard.runner.harness.transcript.NullTranscriptSource`, so a
+        caller never needs a null check of its own.
         """
         ...

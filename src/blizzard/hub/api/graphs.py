@@ -10,9 +10,9 @@ newest non-retired graph of each name marked ``effective`` — the domain's
 ``POST /api/graphs/sync`` reconciles the hub's own **packaged** graph set against the
 store, minting only what changed (issue #146) — the reconciliation itself is
 :mod:`blizzard.hub.graph_sync`'s, so this route is a thin adapter and the same function
-serves an at-startup reconciliation unchanged. It is hub-side rather than a CLI-composed
-loop because the packaged set that matters is the one the **running daemon** was deployed
-with, which a possibly-different client wheel cannot speak for.
+serves an at-startup reconciliation unchanged. Hub-side rather than a CLI-composed loop:
+only the running daemon's own packaged set is authoritative, and a possibly-different
+client wheel cannot speak for it.
 ``GET /api/graphs/{graph_id}`` serves the full reified graph; unknown id resolves to
 404 at the edge. ``retire``/``enable`` append a reversible lifecycle fact
 (:class:`~blizzard.hub.domain.graph_lifecycle.GraphLifecycleService`) — the ``graphs``
@@ -24,10 +24,8 @@ to :class:`~blizzard.hub.domain.graph_authoring.GraphMintService`, and resolves 
 :class:`~blizzard.hub.domain.graph_lifecycle.GraphLifecycleService`
 (``bzh:domain-takes-objects``).
 
-``dependencies=[Depends(reject_runner_principal)]`` rejects a runner's bearer token
-here rather than treating it as anonymous-plus-credential — a runner's token is
-confined to the fleet router (issue #104; this router was the one operator router
-still missing the check every other one already carries).
+``dependencies=[Depends(reject_runner_principal)]`` confines a runner's bearer token
+to the fleet router (issue #104).
 """
 
 from __future__ import annotations

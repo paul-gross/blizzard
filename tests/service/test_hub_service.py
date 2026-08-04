@@ -259,7 +259,7 @@ def test_a_fresh_migration_publishes_queue_changed_to_a_live_subscriber(tmp_path
 
     ``tests/test_migration_apply.py`` fences the same behaviour at the component tier, but
     against the broker's *replay tail* — which proves the event was recorded, not delivered.
-    #107's claim is immediacy: the board's spine should learn of the re-queued chunk without
+    #107's claim is immediacy: a subscriber should learn of the re-queued chunk without
     waiting for a poll tick. Only a real subscriber on a real socket can observe the fan-out
     leg, so this is the row that actually closes the issue's premise.
     """
@@ -302,11 +302,10 @@ def test_chunk_pause_field_reflects_the_operator_chunk_brake(tmp_path: Path) -> 
     tiers``) — this is that mandatory surface, distinct from the runner-level brake above:
     a chunk pause keeps the claim (the route stays), unlike the runner's own brake.
 
-    ``ChunkDetail.pause`` is the **only** shape the fact travels in: the runner reads it,
-    and so does the board's chunk detail dock, which is where every operator action lives
-    (issue #42). The summary deliberately carries no pause field — the card is a passive
-    status view — and this asserts that narrowing, since a silently re-added field would
-    be exactly as untype-checked as a removed one.
+    ``ChunkDetail.pause`` is the **only** shape the fact travels in (issue #42) — the
+    runner reads it. The summary deliberately carries no pause field — the card is a
+    passive status view — and this asserts that narrowing, since a silently re-added
+    field would be exactly as untype-checked as a removed one.
     """
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
@@ -549,14 +548,9 @@ def test_explicit_attachment_is_accepted_under_enforce_over_the_wire(tmp_path: P
 
 def test_git_commit_covered_produces_name_is_accepted_under_enforce_over_the_wire(tmp_path: Path) -> None:
     """Under ``enforce`` a ``produces:`` name covered by a **pushed git commit** — carrying
-    ``attached=False``, since nothing was attached — passes the backstop and advances.
-
-    The regression class this closes (issue #113): the hub once counted a name covered only
-    by ``attached=True``, so a commit-covered name was fenced out over the wire even though
-    the runner's own nudge check already treated it as satisfied and never asked the worker
-    for anything more. A worker doing exactly what the runner wanted was rejected by the hub.
-    The unit-tier `test_produces_coverage_agreement.py` pins the two predicates together;
-    this proves the accept end to end over the real wire, the only place the mismatch bit.
+    ``attached=False``, since nothing was attached — passes the backstop and advances
+    (regression guard, issue #113). The unit-tier `test_produces_coverage_agreement.py`
+    pins the two predicates together; this proves the accept end to end over the real wire.
     """
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (

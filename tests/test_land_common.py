@@ -177,7 +177,7 @@ def test_a_connection_error_on_every_attempt_raises_after_three_calls() -> None:
 
 def test_constructing_with_no_callback_url_is_not_fatal_by_itself() -> None:
     """A chunk with nothing pending never calls ``record`` — that must stay a silent
-    no-op exactly like before issue #230; only invoking the closure is fatal."""
+    no-op; only invoking the closure is fatal."""
     request = _request_returning()
     land_common.marker_recorder(callback_url="", token=_TOKEN, request=request)  # must not raise
 

@@ -6,8 +6,8 @@ never clutters ``blizzard --help``, but it is a real, tested entrypoint.
 
 ``check-invariants`` runs the facts-level invariant checker (``bzh:invariant-checker``,
 :mod:`blizzard.foundation.store.invariants`) against a runner store, a hub store, or
-both — the same library the kill-9 sweep asserts after every armed crash. Exit 0 means
-every durable invariant holds; exit 1 prints each violation and its stable slug.
+both. Exit 0 means every durable invariant holds; exit 1 prints each violation and its
+stable slug.
 """
 
 from __future__ import annotations

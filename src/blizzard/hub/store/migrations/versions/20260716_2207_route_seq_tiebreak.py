@@ -1,19 +1,13 @@
 """route-event monotonic tiebreak (hub store tree, issue #41)
 
-Two oracles answer "does this chunk have a live route" from ``route_created``/
-``route_released`` rows: :func:`blizzard.hub.domain.work._has_live_route` (chunk-status
-derivation) and :meth:`ChunkStore.route_of` (the gate a same-instant detach's 409
-check relies on). Both used to compare bare ``created_at``/``released_at`` timestamps —
-one with strict ``>``, the other with ``>=`` — so they disagreed on a same-instant tie.
 A plain-timestamp fact model cannot tell "created after released" from "released after
-created" when the instants coincide.
-
-This revision adds ``seq`` to both tables: a per-chunk counter shared across the two,
-assigned in real write order (:meth:`ChunkStore._next_route_seq`). Both oracles now
-order by ``(timestamp, seq)`` and share one comparison
-(:func:`blizzard.hub.domain.work.newest_live_route`), so a tie is broken by which event
-was actually recorded later rather than by two independently-chosen, conflicting
-defaults.
+created" when the instants coincide. This revision adds ``seq`` to ``route_created`` and
+``route_released`` — a per-chunk counter shared across the two, assigned in real write
+order (:meth:`ChunkStore._next_route_seq`) — so both liveness oracles order by
+``(timestamp, seq)`` through one comparison
+(:func:`blizzard.hub.domain.work.newest_live_route`) and a tie resolves to whichever
+event was actually recorded later. Pinned by
+``tests/test_gates.py::test_reclaim_at_a_same_instant_tie_still_derives_running``.
 
 **Backfill (existing rows predate ``seq``):** for each chunk, its ``route_created``/
 ``route_released`` rows are ordered chronologically by timestamp, with a same-instant
@@ -25,10 +19,8 @@ order. This is the same "release wins the historical tie" bias :meth:`route_of` 
 hard-code, kept only as the backfill default — new writes are ordered by real insertion
 order regardless.
 
-``chunk_pm_pointers`` set the precedent (``0013_pm_pointer_source_ref``) for freezing
-0002's shape rather than importing it live off ``schema.py`` once a later revision
-reshapes it (0002's own module docstring explains why); this revision does the same for
-``route_created``/``route_released``, which is why 0002 no longer imports them live.
+Local ``sa.Table`` literals for ``route_created``/``route_released``, not a ``schema.py``
+import — the reason is recorded in ``0013_pm_pointer_source_ref``'s docstring.
 
 Revision ID: 20260716_2207_hub_route_seq_tiebreak
 Revises: 20260716_2206_hub_pr_opened_idempotent

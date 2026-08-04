@@ -1,21 +1,13 @@
 """The runner's own local session — a signed, stateless ``HttpOnly`` cookie (issue #95).
 
-Unlike the hub's session (a store-backed row resolved by hash, ``hub/auth/sessions.py``)
-the runner's session carries no server-side row: it is a small JSON payload
-(``username``, ``role``, ``issued_at``, ``expires_at``) HMAC-signed with a per-process
-secret minted at daemon startup (``bzh:injected-clock`` for the timestamps; the secret
-itself is not a domain concern, so it is plain ``secrets.token_bytes`` at the
-composition root, not clock-derived). A restart therefore invalidates every live
-session outright — acceptable because re-authentication is a *silent* bounce back
-through the hub (issue #95's own design): the human plane 401s, the browser is bounced
-to ``GET /api/auth/login``, and if the hub itself still holds a live session the whole
-round trip completes with no user-visible prompt. This trades session durability across
-a runner restart for zero new store schema — the runner-store table this phase does add
-(``jwt_jti_seen``) exists for the anti-replay guarantee, which *must* survive a restart
-within its own short window; a *runner-local* session losing itself the moment the
-daemon that minted it restarts is not a comparable correctness requirement, and (issue
-#95's own text) runner sessions are already meant to be short-lived (hours) with silent
-renewal — a hard restart simply forces the next renewal a little early.
+Stateless rather than store-backed: a small JSON payload (``username``, ``role``,
+``issued_at``, ``expires_at``) HMAC-signed with a per-process secret minted at daemon
+startup (``bzh:injected-clock`` for the timestamps), so it costs no new store schema and
+a restart invalidates every live session. That trade is acceptable because
+re-authentication is a *silent* bounce back through the hub, and these sessions are
+short-lived (hours) with silent renewal anyway.
+
+Pinned by tests/test_pin_runner_misc.py::test_a_session_minted_before_a_restart_is_refused_after_it.
 """
 
 from __future__ import annotations

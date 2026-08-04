@@ -148,13 +148,10 @@ def test_pause_allows_running_ready_and_human_gated_statuses(facts_factory: obje
 def test_resume_is_never_refused_not_even_for_the_statuses_pause_refuses(facts_factory: object) -> None:
     """Resume is **unconditional** — the refusal set governs `pause` only (issue #46 §4).
 
-    The asymmetry is a decision, not an oversight: pause is a lever that must not be
-    *engaged* on work already finished or in flight to the forge, but *disengaging* a brake
-    is always safe, so it is never refused (matching `POST /runners/{id}/resume`). Without
-    these, `resume` could grow a `_require_pausable` call and the whole suite stays green —
-    and a chunk paused before it reached `done` could then never have its pause fact
-    cleared. The CLI relies on this too: `resume-chunk` maps no 409 at all, so a refusal
-    would surface as a raw API error rather than a named one.
+    The asymmetry is deliberate, not an oversight: pause must not *engage* on work already
+    finished or in flight to the forge, but *disengaging* a brake is always safe, matching
+    `POST /runners/{id}/resume`. The CLI relies on this too — `resume-chunk` maps no 409 at
+    all, so a refusal would surface as a raw API error rather than a named one.
     """
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
@@ -178,7 +175,7 @@ def test_resume_twice_is_a_harmless_no_op() -> None:
 
 
 def test_pause_refusal_carries_the_offending_status_on_the_exception() -> None:
-    """The typed exception carries the status — the 409 detail the CLI echoes is built from it."""
+    """The typed exception carries the status the 409 detail is built from."""
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=_delivering_facts())
     service = PauseService(chunks=_as_write_repo(repo), clock=clock)

@@ -21,18 +21,15 @@ class SubprocessHubCommandRunner:
         self._timeout = timeout
 
     def run(self, *, command: str, cwd: str, env: dict[str, str]) -> CommandResult:
-        # Merge onto the hub daemon's own environment — never a bare replacement —
-        # mirroring the worker spawn's own env-build (`_spawn_env`,
-        # `runner/harness/internal/claude_code_adapter.py`): a `run:` script needs
-        # ``PATH``/``PYTHONPATH``/``VIRTUAL_ENV`` etc. to resolve ``git``/``python3``/
-        # the ``blizzard`` package the same way the hub process itself does — the
-        # node-specific ``BZ_*`` keys are added on top (never removed by the parent
-        # env), so a script sees both. Inheriting ``PATH`` alone is not enough for
-        # ``python3``: a wheel-installed daemon launched by absolute path (systemd)
-        # inherits a PATH with no venv on it, so a bare ``python3`` in a ``run:``
-        # step would resolve to an interpreter that cannot import ``blizzard`` —
-        # prepend the hub interpreter's own bin dir so it always resolves to the
-        # interpreter the hub itself runs under (``bzh:hub-node-env-contract``).
+        # Merge onto the hub daemon's own environment — never a bare replacement — with the
+        # node-specific ``BZ_*`` keys on top, so a `run:` script resolves its tools the way
+        # the hub process itself does. Inheriting ``PATH`` alone is not enough: a
+        # wheel-installed daemon launched by absolute path (systemd) inherits a PATH with no
+        # venv on it, so prepend the hub interpreter's own bin dir and a bare ``python3``
+        # always resolves to an interpreter that can import ``blizzard``
+        # (``bzh:hub-node-env-contract``; pinned by ``tests/test_hub_command_runner.py``'s
+        # ``test_bare_python3_resolves_to_the_hubs_own_interpreter`` and
+        # ``test_an_injected_path_is_still_prepended_not_replaced``).
         full_env = {**os.environ, **env}
         interpreter_bin = os.path.dirname(sys.executable)
         path = full_env.get("PATH", "")

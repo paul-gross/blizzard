@@ -1,16 +1,12 @@
 """Retries exhausted -> needs_human -> resumable takeover — scenario 3 of the standing
 e2e smoke — MVP criterion 6.
 
-The third full-stack scenario alongside the happy path (test_acceptance_loop) and the
-review-fail cycle (test_review_cycle_e2e). One chunk is driven through the real forge +
-hub + runner + ``mock-claude-code`` façade where the build worker **exits without a
-parseable verdict twice** — a clean exit whose judgement resume yields no
-``<Choice>``. With ``retries.max = 1`` that is two failed execution attempts,
-so the node's budget is exhausted and the runner **escalates**:
+One chunk is driven through the real forge + hub + runner + ``mock-claude-code`` façade
+where the build worker **exits without a parseable verdict twice**. With
+``retries.max = 1`` that is two failed execution attempts, so the node's budget is
+exhausted and the runner **escalates**:
 
-* the chunk derives **needs_human** — an open ``escalation.recorded`` with no later
-  lease mint, flushed up the runner's outbound buffer to
-  ``POST /api/fleet/events`` and dispatched to ``record_escalation``;
+* the chunk derives **needs_human**;
 * the open escalation surfaces the runner-composed **takeover command** — the
   pasteable ``cd <workdir> && <harness> --resume <session>``;
 * and that command, **executed verbatim in the env**, actually resumes the parked
@@ -57,9 +53,8 @@ pytestmark = [
 
 # build: a clean no-op turn — the worker exits successfully but does no work of note.
 _BUILD_SCRIPT = "pass\n"
-# build judgement: a no-op that emits NO verdict() — so the resume reply carries no
-# ``<Choice>``, which the adapter parses to None and the core treats as a failed
-# attempt. Every attempt fails this way, so the node's retry budget exhausts.
+# build judgement: a no-op that emits NO verdict(), so every attempt fails and the node's
+# retry budget exhausts.
 _VERDICTLESS_JUDGEMENT = "pass\n"
 
 # The takeover message a human types into the resumed session. It arrives as code (a
@@ -106,12 +101,8 @@ def _graph_yaml() -> str:
 
 
 def _session_state_path(workspace: Path, session_id: str) -> Path:
-    """Where the mock harness persists the session keyed by ``session_id``.
-
-    Defaults beside the fence marker (blizzard_mock.harness.engine._state_root): the
-    marker sits at the workspace root, so every acquired env worktree under it shares
-    ``<workspace>/.blizzard-mock-harness/sessions``.
-    """
+    """Where the mock harness persists the session keyed by ``session_id`` — beside the
+    fence marker at the workspace root, shared by every acquired env worktree under it."""
     return workspace / ".blizzard-mock-harness" / "sessions" / f"{session_id}.json"
 
 
@@ -177,12 +168,10 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(tmp_path: Path
         takeover = escalation["takeover_command"]
         assert takeover, "the escalation must surface a pasteable takeover command"
 
-        # The wrapped, supported entry point (issue #251) rides alongside the raw
-        # fallback above — asserted here as shape only; the RAW command below stays the
-        # one actually executed (it alone proves a resumable session exists). `--dir`
-        # names the runner's own runtime root as `RunnerConfig.load` stamps it — a
-        # resolved, absolute path (`root.resolve()`) — not the raw `tmp_path / "runner"`
-        # expression, which need not coincide with it off a plain Linux tmpdir.
+        # The wrapped entry point (issue #251), asserted as shape only; the RAW command
+        # below stays the one actually executed. `--dir` must be the *resolved* runtime
+        # root, not the raw `tmp_path / "runner"` expression, which need not coincide
+        # with it off a plain Linux tmpdir.
         runner_dir = (tmp_path / "runner").resolve()
         wrapped_takeover = escalation["wrapped_takeover_command"]
         assert wrapped_takeover == f"blizzard runner takeover {chunk_id} --dir {shlex.quote(str(runner_dir))}"

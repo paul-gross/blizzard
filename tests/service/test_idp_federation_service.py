@@ -51,25 +51,13 @@ def _replay_bounce_cookies(runner: httpx.Client, login_resp: httpx.Response) -> 
     """Re-set the bounce cookies on ``runner`` so the callback POST carries them, as a
     browser's would.
 
-    The runner mints these two ``SameSite=None; Secure`` on any origin a browser counts
-    as *potentially trustworthy*, loopback included, which is what lets a plain-``http``
-    ``127.0.0.1`` runner hold them at all
-    (``blizzard.runner.auth.federation._bounce_cookie_policy``). A browser applies that
-    same loopback exception on the way back out and returns them on the hub's cross-site
-    form POST. ``http.cookiejar`` — what backs an ``httpx`` client's jar — implements the
-    bare RFC 6265 rule with no such exception and withholds *any* ``Secure`` cookie from
-    an ``http`` request, so the jar alone never returns them here and every callback
-    fails as "bad or expired state". That is an artifact of the stand-in client, not of
-    the wire leg under test, so replay them as plain (non-``Secure``) cookies — one
-    header entry each, since the jar still withholds the ``Secure`` originals.
-
-    Installing a jar policy instead does not work, and fails *silently*: ``httpx``'s
-    ``_merge_cookies`` rebuilds a default-policy ``CookieJar`` on every single request,
-    so a policy set on the client is discarded before the cookie header is ever built.
-
-    This tier owns the JWT/JWKS wire leg; the browser's own cookie handling is pinned by
-    ``tests/test_runner_federation.py`` (the attributes actually minted) and by the
-    real-browser e2e bounce scenario.
+    ``http.cookiejar`` implements the bare RFC 6265 rule and withholds any ``Secure`` cookie
+    from an ``http`` request, so the jar alone never returns them here — replayed as plain
+    (non-``Secure``) headers instead. Installing a jar policy instead fails *silently*:
+    ``httpx``'s ``_merge_cookies`` rebuilds a default-policy ``CookieJar`` on every request,
+    discarding any client-level policy before the header is built. The browser's own cookie
+    handling is pinned separately by ``tests/test_runner_federation.py`` and the real-browser
+    e2e bounce scenario.
     """
     for name in _BOUNCE_COOKIES:
         runner.cookies.set(name, login_resp.cookies[name])

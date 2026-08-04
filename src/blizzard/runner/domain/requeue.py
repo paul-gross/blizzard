@@ -1,33 +1,21 @@
 """The operator requeue — ``blizzard runner requeue <chunk-id>`` (issue #53).
 
-Behind ``POST /chunks/{id}/requeues``: the explicit hand-back after a human either
-:mod:`~blizzard.runner.domain.takeover`'s ``blizzard runner takeover`` and worked the
-session interactively, or simply pasted an escalation's surfaced resume command by
-hand with no recorded takeover at all. Both routes leave the exact same local shape —
-a lease closed ``escalated`` with no later mint
+Behind ``POST /chunks/{id}/requeues``: the explicit hand-back after a human worked a
+needs_human chunk interactively, whether by ``blizzard runner takeover`` or by pasting
+an escalation's resume command with no recorded takeover at all. Both routes leave the
+same local shape — a lease closed ``escalated`` with no later mint
 (:meth:`~blizzard.runner.store.repository.IReadRunnerStore.open_escalation_for_chunk`) —
-because ending a takeover never writes a closure or mints a lease, so one read covers
-both flows with no extra bookkeeping to tell them apart.
+so one read covers both.
 
-:meth:`RequeueService.requeue` only appends the clearing fact
-(``bzh:crash-correctness`` — fact first, no direct spawn from the API edge, mirroring
-:class:`~blizzard.runner.domain.takeover.TakeoverService`'s fact-before-anything-else
-ordering): the next FILL tick's
-:func:`~blizzard.runner.loop.steps._reconcile_interrupted_claims` reads
-:meth:`~blizzard.runner.store.repository.IReadRunnerStore.pending_requeue_chunk_ids`
-back and spawns the fresh attempt — new session, new lease, fresh epoch, at the
-chunk's current node. The chunk's route is never released and it never re-enters the
-hub's queue, unlike ``blizzard hub requeue``
-(:class:`blizzard.hub.domain.decisions.RequeueService`), which also supersedes the
-escalation but additionally releases the route so *any* runner may reclaim the chunk
-fresh — this is the narrower, same-runner, same-place hand-back a human takeover
-implies.
+:meth:`RequeueService.requeue` only appends the clearing fact (``bzh:crash-correctness``
+— fact first, no direct spawn from the API edge); the next FILL tick reads it back and
+spawns the fresh attempt. The chunk's route is never released and it never re-enters the
+hub's queue — this is the narrower, same-runner, same-place hand-back a human takeover
+implies (contrast ``blizzard hub requeue``,
+:class:`blizzard.hub.domain.decisions.RequeueService`).
 
-The retry budget is **carried, not reset**: the fresh attempt is an ordinary
-:func:`~blizzard.runner.loop.steps._spawn_attempt` mint, so
-:meth:`~blizzard.runner.store.repository.IReadRunnerStore.attempt_count` simply gains
-one more entry against the node's existing ``retries_max`` — the human's requeue buys
-the chunk exactly one more try, not a fresh budget.
+The retry budget is **carried, not reset**: the human's requeue buys the chunk exactly
+one more try, not a fresh budget.
 """
 
 from __future__ import annotations

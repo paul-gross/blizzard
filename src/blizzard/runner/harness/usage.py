@@ -4,18 +4,13 @@ Cost always comes from the harness's own ``total_cost_usd`` — blizzard never
 maintains a pricing table (``bzh:facts-not-status`` precedent: a derived figure is
 read off the source of truth at read time, never recomputed from a private
 schedule). :class:`UsageSample` is the one shape a coding-harness invocation's
-consumption is translated into, produced behind :class:`~blizzard.runner.harness.
-adapter.IHarnessAdapter` (``parse_usage`` / ``sum_transcript_usage``) so a future
-Codex/OpenCode adapter conforms without the core ever learning a second harness's
-wire format.
+consumption is translated into, produced behind
+:class:`~blizzard.runner.harness.adapter.IHarnessAdapter`.
 
 Token counts are always present (a killed or reaped worker still consumed tokens);
 ``cost_usd`` is the one field that can be legitimately absent — ``None`` means no
-result envelope existed for this invocation (the envelope-less transcript-summation
-fallback, or a process that never produced one), never a fabricated ``0.0``. A
-caller that sums cost across samples must treat ``None`` as "unknown", not as
-zero-cost (the runner-ceiling/chunk-cap phases carry this forward as the
-lower-bound + PARTIAL treatment).
+result envelope existed for this invocation, never a fabricated ``0.0``. A caller
+that sums cost across samples must treat ``None`` as "unknown", not as zero-cost.
 """
 
 from __future__ import annotations

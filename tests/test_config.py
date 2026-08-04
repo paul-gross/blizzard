@@ -37,7 +37,6 @@ def test_runner_default_db_url_is_sqlite_under_data_dir(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_postgres_url_round_trips_through_config(tmp_path: Path) -> None:
-    # A postgres URL is accepted verbatim — portability is a config value, not a code branch.
     pg = "postgresql+psycopg://blizzard:secret@localhost:5432/hub"
     root = tmp_path / "hub"
     root.mkdir()
@@ -60,8 +59,6 @@ def test_service_band_port_env_overrides_default(tmp_path: Path, monkeypatch: py
 def test_runner_loop_seams_scaffold_from_the_winter_injected_env(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The winter-service runner slot injects the loop seams so `blizzard runner init`
-    # scaffolds a runnable config without hand-editing the toml.
     monkeypatch.setenv("BZ_WORKSPACE_ROOT", "/tmp/fixture/workspace")
     monkeypatch.setenv("BZ_WORKSPACE_ENVS", "e1, e2 ,e3")
     monkeypatch.setenv("BZ_HARNESS_BINARY", "/opt/mock-claude-code")
@@ -113,7 +110,6 @@ def test_workspace_prompt_file_wins_and_resolves_relative_to_root(tmp_path: Path
         workspace_prompt="inline-loses",
         workspace_prompt_file="prompt.md",
     )
-    # The file wins over the inline value, and a relative path resolves under root.
     assert config.resolved_workspace_prompt() == "# Fleet worker\nFrom a file."
 
 
@@ -155,7 +151,6 @@ def test_runner_prompt_file_wins_and_resolves_relative_to_root(tmp_path: Path) -
         runner_prompt="inline-loses",
         runner_prompt_file="runner-prompt.md",
     )
-    # The file wins over the inline value, and a relative path resolves under root.
     assert config.resolved_runner_prompt() == "# Blizzard preamble\nFrom a file."
 
 
@@ -456,7 +451,7 @@ def test_work_source_duplicate_provider_and_repo_raises(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_work_source_name_with_a_colon_raises(tmp_path: Path) -> None:
-    # hub/cli.py's ingest token partitions on the first colon.
+    # see hub/cli.py's ingest token parsing.
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(
@@ -596,10 +591,9 @@ def test_annotation_interval_seconds_absent_from_toml_defaults_to_120(tmp_path: 
 
 @pytest.mark.unit
 def test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key(tmp_path: Path) -> None:
-    """Issue #55's deliberate no-alias: `[[pm_source]]` was the pre-rename key, and a hub
-    whose config still carries it would otherwise parse as zero configured sources — a
-    hub that looks configured, 503s every work-item read, and nulls every board label.
-    Config is operator-owned and skew-free, so this fails fast and names the new key."""
+    """Issue #55's deliberate no-alias: a config still carrying the pre-rename
+    `[[pm_source]]` key fails fast, naming the new key, rather than silently parsing as
+    zero sources."""
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(
@@ -611,9 +605,8 @@ def test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key(tmp_path: 
 
 @pytest.mark.unit
 def test_a_leftover_pm_source_block_fails_even_beside_a_valid_work_source(tmp_path: Path) -> None:
-    """The check is not "did we end up with any sources" — a config carrying both keys
-    would silently drop the old block's source, which is exactly the quiet
-    half-configuration the fail-fast exists to prevent."""
+    """Carrying both keys still fails — the check is not merely "did we end up with any
+    sources"."""
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(
@@ -837,7 +830,7 @@ def test_token_env_absent_from_toml_defaults_to_bz_hub_token(tmp_path: Path) -> 
 
 @pytest.mark.unit
 def test_hub_trusted_proxies_default_empty(tmp_path: Path) -> None:
-    # A fresh scaffold trusts no proxy — forwarded headers ignored, today's behavior.
+    # A fresh scaffold trusts no proxy — forwarded headers ignored.
     assert HubConfig.scaffold(tmp_path).trusted_proxies == ()
 
 
@@ -913,10 +906,8 @@ def test_follow_latest_round_trips_through_to_toml_and_load(tmp_path: Path) -> N
 
 @pytest.mark.unit
 def test_follow_latest_stays_a_top_level_key_in_the_emitted_toml(tmp_path: Path) -> None:
-    """`to_toml` hand-rolls its emit as an ordered list of strings, so a key can drift
-    below a `[table]` header without any type error. `follow_latest` would then load as
-    `False` and the fleet-wide policy would be silently off — the failure direction with
-    no symptom. Pin its position: it must precede the first table header."""
+    """`to_toml` hand-rolls its emit as an ordered list of strings, so `follow_latest`
+    must precede the first `[table]` header or it silently loads as `False`."""
     emitted = dataclasses.replace(_hub_config(tmp_path), follow_latest=True).to_toml()
     assert "\nfollow_latest = true\n" in emitted
     first_table = emitted.index("\n[")
@@ -968,9 +959,8 @@ def test_hub_db_url_env_overrides_default_at_scaffold(tmp_path: Path, monkeypatc
 
 @pytest.mark.unit
 def test_hub_host_env_honored_at_load_time(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # Previously only `scaffold` read BZ_HUB_HOST — a value set at `host` time on an
-    # already-scaffolded config (e.g. a container re-created against an existing volume)
-    # was ignored. `load` now honors it too.
+    # A container re-created against an existing volume sets BZ_HUB_HOST at `load`
+    # time, not just `scaffold`.
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nhost = "127.0.0.1"\n')
@@ -1007,8 +997,7 @@ def test_hub_port_cli_flag_wins_over_env_at_load(tmp_path: Path, monkeypatch: py
 
 @pytest.mark.unit
 def test_hub_config_byte_identical_when_env_unset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Every variable unset leaves parsed values byte-identical to today — the
-    regression case pinning that this change is additive, not a behavior shift."""
+    """Every variable unset leaves parsed values byte-identical."""
     for var in (HUB_ENV_DB_URL, HUB_ENV_HOST, HUB_ENV_PORT):
         monkeypatch.delenv(var, raising=False)
     root = tmp_path / "hub"
@@ -1058,7 +1047,6 @@ def test_hub_db_url_honored_identically_by_host_and_migrate(tmp_path: Path, monk
     config = HubConfig.load(root)
     assert config.db_url == override_url
     assert (root / "override.db").exists()
-    # what the daemon's own revision-mismatch guard reads at startup is the same store
     assert migration_runner(config).current_revision() is not None
 
 
@@ -1162,9 +1150,9 @@ def test_load_falls_back_to_default_db_url_when_key_is_absent(tmp_path: Path) ->
 
 @pytest.mark.unit
 def test_a_freshly_scaffolded_dir_copied_elsewhere_re_derives_its_own_db_url(tmp_path: Path) -> None:
-    """The whole point of issue #234's `to_toml` change: `cp -r` a freshly-inited
-    runtime dir and it is self-contained — the copy's db_url points into the copy,
-    not back at the original, with no `--allow-external-db` needed either way."""
+    """Issue #234: `cp -r` a freshly-inited runtime dir and it is self-contained — the
+    copy's db_url points into the copy, not back at the original, with no
+    `--allow-external-db` needed."""
     import shutil
 
     from blizzard.hub.runtime import init_environment

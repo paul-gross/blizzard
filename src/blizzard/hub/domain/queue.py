@@ -46,31 +46,19 @@ class ChunkNotFound(LookupError):
 #: :func:`~blizzard.hub.domain.work.derive_chunk_status` falls through to when a chunk
 #: is neither claimed nor parked nor finished.
 #:
-#: Deliberately a status set rather than a route-liveness read. "No runner holds it" is
-#: what motivated widening the gate past ``ready``, but it is **not** sufficient on its
-#: own, and the set is not its synonym: ``paused``, ``waiting_on_human`` and
-#: ``needs_human`` are all reachable with no live route at all — a never-claimed backlog
-#: chunk can be paused (``PauseService`` refuses only ``done``/``stopped``/``delivering``),
-#: and ``PAUSED`` outranks the un-promoted branch in the derivation, so it reads ``paused``
-#: rather than ``not_ready``. Each of those is a standing human hold, and folding a chunk
-#: out of existence under one is not this operation's call to make. Keying on the two
-#: statuses keeps that correct without a second vocabulary of "available" to hold in
-#: lockstep with the derivation.
+#: Deliberately a status set rather than a route-liveness read: ``paused``,
+#: ``waiting_on_human`` and ``needs_human`` are all reachable with no live route at all,
+#: and each is a standing human hold a group must not fold a chunk out from under
+#: (pinned by
+#: tests/test_queue_shaping.py::test_group_refuses_a_paused_backlog_chunk_without_claiming_a_runner_holds_it).
 GROUPABLE_STATUSES = frozenset({ChunkStatus.NOT_READY, ChunkStatus.READY})
 
 
 class ChunkNotGroupable(ValueError):
     """A group op named a chunk that is not free to be folded away (issue #141).
 
-    Grouping was gated on ``ready`` for every participant, so merging three backlog chunks
-    meant promoting all three into the *claimable* queue first — making them claimable by
-    any live runner mid-flow purely to satisfy a merge, and leaving the survivor ready as a
-    side effect rather than by choice.
-
-    The message names what is **actually enforced** rather than the motivating half of it.
-    "No runner holds it" alone would be a false claim on a refused ``paused`` chunk, which
-    is exactly the kind of wrong-invariant wording issue #141 set out to remove — one
-    status over.
+    The message names what is **actually enforced** rather than the motivating half of
+    it: "no runner holds it" alone would be a false claim on a refused ``paused`` chunk.
     """
 
     def __init__(self, chunk_id: str, status: ChunkStatus) -> None:
@@ -101,11 +89,9 @@ class QueueService:
         """Idempotent whole-order replacement: append one ascending explicit
         position fact per chunk in ``ordered``, front to back.
 
-        Takes already-resolved ``Chunk`` objects, never ids (``bzh:domain-takes-objects``)
-        — the caller (``PUT /api/queue``) has already validated every named id
-        against the ready set and appended any unlisted ready chunk in its current
-        order, so this method only has to record ranks, not resolve or validate
-        anything. Ranking every chunk in ``ordered`` (not just the named ones)
+        Takes already-resolved ``Chunk`` objects, never ids (``bzh:domain-takes-objects``);
+        the caller has already validated them against the ready set, so this records
+        ranks only. Ranking every chunk in ``ordered`` (not just the named ones)
         keeps the result deterministic regardless of positions left over from
         an earlier reorder."""
         at = self._clock.now()
@@ -118,17 +104,13 @@ class QueueService:
         lands it immediately after ``after`` (or at the very top when ``after is None``),
         without restamping every other ready chunk (issue #137's board drag-and-drop).
 
-        Takes already-resolved ``Chunk`` objects, never ids (``bzh:domain-takes-objects``)
-        — the caller (``POST /api/queue/position``) has already resolved and validated
-        both ``chunk`` and ``after`` against the current ready set.
+        Takes already-resolved ``Chunk`` objects, never ids (``bzh:domain-takes-objects``);
+        the caller has already resolved and validated both ``chunk`` and ``after``
+        against the current ready set.
 
         Reads the same effective-position machinery :meth:`ordered_ready` does, then
         excludes ``chunk`` itself from the ordering it anchors against — a chunk being
-        moved must never count as its own neighbour. ``after=None`` computes a position
-        below the current lowest (``first - 1.0``, or ``0.0`` if the ready set is
-        otherwise empty); anchored after the last chunk computes ``after_pos + 1.0``;
-        anchored anywhere else computes the midpoint between ``after`` and the chunk
-        immediately following it.
+        moved must never count as its own neighbour.
 
         Floats are finite: repeated midpoint bisection between the same two neighbours
         eventually has no representable double strictly between them
@@ -178,14 +160,12 @@ class QueueService:
         Before a chunk is ever moved, its position falls back to its
         ``chunk_promoted.promoted_at`` as a unix timestamp if it has been promoted, or its
         ``minted_at`` otherwise — so a chunk minted long ago but promoted late still
-        sorts at the tail rather than mid-queue, and a never-promoted chunk (unreachable
-        via this sort, since only ready chunks are ever ranked, but exercised directly by
-        the unit tests) still falls back to plain FIFO by mint order. Any explicit move (a
-        smaller float) lifts a chunk above the un-moved tail either way.
+        sorts at the tail rather than mid-queue, and a never-promoted chunk still falls
+        back to plain FIFO by mint order. Any explicit move (a smaller float) lifts a
+        chunk above the un-moved tail either way.
 
         :class:`~blizzard.hub.domain.promote.PromoteService` reuses this same fallback
-        to compute its own tail-stamp arithmetic — see its docstring for why that reuse
-        is what makes a lost tail-stamp write self-healing rather than a safety break.
+        for its own tail-stamp arithmetic.
         """
         explicit = positions.get(chunk.chunk_id)
         if explicit is not None:
@@ -198,18 +178,17 @@ class QueueService:
 class GroupResult:
     """A completed group: the survivor and the status it is left at (issue #141).
 
-    The survivor's status rides along because grouping no longer implies ``ready``:
-    folding backlog chunks yields a backlog survivor, so a caller that announces the
-    change (the SSE ``chunk-changed`` frame) must publish what the survivor *is* rather
-    than the ``"ready"`` the ready-only gate once made a safe constant.
+    The survivor's status rides along because grouping does not imply ``ready``:
+    folding backlog chunks yields a backlog survivor, so a caller announcing the change
+    must publish what the survivor *is* rather than a constant.
     """
 
     survivor: Chunk
     status: ChunkStatus
-    # The last ``chunk_grouped.id`` this call wrote (issue #213's activity-feed key) —
-    # ``None`` when ``merge_ids`` resolved to zero targets (every id was the survivor
-    # itself or a duplicate, a no-op). A multi-chunk merge writes one row per target;
-    # this names the newest, representative of "the survivor's row just changed".
+    # The last ``chunk_grouped.id`` this call wrote (issue #213) — ``None`` when
+    # ``merge_ids`` resolved to zero targets (every id was the survivor itself or a
+    # duplicate, a no-op). A multi-chunk merge writes one row per target; this names
+    # the newest.
     grouped_id: int | None = None
 
 

@@ -9,10 +9,10 @@ a mutable upsert, not an append-only fact — see ``hub/domain/registry.py``'s m
 docstring), so the prior token stops resolving via ``registration_for_token_hash``
 immediately. There is no separate revoke: rotating *is* revoking the old token.
 
-Deliberately not folded into :class:`~blizzard.hub.domain.registry.FleetService`:
-enrollment is an operator act on a runner's *identity*, not a fleet registration event
-(no ``last_seen_at``/``paused`` brake is touched here), so it gets its own service
-holding just the write registry and the injected clock (``bzh:injected-clock``).
+Its own service rather than part of :class:`~blizzard.hub.domain.registry.FleetService`:
+enrollment acts on a runner's *identity*, not on the fleet-registration state that
+service owns, so it holds just the write registry and the injected clock
+(``bzh:injected-clock``).
 """
 
 from __future__ import annotations

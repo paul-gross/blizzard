@@ -69,14 +69,12 @@ from blizzard.hub.store import schema as s
 
 _ROUTE_PREFIX = "route"
 
-# The hub coordinator's own reserved ``transitions.runner_id`` (issue #213) — mirrors
-# ``delivery.hub_node._HUB_RUNNER_ID`` (kept private there; not imported here to stay
-# out of scope of this change, ``bzh:repository-split`` — the store owns its own read
-# concerns). What discriminates a ``hub-advanced`` transition (the hub coordinator
-# advancing a generic hub command node) from a ``node-completed`` one (a runner's own
-# judged completion) in :meth:`ChunkStore.activity_facts_since`: both write the same
-# ``transitions`` row shape, and this column is the only fact-table difference between
-# the two causes.
+# The hub coordinator's own reserved ``transitions.runner_id`` (issue #213) — a private
+# copy of ``delivery.hub_node``'s own literal, not an import (``bzh:repository-split``:
+# the store owns its own read concerns). What discriminates a ``hub-advanced`` transition
+# from a ``node-completed`` one in :meth:`ChunkStore.activity_facts_since`: both write the
+# same ``transitions`` row shape, and this column is the only fact-table difference
+# between the two causes.
 _HUB_RUNNER_ID = "hub"
 
 
@@ -1584,17 +1582,14 @@ class ChunkStore:
 
         In **one transaction**: insert the ``chunk_migrations`` fact, re-pin
         ``chunks.graph_id`` (and ``chunks.default_model`` when ``model`` is given —
-        issue #144 retargeted the re-pin, leaving the authored `model:` key, its
-        single-string type, and `MigrationRecord.model` untouched), release the
-        route (unless ``release_route`` is ``False``), **and persist this node-step's
-        artifacts** (MUST-FIX 1 — the migration branch bypasses ``record_transition``,
-        which is where a step's artifacts normally commit; without this the triage node's
-        reasoning asset the carry-over relies on is never persisted). When ``decision_id``
+        issue #144), release the route (unless ``release_route`` is ``False``), **and
+        persist this node-step's artifacts** (the migration branch bypasses
+        ``record_transition``, which is where a step's artifacts normally commit; without
+        this a submitting step's assets are never persisted). When ``decision_id``
         is given — a **human gate's** resolved choice was itself the cross-graph migration
         (#90) — it is stamped on the fact so that decision derives ``transitioned``
         (closed), exactly as a resolving transition would; without it the gate's decision
-        would stay live forever (a phantom decision that mis-renders the board and wedges
-        REAP recovery). ``release_route`` (issue #111) is executor-aware: a hub-landing
+        would stay live forever. ``release_route`` (issue #111) is executor-aware: a hub-landing
         migration passes ``False`` so the holding runner's route is retained — no route
         release means no other runner can poll ``hub-advance`` out from under it, and the
         holding runner's own ADVANCE poll drives the landed hub node's ``run:`` steps.
@@ -1638,16 +1633,13 @@ class ChunkStore:
             )
             values: dict[str, str | None] = {"graph_id": to_graph_id}
             if model is not None:
-                # Issue #144 retargeted the re-pin from `chunks.model` to
-                # `chunks.default_model`. Deliberately INLINE here rather than a
-                # `set_defaults` call: this block writes the migration fact, the graph
-                # re-pin, the route release, the step's artifacts and the intent clear
-                # all-or-nothing, and a second transactional write from inside it would
-                # split the durable fact from the pin it implies — a live
-                # `hub:migration-pin-consistent` violation in a window the crash-point
-                # registry does not cover (`migrate.after-record.before-response` fires
-                # after the whole call). The two paths share `_serialize_default_model`,
-                # the value shaping — never a second transactional write.
+                # The `default_model` re-pin is written INLINE rather than through a
+                # `set_defaults` call (issue #144): this block writes the migration fact,
+                # the graph re-pin, the route release, the artifacts and the intent clear
+                # all-or-nothing, and a second transactional write would split the durable
+                # fact from the pin it implies — a `hub:migration-pin-consistent` violation
+                # in a window the crash-point registry does not cover. Only the crash tier
+                # could observe that; the two paths share `_serialize_default_model`.
                 values["default_model"] = _serialize_default_model([model])
             if clear_intent:
                 values["intended_migration"] = None
@@ -1998,39 +1990,19 @@ class ChunkStore:
         the mint just took (the released-max query alone can't see the token row), so
         the max must span all three tables, not just the original two.
 
-        This is read-then-insert, not an atomic increment, so two concurrent callers
-        for the same chunk must not both compute the same next value. A per-table
-        ``UniqueConstraint`` on ``seq`` cannot close that: the counter is shared
-        *across* ``route_created`` and ``route_released``, and a constraint scoped to
-        one table cannot see a conflicting insert into the other.
-
-        Instead this locks the chunk's own row in ``chunks`` — every route write for
-        this chunk already holds a chunk row to lock, since a route can't exist
-        without one — with a no-op ``UPDATE`` rather than ``SELECT ... FOR UPDATE``.
-        ``FOR UPDATE`` is the more obvious primitive, but sqlite has no row-level
-        locking and silently drops it, and a plain ``SELECT`` (locked or not) only
-        takes sqlite's SHARED read lock, which does *not* block a second concurrent
-        SHARED reader — so two callers can both read the same stale max before either
-        has written, race and all, with no error from either side. An ``UPDATE``,
-        even a no-op one, forces sqlite to acquire its whole-database write lock
-        immediately rather than only when the eventual ``INSERT`` runs, closing that
-        window; on postgres the same ``UPDATE`` takes the row-exclusive lock ``FOR
-        UPDATE`` would have, so the second caller's lock acquisition blocks until the
-        first's transaction commits its insert, then it re-reads the now-committed
-        max. One portable statement serializes both dialects instead of two different
-        primitives per dialect (``bzh:sql-portable``). Verified directly: racing this
-        allocator from two threads against a real sqlite store never commits a
-        duplicate seq (``tests/test_route_seq_concurrency.py``); postgres is checked
-        by compiling the lock statement for the postgres dialect and asserting the
-        expected row lock, since no live postgres server is available to this suite.
-
-        Tradeoff: a route write now holds a write lock on ``chunks`` for the length of
-        its transaction, so two route writes for the *same* chunk serialize instead of
-        interleaving. Route writes are low-frequency and per-chunk, so this is judged
-        cheap next to what it buys: the alternative considered (a per-table unique
-        constraint) does not enforce the invariant at all, and a full restructure to
-        one ``route_events`` table (kind discriminator + seq) is likely the sounder
-        long-term shape but too large to fold into this fix — a candidate follow-up.
+        This is read-then-insert, not an atomic increment, so concurrent callers for the
+        same chunk are serialized by locking the chunk's own ``chunks`` row with a no-op
+        ``UPDATE``. ``SELECT ... FOR UPDATE`` cannot serve: sqlite has no row-level
+        locking and silently drops it, and a plain ``SELECT`` takes only sqlite's SHARED
+        read lock, which does not block a second reader — while an ``UPDATE`` takes
+        sqlite's whole-database write lock immediately and postgres's row-exclusive lock,
+        one portable statement for both dialects (``bzh:sql-portable``). A per-table
+        ``UniqueConstraint`` on ``seq`` cannot close the race either, since the counter is
+        shared *across* the three tables. The tradeoff is that two route writes for the
+        same chunk serialize instead of interleaving — cheap, since route writes are
+        low-frequency and per-chunk. Pinned by
+        ``tests/test_route_seq_concurrency.py::test_next_route_seq_locks_the_chunk_row_for_update``
+        and ``::test_concurrent_seq_allocation_on_sqlite_never_duplicates``.
         """
         conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(chunk_id=chunk_id))
         created_max = conn.execute(

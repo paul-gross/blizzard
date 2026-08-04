@@ -1,18 +1,10 @@
 """The UTC-instants fitness test (issue #28, ``bzh:utc-instants``).
 
-Anti-regression for the sixth naive-timestamp route (the one that doesn't exist yet):
-a Python test, not a doc check, so it runs inside ``blizzard:gate`` rather than depending
-on a reviewer catching a raw ``.isoformat()`` by eye.
-
-1. **Structural guard** — AST-walks (not grep: grep can't see attribute chains reliably)
-   every module under ``src/blizzard/`` — **recursively**, so a wire payload minted
-   anywhere (a router, a runner-loop step, a future subpackage) can't escape the guard
-   by being nested — for a call to ``.isoformat()``. Scoped to ``src/blizzard/`` rather
-   than just the ``api/`` packages: a wire payload can be minted at any boundary that
-   crosses to the hub or a TS consumer, not only inside a router (e.g. the runner's
-   store-and-forward outbound-buffer payloads). ``foundation/store/utc.py`` is excluded — it is
-   ``iso_utc``'s own implementation, the one legitimate owner of a raw ``.isoformat()``
-   call.
+1. **Structural guard** — AST-walks (not grep, which can't see attribute chains reliably)
+   every module under ``src/blizzard/`` recursively for a call to ``.isoformat()``, since
+   a wire payload can be minted at any boundary crossing to the hub or a TS consumer, not
+   only inside ``api/`` routers. ``foundation/store/utc.py`` is excluded — it is
+   ``iso_utc``'s own implementation.
 2. **Schema guard** — every ``DateTime``-family column in both store ``MetaData`` objects
    is ``UtcDateTime``-typed.
 """

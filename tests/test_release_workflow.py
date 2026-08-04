@@ -94,8 +94,7 @@ def test_version_tag_check_runs_before_anything_is_built() -> None:
 def test_release_notes_are_generated_not_auto_generated() -> None:
     """`gh release create` must consume the commit-type-grouped notes
     (scripts/release-notes.sh, tests/test_release_notes.py), not GitHub's own
-    `--generate-notes` — the plan's whole point is grouped, breaking-changes-first
-    notes with a leading Upgrade notes placeholder."""
+    `--generate-notes`."""
     steps = _release_job()["steps"]
     notes_gen_idx = _step_index(steps, lambda s: "release-notes.sh" in str(s.get("run", "")))
     publish_idx = _step_index(steps, lambda s: "gh release create" in str(s.get("run", "")))

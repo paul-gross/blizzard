@@ -52,12 +52,10 @@ class AuthStateRepository:
             ) from exc
 
     def consume(self, state: str) -> AuthStateEntry | None:
-        # The DELETE is the single-use gate (mirrors the jti cache's PK-insert
-        # discipline, ``bzh:dependency-inversion``): a plain SELECT-then-DELETE lets
-        # two racing callers both read the row before either deletes it, so both would
-        # "win". Deleting with ``RETURNING`` makes the delete itself atomic with the
-        # read — only the caller whose DELETE actually removed the row gets the entry
-        # back; a racing loser's DELETE affects zero rows and returns ``None``.
+        # DELETE ... RETURNING, not SELECT-then-DELETE: the delete is atomic with the
+        # read, so only the caller that actually removed the row gets the entry back
+        # (pinned by tests/test_auth_repositories.py::
+        # test_auth_state_consume_is_single_use_under_concurrent_callers).
         with self._engine.begin() as conn:
             row = conn.execute(
                 delete(s.auth_state).where(s.auth_state.c.state == state).returning(*s.auth_state.c)

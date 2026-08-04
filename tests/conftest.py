@@ -24,15 +24,12 @@ from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 
 # The identity a runner injects into every worker spawn (``ClaudeCodeAdapter._spawn_env``).
-# Blizzard develops itself, so its suite routinely runs *inside* a blizzard worker, which
-# inherits all of these — and a test asserting the absence of one (say, that ``attach``
-# omits the token header when unauthenticated) then reads the ambient value and fails.
-# ``CliRunner(env=...)`` overlays ``os.environ`` rather than replacing it, so passing a
-# dict without a var does not unset it. Strip them once, for every test: a test that wants
-# one sets it explicitly. Tier-gating vars (``BLIZZARD_E2E``, ``BLIZZARD_SERVICE``,
-# ``BLIZZARD_CRASH_SWEEP``, ``BLIZZARD_JOURNEY``, ``BLIZZARD_MOCK_*``) are deliberately
-# absent — those select which tiers run and must survive.
-# ``test_runner_harness_adapter.py`` guards this list against drifting from ``_spawn_env``.
+# Strip them in every test, since blizzard's own suite routinely runs inside a blizzard
+# worker and inherits all of these; a test that wants one sets it explicitly. Tier-gating
+# vars (``BLIZZARD_E2E``, ``BLIZZARD_SERVICE``, ``BLIZZARD_CRASH_SWEEP``,
+# ``BLIZZARD_JOURNEY``, ``BLIZZARD_MOCK_*``) are deliberately absent, since those select
+# which tiers run. ``test_runner_harness_adapter.py`` guards this list against drifting
+# from ``_spawn_env``.
 _WORKER_IDENTITY_ENV = (
     "BLIZZARD_ENV_IDS",
     "BLIZZARD_ENV_WORKDIRS",
@@ -56,18 +53,12 @@ def _strip_worker_identity_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def _isolated_session_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Point the CLI's session-token file at a per-test temp dir.
 
-    The same hazard as :func:`_strip_worker_identity_env`, one layer out: ambient *host*
-    state rather than ambient env. ``session_store`` resolves its path through
-    ``platformdirs.user_config_dir``, so an operator who has ever run ``blizzard hub
-    login`` against the CLI's DEFAULT hub url holds a real token on disk. Every unit test
-    that drives a verb WITHOUT overriding ``BZ_HUB_URL`` resolves to that same default,
-    ``_request`` finds the token and attaches a ``headers=`` kwarg, and the test's own
-    ``httpx`` fake — which declares only the kwargs the CLI used to send — dies with
-    ``TypeError: fake_get() got an unexpected keyword argument 'headers'``.
-
-    The failure is invisible in CI, where nobody has logged in, and reproduces for every
-    developer who has: exactly the split ``_strip_worker_identity_env`` exists to close.
-    Isolate it once, for every test; a test that wants a stored session saves one itself.
+    Without isolation, an operator's real on-disk ``blizzard hub login`` token
+    (``session_store`` resolves via ``platformdirs.user_config_dir``) leaks into any unit
+    test that doesn't override ``BZ_HUB_URL``, breaking its ``httpx`` fake with an
+    unexpected ``headers`` kwarg — the same ambient-*host*-state hazard
+    :func:`_strip_worker_identity_env` closes for env vars. Isolate it once, for every
+    test; a test that wants a stored session saves one itself.
     """
     monkeypatch.setattr(
         session_store.platformdirs, "user_config_dir", lambda _app: str(tmp_path / "config" / "blizzard")

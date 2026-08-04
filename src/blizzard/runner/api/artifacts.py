@@ -5,11 +5,9 @@ Two lease-scoped read routes: ``GET /api/leases/{lease_id}/artifacts`` (the whol
 resolved latest-by-epoch, both kinds) and ``GET /api/leases/{lease_id}/artifacts/{name}``
 (one by ``produces:`` name). ``{name}`` uses Starlette's ``:path`` converter so it can
 capture a slash-containing name verbatim (issue #233 — blizzard itself produces
-``merged/<repo>`` markers); the CLI percent-encodes every other reserved character
-(space, ``%``, ``?``, …) with ``urllib.parse.quote(name, safe="/")`` before building the
-request, which this converter decodes back to the exact original name. The write
-counterpart is ``POST /api/leases/{lease_id}/attachments`` (``attachments.py``) — the
-same lease-scoped, token-authorized shape.
+``merged/<repo>`` markers). The write counterpart is ``POST
+/api/leases/{lease_id}/attachments`` (``attachments.py``) — the same lease-scoped,
+token-authorized shape.
 
 The read is layered exactly like the work-item proxy (``work_items.py``): the worker never
 holds hub credentials. This route authorizes the lease token minted at the worker's own

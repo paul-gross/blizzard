@@ -31,15 +31,8 @@ def test_health_endpoint(daemon: Daemon) -> None:
 
 
 def test_health_reports_the_installed_version_not_a_literal(daemon: Daemon) -> None:
-    """``/api/health`` must answer with the version this process is actually running.
-
-    ``scripts/build-wheel.sh`` stamps a build's version into ``pyproject.toml`` and never
-    into the source tree, so a ``__version__`` written as a literal drifts silently the
-    moment an artifact is built — reporting ``0.1.0`` out of every dev build and every
-    release. Pin it to installed package metadata, which is the one value that tracks the
-    stamp. The end-to-end proof that a *stamped* build reports its stamp belongs to
-    ``scripts/build-wheel.sh``, which asserts it against a real wheel.
-    """
+    """``/api/health`` reports ``importlib.metadata.version("blizzard")``, and the
+    OpenAPI document's version must agree with it."""
     app = daemon.build_app()
     with TestClient(app) as client:
         body = client.get("/api/health").json()
@@ -48,11 +41,9 @@ def test_health_reports_the_installed_version_not_a_literal(daemon: Daemon) -> N
 
 
 def test_frontend_mount_serves_placeholder(daemon: Daemon, tmp_path: Path) -> None:
-    # The no-build fallback at the mount seam: with no index.html present the mount
-    # serves the runtime placeholder naming the app. Mount an EMPTY static dir here so
-    # the test is hermetic — it exercises the absent-index path regardless of whether a
-    # real build has filled the package's (fully gitignored) static dirs (a local build,
-    # e.g. for the browser e2e, must not turn this red — mirrors the SPA-fallback test).
+    # Mount an EMPTY static dir here so the test is hermetic — it exercises the
+    # absent-index path regardless of whether a real build has filled the package's
+    # (gitignored) static dirs (mirrors the SPA-fallback test below).
     static_dir = tmp_path / "static"
     static_dir.mkdir()
     app = FastAPI()
@@ -65,11 +56,9 @@ def test_frontend_mount_serves_placeholder(daemon: Daemon, tmp_path: Path) -> No
 
 
 def test_spa_fallback_serves_index_for_client_route(tmp_path: Path) -> None:
-    # SPA routing at the mount seam: once a frontend build has landed an index.html,
-    # a deep client-side route the server does not know must resolve to that shell
-    # (not 404). Build a minimal static dir here so the test exercises the present-
-    # index SpaStaticFiles path independent of whether a real build has filled the
-    # package's (now fully gitignored) static dirs.
+    # Build a minimal static dir here so the test exercises the present-index path
+    # independent of whether a real build has filled the package's (gitignored)
+    # static dirs.
     static_dir = tmp_path / "static"
     static_dir.mkdir()
     (static_dir / "index.html").write_text("<app-root></app-root>")

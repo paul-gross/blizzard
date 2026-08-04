@@ -1,14 +1,11 @@
 """Shared component-test scaffolding — a fully-wired hub over a tmp sqlite store.
 
 Builds the store-backed ``host`` composition with the work-item read seam replaced by an
-in-process fake (``bzh:pluggable-seams``): a :class:`FakeWorkSource` that returns canned
-issue text, wired into the hub through a
-:class:`~blizzard.hub.work_sources.registry.WorkSourceRegistry` the same way the real factory
-would. The clock is a :class:`~blizzard.foundation.clock.FixedClock` the test can
-advance, so ids order and timestamps are deterministic (``bzh:injected-clock``). A hub
-command node's own forge-facing script (#65/#67) talks HTTP directly (``urllib``), so
-no forge seam is wired here — a test that reaches a deliver hub node arms
-:class:`FakeHubCommandRunner` instead.
+in-process :class:`FakeWorkSource` (``bzh:pluggable-seams``) and a
+:class:`~blizzard.foundation.clock.FixedClock` the test can advance, so ids order and
+timestamps are deterministic (``bzh:injected-clock``). No forge seam is wired: a hub
+command node's own forge-facing script (#65/#67) talks HTTP directly, so a test that
+reaches a deliver hub node arms :class:`FakeHubCommandRunner` instead.
 """
 
 from __future__ import annotations
@@ -87,11 +84,10 @@ class FakeHubCommandRunner:
     """An in-process :class:`IHubCommandRunner` — scripted results by command, in order.
 
     ``script`` maps a command string to a queue of :class:`CommandResult`\\ s (popped in
-    order, so a command run twice — a re-run after a crash point — gets its next
-    scripted result, or repeats its last if the queue is exhausted); ``calls`` records
-    every ``(command, cwd, env)`` invocation for assertion. ``before_run``, when set, is
-    called synchronously inside :meth:`run` before returning — the serialization
-    barrier test's hook to block on a latch/barrier while holding the fleet-wide slot.
+    order, so a command run twice gets its next scripted result, or repeats its last if
+    the queue is exhausted); ``calls`` records every ``(command, cwd, env)`` invocation
+    for assertion. ``before_run``, when set, is called synchronously inside :meth:`run`
+    before returning — a hook for a test that must block there.
     """
 
     def __init__(self, *, default: CommandResult | None = None) -> None:
@@ -144,17 +140,13 @@ def _conforms_fake_hub_workdir(x: FakeHubWorkdir) -> IHubWorkdir:
 class FakeWorkSource:
     """An in-process :class:`IWorkSource` — canned title + body + comments per pointer ref.
 
-    Keyed on ``pointer.ref`` (an opaque item token, mirroring the real GitHub adapter's
-    issue number) rather than a URL — the pointer names its binding by ``source``
-     so this fake, like the real adapter, never re-derives a repo from a
-    URL. A default ``title``/``body``/``comments`` answers every pointer; ``by_ref``
-    overrides the item for specific refs (a grouped chunk reads distinct items), and
-    ``fail_refs`` raises :class:`WorkSourceError` for a ref to exercise the per-pointer
-    forge-failure degradation. ``name`` is this fake's registered source name — the
-    prefix its ``label`` renders under and the ``source`` a pointer it mints carries,
-    mirroring a real binding's configured ``name``. ``repo`` is the
-    ``owner/repo`` this fake renders ``web_url``s under — cosmetic only now that
-    resolution is name-keyed."""
+    Keyed on ``pointer.ref`` (an opaque item token) rather than a URL. A default
+    ``title``/``body``/``comments`` answers every pointer; ``by_ref`` overrides the item
+    for specific refs, and ``fail_refs`` raises :class:`WorkSourceError` for a ref to
+    exercise the per-pointer forge-failure degradation. ``name`` is this fake's
+    registered source name — the prefix its ``label`` renders under and the ``source`` a
+    pointer it mints carries. ``repo`` is the ``owner/repo`` this fake renders
+    ``web_url``s under."""
 
     def __init__(
         self,
@@ -177,10 +169,8 @@ class FakeWorkSource:
         self.fetched: list[str] = []
 
     def parse(self, token: str) -> WorkRef | None:
-        """``{name}:{ref}`` or ``{name}#{ref}``; ``None`` otherwise — this
-        fake carries no URL grammar (the real binding's own concern) and, unlike
-        the real GitHub adapter, does not require a numeric ``ref`` — tests key fakes on
-        whatever ref shape is convenient."""
+        """``{name}:{ref}`` or ``{name}#{ref}``; ``None`` otherwise — no URL grammar, and
+        any non-empty ``ref`` shape is accepted."""
         for sep_char in (":", "#"):
             prefix, sep, ref = token.partition(sep_char)
             if sep and prefix == self.name and ref:
@@ -213,8 +203,7 @@ class FakeAnnotator:
     """An in-process :class:`IWorkAnnotator` — an in-memory ``{ref: {markers}}`` map,
     plus call logs a test asserts against. ``fail_refs`` raises
     :class:`WorkAnnotateError` for a ref's own :meth:`set_status`/:meth:`clear_status`,
-    mirroring :class:`FakeWorkSource`'s own per-pointer failure knob — the reconciler's
-    per-item degradation test drives this rather than the real GitHub adapter."""
+    mirroring :class:`FakeWorkSource`'s own per-pointer failure knob."""
 
     def __init__(
         self,
@@ -252,9 +241,7 @@ def _conforms_fake_annotator(x: FakeAnnotator) -> IWorkAnnotator:
 class FakeCloser:
     """An in-process :class:`IWorkCloser` — an in-memory ``{ref: outcome}`` map plus
     a call log a test asserts against. ``gone_refs`` raises
-    :class:`WorkItemGoneError`; ``fail_refs`` raises a bare :class:`WorkCloseError` —
-    the reconciler's terminal-vs-retried outcome split drives this rather than the
-    real GitHub adapter."""
+    :class:`WorkItemGoneError`; ``fail_refs`` raises a bare :class:`WorkCloseError`."""
 
     def __init__(self, *, gone_refs: set[str] | None = None, fail_refs: set[str] | None = None) -> None:
         self.gone_refs = gone_refs or set()
@@ -296,13 +283,11 @@ def github_double(
     uv project), the adapter HTTP shaping is exercised against this minimal
     GitHub-REST-v3 surface — issue read + comments, PR create + merge, plus the
     label routes the annotator seam needs: repo-level label create (422 on
-    duplicate), issue-level label add/remove, and a real ``Link``-header-paginated,
-    ``labels=`` filtered issue listing (so ``GitHubWorkSource.marked_refs``'s
-    pagination and PR-filtering run against genuine pagination, not a stub).
+    duplicate), issue-level label add/remove, and a genuinely
+    ``Link``-header-paginated, ``labels=`` filtered issue listing.
     ``pull_numbers`` marks which issue numbers the listing renders with a
-    ``pull_request`` key, mirroring GitHub's issue-list endpoint returning PRs too.
-    Wrapped in a ``TestClient`` (itself an ``httpx.Client``) so the sync adapters
-    drive it directly.
+    ``pull_request`` key. Wrapped in a ``TestClient`` (itself an ``httpx.Client``) so
+    the sync adapters drive it directly.
     """
     from fastapi.responses import JSONResponse
 
@@ -322,9 +307,8 @@ def github_double(
         key = f"{owner}/{repo}#{number}"
         data = issue_store.get(key, {"body": f"issue {number}", "comments": []})
         payload: dict[str, object] = {"number": number, "body": data["body"]}
-        # Real GitHub *always* returns a "title", so the double does too by default — a double
-        # laxer than the forge it stands for would hide bugs. A test opts into the degenerate
-        # shapes explicitly: ``OMIT_TITLE`` drops the key, ``None`` sends it null.
+        # A double laxer than the forge it stands for would hide bugs, so ``title`` is
+        # present by default and a test opts into the degenerate shapes explicitly.
         title = data.get("title", f"issue {number}")
         if title is not OMIT_TITLE:
             payload["title"] = title
@@ -409,8 +393,7 @@ def github_double(
 
     def _forbidden_if_armed() -> JSONResponse | None:
         """The ``forbidden`` lever a test arms via ``client.forge_state["forbidden"]
-        = True`` — an insufficient-scope token, mirroring GitHub's 403 (not the
-        rate-limit 403 the delivery-seam tests don't model here)."""
+        = True`` — an insufficient-scope 403 (the rate-limit 403 is not modelled)."""
         if state.get("forbidden"):
             return JSONResponse(status_code=403, content={"message": "Resource not accessible by integration"})
         return None
@@ -493,8 +476,7 @@ def github_double(
 def forge_state(double: TestClient) -> dict[str, object]:
     """Typed accessor for a :func:`github_double`'s mutable state dict — a test
     seeds/reads ``issue_labels``/``repo_labels``/``pr_numbers``/``forbidden``/
-    ``label_add_forbidden`` directly rather than driving every scenario through the
-    adapter's own HTTP calls."""
+    ``label_add_forbidden`` directly."""
     return double.forge_state  # type: ignore[attr-defined]
 
 
@@ -533,24 +515,19 @@ def build_hub(
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
-    ``work_sources`` is ``{name: FakeWorkSource}`` — the same name-keyed shape the real
-    :func:`~blizzard.hub.work_sources.internal.factory.build_work_source_registry` produces;
-    defaults to one entry so the common single-source case needs no test churn.
-    ``None`` defaults to one source; an explicit ``work_sources={}`` is a legal, deliberately
-    **empty** registry — ``or`` would silently coerce that back to the default,
-    which is what made the empty-registry path unreachable through this harness.
+    ``work_sources`` is ``{name: FakeWorkSource}``; ``None`` defaults to one source, while
+    an explicit ``work_sources={}`` is a legal, deliberately **empty** registry — ``or``
+    would silently coerce that back to the default.
     ``hub_command_runner``/``hub_workdir`` are the generic hub command node's mechanism
     seams (#65) — a test binds fakes here; left ``None``, ``build_services`` wires the
-    real subprocess/filesystem adapters (rooted under a throwaway tmp dir, harmless for
-    tests that never mint a ``run:`` node). ``runner_auth_mode`` (issue #86a),
-    ``route_token_mode`` (issue #84b), and ``produces_mode`` (issue #113 phase 5) default
-    to ``warn``; a test exercising an ``enforce`` rejection path overrides the relevant
-    one. ``auth_mode``/``superuser`` (issue #91) default to ``none`` (the epic-wide
-    shipped default) so every pre-#91 test keeps building an ungated hub with no
-    changes; a test exercising ``require()`` gating passes ``auth_mode="oauth"``.
-    ``oauth_providers`` (issue #92) is ``{name: FakeOAuthProvider}`` — the no-network
-    in-repo-fake registry the provider-login route tests bind, bypassing config/secret
-    resolution entirely (mirrors ``work_sources``'s own dict-keyed fake injection above)."""
+    real subprocess/filesystem adapters, rooted under a throwaway tmp dir.
+    ``runner_auth_mode`` (issue #86a), ``route_token_mode`` (issue #84b), and
+    ``produces_mode`` (issue #113 phase 5) default to ``warn``; a test exercising an
+    ``enforce`` rejection path overrides the relevant one. ``auth_mode``/``superuser``
+    (issue #91) default to ``none``; a test exercising ``require()`` gating passes
+    ``auth_mode="oauth"``. ``oauth_providers`` (issue #92) is
+    ``{name: FakeOAuthProvider}`` — the no-network in-repo-fake registry the
+    provider-login route tests bind."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,
@@ -589,18 +566,12 @@ def build_hub(
     )
     app = create_app(config, services=services)
     client = TestClient(app)
-    # Warm FastAPI's per-router route-resolution cache before any test drives the
-    # client. FastAPI (0.139) resolves an included router's routes lazily and caches
-    # them by clearing and repopulating an instance list on first use — thread-unsafe
-    # if two requests hit the cold cache at once: one sees the half-built (or momentarily
-    # empty) candidate list, fails to match the API route, and falls through to the SPA
-    # static mount, which 405s the non-GET. A single-threaded async server (uvicorn) can
-    # never interleave that synchronous stretch, so this is invisible in production and
-    # only surfaces in the OS-thread races the component tier uses to prove exactly-once
-    # arbitration (test_claim_exactly_once, test_edit_claim_race). One throwaway request
-    # to a non-matching /api path traverses — and so warms — every API router branch
-    # before falling to the mount, leaving only the thread-safe cache-hit path for the
-    # concurrent requests the tests then fire.
+    # Warm FastAPI's per-router route-resolution cache before any test drives the client.
+    # FastAPI (0.139) resolves an included router's routes lazily, caching them by
+    # clearing/repopulating an instance list on first use — thread-unsafe if two requests
+    # hit the cold cache at once, which the component tier's OS-thread races
+    # (test_claim_exactly_once, test_edit_claim_race) can trigger. One throwaway request
+    # to a non-matching /api path traverses, and so warms, every API router branch first.
     client.get("/api/_route_cache_warm")
     return HubHarness(
         client=client,
@@ -617,13 +588,11 @@ def write_work_sources(hub_dir: Path, sources: Sequence[WorkSourceConfig]) -> Hu
     """Declare ``[[work_source]]`` entries on an already-``init``ed hub runtime dir.
 
     Every upper-tier fixture (``tests/e2e``, ``tests/crash``, ``tests/journey``,
-    ``tests/service``) runs ``blizzard hub init`` from its own subprocess-driven support
-    code and then ingests — since Phase 2 the ingest route 422s a pointer no configured
-    source claims, so each fixture must declare its sources or its own ingests fail.
-    Round-trips through :meth:`~blizzard.hub.config.HubConfig.load` ->
-    ``dataclasses.replace`` -> :meth:`~blizzard.hub.config.HubConfig.to_toml` — the same
-    shape ``tests/crash/support.py::write_runner_config`` uses for the runner config, a
-    fixed point verified against a real ``hub init`` hub."""
+    ``tests/service``) that runs ``blizzard hub init`` and then ingests must declare its
+    sources through this, or its own ingests fail. Round-trips through
+    :meth:`~blizzard.hub.config.HubConfig.load` -> ``dataclasses.replace`` ->
+    :meth:`~blizzard.hub.config.HubConfig.to_toml`; see
+    ``tests/crash/support.py::write_runner_config`` for the runner-config counterpart."""
     config = HubConfig.load(hub_dir)
     config = replace(config, work_sources=tuple(sources))
     config.config_path.write_text(config.to_toml())
@@ -636,19 +605,16 @@ def daemon_log_sink(path: Path) -> IO[str]:
     A long-lived daemon must NEVER be given ``stdout=PIPE`` by a test
     (``bzh:daemon-stdout-to-file``). Nothing in these suites drains those pipes, so the
     daemon runs only until its output fills the ~64 KiB pipe buffer and then blocks in
-    ``write`` forever — wedged mid-tick, HTTP included, with every subsequent wait timing
-    out against a process that still looks alive (``poll()`` says running, the port still
-    accepts ``connect``). The deadlock is latent in output *volume* rather than in
-    anything the test does, so it surfaces as an unrelated-looking assertion far from its
-    cause — it first bit the journey's escalate chunk, and any change that adds daemon
-    logging shortens the fuse for every other suite without touching them. A file has no
-    such ceiling, and it makes the daemon's log readable after a failure instead of
-    discarded with the pipe.
+    ``write`` forever — wedged mid-tick, with every subsequent wait timing out against a
+    process that still looks alive. The deadlock is latent in output *volume* rather than
+    in anything the test does, so it surfaces as an unrelated-looking assertion far from
+    its cause. A file has no such ceiling, and it keeps the daemon's log readable after a
+    failure instead of discarded with the pipe.
 
     One owner for all four daemon-running tiers (issue #145): ``tests/crash``,
-    ``tests/service``, ``tests/e2e``, and ``tests/journey`` all spawn through this rather
-    than copy-pasting the rule per file. Short-lived ``subprocess.run(...,
-    capture_output=True)`` calls are unaffected — they drain by construction.
+    ``tests/service``, ``tests/e2e``, and ``tests/journey`` all spawn through this.
+    Short-lived ``subprocess.run(..., capture_output=True)`` calls are unaffected — they
+    drain by construction.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     return path.open("a", buffering=1)
@@ -674,12 +640,11 @@ def read_daemon_log(path: Path | None) -> str:
 def shared_daemon_log_dir() -> Path:
     """The per-process fallback log directory for daemons spawned with no runtime dir.
 
-    The hub and runner launchers each own a runtime dir (``hub init`` / ``runner init``)
-    and put their log beside it; the **mock** fleet's daemons (mock hub, mock runner,
-    stub IdP) own no directory at all, and threading one through their ~40 call sites
-    would buy nothing a single well-named directory does not. Created once per pytest
-    process and reused, so a whole session's mock-daemon logs land together and are still
-    on disk after a failure.
+    The **mock** fleet's daemons (mock hub, mock runner, stub IdP) own no runtime
+    directory to put a log beside, and threading one through their ~40 call sites would
+    buy nothing a single well-named directory does not. Created once per pytest process
+    and reused, so a whole session's mock-daemon logs land together and are still on disk
+    after a failure.
     """
     return Path(tempfile.mkdtemp(prefix="blizzard-daemon-logs-"))
 
@@ -688,8 +653,7 @@ def parse_sse_frames(text: str) -> list[dict[str, str]]:
     """Parse an ``text/event-stream`` payload into ``[{id, event, data}]`` dicts.
 
     Reserved comment lines (``:``-prefixed) and keepalives are skipped; a blank line
-    terminates one frame. Shared by the broker-buffer read and the direct stream-generator
-    drain so both assert the exact wire bytes an ``EventSource`` would parse.
+    terminates one frame.
     """
     events: list[dict[str, str]] = []
     current: dict[str, str] = {}
@@ -714,11 +678,10 @@ async def drain_stream(broker: EventBroker, *, last_event_id: int = 0) -> list[d
     """Read the SSE endpoint's own generator to the end of its replay tail (a real stream read).
 
     Starlette's ``TestClient`` (httpx ``ASGITransport``) buffers a whole response body, so it
-    cannot consume the hub's *infinite* live stream incrementally. Instead this drives the
+    cannot consume an *infinite* live stream incrementally. Instead this drives the
     route's async generator directly with a request that reports itself disconnected, so the
-    generator emits the reserved comment plus the buffered replay tail (newer than
-    ``last_event_id``) and then returns at the first liveness check — exactly the bytes a
-    reconnecting ``EventSource`` receives before live events begin.
+    generator emits its replay tail (newer than ``last_event_id``) and then returns at the
+    first liveness check.
     """
     from blizzard.hub.api.events import _stream
 
@@ -735,9 +698,8 @@ async def drain_stream(broker: EventBroker, *, last_event_id: int = 0) -> list[d
 def emitted_events(hub: HubHarness, *, since: int = 0) -> list[dict[str, str]]:
     """The typed events the hub published after ``since`` — the broker's replay tail.
 
-    This is exactly what a subscriber connecting with ``Last-Event-ID: since`` replays off
-    the stream (``EventBroker.replay_since``), so asserting on it asserts SSE emission
-    without the buffering-transport limitation. Each dict carries ``id``, ``event``, ``data``.
+    Asserting on it asserts SSE emission without the buffering-transport limitation
+    :func:`drain_stream` describes. Each dict carries ``id``, ``event``, ``data``.
     """
     return [{"id": str(e.id), "event": e.type, "data": e.data} for e in hub.events.replay_since(since)]
 
@@ -754,9 +716,7 @@ def ingest(hub: HubHarness, pointers: list[dict], *, promote: bool = True) -> st
     promote it to ready — each dict is converted to its ``{source}:{ref}``
     ingest token before posting.
 
-    Ingest now mints a chunk in the not-ready resting state, so most tests — which expect
-    the chunk claimable/in the ready queue — promote it in the same breath. Pass
-    ``promote=False`` to assert the not-ready default itself.
+    Pass ``promote=False`` to assert the not-ready resting state a bare ingest leaves.
     """
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(p) for p in pointers]})
     assert resp.status_code == 201, resp.text
@@ -770,20 +730,16 @@ def ingest(hub: HubHarness, pointers: list[dict], *, promote: bool = True) -> st
 def write_chunk_pause_facts(tmp_path: Path, chunk_id: str, *facts: tuple[bool, datetime]) -> None:
     """Append ``chunk_pause_facts`` rows for ``chunk_id``, in argument order (issue #46).
 
-    **Not** a stand-in for the pause route — that exists (``POST /api/chunks/{id}/pause``)
-    and its own write path is proven through it in ``test_chunks_api.py``, which drives a
-    real pause-then-resume and is what fails if the ``load_facts`` hydration order ever
-    reverses. This helper exists for the one thing the route cannot express: **arbitrary
-    ``set_at`` values**. The route stamps a single ``clock.now()`` per call, so a fact
-    sequence with *distinct* instants (or a deliberate same-instant collision) is
-    unreachable through it — and those permutations are exactly what the newest-wins
-    ordering tests need.
+    **Not** a stand-in for the pause route (``POST /api/chunks/{id}/pause``, driven for
+    real in ``test_chunks_api.py``). This helper exists for the one thing the route cannot
+    express: **arbitrary ``set_at`` values** — the route stamps a single ``clock.now()``
+    per call, so a fact sequence with *distinct* instants (or a deliberate same-instant
+    collision) is unreachable through it.
 
     Each tuple is ``(paused, set_at)``; write order is the newest-wins order, matching the
-    append-only ``id`` the hydration sorts by. The **read** path stays entirely real —
-    ``ChunkStore.load_facts`` hydration and then ``derive_chunk_status`` — so nothing
-    asserted through this is a tautology. Opens its own engine on the same ``db_url``
-    :func:`build_hub` derives from ``tmp_path``.
+    append-only ``id`` the hydration sorts by. The **read** path stays entirely real, so
+    nothing asserted through this is a tautology. Opens its own engine on the same
+    ``db_url`` :func:`build_hub` derives from ``tmp_path``.
     """
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
     with engine.begin() as conn:
@@ -801,9 +757,8 @@ def seed_user(
     """Insert one ``users`` row directly (a raw-write test helper, mirrors
     ``write_chunk_pause_facts``) and return the domain object.
 
-    No login mechanism exists yet (issue #91's own scope guardrail: it lands the
-    identity spine, not a way to mint an account) — every test wanting a
-    ``ResolvedIdentity`` seeds the row directly rather than through a route."""
+    No login mechanism exists yet (issue #91), so a test wanting a ``ResolvedIdentity``
+    seeds the row directly rather than through a route."""
     user = User(
         user_id=mint(USER_PREFIX, hub.clock),
         username=username,
@@ -827,9 +782,9 @@ def seed_user(
 
 
 def seed_session(hub: HubHarness, user: User) -> str:
-    """Mint a real session for ``user`` via ``AuthService.mint_session`` (the same path
-    a login callback will use, #92) and return the plaintext session id — a test sets
-    this as the ``bz_session`` cookie or an ``Authorization: Bearer`` header."""
+    """Mint a real session for ``user`` via ``AuthService.mint_session`` (#92) and return
+    the plaintext session id — a test sets this as the ``bz_session`` cookie or an
+    ``Authorization: Bearer`` header."""
     plaintext, _ = hub.services.auth.mint_session(user)
     return plaintext
 
@@ -840,8 +795,7 @@ def assert_utc_iso(value: object) -> None:
     Pins the wire **bytes**, not a parsed-then-compared value (issue #28,
     ``bzh:utc-instants``): a naive string re-parses fine with ``datetime.fromisoformat``
     on the same box that emitted it, so only the literal trailing designator
-    (``+00:00`` / ``Z``) catches the naive-serialization bug — the finale's literal-bytes
-    insight, generalized.
+    (``+00:00`` / ``Z``) catches the naive-serialization bug.
     """
     assert isinstance(value, str), f"expected an ISO-8601 timestamp string, got {value!r}"
     assert value.endswith("+00:00") or value.endswith("Z"), f"timestamp missing a UTC offset: {value!r}"
@@ -871,12 +825,9 @@ def report_lease(
 ) -> dict:
     """Report a runner-minted ``lease.minted`` fact through POST /events.
 
-    Mirrors the real runner flow: after claiming a route, the runner mints its lease
-    locally and reports its epoch up through the store-and-forward buffer, which is the
-    fence input the completion check consumes. Component tests that submit a completion
-    call this first so the hub knows the chunk's latest epoch. ``route_token`` (issue
-    #84b) rides the payload, same as the real runner's stamp-at-enqueue; ``None``
-    (the default) omits it, matching a caller that never claimed under the plaintext.
+    A component test that submits a completion calls this first, so the hub knows the
+    chunk's latest epoch. ``route_token`` (issue #84b) rides the payload; ``None`` (the
+    default) omits it, matching a caller that never claimed under the plaintext.
     """
     payload: dict[str, object] = {"chunk_id": chunk_id, "epoch": epoch}
     if route_token is not None:
@@ -891,13 +842,10 @@ def report_lease(
 
 # --- Migration-test scaffolding --------------------------------------------------
 #
-# ``graphs``/``chunks`` carry no revision-pinned shape — no migration in the hub tree
-# has reshaped either — so, unlike a revision's own frozen table-under-test (which must
-# stay local to that test: a revision pinned in time must not import a shape that has
-# since moved on), this ladder and these two parent-row seeds are identical every time
-# a migration test needs a store at some past revision. Shared here so each migration
-# test file stops hand-rolling both (see ``test_work_ref_migration.py``'s ``_GRAPHS``/
-# ``_CHUNKS``, byte-identical to these).
+# ``graphs``/``chunks`` carry no revision-pinned shape, so these two parent-row seeds are
+# identical every time a migration test needs a store at some past revision and can be
+# shared. A revision's own frozen table-under-test must NOT move here: a revision pinned
+# in time must not import a shape that has since moved on.
 
 _GRAPHS = sa.Table(
     "graphs",

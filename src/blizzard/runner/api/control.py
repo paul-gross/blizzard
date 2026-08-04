@@ -93,11 +93,11 @@ def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerCo
             detail="runner store not wired — start via `blizzard runner host`",
         )
     now = clock.now()
-    # The brake and the report the board reads it from are one write: the hub can
-    # only render what it holds, so a brake it is never told about would leave a runner
-    # rendered as claiming after it has stopped — and PULL only mirrors hub→runner, so
-    # nothing would ever repair it. The buffer delivers whenever the hub is next reachable,
-    # which is what lets this route answer with the hub down.
+    # The brake and the report the board reads it from are one write: PULL only mirrors
+    # hub→runner, so a brake the hub is never told about would never be repaired. The
+    # buffer delivers whenever the hub is next reachable, which is what lets this route
+    # answer with the hub down. Pinned by
+    # tests/test_ingest_and_pause_verbs.py::test_pause_reports_itself_upward_atomically.
     store.record_local_pause(
         config.runner_id,
         paused=request_body.paused,

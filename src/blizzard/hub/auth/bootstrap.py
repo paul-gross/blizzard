@@ -1,9 +1,8 @@
 """``auth.superuser`` bootstrap — ensure/demote/report at hub boot (issue #94).
 
-Run once from ``build_hosted_app`` (``hub/app.py``), alongside — and after — the
-provider-name-immutability boot check, only once the store is confirmed at the
-expected schema head. :func:`ensure_superuser_bootstrap` is the deterministic-shell
-orchestrator (``bzh:deterministic-shell``): every store write it performs goes through
+Run once from ``build_hosted_app`` (``hub/app.py``). :func:`ensure_superuser_bootstrap`
+is the deterministic-shell orchestrator (``bzh:deterministic-shell``): every store write
+it performs goes through
 :class:`~blizzard.hub.auth.service.AuthService`'s own bootstrap methods
 (``bzh:controller-read-only``), never a repository directly.
 

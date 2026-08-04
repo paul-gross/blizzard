@@ -207,8 +207,8 @@ def test_forced_takeover_orders_fact_before_kill_fences_the_epoch_and_consumes_n
     assert record.fence_epoch == 2  # latest_epoch (1) + 1 — the fence bump
 
     # The fence rides the outbound buffer as an ordinary lease.minted fact — the same
-    # kind (and hub-side handling) a real requeue's mint would use — so a late
-    # completion from the killed worker's session lands on a stale epoch at the hub.
+    # kind a real requeue's mint would use — so a late completion from the killed
+    # worker's session lands on a stale epoch.
     pending = store.pending_outbound()
     assert len(pending) == 1
     assert pending[0].kind == LEASE_MINTED
@@ -383,9 +383,8 @@ def test_advance_skips_the_held_chunk_gate_hub_node_poll_under_an_open_takeover(
 
 def test_takeover_composes_its_command_from_the_sessions_own_stamps(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """A read, not a re-resolution: the operator continues under exactly the
-    configuration the session ran with. This is the deliberate exception to mint-only —
-    that rule exists for prompt-cache efficiency on *runner-driven* resumes, and an
-    interactive takeover is neither cache-sensitive nor implicit."""
+    configuration the session ran with — the deliberate exception to mint-only, which
+    exists for prompt-cache efficiency on runner-driven resumes only."""
     store = _store(tmp_path)
     _seed_lease(store, session_name="code", resolved_model="opus", resolved_effort="high")
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)

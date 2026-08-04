@@ -9,13 +9,10 @@ consumed before any user exists, and #95's runner-federation row never survives 
 one request). Nullable: every non-`cli_login` row leaves it unset.
 
 No `ForeignKey` (see `schema.py`'s own note on this column): SQLite refuses to
-`ALTER TABLE ... DROP COLUMN` a column that participates in a foreign key constraint
-baked into the table's original `CREATE TABLE` — which this one would be on a fresh
-`base -> head` build, since `20260721_1200_hub_auth_oauth`'s own `table.create()` reads
-the *current* `schema.py` `auth_state` `Table` object, not a frozen point-in-time copy.
-Plain `sa.String()` avoids the restriction entirely; the reference is enforced at the
-application layer only (`AuthService.exchange_cli_code` already 404/400s a dangling
-one — the row simply fails to resolve a user).
+`ALTER TABLE ... DROP COLUMN` a column participating in an FK baked into the table's
+original `CREATE TABLE`, which this one would be on a fresh `base -> head` build. The
+reference is enforced at the application layer only. Pinned by
+`tests/test_store_migrations.py::test_migrate_up_and_down`.
 
 Idempotent like `20260721_1400_hub_runner_redirect_uris` — `op.add_column` only where
 an older database lacks it, so a fresh `base -> head` and an in-place upgrade both land

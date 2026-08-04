@@ -1,41 +1,27 @@
 """Chunk build-property edits — graph, default model/effort, and intended migration
-(issue #27, widened by issue #120, per-field redesign by issue #124, model/effort
-defaults by issue #144).
+(issues #27, #120, #124, #144).
 
-Ingest pins a chunk's workflow graph at mint (``ingest.py``); the not-ready resting
-state issue #26 opens was the first window to change it before an agent picks the chunk
-up. Issue #120 widens that window through promote: a chunk that has left ``not_ready``
-but sits ``ready`` with no live route is still editable — the wrong graph is often
-noticed only after promote, with no runner anywhere near the chunk yet. Issue #124 adds
-``intended_migration``, whose window does not match ``graph_id``'s at all: it is editable
-at any non-terminal status, ``not_ready``/``ready`` included, not just once a chunk is
-claimed. It is *consulted* only when a transition applies — which implies a claimed,
-progressing chunk — which is why it complements rather than replaces the pre-claim
-``graph_id`` repin. Issue #144 replaces #27's ``model`` field with the
-``default_model``/``default_effort`` pair, which keeps that field's pre-claim window.
-Because the fields no longer share one admit set, editability is validated **per field**
-rather than once for the whole request — see :data:`_FIELD_WINDOW` and
-:meth:`EditService.edit`.
+Ingest pins a chunk's workflow graph at mint (``ingest.py``); this service changes it
+afterward. ``graph_id`` and the ``default_model``/``default_effort`` pair are editable
+**pre-claim** — while the chunk rests ``not_ready``, or sits ``ready`` with no live
+route, since the wrong graph is often noticed only after promote and with no runner
+anywhere near the chunk yet. ``intended_migration`` (issue #124) is editable at any
+non-terminal status instead: it is *consulted* only when a transition applies — which
+implies a claimed, progressing chunk — so it complements rather than replaces the
+pre-claim ``graph_id`` repin. Because the fields do not share one admit set,
+editability is validated **per field** rather than once for the whole request — see
+:data:`_FIELD_WINDOW` and :meth:`EditService.edit`.
 
 Every edit here is a plain column overwrite, not an append-only fact —
-``bzh:facts-not-status`` governs *status derivation*, not every mutable field, and
-``graph_id`` was already a mint-time column with no fact log behind it; the defaults and
-``intended_migration`` follow the same shape.
+``bzh:facts-not-status`` governs *status derivation*, not every mutable field.
 
-Widening the admit set to ``ready`` opens the edit window onto the same chunk a
-runner's claim (:class:`~blizzard.hub.domain.claim.ClaimService`) can land against
-concurrently — both are now check-then-act sequences over "does this chunk have a
-live route", and an unguarded pair is a torn read: the edit's status check could pass
-just before a claim lands, then write against a chunk that is now leased. Rather than
-inventing a second synchronization mechanism, this service is handed the **same**
-in-process lock :class:`~blizzard.hub.domain.claim.ClaimService` serializes its own
-check-live-route/record-route CAS with (one lock per hub, injected at the composition
-root — ``bzh:dependency-injection``): a claim and an edit racing the same chunk now
-resolve to exactly one of "the edit sees the live route and 409s" or "the edit's write
-already landed before the claim acquired the lock, and the claim proceeds after it" —
-never a mix of both. ``intended_migration``'s own window never hinges on the live-route
-check, so it never races a claim the same way, but it shares the lock anyway — one
-edit-time invariant, one lock.
+An edit and a claim are both check-then-act sequences over "does this chunk have a live
+route", so this service is handed the **same** in-process lock
+:class:`~blizzard.hub.domain.claim.ClaimService` serializes its own CAS with (one lock
+per hub, injected at the composition root — ``bzh:dependency-injection``, issue #120);
+see that module's docstring for the race it closes. ``intended_migration``'s own window
+never hinges on the live-route check, so it never races a claim the same way, but it
+shares the lock anyway — one edit-time invariant, one lock.
 
 Holds the *write* chunk repository (``bzh:controller-read-only``); the route resolves the
 chunk (and, for a graph or intended-migration edit, the target
@@ -78,24 +64,19 @@ class _UnsetType(Enum):
 #: singleton rather than reusing ``None``.
 UNSET: Final = _UnsetType.TOKEN
 
-#: The admit set ``graph_id``/``model`` have held since issue #120 — editable while
-#: resting ``not_ready`` (issue #27's original window) or ``ready`` with no live
-#: route; every other status means a runner has (or had) the chunk and the pin is
-#: sealed.
+#: The pre-claim admit set (issues #27, #120) — editable while resting ``not_ready``
+#: or ``ready`` with no live route; every other status means a runner has (or had) the
+#: chunk and the pin is sealed.
 _PRE_CLAIM_WINDOW = frozenset({ChunkStatus.NOT_READY, ChunkStatus.READY})
 
 #: ``intended_migration``'s window (issue #124) — editable at any non-terminal status,
-#: ``not_ready``/``ready`` included: a chunk sitting ``not_ready``, ``ready``,
-#: ``running``, ``delivering``, ``waiting_on_human``, ``needs_human``, or ``paused``
-#: may have its migration intent set, overwritten, or cleared. Closed at
-#: ``done``/``stopped`` — there is no future transition left to consult it. Setting it
-#: pre-claim is legitimate (an operator queuing a migration before a runner ever picks
-#: the chunk up); it is simply *consulted* only once a claimed chunk actually reaches a
-#: transition.
+#: ``not_ready``/``ready`` included: setting it pre-claim is legitimate (an operator
+#: queuing a migration before a runner ever picks the chunk up). Closed at
+#: ``done``/``stopped`` — there is no future transition left to consult it.
 _INTENDED_MIGRATION_WINDOW = frozenset(ChunkStatus) - frozenset({ChunkStatus.DONE, ChunkStatus.STOPPED})
 
-#: Per-field editable-status sets (issue #124) — the redesign this module docstring
-#: describes. Keyed by the same field names :class:`ChunkEdit` carries.
+#: Per-field editable-status sets (issue #124), keyed by the same field names
+#: :class:`ChunkEdit` carries.
 _FIELD_WINDOW: Final[dict[str, frozenset[ChunkStatus]]] = {
     "graph_id": _PRE_CLAIM_WINDOW,
     "default_model": _PRE_CLAIM_WINDOW,
@@ -179,8 +160,7 @@ class EditService:
     ) -> None:
         self._chunks = chunks
         self._graphs = graphs
-        # The same lock ClaimService serializes its claim CAS with — see the module
-        # docstring's race-atomicity note (issue #120).
+        # The same lock ClaimService serializes its claim CAS with (issue #120).
         self._claim_lock = claim_lock
 
     def set_graph(self, chunk: Chunk, *, graph: Graph) -> None:
@@ -212,14 +192,11 @@ class EditService:
         ``graph_target``/``migration_target`` are the resolved
         :class:`~blizzard.hub.domain.graph.Graph` a supplied ``graph_id`` /
         non-``None`` ``intended_migration`` targets, respectively — **separately**
-        resolved and separately checked, one per field, even though a single request
-        can name both fields at once with two different graphs. Collapsing them onto
-        one shared graph would let one field's retirement check validate the *other*
-        field's target — a retired ``graph_id`` slipping past its own
-        :class:`TargetGraphRetired` check because the request's ``intended_migration``
-        happened to name a different, non-retired graph. The controller resolves each
-        independently (``bzh:domain-takes-objects``); this service takes no graph
-        repository beyond the retirement check it already held.
+        resolved and separately checked, one per field, so one field's retirement check
+        can never validate the *other* field's target — pinned by
+        tests/test_edit_service.py::test_edit_graph_id_retirement_check_is_not_bypassed_by_a_different_migration_target
+        The controller resolves each independently (``bzh:domain-takes-objects``); this
+        service takes no graph repository beyond the retirement check it already held.
         """
         graph_id = edit.graph_id
         default_model = edit.default_model
@@ -268,7 +245,7 @@ class EditService:
         (issue #124 §5): a retired target, a target that is already the chunk's own
         pin, and — for ``forced`` — a named node absent from the target. Field-shape
         mismatches (``node_name`` with ``auto`` / missing with ``forced``) are the
-        controller/wire's 422 concern, not this service's."""
+        wire's concern, not this service's."""
         assert target_graph is not None, "an intended-migration edit requires its resolved target graph"
         if self._graphs.is_retired(target_graph.graph_id):
             raise TargetGraphRetired(target_graph.graph_id)

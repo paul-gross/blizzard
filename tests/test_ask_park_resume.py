@@ -115,7 +115,7 @@ def test_exited_worker_with_open_ask_parks_without_a_verdict(tmp_path):  # type:
 
     advance(ctx)
 
-    # Parked: the reap clock is stopped and the chunk derives waiting_on_human (at the hub).
+    # Parked: the reap clock is stopped.
     assert store.parked_lease_ids() == {"lease_1"}
     # The question was forwarded up the outbound buffer (store-and-forward).
     buffered = [f for f in store.pending_outbound() if f.kind == QUESTION_ASKED]
@@ -252,20 +252,14 @@ def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path):  # t
     assert store.parked_lease_ids() == set()
     resumed_lease = store.active_lease("lease_1")
     assert resumed_lease is not None and resumed_lease.pid == 4321
-    # answer.delivered was buffered up to the hub (board detail).
+    # answer.delivered was buffered up to the hub.
     assert [f for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]
 
 
 def test_worker_resumed_after_a_park_past_the_threshold_survives_the_next_reap(tmp_path):  # type: ignore[no-untyped-def]
-    """Issue #150's live incident, end to end at the loop tier.
-
-    A build worker asks at T and exits; the park stops the reap clock, correctly. The
-    operator answers at T+2h — past ``HEARTBEAT_STALENESS_THRESHOLD``, so every heartbeat
-    the lease holds is ancient. ADVANCE resumes the dormant session, and the very next
-    REAP tick used to kill the fresh worker as stalled *before its first tool call could
-    beat*, then funnel the kill into the retry budget and escalate — silently converting
-    the operator's answer into a ``needs_human``. The resume's own ``lease_spawns`` row is
-    now part of the staleness baseline, so the resumed worker gets the full window.
+    """Issue #150: a build worker asks and exits, then is answered past
+    ``HEARTBEAT_STALENESS_THRESHOLD``. The resumed worker must survive the very next
+    REAP tick.
     """
     store = _store(tmp_path)
     _seed_exited_lease(store)
@@ -318,15 +312,8 @@ def test_worker_resumed_after_a_park_past_the_threshold_survives_the_next_reap(t
 
 
 def test_a_chunk_stopped_hub_side_while_parked_on_an_ask_retires_the_open_park(tmp_path):  # type: ignore[no-untyped-def]
-    """blizzard#202: the operator stops a chunk instead of answering its ask.
-
-    PULL's ``_reconcile_leases`` honors the hub's ``STOPPED`` fact via
-    ``_abandon_reassigned`` (issue #118) — before the fix, that path closed the lease and
-    released the environments but never retired the open ``park_facts`` row, since the
-    only other writer of ``park_resumes`` is the answer-driven resume
-    (``_resume_if_answered``), which never runs for a lease the operator stopped instead
-    of answered. The ask must not read open forever after the chunk it belonged to is
-    gone.
+    """blizzard#202: the operator stops a chunk instead of answering its ask. The ask
+    must not read open forever after the chunk it belonged to is gone.
     """
     store = _store(tmp_path)
     _seed_exited_lease(store)

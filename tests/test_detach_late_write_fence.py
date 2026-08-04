@@ -2,17 +2,8 @@
 
 The issue's explicit criterion: "A detached runner's late completion for that chunk
 is rejected by the lease floor and does not resurrect the route." Detach relies on
-the existing epoch fence **as-is** — this test is scoped to *proving*
-that reliance holds, not to the fence's own mechanics (``tests/test_zombie_fence.py``
-owns those and this test follows its established pattern: a 200 whose
-:class:`~blizzard.wire.envelope.ApplyResponse` outcome is ``failure`` with a
-"stale epoch" detail, before anything is written).
-
-The scenario is ordered deliberately: the fence only bites once a **new** lease
-exists. Between the detach and a fresh runner's claim+lease, the chunk's latest
-epoch is unchanged, so a late write at the old epoch would *not* yet be stale. Only
-after another runner claims the now-ready chunk and mints its own lease (raising the
-floor) does runner A's old-epoch completion become a zombie write.
+the existing epoch fence as-is — this test proves that reliance holds, not the fence's
+own mechanics (owned by ``tests/test_zombie_fence.py``).
 """
 
 from __future__ import annotations

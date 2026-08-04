@@ -12,7 +12,9 @@ refresh standalones once per pass, then per env fetch → forced base checkout �
 disconnect → membership reconcile → untracked-file clean → service teardown →
 reprovision. The forced-checkout-then-disconnect ordering is the point: running
 ``winter ws init`` against a previous tenant's stale feature-branch tracking re-infers
-a dead upstream and fails, stalling FILL. A step failure aborts the acquire as an
+a dead upstream and fails, stalling FILL (pinned by
+tests/test_runner_winter_provider.py::test_acquire_of_a_lived_in_env_runs_the_full_reset_sequence).
+A step failure aborts the acquire as an
 :class:`EnvironmentPreparationError` naming the step and env — never a half-reset env.
 ``release`` marks nothing — cleaning happens on the *next* acquire, and the hold was
 never the provider's fact to clear. Confined to ``internal/``
@@ -183,9 +185,11 @@ class WinterWorkspaceProvider:
     def _service_orchestrator_bound(self) -> bool:
         """Whether the workspace binds a service orchestrator, read once per provider.
 
-        ``winter service down`` exits non-zero in a workspace with no orchestrator
-        (the fixture workspace, minimal setups) — skipping on an unbound slot is a
-        config fact read up front, not an error swallowed at teardown time.
+        ``winter service down`` exits non-zero in a workspace with no orchestrator, so
+        the slot is probed once as a config fact rather than caught at teardown time.
+
+        Pinned by tests/test_runner_winter_provider.py::test_service_teardown_skipped_when_no_orchestrator_bound
+        and ::test_standalones_refresh_once_per_pass_and_probe_is_cached.
         """
         if self._service_bound is None:
 

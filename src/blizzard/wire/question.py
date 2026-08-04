@@ -1,10 +1,9 @@
 """The ask/answer wire shapes.
 
-The rendezvous spans the two daemons deliberately: the runner
-forwards a ``question.asked`` up to the hub — as a batched ``POST /events`` fact and,
-equivalently, the typed ``POST /questions`` route — where it becomes a durable row;
-``POST /questions/{id}/answer`` writes the answer first-write-wins; and the runner
-polls ``GET /questions/{id}`` to pick the answer up and resume the dormant session.
+A ``question.asked`` reaches the hub either as a batched ``POST /events`` fact or,
+equivalently, through the typed ``POST /questions`` route, where it becomes a durable
+row; ``POST /questions/{id}/answer`` writes the answer first-write-wins; ``GET
+/questions/{id}`` reads it back.
 """
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ class QuestionAsked(BaseModel):
 
     ``question_id`` is runner-minted (``qn_<ulid>``) so the runner can poll the answer
     back by it; ``epoch`` is the parked lease's fence, ``session_id`` the dormant
-    session to resume around the answer, and ``options`` the choices the board renders.
+    session to resume around the answer, and ``options`` the offered choices.
     """
 
     question_id: str
@@ -54,12 +53,10 @@ class AnswerResult(BaseModel):
 class QuestionView(BaseModel):
     """A question row with its derived answer *and delivery* state — the surfacing shape.
 
-    Behind ``GET /questions`` (open only), ``GET /questions/{id}`` (the runner's answer
-    poll), and the chunk detail's questions list. ``answered`` and the answer fields
-    derive from the presence of the answer row; ``delivered``/``delivered_at`` derive
-    from the ``answer.delivered`` fact the runner mints once the resume-with-answer ran
-    (issue #165) — the return leg that lets the board say *delivered, agent resumed*
-    rather than leaving an answerer guessing whether the answer arrived."""
+    Behind ``GET /questions`` (open only), ``GET /questions/{id}``, and the chunk
+    detail's questions list. ``answered`` and the answer fields derive from the presence
+    of the answer row; ``delivered``/``delivered_at`` derive from the
+    ``answer.delivered`` fact (issue #165)."""
 
     question_id: str
     chunk_id: str

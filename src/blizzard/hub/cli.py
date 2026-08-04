@@ -1,11 +1,9 @@
 """``blizzard hub <cmd>`` — the fleet surface.
 
 Client verbs are pure clients of the hub's HTTP API; ``host`` *becomes* the hub
-daemon. Only ``init`` / ``migrate`` / ``host`` are implemented in the
-scaffold — the rest are stubs that name themselves, present in ``--help`` and
-filled in by the backend builder. This module is CLI top-level glue, so ``echo``
-for user output is fine here (``bzh:structlog-logging``); diagnostics go through
-structlog inside the runtime and app.
+daemon. This module is CLI top-level glue, so ``echo`` for user output is fine here
+(``bzh:structlog-logging``); diagnostics go through structlog inside the runtime and
+app.
 
 The operator verbs are grouped by noun (``chunk``/``runner``/``graph``/``queue``/
 ``decision``/``question``) rather than flat at the top level (issue #104). ``status`` is
@@ -81,7 +79,7 @@ def _bearer_headers(resolved_hub_url: str) -> dict[str, str]:
     """The ``Authorization: Bearer <session-token>`` header for ``resolved_hub_url``
     (issue #96), read from the local session store — empty when no session is stored
     for this hub (an ``auth.mode=none`` hub, or one never logged into), so every verb
-    keeps working with no login, as today."""
+    keeps working with no login."""
     token = session_store.load_session(resolved_hub_url)
     return {"Authorization": f"Bearer {token}"} if token else {}
 
@@ -104,10 +102,8 @@ def _request(
 
     Attaches the stored session token (issue #96), if any, as a bearer header — the
     same seam every verb already goes through, so login/logout are the only commands
-    that need to think about the token file at all. Omitted (not even an empty dict)
-    when no session is stored, so every existing test's ``httpx``-stubbing fake — none
-    of which accept a ``headers`` kwarg — keeps working unchanged, exactly like
-    ``json``/``params`` above."""
+    that need to think about the token file at all. Omitted entirely (not even an empty
+    dict) when no session is stored, exactly like ``json``/``params`` above."""
     resolved = _hub_url(hub_url)
     full_url = f"{resolved.rstrip('/')}{path}"
     call = getattr(httpx, method)
@@ -149,8 +145,7 @@ _LOGIN_HINT = "not authenticated — run `blizzard hub login`"
 def _check(resp: httpx.Response, operation: str, *, on_status: dict[int, str] | None = None) -> None:
     """Map a handful of status codes to a ``ClickException`` reading the body's own
     ``detail`` (falling back to the per-code default named in ``on_status``);
-    anything else still genuinely errors via ``raise_for_status``. The shared
-    404/409/422-ish status-branch block every verb used to carry inline.
+    anything else still genuinely errors via ``raise_for_status``.
 
     A bare 401 not already named in ``on_status`` gets the actionable login hint
     (issue #96) rather than ``raise_for_status``'s generic message."""
@@ -174,17 +169,14 @@ def _finish(resp: httpx.Response, as_json: bool, message: str) -> None:
 
 
 # The since-the-beginning-of-time cutoff `hub status` passes ``GET /api/spend``
-# for its fleet-total line (issue #60) — a full-fleet overview, not a "today" window
-# (the board's own spend-today figure picks its own local-midnight ``since``).
+# for its fleet-total line (issue #60) — a full-fleet overview, not a "today" window.
 _FLEET_SPEND_SINCE = "1970-01-01T00:00:00+00:00"
 
 
 def _format_cost(cost_usd: float, cost_partial: bool) -> str:
     """A derived cost total's terminal-legible form (issue #60) — always to the cent,
     with a leading ``~`` when ``cost_partial`` (a crash/reap-path row had no envelope,
-    so the summed figure is a lower bound, never presented as exact). Mirrors
-    ``web/projects/fleet/src/lib/cost-format.ts``'s ``formatCost`` — the same marker,
-    both surfaces."""
+    so the summed figure is a lower bound, never presented as exact)."""
     amount = f"${cost_usd:.2f}"
     return f"~{amount}" if cost_partial else amount
 
@@ -240,16 +232,12 @@ _GRACEFUL_SHUTDOWN_SECONDS = 5
 class _EarlyShutdownServer(uvicorn.Server):
     """Sets ``shutdown_signal`` the instant SIGTERM/SIGINT is caught (issue #47).
 
-    Uvicorn's own shutdown sequence (``Server.shutdown``) closes listening sockets, marks
-    open connections non-keep-alive, then waits up to ``timeout_graceful_shutdown`` for
-    every in-flight response to finish **before** it sends the ASGI ``lifespan`` "shutdown"
-    message. An SSE response never finishes on its own, so an ``asyncio.Event`` set only
-    from a FastAPI ``lifespan=`` handler (``blizzard.hub.app._lifespan``) would not fire
-    until that drain already timed out — too late to unblock the stream's live-wait race
-    (``blizzard.hub.api.events._stream``). ``handle_exit`` runs synchronously the moment the
-    signal arrives, well before that drain begins, so setting the event here is what lets
-    every open stream close immediately instead of waiting on the drain or its fallback
-    cancellation.
+    Uvicorn only sends the ASGI ``lifespan`` "shutdown" message *after* its graceful-drain
+    wait, which an SSE response never finishes, so an event set from a FastAPI
+    ``lifespan=`` handler would fire too late to unblock the stream's live-wait race
+    (``blizzard.hub.api.events._stream``). ``handle_exit`` runs synchronously the moment
+    the signal arrives, before that drain begins. Pinned by
+    ``tests/test_pin_hub_api.py::test_handle_exit_sets_the_shutdown_signal_synchronously``.
     """
 
     def __init__(self, config: uvicorn.Config, *, shutdown_signal: asyncio.Event) -> None:
@@ -309,8 +297,7 @@ def status(as_json: bool, hub_url: str | None) -> None:
     """The fleet view: every chunk with its derived status, the runners, and open questions.
 
     A pure client of the hub API: ``GET /chunks`` + ``GET /runners`` +
-    ``GET /questions`` + ``GET /spend`` (issue #60), the same facts the board
-    renders, in the terminal."""
+    ``GET /questions`` + ``GET /spend`` (issue #60), in the terminal."""
     base = hub_url
     chunks = _request("get", "/api/chunks", hub_url=base)
     _check(chunks, "GET /chunks")
@@ -347,9 +334,7 @@ def status(as_json: bool, hub_url: str | None) -> None:
         liveness = "online" if r.get("online") else "offline"
         # Name which brake is on (issue #43): "paused" alone would hide whether the fleet
         # stopped this runner or it stopped itself — and they are cleared by different verbs.
-        # A local brake's own reason (issue #61) rides inline — a spend-ceiling trip names
-        # the ceiling and the spend; a manual `blizzard runner pause` carries none, so it
-        # still renders bare.
+        # A local brake's own reason (issue #61) rides inline when there is one.
         brakes = []
         if r.get("hub_paused"):
             brakes.append("hub")
@@ -370,13 +355,11 @@ def status(as_json: bool, hub_url: str | None) -> None:
 def _parse_pointer(token: str) -> str:
     """The ingest token the CLI hands the hub.
 
-    The CLI carries no grammar of its own any more: the hub resolves every token
-    against its configured work sources' own ``parse`` (``{name}:{ref}``,
-    ``{name}#{ref}``, or the item's own URL), so a token travels
-    through verbatim. The one thing that survives here is the deprecated
-    ``github:<rest>`` prefix: it warns on stderr and passes ``rest`` on its own
-    merits rather than silently accepting a provider tag the pointer no longer
-    carries."""
+    The CLI carries no pointer grammar of its own — the hub resolves every token
+    against its configured work sources, so a token travels through verbatim. The one
+    exception is the deprecated ``github:<rest>`` prefix: it warns on stderr and passes
+    ``rest`` on its own merits rather than silently accepting a provider tag the pointer
+    no longer carries."""
     if token.startswith("github:"):
         rest = token[len("github:") :]
         click.echo(
@@ -395,8 +378,7 @@ def record_marker(name: str, content: str) -> None:
 
     A pure client of the mid-run marker callback — the injected
     ``BZ_HUB_MARKER_CALLBACK_URL`` already carries this run's chunk id, node id, and
-    epoch, mirroring ``blizzard runner ask``'s identity-from-environment convention.
-    Enables a dynamic loop (``merge repo -> push -> record merged/<repo> -> next``)
+    epoch. Enables a dynamic loop (``merge repo -> push -> record merged/<repo> -> next``)
     without waiting for the whole step to exit. Idempotent per marker NAME.
 
     Authorizes the write with the run's marker capability token
@@ -426,8 +408,7 @@ def record_marker(name: str, content: str) -> None:
 @_hub_url_options
 def rotate_signing_key(hub_url: str | None) -> None:
     """Rotate the hub's IdP signing keypair (issue #95) — mints a fresh current key,
-    demoting the old current to previous; runners pick up the new key by re-fetching
-    JWKS on an unknown ``kid``, no restart. A no-op error under ``auth.mode = "none"``
+    demoting the old current to previous; no restart. A no-op error under ``auth.mode = "none"``
     (no keypair exists). Human-plane, gated on ``user:manage`` — under ``auth.mode =
     "oauth"`` this requires a hub session (``blizzard hub login``, issue #96)."""
     resp = _request("post", "/api/auth/rotate-signing-key", hub_url=hub_url, json_body=None)
@@ -611,10 +592,8 @@ def chunk_set(
     applied all-or-nothing under ``EditService.edit``. At least one option is required;
     ``chunk migrate`` is the standing-migration-intent sibling of this verb.
 
-    The defaults sit between a graph's ``sessions:`` declaration and the runner's own
-    default — a session declaring its own ``model:``/``effort:`` outranks them. Both are
-    editable only while CHUNK rests ``not_ready`` or sits ``ready`` unclaimed (409
-    otherwise). There is no web editing surface for either; ``chunk show`` reads them back."""
+    Both defaults are editable only while CHUNK rests ``not_ready`` or sits ``ready``
+    unclaimed (409 otherwise); ``chunk show`` reads them back."""
     if graph_id is None and not default_model and default_effort is None:
         raise click.UsageError("at least one of --graph/--default-model/--default-effort is required")
     base = hub_url
@@ -739,8 +718,7 @@ def chunk_stop(chunk_id: str, by: str, as_json: bool, hub_url: str | None) -> No
     ``stopped`` and never re-derives ``ready``; any live route is released in the same
     operation, so the holding runner frees its environments on its next tick — no
     separate ``detach`` needed. 409 when the chunk is already done/stopped. There is no
-    ``un-stop``. Not named in issue #104's own grammar (it predates it, #118) but kept
-    as a full ``chunk`` group member rather than dropped."""
+    ``un-stop``."""
     base = hub_url
     resp = _request("post", f"/api/chunks/{chunk_id}/stop", hub_url=base, json_body={"by": by})
     _check(resp, "POST /chunks/{id}/stop", on_status={409: "chunk is not stoppable", 404: f"no such chunk {chunk_id}"})
@@ -829,7 +807,7 @@ def chunk_migrate(
 @_json_option
 @_hub_url_options
 def chunk_group_cmd(chunk_id: str, merge_ids: tuple[str, ...], as_json: bool, hub_url: str | None) -> None:
-    """Merge MERGE_IDS into CHUNK_ID, the survivor — the board's Group control.
+    """Merge MERGE_IDS into CHUNK_ID, the survivor.
 
     A pure client of ``POST /api/chunks/{id}/group``: the survivor and every merge id
     must currently be **unacquired** — ``not_ready`` or ``ready``, in any mix (409
@@ -889,9 +867,7 @@ def chunk_work_items(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
 def chunk_pm(ctx: click.Context, chunk_id: str, as_json: bool, hub_url: str | None) -> None:
     """Deprecated alias for ``blizzard hub chunk work-items`` (issue #55).
 
-    Operator-typed rather than prompt-embedded, so the stored-prompt exposure that
-    justifies the runner's own ``pm-items`` alias does not apply here — this is kept
-    purely so a rename does not break an operator's muscle memory or a shell script.
+    Kept so a rename does not break an operator's muscle memory or a shell script.
     """
     click.echo(
         "warning: `blizzard hub chunk pm` is deprecated — use `blizzard hub chunk work-items`",
@@ -1074,7 +1050,7 @@ def graph_mint(path: str, as_json: bool, hub_url: str | None) -> None:
     ``definition_yaml`` raw and does not itself resolve file references. Stdin
     (``-``) carries no such directory, so its YAML posts verbatim — already-inlined
     prose expected. Renders the full validation report (every error and warning) on a
-    422, not just the errors (issue #104; supersedes the former ``graph upload``)."""
+    422, not just the errors (issue #104)."""
     base = hub_url
     if path == "-":
         definition_yaml = click.get_text_stream("stdin").read()
@@ -1106,11 +1082,10 @@ def graph_mint(path: str, as_json: bool, hub_url: str | None) -> None:
 def graph_sync(as_json: bool, hub_url: str | None) -> None:
     """Reconcile the hub's packaged graphs into its store, minting only what changed.
 
-    The deploy verb (issue #146). Graphs live in the store, not on disk — the hub
-    resolves a *minted* graph per chunk and never re-reads the packaged YAML — so
-    installing a wheel with a changed graph used to change nothing, silently, with every
-    deploy check still green. Run this at the end of every deploy: it is idempotent, so a
-    wheel that changed no graph mints nothing and churns no lineage.
+    The deploy verb (issue #146). Graphs live in the store, not on disk, so installing a
+    wheel with a changed graph changes nothing until this runs. Run it at the end of
+    every deploy: it is idempotent, so a wheel that changed no graph mints nothing and
+    churns no lineage.
 
     A pure client of ``POST /api/graphs/sync``; the **hub's own** packaged set is what is
     reconciled, not this CLI's, so a client wheel that has drifted from the daemon's
@@ -1385,10 +1360,8 @@ def question_list(as_json: bool, hub_url: str | None) -> None:
 def question_answer(question_id: str, answer_text: str, answered_by: str, as_json: bool, hub_url: str | None) -> None:
     """Answer an open question (first-write-wins CAS at the hub).
 
-    Writes the answer where the question row lives; the runner picks
-    it up and resumes the dormant session. A racing second answer loses and is told who
-    already answered. A pure client of ``POST /api/questions/{id}/answers`` (issue
-    #104's pluralized successor of the deprecated ``.../answer``)."""
+    A racing second answer loses and is told who already answered. A pure client of
+    ``POST /api/questions/{id}/answers`` (issue #104)."""
     base = hub_url
     resp = _request(
         "post",

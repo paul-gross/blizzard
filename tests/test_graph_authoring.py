@@ -107,11 +107,10 @@ def test_adv_dwf_deliver_authors_the_conflict_edge() -> None:
 def test_every_land_pr_ci_outcome_is_authored_on_the_shipped_deliver_node() -> None:
     """#241 recurrence guard: the class of bug here is a script literal with no
     authored edge — `land_pr_ci` prints an outcome the graph never authors a choice
-    for, and it silently re-polls forever (`hub_node.py`'s no-authored-edge branch).
-    Reads the script's own outcome constants rather than hardcoding them, so a rename
-    trips this test instead of leaving it silently unable to catch the next instance.
-    `_PENDING` is machinery-reserved (`bzh:hub-node-outcome-protocol`) and excluded —
-    the engine recognizes it regardless of any authored choice name."""
+    for. Reads the script's own outcome constants rather than hardcoding them, so a
+    rename trips this test instead of leaving it silently unable to catch the next
+    instance. `_PENDING` is machinery-reserved (`bzh:hub-node-outcome-protocol`) and
+    excluded."""
     doc = load_graph_doc(_GRAPHS_DIR / "advanced-development-workflow" / "graph.yaml")
     graph = reify_graph(doc, _clock())
     deliver = graph.node_by_name("deliver")
@@ -122,10 +121,9 @@ def test_every_land_pr_ci_outcome_is_authored_on_the_shipped_deliver_node() -> N
 
 
 def test_every_land_ff_outcome_is_authored_on_the_shipped_bas_dwf_deliver_node() -> None:
-    """Sibling guard for `land_ff` (basic-development-workflow) — cheap alongside the
-    adv-dwf one above. `land_ff` prints only `landed`/`conflict` (no `failure` literal;
-    a non-zero exit maps to the default `failure` choice via exit code, not a printed
-    string), so unlike `land_pr_ci` there are no named constants to import here."""
+    """Sibling guard for `land_ff` (basic-development-workflow), cheap alongside the
+    adv-dwf one above. `land_ff` prints only `landed`/`conflict` — no named constants to
+    import here."""
     graph = reify_graph(_bas_dwf_doc(), _clock())
     deliver = graph.node_by_name("deliver")
     assert deliver is not None

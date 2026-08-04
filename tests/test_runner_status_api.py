@@ -350,10 +350,7 @@ def test_an_answered_ask_does_not_appear(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_an_ask_whose_lease_closed_without_a_park_resume_does_not_appear(tmp_path: Path) -> None:
     """blizzard#202's display-level backstop: an ask must never read open once its lease
-    has closed, independent of whichever loop path is responsible for retiring the park
-    fact — this is what keeps a leaked ``park_facts`` row (a fact-pair writer that missed
-    a non-happy-path closure) from surfacing as open at the API/CLI layer even if the fix
-    upstream ever regresses."""
+    has closed, regardless of which loop path retired the park fact."""
     app, store = _app_with_status(tmp_path)
     _seed_lease(store)
     store.record_ask(
@@ -421,8 +418,7 @@ def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> N
         "closed_at": closed_at.isoformat(),
         "resume_command": "cd /ws/e1 && claude --resume sess-a",
         # `_seed_lease` mints no session stamps (issue #144), so this escalation reads
-        # *unknown* on all three and renders today's bare resume command — the
-        # back-compat shape a pre-#144 lease keeps.
+        # *unknown* on all three and renders the bare resume command.
         "session_name": None,
         "model": None,
         "effort": None,

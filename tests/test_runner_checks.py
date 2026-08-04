@@ -144,8 +144,8 @@ def test_advance_records_a_red_check_and_still_buffers_the_completion(tmp_path: 
 
 @pytest.mark.component
 def test_advance_with_no_checks_runs_nothing_and_carries_empty_check_results(tmp_path: Path) -> None:
-    """A node with no ``checks:`` (every packaged graph today) behaves exactly as before —
-    no check subprocess, no facts, empty ``check_results`` (AC #6 injection-only half)."""
+    """A node with no ``checks:`` runs no check subprocess, records no facts, and carries
+    empty ``check_results`` (AC #6 injection-only half)."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(_NOW)
     _seed_exited_lease(store, lease_id="lease_b", chunk_id="ch_1", node_id="nd_build", epoch=1)

@@ -61,9 +61,8 @@ class GraphLifecycleService:
         — the history stays, and there is no delete path here any more than there is for
         retire/re-enable.
 
-        A **second** lifecycle on the same graph, not a widening of the retire brake: a
-        graph can be retired and re-enabled any number of times without that saying
-        anything about whether its chunks follow the newest mint, so the two facts are
-        appended independently and read independently.
+        A **second** lifecycle on the same graph, not a widening of the retire brake:
+        the two facts are appended and read independently (pinned by
+        tests/test_follow_latest_policy.py::test_the_policy_and_the_retire_brake_are_independent).
         """
         self._graphs.record_policy(graph.graph_id, follow_latest=follow_latest, at=self._clock.now(), by=by)

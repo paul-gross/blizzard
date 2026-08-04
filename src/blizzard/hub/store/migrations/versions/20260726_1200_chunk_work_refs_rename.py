@@ -14,10 +14,9 @@ supported backends (``bzh:sql-portable``); SQLite implements it natively, so the
 ``batch_alter_table`` dance a column reshape needs does not apply here.
 
 **The earlier revisions keep the old name** (``canon:no-retro``): ``0011`` still creates
-``chunk_pm_pointers`` and ``0013`` still reshapes it under that name. A migration means
-what it meant when it ran, and the chain reaches this rename by replaying them in order
-— rewriting them would change what a historical revision does on a future checkout, the
-same reasoning ``0013``'s own docstring records for its local table literals.
+``chunk_pm_pointers`` and ``0013`` still reshapes it under that name, because a migration
+means what it meant when it ran. Pinned by
+``tests/test_pin_hub_api.py::test_a_revisions_table_shape_is_frozen_at_its_own_revision``.
 
 Guarded like ``20260725_1200_graph_checks_gating``: the rename fires only when the old
 table is the one actually present, so a fresh ``base -> head``, an in-place upgrade of a

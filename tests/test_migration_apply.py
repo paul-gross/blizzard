@@ -63,12 +63,8 @@ nodes:
 """
 
 # A target graph whose landing node (name-matching the source's `build`) is
-# hub-executed (issue #111) — mirrors `_BUILD_DELIVER_YAML`'s `deliver` node shape
-# (a `run:` list + a judgement with `success`/`failure` choices), but under the
-# name the source's migrating node lands on by name-match. `success` routes onward
-# to a runner node (never straight to `done`) so the inline run's own route-retention
-# (a non-terminal hub-step transition releases nothing, `_route`'s
-# `release_route=to_node_id == RESERVED_TERMINAL`) is what the test observes, not the
+# hub-executed (issue #111): `success` routes onward to a runner node (never straight
+# to `done`) so the test observes the inline run's own route-retention, not the
 # terminal chunk's own route release.
 _HUB_TARGET_YAML = """
 name: triage
@@ -247,9 +243,7 @@ def test_a_cross_graph_choice_migrating_onto_a_hub_node_runs_it_inline_and_retai
 ) -> None:
     """A migration whose landing node is hub-executed (issue #111) must not release the
     route the way a runner-landing migration does — releasing it would leave the landed
-    hub node's `run:` steps never driven (no holding runner left to poll `hub-advance`).
-    Mirrors `_respond`'s transition-into-a-hub-node branch: run the hub node inline,
-    retain the route, and return `HUB_NODE_TAKEN`."""
+    hub node's `run:` steps never driven (no holding runner left to poll `hub-advance`)."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True, target_yaml=_HUB_TARGET_YAML)
     triage_id = next(g["graph_id"] for g in hub.client.get("/api/graphs").json() if g["name"] == "triage")
@@ -341,22 +335,17 @@ def test_a_replayed_migration_completion_is_idempotent(tmp_path: Path) -> None:
 
 def test_a_replayed_hub_landing_migration_completion_returns_hub_node_taken(tmp_path: Path) -> None:
     """A hub-landing migration's lost-ack replay must return ``hub_node_taken``, not
-    ``migrated`` (issue #111). The runner reacts to ``migrated`` by RELEASING its route —
-    correct for a runner landing (the chunk re-queues ``ready``, claimable) but fatal for a
-    hub landing: the route was retained and the chunk derives ``delivering`` (never
-    ``ready``), so a released route strands it with nothing to drive the landed hub node.
-    The replay therefore returns ``hub_node_taken`` so the holding runner keeps its
-    environments and its ADVANCE poll carries the node to its outcome. (This is the fence on
-    the crash-sweep wedge ``test_kill9_at_migrate_crash_point_landing_on_a_hub_node`` proves
-    end to end: the crash at ``migrate.after-record.before-response`` loses the response, and
-    only this replay outcome keeps the retained-route chunk alive on recovery.)"""
+    ``migrated`` (issue #111) — the route was retained, so releasing it here would strand
+    the landed hub node with nothing to drive it. See
+    ``test_kill9_at_migrate_crash_point_landing_on_a_hub_node`` for the crash-sweep fence
+    this guards."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True, target_yaml=_HUB_TARGET_YAML)
 
     first = _migrate(hub, chunk_id, node_id)
     assert first.json()["outcome"] == "hub_node_taken"
-    # A re-flushed completion (lost ack) replays to hub_node_taken — never migrated, which
-    # would make the runner release the retained route — and lands no second migration.
+    # A re-flushed completion (lost ack) replays to hub_node_taken, never migrated, and
+    # lands no second migration.
     second = _migrate(hub, chunk_id, node_id)
     assert second.json()["outcome"] == "hub_node_taken"
 
@@ -412,10 +401,8 @@ def test_a_hub_landing_migration_does_not_publish_queue_changed(tmp_path: Path) 
 
 def test_a_human_gate_resolved_migration_closes_its_decision(tmp_path: Path) -> None:
     """A human gate whose resolved choice migrates cross-graph must close its decision
-    (issue #90 M1). A migration writes no ``transitions`` row, so without threading the
-    ``decision_id`` the resolved decision stays ``transitioned=False`` forever — a phantom
-    live decision that mis-renders the board and, worse, wedges REAP recovery (the runner
-    skips any chunk whose ``decision`` is non-None as owned by ADVANCE)."""
+    (issue #90 M1) — a migration writes no ``transitions`` row, so without threading the
+    ``decision_id`` the resolved decision would stay ``transitioned=False`` forever."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GATE_SRC_YAML}).status_code == 201
     assert hub.client.post("/api/graphs", json={"definition_yaml": _TARGET_YAML}).status_code == 201
@@ -458,7 +445,7 @@ def test_a_human_gate_resolved_migration_closes_its_decision(tmp_path: Path) -> 
     assert detail["graph_id"] == triage_id  # re-pinned to the target graph
     assert detail["status"] == "ready"  # re-queued under triage, claimable
     assert detail["current_node_name"] == "build"  # approve-gate has no match -> triage's entry
-    # M1: the gate's decision is closed — nothing left to mis-render or wedge REAP.
+    # M1: the gate's decision is closed.
     assert detail["decision"] is None
     assert hub.client.get("/api/decisions").json()["decisions"] == []
     closed = hub.services.chunks.get_decision(decision_id)
@@ -467,12 +454,10 @@ def test_a_human_gate_resolved_migration_closes_its_decision(tmp_path: Path) -> 
 
 def test_a_human_gate_resolved_migration_to_an_unresolvable_target_closes_its_decision(tmp_path: Path) -> None:
     """A human gate whose resolved choice migrates cross-graph to an **unresolvable**
-    target (issue #110) must still close its decision. This branch records an escalation
-    and returns ``PARKED_AT_GATE`` — writing neither a ``transitions`` row nor a
-    ``chunk_migrations`` fact — so without threading the ``decision_id`` onto the
-    escalation the resolved decision stays ``transitioned=False`` forever: the runner
-    re-submits the resolved decision every tick, and REAP holds the chunk's environments
-    (it skips any chunk whose ``decision`` is non-None as owned by ADVANCE)."""
+    target (issue #110) must still close its decision — this branch records an
+    escalation and returns ``PARKED_AT_GATE``, writing neither a ``transitions`` row nor
+    a ``chunk_migrations`` fact, so without threading the ``decision_id`` onto the
+    escalation the resolved decision would stay ``transitioned=False`` forever."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GATE_SRC_GHOST_YAML}).status_code == 201
     # `graph:ghost` is never minted — the edge caller resolves the target to None.
@@ -512,8 +497,7 @@ def test_a_human_gate_resolved_migration_to_an_unresolvable_target_closes_its_de
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "needs_human"  # escalation recorded, visible on the board
-    # #110: the gate's decision is closed atomically with the escalation — no live decision
-    # for the runner to re-submit, nothing for REAP to read as ADVANCE-owned.
+    # #110: the gate's decision is closed atomically with the escalation.
     assert detail["decision"] is None
     assert hub.client.get("/api/decisions").json()["decisions"] == []
     closed = hub.services.chunks.get_decision(decision_id)

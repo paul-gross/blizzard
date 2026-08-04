@@ -164,12 +164,10 @@ def test_a_fresh_store_reaches_head_with_graph_id_not_null(tmp_path: Path) -> No
 def test_the_walking_skeleton_revision_creates_the_pre_graph_id_shape(tmp_path: Path) -> None:
     """The walking-skeleton revision must freeze ``transitions`` at its pre-#90 shape.
 
-    Its create once imported ``transitions`` from head-of-tree ``schema.py``; once
-    ``schema.py`` gained ``graph_id`` that import would materialize the post-reshape
-    column at the walking-skeleton revision — and this revision's ``if "graph_id" in
-    columns: return`` guard would then fire, making its backfill dead on every fresh
-    store while the live store still needed it. The walking-skeleton revision now carries
-    its own frozen literal; this asserts the freeze holds from both ends."""
+    If it imported ``transitions`` from head-of-tree ``schema.py`` instead, this
+    revision's ``if "graph_id" in columns: return`` guard would fire on a fresh
+    store, leaving the backfill dead while a live store still needs it. This asserts
+    the freeze holds from both ends."""
     runner, db_url = _runner(tmp_path)
     engine = create_engine_from_url(db_url)
 

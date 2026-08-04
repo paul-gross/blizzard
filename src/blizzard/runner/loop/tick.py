@@ -11,12 +11,11 @@ first tick after a restart it re-attaches each in-flight session marked for same
 resume — by the graceful shutdown hook (#12) or, when a ``kill -9`` / reboot skipped that
 hook, by ``host``'s startup crash-recovery scan (#13); on every other tick it is a no-op.
 The external-subscription-usage sample (issue #218) runs last, the mirror image of the
-ceiling check's reasoning: that check gates every later step, so it runs first; this step
-gates nothing that any step in this tick or a later one reads before deciding anything,
-so there is no correctness reason to run it earlier — and every reason not to, since its
-only network call must never sit ahead of REAP's reap or FILL's spawn and delay either on
-a diagnostic read neither depends on. The tick holds no state: every step reads and
-writes the runner store through the context's seams.
+ceiling check: it gates nothing any step reads, so its network call must never sit ahead
+of REAP's reap or FILL's spawn and delay either on a diagnostic read (pinned by
+``tests/test_pin_runner_loop.py::test_the_external_usage_sample_runs_after_fill_has_claimed``).
+The tick holds no state: every step reads and writes the runner store through the
+context's seams.
 """
 
 from __future__ import annotations
@@ -44,16 +43,13 @@ def tick(ctx: LoopContext) -> None:
     # (issue #13). Recorded before the steps, not after, so a pass that dies mid-step still
     # leaves the beat that proves the daemon reached it.
     ctx.store.record_daemon_liveness(runner_id=ctx.config.runner_id, alive_at=ctx.clock.now())
-    # The spend-ceiling kill-switch (issue #61b) runs before every other step so a crossing
-    # detected this tick is already engaged — via the local pause brake — by the time REAP
-    # decides whether to kill a stalled worker and FILL decides whether to spawn one.
+    # The spend-ceiling kill-switch (issue #61b) — first; see the module docstring.
     check_spend_ceiling(ctx)
     reap(ctx)
     resume(ctx)
     pull(ctx)
     fill(ctx)
     advance(ctx)
-    # Last (issue #218): gates nothing in this tick or any later one, so it runs behind
-    # every step whose spawn/kill/claim decision could be delayed by its one network call.
+    # Last (issue #218) — see the module docstring.
     sample_external_subscription_usage(ctx)
     _log.debug("tick end", runner_id=ctx.config.runner_id)

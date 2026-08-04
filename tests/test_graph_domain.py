@@ -36,8 +36,7 @@ def test_classify_session_fresh_is_fresh_with_no_source() -> None:
 
 
 def test_classify_session_named_fresh_carries_the_name_as_source() -> None:
-    # #144's new form. It was malformed before #144, which is what makes adding it
-    # back-compatible: no already-minted graph can be carrying it.
+    # #144's new form; no already-minted graph can carry it, so adding it is back-compatible.
     assert classify_session("fresh:code") == (SessionMode.FRESH, "code", False)
 
 

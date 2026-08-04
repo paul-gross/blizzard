@@ -5,27 +5,15 @@ Holds the **write** repositories (``bzh:controller-read-only`` — only the doma
 writes) and takes already-loaded objects (``bzh:domain-takes-objects``): the edge
 resolves a session-id hash to a :class:`~blizzard.hub.auth.models.Session` via the read
 repo, then hands the object to :meth:`AuthService.touch_session` for the sliding-expiry
-write and role expansion — no mutation happens at the edge
-(``hub/api/auth_session.py``).
+write and role expansion — no mutation happens at the edge.
 
-:meth:`mint_session` and :meth:`mint_username` landed in #91 (no login mechanism yet)
-so the schema/service shape was stable ahead of #92, which is the first caller —
-:meth:`link_or_mint` (the provider-login callback's own linking step, ``hub/api/
-auth_login.py``) resolves a :class:`~blizzard.hub.auth.models.ProviderIdentity` to a
-:class:`User`, minting one when no identity link (or verified-email match) exists.
-
-Issue #94 adds :meth:`assign_role` (the admin API's hub-side role-change rules) and the
-superuser-bootstrap primitives ``hub/auth/bootstrap.py`` orchestrates at boot —
-:meth:`get_superuser_bootstrap`/:meth:`record_superuser_bootstrap`/
-:meth:`clear_superuser_bootstrap`/:meth:`bootstrap_apply_role`/
-:meth:`report_superuser_bootstrap_unclaimed` — plus the first-login claim check
-:meth:`link_or_mint` runs on its newly-minted-user branch (the only branch a
-pre-provisioned, still-unclaimed bootstrap target can first resolve through). Every
-role change, API-driven or bootstrap-driven, is recorded through the injected
-``auth_facts`` (``bzh:controller-read-only`` extended to a second collaborating
-service, mirroring ``FactIngestService(fleet=...)``'s own domain-service-takes-service
-shape) — never at the edge, since the bootstrap claim has no request-level caller to
-record it instead.
+Also holds :meth:`assign_role` (the admin API's hub-side role-change rules, issue #94)
+and the superuser-bootstrap primitives ``hub/auth/bootstrap.py`` orchestrates at boot,
+plus the first-login claim check :meth:`link_or_mint` runs on its newly-minted-user
+branch. Every role change, API-driven or bootstrap-driven, is recorded through the
+injected ``auth_facts`` (``bzh:controller-read-only`` extended to a second
+collaborating service) — never at the edge, since the bootstrap claim has no
+request-level caller to record it instead.
 """
 
 from __future__ import annotations
@@ -67,8 +55,7 @@ class RoleAssignmentRefused(Exception):
 
 
 #: A session slides forward on every resolve by this much (idle timeout) — chosen as a
-#: generous working-day window; #92/#96 may expose this as config once a login
-#: mechanism exists to make it tunable in practice.
+#: generous working-day window.
 IDLE_TTL = timedelta(hours=24)
 
 #: The absolute cap on a session's lifetime regardless of activity — a session minted
@@ -87,8 +74,7 @@ STATE_TTL = timedelta(minutes=10)
 PROVIDER_LOGIN_STATE_KIND = "provider_login"
 
 #: The registered public client id the CLI authenticates as (issue #96) — a built-in
-#: convention, not a per-user/per-runner registration (mirrors #95's runner clients,
-#: which *are* registered rows; ``cli`` never is).
+#: convention, not a per-user/per-runner registration.
 CLI_CLIENT_ID = "cli"
 
 #: The ``auth_state.kind`` a ``client=cli`` authorize mints (issue #96) — this table's
@@ -171,8 +157,7 @@ class AuthService:
     def mint_session(self, user: User) -> tuple[str, Session]:
         """Mint a fresh session for ``user``; returns ``(plaintext_id, session)`` — the
         caller (the login callback, #92) sets the plaintext into the cookie/bearer
-        exactly once and keeps no other copy, mirroring
-        ``RunnerEnrollmentService.enroll``."""
+        exactly once and keeps no other copy."""
         plaintext = secrets.token_urlsafe(SESSION_ID_BYTES)
         now = self._clock.now()
         session = Session(
@@ -312,10 +297,11 @@ class AuthService:
         (decision D6 — a session, never a runner-style JWT), or ``None`` on any
         failure: an unknown/already-consumed/expired code, a ``redirect_uri`` that
         does not exact-match the one the code was minted for, or a PKCE verifier that
-        does not hash to the stored challenge. Every failure is treated identically —
-        the route (``hub/api/idp.py``) raises one undifferentiated 400, mirroring
-        ``consume_state``'s own "bad state" uniformity, so a caller cannot fingerprint
-        which check failed."""
+        does not hash to the stored challenge. Every failure collapses to the same
+        ``None``, which the route (``hub/api/idp.py``) turns into one undifferentiated
+        400, so a caller cannot fingerprint which check failed (pinned by
+        ``tests/test_cli_login_api.py::test_cli_token_exchange_rejects_an_unknown_code``
+        and its wrong-verifier / mismatched-redirect / single-use siblings)."""
         entry = self._auth_state.consume(code)
         if entry is None or entry.kind != CLI_LOGIN_STATE_KIND:
             return None

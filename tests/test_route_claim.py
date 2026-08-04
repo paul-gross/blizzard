@@ -45,9 +45,6 @@ def test_winning_claim_carries_the_first_node_envelope(tmp_path: Path) -> None:
     assert env["epoch"] == 0
     assert env["node"]["node_name"] == "triage"
     assert env["node"]["executor"] == "runner"
-    # The envelope carries the pre-prompt, the authored judgement prose (the runner
-    # appends the elicitation tail from the choice set), the choice set, and the
-    # chunk's work refs.
     assert env["prompt"]
     assert env["judgement_prompt"]
     assert "<Choice>" not in env["judgement_prompt"]  # the tail is the runner's to render
@@ -56,10 +53,9 @@ def test_winning_claim_carries_the_first_node_envelope(tmp_path: Path) -> None:
 
 
 def test_summary_environment_count_counts_the_routes_environments(tmp_path: Path) -> None:
-    """The board's slot-bar numerator (issue #69) rides ``ChunkSummary`` as a count of the
-    live route's environments — never the full ``environment_ids`` list, which stays out of
-    scope on the status-only summary. A grouped chunk counts all its envs (so the per-runner
-    sum does not undercount); an unrouted chunk is 0."""
+    """``ChunkSummary.environment_count`` counts the live route's environments (issue
+    #69) — never the full ``environment_ids`` list. A grouped chunk counts all its envs;
+    an unrouted chunk is 0."""
     hub = build_hub(tmp_path)
     grouped = _ingest(hub, ref="7")
     single = _ingest(hub, ref="8")
@@ -77,13 +73,11 @@ def test_summary_environment_count_counts_the_routes_environments(tmp_path: Path
     assert summaries[unrouted]["environment_count"] == 0
 
 
-# A graph whose single **runner** node authors `pass -> done`. This is the shape that
-# produces the #140 state: `ApplyService.record_transition` has no route-release parameter
-# at all, so landing the terminal from a runner node stamps no `route.released` — only a
-# hub node landing it does (`HubNodeExecutor`). Deliberately hub-node-free: `deliver` in
-# `test_completion_apply.py`'s graph would release the route and dissolve the bug.
-# Named `default-delivery` so ingest reuses it by name (the same trick that file uses),
-# and declaring no `produces:`, so a completion needs no artifact to be accepted.
+# A graph whose single **runner** node authors `pass -> done` — landing the terminal
+# from a runner node stamps no `route.released` (only a hub node landing does, #140).
+# Deliberately hub-node-free: `deliver` in `test_completion_apply.py`'s graph would
+# release the route and dissolve the bug. Named `default-delivery` so ingest reuses it
+# by name; no `produces:`, so a completion needs no artifact.
 _RUNNER_TERMINAL_YAML = """
 name: default-delivery
 entry: build
@@ -103,21 +97,15 @@ nodes:
 
 
 def test_summary_reports_a_finished_chunk_as_unrouted(tmp_path: Path) -> None:
-    """A terminal chunk holds no claim (issue #140), so its ``runner_id`` /
+    """A terminal chunk holds no claim (issue #140), so its ``runner_id``/
     ``environment_count`` read unrouted even while its route facts still show a route.
 
-    The fleet registry folds exactly these two fields per runner — the card's claim lines
-    and the slot-bar numerator (issue #69) — so a ``done`` chunk that kept its route
-    rendered as a live claim and pushed the numerator past capacity (observed: a 4-env
-    runner reading 10/4).
-
-    The ``done`` chunk here reaches that state **through the code the bug lives in** — a
-    real completion posted to ``POST /api/fleet/chunks/{id}/completions``, taking a runner
-    node's ``-> done`` choice — rather than by a hand-written transition row. That is what
-    keeps the premise honest: the ``route_of`` assertion below fails the moment apply
-    starts releasing the route on this path, instead of passing green against a fixture
-    that only ever *described* the old behavior. ``stop`` releases its route already; it
-    is here because status, not the release, is what the summary keys on."""
+    This ``done`` chunk reaches that state through a real completion posted to
+    ``POST /api/fleet/chunks/{id}/completions``, not a hand-written transition row, so
+    the ``route_of`` assertion below fails the moment apply starts releasing the route
+    on this path. ``stop`` releases its route already; it is here because status, not
+    the release, is what the summary keys on.
+    """
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _RUNNER_TERMINAL_YAML}).status_code == 201
     running = _ingest(hub, ref="7")

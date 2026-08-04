@@ -2,20 +2,14 @@
 
 The full-stack proof that a node's authored ``session:`` mode actually governs which
 harness session a node-entry spawn continues, on the real forge + hub + runner +
-``mock-claude-code`` rails — the one thing no existing scenario asserts: *session
-continuity across a graph transition*. The sibling ``test_review_cycle_e2e`` drives the
-same ``build -> review -> build`` fail-cycle shape but only asserts the work re-runs and
-the findings thread back; it never checks *which session* each spawn ran under.
+``mock-claude-code`` rails — *session continuity across a graph transition*.
 
 Here the graph carries ``build`` on ``session: resume:build`` and ``review`` on
-``session: fresh``. Both were the packaged default's own spellings until #144 moved that
-graph onto a named pool (``resume:code`` / ``fresh:gate``); this scenario deliberately
-keeps the ``resume:<node>`` form, because that form is now exactly the back-compat surface
-nothing else drives end to end. Its named-pool sibling below covers #144's own shape. A
-scripted review **fails once then passes**, so ``build`` is entered twice. The mock
-harness persists each session's state (``turns``, keyed by ``session_id``, under
-``<workspace>/.blizzard-mock-harness/sessions/``) and the runner store records the
-``session_id`` of every node-step lease, so together they prove:
+``session: fresh``. The ``resume:<node>`` form is deliberate: it is the back-compat
+surface nothing else drives end to end, and its named-pool sibling below covers #144's own
+shape. A scripted review **fails once then passes**, so ``build`` is entered twice. The
+mock harness persists each session's ``turns`` keyed by ``session_id`` and the runner
+store records the ``session_id`` of every node-step lease, so together they show:
 
 * **(a) re-entered build resumed its OWN prior build session** — both ``build`` leases
   carry the *same* ``session_id``, and that session's persisted ``turns`` grew past a
@@ -106,8 +100,8 @@ def _graph_yaml() -> str:
     """A ``build -> review -> deliver`` graph carrying the real feature's session modes.
 
     ``build`` is ``session: resume:build`` and ``review`` is ``session: fresh`` — the
-    exact shape plan Q4 exists to express, and (since #144 moved the packaged graphs onto
-    named pools) the standing end-to-end proof that the ``resume:<node>`` form still works.
+    exact shape plan Q4 exists to express, and the standing end-to-end coverage of the
+    ``resume:<node>`` form.
     """
     import yaml
 
@@ -162,9 +156,8 @@ def _graph_yaml() -> str:
 def _sessions_by_node(db_url: str, chunk_id: str) -> dict[str, list[str]]:
     """Map ``node_name -> [session_id, ...]`` (mint order) from the runner store.
 
-    Reopens the runner's own sqlite store after the run — the durable record of which
-    session each node-step lease actually spawned/continued under, the runner-side truth
-    that pairs with the mock's on-disk per-session ``turns``.
+    Reopens the runner's own sqlite store after the run — the runner-side truth that pairs
+    with the mock's on-disk per-session ``turns``.
     """
     store = SqlAlchemyRunnerStore(create_engine_from_url(db_url))
     leases = [store.lease(lid) for lid in store.lease_ids_for_chunk(chunk_id)]
@@ -256,9 +249,7 @@ def test_session_modes_resume_targeted_and_fresh_across_a_cycle(tmp_path: Path) 
     assert len(review_sessions) == 2, f"review should have two node-step leases (fail then pass): {by_node}"
 
     # (a) + (c): both build leases carry the SAME session id — the second entry resumed
-    # the first's fresh session in place rather than spawning a new one. A regression that
-    # dropped `resume:build` (or failed to thread `session_source` through the envelope)
-    # would re-spawn fresh here and yield two distinct build session ids.
+    # the first's fresh session in place rather than spawning a new one.
     assert len(set(build_sessions)) == 1, (
         f"re-entered build did not resume its own session — got distinct ids {build_sessions}"
     )

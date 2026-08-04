@@ -173,10 +173,10 @@ def _check_resume(adapter: IHarnessAdapter, workdir: str, session_id: str, proce
         return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message raised: {exc}")
     if pid <= 0:
         return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message returned a non-positive pid ({pid})")
-    # `resume_with_message` is fire-and-forget (the adapter contract: "never run
-    # against a live process — kill first"), and `run_selftest_checks` tears down the
-    # scratch repo this pid's cwd is in as soon as the check suite finishes. Reap it
-    # here so no live process outlives its scratch dir.
+    # `resume_with_message` is fire-and-forget, and the scratch repo this pid's cwd is in
+    # is torn down as soon as the check suite finishes — reap it here so no live process
+    # outlives its scratch dir. Pinned by
+    # tests/test_runner_selftest.py::test_resume_check_reaps_the_resumed_pid_before_the_scratch_repo_is_torn_down.
     _reap(process, pid)
     return SelfTestCheck(AUTOMATED_RESUME, True, f"resumed session {session_id!r} as pid {pid}")
 

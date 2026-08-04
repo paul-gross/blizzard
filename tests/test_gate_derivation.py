@@ -106,9 +106,9 @@ def test_requeue_supersedes_an_open_escalation() -> None:
     assert derive_chunk_status(escalated) is ChunkStatus.NEEDS_HUMAN
     assert open_escalation(escalated) is not None
 
-    # A later requeue fact closes the escalation by supersession (never a resolution),
-    # and the requeue also releases the route (RequeueService does both). With no open
-    # escalation and no live route, the chunk re-derives ready for a fresh FILL.
+    # A later requeue fact closes the escalation by supersession (never a resolution)
+    # and releases the route. With no open escalation and no live route, the chunk
+    # re-derives ready for a fresh FILL.
     requeued = ChunkFacts(
         minted=True,
         promoted=True,  # it was claimed, so it was promoted — requeue re-derives ready

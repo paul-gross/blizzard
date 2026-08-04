@@ -1,10 +1,8 @@
 """``blizzard runner <cmd>`` — the machine-local surface.
 
 Client verbs are pure clients of the runner's local API; ``host`` *becomes* the
-runner daemon. Only ``init`` / ``migrate`` / ``host`` are implemented in
-the scaffold — the rest are stubs that name themselves, present in ``--help`` and
-filled in by the backend builder. Worker-hook verbs (``heartbeat``, ``session-end``,
-``ask``, ``work-items``) take their identity from the spawn-injected environment and pass
+runner daemon. Worker-hook verbs (``heartbeat``, ``session-end``, ``ask``,
+``work-items``) take their identity from the spawn-injected environment and pass
 no identity arguments.
 """
 
@@ -211,8 +209,8 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
 
     # Two doors onto the one app (issue #43): the unix socket the CLI's local verbs
     # address, and the TCP port the browser and the worker hooks address. Bound up front so
-    # a clash fails startup loudly; served by a single `Server` below, which is what keeps
-    # the shutdown path (and its resume-intent marking) exactly as it was.
+    # a clash fails startup loudly; served by the single `Server` below, which is what keeps
+    # the shutdown path (and its resume-intent marking) on one frame.
     try:
         sockets = bind_listeners(config)
     except ListenerError as exc:
@@ -221,18 +219,14 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         f"serving blizzard-runner on {config.host}:{config.port} and {config.socket_path} (loop tick {interval}s)"
     )
 
-    # The graceful-restart resume marker lives in this frame's `finally`, so it must run
-    # *after* `server.run()` returns — which means SIGTERM must drain the server, not hard-exit
-    # the process. Both handlers that can be in force do exactly that by setting `should_exit`:
-    #   * ours (`_drain`) below, and
-    #   * uvicorn's own `handle_exit`, which its `run()` installs around serving.
-    # So whichever is active, `run()` returns and the marking is reached. We register ours first,
-    # then suppress uvicorn's installer *only on versions that expose it* (older uvicorn's
-    # `install_signal_handlers`) so ours stays in force; on versions that renamed it to the
-    # `capture_signals` context manager (uvicorn ≥ 0.29) there is nothing to suppress and we lean
-    # on uvicorn's own graceful `handle_exit` — equivalent for our purpose. Guarding the monkey-
-    # patch with `hasattr` keeps a uvicorn upgrade from crashing startup on a missing attribute.
-    # A `kill -9` skips all of this — the ungraceful-crash boundary.
+    # The graceful-restart resume marker lives in this frame's `finally`, so SIGTERM must
+    # drain the server (set `should_exit`) rather than hard-exit the process, or `run()`
+    # never returns and the marking is never reached. Ours (`_drain`) is registered first;
+    # uvicorn's own installer is then suppressed only on versions that expose it, and the
+    # `hasattr` guard keeps a uvicorn upgrade from crashing startup on a missing attribute
+    # (on uvicorn ≥ 0.29 its own graceful `handle_exit` is equivalent for our purpose).
+    # A `kill -9` skips all of this — the ungraceful-crash boundary. Pinned by
+    # tests/crash/test_kill9_sweep.py::test_graceful_restart_resumes_in_flight_session.
     # Host/port here are for uvicorn's own startup log only: `run(sockets=...)` below serves
     # exactly the pre-bound sockets and never consults them (uvicorn Server.startup).
     server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port))
@@ -245,12 +239,10 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     if hasattr(server, "install_signal_handlers"):
         server.install_signal_handlers = lambda: None  # type: ignore[method-assign]
 
-    # Ungraceful-restart recovery (#13): a `kill -9` / OOM / reboot never ran the
-    # graceful shutdown marker below, so before the loop starts we detect the sessions killed
-    # mid-work — dead pid, no recorded session-end, heartbeat not stale — and mark them for the
-    # same startup RESUME the first tick runs. The mark is the only ungraceful-specific step;
-    # everything downstream is the graceful path's machinery (kill-first, unchanged epoch, the
-    # abandon-if-reassigned ownership fence). A clean `blizzard runner init` has no leases, so this is a no-op.
+    # Ungraceful-restart recovery (#13): a `kill -9` / OOM / reboot never ran the graceful
+    # shutdown marker below, so before the loop starts the sessions killed mid-work are
+    # marked for the same startup RESUME the first tick runs. The mark is the only
+    # ungraceful-specific step. A clean `blizzard runner init` has no leases, so this is a no-op.
     resumable = mark_crash_resume_intents_on_startup(config)
     if resumable:
         click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
@@ -314,12 +306,9 @@ def external_usage_group() -> None:
 def external_usage_probe(directory: str) -> None:
     """Sample the harness's own subscription rate-limit usage and print it. Read-only.
 
-    Builds the same Claude Code adapter the reconciliation loop uses
-    (``blizzard.runner.loop.build.build_loop_context``'s own construction) and calls
-    :meth:`~blizzard.runner.harness.adapter.IHarnessAdapter.
-    sample_external_subscription_usage` directly — a diagnostic seam-check for phase 1
-    of issue #218 (the store/hub/board wiring is a later phase): no store write, no
-    tick, nothing enqueued or delivered anywhere.
+    Builds the same Claude Code adapter the reconciliation loop uses and samples through
+    it directly — a diagnostic seam-check (issue #218): no store write, no tick, nothing
+    enqueued or delivered anywhere.
     """
     try:
         config = RunnerConfig.load(Path(directory))
@@ -381,9 +370,8 @@ def session_end() -> None:
     A pure client of the runner's local API: the ``SessionEnd`` hook runs this
     when the worker's Claude session exits, and it posts to ``BLIZZARD_RUNNER_URL`` for
     the lease in ``BLIZZARD_LEASE_ID`` — both inherited from the spawn environment, so no
-    arguments. The fact is the "declared done" signal
-    (exit-is-done) startup crash-recovery reads to tell a clean exit from a worker
-    killed mid-work. It fails **soft**, like the heartbeat: a hook must never break
+    arguments. The recorded fact is the worker's "declared done" signal. It fails
+    **soft**, like the heartbeat: a hook must never break
     the worker's exit, so a missing identity or an unreachable runner is reported to stderr
     and the command still exits 0.
     """
@@ -714,11 +702,9 @@ def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_s
     instead.
 
     There is deliberately no ``--forge``: the origin a declaration is verified against
-    comes from the environment's repo manifest, which the workspace provider owns. A
-    worker cannot supply it, so it cannot supply the wrong one — the previous default
-    read ``git remote get-url origin`` in the process cwd, and since workers are spawned
-    at the workspace root, that resolved to the enclosing workspace repo for every repo
-    alike.
+    comes from the environment's repo manifest, which the workspace provider owns, so a
+    worker cannot supply the wrong one. Pinned by
+    tests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag.
 
     A rejection (a wrong/missing token, an unknown lease, a repo the env's manifest does
     not list, an unreachable runner) exits non-zero so the worker learns it rather than
@@ -752,8 +738,7 @@ def chunk_group() -> None:
     worker's own lease, resolved from
     ``BLIZZARD_LEASE_ID``/``BLIZZARD_LEASE_TOKEN``/``BLIZZARD_RUNNER_URL`` (all
     inherited at spawn), so no verb here takes a ``--lease``/``--chunk`` flag by which a
-    worker could name another chunk — unlike the standalone ``work-items`` verb, which
-    takes an explicit chunk id since it predates this group and is not itself lease-scoped.
+    worker could name another chunk.
     """
 
 
@@ -839,13 +824,11 @@ def work_items(chunk_id: str) -> None:
 def pm_items(ctx: click.Context, chunk_id: str) -> None:
     """Deprecated alias for ``blizzard runner work-items`` (issue #55).
 
-    Kept working, hidden from ``--help``, on the ``attach`` precedent above — and for a
-    sharper reason than style. A node's prompt is **inlined into the store at mint and
-    immutable thereafter** (``graph_nodes.prompt``), so every graph already minted in a
-    live hub carries pre-rename prompt text naming this verb *forever*. Those workers run
-    against whatever wheel the runner has now, so without this alias a chunk on an
-    old graph fails mid-node with "no such command" — the failure that hurts most,
-    since it is neither loud at boot nor visible until a worker is already spawned.
+    Kept working, hidden from ``--help``: a node's prompt is **inlined into the store at
+    mint and immutable thereafter** (``graph_nodes.prompt``), so every graph already
+    minted in a live hub names this verb forever, and dropping the alias would fail those
+    workers mid-node with "no such command". Pinned by
+    tests/test_pin_runner_misc.py::test_the_deprecated_pm_items_cli_alias_still_reads_the_work_item.
     """
     click.echo(
         "warning: `blizzard runner pm-items` is deprecated — use `blizzard runner work-items`",
@@ -879,8 +862,7 @@ def status(directory: str, runner_url: str | None) -> None:
     is reported, not assumed. ``GET /runner`` + ``GET /leases`` + ``GET /environments``
     + ``GET /asks?open=true`` + ``GET /escalations`` + ``GET /takeovers`` — no store
     access, no hub call. The open-takeovers section is the recovery surface for a
-    takeover a stranded CLI (an interrupted terminal that never reached the end-PATCH,
-    issue #52) left open with no other way to find its ``takeover_id``.
+    takeover left open by a stranded CLI (issue #52).
     """
     client, where = _local_api_client(directory, runner_url)
     try:
@@ -919,9 +901,8 @@ def status(directory: str, runner_url: str | None) -> None:
     for lease in leases:
         click.echo(f"  {lease['lease_id']}  {lease['state']:<12} chunk={lease['chunk_id']} node={lease['node_name']}")
 
-    # `GET /api/environments` now carries the full configured pool (issue #106); this
-    # section stays the *held*-environments view it always was, so unused pool slots
-    # (chunk_id null) are filtered back out here rather than reworking the CLI's shape.
+    # `GET /api/environments` carries the full configured pool (issue #106); this section
+    # is the *held*-environments view, so unused pool slots (chunk_id null) are filtered out.
     envs = [env for env in envs_resp.json().get("items", []) if env.get("chunk_id") is not None]
     click.echo(f"\nheld environments ({len(envs)}):")
     for env in envs:
@@ -966,16 +947,12 @@ def pause(directory: str, runner_url: str | None, by: str) -> None:
 
     This runner's **own** brake — "it says it won't try" — and a pure client of its local
     API (``PATCH /runner``), so it works with the hub unreachable. It blocks every spawn
-    site (FILL, restart-resume, an answer-resume, ADVANCE's next-node, a requeue or
-    claim-adopt respawn, and the judgement resume that would elicit a verdict from an
-    exited worker's session) and defers both REAP's kill of a stalled worker and
-    escalation to a human at an exhausted retry budget, wherever it would happen. No
-    retry is consumed anywhere; a live worker already running is left alone (this is not
-    a drain, and it does not kill). A worker that *exits* while paused simply waits
-    unjudged — judging it is itself a spawn — until the brake clears. It is distinct from
-    the hub's brake (``blizzard hub pause <runner_id>``), which coerces a runner from the
-    fleet side and keeps its claims-only meaning, and each is cleared where it was set.
-    Clear this one with ``blizzard runner start``."""
+    site and defers both the kill of a stalled worker and escalation to a human at an
+    exhausted retry budget. No retry is consumed anywhere; a live worker already running
+    is left alone (this is not a drain, and it does not kill). A worker that *exits* while
+    paused simply waits unjudged — judging it is itself a spawn — until the brake clears.
+    It is distinct from the hub's brake (``blizzard hub pause <runner_id>``), and each is
+    cleared where it was set. Clear this one with ``blizzard runner start``."""
     _set_local_paused(paused=True, by=by, directory=directory, runner_url=runner_url)
 
 

@@ -68,7 +68,7 @@ class RunnerRegistration:
     They are separate concepts, so they are separate fields rather than one ``paused``:
 
     * ``hub_paused`` — the fleet's brake, set here and pulled down by the runner, which
-      adheres. Advisory today: the hub does not yet refuse a paused runner's claim (#44).
+      adheres; the hub also refuses a paused runner's claim (#44).
     * ``locally_paused`` — the runner's own brake, set on its machine and reported up. The
       hub only ever reads this one.
 
@@ -93,29 +93,23 @@ class RunnerRegistration:
     #: unenrolled runner. Never the plaintext: the token is returned once, at enroll
     #: time, and this is the only copy the hub ever keeps.
     token_hash: str | None = None
-    #: The runner's configured environment-pool size (issue #69) — the ``total`` the board's
-    #: slot bar renders ``used/total`` against. A reported **fact** (the runner's own
-    #: ``len(workspace_envs)``), refreshed in place on each re-registration, so a config
-    #: change converges; ``None`` for a runner registered by a client that predates it.
+    #: The runner's configured environment-pool size (issue #69) — a reported **fact**
+    #: (the runner's own ``len(workspace_envs)``), refreshed in place on each
+    #: re-registration so a config change converges; ``None`` when none was reported.
     env_capacity: int | None = None
     #: The runner's own browser-reachable base URL (issue #95) — ``None`` for a runner
-    #: that has never registered one (or predates the field). A prerequisite for
-    #: federation: the hub's IdP authorize endpoint only bounces a browser to a
-    #: ``redirect_uri`` that exact-matches an entry in :attr:`redirect_uris`, so a
-    #: runner with no ``public_url``/``redirect_uris`` simply cannot be an authorize
-    #: ``client``.
+    #: that has never registered one. A prerequisite for federation, together with
+    #: :attr:`redirect_uris`.
     public_url: str | None = None
-    #: The runner's allowed redirect URIs (issue #95) — the open-redirect guard the
-    #: hub's IdP authorize endpoint exact-matches a presented ``redirect_uri`` against.
-    #: Empty for a runner that has registered none.
+    #: The runner's allowed redirect URIs (issue #95) — the open-redirect guard a
+    #: presented ``redirect_uri`` is exact-matched against. Empty for a runner that has
+    #: registered none.
     redirect_uris: tuple[str, ...] = ()
     #: The runner's newest reported external-subscription-usage sample (issue #218),
     #: raw, not yet staleness-derived — ``None`` for a runner that has never reported
-    #: one. Staleness
-    #: is *not* applied here (the store read is not clock-aware); see
-    #: :func:`derive_external_subscription_usage`, which turns this plus ``now`` into
-    #: the renderable view, mirroring how ``last_seen_at`` stays a raw column here while
-    #: :func:`derive_online` is the clock-relative read.
+    #: one. Staleness is *not* applied here (the store read is not clock-aware); see
+    #: :func:`derive_external_subscription_usage`, mirroring how ``last_seen_at`` stays
+    #: a raw column here while :func:`derive_online` is the clock-relative read.
     external_usage_sampled_at: datetime | None = None
     #: The sample's windows, parsed off the stored JSON array — empty when
     #: ``external_usage_sampled_at`` is ``None``.
@@ -199,18 +193,15 @@ class IReadRunnerRegistry(Protocol):
     def registration_for_token_hash(self, token_hash: str) -> RunnerRegistration | None:
         """The reverse, hash-indexed lookup a presented bearer token resolves through
         (issue #86a) — the mirror image of every other read here, which key on
-        ``runner_id``. This is what ``require_runner_principal``
-        (``hub/api/auth.py``) resolves a principal with, from the token alone; a
-        router-level dependency cannot uniformly read a declared ``runner_id`` (it
-        lives in request bodies for some routes, path params for others)."""
+        ``runner_id``. Resolving a principal from the token alone is what the auth
+        dependency needs (``hub/api/auth.py``), since a ``runner_id`` is not uniformly
+        readable off a request."""
         ...
 
     def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
         """Every ``runner-changed`` activity row off the fleet's two pause-family fact
         tables, at or after ``since`` — the activity feed's runner-scoped source (issue
-        #213), pause family only: ``registered``/``heartbeat`` carry no fact table and
-        are muted the same way the board's own live SSE consumer mutes them
-        (``MUTED_RUNNER_KINDS``, ``fleet-live.ts``).
+        #213), pause family only: ``registered``/``heartbeat`` carry no fact table.
 
         Deliberately **not** on :class:`~blizzard.hub.domain.work.IReadChunkRepository`
         (``bzh:repository-split``): a runner-pause fact names no chunk, so it belongs on
@@ -363,8 +354,7 @@ class FleetService:
         """Land a runner's report that it paused or started *itself* (issue #43).
 
         Not a control: the runner has already stopped claiming by the time this arrives, and
-        the hub cannot set this brake. Landing it is what lets the board show a runner that
-        is declining work rather than silently rendering it as running.
+        the hub cannot set this brake.
 
         ``reason`` (issue #61) carries the fact's own composed cause — e.g. a spend-ceiling
         crossing names the ceiling and the spend — so an operator sees *why*, not just

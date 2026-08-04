@@ -1,11 +1,9 @@
-"""Process-liveness by (pid, start time) — the P6 reap signal (no heartbeats yet).
+"""Process-liveness by (pid, start time) — the reap signal.
 
 A bare pid check is unsafe: the OS reuses pids, so a different process may now hold
-an old worker's pid. REAP therefore keys on **pid AND the recorded process start
-time together** — comparing the recorded start time against
-the live process's start time survives pid reuse. Heartbeat-based stall detection is
-P7; in P6 a worker's liveness is exactly whether its recorded (pid, start_time) is
-still the process at that pid.
+an old worker's pid. This probe therefore keys on **pid AND the recorded process start
+time together** — comparing the recorded start time against the live process's start
+time survives pid reuse.
 
 The probe is a seam (``bzh:pluggable-seams``) so loop tests inject a fake and never
 depend on real pids; the Linux ``/proc`` adapter is the reference binding.
@@ -44,8 +42,8 @@ class LinuxProcessProbe:
 
     def is_alive(self, pid: int, process_start_time: str) -> bool:
         # A worker the runner spawned fire-and-forget becomes a zombie the instant it
-        # exits (nothing wait()s it until P7's REAP); its /proc entry lingers with the
-        # same start time, so it must read as dead here or ADVANCE never judges it.
+        # exits (nothing wait()s it); its /proc entry lingers with the same start time,
+        # so it must read as dead here or ADVANCE never judges it.
         if is_zombie(pid):
             return False
         current = self.start_time(pid)

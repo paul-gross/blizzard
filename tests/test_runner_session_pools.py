@@ -584,9 +584,8 @@ def test_a_head_with_no_model_stamp_cannot_drift(tmp_path):  # type: ignore[no-u
 
 @pytest.mark.component
 def test_max_transcript_bytes_fires_against_the_real_repository_at_the_production_root(tmp_path):  # type: ignore[no-untyped-def]
-    """The threshold end to end over the **real** transcript source (blizzard#245:
-    retargeted from ``JsonlTranscriptRepository``, which this stack replaced), against
-    a file at the production path shape — not a scripted size.
+    """The threshold end to end over the **real** transcript source (blizzard#245),
+    against a file at the production path shape — not a scripted size.
 
     The scripted-size cases above pin the comparison; this pins that the comparison is
     reading the thing it thinks it is. A `size_bytes` that silently returned `None` for

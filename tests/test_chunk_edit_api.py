@@ -71,8 +71,7 @@ def _mint_alt_graph(hub) -> str:  # type: ignore[no-untyped-def]
 
 def test_a_freshly_ingested_chunk_carries_the_default_graph_and_no_model_preference(tmp_path: Path) -> None:
     """Ingest mints neither default (issue #144) — a fresh chunk expresses no model or
-    effort preference, so the runner's own default applies exactly as before. Minting a
-    concrete model would outrank every `sessions:` declaration omitting `model:`."""
+    effort preference."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER], promote=False)
 
@@ -140,8 +139,8 @@ def test_patch_applies_graph_id_and_both_defaults_together(tmp_path: Path) -> No
 
 
 def test_patch_naming_one_default_leaves_the_other_untouched(tmp_path: Path) -> None:
-    """The two share one repository write (``set_defaults``), so "not supplied" has to
-    keep meaning "leave unchanged" rather than silently clearing its twin."""
+    """``default_model`` and ``default_effort`` are set independently — omitting one
+    from the body leaves it unchanged."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER], promote=False)
     seed = hub.client.patch(
@@ -205,8 +204,8 @@ def test_patch_blank_default_effort_is_422(tmp_path: Path) -> None:
 
 
 def test_patch_accepts_an_unrecognized_model_or_effort_vocabulary(tmp_path: Path) -> None:
-    """Neither value's vocabulary is the hub's to check: the alias tables live in each
-    runner's own config, so both are opaque preference strings here."""
+    """Neither value's vocabulary is the hub's to check — both are opaque preference
+    strings here."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER], promote=False)
 

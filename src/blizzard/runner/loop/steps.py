@@ -87,8 +87,7 @@ from blizzard.wire.queue import QueuePeekEntry
 from blizzard.wire.route import RouteClaim
 
 #: This module's public API — the loop steps it owns. ``HEARTBEAT_STALENESS_THRESHOLD``
-#: lives in ``runner/domain/leases.py`` (its one owner, ``bzh:domain-core``); this
-#: module no longer re-exports it — importers (tests included) reach it there.
+#: is not among them: its owner is ``runner/domain/leases.py`` (``bzh:domain-core``).
 __all__ = [
     "advance",
     "check_spend_ceiling",
@@ -118,25 +117,19 @@ _RELEASED = "released"  # the chunk was found reassigned/detached/unknown — ab
 _RESTART_RESUME_MESSAGE = "# The supervisor restarted; continue your task where you left off."
 
 #: The message ADVANCE delivers into a session the operator paused and then resumed (issue #46).
-#: Same ``#``-prefixed inert-comment framing as the restart resume above, for the same reason: the
-#: session may be real-harness prose or a blizzard-mock behavior *script* it ``exec``s. The exact
-#: prose is unpinned.
+#: Same ``#``-prefixed inert-comment framing as the restart resume above, for the same reason.
+#: The exact prose is unpinned.
 _PAUSE_RESUME_MESSAGE = "# The operator resumed this chunk; continue your task where you left off."
 
-# Outbound-buffer fact kinds. ``completion.submitted`` is the
-# runner-local kind whose flush drives the apply-response; ``decision.submitted`` is the
-# runner-config gate's kind, which parks the chunk instead of advancing it; the
-# two hub-fact kinds (LEASE_MINTED / ESCALATION_RECORDED) flush to POST /events.
+# The two outbound-buffer fact kinds the flusher handles specially (every other kind
+# flushes generically to POST /events).
 _COMPLETION_KIND = "completion.submitted"
 _DECISION_KIND = "decision.submitted"
 
-# The env count a chunk gets when nothing says otherwise. One environment is the
-# default, not an assumption baked into everything downstream: git-commit declarations
-# are keyed by ``(lease, environment_id, repo)``, the ADVANCE harvest reads every bound
-# environment, and delivery refuses an unconverged set rather than tie-breaking it — so
-# a chunk holding several is representable and safe today. What is missing is only a
-# *producer*: nothing in the queue entry or the chunk yet says how many a piece of work
-# wants, so inventing a knob here would be a setting no caller sets.
+# The env count a chunk gets when nothing says otherwise. One is a default, not a
+# structural assumption — a chunk holding several is representable. It stays a constant
+# because nothing in the queue entry or the chunk yet says how many a piece of work
+# wants, so a knob here would be a setting no caller sets.
 _DEFAULT_ENV_COUNT = 1
 
 # --------------------------------------------------------------------------- #
@@ -150,9 +143,8 @@ _DEFAULT_ENV_COUNT = 1
 _CP_REAP_BEFORE = crashpoint("reap.before-expire", "entered REAP; no lease expired yet")
 _CP_REAP_AFTER = crashpoint("reap.after-expire", "REAP done; stale leases expired")
 
-# RESUME — the restart re-attach, second in the tick (only ever non-empty on the first tick
-# after a restart, graceful or crash-detected). These bracket the re-attach the way SPAWN brackets
-# its spawn: the kill→re-attach→record window's *un-recordable* middle (the harness
+# RESUME — the restart re-attach. These bracket the re-attach the way SPAWN brackets its
+# spawn: the kill→re-attach→record window's *un-recordable* middle (the harness
 # resume-with-message call whose pid is not yet durable) is the same by-construction gap
 # SPAWN leaves between spawn and record_spawn — see ``_resume_in_place``. Armed at either
 # bracket, recovery re-runs RESUME idempotently and the chunk still lands exactly once.
@@ -165,15 +157,10 @@ _CP_RESUME_AFTER = crashpoint("resume.after-reattach", "session re-attached unde
 # while the runner was up, caught by its live-tick detach check), or REAP's `_fail_attempt` escalate
 # guard (an exhausted-retries lease the hub already moved elsewhere, since blizzard#38). A crash
 # here leaves a lease with a dead pid, environments not yet released, and no closure recorded, so
-# the lease is still active at the next startup. That next tick's recovery differs by how the
-# lease got here: a lease `mark_crash_resume_intents` marks for resume — session-bearing, not
-# parked/pending-submission/session-ended, and not stale-heartbeat as measured at crash time —
-# is re-asked by RESUME, finds it still not ours, and re-runs this same abandon idempotently. A
-# lease in one of those skipped states gets no resume intent, so RESUME never revisits it — but
-# PULL's own `_reconcile_leases` re-scans *every* active lease each tick, unconditional on those
-# states, and reaches the identical re-ask; it is the stronger recovery story of the two, and the
-# one that actually covers every path into this function (killing an already-dead pid is a
-# no-op; `_release_all` and `record_closure` are re-runnable), and the chunk lands exactly once.
+# the lease is still active at the next startup. Recovery is PULL's own `_reconcile_leases`, which
+# re-scans *every* active lease each tick and reaches the identical re-ask — it covers every path
+# into this function, and every operation here is re-runnable (killing an already-dead pid is a
+# no-op; `_release_all` and `record_closure` are idempotent), so the chunk lands exactly once.
 _CP_ABANDON_AFTER_KILL = crashpoint(
     "abandon.after-kill.before-release", "detached worker killed; environments not yet released"
 )
@@ -184,11 +171,10 @@ _CP_ABANDON_AFTER_KILL = crashpoint(
 # *inverse* of the abandon — the worker dies but the claim, the route, the epoch and every
 # environment survive — and it is reached from two different steps, so naming it for either one
 # would be false. A crash here leaves a lease that is still active, session-bearing, pid dead, and
-# NOT yet parked. Recovery converges *because of* the RESUME fix (`_resume_marked_lease`): startup
-# crash-recovery marks that exact shape for resume (fresh-at-crash heartbeat, no session-end),
-# RESUME re-asks the hub, reads `detail.pause is not None`, and re-runs this same park idempotently
-# — killing the already-dead pid is a no-op. Before that fix the identical path *abandoned* the
-# chunk, so this point is the regression fence on the plan's central bug, not decoration.
+# NOT yet parked. Recovery converges through `_resume_marked_lease`: startup crash-recovery marks
+# that exact shape for resume (fresh-at-crash heartbeat, no session-end), RESUME re-asks the hub,
+# reads `detail.pause is not None`, and re-runs this same park idempotently — killing the
+# already-dead pid is a no-op.
 _CP_PAUSE_PARK_AFTER_KILL = crashpoint(
     "pause.after-kill.before-park", "paused worker killed; pause-park not yet durable"
 )
@@ -212,10 +198,8 @@ _CP_SPAWN_AFTER_MINT = crashpoint("spawn.after-lease-mint.before-spawn", "lease 
 _CP_SPAWN_AFTER_SPAWN = crashpoint("spawn.after-spawn", "worker spawned; pid recorded")
 
 # ADVANCE — judge an exited worker: verify declared git commits -> elicit verdict ->
-# buffer completion. Verify is read-only (issue #143, Phase 4) — the push-mutation
-# window this used to open (`advance.before-artifact-push` / `.after-artifact-push.
-# before-judgement`) is gone; a read-only re-derivation needs no crash point of its own
-# (`bzh:crash-correctness` — recorded as a removed exemption in
+# buffer completion. Verify is read-only (issue #143, Phase 4), so it needs no crash point
+# of its own (`bzh:crash-correctness` — recorded as an exemption in
 # `blizzard-context:/architecture/crash-correctness.md`).
 _CP_ADV_AFTER_JUDGE = crashpoint("advance.after-judgement.before-buffer", "verdict parsed; completion not buffered")
 # Usage recording (issue #58) sits between the verdict and the completion buffer: a crash
@@ -296,19 +280,14 @@ def _stdout_path(ctx: LoopContext, lease_id: str, generation: int) -> str:
     """This lease's per-generation harness-stdout redirect target, or ``""`` for no
     redirect.
 
-    Empty when ``worker_stdout_dir`` is unset (Phase 1's discard/inherit default, and
-    every test that does not wire one) — the composition root (``loop/build.py``)
-    resolves the real directory and creates it once. Scoped to ``(lease_id,
-    generation)``, not just ``lease_id``: each spawn/resume gets its own file, so
-    ADVANCE's readback for a given attempt (:func:`_worker_usage_sample`) sees only
-    that attempt's own envelope line, never a prior generation's — a generation whose
-    own invocation exited without writing one correctly falls through to the
-    transcript-sum fallback instead of replaying a stale envelope (the bug this
-    per-generation split fixes). The adapter still opens the file in append mode, so a
-    retry that lands before this attempt's own ``record_spawn`` is durable (the
-    un-armable spawn-record gap every resume site's docstring calls out, e.g.
-    :func:`_resume_in_place`) safely reuses the same generation number and the same
-    file rather than colliding with a different attempt's."""
+    Empty when ``worker_stdout_dir`` is unset (discard/inherit) — the composition root
+    (``loop/build.py``) resolves the real directory and creates it once. Scoped to
+    ``(lease_id, generation)``, not just ``lease_id``: each spawn/resume gets its own file,
+    so a readback for a given attempt (:func:`_worker_usage_sample`) sees only that
+    attempt's own envelope line, never a prior generation's. The adapter opens the file in
+    append mode, so a retry landing before this attempt's own ``record_spawn`` is durable
+    (the un-armable spawn-record gap, e.g. :func:`_resume_in_place`) safely reuses the same
+    generation number and file rather than colliding with a different attempt's."""
     if not ctx.config.worker_stdout_dir:
         return ""
     return os.path.join(ctx.config.worker_stdout_dir, f"{lease_id}.{generation}.stdout")
@@ -317,8 +296,7 @@ def _stdout_path(ctx: LoopContext, lease_id: str, generation: int) -> str:
 def _stderr_path(ctx: LoopContext, lease_id: str, generation: int) -> str:
     """This lease's per-generation harness-**stderr** redirect target (issue #125, change
     L(iii)), or ``""`` for no redirect — the sibling of :func:`_stdout_path`, so a launched
-    worker that crashed to stderr leaves a readable tail for the ``worker-lost`` event
-    instead of the old ``DEVNULL`` discard."""
+    worker that crashed to stderr leaves a readable tail for the ``worker-lost`` event."""
     if not ctx.config.worker_stdout_dir:
         return ""
     return os.path.join(ctx.config.worker_stdout_dir, f"{lease_id}.{generation}.stderr")
@@ -366,11 +344,8 @@ def _record_worker_usage(ctx: LoopContext, lease: LeaseRecord, bindings: list[En
 
     The token-burning invocation whose exit ADVANCE is handling, attributed to this
     lease's current spawn generation (``spawn`` on generation 1, ``resume`` after —
-    issue #58, reusing issue #13's generation tracking). Every exit path through
-    ADVANCE that burned a spawn/resume invocation records this, whether or not a
-    judgement follows: a worker that asked-and-exited (:func:`_park_on_ask`) elicited
-    no verdict, so it records this alone; the judged paths add the judge fact on top
-    (:func:`_record_attempt_usage`). Keyed on ``(lease, generation, kind)`` it is
+    issue #58). Every exit path that burned a spawn/resume invocation records this,
+    whether or not a judgement follows. Keyed on ``(lease, generation, kind)`` it is
     idempotent across a re-run and distinct from the *next* generation's resume fact,
     so an ask-park's spawn usage and its later answer-resume usage never collide.
     """
@@ -386,8 +361,8 @@ def _record_attempt_usage(
 ) -> None:
     """Record this attempt's harness usage: the spawn/resume invocation whose exit
     ADVANCE is judging, and the judgement resume that elicited its verdict — each its
-    own fact, keyed on this lease's current spawn generation (issue #58, reusing issue
-    #13's own generation tracking). Called just before the completion is buffered
+    own fact, keyed on this lease's current spawn generation (issue #58). Called just
+    before the completion is buffered
     (``_CP_ADV_AFTER_USAGE``) and equally on the verdict-less-fail exit (both burned the
     judge invocation): a crash between the two either finds these facts already durable
     — idempotent re-run, keyed on ``(lease, generation, kind)`` — or reaches neither,
@@ -398,7 +373,7 @@ def _record_attempt_usage(
     # Attribute to the lease's own `resolved_model` stamp (issue #144), not the adapter's
     # single default: per-session resolution means a judge turn on a sonnet session would
     # otherwise book its spend against opus. `None` (a lease predating the stamps) leaves
-    # the adapter's default standing — the pre-#144 behavior, unchanged.
+    # the adapter's default standing.
     judge_sample = ctx.harness.parse_usage(judge_output, "judge", model=lease.resolved_model)
     if judge_sample is not None:
         _store_usage(ctx, lease, generation=generation, sample=judge_sample)
@@ -456,38 +431,29 @@ def check_spend_ceiling(ctx: LoopContext) -> None:
     per-chunk cap, sharing the ``[cost]`` table and its identical lower-bound + PARTIAL
     cost-absent treatment.
 
-    Runs **first** in the tick (:func:`blizzard.runner.loop.tick.tick`, ahead of REAP,
-    RESUME, PULL, FILL and ADVANCE) so a crossing detected this tick is already visible to
-    every spawn primitive gated by :func:`_spawn_suppressed` and to REAP's kill-a-stalled-
-    worker deferral, within the *same* pass — no worker is newly spawned, and no live
-    worker is killed, on the strength of a check that ran too late in its own tick.
+    Runs **first** in the tick (:func:`blizzard.runner.loop.tick.tick`) so a crossing
+    detected this tick is already visible to every later step in the *same* pass.
 
-    Reuses the existing local pause brake rather than inventing a second suppression
-    mechanism (the locked design, issue #61): the exact ``record_local_pause`` call
-    ``blizzard runner pause`` itself makes, so every existing spawn-suppression site
-    already honors it and no retry budget is touched. Reads ``local_paused`` first and
-    returns immediately when already engaged — engaging is a one-time transition, not a
-    per-tick assertion, so a runner already paused (by this ceiling or by an operator's own
-    ``blizzard runner pause``) is left alone rather than re-escalated on every later tick,
-    even while the rolling window's sum stays over the ceiling for as long as it holds.
-    **No auto-unpause**: this function never calls ``record_local_pause(paused=False,
-    ...)`` — ``blizzard runner start`` is the only conscious clear, and the brake does not
-    lift itself when the window later rolls the spend back under the ceiling.
+    Engages the existing local pause brake — the same ``record_local_pause`` write
+    ``blizzard runner pause`` makes — exactly once, and never lifts it: ``blizzard runner
+    start`` is the only conscious clear (the locked design, issue #61). Pinned by
+    ``tests/test_runner_paused.py``'s
+    ``test_ceiling_crossing_engages_the_local_brake_and_logs_ceiling_and_spend``,
+    ``test_ceiling_engages_once_no_thrash_on_later_ticks`` and
+    ``test_ceiling_does_not_auto_lift_when_the_window_rolls_the_spend_back_under_cap``.
 
-    ``cost.runner_ceiling_usd`` absent means no ceiling — unchanged pre-#61b behavior. The
-    window is summed **locally** (unlike the per-chunk cap's hub-derived read): this
-    runner's own :meth:`~blizzard.runner.store.repository.IReadRunnerStore.usage_since`
-    over the trailing ``runner_ceiling_window_hours``, off the injected clock, never wall
-    time, so a timezone or DST change never moves the boundary.
+    ``cost.runner_ceiling_usd`` absent means no ceiling. The window is summed **locally**
+    (unlike the per-chunk cap's hub-derived read): this runner's own
+    :meth:`~blizzard.runner.store.repository.IReadRunnerStore.usage_since` over the
+    trailing ``runner_ceiling_window_hours``, off the injected clock, never wall time, so
+    a timezone or DST change never moves the boundary.
 
     Crash safety: the only durable write here is the single-transaction
     ``record_local_pause`` (local pause fact + its hub-bound report, atomic by
-    construction — the same call the manual pause route makes, which carries no crash
-    point of its own for the same reason). Everything before it (``local_paused``,
-    ``usage_since``) is a plain read with no observable partial state, so a crash at any
-    point up to the write leaves nothing to recover: the next tick simply re-derives the
-    identical decision from the same durable facts and the (now later) clock. This opens
-    no new crash window, so no new crash-point-registry point is added.
+    construction). Everything before it is a plain read with no observable partial state,
+    so a crash at any point up to the write leaves nothing to recover: the next tick
+    re-derives the identical decision from the same durable facts and the (now later)
+    clock. This opens no new crash window, so no crash-point-registry point is added.
     """
     cap = ctx.config.runner_ceiling_usd
     if cap is None:
@@ -550,28 +516,16 @@ def reap(ctx: LoopContext) -> None:
     the two apart — a worker that exited cleanly still carries a fresh final heartbeat,
     so REAP never preempts ADVANCE's judgement of it.
 
-    **The local brake (issue #45) is checked per case, not blanket, once the escalate
-    branch grew its own gate.** The two live cases carry different stakes while locally
-    paused:
-
-    * the **stall** case has a live process to kill — the only kill in this function —
-      and a local pause is not a drain (it must not kill a worker still running), so
-      this case alone is suppressed here, deferred to the first tick after the brake
-      clears.
-    * the **orphan** case has no process to kill (``pid is None``, so the top-of-
-      :func:`_fail_attempt` kill is a no-op) and its requeue branch already self-defers
-      correctly — the respawn is gated at :func:`_spawn_attempt`, so no retry is consumed
-      by construction (:data:`attempt_count` counts mints, and the mint sits below that
-      gate) — and its escalate branch, at an exhausted budget, defers there too (the same
-      gate every ``_fail_attempt`` caller shares). Suspending it here as well would only
-      cost startup recovery time for no correctness gain, so it runs unguarded — at the
-      price that its orphan leases occupy ``max_agents`` slots invisibly while paused,
-      since FILL is paused too (logged below so that state is at least greppable).
-
-    (An earlier version of this guard suspended both cases and justified it as "avoiding
-    burning a retry on a brake" — false: the retry budget was never at risk, since it
-    counts mints and every mint site already sits below :func:`_spawn_suppressed`. The
-    real reason to suspend anything here is the kill, not the retry.)
+    **The local brake (issue #45) is checked per case, not blanket.** Only the **stall**
+    case is suppressed while locally paused — it is the one kill in this function, and a
+    pause is not a drain. The **orphan** case runs unguarded: it has no process to kill,
+    and both its onward branches already self-defer at gates further down (the respawn at
+    :func:`_spawn_attempt`, the escalation in :func:`_fail_attempt`), so it consumes no
+    retry. Pinned by
+    ``tests/test_runner_paused.py::test_reap_at_exhausted_retries_does_not_escalate_while_locally_paused``
+    (stall) and
+    ``tests/test_runner_paused.py::test_reap_orphan_requeue_respawn_suppressed_then_adopted_at_unpause``
+    (orphan).
 
     **A chunk under an open takeover (issue #52) is skipped outright**, ahead of every
     other case: the human already holds the session (a forced takeover already killed
@@ -694,15 +648,12 @@ def mark_crash_resume_intents(store: IWriteRunnerStore, *, process: IProcessProb
     this issue exists for into the fresh-retry path it exists to prevent. ``now`` remains the
     fallback for a store that never ticked, which by construction holds no in-flight lease.
 
-    Issue #150 widened that staleness baseline to include the lease's newest **spawn**
-    (:func:`~blizzard.runner.domain.leases.last_activity`), and this classifier inherits the
-    reclassification **deliberately**: a worker respawned shortly before the daemon died, whose
-    heartbeats all belong to an earlier generation, was read as "stalled at crash time" and
-    abandoned to a fresh retry. It was in fact working — it had just not made its first tool
-    call of the new generation yet, the same blind spot the reap bug turns on. It now marks for
-    resume, which is what its live-at-crash-time process warranted all along. The skip still
-    fires for what it was written for: a worker whose newest spawn *and* newest beat both
-    predate ``crashed_at`` by more than the threshold really had wedged.
+    The staleness baseline is the lease's newest **activity** — spawn or heartbeat, whichever
+    is later (:func:`~blizzard.runner.domain.leases.last_activity`, issue #150) — so a worker
+    respawned shortly before the daemon died, whose heartbeats all belong to an earlier
+    generation, is not read as stalled: it was working, it had just not made its first tool
+    call of the new generation. The skip fires only when a lease's newest spawn *and* newest
+    beat both predate ``crashed_at`` by more than the threshold.
 
     Parked (dormant on a question, resumed by its answer) and pending-submission (outcome
     already elicited, awaiting flush) leases are skipped for the same reasons the graceful
@@ -772,17 +723,10 @@ def _resume_marked_lease(ctx: LoopContext, lease: LeaseRecord) -> None:
     (issue #46), or if the hub no longer knows it at all (blizzard#9).
 
     The pause branch is **first**, and it keys on the pause *fact* rather than the derived
-    status (issue #46). Both details are load-bearing:
-
-    * **First**, because a paused chunk derives ``PAUSED``, not ``RUNNING`` — so before this
-      branch existed a chunk still routed to *this* runner fell through to
-      :func:`_abandon_reassigned`, giving up the claim, the route and every environment. A
-      pause silently degraded into a detach on every restart, and RESUME runs before PULL, so
-      PULL's own pause-park never got the chance to see it.
-    * **The fact, not the status**, because ``status == PAUSED`` is a lossy read: PAUSED sits
-      below the human-gated states in the derivation order, so a chunk both paused *and*
-      parked on a question derives ``waiting_on_human``. A status-keyed check would never
-      learn it was paused and would resume it on the answer.
+    status (issue #46) — ``status == PAUSED`` is a lossy read, since a chunk both paused and
+    parked on a question derives ``waiting_on_human`` instead. Pinned by
+    ``tests/test_pin_runner_loop.py::test_resume_parks_a_paused_chunk_whose_derived_status_hides_the_pause``
+    and ``tests/test_chunk_pause.py::test_restart_into_a_standing_pause_keeps_the_claim``.
 
     Conjoined with ``ours`` so a chunk that was **detached and then paused** still abandons:
     detach wins, because the route is gone and no amount of pausing makes it ours again. A chunk
@@ -940,13 +884,12 @@ def _abandon_reassigned(ctx: LoopContext, lease: LeaseRecord, *, killed: bool = 
 def _kill_and_park_paused(ctx: LoopContext, lease: LeaseRecord, *, via: str) -> None:
     """Kill a paused chunk's worker and park its lease — the claim is **kept** (issue #46).
 
-    The deliberate inverse of :func:`_abandon_reassigned`, and a genuinely separate function
-    rather than that one with a flag: the two diverge on every consequential point. This one
-    does **not** release the environments (they stay held and warm for the resume), does not
-    record a closure (the lease stays ACTIVE), does not bump the epoch, mints no lease, and
-    records no requeue — so **no retry is consumed** and the route, epoch and session all
-    survive the pause. What ends is the *process*, not the tenure. Detach gives the work away;
-    a pause holds it exactly where it is.
+    The deliberate inverse of :func:`_abandon_reassigned`, and a separate function rather
+    than that one with a flag: it releases no environment, records no closure, bumps no
+    epoch, mints no lease and records no requeue — so **no retry is consumed** and the
+    route, epoch and session all survive the pause. What ends is the *process*, not the
+    tenure. Pinned by
+    ``tests/test_chunk_pause.py::test_pull_kills_the_worker_and_parks_the_lease_keeping_everything_else``.
 
     ``via`` names which caller reached the pause check that led here (``"resume"`` — a chunk
     paused while the runner was down, ``"pull"`` — paused while it was up), following the
@@ -954,13 +897,11 @@ def _kill_and_park_paused(ctx: LoopContext, lease: LeaseRecord, *, via: str) -> 
 
     **Not gated by :func:`_spawn_suppressed`.** A kill is not a spawn, and a chunk pause is a
     hub-level instruction over one specific chunk — orthogonal to the runner's own brake, so
-    one must not suppress the other. This is the same reason the abandon kill that
-    :func:`_reconcile_leases` reaches (:func:`_abandon_reassigned`) is ungated. It reads as an
-    asymmetry against REAP's stall kill, which *is*
-    deferred while locally paused, so the distinction is worth naming: there the local brake is
-    the **only** authority saying anything about that worker, and killing it would make a pause
-    into a drain. Here a second authority — the hub, about this chunk — has said stop, and
-    honoring it is not the brake's business either way.
+    one must not suppress the other (the same reason :func:`_abandon_reassigned`'s kill is
+    ungated, and what distinguishes both from REAP's stall kill, where the local brake is the
+    only authority speaking about that worker). Pinned by
+    ``tests/test_chunk_pause.py::test_a_suppressed_pause_resume_writes_no_fact_even_on_the_ask_park_path``,
+    whose first tick parks a pause while the local brake is on.
 
     ``record_resume_clear`` unconditionally is correct and inert when there is no mark:
     ``_intent_is_open`` is timestamp-correlated, so clearing an unmarked lease writes a row no
@@ -994,13 +935,8 @@ def pull(ctx: LoopContext) -> None:
     """Exchange facts with the hub (outbound-only): sync the registry, learn of any
     detach/reassignment, drain the buffer.
 
-    Three outbound exchanges happen here. First :func:`_sync_registry` registers the runner
-    (idempotent — refreshing its ``last_seen_at`` liveness) and reads its declarative
-    pause brake back, mirroring it locally so FILL adheres. Then :func:`_reconcile_leases`
-    asks the hub, per active lease, whether this runner still holds the route — the same
-    ownership question restart-resume already asks — and abandons any lease it no longer holds,
-    or parks one the operator paused (issue #46), before anything is flushed. Then the
-    outbound buffer drains.
+    Three outbound exchanges happen here, in order: :func:`_sync_registry`,
+    :func:`_reconcile_leases` (before anything is flushed), then the buffer drain.
 
     Store-and-forward always: every hub-bound fact was written to the buffer at mint
     with a per-runner monotonic seq, and this is the single flusher that drains it — FIFO, so
@@ -1045,37 +981,25 @@ def _reconcile_leases(ctx: LoopContext) -> None:
     no longer routes it here, else park it if the operator paused it (issue #46).
 
     A live tick's half of restart-resume's ownership check (:func:`_resume_marked_lease`), and
-    the two questions share **one** ``get_chunk`` per lease: this sweep already made that call
-    for the detach check, and the pause answer rides the very same response, so honoring a pause
-    on a live tick costs no extra hub polling at all.
+    the two questions share **one** ``get_chunk`` per lease, so honoring a pause on a live tick
+    costs no extra hub polling at all.
 
-    For every active lease, ask the hub who holds the chunk's route now. Unreachable hub →
-    ``continue``: keep working, the last-known directive holds (the same rule
+    Unreachable hub → ``continue``: keep working, the last-known directive holds (the same rule
     :func:`_sync_registry` follows) — do not crash, do not abandon on a transport failure, and do
-    not read a transport failure as a pause either. Then, in order:
+    not read a transport failure as a pause either. Then the branch order below is load-bearing:
 
-    * **Unknown at the hub** (a 404, :class:`ChunkNotFoundError`) → :func:`_abandon_reassigned`:
-      terminal, not retryable (blizzard#9) — the chunk's tenure ended out from under this
-      runner, so the worker is reaped and the environments released rather than the read retried
-      forever. Caught **ahead of** the ``HubClientError`` arm below, which it subclasses.
-    * **Stopped** (``detail.status is ChunkStatus.STOPPED``) → :func:`_abandon_reassigned`
-      (issue #118): checked **first** of the fact/status branches, ahead of the route check
-      below, so this runner honors the terminal fact directly rather than depending on
-      ``stop``'s own route release having landed — a belt-and-suspenders backstop, not a
-      replacement, for the ordinary case where the route is already gone by the time this
-      sweep asks.
-    * **Detached or reassigned** (``route is None`` or someone else's ``runner_id``) →
-      :func:`_abandon_reassigned`: kill the worker, release every environment, close the lease
-      ``released`` with no epoch bump, no requeue fact, no retry consumed. Checked **first** of
-      the two fact branches, so a chunk that was detached *and* paused abandons — detach wins,
-      the route is gone.
-    * **Paused** (``detail.pause`` is set) → :func:`_kill_and_park_paused`: kill the worker but
-      keep the claim, the route, the epoch and the environments.
-    * Otherwise → leave it alone, whatever its derived status: a live runner legitimately holds
-      an active lease while the chunk derives ``delivering``, ``waiting_on_human``, or
-      ``needs_human`` (a hub-node hold or an open escalation), so — unlike the restart-resume
-      predicate, which also checks ``status == RUNNING`` because at restart a non-running status
-      means the world moved on — the check here is route identity **alone**.
+    * **Unknown at the hub** (a 404) is terminal, not retryable (blizzard#9), and is caught
+      **ahead of** the ``HubClientError`` arm it subclasses.
+    * **Stopped** (issue #118) is checked ahead of the route check, so this runner honors the
+      terminal fact directly rather than depending on ``stop``'s own route release having
+      landed — a belt-and-suspenders backstop, not a replacement.
+    * **Detached or reassigned** is checked ahead of **paused**, so a chunk that was detached
+      *and* paused abandons — detach wins, the route is gone.
+    * Otherwise the lease is left alone whatever its derived status: a live runner legitimately
+      holds an active lease while the chunk derives ``delivering``, ``waiting_on_human``, or
+      ``needs_human``, so — unlike the restart-resume predicate, which also checks
+      ``status == RUNNING`` because at restart a non-running status means the world moved on —
+      the check here is route identity **alone**.
 
     The pause branch keys on the ``pause`` **fact**, not the derived status, and that is what
     makes the overlap with an ask-park work: a paused chunk that is also parked on a question
@@ -1091,18 +1015,14 @@ def _reconcile_leases(ctx: LoopContext) -> None:
     ``runner:one-open-pause-park-per-lease`` invariant (``bzh:invariant-checker``) fences
     exactly this.
 
-    Runs before the flush, deliberately: killing the detached chunk's worker as early **within
-    this step** as possible is the best lever the runner has on the late-write window — between
-    the detach and the chunk's re-claim by some runner, this runner's already-buffered facts for
-    the chunk can still flush and be accepted; only a new lease's floor closes that.
-    It is not the earliest point in the *tick* — REAP and RESUME both precede PULL, and REAP's own
-    failed-attempt path (:func:`_fail_attempt`) makes the same ownership check before escalating,
-    so a detach discovered there is abandoned on the spot rather than left for this pass to find.
-    Killing the worker before the flush narrows the window but cannot purge the buffer:
-    ``bzh:invariant-checker`` requires a gapless outbound-buffer sequence, so deleting buffered
-    facts to close it would trade a durable invariant for a window the fence closes anyway. This is
-    requeue's existing window (requeue already releases the route with no bump too) — not engineered
-    around here."""
+    Runs before the flush, deliberately: killing a detached chunk's worker as early within this
+    step as possible is the best lever the runner has on the late-write window. It narrows that
+    window but never purges the buffer — ``bzh:invariant-checker`` requires a gapless outbound
+    sequence, and the epoch fence is what actually closes the window. Pinned by
+    ``tests/test_runner_detach.py::test_pull_abandons_before_it_flushes``, which asserts the
+    ownership poll precedes the push, and by
+    ``tests/test_runner_detach.py::test_pull_defers_when_hub_unreachable`` for the buffer's
+    survival."""
     pause_parked = ctx.store.pause_parked_lease_ids()  # hoisted: the park guard, one read per tick
     for lease in ctx.store.list_active_leases():
         try:
@@ -1137,13 +1057,11 @@ def _reassigned_or_detached(ctx: LoopContext, lease: LeaseRecord) -> bool:
     abandon path reap the lease and release the held environments rather than retry the 404
     forever (blizzard#9).
 
-    :func:`_fail_attempt`'s escalate guard is this function's caller: a single lease, checked
-    only on the exhausted-retries path. PULL's own sweep (:func:`_reconcile_leases`) once shared
-    it, but now inlines the ``get_chunk`` so its detach and pause branches can read one response
-    instead of polling the hub twice — it carries its own copy of the 404 rule above, for the
-    same reason and to the same effect. This stays a function because the two ask the same
-    ownership question at very different rates, and the escalate guard needs the answer where no
-    sweep is running."""
+    :func:`_fail_attempt`'s escalate guard is this function's only caller: a single lease,
+    checked only on the exhausted-retries path. PULL's own sweep (:func:`_reconcile_leases`)
+    inlines its own ``get_chunk`` so its detach and pause branches can read one response
+    instead of polling the hub twice; this stays a separate function because the escalate
+    guard needs the same answer where no sweep is running."""
     try:
         detail = ctx.hub.get_chunk(lease.chunk_id)
     except ChunkNotFoundError:
@@ -1171,9 +1089,7 @@ def _flush_one(ctx: LoopContext, fact: BufferedFact) -> bool:
 
 def _flush_hub_fact(ctx: LoopContext, fact: BufferedFact) -> bool:
     """Push one buffered fact to POST /events — the generic default arm for every kind
-    but completion and decision (``lease.minted``, ``escalation.recorded``,
-    ``question.asked``, the local pause/resume pair, ``usage.recorded``,
-    ``event.recorded``, and ``external_subscription_usage.sampled`` among them)."""
+    but completion and decision."""
     payload = json.loads(fact.payload)
     batch = RunnerFactBatch(
         runner_id=ctx.config.runner_id,
@@ -1354,16 +1270,10 @@ def fill(ctx: LoopContext) -> None:
     **either** is set: the hub's flag (mirrored locally by PULL) and this runner's own
     local flag (``PATCH /runner``, issue #43), which the operator sets machine-locally and
     which therefore holds with the hub unreachable. In-flight chunks are untouched under
-    either — FILL only ever stops *new* claims — but since issue #45 the two brakes'
-    reach beyond FILL diverges: the hub brake keeps its claims-only meaning (checked
-    here alone), while the local brake also blocks every other spawn site (restart-resume,
-    an answer-resume, ADVANCE's next-node, a requeue or claim-adopt respawn, and ADVANCE's
-    judgement resume) via :func:`_spawn_suppressed`, its one shared home, and defers
-    escalation (:func:`_fail_attempt`'s exhausted-budget branch) the same way REAP's own
-    kill of a stalled worker is deferred — a locally-paused runner starts no process and
-    hands nothing off as unrecoverable while it waits. So a hub-only pause still drains the
-    fleet the way it always has; a local pause spawns nothing, anywhere, while
-    leaving every lease, route, and retry budget exactly as it was.
+    either — FILL only ever stops *new* claims. The two brakes' reach beyond FILL diverges
+    (issue #45): the hub brake keeps its claims-only meaning and is checked **here alone**,
+    while the local brake also blocks every other spawn site via :func:`_spawn_suppressed`,
+    its one shared home.
 
     Recovery runs first: :func:`_reconcile_interrupted_claims` reconciles any binding
     left by a crash in FILL's own bind→claim→spawn window **before** new work is peeked,
@@ -1633,18 +1543,11 @@ def advance(ctx: LoopContext) -> None:
     next tick — a spawn/kill churn loop.
 
     A lease with an **open resume intent** is skipped too (issue #45): RESUME, not this
-    step, owns it until the intent clears. This is not just a pause artifact — it holds
-    on every tick, restart or not. On an ordinary restart RESUME already resolved every
-    marked lease (re-attached it or abandoned it) earlier in the same tick, so this set
-    is empty by the time ADVANCE runs and the skip is inert; it only ever bites when
-    RESUME left the intent open — the runner's own brake is on (:func:`_resume_in_place`
-    suppressed), or the hub was unreachable for the ownership check. Either way, the
-    lease left behind is *exactly* the shape this loop would otherwise read as exited
-    work — active, session-bearing, dead pid — and judging it here would be wrong
-    twice over: it elicits a verdict from a worker RESUME never got to re-attach
-    (:meth:`ctx.harness.judge` resumes the session headlessly, a real spawn the local
-    brake forbids), and a worker killed mid-work is not a done declaration even
-    though its process is gone.
+    step, owns it until the intent clears — see :func:`_resume_in_place`. The lease RESUME
+    leaves behind is *exactly* the shape this loop would otherwise read as exited work
+    (active, session-bearing, dead pid), and judging it here would be wrong twice over: the
+    judgement is itself a spawn the local brake forbids, and a worker killed mid-work is not
+    a done declaration even though its process is gone.
 
     **A chunk under an open takeover (issue #52) is skipped in both loops below**: the
     human holds the session, so neither the judgement/resume elicitation nor the
@@ -1694,15 +1597,12 @@ def _run_or_read_checks(
     marker) is what makes the recorded results exactly-once across a crash.
 
     **The re-run key is ``(lease, epoch)`` and never anything stable across a node re-entry**
-    (e.g. ``(chunk, node)``). The verified runner lifecycle: a verdict-less retry, a
-    ``requires_checks`` gate-fire, and a node re-entry each mint a *new* ``(lease, epoch)``
-    via ``_spawn_attempt`` (a fresh lease + an incremented epoch), so ``checks_ran`` is
-    unset and checks re-run against the rebuilt tree — correct. The only
-    same-``(lease, epoch)`` re-drives are the hub-unreachable re-tick (ADVANCE returns
-    before this function is reached, tree untouched) and the produces-nudge (which runs
-    *after* the judgement, declares already-authored work, and must not author new tree
-    content — see the nudge site). Keying on ``(chunk, node)`` would wedge every retry on a
-    stale red result.
+    (e.g. ``(chunk, node)``, which would wedge every retry on a stale red result): a retry, a
+    ``requires_checks`` gate-fire and a node re-entry each mint a fresh ``(lease, epoch)``, so
+    checks re-run against the rebuilt tree. Pinned by
+    ``tests/test_pin_runner_loop.py::test_checks_rerun_under_a_fresh_lease_epoch_at_the_same_chunk_and_node``
+    and, for the same-key read-back,
+    ``tests/test_runner_checks.py::test_run_or_read_checks_is_idempotent_reading_back_without_rerunning``.
 
     Multi-env chunks are parked (a solo chunk holds exactly one env today), so checks run in
     the single leased binding. Were multi-env to land, checks would run per binding and a
@@ -1768,12 +1668,9 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     this module leaves behind.
 
     Checks (issue #114): the node's ``checks:`` run at worker exit, before the judgement is
-    elicited (so their results inject into the judge prompt), and a ``requires_checks``
-    choice selected while any check is red is treated like an unparseable verdict — a
-    retry-consuming failure that re-queues a fresh rebuild, never an accepted edge (AC #4).
-    A red check reported through a non-gated choice (``fail``) routes normally and never
-    runs the gate (AC #5); a node with no ``requires_checks`` choice injects results but
-    gates nothing (AC #6).
+    elicited, so their results inject into the judge prompt; a ``requires_checks`` choice
+    selected while any check is red is treated like an unparseable verdict — a
+    retry-consuming failure that re-queues a fresh rebuild, never an accepted edge.
     """
     if lease.session_id is None:
         return  # not spawned — REAP's residue (guarded by the caller too)
@@ -1876,14 +1773,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     # judges the exact checks the worker was shown and judged against (the pre-nudge tree) —
     # runner-local gate and worker can never diverge on "the tree". A violation is treated
     # like an unparseable verdict: `_fail_attempt` consumes a retry and re-queues a FRESH
-    # rebuild attempt under a NEW (lease, epoch) — the same path a verdict-less exit takes,
-    # NOT an in-place re-judge of this session. The next worker rebuilds and re-runs checks,
-    # and the red evidence reaches it through the Phase-3 injection on ITS own exit. A worker
-    # that keeps selecting the gated choice against a check it cannot get green burns its
-    # retry budget to needs_human; one that instead selects the non-gated `fail` routes to
-    # the fix path normally and never runs this gate — the intended AC #4/#5 shape. This is
-    # never an engine override of the worker's routing authority: the worker still chooses;
-    # the engine only refuses to accept a green-gated edge over red mechanical truth.
+    # rebuild attempt under a NEW (lease, epoch), NOT an in-place re-judge of this session.
     selected = next((c for c in envelope.node.choices if c.name == choice), None)
     if selected is not None and checks_gate_violated(selected.requires_checks, check_records):
         _log.warning(
@@ -1905,23 +1795,12 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     #     gated its one entry into spawn territory above (comment 2), and a suppressed
     #     tick never reaches this line at all.
     #
-    #     The fact is recorded BEFORE the resume runs, not after. Every other
-    #     resume-then-record pairing in this module (`_resume_if_answered`,
-    #     `_resume_if_unpaused`) records after because the fact it writes carries the
-    #     resume's own output (a new pid) — it cannot exist sooner. This fact carries
-    #     no such output: it is a pure guard, so nothing blocks writing it first, and
-    #     writing it first is what makes "at most one nudge" a structural guarantee
-    #     rather than a hope. A kill -9 anywhere from this write onward can never lead
-    #     to a second resume attempt for this attempt, because the next ADVANCE pass
-    #     consults the fact alone, never the resume's outcome. The alternative
-    #     ordering (record after) leaves a window — a crash between the resume
-    #     returning and the fact landing — where recovery cannot tell "nudged, worker
-    #     ignored it" from "never nudged" without trusting the worker's compliance,
-    #     which a crash-correctness guarantee cannot rest on. A crash before this
-    #     write (there is nothing to arm — the write is the first mutation in this
-    #     branch) simply leaves the fact unset, so the very next pass evaluates the
-    #     same missing-set fresh and decides again, same as if this branch had never
-    #     started.
+    #     The fact is recorded BEFORE the resume runs, not after: it is a pure guard
+    #     carrying none of the resume's own output, and writing it first is what makes
+    #     "at most one nudge" hold across a kill -9 at either point — recording after
+    #     leaves a window where recovery cannot tell "nudged, worker ignored it" from
+    #     "never nudged". Pinned by `tests/test_pin_runner_loop.py::
+    #     test_the_nudge_guard_fact_is_durable_before_the_nudge_resume_runs`.
     assessment = ctx.harness.parse_assessment(output)
     attachments = ctx.store.attachments_for_lease(lease.lease_id)
     missing = _missing_produces(envelope, artifacts, attachments)
@@ -2097,23 +1976,13 @@ def _advance_held_chunk(ctx: LoopContext, chunk_id: str) -> None:
     """Drive a chunk the runner holds with no active lease: a hub node, a parked
     gate, or a chunk the hub has just routed into a fresh runner node.
 
-    Three parked shapes share this poll (all hold environments, no live lease): a
-    chunk at a **hub node** (a generic hub command node, #65) is polled for its
-    terminal outcome and released once it reaches `done`; a chunk **parked on a
-    resolved gate decision** is advanced by recording the resolving transition along
-    the chosen edge, then continued in place from the returned envelope — the human's
-    choice moves the chunk; a chunk the hub has advanced to a **higher epoch** than
-    this runner has minted a lease for — its newest transition now targets a plain
-    **runner node** under the executor's own ``hub_epoch``, an authored
-    ``merged -> <node>`` edge (#63) landing the chunk into a post-merge node, or a conflict
-    routed back to a worker node — is advanced by :func:`_spawn_into_held_node`: fetch the
-    fresh envelope and spawn it into the already-held, warm environments (the same
-    :func:`_spawn_attempt` path :func:`_apply_response`'s ``NEXT`` branch uses). This is
-    the "runner advances the chunk into `<node>`" mechanism #63 names; it also subsumes the
-    conflict-reappears case once deferred here. The **strictly-higher hub epoch** is what
-    distinguishes a genuine hub advance from a chunk whose just-recorded escalation is still
-    buffered (the hub reads ``running`` for a beat, at the epoch this runner already holds) —
-    spawning on ``running`` alone would re-spawn the escalated node in an endless loop.
+    Three parked shapes share this poll (all hold environments, no live lease): a chunk at
+    a **hub node** (#65) is polled for its terminal outcome and released once it reaches
+    ``done``; a chunk **parked on a resolved gate decision** is advanced by recording the
+    resolving transition along the chosen edge; and a chunk the hub has advanced to a
+    **strictly higher epoch** than this runner has minted a lease for (#63) is spawned into
+    its warm environments by :func:`_spawn_into_held_node`. The strictly-higher epoch is
+    load-bearing — see the inline note at that branch.
 
     A 404 (:class:`ChunkNotFoundError`) is a fourth, terminal shape (blizzard#9): the hub no
     longer knows this chunk (e.g. a store reset), so there is nothing left to poll toward —
@@ -2140,10 +2009,8 @@ def _advance_held_chunk(ctx: LoopContext, chunk_id: str) -> None:
     hub_epoch = detail.latest_epoch
     if detail.status == ChunkStatus.RUNNING and hub_epoch is not None and hub_epoch > ctx.store.latest_epoch(chunk_id):
         # The hub has advanced this chunk to a **higher epoch** than any lease this runner has
-        # minted for it — the hub-node executor authored a fresh transition into a plain runner
-        # node under its own ``hub_epoch = epoch + 1`` (an authored ``merged -> <node>`` land, #63, or
-        # a conflict routed back to a worker node) while this runner retained the route. Spawn
-        # into it, in place, in the warm environment.
+        # minted for it, while this runner retained the route (#63). Spawn into it, in place,
+        # in the warm environment.
         #
         # The epoch gate is load-bearing, not cosmetic: a chunk whose retries have just been
         # exhausted has enqueued its ``escalation.recorded`` fact to the *outbound buffer* but
@@ -2171,13 +2038,9 @@ def _poll_hub_node(ctx: LoopContext, chunk_id: str) -> None:
     """Drive a chunk parked at a hub node one step via ``POST /chunks/{id}/hub-advance``
     (#65/#66) — the re-drive path a hub node otherwise has no liveness poll for.
 
-    A no-op at the hub is expected and silent: the chunk is not currently parked at a
-    generic hub command node, the fleet-wide serialization slot is held by a different
-    chunk right now, or a
-    prior ``pending`` outcome's ``poll_interval`` has not yet elapsed. Any of those
-    leaves this runner's binding untouched — :func:`_advance_held_chunk` calls this
-    again next tick. A transport failure is likewise swallowed: the hub is retried,
-    not treated as a chunk-ending event.
+    A no-op at the hub is expected and silent, and leaves this runner's binding untouched —
+    :func:`_advance_held_chunk` calls this again next tick. A transport failure is likewise
+    swallowed: the hub is retried, not treated as a chunk-ending event.
     """
     try:
         ctx.hub.hub_advance(chunk_id)
@@ -2263,16 +2126,10 @@ def _spawn_suppressed(ctx: LoopContext, *, via: str, chunk_id: str, lease_id: st
     an unjudged exit) is what the next tick's own recovery re-drives once the brake
     clears; no new state is needed here.
 
-    Issue #45 shipped because the judgement resume was a spawn nobody had counted by hand;
-    issue #46 added a fifth primitive the same way. ``tests/test_spawn_suppressed_registry.py``
-    now holds that count mechanically, not this docstring: it AST-asserts every
-    ``ctx.harness.spawn``/``ctx.harness.resume_with_message``/``ctx.harness.judge`` call site
-    (:func:`_spawn_attempt`, :func:`_resume_in_place`, :func:`_resume_if_answered`,
-    :func:`_resume_if_unpaused`, :func:`_advance_exited_worker`'s judgement resume) sits in a
-    function that also calls this gate, so a sixth primitive of that shape fails the test by
-    name instead of shipping ungated. Note what is deliberately *absent* even so:
-    :func:`_kill_and_park_paused` is a kill, not a spawn, and a chunk-level pause from the
-    hub is not this brake's business (see that function).
+    The set of spawn primitives this gate must cover is held mechanically, not by this
+    docstring: ``tests/test_spawn_suppressed_registry.py``. Note what is deliberately
+    *absent* even so: :func:`_kill_and_park_paused` is a kill, not a spawn, and a
+    chunk-level pause from the hub is not this brake's business (see that function).
 
     ``chunk_id`` is always present; ``lease_id`` is ``None`` at :func:`_spawn_attempt` (the
     gate fires before a lease is minted) and carries the held/prior lease at restart-resume,
@@ -2410,19 +2267,16 @@ def _resolve_model_and_effort(
     recording the fresh preference would make the fact false wherever a node resumes a
     session it did not mint.
 
-    That is not hypothetical. In the graph this change tunes, `retrospective` carries no
-    `session:` line (bare `resume`) and so is not a pool member. Entering it resumes the
-    `code` pool's sonnet session and passes no `--model`, so the process runs sonnet —
-    while a fresh resolution for that node finds no declaration, no chunk default, and
-    falls to the runner default, opus. Stamping the preference would then book opus spend
-    against a sonnet session, and hand a takeover command that appends `--model opus` to a
-    live sonnet session, flipping it on an operator. That is precisely the outcome
-    mint-only exists to prevent.
+    Stamping the fresh preference instead would book a bare-`resume` node's spend against
+    the wrong model and hand a takeover command that flips a live session's model on an
+    operator. Pinned by
+    ``tests/test_runner_session_pools.py::test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model``.
 
     On the pooled path the drift check guarantees stamped == resolved anyway, so inheriting
     is uniform rather than a special case. A resumed session whose own stamp is ``None`` (a
     lease predating the stamps) inherits ``None`` — *unknown*, which every consumer
-    declines to guess at rather than substituting a default.
+    declines to guess at rather than substituting a default
+    (``tests/test_runner_session_pools.py::test_a_lease_predating_the_stamps_inherits_unknown_rather_than_a_guess``).
 
     Effort is inherited alongside model even though it is reasserted on every invocation
     (it is not sticky): the two describe one session's configuration, and a resume that
@@ -2447,12 +2301,11 @@ def _spawn_attempt(
 ) -> None:
     """Mint a fresh-epoch lease and spawn a headless worker for a node-step.
 
-    Always its caller's final statement, with no post-spawn logic after it (fill/apply-
-    response/adopt/reclaim/requeue) — that is what lets the local-pause gate below stay a
-    silent ``None`` return indistinguishable from a real spawn (issue #45): there is no
-    boolean a caller could misread as "spawn failed" and burn a retry on. A future caller
-    that adds post-spawn logic must re-read this contract first. ``via`` names the calling
-    site, attributing the gate's suppression log line to it.
+    Always its caller's final statement, with no post-spawn logic after it — that is what
+    lets the local-pause gate below stay a silent ``None`` return no caller can misread as
+    "spawn failed" and burn a retry on (issue #45). A caller that adds post-spawn logic owns
+    re-reading this contract. ``via`` names the calling site, attributing the gate's
+    suppression log line to it.
 
     ``resume_from`` (issue #115) is the prior session id this spawn continues, or
     ``None`` for a fresh session — the sole funnel into ``ctx.harness.spawn``, so a
@@ -2545,14 +2398,10 @@ def _spawn_attempt(
     # story. Do not hoist this above the `resume_from` check: a fresh spawn passes today
     # only because its session has no prior row *yet*, and that stops being true the moment
     # a session id is reused.
-    # Truthiness, not `is not None`, to match the adapter's own `if resume_from:`
-    # (`harness/internal/claude_code_adapter.py`): an empty string there falls through to
-    # `--session-id`, i.e. a brand-new session. Under `is not None` the core would look up a
-    # fingerprint for `""` and could elide — handing a session that has never seen the prose
-    # a line saying its standing instructions are unchanged. Not reachable today (this
-    # function always passes a uuid `session_hint`, and `latest_session_id` returns either a
-    # real id or `None`), but the two predicates deciding "is this a resume?" differently is
-    # the kind of divergence that only stays safe by accident.
+    # Truthiness, not `is not None`, to match the adapter's own resume predicate
+    # (`harness/internal/claude_code_adapter.py`) — the two must agree on what counts as a
+    # resume, or an empty session id elides prose the session has never seen. Unreachable
+    # today (the caller always supplies a real id or `None`), so no test pins it.
     prior_preamble = ctx.store.session_preamble_fingerprint(resume_from) if resume_from else None
     rendered = render_worker_preamble(
         runner_prompt=ctx.config.runner_prompt,
@@ -2610,8 +2459,7 @@ def _spawn_attempt(
     # fresh sessions that receive the full prose anyway, so no conditional belongs here.
     # Keyed on the HANDLE's session id — the authoritative continuation id, which is
     # `resume_from` for an in-place resume and would be the fork id if the adapter ever
-    # forked. Its own store call rather than a widening of `record_spawn`, whose three
-    # resume-with-message call sites send no prompt_prefix at all: see
+    # forked. Its own store call rather than a widening of `record_spawn` — see
     # `record_session_preamble`'s docstring. Deliberately no crash-sweep point — the write
     # lands after the spawn returns, so a durable fingerprint always implies the prose
     # reached the process, and a kill that loses it leaves the next resume rendering in
@@ -2695,27 +2543,18 @@ def _emit_command_failed(
 def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str, via: str) -> None:
     """Close a failed attempt, then requeue at the node or escalate per the budget.
 
-    The exhausted-retries branch checks ownership before escalating (blizzard#38). Tick order is
-    REAP -> RESUME -> PULL -> FILL -> ADVANCE, and PULL's own detach sweep
-    (:func:`_reconcile_leases`) is what abandons a lease the hub no longer routes here — but a
-    caller earlier in the tick (REAP, chiefly) can reach an exhausted retry budget on such a
-    lease first. Escalating anyway would buffer an ``escalation.recorded`` fact this same tick's
-    PULL cannot retract once flushed — unlike the requeue branch, whose fresh, routeless lease is
-    itself caught and abandoned by that later PULL pass, an escalation is a one-way door. So this
-    branch re-asks the same ownership question :func:`_reconcile_leases` asks and, if the chunk is
-    no longer ours, abandons in place (:func:`_abandon_reassigned`) instead of escalating — the
-    same outcome PULL would reach later this tick, without the intervening false escalation.
+    The exhausted-retries branch re-asks the ownership question before escalating and, if the
+    chunk is no longer ours, abandons in place instead (blizzard#38): an ``escalation.recorded``
+    fact is a one-way door this same tick's flush cannot retract, unlike the requeue branch's
+    routeless lease, which PULL catches later. Pinned by
+    ``tests/test_runner_detach.py::test_reap_abandons_instead_of_escalating_a_detached_chunk``.
 
     **Escalation is deferred while locally paused (issue #45)**, for the same one-way-door
-    reason: an ``escalation.recorded`` fact hands the chunk to a human, and a runner that
-    has told its operator it will start no processes should not also be handing work off
-    as unrecoverable while it waits. The requeue branch above needs no such gate — it
-    already self-defers correctly, since its respawn is gated at :func:`_spawn_attempt` and
-    :data:`attempt_count` counts mints, which sit below that gate, so no retry is consumed
-    by a requeue this function records but that respawn never mints. This one function is
-    every caller's escalate path (REAP's orphan case, ADVANCE's verdict-less exit, PULL's
-    rejection paths), so gating it here — rather than in each caller — is what keeps them
-    all honoring the same brake without three separate checks drifting out of sync."""
+    reason, and gated here — every caller's one escalate path — rather than in each caller.
+    The requeue branch needs no such gate: its respawn is gated at :func:`_spawn_attempt`, and
+    :data:`attempt_count` counts mints, which sit below that gate, so no retry is consumed.
+    Pinned by
+    ``tests/test_runner_paused.py::test_reap_orphan_at_exhausted_retries_defers_escalation_while_locally_paused``."""
     now = ctx.clock.now()
     if lease.pid is not None:
         ctx.process.kill(lease.pid)  # best-effort hygiene; the epoch fence is the guarantee
@@ -3056,14 +2895,12 @@ def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
     answered, the agent is **reconstituted around the answer** — the same session, same
     lease, same node-step — via the adapter's resume-with-message. The lease's
     new pid is recorded so it reads live again, the park is closed, and ``answer.delivered``
-    is buffered up to the hub (board detail; the status already flipped at question.answered).
+    is buffered up to the hub.
 
     Gated by the local brake (issue #45) **before the poll** — this step's own ``get_question``
-    poll runs none while the brake is on. That is not the same as the runner making no hub call
-    that tick: :func:`_reconcile_leases` still polls ``ctx.hub.get_chunk`` once per active lease
-    regardless of the local brake, deliberately ungated — a kill is not a spawn, and a chunk pause
-    is a hub-level instruction orthogonal to this runner's own brake. A suppressed resume leaves
-    the park open; the answer is picked up once the brake clears (no retry consumed either way).
+    poll runs none while the brake is on (that gate stops only this step's polling, not every
+    hub call the tick makes — see :func:`_resume_if_unpaused`). A suppressed resume leaves the
+    park open; the answer is picked up once the brake clears (no retry consumed either way).
     """
     if _spawn_suppressed(ctx, via="answer-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
         return
@@ -3123,10 +2960,8 @@ def _resume_if_unpaused(ctx: LoopContext, lease: LeaseRecord) -> None:
     """Poll a pause-parked lease's chunk; once the operator resumes it, restart its session (#46).
 
     The **fifth** member of the resume family, and a sibling of :func:`_resume_if_answered`
-    rather than a branch inside it: the two share a silhouette but no body. That one polls
-    ``get_question(park.question_id)`` — structurally impossible here, since a pause-park has no
-    question — and they differ in every step besides: a different poll, a different message, a
-    different resume fact, and no outbound. Parameterizing them on a boolean would produce one
+    rather than a branch inside it: that one polls a question a pause-park does not have, and
+    the two share no step besides the silhouette — a boolean parameter would produce one
     function with two disjoint halves.
 
     Same lease, same epoch, same session; only ``pid``/``process_start_time`` are
@@ -3223,7 +3058,7 @@ def _missing_produces(
 
     Returns the unmet specs themselves, not just their names (issue #143, Phase 5) —
     :func:`_nudge_message` needs each spec's `kind` to name the kind-appropriate
-    declaration verb, not just the deprecated single-verb nudge issue #113 shipped.
+    declaration verb.
 
     ``attachments`` has not yet been folded into a ``SubmittedArtifact`` list at this
     point in the attempt (that assembly is :func:`_collect_asset_artifacts`'s job,
@@ -3231,11 +3066,8 @@ def _missing_produces(
     attachment purely to hand the shared predicate one artifact list to evaluate — the
     same shape :func:`_collect_asset_artifacts` will itself submit.
 
-    Evaluated by :func:`~blizzard.wire.completion.produces_coverage`, the same shared
-    predicate the hub's own backstop checks
-    (:func:`~blizzard.hub.domain.produces_auth.check_produces`) — an ``asset`` spec by
-    name, a ``git_commit`` spec by kind (any ``GIT_COMMIT`` artifact present) — so the
-    two coverage models cannot drift apart again."""
+    Evaluated by :func:`~blizzard.wire.completion.produces_coverage` — the shared predicate
+    the hub's own backstop also checks, so the two coverage models cannot drift apart."""
 
     attached = [
         SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content=content, attached=True)
@@ -3321,10 +3153,10 @@ def _verify_and_collect_git_commits(
 ) -> tuple[list[SubmittedArtifact], dict[tuple[str, str], GitCommitDeclarationRecord]]:
     """Read back the worker's declared git commits for this lease and confirm each,
     read-only, against the origin the declaring environment's repo manifest names
-    (issue #143, Phase 4) — replaces the runner's former infer-and-push. The worker has
-    already pushed its branch and declared ``(env, repo, branch, commit)`` through the
-    local declaration channel (Phase 3, `blizzard runner artifact commit`); this never
-    mutates git and never infers a branch name off residue.
+    (issue #143, Phase 4). The worker has already pushed its branch and declared
+    ``(env, repo, branch, commit)`` through the local declaration channel
+    (`blizzard runner artifact commit`); this never mutates git and never infers a branch
+    name off residue.
 
     Spans **every** bound environment, not just the first. A chunk holding several envs
     has a worktree of the same repo in each, and the declaration key carries the env, so
@@ -3335,13 +3167,10 @@ def _verify_and_collect_git_commits(
     A declaration that does not verify is **not** silently dropped. It is reported via
     :func:`_emit_command_failed` naming the declared branch/commit against the origin it
     was checked at, so the worker — which is still alive and still holds the context —
-    can correct it, and it still counts as "not covered" for the Phase-2 kind-coverage
-    nudge (:func:`_missing_produces`). Relying on non-coverage alone was load-bearing
-    exactly once: when the coverage check could not see the ``git_commit`` spec, nothing
-    was left to notice, and a chunk sailed to `done` having delivered nothing. A verify
-    subprocess failure (unreachable origin, a network hiccup) is reported the same way —
-    informational only: a read-only re-derivation opens no unsafe mutation window, so
-    unlike the push it replaces, this never re-raises to crash-loop the tick.
+    can correct it, and it still counts as "not covered" for the kind-coverage nudge
+    (:func:`_missing_produces`). A verify subprocess failure (unreachable origin, a network
+    hiccup) is reported the same way — informational only: a read-only re-derivation opens
+    no unsafe mutation window, so this never re-raises to crash-loop the tick.
 
     ``already_declared`` names the exact declarations this lease's attempt already
     resolved on an earlier call this attempt (the pre-nudge pass) — an ``(env, repo)``
@@ -3546,16 +3375,7 @@ def _external_usage_payload(snapshot: ExternalSubscriptionUsageSnapshot) -> dict
 
 def sample_external_subscription_usage(ctx: LoopContext) -> None:
     """Sample the harness's own subscription rate-limit utilization (issue #218) — the
-    tick's last step, run **after** ADVANCE (:func:`blizzard.runner.loop.tick.tick`, behind
-    CEILING, REAP, RESUME, PULL, FILL and ADVANCE), the mirror image of
-    :func:`check_spend_ceiling`'s reasoning for running first: that check gates every later
-    step's spawn/kill decisions within the same pass, so it must run before them; this step
-    gates nothing — no other step in this tick or any later one reads what it wrote before
-    deciding anything — so there is no correctness reason to run it earlier, and every
-    reason not to: its only network call (the harness's own usage endpoint, via
-    :meth:`~blizzard.runner.harness.adapter.IHarnessAdapter.sample_external_subscription_usage`)
-    must never sit ahead of REAP's stale-worker reap or FILL's claim-and-spawn in the same
-    pass and delay either on a diagnostic read neither depends on.
+    tick's last step (:func:`blizzard.runner.loop.tick.tick` owns the ordering and why).
 
     **Cadence gate.** Reads :meth:`~blizzard.runner.store.repository.
     IReadRunnerStore.last_external_usage_attempt_at` — the derived ``max(sampled_at)``

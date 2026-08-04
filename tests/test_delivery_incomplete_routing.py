@@ -1,18 +1,9 @@
 """Retrospective's authored ``delivery-incomplete`` choice actually routes to ``resolve``,
 carrying the ``resolve.from-retrospective.md`` addendum (component tier, issue #238 AC4).
 
-Mints the **real, packaged** advanced-development-workflow graph — not a hand-rolled
-copy — so a regression in the packaged file itself (the choice dropped, retargeted, or
-its addendum broken) fails here, not just the unit-tier reify assertion
-(``tests/test_graph_authoring.py``). Driving a chunk through the graph's other six nodes
-(``plan -> plan-review -> build -> verify -> review -> pre-push -> deliver``) to reach
-``retrospective`` for real is exactly what the packaged ``land_pr_ci`` script and the
-generic hub-command-node machinery already have their own component coverage for; this
-scenario is scoped to the one thing under test — the routing edge itself — so it seeds
-the chunk directly at ``retrospective``'s real, minted node id via a direct
-transition-fact insert, the same technique
-``tests/test_transition_graph_provenance.py``'s component tier uses to reach a scenario
-without re-driving every preceding node-step over HTTP.
+Mints the real, packaged advanced-development-workflow graph, seeding the chunk directly
+at ``retrospective``'s minted node id via a direct transition-fact insert (see
+``tests/test_transition_graph_provenance.py`` for the same technique).
 """
 
 from __future__ import annotations
@@ -54,14 +45,11 @@ def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
 
 def _seed_at_retrospective(hub: HubHarness, chunk_id: str, graph_id: str, node_id: str) -> None:
     """Place the chunk's current node directly at ``retrospective`` via a synthetic
-    transition fact — only ``to_node_id`` matters to :func:`current_node_id`'s
-    newest-transition derivation, so this stands in for the six node-steps a real chunk
-    would have taken to arrive here. Recorded at epoch 1, under retrospective's real
-    attempt at epoch 2 (below): ``newest_transition`` tie-breaks same-instant
-    transitions by epoch, and a ``FixedClock`` never advances on its own, so two
-    same-epoch transitions here would be genuinely ambiguous — the same reason
-    ``test_poll_timeout_escalates_once_the_bounce_cap_is_crossed`` gives its own
-    re-entry a fresh epoch."""
+    transition fact, standing in for the six node-steps a real chunk would have taken to
+    arrive here. Recorded at epoch 1, under retrospective's real attempt at epoch 2
+    (below), to avoid two ambiguous same-epoch transitions — the same reason
+    ``test_poll_timeout_escalates_once_the_bounce_cap_is_crossed`` gives its own re-entry
+    a fresh epoch."""
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.transitions).values(

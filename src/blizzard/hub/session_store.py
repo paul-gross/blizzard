@@ -1,10 +1,9 @@
 """``blizzard hub login``'s local session-token store (issue #96).
 
-CLI-client state, not hub daemon state: the token the CLI stores here is a bearer the
-human-plane edge (``hub/api/auth_session.py``) resolves the same way a browser's
-cookie resolves, but the CLI has no cookie jar of its own — one ``sessions.json``
-under the user config dir, keyed by hub base URL (a CLI can hold sessions for more
-than one hub), owner-only (``0600``; parent dir ``0700``).
+CLI-client state, not hub daemon state: the CLI has no cookie jar of its own, so the
+session bearer lands in one ``sessions.json`` under the user config dir, keyed by hub
+base URL (a CLI can hold sessions for more than one hub), owner-only (``0600``; parent
+dir ``0700``).
 """
 
 from __future__ import annotations

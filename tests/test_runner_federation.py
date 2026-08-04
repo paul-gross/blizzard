@@ -139,11 +139,9 @@ def test_the_worker_hook_lane_stays_ungated_over_tcp_even_with_the_idp_surface_a
 def test_the_human_lane_api_is_gated_401_over_tcp_under_oauth(tmp_path: Path) -> None:
     """The panel's own JSON reads (``runner/status`` open-asks, leases, environments, the
     runner status view, the fact ledger) are the **human web lane**: under an oauth-mode
-    hub an unauthenticated TCP request is refused with ``401``, not served — a
-    session-gated HTML shell over an ungated JSON API would be no gated surface at all
-    (any browser or curl would read it). The exhaustive per-route split is
-    ``tests/test_runner_route_gating.py``; this pins the representative reads end to end
-    through the app the bounce mints a session for."""
+    hub an unauthenticated TCP request is refused with ``401``, not served. The
+    exhaustive per-route split is ``tests/test_runner_route_gating.py``; this pins the
+    representative reads end to end through the app the bounce mints a session for."""
     _private_key, jwk = _keypair()
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
     for path in ("/api/facts", "/api/asks", "/api/environments", "/api/runner", "/api/leases"):
@@ -152,8 +150,7 @@ def test_the_human_lane_api_is_gated_401_over_tcp_under_oauth(tmp_path: Path) ->
 
 def test_the_human_lane_api_is_open_when_the_hub_runs_no_idp_surface(tmp_path: Path) -> None:
     """Under a ``none``-mode hub the runner's human surface is authless (issue #95): the
-    same reads reach their handler (never ``401``), preserving today's fully-unauthed
-    behaviour so existing none-mode contracts stay intact."""
+    same reads reach their handler, never ``401``."""
     client = _build_app(tmp_path, oauth_enabled=False)
     for path in ("/api/facts", "/api/asks", "/api/environments", "/api/runner", "/api/leases"):
         assert client.get(path).status_code != 401, path

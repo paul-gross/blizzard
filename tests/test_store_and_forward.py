@@ -138,12 +138,9 @@ def test_reflushed_completion_applies_exactly_once(tmp_path: Path) -> None:
 def test_escalation_fact_rides_events_and_derives_needs_human(tmp_path: Path) -> None:
     """The other buffered hub fact: escalation.recorded lands via /events, dedup and all.
 
-    This is the path production actually exercises for escalations — the runner's
-    outbound buffer flushed through ``push_facts`` to ``POST /api/fleet/events`` and
-    ``FactIngestService.ingest`` — as opposed to the direct ``POST
-    .../escalations`` route nothing in ``src/`` calls. It also carries
-    ``wrapped_takeover_command`` (issue #251) through the same round trip, pinning
-    ``facts.py``'s ``_apply`` reading it off the payload.
+    This is the path production actually exercises for escalations, as opposed to the
+    direct ``POST .../escalations`` route nothing in ``src/`` calls. It also carries
+    ``wrapped_takeover_command`` (issue #251) through the same round trip.
     """
     hub = build_hub(tmp_path)
     chunk_id, _ = _claim(hub)

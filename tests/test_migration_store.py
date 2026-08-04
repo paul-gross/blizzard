@@ -126,7 +126,7 @@ def test_after_a_migration_the_current_node_is_the_landing_node_and_status_is_re
     assert current_node_id(facts) == "nd_landed"
     # A runner-executed landing node re-queues the chunk claimable (issue #111 regression).
     assert derive_chunk_status(facts) is ChunkStatus.READY
-    # The fact carries the re-pinned model for the audit/history surface.
+    # The fact carries the re-pinned model.
     migration = newest_migration(facts)
     assert migration is not None and migration.model is None
 
@@ -251,8 +251,7 @@ def test_record_migration_repins_releases_and_persists_artifacts_in_one_write(tm
     # string, and it lands in the prioritized `default_model` list as its one entry.
     assert chunk.default_model == ["claude-sonnet-5"]
     assert hub.services.chunks.route_of(chunk_id) is None  # route released
-    # MUST-FIX 1: the submitting node-step's artifact is durable, so it carries to the
-    # landing claim's envelope.
+    # MUST-FIX 1: the submitting node-step's artifact is durable.
     assert any(a.name == "triage-notes" for a in hub.services.chunks.load_artifacts(chunk_id))
     # The migration is its own fact — no transitions row was written for it.
     facts = hub.services.chunks.load_facts(chunk_id)

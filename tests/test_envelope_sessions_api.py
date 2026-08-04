@@ -19,10 +19,9 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "7"}
 
-# A graph declaring no `sessions:` at all — the pre-#144 shape. Minted explicitly rather
-# than leaning on the packaged default, which phase 8 tuned: what these two tests pin is
-# that a graph declaring nothing keeps behaving as before, not whatever the default
-# happens to be today.
+# A graph declaring no `sessions:` at all. Minted explicitly rather than leaning on the
+# packaged default: what these two tests pin is that a graph declaring nothing behaves
+# consistently, not whatever the default happens to be today.
 _NO_SESSIONS_YAML = """
 name: unsessioned
 entry: build
@@ -131,9 +130,8 @@ def test_the_declaration_outranks_the_chunk_default_field_by_field(tmp_path: Pat
 
 
 def test_a_chunk_default_reaches_a_graph_that_declares_no_sessions(tmp_path: Path) -> None:
-    """The one behavior change #144 makes to a pre-#144 graph: a node on the bare
-    `fresh`/`resume` vocabulary belongs to no pool but still inherits the chunk's
-    defaults."""
+    """A node on the bare `fresh`/`resume` vocabulary belongs to no pool but still
+    inherits the chunk's defaults (issue #144)."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER], promote=False)
     _mint_and_pin(hub, chunk_id, _NO_SESSIONS_YAML)

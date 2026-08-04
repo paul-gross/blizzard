@@ -7,17 +7,10 @@ Timestamps are stamped by application code from the injected clock, never a
 ``server_default=func.now()`` (``bzh:injected-clock``). Portable-SQL surface only
 (``bzh:sql-portable``): the same DDL runs on sqlite and postgres.
 
-The walking-skeleton tables (P6) carry ONE chunk ingest -> claim -> commit ->
-deliver -> land end to end. Tables the thin slice does not yet exercise
-(``chunk_stopped``, ``escalations``) are present because the status-derivation
-*precedence* is only correct with them — a seam shaped, not dead weight. The
-``questions``/``question_answers`` tables land the ask/answer rendezvous (MVP
-criterion 7); the gate tables (``decisions``, ``decision_resolutions``, ``requeues``)
-land the human-gate loop (MVP criterion 12) and feed the ``waiting_on_human``
-derivation; ``transitions.decision_id`` (carried since P6) is what the resolving
-transition points back at — as is ``chunk_migrations.decision_id`` when a gate's
-resolved choice migrates cross-graph (issue #90), so that decision derives closed
-even though a migration writes no transitions row.
+``transitions.decision_id`` is what a gate's resolving transition points back at — as is
+``chunk_migrations.decision_id`` when a gate's resolved choice migrates cross-graph
+(issue #90), so that decision derives closed even though a migration writes no
+transitions row.
 """
 
 from __future__ import annotations
@@ -187,13 +180,10 @@ chunks = Table(
     Column("chunk_id", String, primary_key=True),  # ch_<ulid>
     Column("graph_id", String, ForeignKey("graphs.graph_id"), nullable=False),  # pinned at mint
     Column("minted_at", UtcDateTime, nullable=False),
-    # #27's model selection — RETAINED AND UNREAD since issue #144, and meaningful only
-    # for a row minted before it. #144 replaced the field with the `default_model` /
-    # `default_effort` pair below and stopped the domain reading this column; ingest also
-    # stopped writing it, so every post-#144 row takes the migration's `server_default`
-    # (a literal `claude-opus-4-8`) regardless of what its sessions actually ran under.
-    # It is kept only so the pre-#144 rows keep their historical record — do not read it
-    # as a current fact, and do not trust it on a new row.
+    # RETAINED AND UNREAD (issue #144 superseded it with the `default_model` /
+    # `default_effort` pair below): nothing reads or writes it, so a new row carries the
+    # migration's `server_default` regardless of what its sessions ran under. Do not read
+    # it as a current fact, and do not trust it on a new row.
     Column("model", String, nullable=False),
     # The chunk's **default** model preference and effort (issue #144) — what a surface
     # declaring neither inherits, sitting between a graph's `sessions:` declaration and the
@@ -368,8 +358,7 @@ route_released = Table(
 # response and never stored. ``seq`` shares :func:`ChunkStore._next_route_seq`'s
 # per-chunk counter with ``route_created``/``route_released`` (not a private one) so a
 # token fact totally orders against a create/release even on a timestamp tie — the
-# hub's own live-token derivation (``hub/domain/work.py``'s ``newest_live_route_token``)
-# depends on that shared ordering to resolve exactly one live token per live route.
+# live-token derivation depends on that shared ordering (``hub/domain/work.py``).
 route_token_minted = Table(
     "route_token_minted",
     metadata,
@@ -450,14 +439,10 @@ chunk_bounces = Table(
 
 # --- Open-PR delivery facts (pr.opened / pr.closed) ---------------------------
 #
-# Pre-#67 history, kept for back-compat reads of a chunk delivered before the generic
-# hub command node executor: the ``open-pr`` deliver mode recorded ``pr.opened`` here
-# without a terminal transition or ``route_released``, so the chunk derived
-# ``delivering`` (awaiting an external merge) with its environments held, and a later
-# poll recorded ``pr.closed`` — the terminal fact that flipped the chunk to ``done``
-# (either disposition), carrying ``merged`` and the actually-landed commit where one
-# exists. No engine path writes either table any more; a hub command node's own
-# ``run:`` script (e.g. ``hub/graphs/scripts/land_pr_ci.py``) owns this policy now.
+# Read-only history (#67): a chunk delivered under the old ``open-pr`` deliver mode
+# recorded ``pr.opened``/``pr.closed`` here. No engine path writes either table any more;
+# open-PR delivery policy is a hub command node's ``run:`` script
+# (``hub/graphs/scripts/land_pr_ci.py``).
 
 delivery_pr_opened = Table(
     "delivery_pr_opened",
@@ -469,12 +454,9 @@ delivery_pr_opened = Table(
     Column("pr_url", String, nullable=False),  # the PR's html url — surfaced on the board
     Column("commit_hash", String, nullable=False),  # the authoritative head the PR carries
     Column("opened_at", UtcDateTime, nullable=False),
-    # A ``pr.opened`` write was idempotent per (chunk, repo) (20260716_2206_hub_pr_opened_idempotent):
-    # the now-deleted coordinator's deliver node ran on both a fresh apply and an idempotent
-    # replay, and its DB-backed skip-set (a store read each call, not an in-memory cache) had a
-    # narrow race between that read and the write. This constraint was the actual close of that
-    # race. Retained now only as the shape of the historical rows this table still reads back
-    # (see the table-group comment above) — no engine path writes it any more.
+    # One ``pr.opened`` per (chunk, repo) — the constraint that closed a replay race
+    # (20260716_2206_hub_pr_opened_idempotent). Retained as the shape of the historical
+    # rows this table still reads back; no engine path writes it any more.
     UniqueConstraint("chunk_id", "repo", name="uq_delivery_pr_opened_chunk_repo"),
 )
 
@@ -577,21 +559,17 @@ escalations = Table(
     # ``takeover_command`` rather than replacing it: that column stays the raw
     # harness-resume string for back-compat/audit, while this one is what the board
     # renders so a human's takeover actually routes through the runner instead of
-    # bypassing it with a pasted harness command. Composed by ``_escalate``
-    # (``runner/loop/steps.py``) and persisted through the runner-reported
-    # ``record_escalation`` route (``hub/store/internal/chunk_store.py``) whenever
-    # composing one is possible — hub-authored escalations
-    # (``record_bounce_escalation``) never carry it; see
-    # ``blizzard-context:/domain/humans.md`` §Escalation for when it isn't. A row
-    # from before this column existed reads back its ``server_default`` empty string.
+    # bypassing it with a pasted harness command. Written through the runner-reported
+    # ``record_escalation`` route whenever composing one is possible — hub-authored
+    # escalations (``record_bounce_escalation``) never carry it; see
+    # ``blizzard-context:/domain/humans.md`` §Escalation. A row from before this column
+    # existed reads back its ``server_default`` empty string.
     #
-    # Deliberate trade-off: this string is *stored pre-composed* — a function of
-    # ``chunk_id`` plus the runner's ``--dir`` at escalation time — rather than
-    # derived at read time the way the runner's own ``resume_command`` is (computed
-    # fresh from the live harness adapter on every read, never persisted). If a
-    # runner's runtime dir ever moves after the fact, already-open escalations keep
-    # showing the old ``--dir`` path until that escalation closes and a fresh one is
-    # recorded — there is no read-time recomposition to pick up the change.
+    # Deliberate trade-off: this string is *stored pre-composed* at escalation time
+    # rather than derived at read time, so a runner whose ``--dir`` moves leaves
+    # already-open escalations showing the old path until a fresh one is recorded
+    # (pinned by tests/test_escalation.py::
+    # test_escalation_without_wrapped_takeover_reads_back_empty).
     Column("wrapped_takeover_command", Text, nullable=False, server_default=""),
     # ``decision_id`` is set only when a **human gate's** resolved choice migrated
     # cross-graph to an unresolvable target (issue #110): the escalation stands in for the
@@ -634,8 +612,8 @@ usage_facts = Table(
 
 # --- Questions and answers (the ask/answer rendezvous) ----------------------
 #
-# A worker facing an undecidable choice runs ``blizzard runner ask`` and exits; the
-# runner forwards the question here, where it becomes a durable row (question.asked).
+# A worker's question, forwarded by its runner, becomes a durable row here
+# (question.asked).
 # Open/answered is derived: a question is open exactly while no answer row
 # exists. The answer is first-write-wins CAS — the ``question_answers`` primary key
 # IS the question id, so the second concurrent writer's insert fails and the loser is
@@ -759,9 +737,9 @@ runner_high_water = Table(
 
 # --- Queue shaping: ready-queue ordering ----------------------
 #
-# Ready-queue ordering is an explicit hub-side property (the board's Prioritize
-# control): the operator moves a ready chunk to a position, and GET /api/queue
-# honours it. Facts append, order derives: each reorder appends ONE row —
+# Ready-queue ordering is an explicit hub-side property: the operator moves a ready
+# chunk to a position, and GET /api/queue honours it.
+# Facts append, order derives: each reorder appends ONE row —
 # the moved chunk's new float ``position``, computed between its target neighbours —
 # and a chunk's effective position is its newest such fact, or its ``minted_at``
 # instant (as a unix timestamp) before it was ever moved. Ready chunks sort ascending
@@ -801,8 +779,7 @@ chunk_grouped = Table(
 # bumped by the register call and the dedicated heartbeat; liveness derives from
 # it against a staleness threshold (never a stored column). Operational state is
 # declarative and append-only: pause/resume facts land in ``runner_pause_facts`` and
-# ``paused`` derives from the newest one — the runner reads it
-# back on its outbound pull and adheres (paused = no new claims; in-flight runs on).
+# ``paused`` derives from the newest one.
 
 runner_registrations = Table(
     "runner_registrations",
@@ -907,8 +884,7 @@ runner_external_usage = Table(
 # --- The identity spine: users, provider identities, sessions (issue #91) -----
 #
 # Independent of any login mechanism (that is #92) — the schema every other auth slice
-# builds on. ``users`` is the hub-local account row: ``username`` is unique (minted from
-# a provider handle with a collision suffix once #92 lands), ``role`` is the coarse
+# builds on. ``users`` is the hub-local account row: ``username`` is unique, ``role`` is the coarse
 # ``blizzard.auth_core.Role`` tag a session's ``ResolvedIdentity`` expands via the
 # static ``ROLE_PERMISSIONS`` map (never a stored permission list — `bzh:domain-core`).
 # ``email`` is nullable (a provider need not disclose one) and, when present, unique —
@@ -940,10 +916,9 @@ Index(
 )
 
 # One row per (provider, subject) a user has linked — the first-login email-merge rule
-# (#92) attaches a second identity to an existing user; nothing in #91 writes one yet
-# (sessions are seeded directly by tests). ``handle`` is the provider's own
-# display/login name at last link, refreshed on a later login (#92) rather than
-# re-derived here.
+# (#92) attaches a second identity to an existing user. ``handle`` is the provider's own
+# display/login name at last link, refreshed on a later login rather than re-derived
+# here.
 identities = Table(
     "identities",
     metadata,
@@ -1006,8 +981,8 @@ auth_state = Table(
 )
 
 # The append-only, non-chunk auth/security event log (``bzh:facts-not-status``) —
-# `login_failed`/`sso_refused` land here in this phase; #94 adds `user_role_changed`.
-# Distinct from the chunk-scoped fact tables: these events concern no single chunk.
+# `login_failed`/`sso_refused`/`user_role_changed` land here. Distinct from the
+# chunk-scoped fact tables: these events concern no single chunk.
 auth_facts = Table(
     "auth_facts",
     metadata,

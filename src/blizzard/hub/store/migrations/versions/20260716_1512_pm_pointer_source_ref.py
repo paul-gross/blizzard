@@ -5,14 +5,11 @@ configured ``[[pm_source]]`` plus that source's own item reference: ``{source, r
 ``chunk_pm_pointers`` is reshaped in place (SQLite has no ``ALTER COLUMN``, so this uses
 ``op.batch_alter_table`` — the portable Alembic idiom, ``bzh:sql-portable``).
 
-**Deliberate deviation from 0011's shape:** this revision declares its own local
-``sa.Table`` literals for both the old and new column shapes below, rather than
-importing :mod:`blizzard.hub.store.schema` the way ``20260715_1817_chunk_promoted.py`` does.
-0011 only *creates* a table, so importing head-of-tree shape was harmless; a revision
-that *reshapes* a column is a data migration pinned to a moment in time; that module is
-head-of-tree and will keep moving, so importing it here would silently change what this
-revision does on a future checkout. A migration's meaning must not depend on when it is
-read.
+**Local ``sa.Table`` literals for both the old and new column shapes, not a
+:mod:`blizzard.hub.store.schema` import:** a revision that *reshapes* a column is a data
+migration pinned to a moment in time, and head-of-tree ``schema.py`` keeps moving
+(``canon:no-retro``). Pinned by
+``tests/test_pin_hub_api.py::test_pm_pointer_reshape_backfills_and_survives_a_down_then_up_cycle``.
 
 **Backfill rule (config-free, deterministic — rehearsable):** this revision
 reads no configuration file, so re-running it on the same bytes at two times gives the
@@ -33,28 +30,13 @@ hub's pass-through routes already degrade a pointer with no matching configured 
 to a null label; the composition root is where an operator would be warned of a
 still-unresolved name, not a hard migration failure or a startup refusal.
 
-**``downgrade()`` is canonicalizing, not byte-exact:** reversing
-``source="blizzard", ref="26"`` needs a full issue URL, but the *owner* segment
-(``paul-gross`` in ``https://github.com/paul-gross/blizzard/issues/26``) was never
-retained forward — only the repo tail was. That owner is genuinely unrecoverable from
-``source`` alone. This revision's resolution: a numeric ``ref`` is treated as a
-backfilled GitHub-issue row and reconstructed as ``provider="github"``,
-``url=f"https://github.com/{_UNKNOWN_OWNER}/{source}/issues/{ref}"`` — *structurally*
-canonical under a documented, constant placeholder owner, **not resolvable**: nothing
-is served at that address (the real owner is gone, so no reconstruction could be).
-That is the accepted, recorded cost, and its operational consequence is
-concrete: **a downgraded hub running pre-0013 code parses that URL for owner/repo and
-404s on every PM read** of a backfilled pointer until the chunk is re-ingested. A
-rollback restores the *schema*, not the hub's PM reach.
-
-What the placeholder buys — and the property actually worth holding — is that
-**down-then-up is stable**: re-upgrading a downgraded row returns the identical
-``(source, ref)``, because ``_backfill_source_ref`` reads only the repo tail and the
-number, both of which survive the round trip. The owner is the only casualty, and it
-is precisely the segment the forward rule already discarded. A reconstruction that
-instead dropped the owner segment (an ``owner``-less ``{repo}/issues/{n}``) would fail
-to re-parse and break that stability, which is why the placeholder is a constant and
-not an omission.
+**``downgrade()`` is canonicalizing, not byte-exact:** the *owner* segment was never
+retained forward, so a numeric ``ref`` is reconstructed under the documented constant
+placeholder ``_UNKNOWN_OWNER`` — structurally canonical, not resolvable. The constant is
+what keeps **down-then-up stable** (re-upgrading returns the identical ``(source, ref)``),
+and its accepted cost is that a downgraded hub running pre-0013 code 404s on every PM
+read of a backfilled pointer until the chunk is re-ingested. Pinned by
+``tests/test_pin_hub_api.py::test_pm_pointer_reshape_backfills_and_survives_a_down_then_up_cycle``.
 
 A non-numeric ``ref`` was never GitHub-issue-shaped in the first place (the
 verbatim-copy branch above): its downgrade is the exact inverse, ``provider=source``,

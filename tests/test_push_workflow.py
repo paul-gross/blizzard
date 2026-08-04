@@ -59,15 +59,8 @@ def test_dev_build_job_exposes_its_version_as_an_output() -> None:
 
 
 def test_the_dev_version_carries_the_commit_it_was_built_from() -> None:
-    """A hub following the edge channel updates itself, so "what is this build"
-    is asked of the running daemon — and the version string is the only answer
-    it can give. The run number alone needs a lookup in this repo's Actions
-    history, and the OCI revision annotation is a *manifest* annotation, absent
-    from ``.Config.Labels`` and so unreadable from the running container.
-
-    Pinned because it is one interpolation in a shell line: easy to drop while
-    tidying, and nothing else fails when it goes — the build still succeeds, the
-    image still publishes, and every deployed hub quietly stops being able to
+    """Pinned because it is one interpolation in a shell line: easy to drop while
+    tidying, and nothing else fails when it goes — every deployed hub then can't
     name its own commit.
     """
     steps = _jobs()["dev-build"]["steps"]
@@ -79,10 +72,9 @@ def test_the_dev_version_carries_the_commit_it_was_built_from() -> None:
 
 
 def test_dev_image_puts_a_wheel_in_dist_before_building() -> None:
-    """packaging/docker/Dockerfile does `COPY dist/blizzard-*.whl` — it installs a
-    wheel from the build context rather than building one. A bare checkout has no
-    `dist/`, so the build fails at `lstat /dist`; the job must stage the wheel into
-    `dist/` first, and must do so BEFORE the build-push step.
+    """A bare checkout has no `dist/`, so the job must stage the wheel there before
+    the build-push step — packaging/docker/Dockerfile installs it via
+    `COPY dist/blizzard-*.whl`.
     """
     steps = _dev_image_job()["steps"]
     fetch = _step_index(steps, lambda s: "download-artifact" in str(s.get("uses", "")))

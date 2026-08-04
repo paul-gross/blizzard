@@ -1,24 +1,21 @@
 """The runner daemon's listeners: a unix socket and a TCP port over the one ASGI app (issue #43).
 
 The local API settles on **HTTP over a unix domain socket** — the socket under the
-state dir, filesystem permissions as access control — with localhost TCP as an opt-in. The
-socket is what the CLI's local verbs address (found from the runtime dir alone, no port
-registry, and no listening port to stand open). TCP is what the
-browser addresses, because a browser cannot open a unix socket and the runner serves its
-web app same-origin with ``/api/*``. Both are the *same* app and the same
-route table — two doors, not two APIs: HTTP semantics keep this route table as written
-regardless of which one is dialed in on.
+state dir, filesystem permissions as access control — alongside localhost TCP, which a
+browser needs because it cannot open a unix socket. Both are the *same* app and the same
+route table — two doors, not two APIs.
 
-Today both listeners are always on: TCP is not yet the opt-in described above, because the
-worker hooks still inherit ``BLIZZARD_RUNNER_URL`` as a TCP URL. Making TCP opt-in is its
-own change; this module exists so the socket lands without disturbing anything speaking TCP.
+Both listeners are always on: TCP cannot be made opt-in while the worker hooks inherit
+``BLIZZARD_RUNNER_URL`` as a TCP URL.
 
 Sockets are bound **here** rather than handed to uvicorn as ``Config(uds=…)`` for two
-reasons: uvicorn's own uds branch chmods the socket ``0o666``, which would leave
-filesystem permissions as access control resting entirely on the parent directory; and
-pre-bound sockets let one ``uvicorn.Server`` serve both (``run(sockets=[...])`` creates a
-listener per socket under a single ``should_exit``), which keeps the daemon's one-server
-shutdown — and the resume-marking that runs after it returns — undisturbed.
+reasons: uvicorn's own uds branch chmods the socket ``0o666``, losing the owner-only mode
+filesystem access control rests on; and pre-bound sockets let one ``uvicorn.Server`` serve
+both doors under a single ``should_exit``, which keeps the daemon's one-server shutdown —
+and the resume-marking that runs after it returns — undisturbed.
+
+Pinned by tests/test_runner_listeners.py::test_socket_is_owner_only and
+::test_binds_both_a_socket_and_a_tcp_port.
 """
 
 from __future__ import annotations

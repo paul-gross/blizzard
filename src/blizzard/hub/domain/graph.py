@@ -92,8 +92,8 @@ class SessionMode(StrEnum):
 
 # The prefix for a node-entry targeted resume (issue #115): ``session: resume:<node>``
 # resumes node ``<node>``'s most-recent session instead of the chunk's most-recent
-# session overall (bare ``resume``). Since #144 the ``<name>`` may also name a graph-level
-# **declared session** (a ``sessions:`` entry) — resolution is declared-session-first,
+# session overall (bare ``resume``). The ``<name>`` may also name a graph-level **declared
+# session** (a ``sessions:`` entry, issue #144) — resolution is declared-session-first,
 # node-name-second, and belongs to the runner, not to this parser.
 SESSION_RESUME_TARGET_PREFIX = "resume:"
 
@@ -152,9 +152,7 @@ class RetriesExhausted(StrEnum):
 # exit code to when the command prints no explicit choice (#65): exit 0 -> success,
 # nonzero -> failure. A node authors a matching choice to route either default
 # anywhere it likes, including straight to the reserved terminal — no node name is
-# privileged by the engine (#67); a command may also print one of the node's other
-# authored choice names (e.g. ``landed``/``conflict``) on its last stdout line to
-# select it directly.
+# privileged by the engine (#67).
 HUB_DEFAULT_SUCCESS_CHOICE = "success"
 HUB_DEFAULT_FAILURE_CHOICE = "failure"
 
@@ -162,10 +160,8 @@ HUB_DEFAULT_FAILURE_CHOICE = "failure"
 # it by printing this literal name on its last stdout line (exit code 0; a nonzero
 # exit is always a failure, never pending). Recognized regardless of whether the node
 # authors a matching choice — like ``success``/``failure``, it is machinery-reserved,
-# not an authored edge: the executor intercepts it *before* any edge lookup, records a
-# poll-attempt fact, releases the fleet-wide slot, and re-runs the node's ``run:`` list
-# (skipping any step whose ``produces:`` marker already exists) once ``poll_interval``
-# has elapsed — never routing a transition while pending persists.
+# not an authored edge; the poll behavior it triggers belongs to
+# ``blizzard.hub.delivery.hub_node``.
 HUB_PENDING_CHOICE = "pending"
 
 # The fleet-wide default kick-back cap (#64) — a hub node whose author omits
@@ -196,10 +192,8 @@ class ChoiceDoc:
     target_graph: str | None = None
     model: str | None = None
     # Whether this choice is gated on green checks (issue #114) — a worker may not route
-    # through it while any of its node's `checks:` is red; the engine treats such a
-    # selection as an unparseable verdict (a retry-consuming failure), never an accepted
-    # edge. Default `False` keeps every existing choice ungated. The validator rejects it
-    # on a choice whose node declares no `checks:`, and on hub/human-judged nodes.
+    # through it while any of its node's `checks:` is red. The validator rejects it on a
+    # choice whose node declares no `checks:`, and on hub/human-judged nodes.
     requires_checks: bool = False
 
 
@@ -218,10 +212,8 @@ class RunStepDoc:
 
     ``produces``, when set, names a marker artifact: the engine records it once this
     step exits 0, and SKIPS the step on any later re-run once it already exists — the
-    at-least-once-per-step crash contract, and the redelivery reconciliation
-    generalized (``record_delivery_repo_landed``'s per-repo skip is the pattern this
-    generalizes). ``name`` is a human label only (surfaced in logs/artifacts); it
-    defaults to the step's 1-based position when omitted.
+    at-least-once-per-step crash contract. ``name`` is a human label only (surfaced in
+    logs/artifacts); it defaults to the step's 1-based position when omitted.
     """
 
     command: str
@@ -233,11 +225,10 @@ class RunStepDoc:
 class ProducesSpec:
     """One ``produces:`` entry, kind-carrying (D1, issue #143).
 
-    Authored as a bare string (``kind`` defaults to :attr:`ArtifactKind.ASSET` — every
-    pre-#143 graph's shape) or a mapping ``{name, kind}`` (a ``git_commit`` expectation).
-    :func:`_parse_node` normalizes both authored forms to this one type, so every
-    downstream reader (mint, store, wire, coverage) sees a single shape regardless of
-    which form the author wrote.
+    Authored as a bare string (``kind`` defaults to :attr:`ArtifactKind.ASSET`) or a
+    mapping ``{name, kind}`` (a ``git_commit`` expectation). :func:`_parse_node`
+    normalizes both authored forms to this one type, so every downstream reader sees a
+    single shape regardless of which form the author wrote.
     """
 
     name: str
@@ -261,9 +252,8 @@ class NodeDoc:
     # The kick-back cap (#64) — ``None`` accepts the fleet default (``DEFAULT_BOUNCE_CAP``);
     # a hub node may author its own, stricter or looser.
     bounce_cap: int | None = None
-    # The generic hub command node's declared commands (#65) — non-empty exactly on a
-    # node ``executor: hub`` authors as the generic primitive; empty on every worker
-    # node. Every hub node authors ``run:`` since #67 retired the deliver special case.
+    # The generic hub command node's declared commands (#65, #67) — non-empty exactly on
+    # a node ``executor: hub`` authors as the generic primitive; empty on every worker node.
     run: list[RunStepDoc] = field(default_factory=list)
     # The pending-poll cadence (#66), in seconds — ``None`` accepts the executor's
     # own default (:data:`blizzard.hub.delivery.hub_node.DEFAULT_POLL_INTERVAL` /
@@ -352,9 +342,7 @@ class GraphDoc:
     entry: str
     nodes: list[NodeDoc]
     # The graph-level named-session declarations (issue #144), keyed by name — a top-level
-    # sibling of ``nodes:``, empty for every graph that declares none. ``default_factory``
-    # rather than a bare ``{}``: a mutable default raises on a frozen dataclass, and the
-    # default keeps every doc built without an opinion on sessions compiling unchanged.
+    # sibling of ``nodes:``, empty for every graph that declares none.
     sessions: dict[str, SessionDecl] = field(default_factory=dict)
 
     def node(self, name: str) -> NodeDoc | None:
@@ -384,7 +372,7 @@ def parse_graph_doc(raw: dict[str, object]) -> GraphDoc:
 def _parse_sessions(raw: object) -> dict[str, SessionDecl]:
     """Parse the optional top-level ``sessions:`` map (issue #144).
 
-    Absent (every pre-#144 graph) reads as ``{}``. Structural coercion only — a
+    Absent reads as ``{}``. Structural coercion only — a
     session naming a node, or a ``resume:``/``fresh:`` reference naming nothing, is the
     validator's verdict, not this parser's.
     """
@@ -475,9 +463,9 @@ def _parse_node(name: str, body: dict[str, object]) -> NodeDoc:
 def _parse_produces_entry(raw: object, node_name: str) -> ProducesSpec:
     """Normalize one authored ``produces:`` entry (D1, issue #143).
 
-    A bare string names an asset (``kind=asset`` — every pre-#143 graph's shape,
-    unchanged). A mapping ``{name, kind}`` names an explicit kind — currently ``asset``
-    or ``git_commit``. Structural coercion only, matching :func:`_parse_node`'s other
+    A bare string names an asset (``kind=asset``). A mapping ``{name, kind}`` names an
+    explicit kind — currently ``asset`` or ``git_commit``. Structural coercion only,
+    matching :func:`_parse_node`'s other
     enum fields (``executor``, ``session``): an unrecognized ``kind`` value raises
     :class:`GraphParseError` with a clear message rather than a bare :class:`ValueError`,
     since ``produces:`` entries are user-authored graph YAML, not an internal enum."""
@@ -584,8 +572,7 @@ class Choice:
     name: str
     description: str
     # Whether this choice is gated on green checks (issue #114) — see
-    # ``ChoiceDoc.requires_checks``. A validated graph carries this reified so the runner
-    # (its local gate) and the hub (its backstop) both read it off the node/envelope.
+    # ``ChoiceDoc.requires_checks``.
     requires_checks: bool = False
 
 
@@ -655,9 +642,7 @@ class Node:
     def is_hub_command_node(self) -> bool:
         """True for a generic hub command node (``executor: hub`` + a non-empty
         ``run:``) — the shape :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor`
-        drives. False for every worker node. Since #67 every hub node authors
-        ``run:`` — there is no other kind left, the special-cased deliver node is
-        retired — but the property stays a plain predicate rather than an
+        drives. False for every worker node. A plain predicate rather than an
         assertion, since an author is free to declare a (currently pointless)
         ``executor: hub`` node with an empty ``run:``."""
         return self.executor is Executor.HUB and bool(self.run)
@@ -709,11 +694,11 @@ def mark_effective(graphs: list[Graph], *, retired_ids: Collection[str]) -> dict
     whose newest lifecycle fact (issue #101) reads retired; a retired graph is never a
     candidate, so a name whose every graph is retired marks none of them effective.
 
-    Required, keyword-only, and carries no default (issue #101 lockstep note): this
-    must stay in lockstep with ``get_enabled_by_name``'s own retired-exclusion, and a
-    caller that forgot the argument silently getting the pre-#101 "every graph is a
-    candidate" behavior back — with no type error — is exactly the kind of drift that
-    would undo. Pass ``retired_ids=frozenset()`` explicitly for the pre-#101 behavior.
+    Required, keyword-only, and carries no default (issue #101 lockstep note), so a
+    caller that omits it gets a ``TypeError`` rather than the pre-#101 "every graph is a
+    candidate" behavior (pinned by
+    tests/test_graph_domain.py::test_mark_effective_requires_retired_ids_explicitly).
+    Pass ``retired_ids=frozenset()`` explicitly for the pre-#101 behavior.
     """
     newest_by_name: dict[str, Graph] = {}
     for graph in graphs:
@@ -743,8 +728,9 @@ def is_newer_mint(candidate: Graph, current: Graph) -> bool:
 
     Its caller is the follow-latest policy (issue #164), which needs **strictly** newer:
     ``get_enabled_by_name`` answers with the newest *non-retired* mint, so a chunk sitting
-    on a mint that has since been retired would otherwise be dragged **backwards** onto an
-    older enabled one. Following latest must only ever move a chunk forward.
+    on a since-retired mint would otherwise be dragged **backwards** onto an older enabled
+    one (pinned by
+    tests/test_follow_latest_policy.py::test_the_policy_never_drags_a_chunk_backwards_onto_an_older_mint).
     """
     return (candidate.created_at, candidate.graph_id) > (current.created_at, current.graph_id)
 
@@ -757,10 +743,11 @@ def resolve_follow_latest(graph_policy: bool | None, *, hub_default: bool) -> bo
     hub-level ``follow_latest``. A pure function over two already-read values rather than a
     repository read, so the precedence is unit-testable with no store (``bzh:domain-core``).
 
-    ``hub_default`` is keyword-only and carries no default of its own: the whole point of
-    the flag is that a fleet opts *in*, and a caller that forgot to pass the hub setting
-    silently getting ``True`` — or silently getting ``False`` and never migrating anything
-    — are both failures no type error would catch.
+    ``hub_default`` is keyword-only and carries no default of its own (issue #164), so a
+    caller that omits the hub setting gets a ``TypeError`` rather than a silent ``True``
+    (migrating a fleet that never opted in) or a silent ``False`` (never migrating at
+    all) — pinned by
+    tests/test_pin_hub_domain.py::test_resolve_follow_latest_requires_hub_default_explicitly
     """
     return hub_default if graph_policy is None else graph_policy
 

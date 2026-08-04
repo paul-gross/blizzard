@@ -1,7 +1,6 @@
 """Per-kind SSE frame wire models (issue #235) — the producer's own description of each
-frame kind's payload. :meth:`blizzard.hub.events.broker.EventBroker.publish_*` builds its
-payload from these instead of hand-assembling a dict, so the wire has one description
-instead of two (mirrored by the golden corpus at ``contracts/sse/``).
+frame kind's payload — the one description the wire has, mirrored by the golden corpus
+at ``contracts/sse/``.
 
 Every model is ``extra="forbid"``: a golden case carrying a field the model does not
 declare fails to parse, which is the contract test's parse half.
@@ -21,10 +20,7 @@ from typing import ClassVar, Literal
 from pydantic import BaseModel, ConfigDict
 
 #: What fact family drove a ``chunk-changed`` frame (issue #212) — each emit site names
-#: its own cause statically. ``escalated`` is reachable from both ``report_escalation``
-#: and the runner-facts ingest loop; ``question-asked``/``question-answered`` are
-#: reachable from both ``questions.py``'s two routes and the ingest loop's ``fact.kind``
-#: mapping.
+#: its own cause statically.
 ChunkChangeCause = Literal[
     "minted",
     "promoted",

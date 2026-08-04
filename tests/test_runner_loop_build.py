@@ -35,11 +35,8 @@ def test_build_loop_context_threads_worker_env_passthrough_into_the_adapter(tmp_
 
 @pytest.mark.unit
 def test_build_loop_context_threads_external_usage_credentials_path_into_the_adapter(tmp_path: Path) -> None:
-    """A composition-root gap here is a network-isolation gap, not just a wiring miss:
-    an unthreaded override leaves every daemon this root builds — including the real
-    subprocess service/e2e/journey/crash-sweep tiers spawn — reading the adapter's own
-    default (``~/.claude/.credentials.json``) and reaching the real Anthropic endpoint
-    on its sampling cadence, silently breaking those tiers' no-network-access guarantee
+    """An unthreaded override leaves every daemon this root builds reading the
+    adapter's own default credentials path and reaching the real Anthropic endpoint
     (issue #218)."""
     scratch = str(tmp_path / "scratch-credentials.json")
     config = RunnerConfig(
@@ -57,19 +54,14 @@ def test_build_loop_context_threads_external_usage_credentials_path_into_the_ada
 
 @pytest.mark.unit
 def test_build_loop_context_threads_runner_dir_from_the_resolved_root(tmp_path: Path) -> None:
-    """The wrapped takeover command (issue #251) is composed at escalation from
-    ``LoopConfig.runner_dir``, which must mirror ``RunnerConfig``'s own resolved
-    ``root`` — the runtime directory a human's ``blizzard runner takeover <chunk_id>
-    --dir <runner_dir>`` needs to land back in *this* runner, not some other
-    composition root's idea of it.
+    """The wrapped takeover command (issue #251) needs ``LoopConfig.runner_dir`` to
+    mirror ``RunnerConfig``'s own resolved ``root``.
 
     Routed through ``RunnerConfig.load()`` — not the bare dataclass constructor —
-    with a deliberately un-resolved ``..``-bearing path, since ``.load()`` is the
-    one place resolution actually happens (``build_loop_context`` just mirrors
-    ``config.root`` verbatim). Asserting against ``config.root.resolve()`` off a
-    directly-constructed ``RunnerConfig`` would pass even if resolution were
-    silently dropped, because a bare ``tmp_path`` already equals its own resolved
-    form on this platform."""
+    with a deliberately un-resolved ``..``-bearing path, since ``.load()`` is where
+    resolution actually happens. Asserting against a directly-constructed
+    ``RunnerConfig`` would pass even if resolution were silently dropped, because a
+    bare ``tmp_path`` already equals its own resolved form on this platform."""
     real_root = tmp_path / "runner"
     real_root.mkdir()
     (real_root / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(real_root)}"\n')

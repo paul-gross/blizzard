@@ -75,11 +75,9 @@ def test_events_stream_excluded_from_openapi() -> None:
 
 
 def test_the_only_deprecated_operations_are_the_sanctioned_aliases() -> None:
-    # Issue #105 removed the last deprecated-alias routes, and the schema went back to
-    # exactly one route per operation. Issue #55's work-source rename adds these two back
-    # deliberately: the HTTP surface is reachable by out-of-tree callers, so `/pm-items`
-    # stays as a deprecated alias onto the same handler. The assertion is an allow-list,
-    # not a relaxation — a *new* deprecated route still fails here until it is named.
+    # `/pm-items` stays as a deprecated alias (issue #55) since the HTTP surface is
+    # reachable by out-of-tree callers. The assertion is an allow-list, not a
+    # relaxation — a *new* deprecated route still fails here until it is named.
     paths = create_app_for_export().openapi()["paths"]
     deprecated = {
         f"{method.upper()} {path}"

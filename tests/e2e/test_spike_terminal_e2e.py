@@ -1,24 +1,16 @@
 """A non-code chunk completes with only asset artifacts — MVP criterion 10 (2nd sentence).
 
-The sibling e2e scenarios all end in a git deliver that lands **code**: their chunks
-build a change, so the deliver node merges branch pointers onto bare ``main``. This
-scenario covers the other half of criterion 10 — *"A chunk whose purpose is non-code
-work (a review, a spike) completes with only asset artifacts"* — end to end on the real
-rails: a chunk whose whole purpose is a review or a spike simply ends with assets
-instead of branch pointers, and the graph still ends in a deliver node — the uniform
-terminal.
+The sibling e2e scenarios all end in a git deliver that lands **code**. This scenario
+covers the other half of criterion 10 — *"A chunk whose purpose is non-code work (a
+review, a spike) completes with only asset artifacts"* — end to end on the real rails.
 
 One chunk travels a **spike** node whose worker does read-only investigation (no commit,
-so nothing is pushed or declared and ``_verify_and_collect_git_commits`` yields no
-git-commit artifact) and ``produces`` a ``spike-notes`` **asset**, whose content is the worker's judgement
-assessment — the text after ``</Choice>``. The spike routes into the hub
-**deliver** node exactly as a code chunk does — the same packaged
-``land_default.py`` script (#67) every other e2e scenario's delivery runs; because the
-chunk carries *no* git-commit pointers, ``BZ_HUB_GIT_COMMITS`` is an empty list, so the
-script's own pending-repo loop is empty and it prints ``landed`` immediately, opening no
-PR and moving no ``main`` — yet the ``landed -> done`` edge still finalizes the chunk, so
-it derives ``done`` carrying only its asset. The assertions pin the criterion at all
-three truths:
+so no git-commit artifact) and ``produces`` a ``spike-notes`` **asset** whose content is
+the worker's judgement assessment. The spike routes into the same hub **deliver** node a
+code chunk uses, running the same packaged ``land_default.py`` script (#67); with no
+git-commit pointers there is nothing to land, so no PR opens and ``main`` never moves,
+yet the chunk still derives ``done`` carrying only its asset. The assertions pin the
+criterion at all three truths:
 
 * **fleet truth** — the hub derives the chunk ``done`` (an empty delivery still lands);
 * **hub-durable artifacts** — the chunk detail exposes exactly one artifact, the
@@ -26,9 +18,8 @@ three truths:
 * **git truth** — no PR is opened at the forge and bare ``main`` is untouched: a non-code
   chunk lands no code.
 
-This is the terminal-with-only-assets case no other e2e reaches: the review-cycle asset
-is a *fail-loop intermediate* on a chunk that still delivers code, whereas here the asset
-is the chunk's whole, terminal output. Reuses the acceptance loop's live-stack scaffolding
+This is the terminal-with-only-assets case no other e2e reaches. Reuses the acceptance
+loop's live-stack scaffolding
 (forge/hub/runner harnesses, fixture mint, port helpers); skipped unless ``BLIZZARD_E2E=1``
 with the sibling ``blizzard-mock`` worktree provisioned, exactly like test_acceptance_loop.
 """
@@ -63,13 +54,11 @@ pytestmark = [
     ),
 ]
 
-# The spike's base turn: a read-only investigation — no file written, no commit made — so
-# the runner discovers no produced branch and pushes nothing (the non-code path). A bare
-# ``pass`` is the mock's no-op turn; the finding is elicited on the judgement resume.
+# The spike's base turn: a read-only investigation — no file written, no commit made (the
+# non-code path). A bare ``pass`` is the mock's no-op turn.
 _SPIKE_SCRIPT = "pass\n"
-# The spike's judgement: route to the deliver node (``complete -> deliver``) and carry the
-# investigation write-up as the assessment. The text after ``</Choice>`` becomes the
-# ``spike-notes`` asset's content — the chunk's whole, terminal output.
+# The spike's judgement: route to the deliver node and carry the investigation write-up as
+# the assessment, which becomes the ``spike-notes`` asset's content.
 _SPIKE_NOTES = "SPIKE: investigated toy-api; the change is not warranted — no code needed."
 _SPIKE_JUDGEMENT = f"verdict('complete', {_SPIKE_NOTES!r})\n"
 
@@ -77,13 +66,10 @@ _SPIKE_JUDGEMENT = f"verdict('complete', {_SPIKE_NOTES!r})\n"
 def _graph_yaml() -> str:
     """A ``default-delivery`` graph whose only work node is an asset-producing spike.
 
-    Named ``default-delivery`` so the hub's lazy ``ensure_default`` (POST /chunks) pins
-    this pre-minted graph by name instead of the packaged prose default. The
-    spike ``produces`` a ``spike-notes`` asset and routes into the same hub ``deliver``
-    node a code chunk uses (the graph ends in a deliver node). With
-    no branch pointers to land, the deliver is an empty land: no PR, no ``main`` move,
-    but a terminal ``delivery.landed`` fact — so the chunk reaches ``done`` carrying only
-    its produced asset.
+    Named ``default-delivery`` so the hub's lazy default-graph mint pins this pre-minted
+    graph by name instead of the packaged prose default. The spike ``produces`` a
+    ``spike-notes`` asset and routes into the same hub ``deliver`` node a code chunk uses,
+    where with no branch pointers to land the deliver is an empty land.
     """
     import yaml
 
@@ -178,8 +164,7 @@ def test_spike_chunk_terminates_with_only_asset_artifacts(tmp_path: Path) -> Non
         # Fleet truth: the chunk reached the terminal (the empty deliver still lands).
         assert status == "done", f"spike chunk did not reach done (last status {status!r})"
 
-        # Hub-durable artifacts: the spike-notes asset and the deliver hub node's own
-        # run: step log (#65's captured stdout/stderr) — no git commit, ever.
+        # Hub-durable artifacts: assets only — no git commit, ever.
         detail = hub.get(f"/api/chunks/{chunk_id}").json()
         artifacts = detail["artifacts"]
         assert {a["kind"] for a in artifacts} == {"asset"}, f"expected only asset artifacts, got: {artifacts}"

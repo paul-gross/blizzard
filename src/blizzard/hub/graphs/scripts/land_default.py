@@ -5,12 +5,8 @@ The reference hub-command-node `run:` script; it honors the authoring contract o
 ``bzh:hub-node-env-contract``, ``bzh:hub-node-outcome-protocol``,
 ``bzh:hub-node-step-idempotence``).
 
-Not wired into any packaged graph today — the packaged default graph
-(``hub/graphs/default/graph.yaml``) is a triage router with no `deliver` node of its own,
-and the two graphs that do deliver author their own policy instead (`land_ff` for
-``hub/graphs/basic-development-workflow/graph.yaml``, `land_pr_ci` for
-``hub/graphs/advanced-development-workflow/graph.yaml``). This module remains the
-reference land policy — exercised directly by the e2e delivery scenarios
+Not wired into any packaged graph today (see `hub/graphs/*/graph.yaml`). This module
+remains the reference land policy — exercised directly by the e2e delivery scenarios
 (`tests/e2e/test_delivery_conflict_e2e.py` and siblings) and the shared home
 `land_ff`/`land_pr_ci` import their common helpers from
 (:mod:`~blizzard.hub.graphs.scripts.land_common`) — and any graph that wants this exact

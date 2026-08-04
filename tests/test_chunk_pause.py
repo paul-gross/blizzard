@@ -6,15 +6,10 @@ when the pause clears. That is the whole promise: a pause is not a detach.
 
 Every test here drives the **full composed tick** (REAP → RESUME → PULL → FILL →
 ADVANCE) rather than a hand-picked step, because this subsystem's bugs are
-step-ordering bugs: the headline one (:func:`_resume_marked_lease` abandoning a paused
-chunk, plan §0.2 B) is invisible to any test that drives PULL alone, since RESUME runs
-*first* and gives the claim away before PULL's pause-park can ever see it. Issue #45's
-bug shipped past three mutation-testing verify-finales for exactly this reason — every
-test drove a single step in isolation with an unrealistic worker-alive shape.
+step-ordering bugs that no single-step test can see (plan §0.2 B).
 
-:class:`FakeProbe` is that unreality trap: nothing makes a spawned pid alive
-automatically, so every test below seeds ``alive`` **deliberately** for the shape it
-reasons about.
+Nothing makes a spawned pid alive automatically, so every test below seeds
+:class:`FakeProbe`'s ``alive`` **deliberately** for the shape it reasons about.
 
 Driven against a real (tmp sqlite) runner store with the fakes standing in only at the
 seams — the harness matrix's component definition.
@@ -84,10 +79,9 @@ def _paused_chunk(chunk="ch_1", *, runner_id="r1", status=ChunkStatus.PAUSED):  
     """A chunk the operator paused, still routed to us.
 
     ``status`` is overridable because the runner must key on the **pause fact**, not the
-    derived status: PAUSED sits below the human-gated statuses in the derivation order,
-    so a paused chunk that is also parked on a question derives ``waiting_on_human``
-    while still carrying ``pause`` (P2's
-    ``test_pause_view_is_carried_even_when_the_status_hides_the_pause`` fences it).
+    derived status — a paused chunk also parked on a question derives ``waiting_on_human``
+    while still carrying ``pause`` (fenced by
+    ``test_pause_view_is_carried_even_when_the_status_hides_the_pause``).
     """
     return ChunkDetail(
         chunk_id=chunk,
@@ -101,7 +95,7 @@ def _paused_chunk(chunk="ch_1", *, runner_id="r1", status=ChunkStatus.PAUSED):  
 
 
 def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-def]
-    """The same chunk unpaused — ``pause`` is None once the newest fact is a resume."""
+    """The same chunk unpaused — no ``pause`` view."""
     return ChunkDetail(
         chunk_id=chunk,
         graph_id="gr_1",
@@ -123,8 +117,8 @@ def _make_ctx(store, hub, harness, probe, **kw):  # type: ignore[no-untyped-def]
 def _pause_locally(store, ctx, *, paused: bool):  # type: ignore[no-untyped-def]
     """Set the runner's own brake, the way `PATCH /runner` does — fact + report, one write.
 
-    The twin of `test_runner_paused.py`'s helper; kept local so this file stays readable as the
-    pause subsystem's own story rather than importing across test modules.
+    The twin of `test_runner_paused.py`'s helper, kept local rather than imported across
+    test modules.
     """
     store.record_local_pause(
         "r1",
@@ -144,16 +138,13 @@ def _pause_locally(store, ctx, *, paused: bool):  # type: ignore[no-untyped-def]
 def test_restart_into_a_standing_pause_keeps_the_claim(tmp_path):  # type: ignore[no-untyped-def]
     """A runner restarted while one of its chunks is paused must **park** it, not abandon it.
 
-    The plan's center of gravity (§0.2 B). Before the fix, ``_resume_marked_lease``
-    branched on ``detail.status == ChunkStatus.RUNNING and ours`` — and a paused chunk
-    derives ``PAUSED``, not ``RUNNING``, so a chunk *still routed to this runner* fell
-    through to ``_abandon_reassigned``: kill + release **every** environment + close the
-    lease ``released``. The claim, the route and the environments were all given up —
-    pause silently degraded into detach, on every restart. RESUME runs before PULL, so
-    PULL's pause-park never got a chance to see it.
+    The plan's center of gravity (§0.2 B). A paused chunk derives ``PAUSED``, not
+    ``RUNNING``, so a RESUME branch keyed on the derived status drops a chunk *still
+    routed to this runner* through to ``_abandon_reassigned`` — kill, release **every**
+    environment, close the lease ``released``.
 
-    Driven as a full tick because that hand-off is the bug: RESUME alone and PULL alone
-    were each defensible.
+    Driven as a full tick because the RESUME → PULL hand-off is where it goes wrong:
+    RESUME alone and PULL alone are each defensible.
     """
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -198,11 +189,10 @@ def test_restart_into_a_standing_pause_keeps_the_claim(tmp_path):  # type: ignor
 def test_a_chunk_detached_and_then_paused_is_still_abandoned(tmp_path):  # type: ignore[no-untyped-def]
     """Detach wins over pause — the ``ours`` conjunct on both pause branches.
 
-    The keystone's fix must not overshoot. A chunk that was detached *and* paused is not ours
-    to hold: the route is gone, and no amount of pausing makes it ours again. Parking it would
-    keep environments bound to work another runner is free to claim. Both the RESUME branch
-    (``ours and detail.pause is not None``) and PULL's sweep (detach checked first) exist to get
-    this case right, so it is driven through RESUME — the path the keystone changed.
+    A chunk that was detached *and* paused is not ours to hold: the route is gone, and no
+    amount of pausing makes it ours again. Parking it would keep environments bound to
+    work another runner is free to claim. Driven through RESUME, the earlier of the two
+    branches that must get this right.
     """
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -241,10 +231,9 @@ def test_a_chunk_detached_and_then_paused_is_still_abandoned(tmp_path):  # type:
 def test_pull_kills_the_worker_and_parks_the_lease_keeping_everything_else(tmp_path):  # type: ignore[no-untyped-def]
     """A pause discovered on a live tick kills the worker and parks — the inverse of an abandon.
 
-    ``_kill_and_park_paused`` is defined by what it does *not* do (plan §3.1): no
-    ``_release_all``, no ``record_closure``, no epoch bump, no lease mint, no requeue. Each
-    omission is asserted, because each is what separates "keep the claim" from a detach, and
-    seams 11/16 rest silently on the closure one.
+    Each omission is asserted separately — no release, no closure, no epoch bump, no lease
+    mint, no requeue (plan §3.1) — because each is what separates "keep the claim" from a
+    detach.
     """
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -316,14 +305,9 @@ def test_reap_never_reaps_a_pause_parked_lease_however_long_it_stands(tmp_path):
 
     A pause is open-ended — an operator may leave a chunk paused overnight — so "nothing bad
     accumulates while parked" has to hold across many ticks, not just the one that parked it.
-    Two mechanisms share the load once the worker is killed and the lease is parked, and this
-    drives both by composing the whole tick:
-
-    * REAP's skip (inherited for free through ``parked_lease_ids()``'s union) keeps the reap
-      clock stopped, so no amount of elapsed time reaps the lease for inactivity;
-    * ADVANCE's pause-park routing keeps the now-dead pid from being read as a done declaration
-      (D-055) and judged into a verdict-less failure — which is what would actually burn the
-      retries here, since a killed worker is not a finished one.
+    Driving the whole tick exercises both mechanisms that share that load: REAP's skip of a
+    parked lease, and ADVANCE's pause-park routing, which keeps the now-dead pid from being
+    read as a done declaration (D-055) and judged into a verdict-less failure.
     """
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -442,10 +426,8 @@ def test_resuming_the_chunk_restarts_the_same_session_under_the_same_lease(tmp_p
 def test_an_ask_parked_and_paused_lease_does_not_resume_on_the_answer(tmp_path):  # type: ignore[no-untyped-def]
     """Pause dominates the ask: answering a paused chunk's question does **not** restart it.
 
-    The overlap is real — pause is deliberately not refused on ``waiting_on_human`` — and it is
-    where a status-keyed runner would fail silently: a chunk both paused and asked derives
-    ``waiting_on_human``, *not* ``paused``, so the loop must key on the pause **fact**. Here the
-    hub reports exactly that lossy status while carrying ``pause``.
+    The hub here reports the lossy ``waiting_on_human`` status while still carrying ``pause``,
+    so a status-keyed runner would fail silently: the loop must key on the pause **fact**.
 
     Two things must hold. While paused, an answer sits unclaimed. When the pause lifts, the
     answer — not the unpause — is what resumes the session, on the following tick.
@@ -501,19 +483,15 @@ def test_an_ask_parked_and_paused_lease_does_not_resume_on_the_answer(tmp_path):
 def test_a_suppressed_pause_resume_writes_no_fact_even_on_the_ask_park_path(tmp_path):  # type: ignore[no-untyped-def]
     """The local brake gates ``_resume_if_unpaused`` **above its fact writes**, not merely above its spawn.
 
-    ``_spawn_suppressed``'s stated contract is that a suppressed spawn "writes no fact ... the
-    lease is left exactly as it was — active, unmodified". For this primitive that is a claim
-    about *where* the gate sits: at the very top of the function, above the hub poll, above the
+    The gate must sit at the very top of the function — above the hub poll, above the
     ask-park early return, and above ``record_pause_park_resume``.
 
-    ``test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alone`` (row 14)
-    asserts the park survives a suppressed resume, but it cannot fence the gate's *position*: on
-    the ordinary path every fact write already sits below ``resume_with_message``, so a gate
-    lowered to just above the spawn would satisfy it identically. The **ask-park overlap** is the
-    one shape that separates them — its early return writes ``record_pause_park_resume`` and then
-    returns *without* ever reaching the spawn, so a lowered gate would clear the pause-park of a
-    locally-paused runner. This test is that discriminator, and it is why the two rows are
-    written apart rather than folded together.
+    The **ask-park overlap** is the one shape that fences the gate's *position*: its early
+    return writes ``record_pause_park_resume`` and then returns *without* ever reaching the
+    spawn, so a gate lowered to just above the spawn would clear the pause-park of a
+    locally-paused runner. Row 14's
+    ``test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alone``
+    cannot separate the two positions; this test is that discriminator.
     """
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -584,10 +562,10 @@ def test_a_suppressed_pause_resume_writes_no_fact_even_on_the_ask_park_path(tmp_
 def test_fill_does_not_reconcile_a_pause_parked_chunk_as_an_interrupted_claim(tmp_path):  # type: ignore[no-untyped-def]
     """FILL's ``_reconcile_interrupted_claims`` skips a pause-parked chunk (seam 11).
 
-    It skips chunks that have an active lease — which a pause-parked chunk does, precisely
-    because ``_kill_and_park_paused`` records no closure. Were that omission ever "tidied up",
-    this chunk would look exactly like an interrupted claim (a held binding, no active lease)
-    and FILL would **spawn a worker into it while it is paused**.
+    A pause-parked chunk keeps an active lease, precisely because ``_kill_and_park_paused``
+    records no closure. Were that omission ever "tidied up", this chunk would look exactly
+    like an interrupted claim (a held binding, no active lease) and FILL would **spawn a
+    worker into it while it is paused**.
 
     Asserted independently of its ADVANCE twin below: two seams resting on one property must be
     proven one at a time, or each can mask the other's regression.
@@ -614,10 +592,9 @@ def test_fill_does_not_reconcile_a_pause_parked_chunk_as_an_interrupted_claim(tm
 def test_advance_does_not_drive_a_pause_parked_chunk_as_a_held_chunk(tmp_path):  # type: ignore[no-untyped-def]
     """ADVANCE's ``_advance_held_chunk`` skips a pause-parked chunk (seam 16).
 
-    The same load-bearing omission from the other side: ``_advance_held_chunk`` is for chunks
-    the runner holds with **no** active lease (a hub node, a resolved gate). A pause-parked
-    chunk has one, so it is never routed there — and its exited worker is never read as a done
-    declaration either (D-055): the worker was killed, it did not finish.
+    The same load-bearing omission from the other side: a pause-parked chunk has an active
+    lease, so it is never routed to ``_advance_held_chunk`` — and its exited worker is never
+    read as a done declaration either (D-055): the worker was killed, it did not finish.
     """
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -647,10 +624,10 @@ def test_advance_does_not_drive_a_pause_parked_chunk_as_a_held_chunk(tmp_path): 
 def test_pausing_an_unheld_ready_chunk_simply_keeps_it_out_of_the_queue(tmp_path):  # type: ignore[no-untyped-def]
     """A paused chunk nobody holds is a pure hub-side affair: the runner does nothing at all.
 
-    There is no lease to park and no worker to kill — the chunk just never appears in
-    ``list_ready()``, so FILL is never offered it (the hub's "free win", pinned at its own tier
-    in ``test_queue_shaping.py``). This is the runner-side half: given an empty queue, a paused
-    chunk produces no park, no claim, and no error path.
+    There is no lease to park and no worker to kill. The hub-side half — a paused chunk
+    never appearing in ``list_ready()`` — is pinned in ``test_queue_shaping.py``; this is
+    the runner-side half: given an empty queue, a paused chunk produces no park, no claim,
+    and no error path.
     """
     store = _store(tmp_path)
     hub = FakeHub()

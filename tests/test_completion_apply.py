@@ -53,10 +53,8 @@ nodes:
 
 
 # A spike -> deliver graph: one read-only work node that `produces` an asset and no
-# code, routing into the same hub deliver node a code chunk uses — a chunk whose whole
-# purpose is a review or a spike simply ends with assets instead of branch pointers, and
-# the graph still ends in a deliver node. It is the non-code terminal — MVP criterion
-# 10's 2nd sentence — reached hermetically at the apply tier.
+# code, routing into the same hub deliver node a code chunk uses — the non-code
+# terminal (MVP criterion 10, 2nd sentence), reached hermetically at the apply tier.
 _SPIKE_DELIVER_YAML = """
 name: default-delivery
 entry: spike
@@ -148,14 +146,9 @@ def test_unknown_choice_is_a_failure(tmp_path: Path) -> None:
 
 
 def test_non_code_chunk_completes_with_only_asset_artifacts(tmp_path: Path) -> None:
-    """A spike chunk carrying only an asset reaches ``done`` — no code lands (criterion 10, 2nd sentence).
-
-    The sibling apply tests (and every other completing-chunk test) end in a git deliver
-    that lands branch pointers; this pins the *non-code* half: a node-step that
-    ``produces`` an asset and no git commit routes into the deliver node, which lands
-    nothing (no forge call, no PR) yet still finalizes the chunk terminal — so the chunk
-    completes carrying only its asset. The full-rails equivalent is
-    ``tests/e2e/test_spike_terminal_e2e.py``; this is the always-run hermetic guard.
+    """A spike chunk carrying only an asset reaches ``done`` — no code lands (criterion
+    10, 2nd sentence). See ``tests/e2e/test_spike_terminal_e2e.py`` for the full-rails
+    equivalent.
     """
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claimed(hub, graph_yaml=_SPIKE_DELIVER_YAML)

@@ -102,8 +102,8 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
         worktree_git=FakeWorktreeGit(),
     )
 
-    advance(ctx)  # assembles the completion from the real durable attachment + fallback
-    pull(ctx)  # the flusher delivers it to the hub
+    advance(ctx)
+    pull(ctx)
 
     _, submission = hub.completions[0]
     by_name = {a.name: a for a in submission.artifacts}

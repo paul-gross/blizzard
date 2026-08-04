@@ -96,8 +96,8 @@ def test_chronologically_ordered_rows_backfill_seq_in_order(tmp_path: Path) -> N
 def test_same_instant_rows_backfill_created_before_released(tmp_path: Path) -> None:
     """The documented backfill default for a historical tie (see the route-seq-tiebreak revision's docstring):
     created sorts first, so a pre-existing same-instant pair backfills as though the
-    release outranked the create — the same "release wins" bias ``route_of`` used to
-    hard-code, kept only here since a real historical tie is not expected to exist."""
+    release outranked the create — kept only here since a real historical tie is not
+    expected to exist."""
     runner, engine = _migrate_to_before(tmp_path)
     with engine.begin() as conn:
         _seed_chunk(conn, "ch_tied")

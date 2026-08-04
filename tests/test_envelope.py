@@ -89,10 +89,8 @@ def test_latest_artifacts_by_name_keeps_the_highest_epoch() -> None:
 
 
 def test_envelope_carries_authored_judgement_prose_and_choice_set() -> None:
-    # The author writes only the prose; the runner appends the (harness-inert)
-    # elicitation tail from node.choices when it delivers the judgement into the
-    # session. The envelope must therefore carry the prose verbatim and the
-    # choice set — never a baked-in tail (which would duplicate it and break the mock).
+    # The envelope carries the judgement prompt verbatim and the choice set — never a
+    # baked-in elicitation tail; that's the runner's to render.
     env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[_row("f", 1)], epoch=1)
     assert env.epoch == 1
     assert env.node.node_name == "build"
@@ -129,8 +127,7 @@ def test_arrival_addendum_appends_to_the_pre_prompt() -> None:
 def test_required_artifacts_table_renders_name_and_kind_and_is_harness_inert() -> None:
     """The procedurally-generated required-artifacts table (issue #143, Phase 5): one
     `#`-prefixed line per `produces:` entry, naming its kind and the fleet-protocol
-    declaration verb — inert to the mock harness's prompt-is-program `exec` exactly like
-    the runner's own generated tails (`steps._elicitation_tail`, `_nudge_message`)."""
+    declaration verb — inert to the mock harness's prompt-is-program `exec`."""
     node = replace(
         _node(),
         produces=[
@@ -210,9 +207,8 @@ def test_envelope_checks_gating_fields_default_off() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# The effective session declaration (issue #144) — precedence resolved hub-side,
-# because the hub owns both halves: session declaration > chunk default. The
-# runner's own default is the last resort and is applied there.
+# The effective session declaration (issue #144) — precedence resolved hub-side:
+# session declaration > chunk default.
 # --------------------------------------------------------------------------- #
 
 
@@ -236,8 +232,7 @@ def test_a_declaration_only_node_carries_the_declaration() -> None:
 
 def test_a_chunk_default_only_node_carries_the_chunk_default_and_no_pool() -> None:
     # A bare `resume`/`fresh` node references no declaration, so it belongs to no pool —
-    # but the chunk's defaults still reach it. That is the precedence rule's intended
-    # reach, and the one behavior change this makes to a pre-#144 graph.
+    # but the chunk's defaults still reach it: the precedence rule's intended reach.
     chunk = _chunk_with_defaults(["blizzard:advanced"], "high")
 
     env = build_node_envelope(chunk=chunk, graph=_graph(), node=_node(), artifacts=[], epoch=1)
@@ -273,7 +268,7 @@ def test_a_declaration_with_neither_field_falls_all_the_way_to_the_chunk_default
 
 
 def test_neither_a_declaration_nor_a_chunk_default_expresses_no_preference() -> None:
-    # The pre-#144 world, unchanged: the runner's own default applies.
+    # No declaration and no chunk default: the runner's own default applies.
     env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1)
 
     assert env.node.session_name is None

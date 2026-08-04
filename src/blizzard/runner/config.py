@@ -24,7 +24,7 @@ DATA_DIRNAME = "data"
 WORKER_SETTINGS_FILENAME = "worker-settings.json"
 # The local API's unix socket: it lives under the state dir beside the store, and
 # filesystem permissions are its access control — so the CLI finds it from the runtime dir
-# alone. The TCP listener runs alongside it for the browser, which cannot speak a socket.
+# alone (``runner/listeners.py``).
 SOCKET_FILENAME = "runner.sock"
 
 DEFAULT_HOST = "127.0.0.1"
@@ -58,10 +58,9 @@ DEFAULT_HUB_URL = "http://127.0.0.1:8421"  # the hub's default bind (band +2)
 DEFAULT_RUNNER_ID = "runner-local"
 DEFAULT_WORKSPACE_ID = "workspace-local"
 DEFAULT_HARNESS_BINARY = "claude"
-# A workspace-isolated worker runs headless with no one to approve tool use, so real
-# Claude Code needs a non-interactive permission mode to edit/commit in its sandboxed
-# worktree; ``bypassPermissions`` is the fresh-init
-# default. The ``mock-claude-code`` façade ignores it; a config may set it empty to omit.
+# A workspace-isolated worker runs headless with no one to approve tool use, so it needs a
+# non-interactive permission mode to edit/commit in its sandboxed worktree;
+# ``bypassPermissions`` is the fresh-init default. A config may set it empty to omit.
 DEFAULT_HARNESS_PERMISSION_MODE = "bypassPermissions"
 DEFAULT_MAX_AGENTS = 1
 DEFAULT_BASE_BRANCH = "main"
@@ -110,12 +109,9 @@ class RunnerConfig:
     runner_id: str = DEFAULT_RUNNER_ID
     workspace_id: str = DEFAULT_WORKSPACE_ID
     #: Names the env var carrying this runner's hub bearer token (issue #86b) — never the
-    #: secret itself: round-trips through toml (mirrors ``WorkSourceConfig.token_env``,
-    #: ``src/blizzard/hub/config.py``). :attr:`hub_token` is the *resolved* secret, read
-    #: from ``os.environ[token_env]`` at ``scaffold``/``load`` and never written back to
-    #: toml. Empty (``hub_token == ""``) is a valid, warn-mode-only state — the outbound
-    #: client attaches no ``Authorization`` header, so a fleet with no tokens installed yet
-    #: keeps working.
+    #: secret itself, which never round-trips through toml. :attr:`hub_token` is the
+    #: *resolved* secret, read from ``os.environ[token_env]`` at ``scaffold``/``load``.
+    #: Empty (``hub_token == ""``) is a valid state — see :meth:`auth_headers`.
     token_env: str = DEFAULT_TOKEN_ENV
     hub_token: str = ""
     workspace_root: str = ""  # the winter workspace the provider drives; required to FILL
@@ -130,9 +126,7 @@ class RunnerConfig:
     gates: tuple[str, ...] = ()
     #: The runner-owned workspace prompt prepended to a worker spawn (issue #17): the
     #: standing "you are a fleet worker in this winter workspace" framing above the node
-    #: envelope. Sent in full on a fresh spawn; a resumed spawn re-sends it only when it
-    #: differs from what that session was last given, announced as updated (issue #149).
-    #: Two source knobs, one effective value (:meth:`resolved_workspace_prompt`):
+    #: envelope. Two source knobs, one effective value (:meth:`resolved_workspace_prompt`):
     #: ``workspace_prompt`` is the inline text; ``workspace_prompt_file`` is a path (absolute,
     #: or relative to :attr:`root`) whose contents win over the inline text when set. Empty
     #: on a fresh scaffold — an absent prompt still spawns a valid worker (table-only). The
@@ -144,42 +138,30 @@ class RunnerConfig:
     #: ``workspace_prompt`` exactly: ``runner_prompt`` is the inline text;
     #: ``runner_prompt_file`` (a path, absolute or relative to :attr:`root`) wins over
     #: the inline text when set (:meth:`resolved_runner_prompt`). Empty on a fresh
-    #: scaffold means the resolved value is also empty, in which case
-    #: ``render_worker_preamble`` falls back to the baked ``DEFAULT_BLIZZARD_PREAMBLE`` —
-    #: this layer is config/startup only, unlike ``workspace_prompt``'s live runtime
-    #: override (out of scope for issue #103).
+    #: scaffold means the resolved value is also empty, which the preamble renderer reads
+    #: as "use the baked default". Config/startup only — no live runtime override.
     runner_prompt: str = ""
     runner_prompt_file: str = ""
     #: Where the coding harness writes session transcripts (issue #29). Empty (the
     #: fresh-scaffold default) means ``~/.claude/projects`` — resolved once at the
     #: composition root (``runner/app.py``), never inside the transcript adapter.
     #: Seeded from ``BZ_TRANSCRIPTS_ROOT`` at ``runner init`` and then read from
-    #: ``blizzard-runner.toml`` — **not** re-read from the environment live. That is
-    #: safe only because the service orchestrator's per-env launch command deletes
-    #: ``blizzard-runner.toml`` before every ``init`` (workspace
-    #: ``.winter/config/winter-service-tmux/config.toml``), so a changed env var
-    #: takes effect on the next service start; a bare process restart without that
-    #: delete would keep the stale value.
+    #: ``blizzard-runner.toml`` — **not** re-read from the environment live, so a changed
+    #: env var only takes effect on a re-``init``.
     transcripts_root: str = ""
     #: The per-chunk spend cap (epic #57, issue #61a) — read from the ``[cost]`` table's
-    #: ``chunk_cap_usd`` key. Absent (``None``, the fresh-scaffold default) means no cap,
-    #: today's behavior unchanged. When set, ADVANCE's step boundary parks a chunk whose
-    #: hub-derived total cost (``ChunkDetail.cost.cost_usd``) reaches or exceeds this value
-    #: ``needs_human`` rather than spawning its next attempt, instead of killing the live
-    #: worker that just finished it. The ``[cost]`` table is shared with
+    #: ``chunk_cap_usd`` key. Absent (``None``, the fresh-scaffold default) means no cap.
+    #: When set, a chunk whose derived total cost reaches this value parks ``needs_human``
+    #: at its next step boundary. The ``[cost]`` table is shared with
     #: ``runner_ceiling_usd`` — one section for the epic's two spend controls.
     chunk_cap_usd: float | None = None
     #: The runner-wide spend ceiling (epic #57, issue #61b) — read from the ``[cost]``
     #: table's ``runner_ceiling_usd`` key. Absent (``None``, the fresh-scaffold default)
-    #: means no ceiling, today's behavior unchanged. When set, the tick's ceiling check
-    #: (:func:`blizzard.runner.loop.steps.check_spend_ceiling`) sums this runner's own
-    #: LOCAL usage facts over the trailing :attr:`runner_ceiling_window_hours` (a rolling
-    #: window off the injected clock, never wall time) and, once that sum reaches this
-    #: value, engages the existing local pause brake (the same one ``blizzard runner
-    #: pause`` sets) rather than inventing a second suppression mechanism — every spawn
-    #: site already honors it. There is no auto-unpause: the brake stays engaged even
-    #: after the rolling window later drops back under the ceiling, until an operator
-    #: consciously runs ``blizzard runner start``.
+    #: means no ceiling. When set, this runner's own local usage summed over the trailing
+    #: :attr:`runner_ceiling_window_hours` reaching this value engages the existing local
+    #: pause brake rather than a second suppression mechanism. There is no auto-unpause:
+    #: the brake stays engaged after the rolling window drops back under the ceiling,
+    #: until an operator consciously runs ``blizzard runner start``.
     runner_ceiling_usd: float | None = None
     #: The runner ceiling's rolling window length in hours (issue #61b) — read from
     #: ``[cost].window_hours``. Meaningless (and unused) while :attr:`runner_ceiling_usd`
@@ -189,30 +171,21 @@ class RunnerConfig:
     #: The external-subscription-usage sample step's cadence in seconds (issue #218) —
     #: read from the ``[external_subscription_usage]`` table's ``sample_interval_seconds``
     #: key. Defaults to :data:`DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS` when the
-    #: table (or just this key) is absent. The tick's sample step
-    #: (:func:`blizzard.runner.loop.steps.sample_external_subscription_usage`) only
-    #: re-samples the harness's own rate-limit windows once this many seconds have
-    #: elapsed since the runner's last sampling *attempt* — a diagnostic cadence, not a
-    #: spend control, so there is no "absent means never" knob here the way
-    #: ``runner_ceiling_usd`` has one.
+    #: table (or just this key) is absent — a diagnostic cadence, not a spend control, so
+    #: there is no "absent means never" knob here the way ``runner_ceiling_usd`` has one.
     external_usage_sample_interval_seconds: int = DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS
     #: An override for the credential file the external-usage sampler reads (issue #218) —
     #: read from the ``[external_subscription_usage]`` table's ``credentials_path`` key.
     #: ``None`` (the key absent, the default for every real deployment) means the adapter's
-    #: own default, Claude Code's real ``~/.claude/.credentials.json``. Test scaffolding
-    #: (the same daemons every service/e2e/journey/crash-sweep tier spawns for real, over
-    #: the same composition root a live deployment uses) points this at a scratch path that
-    #: is never created, so the sampler's first soft-failure check (a missing file) trips
-    #: before any request is built — keeping those tiers' no-network-access guarantee real
-    #: for this step exactly as it already is for every other seam.
+    #: own default. Test scaffolding points this at a scratch path that is never created,
+    #: so the sampler soft-fails on the missing file before any request is built —
+    #: keeping those tiers' no-network-access guarantee real for this step.
     external_usage_credentials_path: str | None = None
     #: The operator's declared extension to the worker spawn-environment allowlist
-    #: (issue #88) — read from the ``[worker]`` table's ``env_passthrough`` key. The
-    #: adapter's three subprocess env constructions build from a fixed base allowlist
-    #: (``PATH``/``HOME``/``USER``/``LANG``/``LC_*``/``TERM``/``TMPDIR``) plus this list,
-    #: never a full ``os.environ`` copy — so a daemon secret (foremost ``BZ_HUB_TOKEN``)
-    #: is absent from every worker/judge/resume child by construction unless an operator
-    #: deliberately names it here. Empty on a fresh scaffold.
+    #: (issue #88) — read from the ``[worker]`` table's ``env_passthrough`` key. A worker
+    #: child's env is a fixed base allowlist plus this list, never a full ``os.environ``
+    #: copy, so a daemon secret (foremost ``BZ_HUB_TOKEN``) is absent by construction
+    #: unless an operator deliberately names it here. Empty on a fresh scaffold.
     worker_env_passthrough: tuple[str, ...] = ()
     #: The runner's own browser-reachable base URL (issue #95) — read from the
     #: `public_url` key. Empty (the fresh-scaffold default) means this runner does not
@@ -222,9 +195,7 @@ class RunnerConfig:
     public_url: str = ""
     #: The hub **username** naming this runner's own sovereign (issue #95,
     #: `[auth].superuser`) — never assignable through a JWT claim; a config-only
-    #: designation, mirroring the hub's own `auth.superuser` (a bootstrap identity, not
-    #: API-assignable). `None` (the fresh-scaffold default) names no runner-local
-    #: superuser.
+    #: designation. `None` (the fresh-scaffold default) names no runner-local superuser.
     auth_superuser: str | None = None
     #: The fallback runner-local role for a hub identity with no `[auth.users]`
     #: override (issue #95) — `"mirror"` reproduces the hub's own `role` claim, or a
@@ -240,25 +211,20 @@ class RunnerConfig:
     #: Model tier-alias mappings (issue #144, `[models.aliases]`) — a tuple of
     #: `(alias, native_name)` pairs (not a `dict`, so the frozen dataclass keeps every
     #: field hashable/immutable like `auth_users` above). Maps the namespaced
-    #: `blizzard:` tier aliases a graph's `sessions:` declaration or a chunk default
-    #: names — `blizzard:frontier`/`advanced`/`basic` are the standard three — onto the
-    #: model names *this* runner's harness understands. This is what keeps a graph
-    #: harness-agnostic: a codex runner maps the same tiers to its own models, and a
-    #: hub that never sees this table treats every entry as an opaque preference string.
+    #: `blizzard:` tier aliases an authored graph names onto the model names *this*
+    #: runner's harness understands — which is what keeps a graph harness-agnostic.
     #: An entry here overrides the adapter's own built-in tier defaults; an alias
     #: mapped by neither is skipped at resolution, never a spawn failure.
     model_aliases: tuple[tuple[str, str], ...] = ()
     #: Effort alias mappings (issue #144, `[effort.aliases]`) — the same shape, mapping
-    #: an authored effort value onto the `low|medium|high|max` ordinal each adapter maps
-    #: to its own native tiers. The well-known four need no entry; this exists so a
-    #: deployment can name its own vocabulary (or reach a native tier outside the
-    #: ordinal, e.g. Claude Code's `xhigh`).
+    #: an authored effort value onto the `low|medium|high|max` ordinal. The well-known
+    #: four need no entry; this exists so a deployment can name its own vocabulary (or
+    #: reach a native tier outside the ordinal).
     effort_aliases: tuple[tuple[str, str], ...] = ()
     #: The reverse-proxy trust set (issue #130) — proxy addresses or CIDRs whose
     #: `X-Forwarded-Proto` is honored when minting the runner's own SSO session cookie
     #: (`runner/auth/federation.py`, the `Secure` flag). Empty (the default) ignores the
-    #: header from every peer — byte-identical to a direct-exposure runner. Stored as raw
-    #: strings that round-trip to toml; parsed into
+    #: header from every peer. Stored as raw strings that round-trip to toml; parsed into
     #: :class:`~blizzard.foundation.forwarded.TrustedProxies` at the composition root.
     trusted_proxies: tuple[str, ...] = ()
 
@@ -567,7 +533,7 @@ def _parse_chunk_cap_usd(cost: object) -> float | None:
 
 def _parse_runner_ceiling_usd(cost: object) -> float | None:
     """``[cost].runner_ceiling_usd`` (issue #61b) — absent (the table, or just this key)
-    means no ceiling, mirroring :func:`_parse_chunk_cap_usd`'s shape exactly."""
+    means no ceiling."""
     if not isinstance(cost, dict) or cost.get("runner_ceiling_usd") is None:
         return None
     return float(cost["runner_ceiling_usd"])
@@ -585,7 +551,7 @@ def _parse_runner_ceiling_window_hours(cost: object) -> float:
 def _parse_external_usage_sample_interval_seconds(table: object) -> int:
     """``[external_subscription_usage].sample_interval_seconds`` (issue #218) — defaults to
     :data:`DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS` when the table (or just this
-    key) is absent, mirroring :func:`_parse_runner_ceiling_window_hours`'s shape."""
+    key) is absent."""
     if not isinstance(table, dict) or table.get("sample_interval_seconds") is None:
         return DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS
     return int(table["sample_interval_seconds"])
@@ -602,7 +568,7 @@ def _parse_external_usage_credentials_path(table: object) -> str | None:
 
 def _parse_worker_env_passthrough(worker: object) -> tuple[str, ...]:
     """``[worker].env_passthrough`` (issue #88) — absent (the table, or just this key)
-    means no operator extension, mirroring :func:`_parse_chunk_cap_usd`'s shape."""
+    means no operator extension."""
     if not isinstance(worker, dict) or worker.get("env_passthrough") is None:
         return ()
     return tuple(str(v) for v in worker["env_passthrough"])
@@ -633,8 +599,7 @@ def _parse_auth_superuser(auth: object) -> str | None:
 
 def _parse_auth_hub_role_default(auth: object) -> str:
     """``[auth].hub_role_default`` (issue #95) — defaults to ``"mirror"`` when absent
-    (the table, or just this key), mirroring :func:`_parse_runner_ceiling_window_hours`'s
-    shape."""
+    (the table, or just this key)."""
     if not isinstance(auth, dict) or not auth.get("hub_role_default"):
         return "mirror"
     return str(auth["hub_role_default"])
@@ -642,9 +607,8 @@ def _parse_auth_hub_role_default(auth: object) -> str:
 
 def _parse_aliases(table: object) -> tuple[tuple[str, str], ...]:
     """``[models.aliases]`` / ``[effort.aliases]`` (issue #144) — an alias-keyed table
-    projected into an immutable pair tuple, mirroring :func:`_parse_auth_users` (a frozen
-    dataclass field must stay hashable). Absent, or present but empty, means no override:
-    the adapter's own built-in tier defaults stand."""
+    projected into an immutable pair tuple (a frozen dataclass field must stay hashable).
+    Absent, or present but empty, means no override."""
     if not isinstance(table, dict):
         return ()
     aliases = table.get("aliases")
@@ -655,9 +619,8 @@ def _parse_aliases(table: object) -> tuple[tuple[str, str], ...]:
 
 def _parse_auth_users(auth: object) -> tuple[tuple[str, str], ...]:
     """``[auth.users]`` (issue #95) — a hub-username-keyed table of per-user role
-    overrides, projected into an immutable pair tuple (see :attr:`RunnerConfig.auth_users`'s
-    own docstring for why: a frozen dataclass field must stay hashable). Absent (the
-    table, or an empty one) means no override."""
+    overrides, projected into an immutable pair tuple (a frozen dataclass field must stay
+    hashable). Absent (the table, or an empty one) means no override."""
     if not isinstance(auth, dict):
         return ()
     users = auth.get("users")

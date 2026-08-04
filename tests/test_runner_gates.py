@@ -242,10 +242,8 @@ def test_fill_leaves_a_resolved_gate_to_advance(tmp_path):  # type: ignore[no-un
 
     A resolved-but-not-transitioned gate keeps its route live, so it derives ``running``
     with a bound env and no active lease — the *same* shape FILL's crash reconciler
-    (``_reconcile_interrupted_claims``) recovers. Without the gate guard, FILL would
-    "adopt" it by spawning a worker on the human-judged node, minting a fresh-epoch lease
-    that strands the human's resolving transition as stale. FILL must skip
-    it and leave the resolving transition to ADVANCE.
+    (``_reconcile_interrupted_claims``) recovers. FILL must skip it and leave the
+    resolving transition to ADVANCE.
     """
     store = _store(tmp_path)
     # A chunk parked at a gate the human just resolved: env bound, no active lease, RUNNING.

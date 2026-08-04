@@ -8,61 +8,23 @@ For **every** crash point in the registry (``bzh:crash-point-registry``), this s
    boundary (a faithful ``kill -9``);
 3. asserts the facts-level invariant checker (``bzh:invariant-checker``) is green over
    both stores immediately after the crash;
-4. restarts the killed daemon **unarmed** (its startup pass is REAP) and lets the
-   scenario converge;
+4. restarts the killed daemon **unarmed** and lets the scenario converge;
 5. asserts the chunk still lands **exactly once** — one ``delivery.landed`` fact, the
    file reachable from bare ``main`` exactly once — and the invariants are green again.
 
-RESUME's boundaries are the exception: they fire only on the first tick after a
-*graceful* restart, which the ``build -> deliver`` scenario never performs, so they are
-swept by the dedicated graceful-restart scenario (``test_kill9_at_resume_crash_point``)
-which arms each on the restart process. The registry is partitioned accordingly.
+Families whose boundary the plain ``build -> deliver`` scenario never reaches are
+partitioned out of the generic sweep and swept by a dedicated scenario each: ``resume.*``,
+``abandon.*``, ``pause.*``, ``hubnode.*``, ``hubnode.after-poll.*``, ``migrate.*``,
+``attach.*``, ``declare-commit.*``, ``nudge.*``, ``checks.*``. Each partition's own comment
+below names its scenario and what that scenario drives.
 
-The ``abandon.*`` family is a second exception, for the same reason: the boundary is
-reached only when the hub reassigns or detaches a chunk out from under an active
-lease, which the plain ``build -> deliver`` scenario never triggers. It is
-swept by its own dedicated scenario (``test_kill9_at_abandon_crash_point``), which
-detaches a running chunk mid-flight via the real hub endpoint and proves the crash
-recovers through RESUME, not through REAP's retry path (blizzard#38 slice 5).
-
-The ``pause.*`` family is the third, and the abandon family's mirror image: its boundary
-is reached only when an operator **pauses** a chunk out from under an active lease
-(issue #46), and where the abandon gives the claim up, the pause keeps it. Its dedicated
-scenario (``test_kill9_at_pause_park_crash_point``) pauses a running chunk mid-flight,
-crashes the runner between the worker's kill and the durable park, and proves recovery
-converges *because* RESUME parks a paused chunk rather than abandoning it.
-
-The ``hubnode.`` family is the fourth (issue #65): its boundaries open only inside the
-generic hub command node executor, which runs a ``run:`` node's declared commands
-serialized fleet-wide on the transition-in completion — a shape the plain
-``build -> deliver`` scenario (whose ``deliver`` node, since #67, is just ``run: [{command:
-"true"}]``, no forge traffic) never mints. Its dedicated scenario
-(``test_kill9_at_hub_command_node_crash_point``) drives a ``build -> merge(run:) -> done``
-graph whose ``merge`` hub node lands the chunk to the mock forge across two ``produces:``
--marked steps, and crashes the hub in one of the two per-step windows: at
-``hubnode.after-step.before-marker`` the just-run land step re-runs on recovery (re-merging
-a merged head is a no-op), and at ``hubnode.after-marker.before-next`` only the unmarked
-remainder re-runs (the marked land step is skipped). Either way the chunk lands exactly
-once and the ``hub:one-live-exec-slot`` invariant is green with no leaked live slot.
-
-Three whole-process cases round it out: an external ``kill -9`` of the runner daemon
-mid-flight, and — closing the #67 gap the per-step registry cannot express — an external
-``kill -9`` of the whole hub process group MID-SCRIPT, inside EITHER of the two packaged
-deliver scripts' own between-repos window: ``land_default.py``
-(``test_kill9_between_default_graph_repo_pushes``) and its PR-free sibling
-``land_ff.py`` (``test_kill9_between_ff_graph_repo_pushes``, #123). Both scripts loop over
-an arbitrary, chunk-dynamic number of repos inside ONE ``run:`` step, recording each
-``merged/<repo>`` marker through the MID-RUN CALLBACK rather than the executor's static
-per-step ``produces:`` — so each script's "between two repos' pushes" boundary is a
-WALL-CLOCK race an external kill (of the hub daemon AND the land subprocess it spawned)
-must land inside, never a named ``hubnode.*`` registry point (the registry arms points
-inside blizzard's OWN process, never inside a spawned script). Each dedicated scenario
-mints a 2-repo chunk against the real script, arms its test-only pause
-(``BZ_HUB_LAND_TEST_PAUSE_SECONDS``) so the kill lands right after the first repo's
-marker is durable, and asserts recovery re-runs the script and re-lands ONLY the
-unmarked repo — each repo landing exactly once, no leaked exec slot (``land_default``
-additionally opens exactly one PR apiece; ``land_ff`` opens none to double-check, so its
-exactly-once proof reads straight off each bare repo's history).
+Three whole-process cases round it out, never parametrized: an external ``kill -9`` of the
+runner daemon mid-flight, and — a window no per-step registry point can express, since the
+registry arms points inside blizzard's OWN process, never inside a spawned script — an
+external ``kill -9`` of the whole hub process group MID-SCRIPT, inside the between-repos
+window of each packaged deliver script: ``land_default.py``
+(``test_kill9_between_default_graph_repo_pushes``) and its PR-free sibling ``land_ff.py``
+(``test_kill9_between_ff_graph_repo_pushes``, #123).
 
 Gated like the e2e tier — needs the sibling ``blizzard-mock`` worktree, a local winter
 source, and ``BLIZZARD_CRASH_SWEEP=1``; skipped otherwise (see ``conftest.py``). Run it::
@@ -126,13 +88,12 @@ pytestmark = pytest.mark.crash_sweep
 # Enumerated from the registry at collection — no hand-maintained point list (bzh:crash-point-registry).
 _ALL_POINTS = [p.name for p in discover_crash_points()]
 
-# RESUME's crash points fire only on the FIRST tick after a *graceful* restart, so the generic
-# `build -> deliver` scenario below — which never restarts gracefully — can never reach them.
-# Likewise, the `abandon.*` boundary fires only when the hub reassigns/detaches a chunk out from
-# under an active lease, which the generic scenario never does either. Partition the registry:
-# the generic sweep drives every remaining boundary; resume points are swept by the
-# graceful-restart scenario (`test_kill9_at_resume_crash_point`) and abandon points by the
-# dedicated detach scenario (`test_kill9_at_abandon_crash_point`), further down.
+# RESUME's crash points fire only on the FIRST tick after a *graceful* restart, and the
+# `abandon.*` boundary only when a chunk is detached out from under an active lease — neither
+# of which the generic `build -> deliver` scenario below ever does. Partition the registry: the
+# generic sweep drives every remaining boundary; resume points are swept by the graceful-restart
+# scenario (`test_kill9_at_resume_crash_point`) and abandon points by the dedicated detach
+# scenario (`test_kill9_at_abandon_crash_point`), further down.
 _DEDICATED_PREFIXES = (
     "resume.",
     "abandon.",
@@ -147,102 +108,55 @@ _DEDICATED_PREFIXES = (
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
 _PAUSE_POINTS = [p for p in _ALL_POINTS if p.startswith("pause.")]
-# The generic hub command node's per-step windows (#65) — `hubnode.*` fires inside the
-# hub's synchronous ``HubNodeExecutor`` (a `run:` node runs on the transition-in
-# completion, exactly as `deliver.*` fires inside the coordinator), so the generic
-# `build -> deliver` scenario below (which never mints a `run:` node) cannot reach it
-# either. Excluded from `_GENERIC_POINTS` for that reason and swept by its own dedicated
-# scenario (`test_kill9_at_hub_command_node_crash_point`), which drives a
-# `build -> merge(run:) -> done` graph whose `merge` hub node lands the chunk to the mock
-# forge, then crashes the hub inside one of the two per-step windows — proving the
-# at-least-once-per-step contract: `hubnode.after-step.before-marker` re-runs the just-run
-# step (the land re-runs; re-merging a merged head is a no-op), and
-# `hubnode.after-marker.before-next` re-runs only the UNMARKED remainder (the marked land
-# step is skipped). Both converge exactly once with the `hub:one-live-exec-slot` invariant
-# green and no leaked live slot.
+# The generic hub command node's per-step windows (#65) — `hubnode.*` fires inside the hub's
+# synchronous ``HubNodeExecutor``, which the generic `build -> deliver` scenario below (it
+# mints no `run:` node) cannot reach. Excluded from `_GENERIC_POINTS` for that reason and
+# swept by `test_kill9_at_hub_command_node_crash_point`, which drives a
+# `build -> merge(run:) -> done` graph and crashes the hub inside one of the two per-step
+# windows.
 #
 # `hubnode.after-poll.` is a further, NARROWER carve-out within the `hubnode.` family
-# (issue #66): its boundary opens only when a `run:` step reports the reserved
-# `pending` outcome, which the two-step land/verify scenario above never mints (both
-# steps always succeed). Folding it into `_HUBNODE_POINTS` would silently parametrize
-# `test_kill9_at_hub_command_node_crash_point` against a point its own scenario can
-# never reach. So it is swept by its own dedicated scenario
-# (`test_kill9_at_hub_node_pending_crash_point`), which drives a
-# `build -> merge(run:) -> done` graph whose `merge` hub node reports `pending` on its
-# first poll (a durable poll-attempt fact, the fleet-wide slot still live) then lands on
-# the next, and crashes the hub inside that between-polls window
-# (`hubnode.after-poll.before-slot-release`): the poll fact is durable but the slot's
-# release never ran. Recovery keeps polling — pending-ness is DERIVED from the poll fact,
-# never in-memory — the same chunk reentrantly reclaims its own still-live slot on the
-# next due poll, lands exactly once, and releases the slot: the `hub:one-live-exec-slot`
-# invariant is green after the crash (one leaked live slot is still <= 1) and after
-# convergence (no leaked slot at all).
+# (issue #66): its boundary opens only when a `run:` step reports the reserved `pending`
+# outcome, which the two-step land/verify scenario above never mints. Folding it into
+# `_HUBNODE_POINTS` would silently parametrize `test_kill9_at_hub_command_node_crash_point`
+# against a point its own scenario can never reach, so it is swept by
+# `test_kill9_at_hub_node_pending_crash_point` instead.
 _HUBNODE_PENDING_POINTS = [p for p in _ALL_POINTS if p.startswith("hubnode.after-poll.")]
 _HUBNODE_POINTS = [p for p in _ALL_POINTS if p.startswith("hubnode.") and p not in _HUBNODE_PENDING_POINTS]
-# `migrate.*` fires inside the HUB process (`ApplyService._apply_migration`, issue #90),
-# only when a worker selects a cross-graph judgement choice — which the generic
-# `build -> deliver` scenario (a single-graph graph) never mints. So it is a dedicated
-# family swept by its own scenario (`test_kill9_at_migrate_crash_point`), which drives a
-# two-graph `source --migrate--> triage-delivery` graph: the worker migrates, the hub
-# crashes right after the atomic re-pin, and recovery re-queues + lands the chunk under the
-# target graph exactly once with `hub:migration-pin-consistent` green.
+# `migrate.*` fires inside the HUB (`ApplyService._apply_migration`, issue #90), only when a
+# worker selects a cross-graph judgement choice — which the generic single-graph scenario
+# never mints. Swept by `test_kill9_at_migrate_crash_point`, which drives a two-graph
+# `source --migrate--> triage-delivery` graph.
 _MIGRATE_POINTS = [p for p in _ALL_POINTS if p.startswith("migrate.")]
 # `attach.*` fires inside the RUNNER's local attach endpoint (`AttachmentService.attach`,
-# issue #113), an out-of-band HTTP write the generic `build -> deliver` sweep never drives —
-# so it is a dedicated family swept by its own scenario (`test_kill9_at_attach_crash_point`),
-# which stands up a real runner daemon, seeds a lease + its capability token, and makes the
-# real `POST /api/leases/{id}/attachments` call: the runner records the row durably, crashes
-# in the after-record window, and the attachment (with full provenance) survives against the
-# same store — criterion 3's kill-9 durability. It needs no hub and no forge (the attach
-# channel is loop-independent), so it stands up neither.
+# issue #113), an out-of-band HTTP write the generic sweep never drives. Swept by
+# `test_kill9_at_attach_crash_point`, which makes the real attach call against a real runner
+# daemon.
 _ATTACH_POINTS = [p for p in _ALL_POINTS if p.startswith("attach.")]
 # `declare-commit.*` fires inside the RUNNER's local git-commit declaration endpoint
-# (`GitCommitDeclarationService.declare`, issue #143 Phase 3), `attach.*`'s structural
-# sibling for the `git_commit` artifact kind — an out-of-band HTTP write the generic
-# `build -> deliver` sweep never drives, so it is a dedicated family swept by its own
-# scenario (`test_kill9_at_declare_commit_crash_point`), which stands up a real runner
-# daemon, seeds a lease + its capability token, and makes the real
-# `POST /api/leases/{id}/git-commits` call: the runner records the row durably, crashes
-# in the after-record window, and the declaration (with full provenance) survives
-# against the same store — criterion 3's kill-9 durability, exactly as `attach.*`'s. It
-# needs no hub and no forge (the declare channel is loop-independent, and nothing yet
-# consumes the declaration — that is Phase 4), so it stands up neither.
+# (`GitCommitDeclarationService.declare`, issue #143 Phase 3), `attach.*`'s structural sibling
+# for the `git_commit` artifact kind and likewise never driven by the generic sweep. Swept by
+# `test_kill9_at_declare_commit_crash_point`.
 _DECLARE_COMMIT_POINTS = [p for p in _ALL_POINTS if p.startswith("declare-commit.")]
-# `nudge.*` fires inside the RUNNER's own ADVANCE step (`_advance_exited_worker`,
-# issue #113 Phase 4), only when a node's `produces:` name has neither a pushed git
-# commit nor an explicit attachment — a condition the plain `build -> deliver` graph
-# above never creates (its `build` node declares no `produces:` at all). So it is a
-# dedicated family swept by its own scenario (`test_kill9_at_nudge_crash_point`),
-# which drives `nudge_graph_yaml`'s `build -> deliver` graph — identical but for one
-# unattached `produces:` name on `build` — and crashes the RUNNER (never the hub;
-# both windows are runner-local) in one of the two per-nudge windows:
-# `nudge.after-fired-fact.before-resume` (the guard is durable, the resume that
-# delivers the nudge has not run) and `nudge.after-resume.before-reassemble` (the
-# resume returned, attachments not yet re-read). Either way the chunk still lands
-# exactly once and `runner:nudge-at-most-once` is green — the resume the crash
-# interrupted is never repeated on the recovering pass, because the guard fact is
-# written before the resume runs, not after (see the call site in
-# `runner/loop/steps.py` for why that ordering is what makes the property hold).
+# `nudge.*` fires inside the RUNNER's own ADVANCE step (`_advance_exited_worker`, issue #113
+# Phase 4), only when a node's `produces:` name has neither a pushed git commit nor an
+# explicit attachment — a condition the plain `build -> deliver` graph above never creates
+# (its `build` node declares no `produces:` at all). Swept by `test_kill9_at_nudge_crash_point`
+# against `nudge_graph_yaml`'s graph.
 _NUDGE_POINTS = [p for p in _ALL_POINTS if p.startswith("nudge.")]
-# The checks-at-exit windows (#114) — `checks.*` fires inside the RUNNER's own ADVANCE step
-# (the runner runs a node's `checks:` at worker exit, records the result rows, then a
-# marker). A dedicated family swept by `test_kill9_at_checks_crash_point`, which drives
-# `checks_graph_yaml`'s `build -> deliver` graph — identical to the generic one but for one
-# green `checks:` command on `build` — and crashes the runner in one of the two windows:
-# `checks.after-results.before-marker` (rows durable, marker not — recovery re-runs) and
-# `checks.after-marker.before-judge` (marker durable — recovery reads results back).
+# The checks-at-exit windows (#114) — `checks.*` fires inside the RUNNER's own ADVANCE step,
+# only for a node carrying a `checks:` command, which the generic graph does not. Swept by
+# `test_kill9_at_checks_crash_point` against `checks_graph_yaml`'s graph.
 _CHECKS_POINTS = [p for p in _ALL_POINTS if p.startswith("checks.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset — one crash point per boundary family, biased toward the
-# recovery-critical windows the sweep's two real bugs lived in: the FILL bind→claim window
-# (chunk-strand recovery) and the lost-ack replay (`flush.after-submit.before-ack`, hub
-# idempotency). Running the whole generic sweep as real subprocesses is ~130s locally and
-# multiples of that on a 2-core GitHub runner; the master `push` workflow sets
-# BLIZZARD_CRASH_SWEEP_CI=1 to run this subset so the named gap is a REAL gate at bounded
-# runtime, while the FULL sweep stays the documented local command (`mise run crash-sweep`)
-# and the tag `release` workflow. The three whole-process cases below are never parametrized,
-# so they run in both profiles.
+# recovery-critical windows the sweep's two real bugs lived in. Running the whole generic
+# sweep as real subprocesses is ~130s locally, multiples of that on a 2-core GitHub runner,
+# so the master `push` workflow (BLIZZARD_CRASH_SWEEP_CI=1) runs this subset as a bounded-
+# runtime real gate; the FULL sweep stays the documented local command (`mise run
+# crash-sweep`) and the `release` workflow. The three whole-process cases below are never
+# parametrized, so they run in both profiles.
 _CI_SUBSET = (
     "reap.after-expire",
     "pull.after-flush",
@@ -250,9 +164,8 @@ _CI_SUBSET = (
     "spawn.after-lease-mint.before-spawn",
     "advance.after-buffer.before-flush",
     "flush.after-submit.before-ack",
-    # `claim.*` (issue #84b) is a new boundary family within `_GENERIC_POINTS` — its
-    # lone member is its own CI representative, so it never ships with zero CI-subset
-    # coverage, the same convention `_ABANDON_CI_SUBSET`/`_PAUSE_CI_SUBSET` follow.
+    # `claim.*` (issue #84b) is a boundary family within `_GENERIC_POINTS`; its lone member
+    # is its own CI representative (see `_ABANDON_CI_SUBSET` for the convention).
     "claim.after-persist.before-response",
 )
 
@@ -266,59 +179,35 @@ _RESUME_CI_SUBSET = ("resume.after-kill.before-reattach",)
 # ships with zero CI coverage (bzh:crash-point-registry).
 _ABANDON_CI_SUBSET = ("abandon.after-kill.before-release",)
 
-# The pause CI subset: `pause.*` is a new boundary family (issue #46) whose lone member is that
-# family's CI representative, exactly as `abandon.*`'s is. It earns CI time on its own merit
-# rather than by symmetry: this window is the regression fence on the plan's central bug — the
-# recovery it asserts converges *only* because `_resume_marked_lease` parks a paused chunk instead
-# of abandoning it, so a regression there fails this case and nothing else in the sweep.
+# The pause CI subset (issue #46): the family's lone member is its own CI representative. It
+# earns the CI time on its own merit rather than by symmetry — this window is the regression
+# fence on the issue's central bug, and a regression there fails this case and nothing else in
+# the sweep (see `test_kill9_at_pause_park_crash_point`).
 _PAUSE_CI_SUBSET = ("pause.after-kill.before-park",)
 
-# The hub command node CI subset (#65): `hubnode.*` is a new boundary family whose
-# first-declared member is its own CI representative, exactly as `abandon.`/`pause.` are —
-# so this new window's registry entry never ships with zero CI-subset coverage, even
-# ahead of the dedicated sweep scenario landing (see the Gap comment on `_HUBNODE_POINTS`
-# above).
+# The hub command node CI subset (#65): the family's first-declared member is its own CI
+# representative.
 _HUBNODE_CI_SUBSET = ("hubnode.after-step.before-marker",)
 
-# The hub-node pending CI subset (#66): `hubnode.after-poll.` is the narrower
-# between-polls window carved out of the `hubnode.*` family above (a `run:` step's
-# `pending` outcome, not a per-step land). Its lone member is its own CI representative,
-# so this window ships with real CI coverage — never zero — exactly as the other new
-# families do, and the `_select` rename-guard asserts the point still exists in the
-# registry.
+# The hub-node pending CI subset (#66): the narrower between-polls window carved out of the
+# `hubnode.*` family above; its lone member is its own CI representative.
 _HUBNODE_PENDING_CI_SUBSET = ("hubnode.after-poll.before-slot-release",)
 
-# The migrate CI subset (#90): `migrate.*` is a new hub-side boundary family whose lone
-# member — the after-record window — is its own CI representative, so this new window
-# ships with real CI coverage (never zero), exactly as the other new families do; the
-# `_select` rename-guard asserts the point still exists in the registry.
+# The migrate CI subset (#90): the family's lone member is its own CI representative.
 _MIGRATE_CI_SUBSET = ("migrate.after-record.before-response",)
 
-# The attach CI subset (#113): `attach.*` is a new runner-side boundary family whose lone
-# member — the after-record durability window — is its own CI representative, so this new
-# window ships with real CI coverage (never zero), exactly as the other new families do; the
-# `_select` rename-guard asserts the point still exists in the registry.
+# The attach CI subset (#113): the family's lone member is its own CI representative.
 _ATTACH_CI_SUBSET = ("attach.after-record.before-response",)
 
-# The declare-commit CI subset (#143): `declare-commit.*` is a new runner-side boundary
-# family whose lone member — the after-record durability window — is its own CI
-# representative, exactly as `attach.*`'s is, so this new window ships with real CI
-# coverage (never zero); the `_select` rename-guard asserts the point still exists in
-# the registry.
+# The declare-commit CI subset (#143): the family's lone member is its own CI representative.
 _DECLARE_COMMIT_CI_SUBSET = ("declare-commit.after-record.before-response",)
 
-# The nudge CI subset (#113): `nudge.*` is a new runner-side boundary family whose first-
-# declared member — the fired-fact-before-resume window, the one the "at most one nudge"
-# guarantee rests on — is its own CI representative, exactly as the other new families are,
-# so this new window ships with real CI coverage (never zero); the `_select` rename-guard
-# asserts the point still exists in the registry.
+# The nudge CI subset (#113): the family's first-declared member — the fired-fact-before-resume
+# window the "at most one nudge" guarantee rests on — is its own CI representative.
 _NUDGE_CI_SUBSET = ("nudge.after-fired-fact.before-resume",)
 
-# The checks CI subset (#114): `checks.*` is a new runner-side boundary family whose
-# recovery-critical member — the fired-before-marker window the exactly-once-recording
-# guarantee rests on — is its own CI representative, exactly as `_NUDGE_CI_SUBSET`'s is, so
-# this new window ships with real CI coverage (never zero); the `_select` rename-guard
-# asserts the point still exists in the registry.
+# The checks CI subset (#114): the family's recovery-critical member — the results-before-marker
+# window — is its own CI representative.
 _CHECKS_CI_SUBSET = ("checks.after-results.before-marker",)
 
 
@@ -350,18 +239,15 @@ _DECLARE_COMMIT_SWEEP = _select(_DECLARE_COMMIT_POINTS, _DECLARE_COMMIT_CI_SUBSE
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
     """Every family prefix in the registry yields a non-empty CI-profile selection.
 
-    ``_select`` only asserts a *named* CI-subset point still exists (catching a rename) — it
-    never asserts the converse. The three named subsets (``_CI_SUBSET`` / ``_RESUME_CI_SUBSET`` /
-    ``_ABANDON_CI_SUBSET``) are closed allowlists, so a new point added to an already-partitioned
-    family (a fourth ``resume.*`` boundary, a second ``abandon.*`` one) is silently absent from
-    CI: those families are unreachable by the generic sweep, so the new point gets zero coverage,
-    with no failure to say so. This makes the "a new family never ships with zero CI coverage"
-    claim (see ``_ABANDON_CI_SUBSET`` above) mechanical rather than aspirational.
+    ``_select`` only asserts a *named* CI-subset point still exists (catching a rename), never
+    the converse: the named subsets are closed allowlists, so a new point added to an
+    already-partitioned family would be silently absent from CI with no failure to say so. This
+    makes the "a new family never ships with zero CI coverage" claim (see ``_ABANDON_CI_SUBSET``
+    above) mechanical rather than aspirational.
 
     Forces the CI profile via ``monkeypatch`` rather than trusting the ambient environment, so
-    this assertion holds whether it is run standalone or under ``mise run crash-sweep-ci`` — a
-    fast, registry-only computation, not a sweep run, independent of ``crash_env`` and
-    ``BLIZZARD_CRASH_SWEEP``.
+    this assertion holds standalone or under ``mise run crash-sweep-ci`` — a fast, registry-only
+    computation, independent of ``crash_env`` and ``BLIZZARD_CRASH_SWEEP``.
     """
     monkeypatch.setenv("BLIZZARD_CRASH_SWEEP_CI", "1")
     families = {p.split(".", 1)[0] for p in _ALL_POINTS}
@@ -406,11 +292,9 @@ def _ingest_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> s
     return chunk_id
 
 
-# `claim.*` fires inside the HUB process (`ClaimService._claim_locked`, issue #84b) —
-# the one `_GENERIC_POINTS` family that arms the hub rather than the runner, since the
-# generic `build -> deliver` scenario's claim is a hub-side POST /routes handler, not a
-# runner-loop step. `test_kill9_at_crash_point` below reads this to pick which daemon
-# to arm and restart.
+# `claim.*` fires inside the HUB process (`ClaimService._claim_locked`, issue #84b) — the
+# one `_GENERIC_POINTS` family that arms the hub rather than the runner.
+# `test_kill9_at_crash_point` below reads this to pick which daemon to arm and restart.
 _HUB_SIDE_GENERIC_PREFIXES = ("claim.",)
 
 
@@ -422,18 +306,13 @@ def test_kill9_at_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -
     hub_port, runner_port = free_port(), free_port()
     on_hub = point.startswith(_HUB_SIDE_GENERIC_PREFIXES)
 
-    # Every point in `_GENERIC_POINTS` fires inside the runner loop, except the
-    # `claim.*` family above, which fires inside the hub's claim handler — the
-    # dedicated families (resume./abandon./pause./hubnode.) are excluded above, and
-    # arm their own daemon in their own scenarios.
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point if on_hub else None)
     runner_proc = None
     hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
-        # For a `claim.*` point, ingest+promote alone leaves the chunk ready; the
-        # runner's own FILL claim below — the same call every scenario makes on the
-        # way to delivery — is what drives the hub into the armed window.
+        # For a `claim.*` point, ingest+promote alone leaves the chunk ready; the runner's
+        # own FILL claim below is what drives the hub into the armed window.
         chunk_id = _ingest_chunk(hub, crash_env.forge, landed_file)
 
         write_runner_config(
@@ -494,15 +373,11 @@ def test_kill9_at_migrate_crash_point(crash_env: CrashEnv, tmp_path: Path, point
     """A ``kill -9`` right after a cross-graph migration is recorded still recovers (#90).
 
     ``migrate.*`` fires inside the HUB (``ApplyService._apply_migration``): the worker at
-    the source graph's ``build`` node selects the ``migrate`` choice, the hub records the
-    migration atomically (graph and default-model re-pinned, route released, artifacts
-    committed), then
-    self-SIGKILLs before returning ``MIGRATED``. The claim under test: the runner's
-    lost-ack replay re-derives ``MIGRATED`` via the ``accepted_migration`` probe (no second
-    re-pin — ``hub:one-migration-per-node-epoch`` stays green), the chunk re-queues at the
-    target graph's ``build`` node under the new pin (``hub:migration-pin-consistent``
-    green), and a claim there runs it to ``done`` — landing the file on bare ``main``
-    exactly once, its history spanning two graphs."""
+    the source graph's ``build`` node selects the ``migrate`` choice and the hub self-SIGKILLs
+    after recording the migration, before returning ``MIGRATED``. The claim under test: the
+    migration fact is durable across the crash, the chunk re-queues at the target graph's
+    ``build`` node under the new pin, and a claim there runs it to ``done`` — landing the file
+    on bare ``main`` exactly once, its history carrying exactly one migration."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -593,18 +468,15 @@ def test_kill9_at_migrate_crash_point_for_an_intended_migration(
     proves, now reached through a claimed chunk's standing intent rather than a
     ``graph:<name>`` edge.
 
-    The source graph here is entirely ordinary — no cross-graph edge at all. A
-    ``forced`` intent, PATCHed onto the chunk before the runner ever claims it, names
-    the migration target's own ``build`` node. At the source's ordinary
-    ``build -pass-> deliver`` transition the consult (``ApplyService._consult_intended_migration``)
-    fires unconditionally, landing on the target's ``build`` — never the transition's own
-    ``deliver`` — then the hub self-SIGKILLs right after the atomic re-pin (the same
-    ``migrate.after-record.before-response`` window). The claim under test: the intent is
-    durably cleared in the same transaction as the migration fact (so recovery never
-    re-fires it — a double migration), the runner's lost-ack replay re-derives
-    ``MIGRATED``, the chunk re-queues at the target's ``build`` node, and a claim there
-    runs the target's own real build + deliver to ``done`` — landing the file on bare
-    ``main`` exactly once."""
+    The source graph here is entirely ordinary — no cross-graph edge at all. A ``forced``
+    intent, PATCHed onto the chunk before the runner ever claims it, names the migration
+    target's own ``build`` node; the consult fires at the source's ordinary
+    ``build -pass-> deliver`` transition and the hub self-SIGKILLs right after the atomic
+    re-pin (the same ``migrate.after-record.before-response`` window). The claim under test:
+    the intent is durably cleared in the same transaction as the migration fact (so recovery
+    never re-fires it — a double migration), the chunk re-queues at the target's ``build``
+    node, and a claim there runs the target's own real build + deliver to ``done`` — landing
+    the file on bare ``main`` exactly once."""
     landed_file = f"LANDED-INTENDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -689,18 +561,15 @@ def test_kill9_at_migrate_crash_point_landing_on_a_hub_node(crash_env: CrashEnv,
     """A ``kill -9`` at the migrate window when the migration lands on a **hub** node
     (issue #111) still recovers — it must not wedge at ``delivering``.
 
-    The sibling ``test_kill9_at_migrate_crash_point`` lands on a *runner* node: on the
-    lost-ack replay the hub returns ``MIGRATED``, the runner releases its route, and the
+    The sibling ``test_kill9_at_migrate_crash_point`` lands on a *runner* node, where the
     chunk re-queues ``ready`` for a fresh claim. A **hub-landing** migration is the harder
-    case this scenario fences: the migration retains the route and the chunk derives
-    ``delivering`` (never runner-claimable ``ready``), so recovery cannot come from a fresh
-    claim — it must come from the **holding runner's ADVANCE poll** driving the landed hub
-    node. The crash fires at ``migrate.after-record.before-response``, *before* the inline
-    ``HubNodeExecutor.run`` in ``_apply_migration`` — so the inline dispatch is lost to the
-    crash and only the retained route + the runner's ``hub-advance`` poll can carry the
-    chunk to ``done``. A regression that released the route (or derived ``ready``) on this
-    path would strand the chunk with nothing driving it, and ``wait_status`` below would
-    time out at ``delivering`` rather than converge.
+    case this scenario fences: the route is retained and the chunk derives ``delivering``
+    (never runner-claimable ``ready``), so recovery must come from the **holding runner's
+    ADVANCE poll** driving the landed hub node. The crash fires at
+    ``migrate.after-record.before-response``, *before* the inline ``HubNodeExecutor.run`` in
+    ``_apply_migration``, so only the retained route + that poll can carry the chunk to
+    ``done``. A regression that released the route (or derived ``ready``) would strand the
+    chunk with nothing driving it, and ``wait_status`` below would time out at ``delivering``.
 
     The source ``build`` commits nothing (it hands the chunk off), so the landed hub node
     has no submitted branches to merge — ``LAND_STEP`` is a clean no-op that routes
@@ -774,16 +643,13 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
 
     ``attach.*`` fires inside the RUNNER's local attach endpoint
     (``AttachmentService.attach``, behind ``POST /api/leases/{id}/attachments``), the instant
-    ``record_attachment``'s single committed txn returns and before the ``200`` does. Unlike
-    the generic ``build -> deliver`` sweep, the attach channel is an out-of-band HTTP write no
-    loop step drives — and completion assembly that would read it back is Phase 3, not built
-    here — so this dedicated scenario stands up a real runner daemon (no hub, no forge: the
-    attach path is loop-independent), seeds a lease + its Phase-1 capability token directly,
-    and makes the real attach call. The runner writes the row durably, self-SIGKILLs in the
-    after-record window, and the claim under test is that the attachment — with full
-    provenance — is still readable against the **same store** after the ungraceful death: the
-    durable fact a later completion (and the recovering ADVANCE tick) re-derives via
-    ``attachments_for_lease``.
+    ``record_attachment``'s single committed txn returns and before the ``200`` does. The
+    attach channel is an out-of-band HTTP write no loop step drives, so this dedicated
+    scenario stands up a real runner daemon (no hub, no forge: the attach path is
+    loop-independent), seeds a lease + its capability token directly, and makes the real
+    attach call. The runner writes the row durably, self-SIGKILLs in the after-record window,
+    and the claim under test is that the attachment — with full provenance — is still readable
+    against the **same store** after the ungraceful death.
 
     The seeded lease is **parked** so REAP — which ticks at startup and would otherwise expire
     an unspawned, pid-less lease (``steps.reap``) — leaves it be; ADVANCE skips a pid-less
@@ -872,8 +738,7 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         violations = check_invariants(runner_db_url=db_url)
         assert not violations, "invariant violations after the attach crash:\n" + "\n".join(str(v) for v in violations)
 
-        # Restart the runner UNARMED; the attachment is still readable against the same store —
-        # the fact a later completion (Phase 3) prefers over the judgement assessment.
+        # Restart the runner UNARMED; the attachment is still readable against the same store.
         runner_proc = start_runner(runner_dir, crash_point=None)
         await_http(runner, "/api/health", proc=runner_proc)
         engine3 = create_engine_from_url(db_url)
@@ -907,15 +772,12 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
     ``declare-commit.*`` fires inside the RUNNER's local declare endpoint
     (``GitCommitDeclarationService.declare``, behind ``POST /api/leases/{id}/git-commits``),
     the instant ``record_git_commit_declaration``'s single committed txn returns and before
-    the ``200`` does. Unlike the generic ``build -> deliver`` sweep, the declare channel is
-    an out-of-band HTTP write no loop step drives — and nothing yet reads it back (that is
-    Phase 4) — so this dedicated scenario stands up a real runner daemon (no hub, no forge:
-    the declare path is loop-independent), seeds a lease + its Phase-1 capability token
-    directly, and makes the real declare call. The runner writes the row durably,
-    self-SIGKILLs in the after-record window, and the claim under test is that the
-    declaration — with full provenance — is still readable against the **same store**
-    after the ungraceful death: the durable fact a later collection (Phase 4) re-derives
-    via ``git_commit_declarations_for_lease``.
+    the ``200`` does. The declare channel is an out-of-band HTTP write no loop step drives,
+    so this dedicated scenario stands up a real runner daemon (no hub, no forge: the declare
+    path is loop-independent), seeds a lease + its capability token directly, and makes the
+    real declare call. The runner writes the row durably, self-SIGKILLs in the after-record
+    window, and the claim under test is that the declaration — with full provenance — is
+    still readable against the **same store** after the ungraceful death.
 
     The seeded lease is **parked** so REAP — which ticks at startup and would otherwise
     expire an unspawned, pid-less lease (``steps.reap``) — leaves it be; ADVANCE skips a
@@ -1039,8 +901,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
             str(v) for v in violations
         )
 
-        # Restart the runner UNARMED; the declaration is still readable against the same
-        # store — the fact a later collection (Phase 4) re-derives.
+        # Restart the runner UNARMED; the declaration is still readable against the same store.
         runner_proc = start_runner(runner_dir, crash_point=None)
         await_http(runner, "/api/health", proc=runner_proc)
         engine3 = create_engine_from_url(db_url)
@@ -1077,15 +938,10 @@ def test_kill9_at_nudge_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
     and the chunk still landing exactly once (issue #113, Phase 4).
 
     ``nudge.*`` fires inside the RUNNER's own ADVANCE step, so — unlike ``attach.*`` —
-    this scenario needs a real hub too (the fact this window's condition depends on is
-    an unattached ``produces:`` name on a real node-step, elicited through a real
-    judgement resume against the mock harness). It always arms the runner, never the
-    hub: both windows are runner-local. The mock worker never attaches
-    ``NUDGE_PRODUCES_NAME`` in response to the nudge (scripting a conditional reply is
-    not what these points need proven), so the completion that eventually lands
-    carries the assessment fallback for it — the same shape an unnudged pass would
-    produce, proving the crash cost the attempt nothing but the interrupted resume
-    itself.
+    this scenario needs a real hub too: the window's condition is an unattached
+    ``produces:`` name on a real node-step, reached through a real judgement resume
+    against the mock harness. It always arms the runner, never the hub: both windows are
+    runner-local.
     """
     landed_file = f"NUDGE-LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
@@ -1148,11 +1004,9 @@ def test_kill9_at_checks_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
 
     ``checks.*`` fires inside the RUNNER's own ADVANCE step (the runner runs the node's
     ``checks:`` at worker exit, records the result rows, then the marker), so this arms the
-    runner, never the hub. `checks.after-results.before-marker` leaves the rows durable but
-    the marker unset — recovery re-runs the checks (latest-wins) — and
-    `checks.after-marker.before-judge` leaves the marker durable, so recovery reads the
-    recorded results back rather than re-running. Either way the chunk lands exactly once
-    and the invariant checker is green.
+    runner, never the hub. Either window — `checks.after-results.before-marker` (rows durable,
+    marker not) or `checks.after-marker.before-judge` (marker durable) — must still converge:
+    the chunk lands exactly once and the invariant checker is green.
     """
     landed_file = f"CHECKS-LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
@@ -1324,14 +1178,11 @@ def _await_committed(runner_dir: Path, chunk_id: str, landed_file: str, *, timeo
     """Block until the mid-flight build worker has committed **and durably declared** its
     git commit (issue #143, Phase 4).
 
-    Since Phase 4 the worker itself commits, pushes, and then declares its git-commit
-    through the runner's local channel before it hangs — and the declaration, not the bare
-    commit, is the durable in-flight fact a resume relies on to submit a ``git_commit``
-    artifact and land. Waiting on the committed file alone would race the push+declare that
-    now follows the commit and detach the chunk before the declaration is recorded, leaving
-    the resumed session with nothing to submit (the chunk would never land — the failure
-    mode this guard closes). This is the loop-resume analogue of :func:`_await_marker`,
-    which the abandon scenario uses for the same reason."""
+    The declaration, not the bare commit, is the durable in-flight fact a resume relies on
+    to submit a ``git_commit`` artifact and land. Waiting on the committed file alone would
+    race the push+declare that now follows the commit and detach the chunk before the
+    declaration is recorded, so the chunk would never land. This is the loop-resume analogue
+    of :func:`_await_marker`, which the abandon scenario uses for the same reason."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         store, engine = _runner_store(runner_dir)
@@ -1430,8 +1281,7 @@ def test_kill9_runner_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: P
     crash-recovery must find the killed-mid-work lease itself (dead pid, no recorded session-end,
     heartbeat not stale) and route it to the *same* RESUME the graceful path uses, so the chunk
     lands **exactly once** under the same lease/epoch/session — only the pid rewritten — rather than
-    being redone under a fresh retry. This is the acceptance criterion #12's marker could not cover:
-    the case the systemd unit (``Restart=always``) actually exists for."""
+    being redone under a fresh retry — the acceptance criterion #12's marker could not cover."""
     landed_file = "LANDED-crash-resume.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -1499,9 +1349,8 @@ def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     stop marks the lease, and the restart RESUMEs it — but this restart is ARMED at ``point`` so the
     runner SIGKILLs itself the instant RESUME reaches that boundary. A second, unarmed restart must
     still converge to ``done`` under the *same* lease/epoch/session, with the chunk landing exactly
-    once and the invariant checker green. This is what closes the gap the plain
-    ``test_graceful_restart_resumes_in_flight_session`` left: it proved the happy path, this proves
-    every RESUME boundary the registry enumerates *recovers* from a crash, not just the clean case."""
+    once and the invariant checker green — every RESUME boundary the registry enumerates recovers
+    from a crash, not just the clean case ``test_graceful_restart_resumes_in_flight_session`` proves."""
     landed_file = f"LANDED-resume-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -1693,16 +1542,14 @@ def _wait_for_closure(runner_dir: Path, lease_id: str, *, timeout: float = 30.0)
 def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` right after the abandon's kill (worker dead, envs still held) still recovers.
 
-    A live operator detach is the new way this window is reached (blizzard#38 slice 5):
-    the chunk is claimed and hung mid-flight, the operator detaches it via the real hub endpoint,
-    and the armed runner's next PULL discovers the detach, kills the hung worker, and self-SIGKILLs
-    at ``point`` before the environments are released. The claim under test
-    is that this is recovered by the **same** path restart-resume already carries: the dead pid's
-    heartbeat is fresh at crash time, so the startup scan marks it for resume rather than reaping
-    it as stalled; RESUME then re-asks the hub, finds the chunk still not ours, and re-runs the
-    abandon idempotently. The original lease must close ``released`` — not ``reaped`` — which is
-    exactly the distinction that would catch REAP's expire path retrying the chunk instead of
-    releasing it. The chunk is then re-claimable and lands exactly once."""
+    A live operator detach reaches this window (blizzard#38 slice 5): the chunk is claimed and
+    hung mid-flight, the operator detaches it via the real hub endpoint, and the armed runner's
+    next PULL discovers the detach, kills the hung worker, and self-SIGKILLs at ``point`` before
+    the environments are released. The claim under test is that this recovers through the **same**
+    path restart-resume already carries, not REAP's retry path: the original lease must close
+    ``released`` — not ``reaped`` — which is exactly the distinction that would catch REAP's
+    expire path retrying the chunk instead of releasing it. The chunk is then re-claimable and
+    lands exactly once."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     marker = tmp_path / "hang-once.marker"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
@@ -1723,9 +1570,7 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         runner_proc = start_runner(runner_dir, crash_point=point)
 
         assert wait_status(hub, chunk_id, {"running"}) == "running"
-        # Wait for the marker, not just the committed file: the file is written before the
-        # commit, so racing the detach in right after it appears could kill the worker before it
-        # ever reaches `hang()` — see `_await_marker`.
+        # Wait for the marker, not just the committed file — see `_await_marker`.
         _await_marker(marker)
         before = _leases_for_chunk(runner_dir, chunk_id)
         assert len(before) == 1, f"expected one lease before detach, got {before}"
@@ -1801,8 +1646,7 @@ def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, po
 
     That residue is the whole point. It is exactly the shape startup crash-recovery marks for
     resume, so recovery runs straight back through ``_resume_marked_lease`` — which converges
-    **only because** it reads ``detail.pause`` and parks, killing an already-dead pid as a no-op.
-    The same path *abandoned* the chunk before this issue's central fix, so a regression there
+    **only because** it parks a paused chunk rather than abandoning it. A regression there
     surfaces right here as a ``released`` closure and freed environments instead of a held claim.
     That is what earns this point its place in the CI subset.
 
@@ -1886,14 +1730,8 @@ def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, po
 # --------------------------------------------------------------------------- #
 
 
-# The land step's command: open a PR for each submitted branch and merge it by pinned SHA
-# against the mock forge — the generic ``run:`` policy #65 makes graph content, driven
-# entirely off the injected env, never a typed forge seam (policy-in-YAML). Idempotent by
-# construction: re-merging an already-merged head is a git "Already up to date" no-op, so
-# the ``hubnode.after-step.before-marker`` re-run lands nothing twice. It prints a
-# non-choice line so the executor's outcome mapping falls through to the next step (and,
-# after the last step, to the default ``success`` edge) rather than short-circuiting.
-# Shared with the generic sweep graph's own ``deliver`` step (:data:`support.LAND_STEP`).
+# The land step's command, shared with the generic sweep graph's own ``deliver`` step — see
+# :data:`support.LAND_STEP` for what it runs and why re-running it lands nothing twice.
 _LAND_STEP = LAND_STEP
 
 # The verify step: a no-op second step whose only job is to be an UNMARKED step past the
@@ -1908,12 +1746,10 @@ PYEOF
 def _hub_command_graph_yaml(landed_file: str) -> str:
     """A ``build -> merge(run:) -> done`` graph whose ``merge`` is a generic hub command node.
 
-    ``build`` commits ``landed_file`` (the runner pushes its branch to the origin on ADVANCE,
-    exactly as for the coordinator path); ``merge`` is an ``executor: hub`` node with a
-    two-step ``run:`` list — ``land`` (``produces: merged``) opens+merges a PR by pinned SHA,
-    ``verify`` (``produces: verified``) is a no-op post-land step. Its judgement authors the
-    reserved ``success``/``failure`` choices (#65's fused outcome vocabulary); a clean run
-    ends on ``success -> done``, ``done`` being the only terminal (#63)."""
+    ``build`` commits ``landed_file``; ``merge`` is an ``executor: hub`` node with a two-step
+    ``run:`` list — ``land`` (``produces: merged``) opens+merges a PR by pinned SHA, ``verify``
+    (``produces: verified``) is a no-op post-land step. Its judgement authors the reserved
+    ``success``/``failure`` choices (#65); a clean run ends on ``success -> done`` (#63)."""
     import yaml
 
     graph = {
@@ -1994,7 +1830,7 @@ def test_kill9_at_hub_command_node_crash_point(crash_env: CrashEnv, tmp_path: Pa
     ``land`` (``produces: merged``) then ``verify`` (``produces: verified``) — synchronously on
     the build completion, serialized by the fleet-wide ``hub_exec_slot`` FACT. The hub self-
     SIGKILLs inside one of the two per-step windows, and a restart re-drives the executor off the
-    re-flushed build completion (its idempotent replay re-enters the hub-node branch).
+    re-flushed build completion.
 
     The claim under test is the **at-least-once-per-step** contract:
 
@@ -2069,13 +1905,11 @@ def test_kill9_at_hub_command_node_crash_point(crash_env: CrashEnv, tmp_path: Pa
 
 # The poll-then-land step: a single ``run:`` step that reports the reserved ``pending``
 # outcome on its FIRST poll and lands on every subsequent one. It switches on a durable
-# workdir sentinel — the per-chunk hub workdir lives under the hub runtime dir, keyed by
-# chunk id, so a file written there survives the hub restart the crash forces (losing it
-# would only cost a re-poll, never correctness). The land body is the same policy-in-YAML
-# merge-by-pinned-SHA as ``_LAND_STEP``, gated behind the sentinel; it prints a non-choice
-# line so a clean land falls through to the default ``success`` edge. The pending branch
-# prints the reserved ``pending`` literal and exits 0 — no marker, no transition — which is
-# what parks the chunk and releases the fleet-wide slot (#66).
+# workdir sentinel, which survives the hub restart the crash forces (losing it would only
+# cost a re-poll, never correctness). The land body is ``_LAND_STEP``'s merge-by-pinned-SHA
+# gated behind the sentinel, printing a non-choice line so a clean land falls through to the
+# default ``success`` edge; the pending branch prints the reserved ``pending`` literal and
+# exits 0 — no marker, no transition (#66).
 _POLL_THEN_LAND_STEP = """python3 - <<'PYEOF'
 import json, os, pathlib, urllib.error, urllib.request
 
@@ -2123,13 +1957,12 @@ PYEOF
 def _pending_graph_yaml(landed_file: str) -> str:
     """A ``build -> merge(run:) -> done`` graph whose ``merge`` hub node polls then lands (#66).
 
-    ``build`` commits ``landed_file`` (the runner pushes its branch on ADVANCE); ``merge``
-    is an ``executor: hub`` node with a single ``run:`` step that reports ``pending`` on its
-    first poll and lands on the next. A brisk ``poll_interval`` (1s) keeps the between-polls
-    gap short so the scenario converges in seconds; a generous ``poll_timeout`` (600s) keeps
-    the poll from ever timing out into #64's kick-back — this scenario proves the *resume*
-    path, not the timeout path. A clean land ends on the reserved ``success -> done`` edge,
-    ``done`` being the only terminal (#63)."""
+    ``build`` commits ``landed_file``; ``merge`` is an ``executor: hub`` node with a single
+    ``run:`` step that reports ``pending`` on its first poll and lands on the next. A brisk
+    ``poll_interval`` (1s) keeps the between-polls gap short so the scenario converges in
+    seconds; a generous ``poll_timeout`` (600s) keeps the poll from ever timing out into
+    #64's kick-back — this scenario proves the *resume* path, not the timeout path. A clean
+    land ends on the reserved ``success -> done`` edge (#63)."""
     import yaml
 
     graph = {
@@ -2202,9 +2035,6 @@ def test_kill9_at_hub_node_pending_crash_point(crash_env: CrashEnv, tmp_path: Pa
       slot — so no slot is leaked live after convergence.
     * The chunk reaches ``done`` and the file lands on bare ``main`` exactly once, despite
       the node's ``run:`` step running across the crash.
-
-    Pending itself consumed no retry and no bounce (asserted at the component tier); here the
-    crash-tier claim is the resume-and-land-once + no-leaked-slot invariant.
     """
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
@@ -2257,22 +2087,10 @@ def test_kill9_at_hub_node_pending_crash_point(crash_env: CrashEnv, tmp_path: Pa
 # Mid-script inter-repo-push crash (#67) — the packaged default graph's own window
 # --------------------------------------------------------------------------- #
 #
-# The window the per-step `hubnode.*` registry points cannot reach (see the closed gap
-# below): the packaged default graph's `deliver` node runs the real `land_default.py`
-# across an arbitrary, chunk-dynamic number of repos INSIDE ONE `run:` step, recording
-# each `merged/<repo>` marker through the mid-run callback rather than the executor's
-# static per-step `produces:`. Its "kill between two repos' pushes" boundary is therefore
-# a WALL-CLOCK race an external `kill -9` of the hub daemon (and the land subprocess it
-# spawned) must land inside — not a named in-process crash point the registry can arm.
-#
-# This scenario mints a 2-repo chunk against the REAL `land_default.py`, arms the script's
-# test-only pause (`BZ_HUB_LAND_TEST_PAUSE_SECONDS`) so it stalls right after the FIRST
-# repo's marker is durable, and `kill -9`s the whole hub process group (hub + land script)
-# inside that pause. Recovery re-drives the executor off the re-flushed build completion;
-# `land_default` re-runs, skips the marked repo (`merged/<repo>` already in
-# `BZ_HUB_ARTIFACT_NAMES`), and pushes only the still-unmarked one. Both repos land exactly
-# once, the `hub:one-live-exec-slot` invariant holds with no leaked slot, and each repo
-# carries exactly one PR — proof the marked repo was NOT re-merged.
+# A window the per-step `hubnode.*` registry points cannot reach, because `land_default.py`
+# loops over a chunk-dynamic number of repos INSIDE ONE `run:` step, marking each through the
+# mid-run callback rather than a static per-step `produces:` — see
+# `test_kill9_between_default_graph_repo_pushes` below for what the scenario drives.
 
 _WEB_REPO_NAME = "toy-web"
 _LAND_STEP_COMMAND = "python3 -m blizzard.hub.graphs.scripts.land_default"
@@ -2280,11 +2098,9 @@ _LAND_STEP_COMMAND = "python3 -m blizzard.hub.graphs.scripts.land_default"
 
 def _two_repo_build_script(landed_file: str) -> str:
     """A build node that commits ``landed_file`` in BOTH fixture repos' worktrees, then
-    pushes and declares each (issue #143, Phase 4) — the runner no longer discovers or
-    pushes the produced pointer, so the WORKER must, once per repo, through the real
-    `blizzard runner artifact commit` verb. So the chunk submits a ``git_commit`` pointer
-    for ``toy-api`` AND ``toy-web`` — a genuine 2-repo land for the default graph's
-    ``land_default`` script to loop over."""
+    pushes and declares each through the real `blizzard runner artifact commit` verb (issue
+    #143, Phase 4). So the chunk submits a ``git_commit`` pointer for ``toy-api`` AND
+    ``toy-web`` — a genuine 2-repo land for the deliver script to loop over."""
     return (
         "import subprocess, pathlib\n"
         f"for repo in [{REPO_NAME!r}, {_WEB_REPO_NAME!r}]:\n"
@@ -2357,8 +2173,7 @@ _LAND_FF_STEP_COMMAND = "python3 -m blizzard.hub.graphs.scripts.land_ff"
 def _ff_graph_two_repo_yaml(landed_file: str) -> str:
     """:func:`_default_graph_two_repo_yaml`'s twin for the PR-free lane: a ``build ->
     deliver`` graph named ``default-delivery`` whose ``deliver`` node is the REAL
-    packaged ``land_ff`` script (the same one ``basic-development-workflow/graph.yaml``
-    wires its own ``deliver`` node to), not ``land_default``.
+    packaged ``land_ff`` script, not ``land_default``.
 
     The build commits in both repos; ``deliver`` runs ``land_ff.py``, which fast-forwards
     each repo's base branch ref directly to the chunk's own commit (no PR, no merge
@@ -2518,25 +2333,9 @@ def test_kill9_between_default_graph_repo_pushes(crash_env: CrashEnv, tmp_path: 
 # Mid-script inter-repo-update crash for the PR-free lane — `land_ff`'s own window
 # --------------------------------------------------------------------------- #
 #
-# `land_ff.py`'s mirror of the closed #67 gap above: its own `deliver` node runs the
-# real `land_ff.py` across an arbitrary, chunk-dynamic number of repos INSIDE ONE
-# `run:` step, recording each `merged/<repo>` marker through the mid-run callback
-# rather than the executor's static per-step `produces:`. Repos are updated ONE AT A
-# TIME (no PR to check first, unlike `land_default` — see the module docstring), so its
-# "kill between two repos' fast-forwards" boundary is the same kind of WALL-CLOCK race
-# an external `kill -9` of the hub daemon (and the land subprocess it spawned) must
-# land inside — not a named in-process crash point the registry can arm.
-#
-# This scenario mints a 2-repo chunk against the REAL `land_ff.py`, arms the script's
-# own test-only pause (`BZ_HUB_LAND_TEST_PAUSE_SECONDS`, the same env var and guard
-# shape as `land_default`'s) so it stalls right after the FIRST repo's marker is
-# durable, and `kill -9`s the whole hub process group (hub + land script) inside that
-# pause. Recovery re-drives the executor off the re-flushed build completion;
-# `land_ff` re-runs, skips the marked repo (`merged/<repo>` already in
-# `BZ_HUB_ARTIFACT_NAMES`), and fast-forwards only the still-unmarked one. Both repos
-# land exactly once and the `hub:one-live-exec-slot` invariant holds with no leaked
-# slot — no PR count to check (this lane opens none), so exactly-once is proven
-# directly against each bare repo's own history.
+# `land_ff.py`'s mirror of the mid-script window above, for the PR-free lane: the same
+# one-`run:`-step, many-repos shape, so the same WALL-CLOCK race — see
+# `test_kill9_between_ff_graph_repo_pushes` below for what the scenario drives.
 
 
 def test_kill9_between_ff_graph_repo_pushes(crash_env: CrashEnv, tmp_path: Path) -> None:

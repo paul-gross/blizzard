@@ -4,17 +4,14 @@ A **Decision** is a gate's durable parking row: a multiple-choice ask whose
 resolution moves the chunk. Two shapes write one:
 
 * the **runner-config gate** submits a :class:`DecisionSubmission` to
-  ``POST /chunks/{id}/decisions`` — a runner choosing a decision in place of a
-  transition for a node it was configured to gate. The choice set is the
-  node's own (the hub is the single source of truth for the graph), so the runner
-  sends only the step's artifacts and its fence.
-* a **graph gate** needs no submission — the hub opens the decision itself when a
-  transition lands on a human-judged node (see :mod:`blizzard.hub.domain.apply`).
+  ``POST /chunks/{id}/decisions`` — a decision in place of a transition, for a node
+  the runner was configured to gate. The choice set is the node's own, so the
+  submission carries only the step's artifacts and its fence.
+* a **graph gate** needs no submission — see :mod:`blizzard.hub.domain.apply`.
 
 Resolution — a person picking one choice — is first-write-wins at
 ``POST /decisions/{id}/resolutions`` (:class:`DecisionResolutionRequest`), exactly
-like an answer. The holding runner picks the resolution up on PULL and records the
-resolving transition referencing ``decision_id``.
+like an answer.
 """
 
 from __future__ import annotations
@@ -25,7 +22,7 @@ from blizzard.wire.completion import SubmittedArtifact
 
 
 class DecisionChoiceModel(BaseModel):
-    """One selectable gate outcome — a button on the board/bot."""
+    """One selectable gate outcome."""
 
     name: str
     description: str
@@ -49,11 +46,10 @@ class DecisionSubmission(BaseModel):
 
 
 class DecisionView(BaseModel):
-    """A gate decision in full — the board's card and the runner's pickup.
+    """A gate decision in full.
 
     ``resolved_choice`` is set once a person has decided; ``transitioned`` is true once
-    the holding runner has recorded the resolving transition. The runner acts on a
-    decision that is resolved but not yet transitioned.
+    the resolving transition has been recorded.
     """
 
     decision_id: str

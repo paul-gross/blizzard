@@ -1,8 +1,8 @@
 """Alembic environment for the hub store tree.
 
-Driven programmatically by ``blizzard.foundation.store.migrations.MigrationRunner``:
-the store URL and the ``script_location`` are set as main options, so there is no
-``alembic.ini``. Targets the hub schema metadata for future autogenerate support.
+Driven programmatically by ``blizzard.foundation.store.migrations.MigrationRunner``
+— there is no ``alembic.ini``. Targets the hub schema metadata for future
+autogenerate support.
 """
 
 from __future__ import annotations

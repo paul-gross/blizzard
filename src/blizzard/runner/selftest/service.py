@@ -93,12 +93,11 @@ class SelfTestService:
 
     def _execute(self, selftest_id: str, adapter: IHarnessAdapter) -> None:
         # A per-run wall-clock budget (issue #54): `run_selftest_checks` performs
-        # unbounded I/O for the real adapter (`judge`'s `subprocess.run` has no
-        # `timeout=`), so it is run in its own thread here and joined with a budget —
-        # a hung/drifted harness then fails the run loudly rather than leaving it
-        # `running` (and the CLI poll spinning) forever. The inner thread cannot be
-        # killed if it overruns; it is abandoned as a daemon thread, and the run
-        # resolves regardless.
+        # unbounded I/O for the real adapter, so it runs in its own thread joined against
+        # the budget — a hung harness fails the run loudly rather than leaving it
+        # `running` forever. An overrun thread cannot be killed; it is abandoned as a
+        # daemon thread and the run resolves regardless. Pinned by
+        # tests/test_runner_selftest.py::test_selftest_run_that_exceeds_its_budget_fails_loudly_instead_of_hanging.
         outcome: list[tuple[list[SelfTestCheck], str | None]] = []
 
         def _run() -> None:

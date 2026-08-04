@@ -1,27 +1,13 @@
 """The hub backstop and the runner nudge agree on produces-coverage (unit tier, issues #113, #143).
 
-The bug this guard closes was a *disagreement*, not a wrong answer on either side alone:
-the hub's :func:`~blizzard.hub.domain.produces_auth.check_produces` counted a ``produces:``
-name covered only by ``attached=True``, so a name legitimately satisfied by a pushed git
-commit (whose ``SubmittedArtifact`` carries ``attached=False``) was **rejected** under
-``produces_mode=enforce`` — while the runner's own
-:func:`~blizzard.runner.loop.steps._missing_produces` already treated that same name as
-satisfied and never nudged for it. A worker could therefore do exactly what the runner
-asked of it and still have its completion fenced out by the hub.
-
-Both now call :func:`~blizzard.wire.completion.produces_coverage`, which also carries the
-kind-aware split (issue #143, D2): a ``git_commit`` spec is met by **any**
-``GIT_COMMIT``-kind artifact present, by kind, not by name (the artifacts below name
-themselves after a repo, e.g. ``toy-api``, never the declared produces name). That shared
-call is easy to un-share again — a future edit re-deriving "covered" inline on either side
-would restore the drift silently, because each side's own tests would still pass. This
-module is the guard against that: it drives **both** predicates over one scenario matrix
-and asserts they return the same verdict for every scenario, so a re-fork fails here
-rather than in production under ``enforce``.
-
-Distinct from ``test_produces_auth.py`` (the hub predicate's own behaviour) and
-``test_runner_nudge.py`` (the nudge's loop behaviour) — neither of those can observe a
-disagreement, since each sees only one side.
+Both must call the one shared :func:`~blizzard.wire.completion.produces_coverage` rather than
+each re-derive "covered" inline, else a worker could satisfy the runner's nudge and still be
+fenced out by the hub under ``produces_mode=enforce`` — a re-fork would restore that drift
+silently, since each side's own tests would still pass. That shared function also carries the
+kind-aware split (issue #143, D2): a ``git_commit`` spec is met by any ``GIT_COMMIT``-kind
+artifact present, by kind, not by name. This module drives both predicates over one scenario
+matrix and asserts they agree on the expected verdict, distinct from ``test_produces_auth.py``
+and ``test_runner_nudge.py``, which each see only one side and so cannot observe a disagreement.
 """
 
 from __future__ import annotations

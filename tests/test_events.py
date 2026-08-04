@@ -126,14 +126,12 @@ async def test_lifecycle_publishes_events_and_the_stream_replays_them(tmp_path: 
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
 
-    # Drive the SSE endpoint's own generator (a real stream read of the replay tail): ingest
-    # emits chunk-changed(not_ready); the claim emits chunk-changed(running)+queue-changed.
+    # Drive the SSE endpoint's own generator: a real stream read of the replay tail.
     events = await drain_stream(hub.events, last_event_id=0)
     types = [e["event"] for e in events]
     assert "chunk-changed" in types
     assert "queue-changed" in types
     assert any(chunk_id in e["data"] and '"status": "running"' in e["data"] for e in events)
-    # Ids are monotonic and strictly increasing across the replayed tail.
     ids = [int(e["id"]) for e in events]
     assert ids == sorted(ids) and len(set(ids)) == len(ids)
 
@@ -170,8 +168,7 @@ def test_route_emission_lands_in_the_replay_buffer(tmp_path: Path) -> None:
 
 def test_every_runner_changed_publish_site_names_its_kind(tmp_path: Path) -> None:
     """All five ``publish_runner_changed`` sites, driven through their own routes (issue
-    #151, #218). The kind is what a consumer filters on, so a site that published a bare
-    ``runner_id`` would be indistinguishable from the heartbeat flood and silently muted."""
+    #151, #218); each must name its own ``kind``."""
     hub = build_hub(tmp_path)
 
     # 1. Registration — the runner's pull-loop liveness beat, by far the loudest site.

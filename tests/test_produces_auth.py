@@ -97,12 +97,10 @@ def test_missing_names_are_all_named_in_the_rejection_detail() -> None:
 
 
 def test_a_git_commit_covered_produces_name_is_accepted_under_enforce() -> None:
-    """A `produces:` name legitimately covered by a pushed git commit (the runner's own
-    coverage model, `runner/loop/steps.py`'s `_missing_produces` /
-    `_collect_asset_artifacts`) carries `attached=False` on its `GIT_COMMIT`
-    `SubmittedArtifact` — this must not be rejected as an unattached name; the two
-    coverage models share `~blizzard.wire.completion.satisfied_produces_names` so they
-    cannot disagree."""
+    """A `produces:` name legitimately covered by a pushed git commit (see
+    `runner/loop/steps.py`) carries `attached=False` on its `GIT_COMMIT`
+    `SubmittedArtifact` — this must not be rejected as an unattached name
+    (`~blizzard.wire.completion.satisfied_produces_names`)."""
     node = _node(produces=["backend"])
     artifacts = [_git_commit_artifact("backend")]
 

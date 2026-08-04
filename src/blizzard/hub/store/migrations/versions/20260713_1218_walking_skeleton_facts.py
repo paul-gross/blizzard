@@ -8,24 +8,14 @@ this revision creates exactly this revision's subset in FK-dependency order, so 
 later revision that adds tables to the same metadata does not get re-created here.
 
 ``chunk_pm_pointers``, ``route_created``, ``route_released``, ``chunks``,
-``transitions``, ``graph_edges``, and ``chunk_stopped`` are the exceptions (as of
-``0013_pm_pointer_source_ref``, ``0015_route_seq_tiebreak``,
-``0018_chunk_model_selection``, ``transition_graph_id``,
-``edge_target_graph_model`` — the last two issue #90 — and
-``20260719_2000_hub_chunk_stopped_by`` respectively): importing them
-from ``schema.py`` here would mean this revision's *historical* shape silently follows
-whatever ``schema.py`` says today — exactly the bug 0013's own docstring names and
-refuses to repeat. This revision instead declares its own frozen literal for each —
-``{provider, url}`` for pointers, no ``seq`` column for the two route tables, no
-``model`` column for ``chunks``, no ``graph_id`` column for ``transitions``, no
-``to_graph_model`` column for ``graph_edges``, no ``stopped_by`` column for
-``chunk_stopped`` — so upgrading from ``base`` always recreates the column shape this
-revision actually shipped with; 0013, 0014, 0018, the two graph-provenance/migration
-revisions, and the chunk-stopped-by revision are what reshape them from there. The
-frozen literals still declare their ``chunk_id``/``graph_id`` foreign keys (via
+``transitions``, ``graph_edges``, and ``chunk_stopped`` are the exceptions: each is a
+frozen local ``sa.Table`` literal rather than a ``schema.py`` import, so upgrading from
+``base`` recreates the column shape this revision shipped with instead of whatever
+``schema.py`` says today (``canon:no-retro``; pinned by
+``tests/test_pin_hub_api.py::test_a_revisions_table_shape_is_frozen_at_its_own_revision``).
+The frozen literals still declare their ``chunk_id``/``graph_id`` foreign keys (via
 same-MetaData resolution stubs, not live imports — see below) so a fresh store's
-schema matches ``schema.py``'s declared FKs (``bzh:sql-portable``: postgres is the
-same schema under a different URL).
+schema matches ``schema.py``'s declared FKs (``bzh:sql-portable``).
 
 Revision ID: 20260713_1218_hub_walking_skeleton
 Revises: 20260713_1112_hub_initial

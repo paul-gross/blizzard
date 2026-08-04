@@ -39,12 +39,10 @@ class RepoBinding:
     """One repo's worktree inside an acquired environment — the provider's answer to
     "where does repo ``name`` live in this env, and what forge does it push to?".
 
-    Blizzard never infers this. The layout is the provider's to declare
-    (``bzh:pluggable-seams``): winter places a worktree per repo under the env workdir
-    by that repo's configured ``name``, but nothing in the protocol requires that, and a
-    binding is free to place them anywhere it likes. A consumer that string-joins its way
-    to a repo path instead of reading this manifest re-opens the class of silent misses
-    this type exists to close.
+    Blizzard never infers this: the layout is the provider's to declare
+    (``bzh:pluggable-seams``), so a consumer reads this manifest rather than string-joining
+    its way to a repo path. Pinned by
+    tests/test_runner_winter_provider.py::test_repos_reads_the_env_manifest_from_winter_rather_than_guessing_paths.
 
     ``relpath`` is relative to the env's ``workdir`` — the env workdir is the sole
     absolute anchor, so a relative segment can only come from a lookup, never from

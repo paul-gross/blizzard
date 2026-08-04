@@ -1,20 +1,14 @@
 """Resume-time spawn-preamble elision end to end — scenario 15 of the standing e2e smoke — issue #149.
 
 The full-stack proof that a **resumed** node-entry spawn is actually handed less than a
-fresh one, and is told when its standing instructions moved. Everything below the unit and
-component tiers stubs the harness seam: the component tier asserts the ``prompt_prefix``
-the loop *hands* a fake adapter, which proves the wiring but not that a real harness
-process on the other side of a real ``claude --resume`` receives it. This scenario closes
-that gap on the real forge + hub + runner + ``mock-claude-code`` rails.
+fresh one, and is told when its standing instructions moved — over the real forge + hub +
+runner + ``mock-claude-code`` rails, rather than against a fake adapter.
 
 **What makes it observable.** The mock harness records each turn's *user* text into a
 Claude-Code-shaped transcript (``<BZ_TRANSCRIPTS_ROOT>/mock-claude-code/<session_id>.jsonl``),
-appended across spawn and every later ``--resume`` by separate processes. For an untagged
-prompt that user text **is the runner's preamble verbatim**
-(``blizzard-mock:harness/engine.py`` — ``prose = tagged.prose if tagged is not None else
-preamble``). So one session's transcript is the ordered record of what each of its turns
-was actually sent, which is precisely the thing under test. No mock change is needed, and
-nothing here reaches around the seam: it reads what the harness received.
+appended across spawn and every later ``--resume``. For an untagged prompt that user text
+is the runner's preamble verbatim, so one session's transcript is the ordered record of
+what each of its turns was actually sent — read through the seam, not around it.
 
 The graph is the sibling ``test_session_modes_e2e`` shape — ``build`` is
 ``session: resume:build``, ``review`` is ``session: fresh``, and a scripted review fails
@@ -77,14 +71,10 @@ pytestmark = [
 ]
 
 #: The two standing layers. Each carries a distinctive sentinel so its presence or absence
-#: in a transcript turn is unambiguous, and each is padded to a **realistic** size.
-#:
-#: The padding is load-bearing, not decoration. The elision replaces two layers with one
-#: banner of real prose (~450 chars), so whether it saves anything at all depends on what
-#: it replaced: against one-line sentinels the "saving" is negative. A deployment's actual
-#: layer 1 is the packaged preamble (~2.5 KB) or an operator's own framing, and layer 2 is
-#: a workspace policy document — the shape modelled here. Asserting the saving against
-#: toy-sized prose would assert something untrue of every real deployment and false here.
+#: in a transcript turn is unambiguous, and each is padded to a **realistic** size — real
+#: deployments run a packaged preamble (~2.5 KB) and a workspace policy document, and the
+#: elision replaces both with one ~450-char banner, so against one-line sentinels the
+#: "saving" the test asserts would be negative and untrue of any real deployment.
 _RUNNER_PROMPT = (
     "LAYER-ONE-BLIZZARD-FRAMING-SENTINEL\n\n"
     "You are a worker in a blizzard fleet: an autonomous fleet-management system that claims\n"
@@ -247,9 +237,8 @@ def _drive(config, hub, chunk_id, fenced_env, *, on_tick=None, timeout: float = 
 def _transcripts_root(config, workspace: Path) -> Path:  # type: ignore[no-untyped-def]
     """Where the mock wrote its transcripts for this run.
 
-    The mock resolves ``BZ_TRANSCRIPTS_ROOT`` when set and otherwise falls back **under the
-    fence**, beside the session-state directory — never a real home. Mirrored here rather
-    than assumed, so the scenario reads the same place the writer wrote.
+    Mirrors the mock's own resolution order (``BZ_TRANSCRIPTS_ROOT``, else under the fence)
+    so the scenario reads the same place the writer wrote.
     """
     override = os.environ.get("BZ_TRANSCRIPTS_ROOT") or config.transcripts_root
     return Path(override) if override else workspace / ".blizzard-mock-harness" / "transcripts"

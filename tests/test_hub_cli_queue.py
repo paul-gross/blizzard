@@ -1,9 +1,5 @@
 """``blizzard hub queue move`` (unit tier) — a client of the single-chunk fractional
 ``POST /api/queue/position``, driven here with ``httpx`` stubbed (issue #137).
-
-Re-points what used to compose a whole-order ``PUT /api/queue`` client-side (issue
-#105) onto the new single-chunk write; this file exists to prove the CLI's front/
-middle/end UX is unchanged while the wire call underneath it is.
 """
 
 from __future__ import annotations

@@ -2,8 +2,7 @@
 tier, issue #91).
 
 Exercised against in-memory fakes of the three repository Protocols — pure domain
-logic in isolation, mirroring ``tests/test_hub_auth.py``'s own unit-tier shape for
-``assert_owns``. The real SQLAlchemy adapters are exercised at component tier in
+logic in isolation. The real SQLAlchemy adapters are exercised at component tier in
 ``tests/test_auth_repositories.py``.
 """
 
@@ -269,10 +268,8 @@ def test_touch_session_returns_none_once_idle_expired() -> None:
 def test_touch_session_returns_none_past_absolute_max_age_even_if_recently_touched() -> None:
     """A session cannot outlive its absolute cap no matter how often it slides.
 
-    Mirrors the edge's own pattern (``hub/api/auth_session.py``): each call re-fetches
-    the freshly-slid row via ``get_by_hash`` before handing it to ``touch_session``,
-    exactly as a fresh request re-resolves the session from the store — a stale,
-    in-hand ``Session`` object is not what production ever passes twice."""
+    Re-fetches the freshly-slid row via ``get_by_hash`` before each ``touch_session``
+    call (see ``hub/api/auth_session.py``)."""
     clock = FixedClock(_T0)
     service, users, sessions, _ident, _, _ = _service(
         clock, idle_ttl=timedelta(hours=1), absolute_max_age=timedelta(hours=3)
@@ -297,7 +294,7 @@ def test_touch_session_returns_none_past_absolute_max_age_even_if_recently_touch
 
 def test_touch_session_returns_none_when_the_user_no_longer_exists() -> None:
     """A session outliving its user (deleted between mint and resolve) resolves to
-    nothing rather than raising — the edge treats this exactly like "no session"."""
+    nothing rather than raising."""
     clock = FixedClock(_T0)
     service, users, _, _ident, _, _ = _service(clock)
     user = _user()
@@ -320,10 +317,7 @@ def test_revoke_deletes_the_session_row() -> None:
 
     service.revoke(session)
 
-    # Mirrors the edge's own read-then-resolve shape: a revoked session no longer
-    # resolves via the read repo at all, so a fresh request's `get_by_hash` (what
-    # `resolve_identity` actually calls) sees nothing — the edge never reaches
-    # `touch_session` on a deleted row.
+    # Mirrors the edge's own read-then-resolve shape (hub/api/auth_session.py).
     assert sessions.get_by_hash(session.id_hash) is None
 
 
@@ -385,9 +379,8 @@ def test_link_or_mint_mints_a_new_pending_user_for_an_unknown_identity() -> None
 
 
 def test_link_or_mint_never_stores_an_unverified_email_on_a_newly_minted_user() -> None:
-    """An unverified provider-reported email is not proof of ownership — storing it
-    would let a later *verified* login for the same address merge into whatever
-    account an attacker seeded with an unverified claim."""
+    """An unverified provider-reported email is not proof of ownership, so it is not
+    stored on a newly minted user."""
     clock = FixedClock(_T0)
     service, _, _, _, _, _ = _service(clock)
 
@@ -693,9 +686,8 @@ def test_clear_superuser_bootstrap_deletes_the_row() -> None:
 
 
 def test_link_or_mint_claims_an_unclaimed_bootstrap_target_on_first_verified_login() -> None:
-    """The bootstrap row's own singleton claim, run inside ``link_or_mint``'s
-    newly-minted-user branch — the only branch a pre-provisioned, still-unclaimed
-    target can first resolve through."""
+    """Claims an unclaimed bootstrap target on the first verified login for its
+    email."""
     clock = FixedClock(_T0)
     service, users, _, _, superuser_bootstrap, auth_facts = _service(clock)
     service.record_superuser_bootstrap(email="alice@example.com", claimed_user_id=None)

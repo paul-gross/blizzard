@@ -19,13 +19,11 @@ builds per chunk, shared through :func:`_summary_view` (``canon:one-owner``). St
 codes are unchanged; only the body is enriched.
 
 The envelope read, the completion/decision/lease/escalation writes, and ``hub-advance``
-(#65/#66, driven by the runner's own ADVANCE poll) moved to the runner-authenticated
-fleet router (:mod:`blizzard.hub.api.fleet`, issue #87) — no board or CLI caller ever
-reached any of them. ``get_chunk`` and ``get_work_items`` stay here (the board's own
-reads) *and* gain fleet-side counterparts, since the runner reads both too;
-``dependencies=[Depends(reject_runner_principal)]`` on this router rejects a runner's
-bearer token here rather than treating it as anonymous-plus-credential — a runner's
-token is confined to the fleet router.
+(#65/#66, driven by the runner's own ADVANCE poll) live on the runner-authenticated
+fleet router (:mod:`blizzard.hub.api.fleet`, issue #87). ``get_chunk`` and
+``get_work_items`` stay here (the board's own reads) *and* gain fleet-side counterparts,
+since the runner reads both too; ``dependencies=[Depends(reject_runner_principal)]`` on
+this router confines a runner's bearer token to the fleet router.
 """
 
 from __future__ import annotations
@@ -166,10 +164,11 @@ def _history_views(facts: ChunkFacts, graphs: dict[str | None, Graph | None]) ->
 
     Each edge's node ids are resolved to their human graph names against *the graph the
     transition happened in* (issue #90), keyed by ``TransitionFact.graph_id`` — not the
-    chunk's current pin. A single-graph history keys every step to the one graph exactly
-    as before; a chunk that later migrates still reads its old-graph steps' names, rather
-    than degrading them to raw ``nd_`` ids against the new pin. The step's own
-    ``graph_id``/``graph_name`` ride along so the board can label which graph it belongs to."""
+    chunk's current pin — so a migrated chunk's old-graph steps keep their names instead of
+    degrading to raw ``nd_`` ids (pinned by
+    ``tests/test_transition_graph_provenance.py::test_history_view_resolves_each_step_name_against_its_own_graph``).
+    The step's own ``graph_id``/``graph_name`` ride along so the board can label which
+    graph it belongs to."""
     views: list[TransitionView] = []
     for t in transition_history(facts):
         graph = graphs.get(t.graph_id)

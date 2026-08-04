@@ -299,9 +299,7 @@ def test_stopped_reads_off_chunk_stopped(tmp_path: Path) -> None:
 
 
 def test_edited_produces_no_activity_row(tmp_path: Path) -> None:
-    """A chunk edit (``PATCH``) mutates ``chunks`` columns in place — no fact table
-    exists for it (unlike every other cause above), so no source can ever produce an
-    ``edited`` row. A documented, deliberate exclusion, not a gap."""
+    """No fact table backs ``edited`` — a deliberate exclusion, not a gap."""
     store, _ = _store(tmp_path)
     store.set_graph("ch_1", graph_id="gr_2")
     store.set_defaults("ch_1", default_model=["opus"], default_effort="high")
@@ -362,8 +360,7 @@ def test_runner_pause_resolves_through_the_runner_registry(tmp_path: Path) -> No
 
 
 def test_registered_and_heartbeat_kinds_are_never_sourced(tmp_path: Path) -> None:
-    """Pause family only (issue #213) — ``registered``/``heartbeat`` carry no fact
-    table and are muted the same way the board's live SSE consumer mutes them."""
+    """Pause family only (issue #213) — ``registered``/``heartbeat`` carry no fact table."""
     store = _registry_store(tmp_path)
     store.upsert_registration("runner-a", workspace_id="ws-a", env_capacity=None, at=_T0)
     store.touch_last_seen("runner-a", at=_at(1))
@@ -372,8 +369,7 @@ def test_registered_and_heartbeat_kinds_are_never_sourced(tmp_path: Path) -> Non
 
 
 def test_read_chunk_repository_gains_no_runner_pause_method() -> None:
-    """The seam boundary is honored, not just conceptual (a must-fix from a prior
-    review round): runner-pause reads live on ``IReadRunnerRegistry`` alone."""
+    """The seam boundary is honored: runner-pause reads live on ``IReadRunnerRegistry`` alone."""
     assert hasattr(IReadRunnerRegistry, "list_pause_facts_since")
     assert not hasattr(IReadChunkRepository, "list_pause_facts_since")
     assert hasattr(IReadChunkRepository, "activity_facts_since")

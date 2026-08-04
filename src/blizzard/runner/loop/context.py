@@ -37,10 +37,9 @@ class LoopConfig:
     max_agents: int = 1
     base_branch: str = "main"
     #: The runner's configured environment-pool size (issue #69) — ``len(workspace_envs)``,
-    #: mirrored once at composition from :class:`~blizzard.runner.config.RunnerConfig`. The
-    #: loop reports it to the hub on each registration (the heartbeat) as the board's slot-bar
-    #: ``total``; the loop consumes only the count, so the full pool stays with the provider.
-    #: ``None`` means unreported — the hub stores null and the board omits the bar.
+    #: mirrored once at composition from :class:`~blizzard.runner.config.RunnerConfig`.
+    #: Reported to the hub on each registration; the loop consumes only the count, so the
+    #: full pool stays with the provider. ``None`` means unreported.
     env_capacity: int | None = None
     #: This runner's own browser-reachable base URL (issue #95), mirrored once at
     #: composition from :attr:`~blizzard.runner.config.RunnerConfig.public_url`.
@@ -72,17 +71,15 @@ class LoopConfig:
     #: Node NAMES this runner imposes a human gate on: for a gated
     #: node the runner submits a Decision instead of a transition, so an operator dials
     #: their own HITL level without forking the fleet's graph. Matched by name across all
-    #: graphs, read fresh from config at context build — true of every ``run_single_tick``
-    #: (a fresh context per call, ``build.py``), but the hosted daemon's ``PeriodicDriver``
-    #: builds one context and reuses it for its lifetime, so there a config edit needs a
-    #: restart to take effect, not just a new tick.
+    #: graphs, read fresh from config at context build — so under the hosted daemon's
+    #: ``PeriodicDriver`` (one context for its lifetime) a config edit needs a restart to
+    #: take effect, not just a new tick.
     gates: tuple[str, ...] = ()
     #: The directory the per-lease harness-stdout files live in (issue #58) — resolved
     #: once at the composition root from the runner's own data directory, empty meaning
-    #: "no redirect" (today's discard/inherit behavior, Phase 1's default). A worker's
-    #: stdout is redirected to ``<this>/<lease_id>.<generation>.stdout`` so a killed/reaped
-    #: worker's result envelope survives the process for ADVANCE's usage extraction to
-    #: read back.
+    #: "no redirect" (discard/inherit). A worker's stdout is redirected to
+    #: ``<this>/<lease_id>.<generation>.stdout`` so a killed/reaped worker's result envelope
+    #: survives the process for ADVANCE's usage extraction to read back.
     worker_stdout_dir: str = ""
     #: The per-chunk spend cap (issue #61a), mirrored from ``RunnerConfig.chunk_cap_usd``.
     #: ``None`` means no cap — ADVANCE's step boundary (:func:`blizzard.runner.loop.steps.
@@ -105,13 +102,10 @@ class LoopConfig:
     external_usage_sample_interval_seconds: int = 300
     #: This runner's runtime directory (``RunnerConfig.root``), mirrored once at
     #: composition (``build_loop_context``, ``runner/loop/build.py``) as
-    #: ``str(config.root)`` — resolving to an absolute path is ``RunnerConfig.load()``'s
-    #: job, not this dataclass's own, so this field is absolute only because every real
-    #: ``src/`` caller builds its ``RunnerConfig`` by going through ``.load()`` first.
-    #: ``_escalate`` (issue #251) composes the wrapped ``blizzard runner takeover
-    #: <chunk_id> --dir <runner_dir>`` command from it; empty means unresolved (no
-    #: context ever built without it in practice, but the guard composes no wrapped
-    #: command rather than guessing).
+    #: ``str(config.root)`` — absolute only because every real ``src/`` caller builds its
+    #: ``RunnerConfig`` through ``.load()``, which is what resolves it. ``_escalate``
+    #: (issue #251) composes the wrapped takeover command from it; empty means unresolved,
+    #: and the guard there composes no wrapped command rather than guessing.
     runner_dir: str = ""
 
 

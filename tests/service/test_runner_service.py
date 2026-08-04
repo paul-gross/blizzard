@@ -80,8 +80,7 @@ def _drive(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: f
 
 
 def _status(hub: httpx.Client, chunk_id: str) -> str:
-    """The mock hub's own status read (issue #87 moved its whole hub mirror under
-    ``/api/fleet``)."""
+    """The mock hub's own status read."""
     return hub.get(f"/api/fleet/chunks/{chunk_id}").json()["status"]
 
 
@@ -194,16 +193,12 @@ _TRANSCRIPT_DIFF = (
 
 _TRANSCRIPT_COMMIT_MESSAGE = "feat: mint a transcript-provable commit"
 
-#: Unlike ``BUILD_SCRIPT`` above (raw ``subprocess`` git calls, which the transcript
-#: writer never sees), this script calls the mock's own ``apply_diff``/``commit``
-#: helpers so the run mints matched ``tool_use``/``tool_result`` turns
-#: (``Edit``/``Bash``) — exactly the pairing ``blizzard-mock``'s
-#: ``helpers._record_tool_turn`` performs for a real behavior script. The helpers
-#: apply against ``current_context().cwd`` directly, which the runner sets to the
-#: *environment* directory (holding every acquired repo as a child) rather
-#: than the one repo the fixture uses — so the script first repoints the ambient
-#: context's ``cwd`` at the repo child directory, the same real object the engine's
-#: own ``run_prompt`` constructed, before calling the helpers.
+#: Unlike ``BUILD_SCRIPT`` above (raw ``subprocess`` git calls), this script calls the
+#: mock's own ``apply_diff``/``commit`` helpers so the run mints matched
+#: ``tool_use``/``tool_result`` turns (``Edit``/``Bash``). Those helpers apply against
+#: ``current_context().cwd``, which the runner sets to the *environment* directory
+#: rather than the one repo the fixture uses — so the script first repoints the
+#: ambient context's ``cwd`` at the repo child directory before calling them.
 _TRANSCRIPT_BUILD_SCRIPT = (
     "import pathlib, subprocess\n"
     "from blizzard_mock.harness.engine import current_context\n"
@@ -263,16 +258,12 @@ def _transcript_chunk_spec(work_ref_url: str) -> dict:
 
 
 def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> None:
-    """The panel's transcript read, proven at the tier that can now reach it.
+    """The panel's transcript read, proven at the tier that can reach it.
 
-    Until the mock fleet grew a real transcript writer, every transcript test proved
-    the parser against fixtures the same repo authored — a closed loop; production
-    could have been serving ``not_found`` for every real agent and every test would
-    stay green. This drives a chunk through the **real** fleet — a real
-    ``mock-claude-code`` subprocess mints a genuine Claude-shaped JSONL as it runs
-    ``apply_diff``/``commit`` — then reads the result back through the **runner's
-    own local HTTP API**, never by importing the parser (that stays the unit tier's
-    job and would re-close the loop).
+    This drives a chunk through the **real** fleet — a real ``mock-claude-code``
+    subprocess mints a genuine Claude-shaped JSONL as it runs ``apply_diff``/``commit``
+    — then reads the result back through the **runner's own local HTTP API**, never by
+    importing the parser (that stays the unit tier's job).
 
     The provenance assertion: the ``Bash`` (commit) turn's ``tool_output`` carries a
     short commit sha the transcript writer minted *from the real ``git commit`` this
@@ -315,8 +306,7 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
             finally:
                 runner_client.close()
 
-    # The transcript is available and genuinely parsed, not a stub 404/`not_found` —
-    # the closed loop this test exists to break.
+    # The transcript is available and genuinely parsed, not a stub 404/`not_found`.
     assert body["available"] is True, body
     assert body["session_id"], "a closed lease's session id must still be readable"
     turns = body["turns"]

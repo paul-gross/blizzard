@@ -1,17 +1,13 @@
 """Ask/answer park→resume round trip — scenario 4 of the e2e smoke — MVP criterion 7.
 
-The one genuinely new primitive, end to end over the real stack: a
-build worker hits an undecidable choice, runs the **real** ``blizzard runner ask``
-(shelled out by the ``mock-claude-code`` façade via ``BLIZZARD_RUNNER_ASK_CMD``, wired
-through the runner's spawn env), and **exits**. The chunk parks — its forwarded
-question lands at the hub, the reap clock stops, and it derives **waiting_on_human**.
-The park is then proven **inert**: several more ticks advance with the dormant lease
-never reaped, never re-elicited, and no retry consumed — the chunk stays
-waiting_on_human on the same single open question.
-A human answers at the hub with ``blizzard hub question answer``; the runner picks the answer up
-on its next tick and **resumes the dormant session** around it — same session — and the
-resumed worker commits the change. The chunk then walks build→review→deliver to
-**done**, and the mock's persisted session state proves the same session was resumed.
+End to end over the real stack: a build worker hits an undecidable choice, runs the
+**real** ``blizzard runner ask``, and **exits**. The chunk parks and derives
+**waiting_on_human**. The park is then asserted **inert**: several more ticks leave the
+chunk waiting_on_human on the same single open question.
+A human answers with ``blizzard hub question answer``; the runner picks the answer up on
+its next tick and **resumes the dormant session** around it, and the resumed worker
+commits the change. The chunk then walks build→review→deliver to **done**, and the
+mock's persisted session state is asserted to show the same session was resumed.
 
 Runs the full live stack like the sibling scenarios, plus the runner's **local API**
 (served in a thread) so the real ``blizzard runner ask`` verb has a daemon to POST to,
@@ -60,11 +56,10 @@ pytestmark = [
     ),
 ]
 
-# build turn 1: ask an undecidable question and exit (ask-and-exit). The mock's ask()
-# shells out to the real `blizzard runner ask` (BLIZZARD_RUNNER_ASK_CMD) before exiting.
+# build turn 1: ask an undecidable question and exit (ask-and-exit).
 _ASK_SCRIPT = 'ask("Which API style should the endpoint use?", ["rest", "graphql"])\n'
-# The human's answer, delivered as `blizzard hub question answer <qid> "<script>"`. It arrives as
-# the resume message (the mock execs it): it makes the real commit the build node owes.
+# The human's answer, delivered as `blizzard hub question answer <qid> "<script>"`. It
+# arrives as the resume message and makes the real commit the build node owes.
 _ANSWER_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
@@ -262,11 +257,9 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
             session_id = question["session_id"]
             assert question["options"] == ["rest", "graphql"]
 
-            # The reap clock is stopped while parked: drive several
-            # more full ticks and prove the park is inert — REAP never reaps the dormant lease,
-            # ADVANCE never re-elicits, and no retry is consumed. Observable proof: the chunk
-            # stays waiting_on_human and the SAME single question stays open (a consumed retry
-            # would re-spawn the worker, which would ask a fresh question or fail the attempt).
+            # Drive several more full ticks and assert the park is inert: the chunk stays
+            # waiting_on_human and the SAME single question stays open (a consumed retry
+            # would re-spawn the worker, which would ask a fresh question or fail).
             _tick_n(config, fenced, 4)
             still = hub.get(f"/api/chunks/{chunk_id}").json()
             assert still["status"] == "waiting_on_human", f"the park was not inert (status {still['status']!r})"
@@ -298,11 +291,9 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
             status = _tick_until(config, hub, chunk_id, fenced, {"done", "needs_human", "stopped"}, 120.0)
             assert status == "done", f"chunk did not reach done after the answer (last status {status!r})"
 
-        # Fleet truth: the answered question is closed, and the return leg landed —
-        # `delivered` derives from the `answer.delivered` fact the **real** runner minted
-        # on resume (issue #165). This is the only tier that sees that fact produced by
-        # production code rather than hand-pushed, so it is the only place a regression in
-        # the runner's payload would surface: `fleet.py`'s publish silently skips a fact
+        # `delivered` derives from the `answer.delivered` fact the **real** runner mints on
+        # resume (issue #165); this is the only tier where that fact comes from production
+        # code rather than hand-pushed, since `fleet.py`'s publish silently skips a fact
         # whose `question_id` is absent, which every component test would still pass.
         closed = hub.get(f"/api/fleet/questions/{question_id}").json()
         assert closed["answered"] is True

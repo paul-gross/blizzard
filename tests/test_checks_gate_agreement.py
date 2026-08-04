@@ -1,14 +1,9 @@
 """The hub backstop and the runner gate agree on the checks gate (component tier, issue #114).
 
-Both the runner-local gate (:func:`~blizzard.runner.loop.steps._advance_exited_worker`) and
-the hub's completion backstop (:mod:`blizzard.hub.domain.apply`) call the one shared
-predicate :func:`~blizzard.wire.completion.checks_gate_violated`, so a worker whose choice
-the runner would fence can never slip past the hub, and vice versa. That shared call is easy
-to un-share again — a future edit re-deriving "is a gated choice red?" inline on either side
-would restore the drift silently, because each side's own tests would still pass. This module
-is the guard against that: it drives **both** real decision sites over one scenario matrix and
-asserts they reach the same accept/reject verdict — and that the verdict is the expected one,
-so two sides that re-forked into the same wrong answer fail too. Mirrors
+Both sides must call the one shared predicate :func:`~blizzard.wire.completion.checks_gate_violated`
+rather than each re-derive "is a gated choice red?" inline, else drift can go undetected since
+each side's own tests would still pass. This module drives both real decision sites over one
+scenario matrix and asserts they reach the same, expected verdict. Mirrors
 ``test_produces_coverage_agreement.py`` for the produces backstop.
 """
 

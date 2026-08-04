@@ -15,16 +15,13 @@ This revision adds ``uq_delivery_pr_opened_chunk_repo`` — a unique constraint 
 (``ChunkStore.record_pr_opened``) now catches the collision and discards it as the
 harmless duplicate write it is, the same CAS shape ``question_answers`` already uses.
 
-**De-duplicate before constraining:** a store carrying the dogfood duplicates would
-fail this revision's constraint add outright, so ``upgrade()`` first deletes every
-row but the earliest (lowest ``id``) per (chunk_id, repo) — the accepted duplicate the
-coordinator would have kept anyway (the first write wins; the race only ever produces a
-second, redundant fact, never a conflicting one, since both writers observe the same
-forge-assigned PR).
+**De-duplicate before constraining:** a store carrying the dogfood duplicates would fail
+the constraint add outright, so ``upgrade()`` first deletes every row but the earliest
+(lowest ``id``) per (chunk_id, repo) — the one the coordinator's first write landed
+(pinned by ``tests/test_pin_hub_api.py::test_pr_opened_upgrade_keeps_only_the_earliest_duplicate``).
 
-Local ``sa.Table`` literals, not an import of ``blizzard.hub.store.schema`` (the reason
-recorded in ``0013_pm_pointer_source_ref``'s docstring): a migration's meaning must not
-depend on when it is read, and ``schema.py`` now carries this very constraint.
+Local ``sa.Table`` literals, not an import of ``blizzard.hub.store.schema`` — the reason
+is recorded in ``0013_pm_pointer_source_ref``'s docstring.
 
 Revision ID: 20260716_2206_hub_pr_opened_idempotent
 Revises: 20260716_1512_hub_pm_pointer_source_ref

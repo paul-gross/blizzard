@@ -7,10 +7,9 @@ Confined to ``internal/`` (adapter placement, ``bzh:dependency-inversion``): all
 This adapter owns the **folder**, not its contents: it creates and reclaims a bare
 directory per chunk under the hub runtime dir. Whether that directory is empty (a
 first visit) or holds one or more warm git clones (a later visit) is up to the
-declared ``run:`` commands themselves — a step's own ``git clone``/``git fetch``,
-never `--depth` (spike #68 finding 4: a shallow clone refuses an "unrelated
-histories" merge). Losing the folder loses time, never correctness: a command
-tolerates an empty/missing folder by cloning fresh.
+declared ``run:`` commands themselves — see
+:class:`~blizzard.hub.delivery.workdir.IHubWorkdir` for the folder's crash/correctness
+contract.
 """
 
 from __future__ import annotations

@@ -1,8 +1,7 @@
 """``blizzard hub login``'s own mechanics (issue #96) — PKCE challenge/verifier
 minting, the ephemeral loopback listener, and the paste-code fallback.
 
-Kept out of ``hub/cli.py`` so the click glue there stays thin (mirrors
-``hub/graphs.py`` holding the graph-YAML mechanics ``chunk_migrate`` calls into). The
+Kept out of ``hub/cli.py`` so the click glue there stays thin. The
 CLI never contacts a provider — every network call here targets the hub itself: the
 browser is pointed at the hub's own ``authorize`` endpoint (issue #95), and the code it
 delivers is redeemed at ``POST /api/auth/cli/token``.

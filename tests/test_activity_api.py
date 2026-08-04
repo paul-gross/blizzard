@@ -4,10 +4,9 @@ Phase 3, component tier).
 Off a real, migrated hub app this proves the route's own contract: the default
 24h/200 window (the issue's AC), an explicit ``since`` narrowing correctly, ``limit``
 bounds enforcement, a tz-naive ``since`` not raising, newest-first ordering, and the
-same auth gating ``GET /api/events`` carries. The read/pending/guest split is proven
-generically over every ``FLEET_VIEW`` route, this one included, by
-``tests/test_route_permission_matrix.py``; this file adds the one case that matrix
-doesn't cover — a runner's bearer token, rejected exactly as it is everywhere else.
+same auth gating ``GET /api/events`` carries. This file adds the one case
+``tests/test_route_permission_matrix.py`` doesn't cover — a runner's bearer token,
+rejected exactly as it is everywhere else.
 """
 
 from __future__ import annotations

@@ -1,13 +1,11 @@
 """The route claim — how a runner takes work.
 
-``POST /routes`` *is* acquisition: the runner peeks the ready queue, acquires the
-chunk's environments from its workspace provider, and posts the **complete** route
-— chunk, runner, workspace, and the acquired env ids. The hub accepts exactly one
-claim per chunk; a second claim races and loses with **409** (the runner releases
-its bindings and moves on). A winning claim's response carries the first node
-envelope, so the runner starts working without a second round-trip. A claim from a
-runner the hub registry marks paused is refused outright with **403** — a distinct
-outcome from the 409 race loss, since this claim was never in the race (issue #44).
+``POST /routes`` *is* acquisition: the claimant posts the **complete** route — chunk,
+runner, workspace, and the acquired env ids. Exactly one claim per chunk is accepted;
+a second claim races and loses with **409**. A winning claim's response carries the
+first node envelope. A claim from a runner the hub registry marks paused is refused
+outright with **403** — a distinct outcome from the 409 race loss, since this claim
+was never in the race (issue #44).
 """
 
 from __future__ import annotations
@@ -28,8 +26,7 @@ class RouteClaim(BaseModel):
 
 class RouteClaimResponse(BaseModel):
     """The winning claim's reply — the route, its first node envelope, and the
-    route's plaintext capability token (issue #84a), returned exactly once here. The
-    runner stashes it and presents it on every subsequent chunk-scoped write."""
+    route's plaintext capability token (issue #84a), returned exactly once here."""
 
     chunk_id: str
     runner_id: str

@@ -1,17 +1,12 @@
 """Produces-artifact authorization — the hub-side backstop on a node's ``produces:``
 declaration (issue #113 phase 5).
 
-Layered on top of two runner-side mechanisms: completion assembly
-(``runner/loop/steps.py``'s ``_collect_asset_artifacts``, phase 3) prefers an explicit
-``blizzard runner attach`` for each ``produces:`` name and falls back to the judgement
-assessment when none was attached (``SubmittedArtifact.attached=False``); the runner's
-own nudge-once (phase 4) resumes the worker a single time to give it a chance to attach
-before submitting. This check is the **hub's** backstop against a submission that still
-carries no explicit attachment, and no covering git commit, for one or more declared
-names — a worker that ignored the nudge, or a graph the nudge never reached. It shares
-its coverage predicate with the runner's own nudge check via
-:func:`~blizzard.wire.completion.produces_coverage`, so the two models cannot
-drift apart.
+This check is the **hub's** backstop against a submission that still carries no
+explicit attachment, and no covering git commit, for one or more declared names — a
+worker that ignored the runner's own nudge (``runner/loop/steps.py``), or a graph the
+nudge never reached. It shares its coverage predicate with the runner's own nudge
+check via :func:`~blizzard.wire.completion.produces_coverage`, so the two models
+cannot drift apart.
 
 The check is a plain function, not a service — it takes already-loaded values
 (``bzh:domain-takes-objects``): the caller resolves the ``Node`` from the pinned graph and

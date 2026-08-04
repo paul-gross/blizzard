@@ -135,9 +135,8 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
 
 
 def test_detail_carries_the_pinned_graphs_name_and_created_at(tmp_path: Path) -> None:
-    """The board's compact-ref graph label (issue #102) needs the pinned graph's name and
-    mint instant on ``ChunkDetail`` — populated from the ``Graph`` already loaded during
-    detail assembly, so this asserts it matches what `GET /api/graphs` independently reports."""
+    """``ChunkDetail`` carries the pinned graph's name and mint instant (issue #102);
+    asserts it matches what `GET /api/graphs` independently reports."""
     hub = build_hub(tmp_path)
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML}).json()
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]

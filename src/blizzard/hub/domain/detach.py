@@ -7,12 +7,9 @@ runner half lives in ``blizzard.runner.loop.steps``, not here). Facts append, st
 derives (``bzh:facts-not-status``).
 
 Detach is deliberately **not** requeue (:class:`blizzard.hub.domain.decisions.RequeueService`):
-it writes no ``requeue.recorded`` fact, so it supersedes no escalation and bumps no
-epoch. A ``needs_human`` chunk detached this way still derives ``needs_human`` — the
-runner is released, but the escalation stays open until a human requeues it.
-Detach is a fleet/route operation, not a human-gate one, which is also why it lives in
-its own module rather than beside :mod:`blizzard.hub.domain.decisions` (that module's
-rules are scoped to gate decisions and requeue-supersession closure).
+it writes no ``requeue.recorded`` fact, so it supersedes no escalation and bumps no epoch.
+Pinned by
+tests/test_chunk_status_derivation.py::test_detached_route_with_an_open_escalation_still_derives_needs_human.
 
 Holds the *write* chunk repository (``bzh:controller-read-only``); the route resolves
 the chunk and delegates here.
@@ -39,9 +36,8 @@ class DetachService:
         """Release the chunk's live route so it re-derives ``ready``.
 
         Raises :class:`NotRouted` if the chunk has no live route — there is nothing to
-        release. No supersession fact is written and no epoch is bumped: unlike requeue,
-        detach never touches an open escalation. Returns the freshly-written
-        ``route_released.id`` (issue #213's activity-feed key)."""
+        release. Returns the freshly-written ``route_released.id`` (issue #213's
+        activity-feed key)."""
         if self._chunks.route_of(chunk.chunk_id) is None:
             raise NotRouted(f"chunk {chunk.chunk_id} has no live route")
         return self._chunks.record_route_released(chunk.chunk_id, at=self._clock.now())

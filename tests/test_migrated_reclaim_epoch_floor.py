@@ -3,13 +3,10 @@
 A cross-graph migration (#90) re-pins a chunk and re-queues it ``ready`` for a **fresh
 claim**, possibly by a runner that never drove it. That runner's runner-local epoch floor
 (``store.latest_epoch``) is 0, while the chunk's hub-side history — append-only ``lease.minted``
-facts spanning the *source* graph — carries epochs > 0. Before #112 the fresh runner minted
-``local + 1 == 1``, at or below the hub's latest epoch, and every state-advancing completion
-then bounced off the hub's stale-epoch fence (``stale epoch X; chunk is at Y``) — the chunk
-wedged. The fix seeds the mint floor from ``max(local, envelope.epoch)``, where
-``envelope.epoch`` is the hub's own ``latest_epoch(facts)`` carried on the claim response
-(``bzh:epoch-fencing``), so a freshly-claimed migrated chunk always mints strictly-higher
-epochs.
+facts spanning the *source* graph — carries epochs > 0. The mint floor is seeded from
+``max(local, envelope.epoch)``, where ``envelope.epoch`` is the hub's own
+``latest_epoch(facts)`` carried on the claim response (``bzh:epoch-fencing``), so a
+freshly-claimed migrated chunk always mints strictly-higher epochs.
 
 Driven end to end at the component tier over the **real** hub app and the **real** FILL step:
 ``HttpHubClient`` (the production ``IHubClient`` adapter the daemon runs) wraps the hub's own
@@ -131,7 +128,7 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
     fill(ctx)
 
     # AC #2/#3: the fresh runner had NO local history (floor 0) yet minted strictly above the
-    # hub floor — `max(0, N) + 1 == N + 1`, not the pre-#112 local-only `0 + 1 == 1`.
+    # hub floor — `max(0, N) + 1 == N + 1`.
     lease = store.active_lease_for_chunk(chunk_id)
     assert lease is not None, "the FILL tick minted no lease for the reclaimed chunk"
     assert lease.epoch == n + 1, f"expected mint at hub-floor+1 ({n + 1}), got {lease.epoch}"

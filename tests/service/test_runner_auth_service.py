@@ -64,7 +64,7 @@ def _captured_from_the_runner(hub: httpx.Client) -> list[dict[str, Any]]:
 
 def _status(hub: httpx.Client, chunk_id: str) -> str:
     """The test's own out-of-band status read, marked so it never masquerades as a runner
-    call. The mock hub's whole hub mirror moved under ``/api/fleet`` (issue #87)."""
+    call."""
     resp = hub.get(f"/api/fleet/chunks/{chunk_id}", headers={_PROBE_HEADER: "1"})
     return resp.json()["status"]
 
@@ -104,14 +104,11 @@ def test_runner_presents_the_bearer_token_on_every_hub_call(tmp_path: Path) -> N
                 proxied = runner_client.get(f"/api/chunks/{chunk_id}/work-items")
             finally:
                 runner_client.close()
-        # Assert the status *and* the payload, not just that a call was captured. Without
-        # this the test passes on a mock hub that 404s the forward — which is exactly what
-        # happened when the real runner moved to `/work-items` ahead of the mock (issue
-        # #55): the capture below still matched, so the tier reported green over a broken
-        # path. The payload assertion is the other half: `work_refs` is a defaulted field
-        # on both sides, so a seed the mock silently ignores yields an empty list rather
-        # than an error, and only reading a seeded ref back proves the field name agrees
-        # end to end (`mock_hub_chunk_spec` seeds exactly one).
+        # Assert the status *and* the payload, not just that a call was captured — a
+        # capture-only check passed green while the mock hub 404'd the forwarded call,
+        # exactly what happened when the real runner moved to `/work-items` ahead of the
+        # mock (issue #55). The payload half matters too: `work_refs` is defaulted on both
+        # sides, so only reading a seeded ref back proves the field name agrees end to end.
         assert proxied.status_code == 200, f"the proxy forward failed upstream: {proxied.status_code} {proxied.text}"
         proxied_items = proxied.json()["items"]
         assert [i["ref"] for i in proxied_items] == [_WORK_REF_URL], (

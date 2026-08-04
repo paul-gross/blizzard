@@ -1,19 +1,15 @@
 """Composition root — wire the hub and build its FastAPI app (``bzh:dependency-injection``).
 
 The single place collaborators are constructed and injected. ``create_app`` builds
-the app from resolved config and does **not** open the store — the startup revision
-guard (``blizzard hub host``) and the offline ``migrate`` verb own that. Keeping
-``create_app`` store-free lets the OpenAPI exporter and unit tests build the app
-without a migrated database; the fleet routes then report the store is unwired.
+the app from resolved config and does **not** open the store: staying store-free lets
+the OpenAPI exporter and unit tests build the app without a migrated database.
 
 ``build_hosted_app`` is the ``host`` composition root: it opens the store, wires the
-readiness seam, and the work source registry over the configured ``[[work_source]]``
-entries — each with its own credentialed client — and assembles the fleet services
-(:func:`blizzard.hub.composition.build_services`). The forge a hub command node's
-``run:`` script talks to (#65/#67) is injected as plain env (``BZ_FORGE_URL`` /
-``BZ_FORGE_TOKEN`` / ``BZ_FORGE_OWNER``), read straight from the environment here —
-no forge-delivery seam sits in front of it; the script itself speaks HTTP via
-``urllib`` (``bzh:deterministic-shell``).
+readiness seam and the work source registry, and assembles the fleet services
+(:func:`blizzard.hub.composition.build_services`). The forge coordinates a hub command
+node's ``run:`` script needs (#65/#67) are injected as plain env (``BZ_FORGE_URL`` /
+``BZ_FORGE_TOKEN`` / ``BZ_FORGE_OWNER``), read straight from the environment here — no
+forge-delivery seam sits in front of it (``bzh:deterministic-shell``).
 """
 
 from __future__ import annotations
@@ -59,11 +55,9 @@ from blizzard.hub.work_sources.internal.factory import build_work_source_registr
 
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
-# The owner segment used to qualify a bare (worktree-name-only) delivery repo into
-# the forge's ``owner/name`` coordinate (mirrors the packaged ``land_default``/
-# ``land_pr_ci`` scripts' own ``qualify_repo``). GitHub in production names the owner
-# explicitly; the verification forge fronts flat bare origins that resolve under any
-# owner, so a workspace-configured default is enough.
+# The owner segment qualifying a bare (worktree-name-only) delivery repo into the
+# forge's ``owner/name`` coordinate. A configured default is enough: GitHub names the
+# owner explicitly, and the verification forge's bare origins resolve under any owner.
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"
 DEFAULT_FORGE_OWNER = "blizzard"
 # The branch every PR/merge targets. ``main`` matches the verification forge's
@@ -74,10 +68,8 @@ DEFAULT_FORGE_BASE_BRANCH = "main"
 
 
 class _Sweepable(Protocol):
-    """The one capability :func:`_run_sweep_loop` needs — structural, so a test's
-    counting fake stands in for :class:`~blizzard.hub.domain.forge_status.AnnotationReconciler`
-    or :class:`~blizzard.hub.domain.work_closure.DeliveryClosureReconciler` with no
-    inheritance."""
+    """The one capability :func:`_run_sweep_loop` needs — structural, so any reconciler
+    (or a test's counting fake) stands in with no inheritance."""
 
     def sweep(self) -> None: ...
 
@@ -88,12 +80,9 @@ async def _run_sweep_loop(
     """A thin sleep-and-call wrapper around one steppable ``sweep()`` per interval
     (``bzh:steppable-loop`` — the reconciler itself has no opinion about scheduling).
     Shared by the forge-status annotation loop (issue #179) and the delivery closure
-    loop (issue #216) — both a periodic-sweep-over-injected-Protocols reconciler with
-    the identical scheduling shape, so one driver serves either. Races ``shutdown``
-    exactly like the runner's own ``PeriodicDriver._run`` (``runner/loop/build.py``),
-    so it wakes immediately on shutdown instead of holding a graceful drain for up to
-    the interval. A sweep that raises is logged and swallowed — a bad tick must never
-    kill the loop, only skip a cycle."""
+    loop (issue #216). Races ``shutdown`` so it wakes immediately instead of holding a
+    graceful drain for up to the interval. A sweep that raises is logged and swallowed —
+    a bad tick must never kill the loop, only skip a cycle."""
     log = get_logger(logger_name)
     while not shutdown.is_set():
         try:
@@ -111,28 +100,19 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     loop (issue #216) across the app's lifetime.
 
     ``app.state.shutdown`` (an ``asyncio.Event``, created eagerly in :func:`create_app` so
-    it exists before the first subscriber connects) is what every ``/api/events/stream``
-    generator races against its queue read (``blizzard.hub.api.events._stream``), so a
-    shutting-down stream returns immediately instead of blocking a graceful drain until its
-    next 15s keepalive wake (or forever). This ASGI-level hook makes the app a well-behaved
-    lifespan citizen under any runner, but it is **not** what unblocks the stream when
-    ``blizzard hub host`` serves under uvicorn: uvicorn's own ``Server.shutdown`` only sends
-    this message *after* waiting (up to ``timeout_graceful_shutdown``) for in-flight
-    responses to finish on their own — an SSE response never does, so that wait would
-    already be blocking or timing out before this fires. The real signal path there is
-    ``blizzard.hub.cli._EarlyShutdownServer.handle_exit``, which sets the same event
-    synchronously the instant SIGTERM/SIGINT is caught, well before uvicorn's drain begins.
+    it exists before the first subscriber connects) is what every SSE stream races against
+    its queue read. This ASGI-level hook makes the app a well-behaved lifespan citizen
+    under any runner; under ``blizzard hub host`` the event is set earlier, on signal
+    catch — see ``blizzard.hub.cli._EarlyShutdownServer``.
 
     Both sweep tasks are created here — not in :func:`build_hosted_app` — because this
     is the one place that runs for every app the ``lifespan`` fires for, and each starts
-    only when ``app.state.services`` names at least one opted-in source: the store-free
-    path (``create_app_for_export``, unit tests) sets ``services`` to ``None`` and starts
-    neither, exactly like a hosted hub with no ``annotate``/``close`` source starts
-    neither. The same ``annotation_interval_seconds`` paces both — no second knob. The
-    annotation reconciler is built here (it needs only ``services.chunks``' read-only
-    Protocol); the closure reconciler needs the write-capable chunk repository
-    (``bzh:controller-read-only``), so it is built once at the composition root
-    (``services.delivery_closure``, ``hub/composition.py``) and just started or not."""
+    only when ``app.state.services`` names at least one opted-in source. The same
+    ``annotation_interval_seconds`` paces both — no second knob. The annotation
+    reconciler is built here (it needs only ``services.chunks``' read-only Protocol);
+    the closure reconciler needs the write-capable chunk repository
+    (``bzh:controller-read-only``), so it is built at the composition root
+    (``services.delivery_closure``) and just started or not."""
     services: HubServices | None = app.state.services
     tasks: list[asyncio.Task[None]] = []
     if services is not None:
@@ -168,8 +148,7 @@ def create_app(
 
     ``readiness`` is the store-backed readiness evaluator; ``services`` is the wired
     fleet-service bundle. Both are optional so the store-free paths — the OpenAPI
-    export and unit tests — build the app without opening a database; the ``/api/ready``
-    probe then reports ``ready=false`` and the fleet routes report the store is unwired.
+    export and unit tests — build the app without opening a database.
     """
     log = get_logger("blizzard.hub")
 
@@ -178,7 +157,7 @@ def create_app(
     app.state.readiness = readiness
     app.state.services = services
     # The event broker is always present (cheap, in-memory) so the SSE stream opens
-    # cleanly even on the store-free app; mutating routes publish through it.
+    # cleanly even on the store-free app.
     app.state.events = services.events if services is not None else EventBroker()
     # Set on shutdown by ``_lifespan``; every SSE stream races it (issue #47).
     app.state.shutdown = asyncio.Event()
@@ -198,12 +177,10 @@ def create_app(
     app.include_router(runners_router)
     app.include_router(spend_router)
     app.include_router(users_router)
-    # The runner-authenticated fleet router (issue #87): `require_runner_principal` is
-    # declared once at router level (`blizzard.hub.api.fleet`), not repeated per route —
-    # a fleet verb is authenticated *because of where it is mounted*.
+    # The runner-authenticated fleet router (issue #87) — a fleet verb is authenticated
+    # *because of where it is mounted*; see `blizzard.hub.api.fleet`.
     app.include_router(fleet_router)
 
-    # The embedded frontend, served from the same process and origin.
     mount_web_app(app, frontend_dir("hub"), app_name="blizzard-hub")
 
     log.info("hub app created", db_url=config.db_url, services_wired=services is not None)
@@ -218,13 +195,12 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
     owner = os.environ.get(ENV_FORGE_OWNER, DEFAULT_FORGE_OWNER)
-    # The work-source registry builds its own credentialed client per configured source.
     work_source_registry = build_work_source_registry(config.work_sources)
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
 
     # The provider-login seam (issue #92) is consumed only under `oauth` — under `none`
     # there is no login mechanism, so no provider is built even if `[[auth.oauth.
-    # provider]]` entries are configured (mirrors #95's "no IdP surface under none").
+    # provider]]` entries are configured.
     oauth_providers = config.auth.oauth_providers if config.auth.mode == AUTH_MODE_OAUTH else ()
     # The IdP signing-key lifecycle (issue #95) — likewise built only under `oauth`; a
     # `none` deployment never touches disk for a keypair it will never mint or publish.
@@ -246,9 +222,9 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     )
     # Only checked once the store is confirmed at the expected schema head — reusing
     # the same readiness evaluation `/api/ready` reports rather than a raw query, so a
-    # store mid-migration (or rolled back, as `blizzard hub migrate --down` leaves it)
-    # fails *readiness*, not *boot* (`build_hosted_app` must still return a serving —
-    # if not-ready — app; see `test_ready_probe_false_on_unmigrated_store`).
+    # store mid-migration fails *readiness*, not *boot* (`build_hosted_app` must still
+    # return a serving — if not-ready — app; see
+    # `test_ready_probe_false_on_unmigrated_store`).
     if readiness.evaluate().ready:
         _check_provider_name_immutability(config, services)
         ensure_superuser_bootstrap(email=config.auth.superuser, users=services.users, auth=services.auth)

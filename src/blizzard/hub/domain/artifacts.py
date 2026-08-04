@@ -37,9 +37,8 @@ class GitCommitArtifact:
     """A branch pushed to the forge before submission, pinned by commit hash.
 
     ``forge`` is the worker's own declared origin (issue #143, Phase 4 — decision
-    R7), confirmed read-only by the runner's verify before submission; ``""`` only
-    for a pre-Phase-4 row this shape predates (a legacy null reads back as "the
-    repo's origin" — see :func:`from_row`)."""
+    R7); ``""`` only for a pre-Phase-4 row this shape predates (a legacy null reads
+    back as "the repo's origin" — see :func:`from_row`)."""
 
     artifact_id: str
     name: str

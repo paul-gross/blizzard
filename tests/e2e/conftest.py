@@ -1,9 +1,7 @@
 """Shared fixtures for the e2e browser tier (scenario 6).
 
-The browser-driven scenario needs a real Chromium, installed out of band with
-``uv run playwright install chromium``. When that binary is absent the whole
-browser scenario **skips cleanly** rather than erroring, so ``mise run e2e`` still
-runs the in-process scenarios on a machine that has never installed the browser.
+Chromium is installed out of band (``uv run playwright install chromium``); when it is
+absent the browser scenario **skips cleanly** rather than erroring.
 """
 
 from __future__ import annotations
@@ -34,9 +32,7 @@ def chromium_available() -> bool:
 
 
 # The two viewport sizes a browser e2e scenario sizes its page against (issue #171's
-# web:shell-sweep — see blizzard-context:/verification/blizzard.md): a wide desktop
-# monitor, and a ~390px phone width, the narrow end of the range the mobile shell's
-# bottom nav actually routes to.
+# web:shell-sweep — see blizzard-context:/verification/blizzard.md).
 _WIDE_VIEWPORT: ViewportSize = {"width": 1400, "height": 900}
 _NARROW_VIEWPORT: ViewportSize = {"width": 390, "height": 844}
 
@@ -49,6 +45,5 @@ def wide_viewport() -> ViewportSize:
 
 @pytest.fixture(scope="session")
 def narrow_viewport() -> ViewportSize:
-    """A ~390px phone-width `Page` viewport — the narrow end of the tier rule every
-    component reachable from the mobile shell's bottom nav is held to (issue #171)."""
+    """A ~390px phone-width `Page` viewport — the narrow end of the tier rule (issue #171)."""
     return _NARROW_VIEWPORT.copy()

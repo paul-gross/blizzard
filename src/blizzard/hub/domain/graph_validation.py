@@ -144,10 +144,9 @@ def _check_node(node: NodeDoc, node_names: set[str], session_names: set[str], er
         elif judgement.by is JudgedBy.HUMAN and judgement.prompt:
             errors.append(f"node `{node.name}`: a human-judged (gate) node must not declare `judgement.prompt`")
     elif node.executor is Executor.HUB:
-        # The generic hub command node (#65) — since #67 the ONLY hub-node shape, the
-        # deliver special case retired: structurally agentless — no prompt, no worker
-        # judgement prose, no in-session checks. Its choices are authored like a
-        # worker node's own (a fused choice/edge per outcome its commands can emit),
+        # The generic hub command node (#65, #67) — structurally agentless: no prompt,
+        # no worker judgement prose, no in-session checks. Its choices are authored like
+        # a worker node's own (a fused choice/edge per outcome its commands can emit),
         # checked generically below like every other node's choices — no node name is
         # privileged by the engine, and no choice is restricted from routing straight
         # to the reserved terminal.
@@ -262,9 +261,9 @@ def _warn_reachability(doc: GraphDoc, node_names: set[str], warnings: list[str])
 def _edges(doc: GraphDoc) -> dict[str, set[str]]:
     """Adjacency built from every node's authored choices — including hub nodes.
 
-    Since #67 no node name is privileged: a hub command node's choices are authored
-    like a worker node's own (a fused choice/edge per outcome its commands can emit),
-    so this reads the same ``judgement.choices`` for every node.
+    No node name is privileged (#67): a hub command node's choices are authored like
+    a worker node's own (a fused choice/edge per outcome its commands can emit), so
+    this reads the same ``judgement.choices`` for every node.
     """
     out: dict[str, set[str]] = {n.name: set() for n in doc.nodes}
     for node in doc.nodes:

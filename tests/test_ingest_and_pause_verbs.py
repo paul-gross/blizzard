@@ -110,9 +110,8 @@ def test_ingest_passes_a_source_hash_ref_token_through(monkeypatch: pytest.Monke
 def test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
     """A pasted work item URL travels through byte-for-byte — the ergonomic path,
     copied straight from the browser — with no local resolution or repo-tail guess.
-    Only the hub, which holds the source configuration, can say which source it names
-    (the whole point of this phase: the CLI can no longer assume a source is named
-    after its repo tail)."""
+    Only the hub, which holds the source configuration, can say which source it
+    names."""
     calls: list[object] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -130,9 +129,8 @@ def test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve(monkeyp
 def test_ingest_warns_on_the_deprecated_github_prefix_but_still_passes_the_rest_through(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The old ``github:<rest>`` provider-tagged form still works — ``rest`` travels
-    through on its own merits — but warns on stderr rather than silently accepting a
-    provider tag the pointer no longer carries."""
+    """The ``github:<rest>`` provider-tagged form passes ``rest`` through on its own
+    merits, but warns on stderr rather than silently accepting the provider tag."""
     calls: list[object] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -165,10 +163,9 @@ def test_ingest_maps_a_pointer_conflict(monkeypatch: pytest.MonkeyPatch) -> None
 
 @pytest.mark.unit
 def test_ingest_maps_a_422_naming_the_unclaimed_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The hub resolves tokens now, not the CLI: a token no configured source
-    claims is a 422 whose detail — naming the token and the configured sources — is
-    the *only* feedback a user gets, so it must surface verbatim rather than a generic
-    error."""
+    """The hub resolves tokens, not the CLI: a token no configured source claims is a
+    422 whose detail — naming the token and the configured sources — is the *only*
+    feedback a user gets, so it must surface verbatim rather than a generic error."""
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(
@@ -186,12 +183,9 @@ def test_ingest_maps_a_422_naming_the_unclaimed_token(monkeypatch: pytest.Monkey
 
 @pytest.mark.unit
 def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Phase 3's finale fixed a *local* bug here: a pasted non-issue URL used to fall
-    through to the ``source:ref`` split and partition on the URL's own scheme colon
-    (``https://…/pull/5`` -> ``{source: "https", ref: "//…/pull/5"}``). With the CLI
-    carrying no grammar at all, that class of input isn't rejected locally
-    any more — it travels to the hub exactly as pasted, and the hub's 422 (naming the
-    token and the configured sources) is what the user now sees."""
+    """A pasted non-issue URL is not rejected locally — with the CLI carrying no
+    grammar at all, it travels to the hub exactly as pasted, and the hub's 422
+    (naming the token and the configured sources) is what the user sees."""
     calls: list[object] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -576,11 +570,10 @@ def test_start_clears_the_local_brake(tmp_path: Path, monkeypatch: pytest.Monkey
 
 @pytest.mark.component
 def test_pause_reports_itself_upward_atomically(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The brake and the fact the board reads it from are one write (issue #43).
+    """The brake and the fact reporting it upward are one write (issue #43).
 
-    Asserting the buffer entry — not just the flag — is what covers the seam that makes the
-    board correct: a brake set locally but never reported leaves a runner rendered as
-    claiming after it stopped, and PULL only mirrors hub->runner, so nothing repairs it.
+    Asserting the buffered fact — not just the flag — is the point: a brake set
+    locally but never reported would leave nothing to repair it.
     """
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)
@@ -598,7 +591,7 @@ def test_pause_reports_itself_upward_atomically(tmp_path: Path, monkeypatch: pyt
 
 @pytest.mark.component
 def test_start_reports_the_resume_upward(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Clearing the brake is reported too, FIFO behind the pause — else the board sticks."""
+    """Clearing the brake is reported too, FIFO behind the pause fact."""
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)
     with _serve_local_api(root):

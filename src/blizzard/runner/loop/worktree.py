@@ -1,24 +1,19 @@
 """The worker-artifact git seam — read-only verify of what a build declared (issue
 #143, Phase 4).
 
-The worker (not the runner) commits its work to a branch in a leased repo worktree,
-pushes that branch to the forge, and declares the resulting ``(env, repo, branch,
-commit)`` through the runner's local declaration channel (Phase 3). ADVANCE reads those
-durable declarations back and, for each, confirms them **read-only** against the origin
-the env's repo manifest names for that repo — never inferring a branch name off git
-residue (the ``git rev-parse --abbrev-ref HEAD`` inference this seam used to perform
-returned the literal string ``HEAD`` in a detached worktree, wedging the push it drove)
-and never mutating git itself (the push responsibility moved to the worker seam). The
-subprocess-git adapter under ``internal/`` is the reference binding, and loop tests
+ADVANCE reads a worker's durable ``(env, repo, branch, commit)`` declarations back and,
+for each, confirms them **read-only** against the origin the env's repo manifest names for
+that repo — never inferring a branch name off git residue, and never mutating git itself.
+The subprocess-git adapter under ``internal/`` is the reference binding, and loop tests
 inject a fake.
 
-The check is deliberately **remote-only**. It once also compared a worker-supplied forge
-against the worktree's ``origin``, which made the seam depend on a local checkout for
-what is purely a question about the forge — and made a worker standing in the wrong
-directory (workers are spawned at the workspace root, so: always) supply a plausible
-wrong URL that failed the comparison silently. With the origin coming from the provider's
-manifest there is no second opinion to disagree with, so the seam asks the only question
-that was ever load-bearing: does this branch, at this origin, point at this commit?
+The check is deliberately **remote-only**: the origin comes from the provider's repo
+manifest and no local checkout is consulted, so the seam asks the one load-bearing
+question — does this branch, at this origin, point at this commit? Pinned by
+``tests/test_runner_gates.py::test_runner_config_gate_buffers_a_decision_not_a_completion``
+(the manifest origin is what reaches ``verify``) and
+``tests/test_subprocess_worktree_git.py::test_verify_confirms_a_declared_commit_against_a_detached_head_worktree``
+(no working directory is read or mutated).
 """
 
 from __future__ import annotations

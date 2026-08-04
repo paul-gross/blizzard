@@ -100,8 +100,7 @@ def test_parse_accepts_this_source_s_own_schemeless_issue_url() -> None:
 
 
 def test_parse_resolves_a_url_even_when_the_source_name_is_not_the_repo_tail() -> None:
-    """The regression this phase exists to fix: the old CLI heuristic assumed a
-    source's name is its repo tail and could never resolve this case."""
+    """A source whose name is not its repo tail must still resolve."""
     source = GitHubWorkSource(github_double(), name="bz", repo="paul-gross/blizzard", web_base="https://github.com")
     pointer = source.parse("https://github.com/paul-gross/blizzard/issues/26")
     assert pointer is not None
@@ -208,7 +207,7 @@ def test_registry_get_picks_the_named_binding_over_real_adapters() -> None:
     # `alpha` is registered first, yet a `beta`-sourced pointer must resolve to `beta`.
     assert registry.get(beta_pointer.source) is beta
     assert registry.get("alpha") is alpha
-    # The label the board renders follows the named binding, not registration order.
+    # The label follows the named binding, not registration order.
     assert registry.get(beta_pointer.source).label(beta_pointer) == "beta#7"  # type: ignore[union-attr]
     # A name no binding declares resolves to None — the 422 at ingest, the null label at read.
     assert registry.get("gamma") is None
@@ -231,9 +230,8 @@ def test_resolve_tries_every_binding_and_returns_the_first_claim() -> None:
 
 
 def test_resolve_over_a_url_naming_a_source_whose_name_is_not_its_repo_tail() -> None:
-    """The regression this guards against: a source whose name isn't its repo tail
-    must still resolve at the registry (the resolver a hub route actually calls), not
-    just the binding directly."""
+    """A source whose name isn't its repo tail must still resolve at the registry —
+    the resolver a hub route actually calls — not just the binding directly."""
     bz = GitHubWorkSource(github_double(), name="bz", repo="paul-gross/blizzard", web_base="https://github.com")
     registry = WorkSourceRegistry({"bz": bz})
 
@@ -311,8 +309,8 @@ def test_label_bootstrap_creates_both_markers_before_the_first_write() -> None:
         "blizzard:ingested",
         "blizzard:in-progress",
     }
-    # Blizzard cyan variants, hashless per the API: at-rest ingested in the board's
-    # light `--cyan` token, active in-progress in the darker `--cyan-dim`.
+    # Blizzard cyan variants, hashless per the API: a lighter cyan for ingested, a
+    # darker one for in-progress.
     assert forge_state(double)["repo_label_colors"] == {  # type: ignore[index]
         "blizzard:ingested": "5cd1e5",
         "blizzard:in-progress": "2b6675",
@@ -411,9 +409,7 @@ def test_set_status_add_label_failure_degrades_to_work_annotate_error() -> None:
     repo-label bootstrap first — so it never reaches the add call and cannot fence
     it. This one fails only the add: the paired remove that follows 404s (the other
     marker is not present), which the adapter deliberately tolerates, so nothing
-    else in the call raises on the add's behalf. Without the add's own status check
-    ``set_status`` returns cleanly, and the reconciler counts a write that never
-    landed — ``written=1 failed=0`` in the sweep log while the forge is unchanged.
+    else in the call raises on the add's behalf.
     """
     double = github_double()
     source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")

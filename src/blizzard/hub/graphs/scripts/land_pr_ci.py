@@ -11,10 +11,9 @@ outcome the policy can express — an EMPTY commit set from a graph that declare
 exits non-zero so the engine routes ``failure``
 (:func:`~blizzard.hub.graphs.scripts.land_default.refuse_empty_delivery`).
 
-Unlike the default graph's strict one-shot (:mod:`blizzard.hub.graphs.scripts.land_default`,
-which bounces to ``build`` on *any* non-``clean`` state), this opens a PR per repo and
-routes by the PR's live ``mergeable_state`` — resolving what is mechanical or transient
-without ever waking the LLM:
+Unlike the default graph's strict one-shot (:mod:`blizzard.hub.graphs.scripts.land_default`),
+this opens a PR per repo and routes by the PR's live ``mergeable_state`` — resolving what
+is mechanical or transient without ever waking the LLM:
 
     clean               -> merge it
     unknown             -> "pending"  (GitHub still computing mergeability — re-poll)
@@ -32,14 +31,6 @@ other chunks' hub nodes run in the gap. ``poll_timeout`` is the executor's job
 (``bzh:hub-node-outcome-protocol``): its expiry fires the engine's ``failure`` kick-back —
 so the graph MUST author a ``failure`` edge, and (for the ``dirty`` fast-bounce) a
 ``conflict`` edge.
-
-This improves on the prior CI-watch policy in three ways: a real ``dirty`` conflict bounces
-*immediately* instead of waiting out the full ``poll_timeout``; a ``behind`` branch is
-*healed* via ``update-branch`` instead of pending forever (nothing used to update it); and a
-``blocked``/``unstable`` PR whose check run has already completed with a terminal conclusion
-routes ``failure`` immediately instead of polling out to ``poll_timeout`` for a check that
-will never turn green — recording a ``delivery-findings`` artifact naming what failed so
-``resolve`` starts from a diagnosis instead of archaeology (issue #232).
 
 Same env contract as :mod:`~blizzard.hub.graphs.scripts.land_default`
 (``BZ_FORGE_URL``/``BZ_FORGE_TOKEN``/``BZ_FORGE_OWNER``/``BZ_HUB_BASE_BRANCH``/
@@ -142,10 +133,10 @@ def classify_checks(check_runs: list[dict[str, Any]]) -> str:
     ``in_progress``/``waiting``/``requested``, an empty list, or a malformed payload (missing
     keys, wrong types) — degrades to ``_WAIT``; this function never raises.
 
-    Design decision D1 (issue #232): a required-vs-optional distinction needs a
-    branch-protection read this script doesn't do — ``clean`` is its only merge gate, so a
-    completed-failing run while ``mergeable_state`` is ``blocked``/``unstable`` is terminal
-    regardless of whether GitHub would call the check "required"."""
+    Design decision D1 (issue #232): terminal regardless of whether GitHub would call the
+    check "required" — that distinction needs a branch-protection read this script doesn't
+    do, and ``clean`` is its only merge gate anyway (pinned by ``tests/test_land_scripts.py``'s
+    ``test_classify_checks_is_failed_for_every_terminal_conclusion``)."""
     if not isinstance(check_runs, list):
         return _WAIT
     for run in check_runs:
@@ -379,9 +370,10 @@ def _land() -> int:
                         print(f"{repo}#{number} has a terminal CI check failure — will not re-poll", file=sys.stderr)
                         continue
                     if check_runs:
-                        # D2: only a NON-empty check-runs read makes this poll
-                        # "substantive" — the very first poll of a fresh PR often reads
-                        # zero check runs yet, and writing findings then says nothing.
+                        # D2 (issue #232): only a NON-empty check-runs read makes this poll
+                        # "substantive" — a fresh PR's first poll often reads zero check
+                        # runs, and findings written then say nothing (pinned by
+                        # tests/test_land_scripts.py::test_an_empty_check_runs_list_is_not_a_substantive_wait).
                         wait_records.append(
                             {
                                 "repo": repo,
@@ -410,13 +402,10 @@ def _land() -> int:
         # out to `poll_timeout`. Nothing merges (chunk atomicity, same as `wait` below);
         # write the findings so the resolve worker can read exactly what failed.
         #
-        # Deliberately left unguarded, unlike the wait-path write below: this branch
-        # already routes to `failure` regardless of whether the write itself succeeds, so
-        # a `MarkerWriteError` propagating from here (and being turned into a nonzero
-        # exit by `main`'s top-level catch) costs nothing beyond one extra `failure` ->
-        # `resolve` bounce cycle — and it is the only signal that findings a resolve
-        # worker needs went unwritten, rather than silently routing `failure` with
-        # nothing for `resolve` to read (issue #243).
+        # Deliberately left unguarded, unlike the wait-path write below: an unwritten set
+        # of findings is the only signal `resolve` has nothing to read, and this branch
+        # routes to `failure` either way (issue #243; pinned by tests/test_pin_hub_delivery.py::
+        # test_a_terminal_failure_findings_write_failure_exits_non_zero_instead_of_routing_failure).
         write_findings(_FINDINGS_NAME, render_findings(failures))
         print(_CI_FAILURE)
         return 0
@@ -430,12 +419,10 @@ def _land() -> int:
         # which is scoped by node, not epoch, and would wrongly suppress every visit
         # after the first.
         #
-        # Unlike the terminal-failure write above, a failure HERE has no correctness
-        # consequence — it only costs a resolve worker some diagnosability on this one
-        # poll, since the wait path re-writes findings on every subsequent poll anyway.
-        # This branch is otherwise a healthy chunk just waiting on CI, so a transient
-        # hub-side write failure must not bounce it (issue #243) — degrade to `pending`
-        # instead of letting `MarkerWriteError` propagate to `main`'s top-level catch.
+        # Unlike the terminal-failure write above, a failure HERE degrades to `pending`:
+        # the next poll re-writes the same findings, so it costs only diagnosability and
+        # must not bounce a healthy chunk (issue #243; pinned by
+        # tests/test_land_scripts.py::test_a_wait_path_findings_write_failure_degrades_to_a_plain_pending_not_a_bounce).
         if wait_records:
             try:
                 write_findings(_FINDINGS_NAME, render_findings(wait_records))

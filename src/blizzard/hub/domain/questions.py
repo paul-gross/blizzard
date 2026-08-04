@@ -63,9 +63,9 @@ class QuestionService:
 def _parse(value: str, clock: IClock) -> datetime:
     """Read an ISO-8601 instant, falling back to now on a malformed stamp.
 
-    Coerces a naive result to UTC (``bzh:utc-instants``): a legacy runner still
-    buffering pre-fix payloads can deliver a naive ``asked_at`` string even
-    after this fix lands, since the outbound buffer replays whatever it already holds.
+    Coerces a naive result to UTC (``bzh:utc-instants``, issue #28): a legacy runner's
+    outbound buffer can still replay a naive ``asked_at`` string (pinned by
+    tests/test_ask_answer.py::test_ask_question_normalizes_a_naive_asked_at).
     """
     try:
         return as_utc(datetime.fromisoformat(value))

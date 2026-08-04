@@ -7,9 +7,7 @@ reach — the pass-through routes degrade per-chunk/per-pointer rather than refu
 start.
 
 The pointer carries its own ``source`` name, so finding a pointer's binding is a
-plain lookup — ``registry.get(pointer.source)`` — rather than the older repo-matching
-``resolve_source`` this module carried while the pointer itself named no source. That
-resolver is retired with it.
+plain lookup — ``registry.get(pointer.source)``.
 
 :meth:`resolve` is the intake-side counterpart: an ingest **token** (as
 opposed to an already-resolved pointer's ``source`` name) is tried against every

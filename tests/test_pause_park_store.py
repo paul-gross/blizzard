@@ -1,23 +1,12 @@
 """The runner-side pause-park store — a separate table pair from park_facts (issue #46).
 
-Pins ``_pause_park_is_open``'s re-pause correctness and the ``parked_lease_ids()``
-union (plan §1, ``blizzard-workspace/.winter/workflows/2026-07-16-chunk-pause/00-plan.md``).
-
-A pause has no natural key like an ask's fresh ``question_id`` per ask, so a plain
-``lease_id NOT IN (select lease_id from pause_park_resumes)`` set-difference is wrong:
-it would read a chunk paused -> resumed -> paused again on the *same* lease as still
-resumed, leaving the second pause invisible and its worker running. The real predicate
-is timestamp-correlated (``NOT EXISTS``, mirroring ``_intent_is_open``); the first test
-below is written to fail against the naive set-difference and pass only against the
-real one — confirmed by hand before landing (see the developer's report).
-
-The last section pins plan §1.3's **zero-diff inheritance** claim: because
-``parked_lease_ids()`` is the union, the three existing skip sites — REAP's
-(``steps.py:227``, ``:230-234``), ``mark_resume_intents`` (``:285``, ``:291``) and
-``mark_crash_resume_intents`` (``:342``, ``:353``) — skip a pause-parked lease with
-**no loop diff at all**. That claim is what earns P3 its share of plan row 10, so it
-is asserted here against the real loop steps rather than left to P4's full-``tick()``
-suite (``test_chunk_pause.py``), which does not exist yet.
+``_pause_park_is_open`` must use a timestamp-correlated ``NOT EXISTS`` predicate
+(mirroring ``_intent_is_open``), not a naive ``lease_id NOT IN (select lease_id from
+pause_park_resumes)`` set-difference: the naive form reads a chunk paused -> resumed ->
+paused again on the *same* lease as still resumed, leaving the second pause invisible and
+its worker running. The three existing skip sites (REAP, ``mark_resume_intents``,
+``mark_crash_resume_intents``) all derive from the same ``parked_lease_ids()`` union, so
+this module also pins that inheritance against the real loop steps.
 """
 
 from __future__ import annotations
@@ -147,9 +136,8 @@ def test_parked_lease_ids_is_the_union_of_ask_and_pause_parks(tmp_path):  # type
 
 
 # --------------------------------------------------------------------------- #
-# Zero-diff inheritance (plan §1.3) — the union alone makes the existing skip
-# sites correct for a pause-park, with no diff to steps.py. P3 lands no loop
-# change, so these drive the real loop steps against a pause-parked lease.
+# Zero-diff inheritance (plan §1.3): parked_lease_ids()'s union makes the existing
+# skip sites correct for a pause-park with no diff to steps.py.
 # --------------------------------------------------------------------------- #
 
 

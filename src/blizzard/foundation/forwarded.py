@@ -67,13 +67,12 @@ class TrustedProxies:
         return first_hop or direct_scheme
 
     def effective_client_ip(self, *, direct_peer: str, forwarded_for: str | None) -> str:
-        """The client IP the throttle keys on and the auth facts record. When
-        ``direct_peer`` is a trusted proxy, the **rightmost untrusted hop** of
-        ``X-Forwarded-For`` is the real client — walking right to left past our own
-        chained proxies, the first hop we do not control is where a forger could start,
-        so it is treated as the client. Otherwise (an untrusted peer, an absent or
-        all-trusted header) the direct peer stands, so a forged ``X-Forwarded-For`` from
-        an untrusted client cannot dodge the throttle."""
+        """The client IP the throttle keys on and the auth facts record. Behind a trusted
+        ``direct_peer`` the **rightmost untrusted hop** of ``X-Forwarded-For`` is the real
+        client — the leftmost entry is forgeable, the first hop we do not control is not.
+        Otherwise (an untrusted peer, an absent or all-trusted header) the direct peer
+        stands (pinned by
+        tests/test_forwarded.py::test_client_ip_stops_at_the_first_untrusted_hop_from_the_right)."""
         if not self._trusts(direct_peer) or not forwarded_for:
             return direct_peer
         hops = [hop.strip() for hop in forwarded_for.split(",") if hop.strip()]

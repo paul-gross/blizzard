@@ -7,10 +7,10 @@ verbatim from the journey prose.
 
 **The setup (journey ¶1).** Five issues are filed across the fixture workspace's two
 repos (``toy-api`` + ``toy-web``) at the mock forge and ingested *by id* — each mints a
-chunk. Two related ones are **grouped** into a single chunk through the same
-``POST /chunks/{id}/group`` the board's Group control calls, and that grouped chunk — the
-riskiest, because it spans both repos — is **moved to the top** of the ready queue through
-the whole-order ``PUT /queue`` (the board's Prioritize control). The queue read proves both took.
+chunk. Two related ones are **grouped** into a single chunk through
+``POST /chunks/{id}/group``, and that grouped chunk — the riskiest, because it spans
+both repos — is **moved to the top** of the ready queue through the whole-order
+``PUT /queue``. The queue read proves both took.
 
 **The night (journey ¶1-2).** The runner is a **real** ``blizzard runner host`` daemon
 and the hub a **real** ``blizzard hub host`` daemon (the systemd units' ``ExecStart`` — see
@@ -39,7 +39,7 @@ fleet continues: every chunk resumes at exactly the node the hub last recorded (
 chunk with no takeover, and it lands. The failed chunk's escalation command, run
 **verbatim**, drops into and resumes the stuck agent's session. Then: the succeeded chunks
 merged to bare ``main`` via the default graph; the full history + artifacts are visible at
-the hub API (the same facts the board renders); the asked chunk resumed without takeover;
+the hub API; the asked chunk resumed without takeover;
 nothing was worked twice (every landed file reachable from bare ``main`` exactly once); no
 environment is orphaned (``blizzard dev check-invariants`` clean); and ``blizzard hub
 status`` tells the truth about every chunk.
@@ -99,8 +99,8 @@ FIXTURE_ENV = "journey"
 RUNNER_ENVS = ("e1", "e2", "e3", "e4")
 MAX_AGENTS = 2
 
-# The two fixture repos (blizzard-mock/fixture_workspace/seed.py). The mock forge's git
-# backend qualifies bare artifacts with OWNER, and both origins are minted by the fixture.
+# The two fixture repos (blizzard-mock/fixture_workspace/seed.py); both origins are
+# minted by the fixture.
 API_REPO = "toy-api"
 WEB_REPO = "toy-web"
 
@@ -131,13 +131,10 @@ def _work_sources(forge_port: int) -> tuple[WorkSourceConfig, ...]:
 
 
 # --------------------------------------------------------------------------- #
-# The shared build → review → deliver graph — the prompt is the program.
-#
-# Every node reads the chunk's own work item through the runner→hub pass-through and
-# branches on a ``KEY=value`` directive in the issue body, so a single graph drives four
-# different journeys. ``.behavior`` is written by the build spawn into the env workdir
-# (which persists across the chunk's node-steps) so the judgement / review turns — and the
-# review's re-entry — read the same behaviour without another fetch.
+# The shared build -> review -> deliver graph (see module docstring). ``.behavior`` is
+# written by the build spawn into the env workdir (which persists across the chunk's
+# node-steps) so the judgement / review turns — and the review's re-entry — read the
+# same behaviour without another fetch.
 # --------------------------------------------------------------------------- #
 
 _BUILD_PROMPT = f"""\
@@ -475,25 +472,18 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
             _widen_runner_pool(runner_dir)
             runner_proc = start_runner(runner_dir, crash_point=None)
 
-            # Let the fleet work the night through to where it needs a human: the two
-            # landing chunks reach ``done`` on their own, the asked chunk parks
-            # ``waiting_on_human`` (its lease held, reap clock stopped), and the failing one
-            # escalates to ``needs_human``. Each is a *latched* hub state, so this gate is
-            # deterministic — no reliance on timing.
+            # Let the fleet work through to where it needs a human — each assert below
+            # gates on a latched hub state, not timing, so this stays deterministic.
             assert wait_status(hub, grp_api, {"done"}, timeout=300.0) == "done"
             assert wait_status(hub, rev, {"done"}, timeout=300.0) == "done"
             assert wait_status(hub, ask, {"waiting_on_human"}, timeout=300.0) == "waiting_on_human"
             assert wait_status(hub, esc, {"needs_human"}, timeout=300.0) == "needs_human"
 
             # ---------------------------------------------------------- #
-            # Journey ¶3 — at some point in the night the machine reboots: SIGKILL BOTH the
-            # colocated hub and the runner supervisor, then bring them back through the same
-            # migrate-then-host path the systemd units declare (packaging/systemd/). Two
-            # chunks are still mid-journey across the reboot — one parked on an open question
-            # (its lease held), one escalated — so this proves the journey's "it didn't
-            # matter" clause: a full-machine reboot leaves every chunk at exactly the node
-            # the hub last recorded. (The exhaustive per-boundary kill-9 recovery proof is
-            # the crash sweep, tests/crash/.)
+            # Journey ¶3 — mid-run reboot (see module docstring): SIGKILL both the hub and
+            # the runner, then bring them back through the systemd units' migrate-then-host
+            # path (packaging/systemd/). The exhaustive per-boundary recovery proof is the
+            # crash sweep, tests/crash/.
             # ---------------------------------------------------------- #
             runner_proc.kill()
             runner_proc.wait(timeout=15)
@@ -506,9 +496,8 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
             hub_proc = _restart_daemons(hub_dir=hub_dir, forge_port=forge_port, hub_port=hub_port, hub=hub)
             runner_proc = start_runner(runner_dir, crash_point=None)
 
-            # Recovery: every chunk is still at exactly the node the hub last recorded — the
-            # reboot changed nothing. The parked lease was NOT reaped (its clock is stopped),
-            # and the two terminal chunks stayed terminal.
+            # Recovery: the reboot changed nothing. The parked lease was NOT reaped (its
+            # clock is stopped), and the two terminal chunks stayed terminal.
             recovered = {c: hub.get(f"/api/chunks/{c}").json()["status"] for c in all_chunks.values()}
             assert recovered[grp_api] == "done" and recovered[rev] == "done", recovered
             assert recovered[ask] == "waiting_on_human", f"the parked chunk did not survive the reboot: {recovered}"
@@ -573,9 +562,7 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
 
 
 def _widen_runner_pool(runner_dir: Path) -> None:
-    """Re-persist the runner config with the journey's env pool + agent cap.
-
-    ``write_runner_config`` (crash support) pins a single ``e1`` env; the journey needs a
+    """Re-persist the runner config with the journey's env pool + agent cap — a wider
     pool so parked/escalated chunks (which keep their env for resume/takeover) do not
     starve the chunks still building.
     """
@@ -661,9 +648,9 @@ def _assert_morning_after(
     # The failed chunk never delivered — its file is on no main.
     assert "LANDED-escalate.md" not in git_bare(api_bare, "ls-tree", "-r", "--name-only", "main").split()
 
-    # Hub API — the full history + artifacts render (the same facts the board consumes).
-    # History records opaque node ids + the choice on each edge; the artifacts carry the
-    # node *name*. Together they show the chunk walked build -> review -> deliver -> done.
+    # Hub API — the full history + artifacts render. History records opaque node ids +
+    # the choice on each edge; the artifacts carry the node *name*. Together they show
+    # the chunk walked build -> review -> deliver -> done.
     grouped_detail = hub.get(f"/api/chunks/{chunks['grouped']}").json()
     choices = [t["choice_name"] for t in grouped_detail["history"]]
     assert len(grouped_detail["history"]) == 3, (

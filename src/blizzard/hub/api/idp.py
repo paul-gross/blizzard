@@ -155,7 +155,7 @@ def authorize(
         # as its return target. The user picks a provider there; completing any provider's
         # dance resumes *this* request — the login page threads return_to through each
         # provider button, honoring only a same-origin /api/auth/authorize target (no open
-        # redirect). Replaces the former blanket 501 for the multi-provider case.
+        # redirect).
         return RedirectResponse(f"/login?return_to={quote(return_to, safe='')}")
 
     user = services.users.get(identity.user_id)

@@ -1,21 +1,15 @@
 """Operational event log — end to end (issue #125, Phase 5, e2e tier).
 
-The in-process scenario (modelled on ``test_escalation_e2e``): a real mock worker driven
-to a **verdict-less** exit exhausts its retry budget, so the runner escalates — and its
-Phase-3 emission surfaces a **critical** ``worker-lost`` operational event that (a) reads
-back off the live ``GET /api/events`` and (b) arrives on the SSE spine as an
-``event-logged`` frame. Every seam real (mock forge + hub + runner over a minted fixture),
-no tokens, no network. Skipped unless ``BLIZZARD_E2E=1``.
+The in-process scenario: a real mock worker driven to a **verdict-less** exit exhausts its
+retry budget, so the runner escalates — and a **critical** ``worker-lost`` operational
+event (a) reads back off the live ``GET /api/events`` and (b) arrives on the SSE spine as
+an ``event-logged`` frame. Every seam real (mock forge + hub + runner over a minted
+fixture), no tokens, no network. Skipped unless ``BLIZZARD_E2E=1``.
 
-The browser half — the Events tab rendering severity-then-recency, its severity and runner
-filters, a live event over SSE with no reload, and a row's chunk deep-link — is the second
-test in this module (:func:`test_the_events_tab_renders_filters_and_updates_live_in_the_browser`),
-over the built bundle.
-
-The Event log **rail** (not the Events tab above) gets its own reload proof (issue #213,
-Phase 5): :func:`test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows`. See
-that test's own docstring for why it restarts the hub daemon mid-test rather than merely
-reloading the page against a still-running one.
+The browser half is
+:func:`test_the_events_tab_renders_filters_and_updates_live_in_the_browser`, over the
+built bundle; the Event log **rail** gets its own reload proof (issue #213) in
+:func:`test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows`.
 """
 
 from __future__ import annotations
@@ -58,9 +52,8 @@ pytestmark = [
     ),
 ]
 
-# A build turn that does nothing of note, whose judgement emits NO verdict() — the adapter
-# parses no <Choice>, the core fails the attempt; every attempt fails this way so the retry
-# budget exhausts and the runner escalates (the worker-lost path).
+# A build turn that does nothing of note, whose judgement emits NO verdict() — every
+# attempt fails, so the retry budget exhausts and the runner escalates.
 _VERDICTLESS = "pass\n"
 
 
@@ -296,15 +289,13 @@ def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
     """The Events tab's time-first grid (issue #153/#154) has a narrow-viewport fallback
     (issue #155) — below the board's own mobile cutoff the fixed grid tracks would
     otherwise leave the message column at ~0px, and `overflow-wrap: anywhere` wraps it one
-    character per line, ballooning a single row to hundreds of pixels tall (measured 848px
-    pre-fix, over 100,000px of scroll across a real feed). This proves the fallback holds at
-    a real ~390px phone width, the narrow end of the range the mobile shell's bottom nav
-    (`tab-events`) actually routes to: a row with a long message stays a bounded height and
-    the page never gains horizontal scroll (issue #171's narrow-viewport tier rule).
+    character per line, ballooning a single row to hundreds of pixels tall. This asserts the
+    fallback holds at a real ~390px phone width: a row with a long message stays a bounded
+    height and the page never gains horizontal scroll (issue #171's narrow-viewport tier
+    rule).
 
-    Fails against 9a27f0e (the grid before its narrow-viewport fallback landed); passes on
-    master. Release-only tier — skips cleanly without Chromium or a built bundle, runs in
-    the tag `release` full e2e tier.
+    Release-only tier — skips cleanly without Chromium or a built bundle, runs in the tag
+    `release` full e2e tier.
     """
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
@@ -362,25 +353,15 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
     Events tab above) backfills on load and survives a reload with no gap and no
     duplicate at the seam (issue #213 — the whole point of the issue).
 
-    **Why this restarts the hub daemon mid-test, rather than just calling
-    ``page.reload()`` against a hub that stays running throughout:**
+    Restarts the hub daemon mid-test rather than calling ``page.reload()``, because
+    ``EventBroker``'s replay ring (``events/broker.py``) is process-scoped and
+    in-memory: a plain reload against a still-running hub gets replayed the entire
+    still-resident ring regardless of the backfill fix, so "rows survive a plain
+    reload" would pass on both sides of it and prove nothing. Only a fresh process
+    (empty ring, on-disk facts intact) isolates the Phase 3/4 ``GET /api/activity``
+    backfill this test targets (issue #213).
 
-    ``EventBroker`` (``events/broker.py``) keeps its own connect-time replay ring
-    in-memory, ``history=256`` deep, scoped to the **process** — not to any one
-    browser tab or SSE subscription. A plain reload opens a brand-new
-    ``EventSource``/fetch stream with no ``Last-Event-ID`` (``sse.service.ts``'s
-    ``lastEventId`` is a local variable, reset to ``null`` on every fresh
-    ``SseService.connect()`` call — nothing persists it in ``localStorage`` or
-    anywhere else a reload could read back), so the hub replays its **entire**
-    still-resident ring to that fresh connection regardless of Phase 4. In a short,
-    quiet test with no runner heartbeats flooding the ring, that alone would already
-    repopulate the rail after a reload — even against the pre-Phase-4 code, which has
-    no backfill query at all. Asserting only "rows survive a plain reload" would
-    therefore pass on both sides of the fix and prove nothing.
-
-    What actually empties the ring — in production, a redeploy; here, deliberately —
-    is the **hub process exiting**: a fresh ``EventBroker`` instance starts with an
-    empty deque. So this test drives a few facts, loads the board once (over the
+    So this test drives a few facts, loads the board once (over the
     still-running hub, establishing a baseline row set), **restarts the hub daemon
     against the same on-disk store** (facts are durable; the in-memory ring is not),
     then reloads the page against the new process and asserts the same rows are

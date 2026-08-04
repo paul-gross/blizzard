@@ -1,9 +1,7 @@
 """Session scaffolding for the kill-9 sweep — one fixture mint, one forge, for all points.
 
-The sweep is gated exactly like the e2e tier: it needs the sibling ``blizzard-mock``
-worktree and a local winter source, and it drives real subprocesses and real signals,
-so it is **skipped unless ``BLIZZARD_CRASH_SWEEP=1``** and the layout is discoverable —
-the default ``pytest`` gate (unit + component) never runs it. Reproduce it with::
+Skipped unless ``BLIZZARD_CRASH_SWEEP=1`` and the layout is discoverable (the sibling
+``blizzard-mock`` worktree plus a local winter source). Run it with::
 
     BLIZZARD_CRASH_SWEEP=1 uv run pytest -m crash_sweep
 

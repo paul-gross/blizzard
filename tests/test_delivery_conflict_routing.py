@@ -1,17 +1,9 @@
 """#241 AC2/AC3: the SHIPPED ``advanced-development-workflow`` graph's ``deliver`` node
 actually routes a printed ``conflict`` outcome — component tier.
 
-Mints the **real, packaged** graph — not the two-node ``test_delivery_pr_ci_e2e.py``
-stand-in whose ``_graph_yaml()`` docstring merely *claims* parity — so a regression in
-the packaged file itself (the ``conflict`` choice dropped or retargeted) fails here, not
-just the unit-tier reify assertion (``tests/test_graph_authoring.py``). Driving a chunk
-through the graph's preceding six node-steps to reach ``deliver`` for real is exactly what
-``land_pr_ci``'s own component coverage and the generic hub-command-node machinery
-(``tests/test_hub_command_node.py``) already exercise; this scenario is scoped to the one
-thing under test — the ``conflict`` edge itself — so it seeds the chunk directly at
-``deliver``'s real, minted node id via a direct transition-fact insert, the same technique
-``tests/test_delivery_incomplete_routing.py`` uses to reach a scenario without re-driving
-every preceding node-step over HTTP.
+Mints the real, packaged graph, seeding the chunk directly at ``deliver``'s minted node
+id via a direct transition-fact insert (see ``tests/test_delivery_incomplete_routing.py``
+for the same technique).
 """
 
 from __future__ import annotations
@@ -67,13 +59,10 @@ def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
 
 def _seed_at_deliver_with_an_unlanded_commit(hub: HubHarness, chunk_id: str, nodes: dict[str, str]) -> None:
     """Place the chunk's current node directly at ``deliver`` (standing in for the six
-    node-steps a real chunk would have taken to arrive here — same technique
+    node-steps a real chunk would take to arrive here — same technique
     ``tests/test_delivery_incomplete_routing.py`` uses for ``retrospective``), carrying
-    one ``git_commit`` artifact for a repo with **no** ``merged/<repo>`` marker — the
-    shape ``_submit_build_pass_with_commit`` (``tests/test_hub_command_node.py``)
-    produces, and what makes this a genuine delivery attempt the kick-back accounting
-    reads (``hub_node.py``'s ``_route``, keyed on the domain fact, never the choice
-    name)."""
+    one ``git_commit`` artifact for a repo with no ``merged/<repo>`` marker, so this
+    reads as a genuine, unlanded delivery attempt."""
     commit_artifact = ArtifactRow(
         kind=ArtifactKind.GIT_COMMIT,
         name="w",
@@ -127,8 +116,8 @@ def test_a_dirty_conflict_routes_to_resolve_and_records_a_bounce(tmp_path: Path)
     assert len(bounce_assets) == 1, detail["artifacts"]
     assert detail["landed"] is False
 
-    # The negative that fails on today's (pre-fix) graph and is the whole point of this
-    # test: no unroutable-outcome artifact, no unroutable-outcome event.
+    # The negative that is the whole point of this test: no unroutable-outcome
+    # artifact, no unroutable-outcome event.
     unroutable_artifacts = [a for a in detail["artifacts"] if a["name"] == "hub-unroutable-outcome"]
     assert unroutable_artifacts == []
     unroutable_events = [
