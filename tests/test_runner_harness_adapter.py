@@ -316,6 +316,41 @@ def test_spawn_env_forwards_a_named_passthrough_var(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.unit
+def test_spawn_env_widens_the_background_wait_ceiling_by_default() -> None:
+    """The harness's 10-minute headless background-wait default killed a live faceted
+    review mid-fan-out (issue #268); every identity env stamps the widened ceiling."""
+    adapter = ClaudeCodeAdapter(binary="claude")
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    env = adapter._spawn_env(envelope, preamble, "sess-1")
+
+    assert env["CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"] == str(int(2.5 * 60 * 60 * 1000))
+
+
+@pytest.mark.unit
+def test_spawn_env_lets_a_passthrough_background_wait_ceiling_win(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An operator ceiling forwarded via ``[worker] env_passthrough`` overrides the
+    stamped default (issue #268) — the stamp is a ``setdefault``, not an overwrite."""
+    monkeypatch.setenv("CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS", "0")
+    adapter = ClaudeCodeAdapter(binary="claude", env_passthrough=("CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS",))
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    env = adapter._spawn_env(envelope, preamble, "sess-1")
+
+    assert env["CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"] == "0"
+
+
+@pytest.mark.unit
 def test_spawn_env_forwards_lc_prefixed_locale_vars(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LC_ALL", "en_US.UTF-8")
     monkeypatch.setenv("LC_TIME", "fr_FR.UTF-8")

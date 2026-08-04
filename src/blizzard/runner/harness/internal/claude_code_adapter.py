@@ -168,6 +168,15 @@ DEFAULT_WORKER_MODEL = "claude-opus-5"
 # name, recognized directly.
 _TIER_PREFIX = "blizzard:"
 
+# How long a headless (``-p``) worker waits for still-running background subagents after
+# its final turn before the harness terminates them and exits (issue #268). The harness
+# default is 10 minutes, which killed a live faceted review mid-fan-out and surfaced as a
+# verdict-less completion; 2.5 hours covers the longest observed legitimate fan-out with
+# headroom. REAP's stall detector (``HEARTBEAT_STALENESS_THRESHOLD``) remains the
+# liveness authority inside this window — a worker whose background tasks died goes
+# heartbeat-stale and is reaped long before the ceiling matters.
+_BG_WAIT_CEILING_MS = str(int(2.5 * 60 * 60 * 1000))
+
 # This adapter's built-in tier mappings, so a zero-config runner resolves the three
 # standard tiers with no ``[models.aliases]`` at all. Overridden entry-by-entry by the
 # runner's own table. Deliberately **unordered roles, not a scale**: nothing substitutes
@@ -808,6 +817,9 @@ class ClaudeCodeAdapter:
         # shells out to whatever ``BLIZZARD_RUNNER_ASK_CMD`` names, so wiring the real
         # command here is what lets the mock exercise the true ask path (verified e2e).
         env.setdefault("BLIZZARD_RUNNER_ASK_CMD", "blizzard runner ask")
+        # Widened background-wait ceiling (issue #268) — ``setdefault`` so an operator
+        # value forwarded through ``[worker] env_passthrough`` wins.
+        env.setdefault("CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS", _BG_WAIT_CEILING_MS)
         return env
 
     def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
