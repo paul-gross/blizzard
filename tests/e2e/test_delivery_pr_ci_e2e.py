@@ -22,7 +22,9 @@ against the (extended) mock forge, one scenario per route:
   self-heal ran.
 * **bounce** — the `merge_conflict` lever makes the PR read `dirty` (a real conflict):
   the script prints `conflict` *immediately* (not a 30-min `poll_timeout` wait), the
-  chunk records a `conflict` bounce and routes back to `build`, **nothing lands**.
+  chunk records a `conflict` bounce and routes back to `build` (this inlined graph's own
+  target — the shipped graph routes `conflict` to `resolve`; see `_graph_yaml()` below),
+  **nothing lands**.
 * **terminal CI failure** (issue #232) — the `checks_failed` lever makes the PR read
   `blocked` with a completed, failing check run: the script prints the authored `failure`
   edge *immediately* (not a 30-min `poll_timeout` wait), routes to `resolve`, and records a
@@ -98,11 +100,15 @@ _BUILD_JUDGEMENT = "verdict('pass', 'committed the change; checks are green')\n"
 def _graph_yaml() -> str:
     """The PR+CI delivery policy's shape, inlined with a re-poll-every-tick cadence.
 
-    Identical to the shipped `advanced-development-workflow` graph's `deliver` node
-    (including the `conflict` edge the self-heal script's `dirty` fast-bounce needs)
-    except `poll_interval`/`poll_timeout` — the `deliver` node names the SAME real
-    `land_pr_ci` script, so this exercises the shipped policy's actual behavior, not a
-    stand-in."""
+    The `deliver` node names the SAME real `land_pr_ci` script and authors the SAME
+    three choice names (`landed`/`conflict`/`failure`) as the shipped
+    `advanced-development-workflow` graph, so this exercises the shipped policy's actual
+    routing behavior, not a stand-in. It deliberately differs in two ways: the brisk
+    `poll_interval`/`poll_timeout` cadence, and both `conflict` and `failure` routing
+    back to `build` — this two-node stand-in has no `resolve`/`pre-push` spine to route
+    into, where the shipped graph routes both to `resolve`. The shipped graph's own
+    `conflict` edge (`-> resolve`) is proven directly, minting the packaged graph itself,
+    by `tests/test_delivery_conflict_routing.py`."""
     import yaml
 
     graph = {
