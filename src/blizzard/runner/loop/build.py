@@ -67,7 +67,7 @@ def build_loop_context(
     # (issue #29): `transcripts_root` empty means Claude Code's own default.
     projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
     harness_transcript_source = ClaudeCodeTranscriptSource(
-        projects_root, HarnessTranscriptErrorFactory(get_logger("blizzard.runner.harness"))
+        projects_root, HarnessTranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
     )
     harness = ClaudeCodeAdapter(
         binary=config.harness_binary,

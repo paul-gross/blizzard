@@ -75,12 +75,13 @@ class Transcript:
 class IReadTranscriptRepository(Protocol):
     """The transcript lookup seam. Read-only (``bzh:repository-split``).
 
-    One operation: its sole consumer, :class:`~blizzard.runner.transcripts.service.
-    LocalTranscriptService`, calls only ``read_turns``. The raw-lines and size-on-disk
+    One operation: its sole consumer,
+    :class:`~blizzard.runner.transcripts.service.LocalTranscriptService`, calls only
+    ``read_turns``. The raw-lines and size-on-disk
     reads a fleet worker's rotation check and envelope-less usage fallback need are a
-    separate concern, reached directly off :meth:`~blizzard.runner.harness.adapter.
-    IHarnessAdapter.transcript_source` (``ctx.harness.transcript_source()``) rather
-    than through this panel-facing seam.
+    separate concern, reached directly off the harness transcript source the loop
+    resolves once onto ``LoopContext.transcripts`` (``ctx.transcripts``) rather than
+    through this panel-facing seam.
     """
 
     def read_turns(self, session_id: str, *, spawn_cwd: str | None) -> Transcript:

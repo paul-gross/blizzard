@@ -2387,8 +2387,10 @@ def _rotation_breach(ctx: LoopContext, head: PoolHead, node: NodeConfig, spawn_c
         return "max_invocations"
 
     if rotate.max_transcript_bytes is not None and ctx.transcripts is not None:
-        # An unwired/null harness transcript source reads every size as `None`, exactly
-        # like a missing file — never a zero that would make the threshold silently inert.
+        # `ctx.transcripts is None` already short-circuits an unwired seam above. When
+        # wired, `size_bytes` still returns `None` for an unreadable/unmeasurable
+        # transcript — treated as unknown, never a zero that would make the threshold
+        # silently inert.
         size = ctx.transcripts.size_bytes(head.session_id, spawn_cwd=spawn_cwd)
         if size is not None and size > rotate.max_transcript_bytes:
             return "max_transcript_bytes"

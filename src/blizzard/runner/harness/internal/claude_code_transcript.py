@@ -6,8 +6,9 @@ knowledge no other module in the tree holds — ``mangle_cwd`` disambiguation, t
 session-id glob, the multi-match tie-break, the tail-seek read — declared here
 directly rather than imported from elsewhere. :mod:`blizzard.runner.transcripts` holds
 only the panel's read-model types (``repository.py``), its HTTP service, and
-:mod:`.internal.projected_transcript_repository`, the sole implementation of that read
-model — a projection over :class:`ClaudeCodeTranscriptSource` below.
+:mod:`~blizzard.runner.transcripts.internal.projected_transcript_repository`, the sole
+implementation of that read model — a projection over :class:`ClaudeCodeTranscriptSource`
+below.
 
 Adds what ``transcripts/`` never needed: sidecar-file discovery (the corpus-primary
 sidechain shape — real sessions overwhelmingly join a subagent's conversation through
@@ -15,9 +16,9 @@ its own sidecar file, not an inline ``uuid``/``parentUuid`` run; see
 ``claude_code_normalizer.py``'s own sidechain-linking-order docstring) under
 ``<project-dir>/<session-id>/subagents/agent-<agentId>.jsonl``, the agent-id join (link
 route 1) against
-:attr:`~blizzard.runner.harness.internal.claude_code_normalizer.NormalizedFile.
-agent_id_by_tool_turn`'s candidates, and :class:`~blizzard.runner.harness.transcript.
-TranscriptPosition` minting/reading for forward incremental reads.
+:attr:`~blizzard.runner.harness.internal.claude_code_normalizer.NormalizedFile.agent_id_by_tool_turn`'s
+candidates, and :class:`~blizzard.runner.harness.transcript.TranscriptPosition` minting/reading
+for forward incremental reads.
 
 **Read shape** (this module's own cap accounting — :data:`MAX_FILE_BYTES` and
 :data:`MAX_BATCH_BYTES` below):
@@ -27,10 +28,11 @@ TranscriptPosition` minting/reading for forward incremental reads.
   :data:`MAX_FILE_BYTES` — and read to EOF uncapped by :data:`MAX_BATCH_BYTES`. A
   tail seek can land mid-line/mid-codepoint, so the first split fragment is
   discarded (``errors="replace"`` covers a split UTF-8 codepoint at the boundary).
-  ``TranscriptBatch.truncated`` reflects this cap on any file involved (the main
-  file or a sidecar), plus the sidecar fan-out's own shared budget running out —
-  all three conditions are cold-read-only; the forward path's own budget exhaustion
-  is reported via ``complete``, never ``truncated``.
+  ``TranscriptBatch.truncated`` reflects this cap on the main file only;
+  ``TranscriptBatch.sidechain_truncated`` reflects the same cap on any sidecar, plus
+  the sidecar fan-out's own shared budget running out — all three conditions are
+  cold-read-only; the forward path's own budget exhaustion is reported via
+  ``complete``, never either truncation field.
 * ``since=<position>`` — a forward read starting at that exact byte offset (always a
   newline boundary, by construction — see below), bounded by one shared
   :data:`MAX_BATCH_BYTES` budget spent across the main file first, then whatever
@@ -39,7 +41,10 @@ TranscriptPosition` minting/reading for forward incremental reads.
   the batch reports ``complete=False``. A read that lands mid-line (the file was
   live-appended-to) holds that trailing partial fragment back rather than consuming
   it, so ``next_position`` never lands anywhere but a newline boundary and a
-  genuinely truncated final record is simply re-read complete on the next call.
+  genuinely truncated final record is simply re-read complete on the next call —
+  except when a single record is itself at least as wide as the whole budget, which
+  a budget-bound window can never wait out; that record is consumed (and, if
+  malformed, dropped) so forward progress is never permanently stalled.
 
 **Sidecar candidacy survives a batch boundary; the spawning turn's identity does
 not.** This is a forward-read (``since=<position>``) guarantee — a cold
@@ -50,28 +55,29 @@ named in the incoming ``since`` position), stays a read candidate on every later
 regardless of which batch's main-file lines first mentioned it — ``next_position``
 always names every sidecar this call knows about, budget-skipped ones included, so one
 never falls out of consideration just because its spawning line scrolled out of the
-read window. But
-the spawning tool-call *turn* is only ever reachable while it is still part of
-*this* call's own ``normalized.turns`` — once delivered in an earlier batch, this
-module holds no reference back to it to amend. A sidecar resolved in a later batch
-than its spawning turn therefore lands on :attr:`~blizzard.runner.harness.transcript.
-TranscriptBatch.unlinked_sidechains` instead of nested — its conversation still
-surfaces, just not under the tool call that spawned it.
+read window. But the spawning tool-call *turn* is only ever reachable while it is
+still part of *this* call's own ``normalized.turns`` — once delivered in an earlier
+batch, this module holds no reference back to it to amend. A sidecar resolved in a
+later batch than its spawning turn therefore lands on
+:attr:`~blizzard.runner.harness.transcript.TranscriptBatch.unlinked_sidechains`
+instead of nested — its conversation still surfaces, just not under the tool call
+that spawned it.
 
 The same batch-locality applies, undressed, to a ``tool_result`` whose matching
-``tool_use`` fell in an earlier batch: :func:`~blizzard.runner.harness.internal.
-claude_code_normalizer.normalize_lines` only ever sees one call's own lines, so
-neither the pending-tool index (route to attaching output) nor the uuid-chain
-sidechain-link route (route 2) carries across a call boundary. Both degrade rather
-than crash — an unmatched result stays absent (:attr:`~blizzard.runner.harness.
-transcript.ToolCall.output` stays ``None``, its own documented "not yet arrived"
-shape) and an uuid-chain split falls through to route 3 and then ``unlinked`` — but
+``tool_use`` fell in an earlier batch:
+:func:`~blizzard.runner.harness.internal.claude_code_normalizer.normalize_lines` only
+ever sees one call's own lines, so neither the pending-tool index (route to attaching
+output) nor the uuid-chain sidechain-link route (route 2) carries across a call
+boundary. Both degrade rather than crash — an unmatched result stays absent
+(:attr:`~blizzard.runner.harness.transcript.ToolCall.output` stays ``None``, its own
+documented "not yet arrived" shape) and an uuid-chain split falls through to route 3
+and then ``unlinked`` — but
 neither is fixed up once the correlating record does arrive. A forward multi-batch
 read is therefore complete-eventually for a *sidecar's own conversation content*
 (never permanently dropped), but not for re-attaching a tool call's own output or a
 route-2 sidechain link once that tool call's turn has already been delivered in a
-prior batch: an accepted gap, not yet closed, tracked against blizzard#245's own
-follow-on work rather than papered over here.
+prior batch: an accepted gap, not yet closed, tracked against `epic:transcripts`'s
+own delta-shipping consumer work rather than papered over here.
 
 :class:`~blizzard.runner.harness.transcript.TranscriptPosition`'s token is this
 module's own JSON: ``{"main": <byte offset>, "sidecars": {<agentId>: <byte offset>}}``
@@ -97,25 +103,41 @@ from blizzard.runner.harness.transcript import (
 
 #: Refuse a pathological file on a cold (``since=None``) read: only the last
 #: this-many bytes are read off disk at all, enforced by seeking to the tail before
-#: reading — peak memory for any ONE file this call reads (the main session file, or
-#: any single sidecar) is bounded by this cap regardless of that file's own size.
-#: Ported verbatim from the deleted ``transcripts/internal/jsonl_transcript_repository.py``.
-#: It is not, by itself, a bound on a cold call's *total* memory across every file it
-#: touches — a session with many sidecars still fans out to many of these caps at
-#: once, which is exactly what :data:`MAX_BATCH_BYTES` bounds below.
+#: reading — bytes read off disk for any ONE file this call touches (the main session
+#: file, or any single sidecar) is bounded by this cap regardless of that file's own
+#: size. **Not**, by itself or in combination with :data:`MAX_BATCH_BYTES` below, a
+#: bound on this call's peak *in-memory* footprint:
+#: :func:`~blizzard.runner.harness.internal.claude_code_normalizer.normalize_lines`
+#: materializes every parsed record into a list before collapsing it, an unconditional
+#: multiplier over raw bytes read (shape-dependent, measured 4-5x on real
+#: Claude-Code-shaped content) neither this
+#: cap nor that one accounts for. Both remain real, useful bounds on bytes read and
+#: on sidecar fan-out *count* — read that claim, not a peak-memory one. The value
+#: coincides with `epic:transcripts`'s declared **chunk** transcript budget (also
+#: 64 MB) but implements no plan cap: that budget is enforced at the runner/hub
+#: shipping boundary a later lane adds, spans a whole chunk's every session and
+#: segment, and is unrelated to this per-*file* tail cap — one chunk can still touch
+#: several of these caps. Chosen against the measured ceiling instead: a real
+#: session's max observed size is ~5.3 MB and rotation caps a live one at 50 MB, so
+#: this is comfortably above any one file this seam reads today.
 MAX_FILE_BYTES = 64 * 1024 * 1024
 
-#: Bounds one forward (``since`` given) read's total bytes across the main file and
-#: every sidecar it reaches — a delta batch is never unbounded just because a fleet
-#: worker went quiet for a long stretch. Exhausting it reports ``complete=False``
-#: plus a ``next_position`` the caller loops on. Also spent, independently, as a cold
-#: (``since=None``) read's shared sidecar fan-out budget: each sidecar a cold call
-#: reads still keeps its own individual :data:`MAX_FILE_BYTES` tail cap, but the
-#: *number* of sidecars simultaneously held in memory is gated by this budget too —
-#: without it, a session with many sidecars could hold ``len(sidecars) *
-#: MAX_FILE_BYTES`` at once, unbounded in the sidecar count. A cold read that runs out
-#: of this budget mid-fan-out reports the shortfall via ``TranscriptBatch.truncated``
-#: (there is no ``next_position`` a cold call's caller loops on to retry the rest).
+#: Bounds one forward (``since`` given) read's total bytes read off disk across the
+#: main file and every sidecar it reaches — a delta batch is never unbounded just
+#: because a fleet worker went quiet for a long stretch. Exhausting it reports
+#: ``complete=False`` plus a ``next_position`` the caller loops on. Also spent,
+#: independently, as a cold (``since=None``) read's shared sidecar fan-out budget:
+#: each sidecar a cold call reads still keeps its own individual :data:`MAX_FILE_BYTES`
+#: tail cap, but the *number* of sidecars this call reads at all is gated by this
+#: budget too — without it, a session with many sidecars could read ``len(sidecars) *
+#: MAX_FILE_BYTES`` bytes off disk at once, unbounded in the sidecar count (see
+#: :data:`MAX_FILE_BYTES` above for why "bytes read" and "peak memory" are not the
+#: same claim). A cold read that runs out
+#: of this budget mid-fan-out reports the shortfall via ``TranscriptBatch.truncated``.
+#: A cold call still mints a ``next_position`` like any other (every call does), but
+#: today's sole consumer — the panel projection — discards it rather than looping on
+#: it; a budget-skipped sidecar is recorded into it anyway (see below), so a future
+#: forward lane that bootstraps via a cold read can still find it.
 #: The gate is checked before a sidecar is admitted, not debited as it reads — a
 #: sidecar admitted with one byte of budget left is still read at its own full
 #: :data:`MAX_FILE_BYTES` tail cap, so the real worst-case bound on one cold call's
@@ -216,17 +238,21 @@ def _read_forward(path: Path, *, start_offset: int, budget: int) -> _FileRead:
     # Consume up to the last complete line; a trailing partial fragment (the file is
     # live-appended-to) is held back so `next_position` never lands mid-line — it is
     # simply re-read complete on a later call. A window with NO newline at all splits
-    # on whether it actually reached the file's current end: genuinely at EOF, this is
-    # the vanishingly rare single line wider than the whole batch budget, and consuming
-    # it whole guarantees forward progress over perfect precision. Short of EOF
-    # (`hit_budget`), there is more file past `end` that might supply the missing
-    # newline — consuming the fragment here would silently and permanently drop
-    # whatever's in it (`normalize_lines` can't parse a truncated record), so this
+    # on whether the budget itself was the binding constraint. Reading a FULL budget's
+    # worth of bytes with no newline anywhere in it (`hit_budget`) proves the current
+    # record is at least `budget` bytes wide — waiting can never resolve this, since a
+    # later call reads the identical window from the identical `begin` and finds the
+    # identical absence, so this is the escape that guarantees monotonic forward
+    # progress: consume the window whole, accepting the vanishingly rare cost of
+    # silently dropping one oversized record (`normalize_lines` can't parse a
+    # truncated fragment) rather than stalling forever. Short of the budget — the
+    # window reached the file's own current end with room to spare — is the ordinary
+    # live-appended case: the trailing fragment may simply not be flushed yet, so this
     # window makes zero progress instead and is read again, complete, once the writer
-    # has flushed further.
+    # catches up.
     if last_newline != -1:
         consumed = last_newline + 1
-    elif not hit_budget:
+    elif hit_budget:
         consumed = len(raw)
     else:
         consumed = 0
@@ -261,7 +287,7 @@ class ClaudeCodeTranscriptSource:
     ) -> TranscriptBatch:
         matches = sorted(self._projects_root.glob(f"*/{session_id}.jsonl"))
         if not matches:
-            self._errors.not_found(session_id=session_id, detail=f"projects_root={self._projects_root}")
+            self._errors.not_found(session_id=session_id, projects_root=str(self._projects_root))
             return _unavailable(session_id, "not_found")
 
         try:
@@ -283,10 +309,9 @@ class ClaudeCodeTranscriptSource:
                 # sidecars, spent here purely as a gate on how many sidecars a
                 # pathological session's cold read pulls in, never on how much of any
                 # one of them (each individual sidecar keeps its own MAX_FILE_BYTES tail
-                # cap). Without it, peak memory for a cold read was every discovered
-                # sidecar's own MAX_FILE_BYTES simultaneously — unbounded in the sidecar
-                # count, contradicting `harness/transcript.py`'s own "peak memory is
-                # bounded" claim for exactly this cap.
+                # cap). Without it, bytes read off disk for a cold read's sidecar
+                # fan-out was every discovered sidecar's own MAX_FILE_BYTES
+                # simultaneously — unbounded in the sidecar count.
                 remaining_budget = MAX_BATCH_BYTES
             else:
                 main_read = _read_forward(path, start_offset=position.main, budget=MAX_BATCH_BYTES)
@@ -315,27 +340,31 @@ class ClaudeCodeTranscriptSource:
         for agent_id in candidate_agent_ids:
             sidecar_path = sidecar_dir / f"agent-{agent_id}.jsonl"
             if not sidecar_path.is_file():
-                if since is not None:
-                    # Not yet flushed to disk -- still recorded as a live candidate
-                    # (same as a budget-skipped one below) so a later call, once the
-                    # file exists, can find it. A cold read has no later call to carry
-                    # it toward, so there is nothing to record on that path.
-                    sidecar_offsets.setdefault(agent_id, 0)
+                # Not yet flushed to disk — still recorded as a live candidate (same as
+                # a budget-skipped one below) so a later call, once the file exists, can
+                # find it: on the forward path directly, on the cold path via a future
+                # forward lane that bootstraps from this call's own minted position.
+                sidecar_offsets.setdefault(agent_id, 0)
                 continue
             if remaining_budget <= 0:
                 if since is not None:
                     hit_budget = True
-                    # A newly discovered sidecar must stay a candidate on the next call
-                    # exactly like an already-known one — recording it here, even at offset
-                    # 0, is what keeps it from falling out of `next_position` entirely.
-                    sidecar_offsets.setdefault(agent_id, 0)
                 else:
-                    # A cold read makes no incremental-retry promise (there is no
-                    # `next_position` a caller loops on for `since=None`), so a sidecar
-                    # the shared budget never reaches for THIS session is simply absent
-                    # from this batch — flagged via `truncated`, the same signal the
-                    # main file's own tail cap already uses.
+                    # Flagged via `truncated` too — the same signal the main file's own
+                    # tail cap already uses — so a cold caller sees this batch was
+                    # incomplete even though it never loops on `next_position` itself.
                     sidecar_budget_exhausted = True
+                    self._errors.budget_skipped(
+                        "sidecar transcript skipped: shared fan-out budget exhausted",
+                        session_id=session_id,
+                        agent_id=agent_id,
+                    )
+                # A budget-skipped sidecar stays a live candidate regardless of path:
+                # recording it here, even at offset 0, is what keeps it from falling out
+                # of `next_position` entirely — on the forward path for the very next
+                # call, and on the cold path for a future forward lane that bootstraps
+                # from this cold read's own minted position.
+                sidecar_offsets.setdefault(agent_id, 0)
                 continue
 
             try:
@@ -356,7 +385,9 @@ class ClaudeCodeTranscriptSource:
                 # Recovered, not aborted: this one sidecar is skipped, but the batch
                 # this call is building still reports `available=True` — WARNING, not
                 # the boundary-failure ERROR the main-file open failures below use.
-                self._errors.from_io_recovered(exc, f"sidecar transcript unreadable: {agent_id}", session_id=session_id)
+                self._errors.from_io_recovered(
+                    exc, "sidecar transcript unreadable", session_id=session_id, agent_id=agent_id
+                )
                 continue
 
             hit_budget = hit_budget or sidecar_read.hit_budget
@@ -368,15 +399,30 @@ class ClaudeCodeTranscriptSource:
                 # The spawning tool call was delivered in an earlier batch — nothing in
                 # `normalized.turns` to nest under here, so the conversation still
                 # surfaces (never silently dropped) via the unlinked list instead.
+                # `link="unlinked"`, not `"agent-id"`: everything the normalizer itself
+                # puts on this list carries `"unlinked"`, and a consumer switching on
+                # `link` to tell resolved from unresolved needs that to hold for every
+                # producer landing here, not just the normalizer's own.
                 if sidecar_normalized.turns:
                     normalized.unlinked_sidechains.append(
                         SidechainConversation(
-                            agent_id=agent_id, agent_type=None, link="agent-id", turns=sidecar_normalized.turns
+                            agent_id=agent_id, agent_type=None, link="unlinked", turns=sidecar_normalized.turns
                         )
                     )
-                normalized.unlinked_sidechains.extend(sidecar_normalized.unlinked_sidechains)
+                # `sidecar_normalized.unlinked_sidechains` is always empty here:
+                # `normalize_lines(..., is_sidechain_file=True)` never routes a record
+                # into its own `sidechain_records` bucket, so nothing ever populates it.
                 continue
             for index in spawning_indices:
+                already_attached = normalized.turns[index].sidechain
+                if already_attached is not None:
+                    # An inline run (route 2/3) already resolved onto this turn before
+                    # this source module ever ran. The sidecar join (route 1) is
+                    # preferred — the corpus-primary shape — but the displaced inline
+                    # conversation still needs a home rather than being replaced in
+                    # place and lost: it surfaces on the unlinked list instead, same as
+                    # any other sidechain this call can't nest.
+                    normalized.unlinked_sidechains.append(already_attached)
                 normalized.turns[index] = replace(
                     normalized.turns[index],
                     sidechain=SidechainConversation(
@@ -397,7 +443,8 @@ class ClaudeCodeTranscriptSource:
             unlinked_sidechains=normalized.unlinked_sidechains,
             next_position=next_position,
             complete=complete,
-            truncated=main_read.truncated or sidecar_budget_exhausted or sidecar_truncated,
+            truncated=main_read.truncated,
+            sidechain_truncated=sidecar_budget_exhausted or sidecar_truncated,
             normalizer_version=NORMALIZER_VERSION,
             harness_version=normalized.harness_version,
         )
@@ -453,6 +500,7 @@ def _unavailable(session_id: str, reason: TranscriptReadReason) -> TranscriptBat
         next_position=None,
         complete=True,
         truncated=False,
+        sidechain_truncated=False,
         normalizer_version=NORMALIZER_VERSION,
         harness_version=None,
     )

@@ -360,7 +360,7 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     # seams reading it.
     projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
     harness_transcript_source = ClaudeCodeTranscriptSource(
-        projects_root, HarnessTranscriptErrorFactory(get_logger("blizzard.runner.harness"))
+        projects_root, HarnessTranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
     )
     harness: IHarnessAdapter = ClaudeCodeAdapter(
         binary=config.harness_binary,

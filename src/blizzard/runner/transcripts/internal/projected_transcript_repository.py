@@ -1,30 +1,36 @@
 """The panel's transcript read model, projected off the harness seam (blizzard#245).
 
-The **only adapter** in ``transcripts/`` as of this change — file and record
-knowledge now live behind :mod:`blizzard.runner.harness.transcript`
-(``harness/internal/claude_code_normalizer.py`` and ``claude_code_transcript.py``);
-:mod:`.repository` and :mod:`.service` still own the domain types and the
+The **only adapter** in ``transcripts/`` — file and record knowledge lives behind
+:mod:`blizzard.runner.harness.transcript` (``harness/internal/claude_code_normalizer.py``
+and ``claude_code_transcript.py``); :mod:`~blizzard.runner.transcripts.repository` and
+:mod:`~blizzard.runner.transcripts.service` still own the domain types and the
 controller-facing read model (see :mod:`blizzard.runner.transcripts`'s own docstring).
 :class:`ProjectedTranscriptRepository` implements
 :class:`~blizzard.runner.transcripts.repository.IReadTranscriptRepository` over an
 injected :class:`~blizzard.runner.harness.transcript.IHarnessTranscriptSource`, so the
 ``GET /api/leases/{lease_id}/transcript`` endpoint and the Angular panel that renders it
-stay byte-identical with no changes of their own.
+stay byte-identical with no changes of their own (**except** that a tool call's
+re-materialized ``input`` skips the ANSI-stripping pass the rest of this projection
+applies — a documented, practically-inert gap; see below).
 
 ``read_turns`` makes exactly **one** ``turns_since(..., since=None)`` call — a cold
-read, which the source always reports ``complete=True`` for (:mod:`.claude_code_transcript`'s
-own docstring; a cold call carries no ``next_position`` a caller could loop on), so this
-projection never loops. Peak memory is **not** today's single tail-capped read, though:
-a cold call also fans out to every sidecar the main file's tool results name, spending
-its own shared budget doing so (``claude_code_transcript.MAX_BATCH_BYTES``) — work this
-projection then discards in full, since it never reads a turn's ``.sidechain`` or a
-batch's ``unlinked_sidechains``. That fan-out's own budget exhaustion sets
-``TranscriptBatch.truncated`` too, which this projection ORs unchanged into
-``Transcript.truncated`` (below) — so a transcript can report truncated because a
-sidechain budget this projection never renders ran out, not because anything the panel
-actually shows was cut. A narrowing consumer paying to discover conversations it always
-discards is a known, accepted cost of one seam serving both a narrowing and (eventually)
-a widening reader, not a defect in either.
+read, which the source always reports ``complete=True`` for
+(:mod:`~blizzard.runner.harness.internal.claude_code_transcript`'s own docstring), so
+this projection never loops. That
+call does mint a ``next_position`` like any other, but this projection has nothing to
+loop on it for and discards it. Peak memory is **not** today's single tail-capped read,
+though: a cold call also fans out to every sidecar the main file's tool results name,
+spending its own shared budget doing so (``claude_code_transcript.MAX_BATCH_BYTES``) —
+work this projection then discards in full, since it never reads a turn's
+``.sidechain`` or a batch's ``unlinked_sidechains``. That fan-out's own budget
+exhaustion sets ``TranscriptBatch.sidechain_truncated``, a field kept separate from
+``TranscriptBatch.truncated`` for exactly this reason — this projection reads only the
+latter into ``Transcript.truncated`` (below), so a sidechain budget it never renders
+running out never surfaces as a false truncation banner on content that was not, in
+fact, cut. A narrowing consumer paying to discover conversations it always discards is a
+known, accepted cost of one seam serving both a narrowing and (eventually) a widening
+reader (``blizzard-context:/verification/blizzard.md`` §Test tiers), not a defect in
+either.
 
 Deliberately a **narrowing** projection, not a widening one — the panel's contract is
 what it renders today:
@@ -142,8 +148,8 @@ def _serialize_tool_input(tool: ToolCall) -> tuple[str, bool]:
     # `input_shape` is the explicit discriminator (`ToolInputShape`) — never guessed
     # by re-parsing `input_unparsed`, which is ambiguous whenever a bare string
     # happens to itself parse as JSON (`"123"`, `"true"`, ...). Byte-identical with
-    # the old parser's blanket `json.dumps(raw_input)` for every shape but "absent",
-    # which the old parser rendered as `""` rather than `json.dumps(None)`.
+    # the wire contract's blanket `json.dumps(raw_input)` for every shape but
+    # "absent", which the wire contract renders as `""` rather than `json.dumps(None)`.
     if tool.input_shape == "absent":
         serialized = ""
     elif tool.input_shape == "string":

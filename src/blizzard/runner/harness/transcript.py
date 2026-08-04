@@ -12,9 +12,12 @@ value shape and Protocol that knowledge sits behind
 failure is shared, harness-agnostic infrastructure in exactly the same sense the
 Protocol above it is (any future per-harness source reads files and can fail the same
 way), so it sits here rather than duplicated into each harness's own ``internal/``
-adapter — the same co-location the exemplar's own `RepoErrorFactory`
+adapter — the same co-location the exemplar's own ``RepoErrorFactory``
 (``blizzard-context:/exemplars/python/repo_pattern.py``) uses for a Protocol and its
-injected error-wrapping seam, not a gap against it.
+injected error-wrapping seam, not a gap against it. :class:`NullTranscriptSource`
+below is likewise kept at this feature-package root rather than under
+``internal/`` — it is not per-harness (every harness shares the one "nothing wired"
+shape), so it has no adapter identity to confine.
 
 :class:`NormalizedTurn` is the turn vocabulary a per-harness source produces: ``env``/
 ``asst``/``tool`` (the panel's existing three) plus ``thinking`` — a kind the current
@@ -50,8 +53,8 @@ from typing import Any, Literal, Protocol
 
 import structlog
 
-#: The normalized turn vocabulary. ``thinking`` is new relative to the panel's
-#: ``env``/``asst``/``tool`` — the current parser drops thinking blocks entirely.
+#: The normalized turn vocabulary. ``thinking`` sits alongside the panel's prior
+#: three (``env``/``asst``/``tool``), which carried no thinking-block kind at all.
 NormalizedTurnKind = Literal["env", "asst", "tool", "thinking"]
 
 #: How a sidechain conversation's attachment to its spawning tool call was resolved,
@@ -75,17 +78,17 @@ SidechainLink = str
 TranscriptReadReason = Literal["not_found", "unreadable"]
 
 #: Which raw shape a tool call's ``input`` was minted from — the discriminator a
-#: re-materializing consumer (the panel projection) needs to reproduce the old
-#: parser's blanket ``json.dumps(raw_input)`` exactly, rather than guessing from
+#: re-materializing consumer (the panel projection) needs to reproduce the wire
+#: contract's blanket ``json.dumps(raw_input)`` exactly, rather than guessing from
 #: ``input``/``input_unparsed`` alone (ambiguous: an absent input and an empty
 #: object both leave ``input_unparsed`` ``None``; a bare string that happens to
 #: itself parse as JSON is indistinguishable from an already-serialized one).
 #: ``"object"`` — ``input`` holds the real mapping, ``input_unparsed`` is ``None``.
 #: ``"absent"`` — the record carried no ``input`` (or an explicit JSON ``null``);
-#: the old parser rendered this as ``""``, not ``"{}"``. ``"string"`` — the record's
+#: the wire contract renders this as ``""``, not ``"{}"``. ``"string"`` — the record's
 #: ``input`` was itself a bare JSON string, held verbatim (unquoted) on
 #: ``input_unparsed``; re-materializing it needs an explicit ``json.dumps`` to
-#: match the old parser's quoting. ``"other"`` — any other non-object value (a
+#: match the wire contract's quoting. ``"other"`` — any other non-object value (a
 #: list, a number, a bool); ``input_unparsed`` already holds its final
 #: ``json.dumps`` form, emitted verbatim.
 ToolInputShape = Literal["object", "absent", "string", "other"]
@@ -179,9 +182,14 @@ class TranscriptBatch:
     ``next_position``/``complete`` are the forward-read contract: ``complete=True``
     means every turn since ``since`` was read into this batch; ``complete=False`` means
     the source's per-batch budget was exhausted first, and ``next_position`` is where a
-    caller resumes. ``truncated`` reflects the *tail* cap (a first, ``since=None`` read
-    of a pathological file) — distinct from ``complete``, which reflects the *forward*
-    batch-budget cap.
+    caller resumes. ``truncated`` reflects the *tail* cap on the **main file only** — a
+    first, ``since=None`` read of a pathological session — distinct from ``complete``,
+    which reflects the *forward* batch-budget cap. ``sidechain_truncated`` is the
+    parallel signal for sidecar content alone (a sidecar's own tail cap, or the shared
+    sidecar fan-out budget running out on a cold read): kept off ``truncated`` on
+    purpose, since a narrowing consumer that never renders a sidechain at all (today's
+    panel) would otherwise report a positive, operator-facing truncation banner for
+    content it never shows and never cut.
 
     ``normalizer_version``/``harness_version`` stamp every batch: the former names the
     normalizer code that produced it (bumped when output shape or semantics change, so
@@ -197,13 +205,16 @@ class TranscriptBatch:
     next_position: TranscriptPosition | None
     complete: bool
     truncated: bool
+    sidechain_truncated: bool
     normalizer_version: str
     harness_version: str | None
 
 
 class TranscriptErrorFactory:
-    """The harness seam's own injected error-logging seam (``bzh:repository-split``'s
-    exemplar shape).
+    """The harness seam's own injected error-logging seam (``bzh:dependency-inversion``'s
+    factory-injected error pattern — the exemplar's per-transport ``from_<transport>``
+    shape, widened here to ``not_found``: a lookup-miss carrying no exception, DEBUG
+    rather than a wrapped error).
 
     ``from_io`` is a boundary failure: the caller's read is over, transformed into
     ``TranscriptBatch.available=False`` (or an empty/``None`` reply on the
@@ -213,8 +224,8 @@ class TranscriptErrorFactory:
     ``available=True``) — WARNING, the same convention's "a recoverable condition the
     caller continued past." ``not_found`` is DEBUG: no session file at all is this
     seam's most routine outcome (a lease with no transcript yet), surfaced under this
-    seam's own logger name (``blizzard.runner.harness``, bound by the composition
-    root) — an operator filter must be keyed on that name to match it.
+    seam's own logger name (``blizzard.runner.harness.transcript``, bound by the
+    composition root) — an operator filter must be keyed on that name to match it.
     """
 
     def __init__(self, log: structlog.stdlib.BoundLogger) -> None:
@@ -225,19 +236,31 @@ class TranscriptErrorFactory:
         detail = str(exc).strip()
         self._log.error(message, session_id=session_id, detail=detail)
 
-    def from_io_recovered(self, exc: Exception, message: str, *, session_id: str = "") -> None:
+    def from_io_recovered(self, exc: Exception, message: str, *, session_id: str = "", **fields: str) -> None:
         """Log ``exc`` once at WARNING: the caller is skipping this one failure and
-        continuing its read, not aborting it. Callers must not log it again."""
+        continuing its read, not aborting it. Callers must not log it again.
+        ``**fields`` carries any caller-specific structured detail (e.g. the sidecar's
+        own ``agent_id``) as a real field rather than interpolated into ``message`` —
+        never a harness-specific keyword this shared factory's own signature would
+        have to name."""
         detail = str(exc).strip()
-        self._log.warning(message, session_id=session_id, detail=detail)
+        self._log.warning(message, session_id=session_id, detail=detail, **fields)
 
-    def not_found(self, *, session_id: str, detail: str) -> None:
-        """Log at DEBUG: no transcript file matched ``session_id``. ``detail`` is an
-        opaque, harness-composed string (Claude Code's is the searched
+    def budget_skipped(self, message: str, *, session_id: str = "", **fields: str) -> None:
+        """Log at WARNING: a shared read budget ran out before admitting something —
+        no exception to carry (unlike :meth:`from_io_recovered`), but the same
+        "a recoverable condition the caller continued past" class: permanent for this
+        one batch, and operator-facing (a cold read's fan-out skip pairs with
+        ``TranscriptBatch.sidechain_truncated``, which nothing else logs)."""
+        self._log.warning(message, session_id=session_id, **fields)
+
+    def not_found(self, *, session_id: str, **fields: str) -> None:
+        """Log at DEBUG: no transcript file matched ``session_id``. ``**fields`` is
+        opaque, harness-composed structured detail (Claude Code's is
         ``projects_root``) — distinguishes "wrong root" from "the agent never wrote
         one," the most likely symptom of a globbed root holding nothing, without this
-        shared factory naming any one harness's own storage layout."""
-        self._log.debug("transcript not found", session_id=session_id, detail=detail)
+        shared factory naming any one harness's own storage layout in its signature."""
+        self._log.debug("transcript not found", session_id=session_id, **fields)
 
 
 class IHarnessTranscriptSource(Protocol):
@@ -298,6 +321,7 @@ class NullTranscriptSource:
             next_position=None,
             complete=True,
             truncated=False,
+            sidechain_truncated=False,
             normalizer_version=_NO_NORMALIZER_VERSION,
             harness_version=None,
         )

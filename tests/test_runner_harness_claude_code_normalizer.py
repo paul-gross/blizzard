@@ -18,7 +18,7 @@ from blizzard.runner.harness.internal.claude_code_normalizer import normalize_li
 from tests import transcript_fixtures as fx
 
 # --------------------------------------------------------------------------- #
-# Behavior ported unchanged from the deleted transcripts/parser.py
+# Record collapse — env/asst/tool
 # --------------------------------------------------------------------------- #
 
 
@@ -90,7 +90,7 @@ def test_is_meta_record_is_filtered() -> None:
         "ai-title",
         "queue-operation",
         "attachment",
-        # New relative to the deleted parser's control-type set — already inert, drop made explicit.
+        # Already inert (matches neither the assistant nor user branch) — drop made explicit.
         "file-history-snapshot",
         "file-history-delta",
         "pr-link",
@@ -202,7 +202,7 @@ def test_non_object_tool_input_is_kept_unparsed_not_coerced() -> None:
 @pytest.mark.unit
 def test_absent_tool_input_is_shaped_absent_not_object() -> None:
     """Distinct from an actual empty object (``input_shape == "object"``) — the
-    re-materializing projection treats the two differently (blizzard#245 F10)."""
+    re-materializing projection treats the two differently."""
     line = json.dumps(
         {
             "type": "assistant",
@@ -435,11 +435,30 @@ def test_prompt_timestamp_route_treats_a_candidate_with_no_timestamp_as_a_non_ma
 
 
 @pytest.mark.unit
+def test_prompt_timestamp_route_tolerates_an_offset_less_candidate_timestamp() -> None:
+    """`_parse_timestamp` coerces an offset-less stamp to UTC rather than leaving it
+    naive, so a comparison between two parsed timestamps never raises `TypeError` for
+    mixing a naive and an aware one — probed here with the sidechain run's own root
+    timestamp offset-less, the tool call's aware."""
+    lines = [
+        fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}, uuid="spawn-1", ts="2026-07-16T09:59:00Z"),
+        fx.sidechain_run_record("find X", uuid="run-root", parent_uuid="orphan", role="user", ts="2026-07-16T10:00:00"),
+    ]
+
+    result = normalize_lines(lines)
+
+    claimed_tool_turns = [t for t in result.turns if t.kind == "tool" and t.sidechain is not None]
+    assert len(claimed_tool_turns) == 1
+    sidechain = claimed_tool_turns[0].sidechain
+    assert sidechain is not None
+    assert sidechain.link == "prompt-timestamp"
+
+
+@pytest.mark.unit
 def test_unresolvable_inline_sidechain_surfaces_unlinked_not_among_top_level_turns() -> None:
-    """The deliberate rewrite of the deleted parser's `test_is_sidechain_record_is_filtered`:
-    an isSidechain record used to yield zero turns, silently. The normalizer now
-    *surfaces* it — still zero top-level turns, but present as data on
-    `unlinked_sidechains` rather than dropped. The projection is what re-establishes the
+    """An isSidechain record with no route to resolve its parent yields zero
+    top-level turns, but surfaces as data on `unlinked_sidechains` rather than being
+    dropped silently. The projection is what re-establishes the
     panel's zero-turn outcome, one layer down
     (`transcripts/internal/projected_transcript_repository.py`)."""
     result = normalize_lines([fx.sidechain_record()])
@@ -447,6 +466,41 @@ def test_unresolvable_inline_sidechain_surfaces_unlinked_not_among_top_level_tur
     assert result.turns == []
     assert len(result.unlinked_sidechains) == 1
     assert result.unlinked_sidechains[0].link == "unlinked"
+
+
+@pytest.mark.unit
+def test_group_sidechain_runs_stays_fast_and_correct_under_duplicate_uuid_values() -> None:
+    """A duplicate `uuid` value shared by every record on a chain — not a shared
+    `parentUuid` alone — is what degrades a naive per-link rescan to quadratic: each
+    walk step looks up the *same* long `children_by_parent_uuid` bucket again, and a
+    rescan-with-filter re-walks its already-consumed prefix every time. Threading each
+    key's bucket from a `deque` instead means every record is dequeued at most once
+    ever, so this stays linear."""
+    import time
+
+    n = 20_000
+    records: list[dict[str, object]] = [
+        {"type": "user", "uuid": "dup", "parentUuid": "orphan", "isSidechain": True},
+    ]
+    for i in range(n):
+        records.append(
+            {
+                "type": "assistant",
+                "uuid": "dup",  # every link shares the same uuid as its predecessor
+                "parentUuid": "dup",  # ...and the same parentUuid, so all land in one bucket
+                "isSidechain": True,
+                "message": {"role": "assistant", "content": f"link {i}"},
+            }
+        )
+
+    start = time.monotonic()
+    runs = normalizer_module._group_sidechain_runs(records)
+    elapsed = time.monotonic() - start
+
+    assert elapsed < 5.0, f"grouping {len(records)} duplicate-uuid records took {elapsed:.1f}s — likely quadratic again"
+    assert len(runs) == 1
+    assert len(runs[0]) == n + 1
+    assert [r["message"]["content"] for r in runs[0][1:]] == [f"link {i}" for i in range(n)]
 
 
 # --------------------------------------------------------------------------- #

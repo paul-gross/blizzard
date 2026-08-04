@@ -11,12 +11,13 @@ These fixtures still hand-author lines at the unit tier because they cover shape
 the mock deliberately never mints — ``meta_record``, ``sidechain_record``,
 ``control_record``, ``ansi_private_mode_text``, ``truncated_line``, and (blizzard#245)
 ``thinking_block``, ``sidecar_record``, ``sidechain_run_record``, ``versioned``. Why the
-mock never mints the blizzard#245 shapes is stated once, in ``blizzard-mock``'s own
-``harness/README.md`` ("Conversation transcripts") — not restated here. The seam design
-makes hand-authoring hermetic: :func:`~blizzard.runner.harness.internal.
-claude_code_normalizer.normalize_lines` takes an iterable of strings, and the
-repository/source adapters take ``projects_root`` as a constructor arg, so a test
-writes these lines under ``tmp_path`` directly — no ``HOME`` monkey-patching.
+mock never mints the blizzard#245 shapes is stated once, in
+``blizzard-mock/src/blizzard_mock/harness/README.md`` ("Conversation transcripts") —
+not restated here. The seam design makes hand-authoring hermetic:
+:func:`~blizzard.runner.harness.internal.claude_code_normalizer.normalize_lines`
+takes an iterable of strings, and the repository/source adapters take
+``projects_root`` as a constructor arg, so a test writes these lines under
+``tmp_path`` directly — no ``HOME`` monkey-patching.
 """
 
 from __future__ import annotations

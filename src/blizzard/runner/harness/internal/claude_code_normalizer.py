@@ -50,9 +50,10 @@ from __future__ import annotations
 
 import json
 import re
+from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from blizzard.runner.harness.transcript import (
@@ -70,16 +71,15 @@ from blizzard.runner.harness.transcript import (
 #: normalizer's rows are told apart from this one's.
 NORMALIZER_VERSION = "claude-code-jsonl/1"
 
-#: Cap each text / thinking / tool-output string block at this many characters —
-#: the deleted ``transcripts/parser.py``'s cap, unchanged. A tool call's *input* is a
-#: mapping at this layer, so there is no string here to cap; that moves to the panel
-#: projection.
+#: Cap each text / thinking / tool-output string block at this many characters. A
+#: tool call's *input* is a mapping at this layer, so there is no string here to cap;
+#: that moves to the panel projection.
 MAX_BLOCK_CHARS = 1024 * 1024
 
 #: Control records: plumbing, never conversation. ``file-history-snapshot``/
-#: ``file-history-delta``/``pr-link`` are new relative to the deleted parser's control-type
-#: set — already inert (they match neither the ``assistant`` nor ``user`` branch below),
-#: but named here so their drop is explicit rather than incidental.
+#: ``file-history-delta``/``pr-link`` are already inert (they match neither the
+#: ``assistant`` nor ``user`` branch below), but named here so their drop is
+#: explicit rather than incidental.
 _CONTROL_TYPES = frozenset(
     {
         "mode",
@@ -96,7 +96,8 @@ _CONTROL_TYPES = frozenset(
 )
 
 #: Raw CSI ANSI escape sequences (e.g. `\x1b[31m`), including the private-mode `?`
-#: prefix (`\x1b[?25l`) — ported verbatim from the deleted ``transcripts/parser.py``.
+#: prefix (`\x1b[?25l`) — a fleet worker shells out to interactive TUI tools that
+#: emit these into its own transcript.
 _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
@@ -109,6 +110,12 @@ class NormalizedFile:
     is Claude-Code-specific plumbing the sibling source module needs to complete the
     sidecar-based agent-id join (link route 1) after discovering and normalizing a
     sidecar file of its own; nothing outside ``internal/`` needs to see it.
+
+    ``frozen=True`` guards against rebinding a field on this instance — it does not
+    make ``turns``/``unlinked_sidechains`` themselves immutable. The sibling source
+    module treats both lists as an assembly buffer it finishes filling (completing
+    the agent-id join by list-mutating ``turns[i]`` and appending late-resolved
+    entries to ``unlinked_sidechains``) after :func:`normalize_lines` returns.
     """
 
     turns: list[NormalizedTurn]
@@ -129,8 +136,7 @@ def normalize_lines(lines: list[str], *, is_sidechain_file: bool = False) -> Nor
     instead of the main turn stream — see the module docstring's route 2/3/4.
 
     An unrecognized or malformed record is skipped silently rather than raising — a
-    third-party format change degrades to "fewer turns", never a crash, exactly like
-    the parser this extends.
+    third-party format change degrades to "fewer turns", never a crash.
     """
     records: list[dict[str, Any]] = []
     for raw_line in lines:
@@ -414,27 +420,29 @@ def _group_sidechain_runs(records: list[dict[str, Any]]) -> list[list[dict[str, 
     record lacking usable ``uuid``/``parentUuid`` fields at all falls back to one
     shared run in file order rather than being silently dropped.
 
-    Linear in ``len(records)`` for well-formed input: a ``parentUuid`` index is built
-    once up front, so finding each link's successor is a dict lookup rather than a
-    fresh linear scan of every remaining record — the naive per-link rescan is
-    quadratic in the sidechain-record count and measured at 33.7s for 40,000 records,
-    a volume an in-spec ~50 MB session transcript can plausibly contain. This bound
-    assumes at most one child per ``parentUuid``, the shape a real fleet worker's
-    linear (never-forking) conversation always produces; several records sharing one
-    ``parentUuid`` — malformed data Claude Code does not mint — degrades the walk
-    below back toward quadratic, since each link consumed then rescans the rest of
-    that shared child list for one not yet used.
+    Linear in ``len(records)`` regardless of well-formedness: a ``parentUuid`` index is
+    built once up front as a queue per key, so finding each link's successor is an
+    O(1) dequeue rather than a scan — a naive per-link rescan-with-filter is quadratic
+    whenever many links share one lookup key, measured at 29.4s for 40,000 records
+    with duplicate ``uuid`` values (a volume an in-spec ~50 MB session transcript can
+    plausibly contain), which is the shape that actually triggers it: several
+    *different* current-record ``uuid``\\ s colliding on the same string value, so
+    their walks repeatedly probe the same key's child pool. A shared ``parentUuid``
+    alone (several genuine children of one parent) does not degrade this: each is
+    still dequeued once, in file order, first-unused-wins.
     """
     by_uuid = {r["uuid"]: r for r in records if isinstance(r.get("uuid"), str)}
-    # Every record indexed by its own `parentUuid`, so walking a chain forward from a
-    # root is a dict lookup per link, not a scan of every record still unconsumed.
-    # More than one child sharing a `parentUuid` is possible in principle (malformed
-    # or unusual data) — kept as a list, resolved in file order, first-unused-wins.
-    children_by_parent_uuid: dict[str, list[dict[str, Any]]] = {}
+    # Every record indexed by its own `parentUuid` as a queue, so walking a chain
+    # forward from a root dequeues each candidate exactly once — no rescan of a shared
+    # key's pool, which is what makes a `uuid` collision (two unrelated walks probing
+    # the same key) cost the same as a clean one. More than one child sharing a
+    # `parentUuid` is possible in principle (malformed or unusual data) — resolved in
+    # file order, first-unused-wins, same as an unshared key.
+    children_by_parent_uuid: dict[str, deque[dict[str, Any]]] = {}
     for record in records:
         parent_uuid = record.get("parentUuid")
         if isinstance(parent_uuid, str):
-            children_by_parent_uuid.setdefault(parent_uuid, []).append(record)
+            children_by_parent_uuid.setdefault(parent_uuid, deque()).append(record)
 
     # A root is a record whose `parentUuid` does not name another record in this
     # sidechain set — either it has none, or it points out to the main conversation.
@@ -454,10 +462,17 @@ def _group_sidechain_runs(records: list[dict[str, Any]]) -> list[list[dict[str, 
             current_uuid = current.get("uuid")
             nxt = None
             if isinstance(current_uuid, str):
-                nxt = next(
-                    (r for r in children_by_parent_uuid.get(current_uuid, ()) if id(r) not in used),
-                    None,
-                )
+                queue = children_by_parent_uuid.get(current_uuid)
+                if queue is not None:
+                    # Drain any front entries already consumed elsewhere (possible only
+                    # under a duplicate `uuid` — two unrelated walks probing the same
+                    # key) — each entry is drained at most once ever, across the whole
+                    # function, so this stays amortized O(1) per link rather than a
+                    # rescan.
+                    while queue and id(queue[0]) in used:
+                        queue.popleft()
+                    if queue:
+                        nxt = queue.popleft()
             if nxt is None:
                 break
             run.append(nxt)
@@ -569,12 +584,18 @@ def _extract_text(content: object) -> str:
 
 
 def _parse_timestamp(raw: object) -> datetime | None:
+    """Every returned datetime is timezone-aware — an offset-less stamp (never
+    observed from Claude Code, but not excluded by ``fromisoformat`` either) is
+    coerced to UTC rather than left naive, so every comparison this module makes
+    between two parsed timestamps stays total (``bzh:utc-instants``): a naive/aware
+    mismatch raises ``TypeError`` on the very first ``>`` route 3 makes."""
     if not isinstance(raw, str) or not raw:
         return None
     try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:
         return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
 def _clean(text: str) -> tuple[str, bool]:

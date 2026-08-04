@@ -302,6 +302,7 @@ class FakeTranscriptSource:
             next_position=None,
             complete=True,
             truncated=False,
+            sidechain_truncated=False,
             normalizer_version="fake/1",
             harness_version=None,
         )

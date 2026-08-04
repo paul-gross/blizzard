@@ -4,9 +4,9 @@ Two independent copies of "what cwd does a worker spawn into" would desync exact
 as ``runner/domain/leases.py`` exists to keep REAP and the panel agreeing on lease
 state: the same reasoning applies here, since both the live spawn path
 (:mod:`blizzard.runner.harness.internal.claude_code_adapter`) and the transcript
-source's own disambiguation hint (:class:`~blizzard.runner.harness.internal.
-claude_code_transcript.ClaudeCodeTranscriptSource`, issue #29, blizzard#245) need
-the same answer to "what was this worker's cwd" — the adapter to *set* it, the
+source's own disambiguation hint
+(:class:`~blizzard.runner.harness.internal.claude_code_transcript.ClaudeCodeTranscriptSource`,
+issue #29, blizzard#245) need the same answer to "what was this worker's cwd" — the adapter to *set* it, the
 transcript reader to *guess* it back for Claude Code's
 ``~/.claude/projects/<mangled-cwd>/`` layout.
 

@@ -10,6 +10,7 @@ and sidecar-backed sidechain nesting (link route 1).
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from pathlib import Path
@@ -145,12 +146,13 @@ def test_turns_since_cold_read_tail_caps_a_pathological_file_and_flags_truncated
 
 
 @pytest.mark.unit
-def test_a_tail_capped_sidecar_ors_its_own_truncation_into_the_batch_flag(
+def test_a_tail_capped_sidecar_ors_its_own_truncation_into_the_sidechain_flag(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A sidecar that itself exceeds `MAX_FILE_BYTES` reports `truncated=True` from
-    its own `_read_cold` — that must reach `TranscriptBatch.truncated`, not just the
-    main file's own tail cap or the shared sidecar-count budget running out."""
+    its own `_read_cold` — that must reach `TranscriptBatch.sidechain_truncated`, not
+    the panel-facing `truncated` field: nothing the panel renders was cut, only
+    sidechain content it already discards in full."""
     project_dir = "-home-user-workspace"
     main_lines = [
         fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}),
@@ -169,7 +171,8 @@ def test_a_tail_capped_sidecar_ors_its_own_truncation_into_the_batch_flag(
 
     batch = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=None)
 
-    assert batch.truncated is True
+    assert batch.sidechain_truncated is True
+    assert batch.truncated is False
 
 
 @pytest.mark.unit
@@ -240,6 +243,70 @@ def test_a_position_past_the_files_current_size_starts_that_file_over(tmp_path: 
 
 
 @pytest.mark.unit
+def test_read_forward_a_record_wider_than_the_budget_makes_forward_progress(tmp_path: Path) -> None:
+    """A window that consumes a FULL budget's worth of bytes with no newline anywhere
+     in it proves the current record is at least that wide — waiting can never resolve
+     it, since a later call reads the identical window from the identical `begin` and
+     finds the identical absence. This must force progress rather than stall forever
+    ."""
+    path = tmp_path / "wide.jsonl"
+    path.write_bytes(b"x" * 100)  # one line, no newline anywhere, wider than the budget below
+
+    result = source_module._read_forward(path, start_offset=0, budget=10)
+
+    assert result.hit_budget is True
+    assert result.next_offset == 10  # forced whole-window consumption, not a stall at 0
+
+
+@pytest.mark.unit
+def test_read_forward_a_live_appended_partial_line_within_the_budget_waits(tmp_path: Path) -> None:
+    """The companion case: the window reaches the file's own current end (short of
+    the budget) with no newline — the ordinary live-appended trailing fragment. This
+    must make zero progress, not force-consume a fragment `normalize_lines` can't
+    parse."""
+    path = tmp_path / "partial.jsonl"
+    path.write_bytes(b"x" * 5)  # shorter than the budget below, still no newline
+
+    result = source_module._read_forward(path, start_offset=0, budget=100)
+
+    assert result.hit_budget is False
+    assert result.next_offset == 0
+    assert result.lines == []
+
+
+@pytest.mark.unit
+def test_sidecar_join_preserves_an_already_attached_inline_sidechain(tmp_path: Path) -> None:
+    """A sidecar (route 1) join must not silently discard an inline sidechain (route
+    2/3) already resolved onto the same tool turn by `normalize_lines` — the displaced
+    conversation surfaces on `unlinked_sidechains` instead of being overwritten in
+    place and lost."""
+    main_lines = [
+        fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}, uuid="a1"),
+        fx.sidechain_run_record("inline chatter", uuid="inline-1", parent_uuid="a1"),
+        fx.tool_result("t1", "subagent finished", agent_id="agent-abc"),
+    ]
+    project_dir = "-home-user-workspace"
+    _write_main(tmp_path, main_lines, project_dir=project_dir)
+
+    subagents_dir = tmp_path / project_dir / "sess-1" / "subagents"
+    subagents_dir.mkdir(parents=True)
+    sidecar_lines = [fx.sidecar_record("sidecar chatter", agent_id="agent-abc")]
+    (subagents_dir / "agent-agent-abc.jsonl").write_text("\n".join(sidecar_lines) + "\n")
+
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+    batch = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=None)
+
+    tool_turn = next(t for t in batch.turns if t.kind == "tool")
+    assert tool_turn.sidechain is not None
+    assert tool_turn.sidechain.link == "agent-id"
+    assert [t.text for t in tool_turn.sidechain.turns] == ["sidecar chatter"]
+
+    displaced = [s for s in batch.unlinked_sidechains if s.link == "uuid-chain"]
+    assert len(displaced) == 1
+    assert [t.text for t in displaced[0].turns] == ["inline chatter"]
+
+
+@pytest.mark.unit
 def test_turns_since_batch_budget_exhaustion_returns_incomplete_with_a_next_position(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -304,6 +371,47 @@ def test_sidecar_backed_sidechain_nests_under_its_spawning_tool_call_by_agent_id
 
 
 @pytest.mark.unit
+def test_a_sidecar_resolved_after_its_spawning_batch_lands_unlinked_not_agent_id(
+    tmp_path: Path,
+) -> None:
+    """A sidecar whose agent id survives to a later batch, but whose spawning tool
+    turn was already delivered in an earlier one, has nothing in this call's own
+    `normalized.turns` to nest under — it surfaces on `unlinked_sidechains` instead.
+    `link` there must read `"unlinked"`, matching every other producer of that list,
+    not `"agent-id"` — a consumer switching on `link` to tell resolved from
+    unresolved needs that to hold regardless of which producer landed the entry."""
+    project_dir = "-home-user-workspace"
+    main_lines = [
+        fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}),
+        fx.tool_result("t1", "spawned", agent_id="agent-abc"),
+    ]
+    path = _write_main(tmp_path, main_lines, project_dir=project_dir)
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    # First batch: the sidecar doesn't exist on disk yet, so the agent id is carried
+    # forward as a candidate with no sidechain attached this call.
+    first_batch = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=None)
+    assert first_batch.next_position is not None
+
+    subagents_dir = tmp_path / project_dir / "sess-1" / "subagents"
+    subagents_dir.mkdir(parents=True)
+    sidecar_lines = [fx.sidecar_record("found X", agent_id="agent-abc")]
+    (subagents_dir / "agent-agent-abc.jsonl").write_text("\n".join(sidecar_lines) + "\n")
+    with path.open("a") as f:
+        f.write(fx.user_env("unrelated later turn") + "\n")
+
+    # Second batch resumes past the tool call's own line — its spawning turn is not
+    # part of this call's `normalized.turns` at all.
+    second_batch = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=first_batch.next_position)
+
+    tool_turns = [t for t in second_batch.turns if t.kind == "tool"]
+    assert tool_turns == []
+    assert len(second_batch.unlinked_sidechains) == 1
+    assert second_batch.unlinked_sidechains[0].link == "unlinked"
+    assert [t.text for t in second_batch.unlinked_sidechains[0].turns] == ["found X"]
+
+
+@pytest.mark.unit
 def test_missing_sidecar_leaves_the_candidate_tool_call_without_a_sidechain(tmp_path: Path) -> None:
     main_lines = [
         fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}),
@@ -323,9 +431,10 @@ def test_cold_read_gates_the_sidecar_fanout_on_a_shared_budget_and_flags_truncat
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A cold read's sidecar fan-out is gated by `MAX_BATCH_BYTES`, not just each
-    sidecar's own `MAX_FILE_BYTES` tail cap — without the shared-budget gate, peak
-    memory for a cold read scales with sidecar *count*, unbounded (the bug this test
-    pins: F3 of the prior review round)."""
+    sidecar's own `MAX_FILE_BYTES` tail cap — without the shared-budget gate, bytes
+    read off disk for a cold read's sidecar fan-out scales with sidecar *count*,
+    unbounded. The shortfall is flagged on `sidechain_truncated`, not the panel-facing
+    `truncated` field — a fan-out this projection always discards in full."""
     project_dir = "-home-user-workspace"
     n_sidecars = 6
     main_lines = []
@@ -348,11 +457,49 @@ def test_cold_read_gates_the_sidecar_fanout_on_a_shared_budget_and_flags_truncat
     monkeypatch.setattr(source_module, "MAX_BATCH_BYTES", per_sidecar_bytes * (n_sidecars - 2))
     source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
 
-    batch = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=None)
+    with capture_logs() as logs:
+        batch = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=None)
 
     nested = [t for t in batch.turns if t.kind == "tool" and t.sidechain is not None]
     assert 0 < len(nested) < n_sidecars
-    assert batch.truncated is True
+    assert batch.sidechain_truncated is True
+    assert batch.truncated is False
+    warning_logs = [entry for entry in logs if entry["log_level"] == "warning"]
+    assert len(warning_logs) == n_sidecars - len(nested)
+    assert all("agent_id" in entry for entry in warning_logs)
+
+
+@pytest.mark.unit
+def test_cold_read_records_a_budget_skipped_sidecar_so_a_bootstrapped_forward_lane_finds_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cold read does mint a `next_position` like any other call — a future forward
+    lane can bootstrap from it. A sidecar the shared budget never reaches on that cold
+    read must still be recorded into it (at offset 0), exactly as the forward path
+    already does, or it silently falls out of consideration for that bootstrapped
+    lane forever."""
+    project_dir = "-home-user-workspace"
+    main_lines = [
+        fx.assistant_tool_use("t1", "Task", {"prompt": "job"}, uuid="a1"),
+        fx.tool_result("t1", "spawned", agent_id="agent-skipped"),
+    ]
+    _write_main(tmp_path, main_lines, project_dir=project_dir)
+
+    subagents_dir = tmp_path / project_dir / "sess-1" / "subagents"
+    subagents_dir.mkdir(parents=True)
+    (subagents_dir / "agent-agent-skipped.jsonl").write_text(fx.sidecar_record("x", agent_id="agent-skipped") + "\n")
+
+    # Zero budget: the sidecar is discovered but the shared fan-out budget never
+    # admits it.
+    monkeypatch.setattr(source_module, "MAX_BATCH_BYTES", 0)
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    batch = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=None)
+
+    assert batch.sidechain_truncated is True
+    assert batch.next_position is not None
+    position_data = json.loads(batch.next_position.token)
+    assert position_data["sidecars"].get("agent-skipped") == 0
 
 
 @pytest.mark.unit
@@ -362,7 +509,7 @@ def test_forward_read_carries_a_budget_skipped_sidecar_forward_as_a_candidate(
     """A sidecar discovered but not yet reached by a forward read's shared budget is
     still recorded in `next_position` at offset 0 (`sidecar_offsets.setdefault`) — a
     later call reopens it rather than losing it once its spawning line scrolls out of
-    the read window (F2 of the prior review round)."""
+    the read window."""
     project_dir = "-home-user-workspace"
     main_lines = [
         fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}, uuid="a1"),
