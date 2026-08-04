@@ -1,18 +1,30 @@
 """The panel's transcript read model, projected off the harness seam (blizzard#245).
 
-The **only** module in ``transcripts/`` as of this change — file and record
+The **only adapter** in ``transcripts/`` as of this change — file and record
 knowledge now live behind :mod:`blizzard.runner.harness.transcript`
-(``harness/internal/claude_code_normalizer.py`` and ``claude_code_transcript.py``).
+(``harness/internal/claude_code_normalizer.py`` and ``claude_code_transcript.py``);
+:mod:`.repository` and :mod:`.service` still own the domain types and the
+controller-facing read model (see :mod:`blizzard.runner.transcripts`'s own docstring).
 :class:`ProjectedTranscriptRepository` implements
 :class:`~blizzard.runner.transcripts.repository.IReadTranscriptRepository` over an
 injected :class:`~blizzard.runner.harness.transcript.IHarnessTranscriptSource`, so the
 ``GET /api/leases/{lease_id}/transcript`` endpoint and the Angular panel that renders it
 stay byte-identical with no changes of their own.
 
-``read_turns`` makes exactly **one** ``turns_since(..., since=None)`` call —
-``complete=True`` by construction (the plan's cap-reconciliation table: the
-batch-budget cap never applies at ``since=None``), so this projection never loops and
-peak memory stays exactly today's single tail-capped read.
+``read_turns`` makes exactly **one** ``turns_since(..., since=None)`` call — a cold
+read, which the source always reports ``complete=True`` for (:mod:`.claude_code_transcript`'s
+own docstring; a cold call carries no ``next_position`` a caller could loop on), so this
+projection never loops. Peak memory is **not** today's single tail-capped read, though:
+a cold call also fans out to every sidecar the main file's tool results name, spending
+its own shared budget doing so (``claude_code_transcript.MAX_BATCH_BYTES``) — work this
+projection then discards in full, since it never reads a turn's ``.sidechain`` or a
+batch's ``unlinked_sidechains``. That fan-out's own budget exhaustion sets
+``TranscriptBatch.truncated`` too, which this projection ORs unchanged into
+``Transcript.truncated`` (below) — so a transcript can report truncated because a
+sidechain budget this projection never renders ran out, not because anything the panel
+actually shows was cut. A narrowing consumer paying to discover conversations it always
+discards is a known, accepted cost of one seam serving both a narrowing and (eventually)
+a widening reader, not a defect in either.
 
 Deliberately a **narrowing** projection, not a widening one — the panel's contract is
 what it renders today:
@@ -21,28 +33,25 @@ what it renders today:
 * Every sidechain is dropped — both a tool turn's nested
   :attr:`~blizzard.runner.harness.transcript.NormalizedTurn.sidechain` and
   :attr:`~blizzard.runner.harness.transcript.TranscriptBatch.unlinked_sidechains`.
-  Today's parser filtered every ``isSidechain`` record outright, so dropping both is
-  what preserves that outcome one layer down (the phase-2 normalizer test's own
-  rewrite note). Widening the panel to show either is the hub-transcript-view issue's
-  job, not this one.
-* :data:`MAX_TURNS` (recency, keep-newest) moves here from the old parser — a forward
-  incremental read must never silently drop turns, so that cap cannot live in the
-  normalizer any more.
+  Zero sidechains keeps the panel's existing contract intact one layer down. Widening
+  the panel to show either is ``blizzard-product:/plans/transcripts.md``'s "The hub
+  transcript view" bullet's job, not this one.
+* :data:`MAX_TURNS` (recency, keep-newest) lives here, not in the normalizer — a
+  forward incremental read must never silently drop turns, so the recency cap belongs
+  at the point where a read's turns are already fully accumulated.
 * A tool call's structured ``input`` is re-materialized to the flattened JSON string
-  the wire contract has always carried (``json.dumps``), **then** capped at
-  :data:`MAX_BLOCK_CHARS` with the overflow OR'd into ``Turn.truncated`` — today the cap
-  applied to the same serialized string at normalization time; under the new model
-  there is no string to cap until this re-materialization step, so the cap moves with
-  it. A narrow, untested-by-the-golden-fixtures accepted gap: unlike the old parser's
-  blanket ``_clean`` (ANSI-strip + cap) over the serialized string, this
-  re-materialization only caps — it does not re-run ANSI stripping, since a tool
-  call's structured *input* practically never carries raw terminal escapes (that is a
-  tool *output* phenomenon, still stripped in the normalizer, unaffected here). The
-  re-materialization itself is byte-identical with the old parser's blanket
-  ``json.dumps(raw_input)`` for every input shape, driven by
+  the wire contract carries (``json.dumps``), **then** capped at
+  :data:`MAX_BLOCK_CHARS` with the overflow OR'd into ``Turn.truncated`` — a mapping
+  has no string to cap until this re-materialization step, so the cap lives here
+  rather than in the normalizer. A narrow, untested-by-the-golden-fixtures accepted
+  gap: this re-materialization only caps — it does not run ANSI stripping, since a
+  tool call's structured *input* practically never carries raw terminal escapes (that
+  is a tool *output* phenomenon, still stripped in the normalizer, unaffected here).
+  The re-materialization is driven by
   :attr:`~blizzard.runner.harness.transcript.ToolCall.input_shape` rather than
   re-inspecting ``input``/``input_unparsed`` (ambiguous on its own — see that field's
-  own docstring).
+  own docstring), and is byte-identical with the wire contract's ``json.dumps`` shape
+  for every input shape.
 """
 
 from __future__ import annotations
@@ -52,8 +61,8 @@ import json
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NormalizedTurn, ToolCall
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository, Transcript, Turn, TurnKind
 
-#: Keep only the most recent this-many turns (post-projection) — ported from the
-#: deleted ``transcripts/parser.py``, unchanged in value.
+#: Keep only the most recent this-many turns (post-projection) — bounds the panel
+#: payload to the newest, most relevant conversation on a long-running session.
 MAX_TURNS = 1000
 
 #: Cap a tool call's *serialized* input at this many characters — see the module
@@ -98,12 +107,6 @@ class ProjectedTranscriptRepository:
             turns=reindexed,
             truncated=turns_truncated or batch.truncated,
         )
-
-    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
-        return self._source.read_raw_lines(session_id, spawn_cwd=spawn_cwd)
-
-    def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
-        return self._source.size_bytes(session_id, spawn_cwd=spawn_cwd)
 
 
 def _project_turn(turn: NormalizedTurn) -> Turn:
@@ -157,7 +160,7 @@ def _serialize_tool_input(tool: ToolCall) -> tuple[str, bool]:
 
 
 # Typecheck-time Protocol/adapter conformance sentinel (the exemplar's shape,
-# `../../exemplars/python/repo_pattern.py`). Pyright rejects the return if
+# `blizzard-context:/exemplars/python/repo_pattern.py`). Pyright rejects the return if
 # `ProjectedTranscriptRepository` drifts from `IReadTranscriptRepository`.
 def _conforms_read_transcript_repository(x: ProjectedTranscriptRepository) -> IReadTranscriptRepository:
     return x

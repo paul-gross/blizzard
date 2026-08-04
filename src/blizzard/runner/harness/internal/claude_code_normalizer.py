@@ -7,17 +7,17 @@ discovery and the file-size tail bound) lives in the sibling
 ``claude_code_transcript.py``, the only module in this pair that touches
 ``pathlib``/``glob``.
 
-Absorbs and extends the panel's original ``transcripts/parser.py``: the same four
-skip rules (minus ``isSidechain``, now routed rather than dropped), the same ANSI
-stripping, the same ``env``/``asst``/``tool`` collapse — plus a ``thinking`` turn
-kind, structured (never ``json.dumps``'d) tool-call input, and inline-sidechain
-assembly. ``MAX_TURNS`` is deliberately **not** ported: a forward incremental read
-must never silently drop turns, so that recency cap lives on the panel projection
-instead (``transcripts/internal/projected_transcript_repository.py``).
-``MAX_BLOCK_CHARS`` stays — it caps every **string** block
-(assistant text, thinking, tool output) exactly as before; a tool call's *input* is
-no longer a string at normalization time; capping its serialized form also moves to
-the projection, the point at which it is re-materialized as one.
+Skips ``isMeta``/control/system records, strips ANSI escapes, and collapses
+``env``/``asst``/``tool`` records (an ``isSidechain`` record is routed to
+inline-sidechain assembly, never dropped) — plus a ``thinking`` turn kind and
+structured (never ``json.dumps``'d) tool-call input. ``MAX_TURNS`` deliberately does
+not live here: a forward incremental read must never silently drop turns, so that
+recency cap lives on the panel projection instead
+(``transcripts/internal/projected_transcript_repository.py``).
+``MAX_BLOCK_CHARS`` stays here — it caps every **string** block (assistant text,
+thinking, tool output); a tool call's *input* is a mapping at this layer, not a
+string, so there is no string here to cap; capping its serialized form moves to the
+projection, the point at which it is re-materialized as one.
 
 Records are read in **file order**, not DAG-traversed via ``uuid``/``parentUuid`` for
 the *main* conversation — a fleet worker is ``claude -p`` (headless, ``--resume``
@@ -71,14 +71,15 @@ from blizzard.runner.harness.transcript import (
 NORMALIZER_VERSION = "claude-code-jsonl/1"
 
 #: Cap each text / thinking / tool-output string block at this many characters —
-#: ``parser.py``'s cap, unchanged. A tool call's *input* is a mapping at this layer,
-#: so there is no string here to cap; that moves to the panel projection.
+#: the deleted ``transcripts/parser.py``'s cap, unchanged. A tool call's *input* is a
+#: mapping at this layer, so there is no string here to cap; that moves to the panel
+#: projection.
 MAX_BLOCK_CHARS = 1024 * 1024
 
 #: Control records: plumbing, never conversation. ``file-history-snapshot``/
-#: ``file-history-delta``/``pr-link`` (finding 5) are new relative to the ported set —
-#: already inert (they match neither the ``assistant`` nor ``user`` branch below), but
-#: named here so their drop is explicit rather than incidental.
+#: ``file-history-delta``/``pr-link`` are new relative to the deleted parser's control-type
+#: set — already inert (they match neither the ``assistant`` nor ``user`` branch below),
+#: but named here so their drop is explicit rather than incidental.
 _CONTROL_TYPES = frozenset(
     {
         "mode",
@@ -95,7 +96,7 @@ _CONTROL_TYPES = frozenset(
 )
 
 #: Raw CSI ANSI escape sequences (e.g. `\x1b[31m`), including the private-mode `?`
-#: prefix (`\x1b[?25l`) — ported verbatim from ``parser.py``.
+#: prefix (`\x1b[?25l`) — ported verbatim from the deleted ``transcripts/parser.py``.
 _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
@@ -272,6 +273,12 @@ def _collapse_user(
     if tool_result_blocks is not None:
         tool_use_result = record.get("toolUseResult")
         agent_id = tool_use_result.get("agentId") if isinstance(tool_use_result, dict) else None
+        # `toolUseResult.agentId` is one field on the record, not one per block — only
+        # attributable to a specific tool turn when this record resolves exactly one
+        # `tool_result`. A record carrying more than one would otherwise stamp every
+        # one of those tool turns as the sidecar's spawning call, misattributing all
+        # but (at most) the one that's actually true.
+        agent_id_unambiguous = len(tool_result_blocks) == 1
         for block in tool_result_blocks:
             tool_use_id = block.get("tool_use_id")
             if not isinstance(tool_use_id, str):
@@ -286,7 +293,7 @@ def _collapse_user(
                 turn.tool, output=output, output_truncated=turn.tool.output_truncated or output_truncated
             )
             turns[index] = replace(turn, tool=updated_tool, truncated=turn.truncated or output_truncated)
-            if isinstance(agent_id, str) and agent_id:
+            if agent_id_unambiguous and isinstance(agent_id, str) and agent_id:
                 agent_id_by_tool_turn[index] = agent_id
         return
 
@@ -407,11 +414,16 @@ def _group_sidechain_runs(records: list[dict[str, Any]]) -> list[list[dict[str, 
     record lacking usable ``uuid``/``parentUuid`` fields at all falls back to one
     shared run in file order rather than being silently dropped.
 
-    Linear in ``len(records)``: a ``parentUuid`` index is built once up front, so
-    finding each link's successor is a dict lookup rather than a fresh linear scan
-    of every remaining record — the naive per-link rescan is quadratic in the
-    sidechain-record count and measured at 33.7s for 40,000 records, a volume an
-    in-spec ~50 MB session transcript can plausibly contain.
+    Linear in ``len(records)`` for well-formed input: a ``parentUuid`` index is built
+    once up front, so finding each link's successor is a dict lookup rather than a
+    fresh linear scan of every remaining record — the naive per-link rescan is
+    quadratic in the sidechain-record count and measured at 33.7s for 40,000 records,
+    a volume an in-spec ~50 MB session transcript can plausibly contain. This bound
+    assumes at most one child per ``parentUuid``, the shape a real fleet worker's
+    linear (never-forking) conversation always produces; several records sharing one
+    ``parentUuid`` — malformed data Claude Code does not mint — degrades the walk
+    below back toward quadratic, since each link consumed then rescans the rest of
+    that shared child list for one not yet used.
     """
     by_uuid = {r["uuid"]: r for r in records if isinstance(r.get("uuid"), str)}
     # Every record indexed by its own `parentUuid`, so walking a chain forward from a

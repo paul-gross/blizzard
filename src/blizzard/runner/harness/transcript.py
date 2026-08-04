@@ -12,7 +12,9 @@ value shape and Protocol that knowledge sits behind
 failure is shared, harness-agnostic infrastructure in exactly the same sense the
 Protocol above it is (any future per-harness source reads files and can fail the same
 way), so it sits here rather than duplicated into each harness's own ``internal/``
-adapter — a documented gap in this module's own dependency purity, not an oversight.
+adapter — the same co-location the exemplar's own `RepoErrorFactory`
+(``blizzard-context:/exemplars/python/repo_pattern.py``) uses for a Protocol and its
+injected error-wrapping seam, not a gap against it.
 
 :class:`NormalizedTurn` is the turn vocabulary a per-harness source produces: ``env``/
 ``asst``/``tool`` (the panel's existing three) plus ``thinking`` — a kind the current
@@ -53,11 +55,17 @@ import structlog
 NormalizedTurnKind = Literal["env", "asst", "tool", "thinking"]
 
 #: How a sidechain conversation's attachment to its spawning tool call was resolved,
-#: carried as data rather than left for a reader to guess at fidelity. ``agent-id`` is
-#: an exact join (a sidecar file's name/records to the spawning call's
-#: ``toolUseResult.agentId``); ``uuid-chain`` and ``prompt-timestamp`` are the inline-
-#: layout fallbacks; ``unlinked`` means no route resolved a parent at all.
-SidechainLink = Literal["agent-id", "uuid-chain", "prompt-timestamp", "unlinked"]
+#: carried as data rather than left for a reader to guess at fidelity — an open,
+#: harness-native label (the same open-string treatment
+#: :attr:`~blizzard.runner.harness.external_usage.ExternalSubscriptionUsageWindow.window`
+#: gives a harness-native vocabulary word, rather than a blizzard-defined enum a second
+#: adapter would have to satisfy). The one value every harness is expected to share is
+#: ``"unlinked"`` — no route resolved a parent at all — since that resolved/unresolved
+#: distinction is the one thing blizzard itself acts on; every other value is that
+#: harness's own route name. Claude Code currently mints ``"agent-id"`` (an exact join,
+#: a sidecar file's name/records to the spawning call's ``toolUseResult.agentId``),
+#: ``"uuid-chain"``, and ``"prompt-timestamp"`` (its two inline-layout fallbacks).
+SidechainLink = str
 
 #: Why a *source* could not produce turns for a session — the two reasons reading a
 #: file can fail. Deliberately narrower than
@@ -204,12 +212,9 @@ class TranscriptErrorFactory:
     several failed to open; the batch it belongs to still reports
     ``available=True``) — WARNING, the same convention's "a recoverable condition the
     caller continued past." ``not_found`` is DEBUG: no session file at all is this
-    seam's most routine outcome (a lease with no transcript yet), the same level the
-    replaced ``transcripts/internal/jsonl_transcript_repository.py`` logged it at —
-    surfaced here under this seam's own logger name
-    (``blizzard.runner.harness``, bound by the composition root, not the deleted
-    module's ``blizzard.runner.transcripts``) rather than the old one, so an operator
-    filter keyed on the old logger name no longer matches it.
+    seam's most routine outcome (a lease with no transcript yet), surfaced under this
+    seam's own logger name (``blizzard.runner.harness``, bound by the composition
+    root) — an operator filter must be keyed on that name to match it.
     """
 
     def __init__(self, log: structlog.stdlib.BoundLogger) -> None:
@@ -226,11 +231,13 @@ class TranscriptErrorFactory:
         detail = str(exc).strip()
         self._log.warning(message, session_id=session_id, detail=detail)
 
-    def not_found(self, *, session_id: str, projects_root: str) -> None:
-        """Log at DEBUG: no transcript file matched ``session_id`` under
-        ``projects_root`` — distinguishes "wrong root" from "the agent never wrote
-        one," the most likely symptom of a globbed root holding nothing."""
-        self._log.debug("transcript not found", session_id=session_id, projects_root=projects_root)
+    def not_found(self, *, session_id: str, detail: str) -> None:
+        """Log at DEBUG: no transcript file matched ``session_id``. ``detail`` is an
+        opaque, harness-composed string (Claude Code's is the searched
+        ``projects_root``) — distinguishes "wrong root" from "the agent never wrote
+        one," the most likely symptom of a globbed root holding nothing, without this
+        shared factory naming any one harness's own storage layout."""
+        self._log.debug("transcript not found", session_id=session_id, detail=detail)
 
 
 class IHarnessTranscriptSource(Protocol):
@@ -303,7 +310,7 @@ class NullTranscriptSource:
 
 
 # Typecheck-time Protocol/adapter conformance sentinel (the exemplar's shape,
-# `../../exemplars/python/repo_pattern.py`). Pyright rejects the return if
+# `blizzard-context:/exemplars/python/repo_pattern.py`). Pyright rejects the return if
 # `NullTranscriptSource` drifts from `IHarnessTranscriptSource`.
 def _conforms_harness_transcript_source(x: NullTranscriptSource) -> IHarnessTranscriptSource:
     return x

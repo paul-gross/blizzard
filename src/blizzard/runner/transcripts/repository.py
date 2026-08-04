@@ -12,11 +12,11 @@ it as a projection over the harness's own transcript source (blizzard#245). Read
 by design (``bzh:repository-split``): nothing in blizzard writes a transcript, so
 there is no ``IWrite…`` variant.
 
-Error logging on an unreadable transcript is now the harness seam's own concern
-(:class:`~blizzard.runner.harness.transcript.TranscriptErrorFactory`) — a transcript
-that exists but cannot be read is still a normal (if degraded) read,
-``available=False, reason="unreadable"``, exactly as before; this module just no
-longer owns the factory that logs it, since it no longer touches the filesystem.
+Error logging on an unreadable transcript is the harness seam's own concern
+(:class:`~blizzard.runner.harness.transcript.TranscriptErrorFactory`), not this
+module's — a transcript that exists but cannot be read is still a normal (if
+degraded) read, ``available=False, reason="unreadable"``; this module touches no
+filesystem itself, so it owns no error-logging factory of its own.
 """
 
 from __future__ import annotations
@@ -73,7 +73,15 @@ class Transcript:
 
 
 class IReadTranscriptRepository(Protocol):
-    """The transcript lookup seam. Read-only (``bzh:repository-split``)."""
+    """The transcript lookup seam. Read-only (``bzh:repository-split``).
+
+    One operation: its sole consumer, :class:`~blizzard.runner.transcripts.service.
+    LocalTranscriptService`, calls only ``read_turns``. The raw-lines and size-on-disk
+    reads a fleet worker's rotation check and envelope-less usage fallback need are a
+    separate concern, reached directly off :meth:`~blizzard.runner.harness.adapter.
+    IHarnessAdapter.transcript_source` (``ctx.harness.transcript_source()``) rather
+    than through this panel-facing seam.
+    """
 
     def read_turns(self, session_id: str, *, spawn_cwd: str | None) -> Transcript:
         """The session's parsed transcript, located by ``session_id`` alone.
@@ -84,33 +92,5 @@ class IReadTranscriptRepository(Protocol):
         (:class:`~blizzard.runner.domain.leases.LeaseActivity` owns the
         closed-binding-release invariant), and the glob-by-session-id primary path
         does not need it at all.
-        """
-        ...
-
-    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
-        """The session's raw transcript lines, unparsed — empty when none exist or the
-        file is unreadable (issue #58's envelope-less usage fallback).
-
-        Same location rule as :meth:`read_turns` (session-id glob, ``spawn_cwd`` an
-        optional disambiguation hint only); this sibling skips normalization entirely —
-        the caller (``sum_transcript_usage``) wants the raw per-message ``usage``
-        objects, not the panel's collapsed turns.
-        """
-        ...
-
-    def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
-        """The session transcript's size on disk, or ``None`` when it cannot be read.
-
-        The signal behind a declared ``rotate.max_transcript_bytes`` (issue #144). Same
-        location rule as the two reads above.
-
-        ``None`` is an **unknown**, never a zero: no file exists yet (the session was just
-        minted), or the file could not be stat'd. The rotation check treats an unreadable
-        signal as "not measured" and lets the head stand — a missing measurement is not a
-        breach — so returning 0 here would silently read as "well under bound" and make
-        the threshold inert in exactly the case it cannot see.
-
-        Reads the size, never the content: an unbounded transcript is precisely what this
-        threshold exists to catch, so it must not be read into memory to measure.
         """
         ...

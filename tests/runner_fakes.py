@@ -604,6 +604,9 @@ def make_context(
         worktree_git=_wt,
         check_runner=_check_runner,
         config=resolved_config,
+        # Mirrors `build_loop_context`'s own composition: the same source `harness`
+        # itself holds, resolved once here rather than reached through `ctx.harness`.
+        transcripts=harness.transcript_source(),
     )
 
 

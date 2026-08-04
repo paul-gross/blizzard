@@ -120,7 +120,7 @@ def test_is_sidechain_record_is_filtered(tmp_path: Path) -> None:
     down: the normalizer now *surfaces* it as an unlinked conversation
     (``tests/test_runner_harness_claude_code_normalizer.py``'s own rewrite of this
     same assertion), and this projection is what re-establishes zero panel turns —
-    the projection half of that two-part rewrite (``plan-review:F5``)."""
+    the projection half of that two-part rewrite."""
     _write(tmp_path, [fx.sidechain_record()])
     assert _read(tmp_path).turns == []
 
@@ -234,9 +234,9 @@ def test_max_block_chars_caps_assistant_text_without_flagging_file_level_truncat
 def test_max_block_chars_caps_a_serialized_tool_input_and_flags_truncated(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Load-bearing per the plan (``plan-review:F4``): today's ``MAX_BLOCK_CHARS`` case
-    exercises assistant *text* only, so nothing catches a re-materialized uncapped
-    tool-input string — this is that missing case, at the layer that now owns the cap.
+    """Load-bearing: today's ``MAX_BLOCK_CHARS`` case exercises assistant *text* only, so
+    nothing catches a re-materialized uncapped tool-input string — this is that missing
+    case, at the layer that now owns the cap.
     """
     monkeypatch.setattr(projection_module, "MAX_BLOCK_CHARS", 10)
     _write(tmp_path, [fx.assistant_tool_use("t1", "Bash", {"command": "x" * 50})])

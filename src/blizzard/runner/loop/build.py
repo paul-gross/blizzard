@@ -117,6 +117,10 @@ def build_loop_context(
         # its child env built from the same worker-env allowlist the harness children use.
         check_runner=SubprocessCheckRunner(env_passthrough=config.worker_env_passthrough),
         config=loop_config,
+        # The same source just injected into `harness` above, declared here too so the
+        # loop's two direct readers (the usage fallback, the rotation size check) don't
+        # reach through `ctx.harness` for it.
+        transcripts=harness_transcript_source,
     )
 
 

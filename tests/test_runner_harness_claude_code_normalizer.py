@@ -1,4 +1,4 @@
-"""``harness/internal/claude_code_normalizer.py`` (blizzard#245, phase 2).
+"""``harness/internal/claude_code_normalizer.py`` (blizzard#245).
 
 All unit tier: :func:`normalize_lines` takes an iterable of strings and needs no
 filesystem, mirroring ``tests/test_runner_transcripts.py``'s coverage of the parser
@@ -18,7 +18,7 @@ from blizzard.runner.harness.internal.claude_code_normalizer import normalize_li
 from tests import transcript_fixtures as fx
 
 # --------------------------------------------------------------------------- #
-# Behavior ported unchanged from transcripts/parser.py
+# Behavior ported unchanged from the deleted transcripts/parser.py
 # --------------------------------------------------------------------------- #
 
 
@@ -90,7 +90,7 @@ def test_is_meta_record_is_filtered() -> None:
         "ai-title",
         "queue-operation",
         "attachment",
-        # New relative to the ported set (finding 5) — already inert, drop made explicit.
+        # New relative to the deleted parser's control-type set — already inert, drop made explicit.
         "file-history-snapshot",
         "file-history-delta",
         "pr-link",
@@ -137,7 +137,7 @@ def test_max_block_chars_caps_a_turn(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# New: thinking turns (finding 4)
+# New: thinking turns
 # --------------------------------------------------------------------------- #
 
 
@@ -220,7 +220,7 @@ def test_absent_tool_input_is_shaped_absent_not_object() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# New: version stamps (finding 3)
+# New: version stamps
 # --------------------------------------------------------------------------- #
 
 
@@ -249,7 +249,7 @@ def test_harness_version_is_none_when_no_record_carries_one() -> None:
 def test_agent_id_join_candidate_surfaces_for_a_tool_result_carrying_agent_id() -> None:
     """Route 1 (agent-id) is resolved by the sibling source module, not here — this
     normalizer only surfaces the candidate turn index, keyed by the agentId its
-    `tool_result` carried (finding 2's exact join key)."""
+    `tool_result` carried — the exact join key the source's sidecar-file lookup uses."""
     lines = [
         fx.assistant_tool_use("t1", "Task", {"subagent_type": "explorer", "prompt": "find X"}),
         fx.tool_result("t1", "subagent finished", agent_id="agent-abc"),
@@ -259,6 +259,42 @@ def test_agent_id_join_candidate_surfaces_for_a_tool_result_carrying_agent_id() 
     assert len(result.turns) == 1
     assert result.agent_id_by_tool_turn == {0: "agent-abc"}
     assert result.turns[0].sidechain is None  # not resolved here — the source's job
+
+
+@pytest.mark.unit
+def test_agent_id_is_not_attributed_when_one_record_resolves_two_tool_results() -> None:
+    """`toolUseResult.agentId` is one field on the record, not one per block — a
+    record resolving more than one `tool_result` can't tell which of those tool
+    calls actually spawned the agent, so neither is stamped as a candidate rather
+    than both being wrongly attributed to it."""
+    lines = [
+        fx.assistant_tool_use("t1", "Task", {"prompt": "job 1"}, uuid="a1"),
+        fx.assistant_tool_use("t2", "Task", {"prompt": "job 2"}, uuid="a2"),
+        json.dumps(
+            {
+                "type": "user",
+                "message": {
+                    "role": "user",
+                    "content": [
+                        {"type": "tool_result", "tool_use_id": "t1", "content": "done 1"},
+                        {"type": "tool_result", "tool_use_id": "t2", "content": "done 2"},
+                    ],
+                },
+                "toolUseResult": {"agentId": "agent-ambiguous"},
+                "timestamp": "2026-07-16T10:00:03Z",
+                "uuid": "u2",
+            }
+        ),
+    ]
+    result = normalize_lines(lines)
+
+    assert result.agent_id_by_tool_turn == {}
+    tool_turns = [t for t in result.turns if t.kind == "tool"]
+    assert len(tool_turns) == 2
+    assert tool_turns[0].tool is not None
+    assert tool_turns[1].tool is not None
+    assert tool_turns[0].tool.output == "done 1"
+    assert tool_turns[1].tool.output == "done 2"
 
 
 @pytest.mark.unit
@@ -344,10 +380,65 @@ def test_prompt_timestamp_route_ignores_a_call_after_the_sidechain_started() -> 
 
 
 @pytest.mark.unit
+def test_prompt_timestamp_route_skips_an_already_claimed_candidate() -> None:
+    """Two independent sidechain runs matching the same prompt-timestamp key, with
+    only one eligible spawning tool call: the second run must not silently overwrite
+    the first's claim on that turn (recorded nowhere) — it falls through to
+    `unlinked` instead, so both runs are always attributable to something."""
+    lines = [
+        fx.assistant_tool_use("t1", "Task", {"prompt": "same prompt"}, uuid="spawn-1", ts="2026-07-16T09:59:00Z"),
+        fx.sidechain_run_record(
+            "same prompt", uuid="run1-root", parent_uuid="orphan1", role="user", ts="2026-07-16T10:00:00Z"
+        ),
+        fx.sidechain_run_record("run1 reply", uuid="run1-reply", parent_uuid="run1-root", ts="2026-07-16T10:00:01Z"),
+        fx.sidechain_run_record(
+            "same prompt", uuid="run2-root", parent_uuid="orphan2", role="user", ts="2026-07-16T10:00:00Z"
+        ),
+        fx.sidechain_run_record("run2 reply", uuid="run2-reply", parent_uuid="run2-root", ts="2026-07-16T10:00:01Z"),
+    ]
+    result = normalize_lines(lines)
+
+    claimed_tool_turns = [t for t in result.turns if t.kind == "tool" and t.sidechain is not None]
+    assert len(claimed_tool_turns) == 1
+    sidechain = claimed_tool_turns[0].sidechain
+    assert sidechain is not None
+    assert sidechain.link == "prompt-timestamp"
+    assert len(result.unlinked_sidechains) == 1
+    assert result.unlinked_sidechains[0].link == "unlinked"
+
+
+@pytest.mark.unit
+def test_prompt_timestamp_route_treats_a_candidate_with_no_timestamp_as_a_non_match() -> None:
+    """A tool turn indexed by prompt but carrying no timestamp of its own can never
+    win "nearest preceding" — `tool_turn_indices_by_prompt` excludes it entirely
+    (only a timestamped turn is ever a candidate), so a sidechain matching that
+    prompt resolves to no spawn rather than an unevaluated "first match wins"."""
+    lines = [
+        # `control_record`-shaped: no `timestamp`/`uuid`, so this tool call is never
+        # indexed by `_index_tool_turns_by_prompt` at all.
+        fx.assistant_tool_use("t1", "Task", {"prompt": "untimed prompt"}, uuid="spawn-untimed"),
+        fx.sidechain_run_record(
+            "untimed prompt", uuid="run-root", parent_uuid="orphan", role="user", ts="2026-07-16T10:00:00Z"
+        ),
+    ]
+    # Strip the timestamp from the tool-use record after minting it, since the
+    # fixture always stamps one — this is the shape `_index_tool_turns_by_prompt`'s
+    # own docstring says can never be a "nearest preceding" winner.
+    record = json.loads(lines[0])
+    del record["timestamp"]
+    lines[0] = json.dumps(record)
+
+    result = normalize_lines(lines)
+
+    assert len(result.unlinked_sidechains) == 1
+    assert result.unlinked_sidechains[0].link == "unlinked"
+
+
+@pytest.mark.unit
 def test_unresolvable_inline_sidechain_surfaces_unlinked_not_among_top_level_turns() -> None:
-    """The deliberate rewrite of the old parser's `test_is_sidechain_record_is_filtered`
-    (`plan-review:F5`): an isSidechain record used to yield zero turns, silently. The
-    normalizer now *surfaces* it — still zero top-level turns, but present as data on
+    """The deliberate rewrite of the deleted parser's `test_is_sidechain_record_is_filtered`:
+    an isSidechain record used to yield zero turns, silently. The normalizer now
+    *surfaces* it — still zero top-level turns, but present as data on
     `unlinked_sidechains` rather than dropped. The projection is what re-establishes the
     panel's zero-turn outcome, one layer down
     (`transcripts/internal/projected_transcript_repository.py`)."""
@@ -365,8 +456,8 @@ def test_unresolvable_inline_sidechain_surfaces_unlinked_not_among_top_level_tur
 
 @pytest.mark.unit
 def test_sidecar_file_records_normalize_as_their_own_main_conversation() -> None:
-    """Every record in a sidecar file carries `isSidechain: true` on itself
-    (finding 1) — normalizing it with `is_sidechain_file=True` must treat that as
+    """Every record in a sidecar file carries `isSidechain: true` on itself —
+    normalizing it with `is_sidechain_file=True` must treat that as
     the whole file's own conversation, not re-route it into a further sidechain
     bucket (which would silently produce zero turns)."""
     lines = [

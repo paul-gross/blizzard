@@ -1,5 +1,5 @@
 """``harness/internal/claude_code_transcript.py`` — the ``IHarnessTranscriptSource``
-filesystem adapter (blizzard#245, phase 3).
+filesystem adapter (blizzard#245).
 
 All unit tier, hermetic under ``tmp_path`` as ``projects_root``
 (``bzh:dependency-injection`` — no ``HOME`` monkey-patching), mirroring
@@ -145,6 +145,34 @@ def test_turns_since_cold_read_tail_caps_a_pathological_file_and_flags_truncated
 
 
 @pytest.mark.unit
+def test_a_tail_capped_sidecar_ors_its_own_truncation_into_the_batch_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A sidecar that itself exceeds `MAX_FILE_BYTES` reports `truncated=True` from
+    its own `_read_cold` — that must reach `TranscriptBatch.truncated`, not just the
+    main file's own tail cap or the shared sidecar-count budget running out."""
+    project_dir = "-home-user-workspace"
+    main_lines = [
+        fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}),
+        fx.tool_result("t1", "spawned", agent_id="agent-abc"),
+    ]
+    _write_main(tmp_path, main_lines, project_dir=project_dir)
+
+    subagents_dir = tmp_path / project_dir / "sess-1" / "subagents"
+    subagents_dir.mkdir(parents=True)
+    sidecar_lines = [fx.sidecar_record(f"turn {i}", agent_id="agent-abc", uuid=f"sc{i}") for i in range(50)]
+    (subagents_dir / "agent-agent-abc.jsonl").write_text("\n".join(sidecar_lines) + "\n")
+
+    line_bytes = max(len(line.encode("utf-8")) for line in sidecar_lines)
+    monkeypatch.setattr(source_module, "MAX_FILE_BYTES", line_bytes * 3)
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    batch = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=None)
+
+    assert batch.truncated is True
+
+
+@pytest.mark.unit
 def test_turns_since_cold_read_of_a_small_file_is_not_truncated(tmp_path: Path) -> None:
     _write_main(tmp_path, [fx.user_env("hello")])
     source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
@@ -270,6 +298,171 @@ def test_missing_sidecar_leaves_the_candidate_tool_call_without_a_sidechain(tmp_
     assert tool_turn.sidechain is None
 
 
+@pytest.mark.unit
+def test_cold_read_gates_the_sidecar_fanout_on_a_shared_budget_and_flags_truncated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cold read's sidecar fan-out is gated by `MAX_BATCH_BYTES`, not just each
+    sidecar's own `MAX_FILE_BYTES` tail cap — without the shared-budget gate, peak
+    memory for a cold read scales with sidecar *count*, unbounded (the bug this test
+    pins: F3 of the prior review round)."""
+    project_dir = "-home-user-workspace"
+    n_sidecars = 6
+    main_lines = []
+    for i in range(n_sidecars):
+        main_lines.append(fx.assistant_tool_use(f"t{i}", "Task", {"prompt": f"job {i}"}, uuid=f"a{i}"))
+        main_lines.append(fx.tool_result(f"t{i}", "spawned", agent_id=f"agent-{i}"))
+    _write_main(tmp_path, main_lines, project_dir=project_dir)
+
+    subagents_dir = tmp_path / project_dir / "sess-1" / "subagents"
+    subagents_dir.mkdir(parents=True)
+    sidecar_paths = []
+    for i in range(n_sidecars):
+        sidecar_path = subagents_dir / f"agent-agent-{i}.jsonl"
+        sidecar_path.write_text(fx.sidecar_record("x" * 200, agent_id=f"agent-{i}") + "\n")
+        sidecar_paths.append(sidecar_path)
+    per_sidecar_bytes = max(p.stat().st_size for p in sidecar_paths)
+
+    # Budget enough for fewer than `n_sidecars` sidecars, so the fan-out must stop
+    # partway through rather than reading every discovered sidecar.
+    monkeypatch.setattr(source_module, "MAX_BATCH_BYTES", per_sidecar_bytes * (n_sidecars - 2))
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    batch = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=None)
+
+    nested = [t for t in batch.turns if t.kind == "tool" and t.sidechain is not None]
+    assert 0 < len(nested) < n_sidecars
+    assert batch.truncated is True
+
+
+@pytest.mark.unit
+def test_forward_read_carries_a_budget_skipped_sidecar_forward_as_a_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A sidecar discovered but not yet reached by a forward read's shared budget is
+    still recorded in `next_position` at offset 0 (`sidecar_offsets.setdefault`) — a
+    later call reopens it rather than losing it once its spawning line scrolls out of
+    the read window (F2 of the prior review round)."""
+    project_dir = "-home-user-workspace"
+    main_lines = [
+        fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}, uuid="a1"),
+        fx.tool_result("t1", "spawned", agent_id="agent-abc"),
+    ]
+    _write_main(tmp_path, main_lines, project_dir=project_dir)
+
+    subagents_dir = tmp_path / project_dir / "sess-1" / "subagents"
+    subagents_dir.mkdir(parents=True)
+    sidecar_lines = [fx.sidecar_record(f"turn {i}", agent_id="agent-abc", uuid=f"sc{i}") for i in range(5)]
+    (subagents_dir / "agent-agent-abc.jsonl").write_text("\n".join(sidecar_lines) + "\n")
+
+    main_path = tmp_path / project_dir / "sess-1.jsonl"
+    monkeypatch.setattr(source_module, "MAX_BATCH_BYTES", main_path.stat().st_size)
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    from blizzard.runner.harness.transcript import TranscriptPosition
+
+    start_position = TranscriptPosition(token='{"main": 0, "sidecars": {}}')
+    first = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=start_position)
+
+    # The main file consumed the whole budget this call, so the sidecar is a
+    # newly-discovered, budget-skipped candidate -- never opened, but still carried.
+    assert first.complete is False
+    tool_turn = next(t for t in first.turns if t.kind == "tool")
+    assert tool_turn.sidechain is None
+    assert first.next_position is not None
+    assert '"agent-abc": 0' in first.next_position.token
+
+    monkeypatch.setattr(source_module, "MAX_BATCH_BYTES", 1_000_000)
+    second = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=first.next_position)
+
+    assert second.complete is True
+    assert len(second.unlinked_sidechains) == 1
+    assert [t.text for t in second.unlinked_sidechains[0].turns] == [f"turn {i}" for i in range(5)]
+
+
+@pytest.mark.unit
+def test_forward_read_carries_a_not_yet_flushed_sidecar_forward_as_a_candidate(tmp_path: Path) -> None:
+    """A sidecar whose agent id is discovered this batch (a `tool_result` named it)
+    but whose file doesn't exist on disk yet — the spawning tool call's turn was
+    already flushed, its sidecar file not — is still recorded in `next_position` at
+    offset 0, so a later call (once the harness has written the file) can find it
+    rather than losing it the moment the spawning line scrolls out of the window."""
+    project_dir = "-home-user-workspace"
+    main_lines = [
+        fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}, uuid="a1"),
+        fx.tool_result("t1", "spawned", agent_id="agent-abc"),
+    ]
+    _write_main(tmp_path, main_lines, project_dir=project_dir)
+    # No `subagents/` directory at all yet -- the sidecar file doesn't exist.
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    from blizzard.runner.harness.transcript import TranscriptPosition
+
+    start_position = TranscriptPosition(token='{"main": 0, "sidecars": {}}')
+    first = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=start_position)
+
+    tool_turn = next(t for t in first.turns if t.kind == "tool")
+    assert tool_turn.sidechain is None
+    assert first.next_position is not None
+    assert '"agent-abc": 0' in first.next_position.token
+
+    # The harness flushes the sidecar file after the fact; a later call now finds it.
+    subagents_dir = tmp_path / project_dir / "sess-1" / "subagents"
+    subagents_dir.mkdir(parents=True)
+    (subagents_dir / "agent-agent-abc.jsonl").write_text(fx.sidecar_record("late", agent_id="agent-abc") + "\n")
+
+    second = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=first.next_position)
+
+    assert len(second.unlinked_sidechains) == 1
+    assert [t.text for t in second.unlinked_sidechains[0].turns] == ["late"]
+
+
+@pytest.mark.unit
+def test_a_sidecar_that_fails_to_open_logs_warning_and_the_batch_stays_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A sidecar `OSError` is recovered, not a boundary failure: `from_io_recovered`
+    (WARNING), and the batch this one sidecar belongs to still reports
+    `available=True` — distinct from the main file's own open failure, which is a
+    boundary failure logged at ERROR via `from_io` and aborts the whole read."""
+    project_dir = "-home-user-workspace"
+    main_lines = [
+        fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}),
+        fx.tool_result("t1", "spawned", agent_id="agent-abc"),
+    ]
+    _write_main(tmp_path, main_lines, project_dir=project_dir)
+
+    subagents_dir = tmp_path / project_dir / "sess-1" / "subagents"
+    subagents_dir.mkdir(parents=True)
+    sidecar_path = subagents_dir / "agent-agent-abc.jsonl"
+    sidecar_path.write_text(fx.sidecar_record("hello", agent_id="agent-abc") + "\n")
+
+    # `is_file()` gates entry to the read at all, so a directory (the main-file
+    # unreadable test's own trick) never reaches the `open()` call for a sidecar --
+    # patch `_read_cold` itself to raise for this one path instead, portable with no
+    # dependence on permission semantics differing when run as root.
+    orig_read_cold = source_module._read_cold
+
+    def failing_read_cold(path: Path) -> object:
+        if path == sidecar_path:
+            raise OSError("simulated sidecar read failure")
+        return orig_read_cold(path)
+
+    monkeypatch.setattr(source_module, "_read_cold", failing_read_cold)
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    with capture_logs() as logs:
+        batch = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=None)
+
+    assert batch.available is True
+    tool_turn = next(t for t in batch.turns if t.kind == "tool")
+    assert tool_turn.sidechain is None
+    warning_logs = [entry for entry in logs if entry["log_level"] == "warning"]
+    assert len(warning_logs) == 1
+    error_logs = [entry for entry in logs if entry["log_level"] == "error"]
+    assert error_logs == []
+
+
 # --------------------------------------------------------------------------- #
 # read_raw_lines / size_bytes — the pre-existing operations, relocated
 # --------------------------------------------------------------------------- #
@@ -315,3 +508,37 @@ def test_size_bytes_measures_a_transcript_far_larger_than_the_read_cap(
     source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
 
     assert source.size_bytes("sess-big", spawn_cwd="/home/user/workspace") == 1200
+
+
+@pytest.mark.unit
+def test_read_raw_lines_unreadable_logs_warning_not_error(tmp_path: Path) -> None:
+    """Both callers (the envelope-less usage fallback, the rotation size check)
+    continue past an empty/`None` reply rather than aborting — a recoverable
+    condition, WARNING per `bzh:structlog-logging`, not the boundary-failure ERROR."""
+    project_dir = tmp_path / "-home-user-workspace"
+    project_dir.mkdir()
+    (project_dir / "sess-1.jsonl").mkdir()  # a directory forces OSError on open
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    with capture_logs() as logs:
+        lines = source.read_raw_lines("sess-1", spawn_cwd="/home/user/workspace")
+
+    assert lines == []
+    assert [entry["log_level"] for entry in logs] == ["warning"]
+
+
+@pytest.mark.unit
+def test_size_bytes_unreadable_logs_warning_not_error(tmp_path: Path) -> None:
+    project_dir = tmp_path / "-home-user-workspace"
+    project_dir.mkdir()
+    # `stat()` (unlike `open()`) succeeds on a plain directory, so a broken symlink is
+    # the portable way to force `OSError` here: `stat()` follows it by default and
+    # raises `FileNotFoundError` on a target that doesn't exist.
+    (project_dir / "sess-1.jsonl").symlink_to(project_dir / "does-not-exist")
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    with capture_logs() as logs:
+        size = source.size_bytes("sess-1", spawn_cwd="/home/user/workspace")
+
+    assert size is None
+    assert [entry["log_level"] for entry in logs] == ["warning"]

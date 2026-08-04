@@ -10,11 +10,10 @@ against this unit tier quietly closing the loop on itself.
 These fixtures still hand-author lines at the unit tier because they cover shapes
 the mock deliberately never mints — ``meta_record``, ``sidechain_record``,
 ``control_record``, ``ansi_private_mode_text``, ``truncated_line``, and (blizzard#245)
-``thinking_block``, ``sidecar_record``, ``sidechain_run_record``, ``versioned`` — the
-edge cases a real fleet run doesn't exercise on demand, plus the corpus-measured
-shapes blizzard#245's plan names (a redacted thinking block, a sidecar-file record, an
-inline ``uuid``/``parentUuid`` sidechain run, a ``version``-stamped record). The seam
-design makes that hermetic: :func:`~blizzard.runner.harness.internal.
+``thinking_block``, ``sidecar_record``, ``sidechain_run_record``, ``versioned``. Why the
+mock never mints the blizzard#245 shapes is stated once, in ``blizzard-mock``'s own
+``harness/README.md`` ("Conversation transcripts") — not restated here. The seam design
+makes hand-authoring hermetic: :func:`~blizzard.runner.harness.internal.
 claude_code_normalizer.normalize_lines` takes an iterable of strings, and the
 repository/source adapters take ``projects_root`` as a constructor arg, so a test
 writes these lines under ``tmp_path`` directly — no ``HOME`` monkey-patching.
@@ -59,7 +58,7 @@ def tool_result(
 ) -> str:
     """A `tool_result` carrier — not a turn, matched by `tool_use_id`.
 
-    ``agent_id`` (blizzard#245 finding 2) stamps `toolUseResult.agentId` — the exact
+    ``agent_id`` stamps `toolUseResult.agentId` — the exact
     join key the spawning `Agent`/`Task` call's result carries, matching a sidecar
     file's own `agentId` (link route 1's primary, corpus-measured path).
     """
@@ -99,7 +98,7 @@ def thinking_block(
 ) -> str:
     """An assistant record carrying one `thinking` content block.
 
-    Redacted by default (blizzard#245 finding 4: all 7,812 sampled thinking blocks
+    Redacted by default (all 7,812 sampled thinking blocks in a real corpus
     carried empty `thinking` plus a `signature`) — the expected shape, not an edge
     case. Pass ``text`` non-empty and ``signature=None`` for the non-redacted case.
     """
@@ -118,8 +117,8 @@ def sidecar_record(
     ts: str = "2026-07-16T10:05:00Z",
     uuid: str = "sc1",
 ) -> str:
-    """One record of a sidecar file (blizzard#245 finding 1, the corpus-primary
-    shape): `<project-dir>/<session-id>/subagents/agent-<agentId>.jsonl`. Every
+    """One record of a sidecar file (the corpus-primary sidechain shape):
+    `<project-dir>/<session-id>/subagents/agent-<agentId>.jsonl`. Every
     record in a real sidecar file carries `isSidechain: true`, `sessionId` (the
     parent session), and `agentId` — read whole (all its own lines are one
     subagent's conversation), never mixed with a top-level session file's lines.
@@ -147,8 +146,8 @@ def sidechain_run_record(
     ts: str = "2026-07-16T10:05:00Z",
 ) -> str:
     """One record of an **inline** sidechain run (the issue's originally-described
-    layout — corpus-unobserved per finding 1, kept as the fallback link routes 2/3
-    exist for). `isSidechain: true` plus a `uuid`/`parentUuid` thread: the run's
+    layout — corpus-unobserved, kept as the fallback link routes 2/3 exist for).
+    `isSidechain: true` plus a `uuid`/`parentUuid` thread: the run's
     root record's `parent_uuid` names the spawning tool call's assistant record
     (route 2's join key); each later record in the run names the previous one.
     """
@@ -166,9 +165,9 @@ def sidechain_run_record(
 
 
 def versioned(line: str, version: str = "2.1.220") -> str:
-    """Stamp an existing fixture line with a harness `version` field (finding 3:
-    every real conversation record carries one — the harness-version stamp is read
-    off records, never a `claude --version` subprocess)."""
+    """Stamp an existing fixture line with a harness `version` field: every real
+    conversation record carries one — the harness-version stamp is read
+    off records, never a `claude --version` subprocess."""
     record = json.loads(line)
     record["version"] = version
     return _line(record)
