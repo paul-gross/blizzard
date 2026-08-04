@@ -409,6 +409,14 @@ def _land() -> int:
         # At least one repo's check run completed terminally — never worth re-polling
         # out to `poll_timeout`. Nothing merges (chunk atomicity, same as `wait` below);
         # write the findings so the resolve worker can read exactly what failed.
+        #
+        # Deliberately left unguarded, unlike the wait-path write below: this branch
+        # already routes to `failure` regardless of whether the write itself succeeds, so
+        # a `MarkerWriteError` propagating from here (and being turned into a nonzero
+        # exit by `main`'s top-level catch) costs nothing beyond one extra `failure` ->
+        # `resolve` bounce cycle — and it is the only signal that findings a resolve
+        # worker needs went unwritten, rather than silently routing `failure` with
+        # nothing for `resolve` to read (issue #243).
         write_findings(_FINDINGS_NAME, render_findings(failures))
         print(_CI_FAILURE)
         return 0
@@ -421,8 +429,18 @@ def _land() -> int:
         # within one visit a no-op, so this is not gated on `already`/artifact names,
         # which is scoped by node, not epoch, and would wrongly suppress every visit
         # after the first.
+        #
+        # Unlike the terminal-failure write above, a failure HERE has no correctness
+        # consequence — it only costs a resolve worker some diagnosability on this one
+        # poll, since the wait path re-writes findings on every subsequent poll anyway.
+        # This branch is otherwise a healthy chunk just waiting on CI, so a transient
+        # hub-side write failure must not bounce it (issue #243) — degrade to `pending`
+        # instead of letting `MarkerWriteError` propagate to `main`'s top-level catch.
         if wait_records:
-            write_findings(_FINDINGS_NAME, render_findings(wait_records))
+            try:
+                write_findings(_FINDINGS_NAME, render_findings(wait_records))
+            except MarkerWriteError as exc:
+                print(f"delivery-findings write failed (wait path, non-fatal): {exc}", file=sys.stderr)
         print(_PENDING)
         return 0
 

@@ -388,6 +388,26 @@ def test_a_check_runs_read_failure_degrades_to_a_plain_pending_not_the_failure_e
     assert not _findings_posts(calls)
 
 
+def test_a_wait_path_findings_write_failure_degrades_to_a_plain_pending_not_a_bounce(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    _set_base_env(monkeypatch, feature_title="t")
+    monkeypatch.setattr(
+        land_pr_ci,
+        "forge_request",
+        _forge_with_state(
+            calls,
+            mergeable_state="blocked",
+            head_check_runs=[_check_run("in_progress", None)],
+            marker_status=500,  # every delivery-findings write attempt fails
+        ),
+    )
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "pending"  # a hub-side write hiccup must never bounce or crash
+
+
 def test_two_pending_repos_one_failing_names_only_the_failing_repo_and_merges_neither(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
