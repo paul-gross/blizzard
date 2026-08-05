@@ -1,17 +1,9 @@
 """The worker-facing chunk-history projection (issue #237).
 
 ``HistoryRowView`` is a flat, kind-discriminated row — ``transition`` | ``migration`` |
-``bounce`` — merged oldest-first across all three of a chunk's own hub-side histories
-(``ChunkDetail.history``/``.migrations``/``.bounces``). Built fresh here rather than
-mounting the board's own views as the runner's ``response_model``: a bounce carries no
-epoch to join it onto a transition row, and a fresh flat row keeps ``wire.chunk``'s views
-out of the runner's OpenAPI spec (pinned by
-tests/test_pin_wire.py::test_the_runner_spec_carries_no_chunk_detail_history_views).
-
-``ChunkHistoryView`` is the internal projection this route validates the hub's full
-``ChunkDetail`` payload down to before ``history_rows`` runs — never a FastAPI
-``response_model``.
-"""
+``bounce`` — merged oldest-first across a chunk's three hub-side histories.
+``ChunkHistoryView`` is the internal projection the payload is validated down to before
+``history_rows`` runs — never a FastAPI ``response_model``."""
 
 from __future__ import annotations
 
@@ -23,12 +15,10 @@ from blizzard.wire.chunk import BounceView, MigrationView, TransitionView
 
 
 class ChunkHistoryView(BaseModel):
-    """The slice of a hub ``ChunkDetail`` payload ``history_rows`` needs — validated with
-    pydantic's default ``extra="ignore"``, so it decodes straight off the full aggregate
-    without duplicating every other field. The three fields are **required**, not
-    defaulted to ``[]`` (issue #237), so a hub-side rename fails loudly here instead of
-    decoding as "no history yet" (pinned by
-    tests/test_pin_wire.py::test_chunk_history_view_requires_all_three_history_lists)."""
+    """The slice of a hub ``ChunkDetail`` payload ``history_rows`` needs — decoded with
+    pydantic's default ``extra="ignore"``. The three fields are **required**, not
+    defaulted to ``[]`` (issue #237), so a rename fails loudly rather than decoding as
+    "no history yet"."""
 
     history: list[TransitionView]
     migrations: list[MigrationView]
@@ -36,18 +26,10 @@ class ChunkHistoryView(BaseModel):
 
 
 class HistoryRowView(BaseModel):
-    """One row of a chunk's own timeline, as a worker reads it — a transition, a
-    cross-graph migration, or a delivery bounce, merged oldest-first by ``recorded_at``.
-
-    ``from_node``/``to_node`` are human-legible labels: a transition's node names, or (for
-    a migration) the ``graph/node`` hop
-    (``from_graph/from_node --choice--> to_graph/landed_node``, see ``MigrationView``).
-    Both null for a bounce, which names no node. ``epoch`` is populated only for a
-    transition row — the wire's own ``MigrationView``/``BounceView`` carry no epoch to
-    project. ``cause``/``detail`` carry a bounce's kick-back cause and its raw envelope, or
-    a migration's ``source`` (``authored-edge``/``intent``/``follow-latest``) in
-    ``detail``; both null on a transition row.
-    """
+    """One row of a chunk's own timeline — a transition, a cross-graph migration, or a
+    delivery bounce, merged oldest-first by ``recorded_at``. ``from_node``/``to_node`` are
+    node labels (a migration's is a ``graph/node`` hop), both null for a bounce; ``epoch``
+    is transition-only; ``cause``/``detail`` carry a bounce's kick-back or a migration source."""
 
     kind: Literal["transition", "migration", "bounce"]
     from_node: str | None = None

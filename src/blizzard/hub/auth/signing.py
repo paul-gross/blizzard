@@ -1,26 +1,9 @@
 """The hub's IdP signing-key lifecycle (issue #95, decision D1) — ``SigningKeyService``.
 
-The hub becomes the fleet's identity provider only under ``auth.mode = "oauth"``: this
-service owns the RS256 keypair a runner's federation bounce is minted/verified against
-(``hub/api/idp.py``), the JWKS a runner fetches to verify a ``kid``, and rotation. Under
-``auth.mode = "none"`` no instance of this service is ever constructed — there is no
-keypair on disk, no JWKS, no IdP surface.
-
-**Storage.** The private key material lives in the hub's own data dir
-(``config.data_dir / "auth" / "signing-keys"``), never in the store, never in config,
-never in the DB — owner-only permissions throughout (``0700`` dir, ``0600`` files). A
-small ``meta.json`` names which ``kid`` is ``current`` and which (if any) is
-``previous``; each keypair's private key is its own ``<kid>.pem`` file. Generated
-lazily on first use, idempotent across restarts, since ``meta.json`` already naming a
-``current`` kid is read back rather than regenerated.
-
-**Rotation** (``rotate()``, driven by ``blizzard hub rotate-signing-key``) mints a fresh
-keypair, demotes the old ``current`` to ``previous`` (dropping whatever ``previous`` key
-existed before — the JWKS publishes at most two generations), and persists the new
-``meta.json`` before returning. A runner picks up the new key with **no restart**: its
-own JWKS cache re-fetches on an unknown ``kid``, and this service's own in-memory state
-is mutated in place directly by the CLI verb's call against the live hub process.
-"""
+Constructed only under ``auth.mode = "oauth"``. Private key material lives under
+``config.data_dir / "auth" / "signing-keys"`` — never in the store or config — with
+owner-only permissions and a ``meta.json`` naming the ``current`` and ``previous`` kids.
+``rotate()`` demotes ``current`` to ``previous``: the JWKS publishes two generations."""
 
 from __future__ import annotations
 
@@ -52,11 +35,8 @@ class _KeyMeta:
 class SigningKeyService:
     """Load/generate the hub's IdP signing keypair, sign claims, and serve JWKS.
 
-    One instance lives for a hub process's whole run (``hub/composition.py``'s
-    ``build_services``, under ``oauth`` mode only) — ``rotate()`` mutates its in-memory
-    state and persists it, so every subsequent ``sign``/``jwks`` call in this same
-    process sees the rotation immediately.
-    """
+    One instance lives for a process's whole run; ``rotate()`` mutates its in-memory
+    state as well as persisting it, so a later ``sign``/``jwks`` sees the rotation."""
 
     def __init__(self, keys_dir: Path) -> None:
         self._dir = keys_dir

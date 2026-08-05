@@ -1,14 +1,8 @@
-"""``GET /api/users`` / ``POST /api/users/{user_id}/role`` — the admin page's user
-listing and role-assignment API (issue #94), gated on ``user:manage``.
+"""``GET /api/users`` / ``POST /api/users/{user_id}/role`` — the user listing and
+role-assignment API (issue #94), gated on ``user:manage``, human-plane throughout.
 
-Both routes are human-plane (``dependencies=[Depends(reject_runner_principal)]`` at
-router level, mirroring every other operator router — a runner's bearer token is
-confined to the fleet plane). Role-change rules (self-change, ``superuser`` grant/
-revoke, ``superuser`` not assignable) live in ``AuthService.assign_role``
-(``bzh:controller-read-only`` — this controller stays read-only and delegates the
-write); this module only resolves the acting identity and the subject row, translates
-:class:`~blizzard.hub.auth.service.RoleAssignmentRefused` to ``403``, and renders the
-result.
+Role-change rules live in ``AuthService.assign_role`` (``bzh:controller-read-only``);
+this module resolves identities, maps ``RoleAssignmentRefused`` to ``403``, and renders.
 """
 
 from __future__ import annotations

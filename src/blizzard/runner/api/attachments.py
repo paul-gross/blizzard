@@ -1,30 +1,9 @@
-"""``blizzard runner artifact create`` (née ``attach``) — ``POST
-/api/leases/{lease_id}/attachments`` (issue #113, Phase 2), plus its read-back
-counterpart ``GET /api/leases/{lease_id}/attachments`` (issue #169).
+"""``blizzard runner artifact create`` — ``POST /api/leases/{lease_id}/attachments``
+(issue #113), plus its read-back counterpart ``GET`` (issue #169).
 
-The CLI is a pure client of this route: a worker durably submits an explicit
-artifact for a ``produces:`` name, authorized by the lease token it inherited at spawn
-(``BLIZZARD_LEASE_TOKEN``, Phase 1). Read-only over its wiring
-(``bzh:controller-read-only``): the edge resolves the lease to an object through the
-read-only store already on ``app.state`` (the same one ``asks.py``'s list route reads
-through) and delegates the write to the composition-root-wired
-:class:`~blizzard.runner.domain.attachments.AttachmentService` — it holds no write
-repository of its own. The token is presented as ``X-Blizzard-Lease-Token`` or a
-standard ``Authorization: Bearer`` header; either is accepted, the dedicated header
-checked first.
-
-The GET route answers a distinct question from ``artifact list``/``get``
-(``runner/api/artifacts.py``): those resolve *inputs* off the hub's envelope, while
-this resolves a worker's own *not-yet-published* submissions straight off the
-runner's ``attachments`` table (:meth:`~blizzard.runner.store.repository.
-IReadRunnerStore.attachments_for_lease`) — so a worker can confirm a ``create`` landed
-even though it will not appear in ``list``/``get`` until the node-step completes and
-publishes it into the next envelope.
-
-``503`` when the store (or, for the POST, the attachment service) is unwired (the
-store-free app); ``404`` for an unknown or already-closed lease; ``403`` for a missing
-or mismatched token; ``200`` on a recorded attach or a successful read.
-"""
+The lease token is presented as ``X-Blizzard-Lease-Token`` or ``Authorization: Bearer``,
+the dedicated header checked first. ``503`` unwired, ``404`` unknown/closed lease,
+``403`` missing/mismatched token."""
 
 from __future__ import annotations
 

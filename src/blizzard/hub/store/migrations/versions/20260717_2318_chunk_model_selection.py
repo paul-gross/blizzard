@@ -1,19 +1,5 @@
-"""chunk model selection — a mutable ``model`` column on chunks (issue #27, hub store tree)
-
-Ingest now pins a chunk to a model at mint, editable later (alongside ``graph_id``)
-while the chunk rests ``not_ready`` (``domain/edit.py``). ``model`` is a plain mutable
-column, not an append-only fact table — the same shape ``graph_id`` already carries.
-
-Every chunk already in flight predates this column; ``server_default`` backfills every
-existing row to the model the fleet actually ran on before this field existed (mirrors
-the runner's own fixed adapter constant, ``DEFAULT_WORKER_MODEL`` in
-``blizzard.runner.harness.internal.claude_code_adapter``). A local literal, not an
-import (``bzh:frozen-revisions``): this revision's backfill must not move if the hub
-domain's own ``DEFAULT_MODEL`` ever does.
-
-Idempotent like ``20260713_1424_hub_escalation_takeover``: it adds the column only where
-an older database created ``chunks`` without it, so a fresh ``base -> head`` and an
-in-place upgrade both land at exactly one column.
+"""chunk model selection — a mutable ``model`` column on chunks, added only where an
+older database lacks it (issue #27, hub store tree)
 
 Revision ID: 20260717_2318_hub_chunk_model_selection
 Revises: 20260717_0446_hub_chunk_pause_facts

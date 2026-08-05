@@ -1,9 +1,7 @@
 """Click parameter-source ranking shared by the CLI's mutually-resolving flags.
 
-A param's mere presence can't mean "the operator chose it" — an envvar or default
-always *has* a value. Ranked ``COMMANDLINE > ENVIRONMENT > DEFAULT`` lets a command
-tell an explicit flag from an ambient one apart, and treat a genuine command-line tie
-— not an ambient default — as the ambiguous case worth failing on.
+Ranked ``COMMANDLINE > ENVIRONMENT > DEFAULT``: a param's presence alone cannot mean
+the operator chose it, since an envvar or a default always has a value.
 """
 
 from __future__ import annotations

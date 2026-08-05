@@ -1,15 +1,9 @@
 """The graph-level ``sessions:`` map — parse, validate, reify, round-trip (issue #144).
 
-Phase 1 of #144 is schema and wire only: a graph gains named session declarations
-carrying a prioritized ``model`` preference list, an ``effort`` value, and ``rotate:``
-thresholds, and its nodes may reference one by name (``fresh:<name>`` / ``resume:<name>``).
-
-The equality tests are load-bearing rather than incidental:
-:meth:`~blizzard.hub.domain.graph_authoring.GraphMintService.mint_if_changed` compares
-**re-parsed docs**, and ``graph_sync`` re-parses the stored YAML, so a ``sessions:`` edit
-that :func:`~blizzard.hub.domain.graph.parse_graph_doc` did not read would leave
-reconciliation silently unable to see it.
-"""
+A graph gains named session declarations (``model`` preference list, ``effort``,
+``rotate:`` thresholds); nodes reference one by name. The equality tests are
+load-bearing: mint compares re-parsed docs, so a ``sessions:`` edit
+``parse_graph_doc`` misses would leave reconciliation unable to see it."""
 
 from __future__ import annotations
 
@@ -66,7 +60,6 @@ def _doc(*, sessions: dict[str, Any] | None = None, build_session: str = "resume
     return raw
 
 
-# --------------------------------------------------------------------------- #
 # parse_graph_doc — the top-level `sessions:` map.
 # --------------------------------------------------------------------------- #
 
@@ -132,7 +125,6 @@ def test_declaration_order_is_the_authored_order() -> None:
     assert list(doc.sessions) == ["planning", "code", "gate"]
 
 
-# --------------------------------------------------------------------------- #
 # GraphDoc equality — what `mint_if_changed` / `graph_sync` compare on.
 # --------------------------------------------------------------------------- #
 
@@ -158,7 +150,6 @@ def test_two_identically_authored_docs_are_equal() -> None:
     assert parse_graph_doc(_doc(sessions=body)) == parse_graph_doc(_doc(sessions=body))
 
 
-# --------------------------------------------------------------------------- #
 # Validation — the reference-namespace rules.
 # --------------------------------------------------------------------------- #
 
@@ -182,8 +173,7 @@ def test_fresh_naming_no_declared_session_is_rejected() -> None:
 
 def test_fresh_naming_a_node_is_rejected_even_though_the_node_exists() -> None:
     # D1: `fresh` always mints, and a session minted at node `review` is not in `build`'s
-    # implicit lineage — so `fresh:<node>` would name nothing. A validation error, not a
-    # silently-inert reference.
+    # implicit lineage — so `fresh:<node>` would name nothing.
     result = validate_graph(parse_graph_doc(_doc(build_session="fresh:review")))
     assert not result.ok
     assert any("never a node" in e for e in result.errors)
@@ -250,7 +240,6 @@ def test_a_declared_but_unreferenced_session_is_legal() -> None:
     assert result.ok, result.errors
 
 
-# --------------------------------------------------------------------------- #
 # Reification and the store round trip.
 # --------------------------------------------------------------------------- #
 

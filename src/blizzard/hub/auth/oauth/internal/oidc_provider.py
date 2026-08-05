@@ -1,12 +1,9 @@
 """The ``oidc`` conformer — issuer discovery, code exchange, ``id_token`` signature
 verification (issue #92, package-private).
 
-All ``httpx``/JWT usage is confined here (``bzh:dependency-inversion``); the route
-sees only :class:`~blizzard.hub.auth.oauth.provider.IOAuthProvider`. Discovery (the
-issuer's ``.well-known/openid-configuration``) is fetched lazily on first use and
-cached for the conformer's lifetime — a hub process reuses one instance for its whole
-run, and a discovery document does not change under it.
-"""
+All ``httpx``/JWT usage is confined here (``bzh:dependency-inversion``). Discovery
+(the issuer's ``.well-known/openid-configuration``) is fetched lazily on first use
+and cached for the conformer's lifetime — it does not change under a running hub."""
 
 from __future__ import annotations
 
@@ -119,11 +116,8 @@ class OidcProvider:
         raise OAuthExchangeError(f"no JWKS key matches id_token kid {kid!r} for provider {self.name!r}")
 
     def _trusted_algorithms(self, jwk: dict[str, object]) -> list[str]:
-        # The accepted algorithm(s) come from a source the issuer controls — the JWKS
-        # key's own ``alg``, then the discovery document, falling back to ``RS256`` —
-        # never the attacker-supplied token header, which would allow an RS256-to-HS256
-        # confusion attack (issue #92; pinned by tests/test_auth_oauth_providers.py::
-        # test_oidc_exchange_rejects_an_alg_confusion_token_when_jwk_omits_alg).
+        # SAFETY: algorithms come from the issuer, never the attacker-supplied token header
+        # (RS256-to-HS256 confusion; pinned by test_oidc_exchange_rejects_an_alg_confusion_token_when_jwk_omits_alg).
         jwk_alg = jwk.get("alg")
         if jwk_alg:
             return [str(jwk_alg)]

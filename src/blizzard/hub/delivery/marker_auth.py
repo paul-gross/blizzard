@@ -1,15 +1,8 @@
 """A hub command node's mid-run marker-write credential (issue #230, phase 1).
 
-A land script is a subprocess of the very process serving the marker-write endpoint its
-mid-run callback posts to, so an in-memory, instance-scoped authority is sufficient: the
-token is issued and verified in one process and never needs to survive a restart.
-
-An orphaned script — its owning hub process killed mid-land — therefore fails against the
-restarted process's fresh, empty authority. That is safe under the executor's
-at-least-once-per-step crash contract (``bzh:steppable-loop``, see
-:mod:`~blizzard.hub.delivery.hub_node`): the step re-runs and re-records the marker
-idempotently, so no correctness property depends on an orphan's write landing. Pinned by
-``tests/test_pin_hub_delivery.py::test_a_restarted_processs_fresh_authority_refuses_a_prior_instances_token``.
+A land script is a subprocess of the process serving the marker-write endpoint, so an
+instance-scoped in-memory authority suffices — an orphaned script fails against a
+restarted process's fresh authority (pinned by ``tests/test_pin_hub_delivery.py``).
 """
 
 from __future__ import annotations
@@ -25,10 +18,7 @@ class MarkerAuthority:
     """Mints, verifies, and revokes short-lived marker-write tokens, keyed by the
     ``(chunk_id, node_id, epoch)`` triple a hub node visit identifies.
 
-    Instance-scoped, never a module global: :class:`~blizzard.hub.composition.HubServices`
-    holds the one live instance a process's executor and API endpoint share. Backed by
-    a plain in-memory dict — see the module docstring for why that is sufficient.
-    """
+    Instance-scoped, never a module global; backed by a plain in-memory dict."""
 
     def __init__(self, *, token_factory: Callable[[], str] = secrets.token_urlsafe) -> None:
         self._token_factory = token_factory

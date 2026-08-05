@@ -1,11 +1,8 @@
-"""``GET /api/spend`` — the fleet-wide spend-since read (issue #60, component tier).
+"""``GET /api/spend`` — the fleet-wide spend-since read (issue #60).
 
-A small dedicated read distinct from a chunk's own derived total
-(``tests/test_usage_facts_ingest.py``): it sums usage facts **across every chunk**,
-filtered by ``recorded_at >= since`` rather than by chunk id — derived at read time,
-never a stored column (``bzh:facts-not-status``). This file proves: the fleet-wide sum
-spans multiple chunks, the ``since`` cutoff excludes facts recorded before it, the
-cost-absent lower-bound + PARTIAL flag, and a malformed ``since`` 422s.
+Sums usage facts across every chunk, filtered by ``recorded_at >= since`` — derived at
+read time, never a stored column (``bzh:facts-not-status``). Proves the fleet-wide sum,
+the cutoff, the cost-absent lower-bound flag, and a malformed ``since`` 422s.
 """
 
 from __future__ import annotations
@@ -105,10 +102,8 @@ def test_fleet_spend_rejects_a_malformed_since(tmp_path: Path) -> None:
 
 
 def test_fleet_spend_omitting_until_is_byte_identical_to_before(tmp_path: Path) -> None:
-    # Same shape as test_fleet_spend_sums_usage_across_every_chunk_since_the_cutoff
-    # above, pinned again here beside the new `until` field so a regression that
-    # narrows the default (unbounded) window shows up next to the tests that would
-    # otherwise carry that proof alone.
+    # Same shape as test_fleet_spend_sums_usage_across_every_chunk_since_the_cutoff,
+    # pinned again beside the new `until` field to catch a narrowed default window.
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claim(hub, _POINTER_A)
     report_lease(hub, chunk_id, epoch=1, seq=1)

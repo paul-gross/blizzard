@@ -1,20 +1,8 @@
-"""Question routes — the anonymous **operator** half of the ask/answer rendezvous
-(issue #87, #104).
+"""Question routes — the anonymous **operator** half of the ask/answer rendezvous (#87).
 
-``POST /questions`` lands the durable question row a runner forwards (the chunk
-derives ``waiting_on_human``); ``POST /questions/{id}/answers`` writes the answer
-**first-write-wins** (201 for the winner, 409 carrying the winning answer for a racing
-loser) — the board's person answering it; and ``GET /questions`` lists the open ones for
-``blizzard hub status``. Controllers stay read-only over the store and delegate the
-writes to :class:`~blizzard.hub.domain.questions.QuestionService`
-(``bzh:controller-read-only``).
-
-The runner's own answer poll (``GET /questions/{id}``) lives on the
-runner-authenticated fleet router (:mod:`blizzard.hub.api.fleet`, issue #87).
-:func:`question_view` stays here, public, so the fleet router's own poll reuses this
-module's rendering rather than duplicating it.
-``dependencies=[Depends(reject_runner_principal)]`` confines a runner's bearer token to
-the fleet router.
+``POST /questions`` lands the durable question row (the chunk derives
+``waiting_on_human``); ``POST /questions/{id}/answers`` writes **first-write-wins**
+(201 for the winner, 409 carrying the winning answer for a racing loser).
 """
 
 from __future__ import annotations

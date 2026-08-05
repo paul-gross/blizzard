@@ -1,9 +1,8 @@
 """Scaffolding for the kill-9 sweep (``blizzard:crash-sweep``).
 
-The sweep runs the daemons as **real subprocesses** so a crash point can SIGKILL a
-whole process the way ``kill -9`` would. It reuses the e2e stack (mock forge + mock
-harness + fixture workspace + real hub/runner), drives the runner as a hosted daemon
-(``blizzard runner host``), and arms a registry crash point via the environment.
+The sweep runs the daemons as **real subprocesses** so a crash point can SIGKILL a whole
+process the way ``kill -9`` would. It reuses the e2e stack (mock forge + mock harness +
+fixture workspace + real hub/runner) and arms a registry crash point via the environment.
 """
 
 from __future__ import annotations
@@ -70,9 +69,7 @@ class CrashEnv:
     forge: httpx.Client
 
 
-# --------------------------------------------------------------------------- #
-# Workspace-layout discovery (mirrors tests/e2e/test_acceptance_loop.py)
-# --------------------------------------------------------------------------- #
+# Workspace-layout discovery
 
 
 def blizzard_root() -> Path:
@@ -96,9 +93,7 @@ def winter_source() -> Path | None:
     return None
 
 
-# --------------------------------------------------------------------------- #
 # The build → deliver sweep graph (prompt-is-the-program)
-# --------------------------------------------------------------------------- #
 
 
 def build_script(landed_file: str) -> str:
@@ -140,15 +135,8 @@ _JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; che
 _MIGRATE_JUDGEMENT_SCRIPT = "verdict('migrate', 'hand the chunk to the triage-delivery graph')\n"
 
 
-# The generic sweep's ``deliver`` node command — a real merge-to-main, not a ``true``
-# no-op: it opens a PR per submitted branch and merges it to the base by pinned SHA
-# against the mock forge, so the change actually LANDS on bare ``main`` and the sweep's
-# exactly-once-on-``main`` assertion is meaningful. Driven entirely off the injected env
-# (``BZ_FORGE_URL`` / ``BZ_HUB_GIT_COMMITS`` / ``BZ_HUB_BASE_BRANCH``), never a typed
-# forge seam (policy-in-YAML, #67); idempotent by construction — re-merging an
-# already-merged head is a git "Already up to date" no-op, so a crash-recovery re-run
-# lands nothing twice. It prints a non-choice line so the outcome mapping falls through
-# to the node's default ``success`` edge.
+# Merges each submitted branch to base by pinned SHA against the mock forge; idempotent
+# by construction, so a crash-recovery re-run lands nothing twice.
 LAND_STEP = """python3 - <<'PYEOF'
 import json, os, urllib.error, urllib.request
 
@@ -190,10 +178,8 @@ PYEOF
 def graph_yaml(landed_file: str) -> str:
     """A minimal ``build -> deliver`` graph, named ``default-delivery`` so ingest reuses it.
 
-    Every GENERIC crash point (reap, pull, fill, spawn, advance, flush) is traversed;
-    ``deliver`` is a hub command node whose ``run:`` step (:data:`LAND_STEP`) merges every
-    submitted branch to bare ``main``. Each scenario lands a **unique** file so successive
-    points never collide in the shared origins.
+    Every GENERIC crash point (reap, pull, fill, spawn, advance, flush) is traversed; each
+    scenario lands a **unique** file so successive points never collide in the shared origins.
     """
     import yaml
 
@@ -272,20 +258,15 @@ def checks_graph_yaml(landed_file: str) -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-#: The nudge scenario's unattached `produces:` name (issue #113, Phase 4) — the build
-#: node declares it and the mock worker's judgement script never attaches it, which is
-#: what keeps the `nudge.*` windows open on every pass.
+#: The nudge scenario's unattached `produces:` name (issue #113) — declared by `build`,
+#: never attached, keeping the `nudge.*` windows open every pass.
 NUDGE_PRODUCES_NAME = "finding"
 
 
 def nudge_graph_yaml(landed_file: str) -> str:
-    """:func:`graph_yaml`'s ``build -> deliver`` shape, plus one unattached
-    ``produces:`` name on ``build`` (issue #113, Phase 4) — no pushed git commit is named
-    :data:`NUDGE_PRODUCES_NAME` and the mock worker never attaches it, so every pass
-    through ``build`` opens the `nudge.*` windows the dedicated scenario arms.
-
-    Named ``default-delivery`` like :func:`graph_yaml` so ingest resolves to it
-    (``hub/api/chunks.py``); a differently-named graph would never be picked up."""
+    """:func:`graph_yaml`'s shape, plus one unattached ``produces:`` name on ``build``
+    (issue #113): declared but never attached, so every pass opens the `nudge.*` windows
+    the dedicated scenario arms. Named ``default-delivery`` so ingest resolves to it."""
     import yaml
 
     graph = {
@@ -323,13 +304,9 @@ def nudge_graph_yaml(landed_file: str) -> str:
 
 
 def migrate_source_yaml() -> str:
-    """A source graph (`default-delivery`, so ingest pins it) whose `build` node migrates
-    the chunk to the `triage-delivery` graph (#90) rather than delivering in place.
-
-    The build prompt is a no-op: the real commit + deliver happens at the target graph's
-    own `build` node after the migration re-queues the chunk there. So the only landing
-    branch is the target's — a source branch that could double-merge never exists, keeping
-    the exactly-once-on-`main` assertion meaningful."""
+    """A source graph (`default-delivery`) whose `build` node migrates the chunk to
+    `triage-delivery` (#90) instead of delivering in place — a no-op prompt, since the
+    real commit + deliver happens at the target's own `build` after the re-queue."""
     import yaml
 
     graph = {
@@ -432,9 +409,7 @@ def intended_migrate_source_yaml() -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-# --------------------------------------------------------------------------- #
 # Process helpers
-# --------------------------------------------------------------------------- #
 
 
 def free_port() -> int:
@@ -482,9 +457,7 @@ def wait_death(proc: subprocess.Popen[str], *, timeout: float = 60.0) -> int:
     raise AssertionError("armed daemon did not reach its crash point within the timeout")
 
 
-# --------------------------------------------------------------------------- #
 # The forge (session) and the two daemons (per point)
-# --------------------------------------------------------------------------- #
 
 
 @contextlib.contextmanager
@@ -517,18 +490,9 @@ def start_hub(
 ) -> subprocess.Popen[str]:
     """Start (or restart) the hub daemon; arm ``crash_point`` when it is a deliver point.
 
-    ``work_sources`` is declared only on the first call for ``hub_dir`` — the
-    one that also runs ``hub init`` — since a restart reuses the config file already on
-    disk; defaults to :func:`default_work_sources`, the crash sweep's single source. Every
-    restart still carries ``WORK_SOURCE_TOKEN_ENV`` regardless, since the config always names it.
-
-    ``new_session`` starts the hub as a session/process-group leader so a caller can
-    ``os.killpg`` the WHOLE tree — the hub plus any ``run:`` subprocess it has spawned —
-    which is what a faithful ``kill -9`` mid-script needs (a bare kill of the hub pid
-    would orphan a running land script; see the #67 mid-script sweep). ``extra_env``
-    layers additional variables onto the hub's environment (e.g. a land script's
-    test-only pause), applied after the base env so a caller can override nothing
-    load-bearing."""
+    ``new_session`` makes the hub a process-group leader so a caller can ``os.killpg`` the
+    whole tree, including any spawned ``run:`` subprocess — required for a faithful
+    kill -9 mid-script (issue #67)."""
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     if not (hub_dir / "blizzard-hub.toml").exists():
         subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
@@ -566,9 +530,8 @@ def write_runner_config(runner_dir: Path, *, workspace: Path, bin_dir: Path, hub
         # The mock façade rejects an unknown ``--permission-mode`` flag, so it must be
         # omitted here — ``None`` omits it.
         harness_permission_mode=None,
-        # A path that is never created — the external-usage sampler's first soft-failure
-        # check (a missing credentials file) trips before any request is built, keeping
-        # this real daemon's no-network-access guarantee real for that step too (issue #218).
+        # Unset on purpose: the external-usage sampler's first soft-failure check (a
+        # missing credentials file) trips before any request is built (issue #218).
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
         base_branch="main",
         # `start_runner` sets `ENV_HARNESS_FENCE` in the daemon subprocess's own env; it

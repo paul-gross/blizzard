@@ -1,33 +1,8 @@
 """Authored post-merge edge (#63) — a `merged -> <node>` graph runs a node AFTER landing.
 
-The e2e-tier proof of #63's routing substrate: a graph whose `deliver` hub node authors
-`landed -> verify` (a post-merge runner node) instead of accepting the machinery default
-(`landed -> done`). Landing every repo records a **non-terminal** transition into `verify`
-and **retains** the route, so the runner advances the held chunk into `verify` in its warm
-environment — a real worker node runs *after* the merge reached bare `main` — and only its
-own `pass -> done` finalizes the chunk.
-
-Asserted at both ends over the full live stack (mock forge + mock harness + fixture
-workspace + real hub/runner, driven one synchronous tick at a time, every seam real, no
-tokens/network):
-
-* **git truth** — the build's file is reachable from the bare origin's `main` (the merge
-  happened);
-* **fleet truth** — the hub's transition history is `build -> deliver (landed) -> verify ->
-  done`, so `verify` ran *after* the land (that transition exists only because a real
-  worker completed the post-merge node), the chunk derives `done`, and its `landed` detail
-  reads true even at `done` (informational, never a status — "merged", honestly).
-
-This is the standing e2e smoke's companion to the crash-tier proof
-(`tests/crash/test_kill9_sweep.py::test_kill9_at_hub_command_node_crash_point`), which
-adds a `kill -9` in the `hubnode.after-step.before-marker` / `hubnode.after-marker.before-next`
-windows around the post-merge node's own step; here the happy path is exercised without a
-crash. Gated exactly like the sibling e2e scenarios — skipped unless `BLIZZARD_E2E=1` and
-the sibling `blizzard-mock` worktree + a local winter source are discoverable.
-
-Reproduce it — from the `blizzard` worktree in a provisioned feature env — with::
-
-    BLIZZARD_E2E=1 uv run pytest tests/e2e/test_post_merge_node_e2e.py
+A `deliver` node authors `landed -> verify` instead of the default `landed -> done`; the
+runner advances into `verify` after the merge lands, and only its `pass -> done` finalizes
+the chunk. Companion to the crash-tier proof in `tests/crash/test_kill9_sweep.py`.
 """
 
 from __future__ import annotations

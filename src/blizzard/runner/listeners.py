@@ -1,21 +1,8 @@
-"""The runner daemon's listeners: a unix socket and a TCP port over the one ASGI app (issue #43).
+"""The runner daemon's listeners: a unix socket and a TCP port over the one ASGI app (#43).
 
-The local API settles on **HTTP over a unix domain socket** — the socket under the
-state dir, filesystem permissions as access control — alongside localhost TCP, which a
-browser needs because it cannot open a unix socket. Both are the *same* app and the same
-route table — two doors, not two APIs.
-
-Both listeners are always on: TCP cannot be made opt-in while the worker hooks inherit
-``BLIZZARD_RUNNER_URL`` as a TCP URL.
-
-Sockets are bound **here** rather than handed to uvicorn as ``Config(uds=…)`` for two
-reasons: uvicorn's own uds branch chmods the socket ``0o666``, losing the owner-only mode
-filesystem access control rests on; and pre-bound sockets let one ``uvicorn.Server`` serve
-both doors under a single ``should_exit``, which keeps the daemon's one-server shutdown —
-and the resume-marking that runs after it returns — undisturbed.
-
-Pinned by tests/test_runner_listeners.py::test_socket_is_owner_only and
-::test_binds_both_a_socket_and_a_tcp_port.
+Both listeners are always on, over the *same* app and route table. Sockets are bound
+here rather than via ``Config(uds=…)``: uvicorn's uds branch chmods the socket ``0o666``,
+losing the owner-only mode filesystem access control rests on.
 """
 
 from __future__ import annotations
@@ -29,9 +16,8 @@ from blizzard.runner.config import RunnerConfig
 
 _log = structlog.get_logger(__name__)
 
-# The socket's own mode: owner-only. Filesystem permissions are the access control,
-# and the containing state dir is only as tight as systemd's StateDirectoryMode (0750 by
-# default) — which would still admit the whole group. 0600 pins it to the daemon's user.
+# The socket's own mode: owner-only. Filesystem permissions are the access control, and
+# the containing state dir may be group-readable; 0600 pins it to the daemon's user.
 SOCKET_MODE = 0o600
 # AF_UNIX paths are bounded by the kernel's sockaddr_un (108 bytes on Linux, including the
 # terminator); a deep runtime dir would otherwise fail inside bind() with a bare OSError.
@@ -87,9 +73,8 @@ def _bind_uds(path: Path) -> socket.socket:
 def _clear_stale_socket(path: Path) -> None:
     """Remove a socket file left by a crash — but never one a live daemon is serving.
 
-    A `kill -9` leaves the file behind and bind() would then fail with EADDRINUSE, so a
-    crashed runner could never restart. The discriminator is whether anything is actually
-    accepting on it: a refused connection means the file is a corpse.
+    A `kill -9` leaves the file behind and bind() would then fail with EADDRINUSE. The
+    discriminator is whether anything is accepting: a refused connection means a corpse.
     """
     if not path.exists():
         return

@@ -1,11 +1,8 @@
 """``GET /api/auth/providers``, ``/{name}/authorize``, ``/{name}/callback``,
 ``POST /api/auth/logout`` (component tier, issue #92).
 
-Driven against the **in-repo fake** :class:`FakeOAuthProvider` bound at the
-composition root (``tests/support.py``'s ``build_hub(oauth_providers=...)``) — no
-network, per the plan's own tier split (the real HTTP dance against the
-``blizzard-mock`` stub IdP is the service tier's job, ``tests/service/``).
-"""
+Driven against the in-repo fake :class:`FakeOAuthProvider` — no network; the real HTTP
+dance against the stub IdP is ``tests/service/``'s job."""
 
 from __future__ import annotations
 

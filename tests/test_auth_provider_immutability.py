@@ -1,11 +1,8 @@
 """The boot-time provider-name-immutability check (component tier, issue #92).
 
-``build_hosted_app`` fails with an actionable error when a stored identity names a
-provider absent from ``[[auth.oauth.provider]]`` — a rename must not silently orphan
-identities and re-mint duplicate users on the next login (issue #92's own AC). Runs
-regardless of ``auth.mode`` (an operator flipping back to ``none`` does not erase the
-guarantee), but only once the store is confirmed at the expected schema head
-(``test_readiness.py``'s own ``build_hosted_app``-must-not-crash-on-drift invariant).
+``build_hosted_app`` fails loud when a stored identity names a provider absent from
+``[[auth.oauth.provider]]`` — a rename must not silently orphan identities. Runs
+regardless of ``auth.mode``.
 """
 
 from __future__ import annotations

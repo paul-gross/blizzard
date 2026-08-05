@@ -23,15 +23,9 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  *
  * Every ask still awaiting an answer — ``GET /api/asks?open=true`` (issue #51).
  *
- * The one **human-web-lane** route on this otherwise worker-hook router: it is the
- * panel's / ``blizzard runner status``'s open-asks read, so it carries
- * ``require_human_api`` (issue #95) while the worker-hook POST above stays ungated. Over
- * the socket and under a ``none``-mode hub the gate resolves to the implicit identity.
- *
- * Derived, hub-free: an ask reads open while its ``question_id`` carries no answer
- * fact (:meth:`~blizzard.runner.store.repository.IReadRunnerStore.open_asks`), whether
- * or not it has been forwarded to the hub yet. There is no closed-ask history to serve,
- * so ``open=false`` is refused rather than silently answered as if it were true.
+ * The one **human-web-lane** route on this otherwise worker-hook router, so it carries
+ * ``require_human_api`` (issue #95). An ask reads open while its ``question_id`` carries
+ * no answer fact. No closed-ask history is kept, so ``open=false`` is refused.
  */
 export const listAsksApiAsksGet = <ThrowOnError extends boolean = false>(options?: Options<ListAsksApiAsksGetData, ThrowOnError>): RequestResult<ListAsksApiAsksGetResponses, ListAsksApiAsksGetErrors, ThrowOnError> => (options?.client ?? client).get<ListAsksApiAsksGetResponses, ListAsksApiAsksGetErrors, ThrowOnError>({ url: '/api/asks', ...options });
 
@@ -48,32 +42,21 @@ export const loginApiAuthLoginGet = <ThrowOnError extends boolean = false>(optio
 /**
  * Logout
  *
- * Clear the runner's own session cookie (issue #129) — the next human-lane request
- * carries no valid session, so the served surface bounces to ``GET /api/auth/login``
- * and the panel's JSON reads ``401``.
- *
- * Public, like the bounce it complements (and like the hub's own ``POST
- * /api/auth/logout``): logging out cannot itself require a live session, and clearing
- * an already-absent cookie is a harmless no-op. The runner session is a **stateless**
- * signed cookie (``runner/auth/session.py``), so there is nothing server-side to revoke
- * — deleting the cookie *is* the logout. SSO stays honest: if the hub session is still
- * live, the next visit silently re-authenticates through the bounce (that is correct —
- * ending fleet-wide access is hub logout, which stops renewals); if it too has ended,
- * the next visit lands on the hub's login surface.
+ * Clear the runner's own session cookie (issue #129). Public, like the bounce it complements:
+ * logging out cannot itself require a live session, and clearing an absent cookie is a harmless no-op.
+ * The session is a **stateless** signed cookie, so there is nothing server-side to revoke — deleting
+ * it *is* the logout. If the hub session is still live, the next visit silently re-authenticates
+ * through the bounce; ending fleet-wide access is hub logout, which stops renewals.
  */
 export const logoutApiAuthLogoutPost = <ThrowOnError extends boolean = false>(options?: Options<LogoutApiAuthLogoutPostData, ThrowOnError>): RequestResult<LogoutApiAuthLogoutPostResponses, unknown, ThrowOnError> => (options?.client ?? client).post<LogoutApiAuthLogoutPostResponses, unknown, ThrowOnError>({ url: '/api/auth/logout', ...options });
 
 /**
  * Read Session
  *
- * The panel's own-identity read behind its username/logout control (issue #129).
- *
- * Public and self-resolving, mirroring the hub's own ``GET /api/me``: it reports the
- * identity a request *would* resolve to rather than gating on one, so it never
- * ``401``s. Under a ``none``-mode hub the surface is authless
- * (``auth_enabled = False``); under oauth it carries the signed-in hub username, or
- * ``None`` when no valid session rode along (the served shell is bounce-gated, so the
- * panel normally holds one by the time it reads this).
+ * The own-identity read (issue #129). Public and self-resolving: it reports the identity a request
+ * *would* resolve to rather than gating on one, so it never ``401``s. Under a ``none``-mode hub the
+ * surface is authless; under oauth it carries the signed-in username, or ``None`` when none rode
+ * along.
  */
 export const readSessionApiAuthSessionGet = <ThrowOnError extends boolean = false>(options?: Options<ReadSessionApiAuthSessionGetData, ThrowOnError>): RequestResult<ReadSessionApiAuthSessionGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ReadSessionApiAuthSessionGetResponses, unknown, ThrowOnError>({ url: '/api/auth/session', ...options });
 
@@ -82,13 +65,8 @@ export const readSessionApiAuthSessionGet = <ThrowOnError extends boolean = fals
  *
  * Forward a chunk's detail read to the hub — the chunk-detail dock's header subject.
  *
- * Forwards to the same fleet-mounted ``ChunkDetail`` read the build worker's own
- * envelope poll uses, but validates the response down to :class:`ChunkHeaderView`:
- * the header needs only the identity, work-item links, state, and pause fact, and
- * projecting here (rather than carrying the full aggregate over this proxy too)
- * keeps the transition/artifact history — and the schema collision its
- * ``EscalationView`` field would otherwise cause in the runner's own OpenAPI spec —
- * out of this route entirely.
+ * The upstream aggregate is validated down to :class:`ChunkHeaderView`, keeping the
+ * transition/artifact history out of this route's own schema entirely.
  */
 export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkApiChunksChunkIdGetData, ThrowOnError>): RequestResult<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}', ...options });
 
@@ -131,10 +109,8 @@ export const resumeChunkApiChunksChunkIdResumePost = <ThrowOnError extends boole
  *
  * Open a takeover over a parked chunk with no running attempt (``409`` otherwise).
  *
- * ``force`` supersedes a live worker attempt instead of refusing: the runner kills it
- * after recording the takeover fact, fencing its in-flight submission at the hub as a
- * stale epoch, exactly like a reaped lease — but consuming no retry and recording no
- * escalation.
+ * ``force`` supersedes a live worker attempt instead of refusing, consuming no retry
+ * and recording no escalation.
  */
 export const openTakeoverApiChunksChunkIdTakeoversPost = <ThrowOnError extends boolean = false>(options: Options<OpenTakeoverApiChunksChunkIdTakeoversPostData, ThrowOnError>): RequestResult<OpenTakeoverApiChunksChunkIdTakeoversPostResponses, OpenTakeoverApiChunksChunkIdTakeoversPostErrors, ThrowOnError> => (options.client ?? client).post<OpenTakeoverApiChunksChunkIdTakeoversPostResponses, OpenTakeoverApiChunksChunkIdTakeoversPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/takeovers',
@@ -224,13 +200,9 @@ export const listArtifactsApiLeasesLeaseIdArtifactsGet = <ThrowOnError extends b
 /**
  * Get Artifact
  *
- * One artifact by ``produces:`` name; ``404`` when this node-step has none by that
- * name (optionally narrowed to one from ``node``, the producing node's name).
- *
- * More than one upstream node can emit the same ``produces:`` name (issue #169) — a
- * bare NAME that resolves to more than one candidate is ``409``, naming the
- * producing nodes, rather than silently returning an arbitrary one; ``?node=`` picks
- * a specific one.
+ * One artifact by ``produces:`` name, optionally narrowed by ``node``; ``404`` when this node-step
+ * has none by that name. More than one upstream node can emit the same name (issue #169), so a bare
+ * name resolving to several candidates is ``409`` naming them, never an arbitrary pick.
  */
 export const getArtifactApiLeasesLeaseIdArtifactsNameGet = <ThrowOnError extends boolean = false>(options: Options<GetArtifactApiLeasesLeaseIdArtifactsNameGetData, ThrowOnError>): RequestResult<GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError> => (options.client ?? client).get<GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/artifacts/{name}', ...options });
 
@@ -321,11 +293,8 @@ export const readyApiReadyGet = <ThrowOnError extends boolean = false>(options?:
  * The runner's machine-local summary: identity, pause states, capacities, hub
  * connectivity, last tick (issue #51).
  *
- * Read-only over its wiring (``bzh:controller-read-only``): the edge holds only the
- * composition-root-wired :class:`RunnerStatusService`, derived entirely from local
- * store facts plus the injected clock — no hub call, so it is truthful with the hub
- * unreachable. On the store-free app (OpenAPI export / unit tests) the service is
- * unwired and the probe answers 503 rather than pretending.
+ * Derived entirely from local store facts plus the injected clock — no hub call, so it
+ * is truthful with the hub unreachable. An unwired service answers 503.
  */
 export const getRunnerApiRunnerGet = <ThrowOnError extends boolean = false>(options?: Options<GetRunnerApiRunnerGetData, ThrowOnError>): RequestResult<GetRunnerApiRunnerGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetRunnerApiRunnerGetResponses, unknown, ThrowOnError>({ url: '/api/runner', ...options });
 
@@ -334,23 +303,9 @@ export const getRunnerApiRunnerGet = <ThrowOnError extends boolean = false>(opti
  *
  * Set this runner's own pause brake — it starts no new workers (issue #45).
  *
- * Local to this machine and independent of the hub's brake: it works with the hub
- * unreachable, and it neither reads nor writes the hub's flag. Every spawn site honors
- * it — FILL, restart-resume, an answer-resume, ADVANCE's next-node, a requeue or
- * claim-adopt respawn, and the judgement resume that elicits a verdict from an exited
- * worker's session. REAP still reaps an orphan lease (nothing to kill, and its respawn
- * is itself suppressed), but does not kill a worker that is merely stalled — pause is
- * not a drain. Escalating a chunk to a human at an exhausted retry budget is deferred
- * too, wherever it would happen (REAP, a rejected flush at PULL): a paused runner does
- * not hand work off as unrecoverable while it waits. No retry is consumed at all: the
- * budget counts lease mints, and the one mint site sits below the gate.
- *
- * A worker that *exits* while paused is **not** judged until the brake clears — judging
- * it resumes its session headlessly, which is itself a spawn the brake forbids. It waits
- * exactly like a suppressed respawn: the lease stays active, and ADVANCE retries the
- * judgement every tick until the brake clears. A live worker already running is left
- * alone throughout — this is not a drain, and it does not kill. Leases, routes, epochs,
- * environments, and retry budgets are otherwise unchanged.
+ * Independent of the hub's brake: it works with the hub unreachable, and neither reads nor
+ * writes the hub's flag. Every spawn site honors it, and escalation at an exhausted budget is
+ * deferred. Not a drain: a live worker is left running, and no retry is consumed.
  */
 export const patchRunnerApiRunnerPatch = <ThrowOnError extends boolean = false>(options: Options<PatchRunnerApiRunnerPatchData, ThrowOnError>): RequestResult<PatchRunnerApiRunnerPatchResponses, PatchRunnerApiRunnerPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchRunnerApiRunnerPatchResponses, PatchRunnerApiRunnerPatchErrors, ThrowOnError>({
     url: '/api/runner',

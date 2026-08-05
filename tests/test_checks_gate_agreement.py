@@ -1,11 +1,8 @@
 """The hub backstop and the runner gate agree on the checks gate (component tier, issue #114).
 
-Both sides must call the one shared predicate :func:`~blizzard.wire.completion.checks_gate_violated`
-rather than each re-derive "is a gated choice red?" inline, else drift can go undetected since
-each side's own tests would still pass. This module drives both real decision sites over one
-scenario matrix and asserts they reach the same, expected verdict. Mirrors
-``test_produces_coverage_agreement.py`` for the produces backstop.
-"""
+Both sides call the one shared predicate ``checks_gate_violated`` rather than each
+re-derive "is a gated choice red?" inline; this drives both real decision sites over
+one scenario matrix and asserts they reach the same verdict."""
 
 from __future__ import annotations
 
@@ -37,9 +34,8 @@ pytestmark = pytest.mark.component
 _POINTER = {"source": "default", "ref": "9"}
 _CHOICES = [("pass", "complete and green"), ("fail", "incomplete")]
 
-#: (id, requires_checks on `pass`, check results as (command, passed), expected: does the
-#: gate REJECT a `pass` here?). A gated `pass` is rejected iff any check is red; an ungated
-#: `pass` is never rejected however red the checks are.
+#: (id, requires_checks on `pass`, check results, expected: does the gate reject a `pass`?)
+#: — rejected iff gated and any check is red.
 _SCENARIOS = [
     ("gated-all-green", True, [("a", True), ("b", True)], False),
     ("gated-one-red", True, [("a", True), ("b", False)], True),

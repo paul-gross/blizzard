@@ -1,10 +1,7 @@
 """Pinning tests for runner decisions that were defended only by comment prose (issue #270).
 
-Each test here is the executable form of a decision whose only defence was a paragraph
-of argument: the reset-clean's ignored-file sweep, the explicit-worktree origin read,
-the runner session's per-process signing secret, ``create_app``'s hermetic default hub
-client, and the deprecated ``pm-items`` CLI alias.
-"""
+Each test is the executable form of a decision whose only defence was a paragraph of
+argument, replacing that prose."""
 
 from __future__ import annotations
 
@@ -121,10 +118,9 @@ class _CountingHubHandler(BaseHTTPRequestHandler):
 
 @pytest.mark.unit
 def test_the_default_hub_client_never_reaches_the_configured_hub_url(tmp_path: Path) -> None:
-    """``create_app``'s own default must be a transport-level double answering 404, not a
-    real client against ``config.hub_url`` — otherwise a coincidental live listener at
-    that address (this very daemon, dogfooded) flips the human lane's gating on outside
-    the ``host`` composition root's control."""
+    """``create_app``'s own default must be a transport-level double answering 404, not
+    a real client against ``config.hub_url``, so a coincidental live listener there
+    cannot flip the human lane's gating outside the composition root's control."""
     server = ThreadingHTTPServer(("127.0.0.1", 0), _CountingHubHandler)
     server.seen: list[str] = []  # type: ignore[attr-defined]
     threading.Thread(target=server.serve_forever, daemon=True).start()

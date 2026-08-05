@@ -1,17 +1,9 @@
 """EditService (unit tier) — a chunk's graph/model/intended-migration edit, facts only
-(issue #27, admit set widened by #120, per-field redesign by #124).
+(issue #27, #120, #124).
 
-A fake stands in for the store — only ``load_facts``/``set_graph``/``set_defaults``/
-``set_intended_migration`` are meaningfully implemented; every other seam is
-unreachable from :meth:`EditService.set_graph`/``set_defaults``/``edit`` and raises
-loudly if a regression starts calling it (``bzh:domain-core`` — no store, no tokens).
-Copies :mod:`tests.test_pause_service`'s fake-repo pattern exactly, including its
-``__getattr__`` guard and the documented ``cast`` at the wide-Protocol call site
-(``bzh:repository-split``). Every service under test here is built with a fresh
-``threading.Lock()`` — a plain stand-in for the composition root's shared claim/edit
-lock (issue #120); the lock's cross-service race atomicity is proven at the component
-tier (``tests/test_edit_claim_race.py``), not here.
-"""
+A fake stands in for the store — every unimplemented seam raises loudly if called
+(``bzh:domain-core``). The lock's cross-service race atomicity is proven at the
+component tier (``tests/test_edit_claim_race.py``), not here."""
 
 from __future__ import annotations
 
@@ -78,11 +70,8 @@ _TARGET_GRAPH_WITH_BUILD = make_graph(
 @dataclass
 class _FakeChunkRepo:
     """Only ``load_facts``/``set_graph``/``set_defaults``/``set_intended_migration`` are
-    live; anything else is a bug.
-
-    Not typed against :class:`IWriteChunkRepository` directly — pyright cannot verify
-    ``__getattr__``-backed structural conformance, so callers wrap an instance in
-    :func:`_as_write_repo` instead."""
+    live; anything else is a bug. Not typed against :class:`IWriteChunkRepository`
+    directly — callers wrap an instance in :func:`_as_write_repo` instead."""
 
     facts: ChunkFacts | None
     graphs_set: list[tuple[str, str]] = field(default_factory=list)
@@ -183,9 +172,7 @@ def _done_facts() -> ChunkFacts:
     )
 
 
-# --------------------------------------------------------------------------- #
-# set_graph / set_defaults — thin wrappers over edit().
-# --------------------------------------------------------------------------- #
+# --- set_graph / set_defaults — thin wrappers over edit(). ---
 
 
 def test_set_graph_writes_on_a_not_ready_chunk() -> None:
@@ -282,11 +269,9 @@ def test_refusal_carries_the_offending_field_and_status_on_the_exception() -> No
 
 
 def test_set_graph_holds_the_injected_lock_across_its_check_and_write() -> None:
-    """Issue #120 — ``EditService`` must take **the lock it was constructed with**
-    around its whole check-then-act, not a lock of its own: this is what lets the
-    composition root serialize it against ``ClaimService``'s own CAS. A blocking-only
-    fake lock proves the service actually calls through to the injected object rather
-    than a private ``threading.Lock()`` it happens to also hold uncontended."""
+    """Issue #120 — ``EditService`` must take the lock it was constructed with around
+    its whole check-then-act, not a private one, so the composition root can serialize
+    it against ``ClaimService``'s own CAS."""
     repo = _FakeChunkRepo(facts=_ready_facts())
     calls: list[str] = []
 
@@ -306,9 +291,7 @@ def test_set_graph_holds_the_injected_lock_across_its_check_and_write() -> None:
     service.set_graph(_CHUNK, graph=_TARGET_GRAPH)
 
     assert calls == ["acquire", "release"]
-    # The write happened while the caller believes the lock is held — i.e. inside the
-    # acquire/release pair, not before or after it (proven above by call order alone,
-    # since the fake repo's write is synchronous and calls are appended in program order).
+    # The write happened inside the acquire/release pair, not before or after it.
     assert repo.graphs_set == [("chk_1", "gr_2")]
 
 
@@ -335,9 +318,7 @@ def test_set_graph_reports_chunk_not_editable_before_checking_a_retired_target()
     assert repo.graphs_set == []
 
 
-# --------------------------------------------------------------------------- #
-# edit() — intended_migration's window: any non-terminal status.
-# --------------------------------------------------------------------------- #
+# --- edit() — intended_migration's window: any non-terminal status. ---
 
 _MIGRATION_TO_GR2 = IntendedMigration(mode=MigrationMode.AUTO, graph_id="gr_2", node_name=None)
 
@@ -386,17 +367,13 @@ def test_edit_with_no_intended_migration_field_at_all_leaves_it_untouched() -> N
     service.edit(_CHUNK, ChunkEdit(default_model=["blizzard:basic"]))
 
     assert repo.intended_migrations_set == []
-    # `default_effort` was not supplied, so the write carries the chunk's own current
-    # value for it — "not supplied" stays "leave unchanged" even though the pair shares
-    # one repository write.
+    # `default_effort` was not supplied, so the write carries its current value.
     assert repo.defaults_set == [("chk_1", ["blizzard:basic"], None)]
     # graph_id was never supplied — confirms UNSET, not just "no migration field".
     assert ChunkEdit().graph_id is UNSET
 
 
-# --------------------------------------------------------------------------- #
-# edit() — the semantic refusals for a non-None intended migration.
-# --------------------------------------------------------------------------- #
+# --- edit() — the semantic refusals for a non-None intended migration. ---
 
 
 def test_edit_intended_migration_refuses_a_retired_target() -> None:
@@ -457,10 +434,9 @@ def test_edit_intended_migration_auto_does_not_check_node_names() -> None:
 
 
 def test_edit_graph_id_retirement_check_is_not_bypassed_by_a_different_migration_target() -> None:
-    """A retired ``graph_id`` target must not slip past its own :class:`TargetGraphRetired`
-    check just because the same request's ``intended_migration`` names a different,
-    non-retired graph — ``graph_target``/``migration_target`` are resolved and checked
-    independently, never collapsed onto one shared graph (pre-push review, issue #124)."""
+    """A retired ``graph_id`` target must not slip past its :class:`TargetGraphRetired`
+    check just because the request's ``intended_migration`` names a different,
+    non-retired graph (issue #124)."""
     repo = _FakeChunkRepo(facts=_ready_facts())
     migration_graph = make_graph("gr_3", "other", entry_node_id="nd_1", created_at=_T0)
     service = _service(repo, graphs=_FakeGraphRepo(retired=frozenset({"gr_2"})))
@@ -479,9 +455,7 @@ def test_edit_graph_id_retirement_check_is_not_bypassed_by_a_different_migration
     assert repo.intended_migrations_set == []
 
 
-# --------------------------------------------------------------------------- #
-# edit() — mixed and all-editable bodies, all-or-nothing.
-# --------------------------------------------------------------------------- #
+# --- edit() — mixed and all-editable bodies, all-or-nothing. ---
 
 
 def test_edit_applies_every_supplied_field_in_one_edit() -> None:

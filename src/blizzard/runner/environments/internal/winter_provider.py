@@ -1,25 +1,9 @@
 """The winter workspace-provider binding (``bzh:pluggable-seams``).
 
-Implements :class:`~blizzard.runner.environments.provider.IWorkspaceProvider` by
-driving the **real** winter CLI against a workspace root — in verification the
-``blizzard-mock`` fixture workspace (a real winter workspace over bare ``file://``
-origins). The pool is the provider's static config;
-which envs are held it learns from the ``held_ids`` the runner passes in
- — it keeps no allocation state of its own.
-
-``acquire`` picks a free env and performs a **full reset-to-base** (reset-on-acquire):
-refresh standalones once per pass, then per env fetch → forced base checkout →
-disconnect → membership reconcile → untracked-file clean → service teardown →
-reprovision. The forced-checkout-then-disconnect ordering is the point: running
-``winter ws init`` against a previous tenant's stale feature-branch tracking re-infers
-a dead upstream and fails, stalling FILL (pinned by
-tests/test_runner_winter_provider.py::test_acquire_of_a_lived_in_env_runs_the_full_reset_sequence).
-A step failure aborts the acquire as an
-:class:`EnvironmentPreparationError` naming the step and env — never a half-reset env.
-``release`` marks nothing — cleaning happens on the *next* acquire, and the hold was
-never the provider's fact to clear. Confined to ``internal/``
-(``bzh:dependency-inversion``).
-"""
+Drives the **real** winter CLI against a workspace root. The pool is static config and held-ness
+is passed in, so the provider keeps no allocation state of its own. ``acquire`` performs a full
+reset-to-base, aborting as an :class:`EnvironmentPreparationError` rather than leaving a
+half-reset env; ``release`` marks nothing, since cleaning defers to the next acquire."""
 
 from __future__ import annotations
 
@@ -79,11 +63,8 @@ class WinterWorkspaceProvider:
         self._git = git if git is not None else SubprocessEnvGit()
         self._ready = False
         self._service_bound: bool | None = None
-        # Per-env repo manifests, memoized. The declare edge consults this on every
-        # `artifact commit`, and each miss costs a `winter` invocation plus a git call
-        # per repo — real latency on a path whose job is a durable write. An env's
-        # layout only changes when the env is re-prepared, so `_prepare` is the one
-        # place the entry is dropped.
+        # Per-env repo manifests, memoized: a miss costs a `winter` invocation plus a git
+        # call per repo. `_prepare` is the one place an entry is dropped.
         self._repos: dict[str, list[RepoBinding]] = {}
 
     def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
@@ -117,18 +98,9 @@ class WinterWorkspaceProvider:
     def repos(self, environment_id: str) -> list[RepoBinding]:
         """``winter ws worktrees --json``, narrowed to ``environment_id``'s worktrees.
 
-        Winter is the authority on where it put things, so the layout is *read*, never
-        derived: the command already emits one ``kind="worktree"`` entry per
-        ``<env>/<repo>`` with its on-disk path, and omits entries whose directory does
-        not exist. The narrowing to ``kind == "worktree"`` also drops the standalone
-        clones, which matters here — a repo can be both a project repo (a worktree in
-        every env) and a standalone extension checkout elsewhere in the workspace, and
-        only the env's own worktree is the worker's to touch.
-
-        Each binding's ``origin_url`` is read from that worktree, so it is the origin of
-        the repo being described rather than of whatever repository happens to enclose
-        the caller.
-        """
+        The layout is *read*, never derived. Narrowing to ``kind == "worktree"`` drops the
+        standalone clones: only the env's own worktree is the worker's to touch, and each
+        ``origin_url`` is read from it rather than from the caller's enclosing repo."""
         cached = self._repos.get(environment_id)
         if cached is not None:
             return list(cached)
@@ -168,9 +140,8 @@ class WinterWorkspaceProvider:
             # discards whatever branch/commit/tracking state the last tenant left.
             self._step(env, "checkout-base", lambda: run(root, ["ws", "checkout", env, self._base_branch, "--force"]))
             self._step(env, "disconnect", lambda: run(root, ["ws", "disconnect", env]))
-            # Membership reconcile (newly-declared repos get worktrees) runs *after*
-            # the disconnect: init's upstream inference has no connected sibling left
-            # to re-infer a stale feature branch from.
+            # Membership reconcile runs *after* the disconnect, so init's upstream
+            # inference has no connected sibling to re-infer a stale branch from.
             self._step(env, "init", lambda: run(root, ["ws", "init", env]))
         # Winter's forced checkout hard-resets tracked state but leaves untracked
         # files; the clean is the one remaining raw-git step.
@@ -185,11 +156,8 @@ class WinterWorkspaceProvider:
     def _service_orchestrator_bound(self) -> bool:
         """Whether the workspace binds a service orchestrator, read once per provider.
 
-        ``winter service down`` exits non-zero in a workspace with no orchestrator, so
-        the slot is probed once as a config fact rather than caught at teardown time.
-
-        Pinned by tests/test_runner_winter_provider.py::test_service_teardown_skipped_when_no_orchestrator_bound
-        and ::test_standalones_refresh_once_per_pass_and_probe_is_cached.
+        ``winter service down`` exits non-zero in a workspace with no orchestrator, so the
+        slot is probed once as a config fact rather than caught at teardown time.
         """
         if self._service_bound is None:
 

@@ -1,23 +1,8 @@
 """SQLAlchemy adapter for the fleet-registry seam (package-private).
 
-Implements :class:`~blizzard.hub.domain.registry.IWriteRunnerRegistry` over the hub's
-``runner_registrations``, ``runner_pause_facts``, and ``runner_local_pause_facts`` tables.
-All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the domain sees
-only :class:`~blizzard.hub.domain.registry.RunnerRegistration`.
-
-Facts only, status derived (``bzh:facts-not-status``): neither brake is a column on the
-registration. ``hub_paused`` derives from the newest ``runner_pause_facts`` row
-and ``locally_paused`` from the newest ``runner_local_pause_facts`` row
-— two independent fact streams with two different authors (issue #43): the fleet sets the
-first here, the runner reports the second up through its outbound buffer.
-
-``last_seen_at`` is the one refreshed timestamp (not a fact), bumped by registration and
-the heartbeat; liveness derives from it in the domain, against the clock. Timestamps
-arrive already stamped from the injected clock (``bzh:injected-clock``).
-
-``token_hash`` (issue #86a) is the second refreshed-in-place column: ``set_token_hash``
-overwrites it on enroll/re-enroll, and ``registration_for_token_hash`` is the reverse,
-hash-indexed read the runner-auth dependency resolves a presented token through.
+All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only,
+status derived (``bzh:facts-not-status``): each brake derives from the newest row of its
+own fact table; ``last_seen_at`` and ``token_hash`` are the refreshed-in-place columns.
 """
 
 from __future__ import annotations
@@ -114,11 +99,8 @@ class RunnerRegistryStore:
             ActivityRow(
                 type="runner-changed",
                 key=f"runner_local_pause_facts:{r.id}",
-                # `set_at` is the runner-machine's own clock (see `runner_local_pause_facts`
-                # in `hub/store/schema.py`); the hub stamps no arrival instant of its own
-                # for this fact. Using it for the sort/window key risks a skewed runner
-                # clock floating a row to the top or out of the feed's window — a known
-                # skew-risk gap, not recoverable without a schema change.
+                # `set_at` is the runner-machine's own clock, so a skewed one can float a
+                # row out of this window — a known gap, not fixable without a schema change.
                 at=r.set_at,
                 runner_id=r.runner_id,
                 kind="locally-paused" if r.paused else "locally-resumed",
@@ -141,12 +123,8 @@ class RunnerRegistryStore:
         redirect_uris: tuple[str, ...] = (),
         at: datetime,
     ) -> bool:
-        # `env_capacity`/`public_url`/`redirect_uris` are written on both branches — an
-        # unconditional overwrite on refresh is what converges a changed `workspace_envs`
-        # (or federation identity, issue #95) on the next re-registration, and writes
-        # `None`/empty verbatim (an older client that omits them resets the stored
-        # values to null), mirroring the `workspace_id`/`last_seen_at` rewrite-in-place
-        # upsert.
+        # Written unconditionally on both branches, `None`/empty verbatim included: the
+        # overwrite on refresh is what converges a changed value on re-registration.
         redirect_uris_json = json.dumps(list(redirect_uris)) if redirect_uris else None
         with self._engine.begin() as conn:
             existing = conn.execute(
@@ -208,10 +186,8 @@ class RunnerRegistryStore:
             return int(key[0]) if key is not None else 0
 
     def record_external_usage(self, runner_id: str, *, sampled_at: datetime, windows_json: str, at: datetime) -> None:
-        # No FK, no known-runner requirement — see `runner_external_usage`'s schema
-        # comment (`hub/store/schema.py`): the fact can legitimately arrive ahead of
-        # the registration that follows it, and must not stall this runner's high-water
-        # mark waiting for one.
+        # No FK, no known-runner requirement: the fact can legitimately arrive ahead of
+        # the registration, and must not stall this runner's high-water mark waiting.
         with self._engine.begin() as conn:
             existing = conn.execute(
                 select(s.runner_external_usage.c.runner_id).where(s.runner_external_usage.c.runner_id == runner_id)
@@ -230,9 +206,8 @@ class RunnerRegistryStore:
             )
 
     def set_token_hash(self, runner_id: str, *, token_hash: str, at: datetime) -> None:
-        # `at` is not persisted: no rotation-audit column exists yet (see the Protocol
-        # docstring) — accepted here only for signature symmetry with this seam's other
-        # writes, all of which stamp a column from it.
+        # `at` is not persisted: no rotation-audit column exists yet — accepted only for
+        # signature symmetry with this seam's other writes.
         del at
         with self._engine.begin() as conn:
             conn.execute(
@@ -250,14 +225,10 @@ class RunnerRegistryStore:
 
     @staticmethod
     def _local_pause_detail(conn, runner_id: str) -> tuple[bool, str | None, str | None]:  # type: ignore[no-untyped-def]
-        """The runner's own brake plus its cause, off the newest fact it reported (issue #43,
-        cause+reason issue #61).
+        """The runner's own brake plus its cause, off the newest fact (issues #43, #61).
 
-        Defaults ``(False, None, None)``: a runner that has never reported one is not
-        locally paused — and a runner the hub has never heard from at all is simply not
-        claiming anyway. ``by``/``reason`` are nulled out (not just left at the fact's own
-        value) once the newest fact is a *resume* — a stale cause must not outlive the brake
-        it named."""
+        Defaults ``(False, None, None)``, and ``by``/``reason`` are nulled once the newest
+        fact is a *resume* — a stale cause must not outlive the brake it named."""
         row = conn.execute(
             select(
                 s.runner_local_pause_facts.c.paused,
@@ -283,10 +254,7 @@ class RunnerRegistryStore:
     def _external_usage(conn, runner_id: str) -> tuple[datetime, str] | None:  # type: ignore[no-untyped-def]
         """The runner's newest external-subscription-usage sample, raw (issue #218) —
         ``sampled_at`` plus its still-JSON-encoded ``windows`` array. ``None`` for a
-        runner that has never reported one. Parsed into value objects by
-        :meth:`_registration`, mirroring ``_paused``/``_local_pause_detail``'s own
-        raw-then-parse split; one query per row, the same shape this seam's other
-        per-runner reads already use."""
+        runner that has never reported one."""
         row = conn.execute(
             select(s.runner_external_usage.c.sampled_at, s.runner_external_usage.c.windows).where(
                 s.runner_external_usage.c.runner_id == runner_id

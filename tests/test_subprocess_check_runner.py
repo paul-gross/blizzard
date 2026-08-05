@@ -1,10 +1,8 @@
 """The subprocess check-runner adapter (unit tier, issue #114).
 
-Real subprocesses (fast, shell built-ins) prove the reference
-:class:`~blizzard.runner.loop.checks.ICheckRunner` binding: exit 0 is a pass, non-zero
-is a red check, a timeout is a red check (never a raise), output is captured as a bounded
-tail, and the child env is built from the worker-env allowlist — no daemon secret leaks in.
-"""
+Real subprocesses prove the reference ``ICheckRunner`` binding: exit 0 is a pass,
+non-zero is a red check, a timeout is a red check (never a raise), output is captured
+as a bounded tail, and the child env is built from the worker-env allowlist."""
 
 from __future__ import annotations
 

@@ -1,16 +1,9 @@
 """SQLAlchemy adapter for the graph repository seam (package-private).
 
-Implements :class:`~blizzard.hub.domain.graph.IWriteGraphRepository` over the
-``graphs`` / ``graph_nodes`` / ``graph_choices`` / ``graph_edges`` tables. All
-``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the domain
-sees only reified :class:`~blizzard.hub.domain.graph.Graph` objects.
-
-Graphs are immutable: :meth:`mint` is insert-only, and there is no update
-path. ``enabled``/``retired`` is not a column on ``graphs`` — it is derived from the
-append-only ``graph_lifecycle_facts`` table (issue #101): ``get_enabled_by_name``
-returns the newest **non-retired** graph of that name, newest-fact-wins per
-``graph_id``, exactly like ``chunk_pause_facts``.
-"""
+All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Graphs are
+immutable: :meth:`mint` is insert-only, with no update path. ``enabled``/``retired`` is
+not a column but is derived from the append-only ``graph_lifecycle_facts`` table,
+newest-fact-wins per ``graph_id`` (issue #101)."""
 
 from __future__ import annotations
 
@@ -132,11 +125,8 @@ class GraphStore:
 
     def get_enabled_by_name(self, name: str) -> Graph | None:
         with self._engine.connect() as conn:
-            # Tie-break on graph_id descending (ULIDs sort lexically by creation) — kept
-            # in lockstep with domain.graph.mark_effective's tie order. Walked
-            # newest-first, skipping every retired graph_id (issue #101), so the
-            # candidate is the newest **non-retired** graph of that name — or None once
-            # every candidate has been skipped.
+            # Tie-break on graph_id descending — ULIDs sort lexically by creation —
+            # then walked newest-first, skipping every retired graph_id (issue #101).
             rows = conn.execute(
                 select(graphs)
                 .where(graphs.c.name == name)
@@ -201,13 +191,8 @@ class GraphStore:
         """Newest ``graph_policy_facts`` row for ``graph_id`` wins; no row reads ``None``
         (inherit the hub setting) — issue #164.
 
-        Ordered by ``id`` rather than ``set_at``, exactly like ``_is_retired``: two facts
-        appended within the same clock tick must still resolve newest-write-wins, and the
-        autoincrement key is the only monotonic thing on the row. ``row.follow_latest`` is
-        itself nullable, so a present row reading ``None`` is a deliberate revert-to-inherit
-        and is returned as such — indistinguishable in *effect* from no row, which is the
-        intent, but preserved as history rather than deleted.
-        """
+        Ordered by ``id``, not ``set_at``: two facts inside one clock tick must still
+        resolve newest-write-wins. A present ``None`` is a deliberate revert-to-inherit."""
         with self._engine.connect() as conn:
             row = conn.execute(
                 select(graph_policy_facts.c.follow_latest)
@@ -298,10 +283,8 @@ class GraphStore:
 def _session_decl(row) -> SessionDecl:  # type: ignore[no-untyped-def]
     """Hydrate one ``graph_sessions`` row into a :class:`SessionDecl` (issue #144).
 
-    A row whose three ``rotate_*`` columns are all null carries **no** policy — the
-    declaration authored no ``rotate:`` block — and hydrates ``rotate=None`` rather than an
-    all-null :class:`RotatePolicy`, so a round-tripped graph compares equal to the reified
-    one ``mint_if_changed`` diffs it against.
+    Three null ``rotate_*`` columns hydrate ``rotate=None``, not an all-null
+    :class:`RotatePolicy`, so a round-tripped graph compares equal to the reified one.
     """
     bounds = (row.rotate_max_context_tokens, row.rotate_max_transcript_bytes, row.rotate_max_invocations)
     return SessionDecl(
@@ -328,8 +311,7 @@ def _run_steps(value: str | None) -> list[RunStep]:
 def _json_list(value: str | None) -> list[str]:
     """Decode a JSON-encoded ``list[str]`` node column (``checks``).
 
-    ``None`` (a row predating the graph-node-produces-checks revision, or a fresh
-    column default) reads as the empty list."""
+    ``None`` — a fresh column default — reads as the empty list."""
     return [str(x) for x in json.loads(value)] if value else []
 
 
@@ -340,17 +322,9 @@ def _produces_spec_to_json(spec: ProducesSpec) -> dict[str, str]:
 def _produces_specs(value: str | None) -> list[ProducesSpec]:
     """Decode the JSON-encoded ``graph_nodes.produces`` column (D1, issue #143).
 
-    Two encodings share this ``TEXT`` column, both handled here (no migration — the
-    normalization on read is the back-compat seam, ``bzh:facts-not-status``):
-
-    * the current shape, a ``list[{name, kind}]``, written by :meth:`GraphStore.mint`
-      since #143;
-    * a **legacy** ``list[str]`` row minted before #143 — normalized to
-      ``[ProducesSpec(name, ArtifactKind.ASSET), ...]``, exactly the kind every
-      pre-#143 graph's bare-string ``produces:`` entries already meant.
-
-    ``None`` (a row predating the graph-node-produces-checks revision, or a fresh
-    column default) reads as the empty list, matching :func:`_json_list`."""
+    Two encodings share this ``TEXT`` column: the current ``list[{name, kind}]``, and a
+    bare ``list[str]`` normalized to ``ArtifactKind.ASSET`` entries. Normalizing on read
+    is the back-compat seam, so no migration is owed. ``None`` reads as empty."""
     if not value:
         return []
     entries = json.loads(value)

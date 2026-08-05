@@ -1,16 +1,8 @@
 """Cross-graph migration — the store write + derivations (issue #90, Phase 3).
 
-Unit tier: a :class:`MigrationFact` makes ``current_node_id`` the landing node,
-``derive_chunk_status`` ``ready`` (re-queued, not ``done``/``delivering`` off the
-superseded pre-migration transition), and the pure ``landing_node`` resolver picks
-name-match-else-entry. Component tier: ``record_migration`` re-pins the graph (+ model),
-releases the route, and persists the submitting node-step's artifacts in one write
-(MUST-FIX 1); a replay is idempotent (no duplicate artifacts, no transition row).
-
-Issue #124 (Phase 1, storage + domain types only — no behavior change) adds:
-``IntendedMigration``'s round-trip through :meth:`ChunkStore.set_intended_migration`/
-:meth:`ChunkStore.get`, and ``record_migration``'s ``clear_intent`` flag landing the
-intent's clear in the same atomic write as the fact and re-pin.
+A :class:`MigrationFact` makes ``current_node_id`` the landing node and status ``ready``;
+``record_migration`` re-pins the graph, releases the route, and persists artifacts in one
+idempotent write. Issue #124 adds ``IntendedMigration`` and the ``clear_intent`` flag.
 """
 
 from __future__ import annotations
@@ -85,7 +77,6 @@ nodes:
 
 # --------------------------------------------------------------------------- #
 # Unit — derivations
-# --------------------------------------------------------------------------- #
 
 
 def _migrated_facts(
@@ -185,7 +176,6 @@ def test_landing_node_is_name_match_else_entry() -> None:
 
 # --------------------------------------------------------------------------- #
 # Component — the atomic store write
-# --------------------------------------------------------------------------- #
 
 
 def _artifact(chunk_id: str, node_id: str) -> ArtifactRow:
@@ -346,7 +336,6 @@ def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(t
 
 # --------------------------------------------------------------------------- #
 # intended_migration (issue #124, Phase 1) — storage + domain types only
-# --------------------------------------------------------------------------- #
 
 
 @component

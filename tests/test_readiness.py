@@ -1,11 +1,8 @@
 """Readiness — the store-status seam, its domain rule, and the ``/api/ready`` probe.
 
-Three levels, one seam:
-- **unit** (``evaluate_readiness``): the pure rule against a fake reader — reachable
-  and at-head is ready; unreachable or drifted is not — no database.
-- **component** (``/api/ready`` over ``build_hosted_app``): the real SQLAlchemy
-  store-status reader wired through the composition root against a real migrated
-  sqlite store, exercised through the app's HTTP surface — a double only at no seam.
+unit (``evaluate_readiness``): the pure rule against a fake reader — reachable and
+at-head is ready, unreachable or drifted is not. component (``/api/ready``): the real
+SQLAlchemy store-status reader over a real migrated store, through the HTTP surface.
 """
 
 from __future__ import annotations

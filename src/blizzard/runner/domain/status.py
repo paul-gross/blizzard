@@ -1,21 +1,9 @@
 """The runner's machine-local status view (``bzh:domain-core``, issue #51).
 
-The machine-local counterpart to the hub's fleet-wide ``blizzard hub status``:
-this runner's own capacities, environment pool, open asks, and parked
-escalations — everything derived from store facts at read time
-(``bzh:facts-not-status``), no new stored status columns. Hub-free by
-construction wherever the hub is not the fact's own home: identity, pause
-states, capacities, held bindings, and open asks come from the local store
-alone. The one exception is hub *reachability* itself, which has no fact of its
-own to read — :meth:`RunnerStatusService.summary` derives it from how stale
-``hub_contact_at`` (the last successful PULL round trip) reads against ``now``,
-so the summary stays truthful with the hub down rather than needing a live call.
-
-Escalation resume commands are **recomputed** here from the escalated lease's
-session id and its chunk's still-held binding, not read back off the outbound
-buffer, which only holds the *unacked* tail and would go blank the moment the fact
-flushes to the hub.
-"""
+This runner's own capacities, environment pool, open asks, and parked escalations, all
+derived from store facts at read time (``bzh:facts-not-status``). Hub *reachability* has
+no fact of its own, so it is derived from how stale ``hub_contact_at`` reads against
+``now``. Escalation resume commands are **recomputed**, never read off the outbound tail."""
 
 from __future__ import annotations
 
@@ -38,10 +26,8 @@ __all__ = [
     "RunnerStatusSummary",
 ]
 
-#: How stale the last successful hub contact (:meth:`IReadRunnerStore.hub_contact_at`)
-#: may read before the summary calls the hub unreachable. Deliberately generous —
-#: several ticks' worth — so a single slow tick or a momentary blip never flips this
-#: false.
+#: How stale the last successful hub contact may read before the summary calls the hub
+#: unreachable — generous, so a single slow tick never flips this false.
 HUB_CONTACT_STALENESS_THRESHOLD = timedelta(minutes=5)
 
 
@@ -93,11 +79,9 @@ class RunnerStatusSummary:
 
 @dataclass(frozen=True)
 class EnvironmentSlot:
-    """One environment in the runner's configured pool — ``GET /environments`` (issue #106).
-
-    Every pool environment surfaces, held or not: ``chunk_id``/``held_since`` are set only
-    while the environment is bound, ``None`` otherwise — the read never invents a chunk
-    ref for an idle slot."""
+    """One environment in the runner's configured pool (issue #106). Every pool
+    environment surfaces, held or not: ``chunk_id``/``held_since`` are set only while the
+    environment is bound, ``None`` otherwise — never an invented ref for an idle slot."""
 
     environment_id: str
     chunk_id: str | None
@@ -106,13 +90,10 @@ class EnvironmentSlot:
 
 @dataclass(frozen=True)
 class EscalationView:
-    """One parked escalation with its literal, ready-to-paste resume command.
-
-    Since issue #144 the session's own configuration rides beside that command — the
-    declared pool it belongs to, and the model/effort it actually ran under — so an
-    operator reads "take over the `code` session (opus, high)" rather than an opaque id.
-    All three are ``None`` for a session on the bare vocabulary (which belongs to no pool)
-    or one predating the stamps (*unknown*)."""
+    """One parked escalation with its literal, ready-to-paste resume command. The
+    session's own configuration rides beside it — its declared pool and the model/effort
+    it ran under (issue #144). All three are ``None`` for a session on the bare
+    vocabulary, which belongs to no pool, or one predating the stamps."""
 
     chunk_id: str
     lease_id: str
@@ -127,12 +108,9 @@ class EscalationView:
 
 @dataclass(frozen=True)
 class OpenTakeoverView:
-    """One open operator takeover — ``GET /takeovers`` (issue #51, recovery for #52).
-
-    The recovery surface for a takeover a stranded CLI (an interrupted terminal, or
-    any path that never reached the end-PATCH) left open with no other way to find its
-    ``takeover_id``: this is what lets an operator spot the wedged chunk and pass the
-    id back to ``blizzard runner takeover`` to re-adopt or to a manual end-PATCH."""
+    """One open operator takeover (issue #51, recovery for #52) — the recovery surface
+    for a takeover a stranded client left open with no other way to find its
+    ``takeover_id``."""
 
     chunk_id: str
     takeover_id: str
@@ -187,18 +165,10 @@ class RunnerStatusService:
         )
 
     def environments(self) -> list[EnvironmentSlot]:
-        """The full configured pool (issue #106), each row joined against the held binding
-        facts — held slots carry their chunk ref and since-instant, unused slots carry
-        neither. A held binding whose environment id has since fallen out of the configured
-        pool (a resized pool) still surfaces — a bound environment never silently vanishes
-        from the read.
-
-        ``env_bindings`` carries no unique constraint on ``environment_id`` — a
-        crash/requeue race can leave two held bindings on one environment id. That
-        anomaly is exactly what this read exists to expose (``bzh:facts-not-status``),
-        so the join keys by environment id to a *list* and every extra held binding
-        past the first still surfaces as its own row, the same way an out-of-pool
-        binding does below — never silently dropped for being the second one bound."""
+        """The full configured pool (issue #106), joined against the held binding facts.
+        A bound environment never silently vanishes: a binding whose id has fallen out of
+        the pool still surfaces, and — since ``env_bindings`` has no unique constraint on
+        ``environment_id`` — so does every extra binding past the first on one id."""
         held_by_env: dict[str, list[EnvBindingRecord]] = {}
         for binding in self._store.held_bindings():
             held_by_env.setdefault(binding.environment_id, []).append(binding)
@@ -255,8 +225,7 @@ class RunnerStatusService:
                 bindings = self._store.bindings_for_chunk(escalation.chunk_id)
                 if bindings:
                     # Composed from the escalation's own stamps (issue #144), not a fresh
-                    # resolution: the operator lands in the configuration the parked
-                    # session ran with.
+                    # resolution: the operator lands in the configuration it ran with.
                     resume_command = self._harness.resume_command(
                         bindings[0].workdir,
                         escalation.session_id,

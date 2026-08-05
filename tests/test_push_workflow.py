@@ -59,10 +59,8 @@ def test_dev_build_job_exposes_its_version_as_an_output() -> None:
 
 
 def test_the_dev_version_carries_the_commit_it_was_built_from() -> None:
-    """Pinned because it is one interpolation in a shell line: easy to drop while
-    tidying, and nothing else fails when it goes — every deployed hub then can't
-    name its own commit.
-    """
+    """Pinned because it is one interpolation in a shell line, easy to drop while
+    tidying, and nothing else fails when it goes."""
     steps = _jobs()["dev-build"]["steps"]
     compute = next(s for s in steps if s.get("id") == "ver")
     assert "GITHUB_SHA" in compute["run"], (
@@ -73,9 +71,7 @@ def test_the_dev_version_carries_the_commit_it_was_built_from() -> None:
 
 def test_dev_image_puts_a_wheel_in_dist_before_building() -> None:
     """A bare checkout has no `dist/`, so the job must stage the wheel there before
-    the build-push step — packaging/docker/Dockerfile installs it via
-    `COPY dist/blizzard-*.whl`.
-    """
+    the build-push step."""
     steps = _dev_image_job()["steps"]
     fetch = _step_index(steps, lambda s: "download-artifact" in str(s.get("uses", "")))
     build = _step_index(steps, lambda s: "build-push-action" in str(s.get("uses", "")))

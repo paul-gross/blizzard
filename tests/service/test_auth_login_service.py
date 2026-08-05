@@ -1,17 +1,9 @@
 """OAuth provider login — the real hub against the real stub IdP (service tier, issue #92).
 
-The **matrix gap** the plan names: no declared method drives a real HTTP
-authorize->callback exchange. This is that method — a running hub (real subprocess,
-``auth.mode = "oauth"``) whose ``authorize`` 302s to the ``blizzard-mock`` stub IdP
-(a real subprocess, both provider shapes), whose ``callback`` exchanges the stub's
-code, ending in a resolving session cookie and a working ``GET /api/me`` — for both the
-``oidc`` and ``github`` conformers, over the real wire, no tokens hard-coded, no network
-beyond the two local subprocesses.
-
-Reproduce — from a provisioned feature env::
-
-    BLIZZARD_SERVICE=1 uv run pytest tests/service/test_auth_login_service.py
-"""
+A running hub (``auth.mode = "oauth"``) whose ``authorize`` 302s to the real stub IdP
+subprocess, whose ``callback`` exchanges the stub's code, ending in a resolving session
+cookie and a working ``GET /api/me`` — for both ``oidc`` and ``github`` conformers, over
+the real wire. Run with ``BLIZZARD_SERVICE=1``."""
 
 from __future__ import annotations
 
@@ -158,12 +150,9 @@ def test_login_then_logout_round_trips_over_the_wire(tmp_path: Path) -> None:
 
 
 def test_providers_endpoint_lists_both_configured_providers_over_the_wire(tmp_path: Path) -> None:
-    """#92 criterion 1, the ``lists both`` half over the real wire: a single hub with
-    **both** an ``oidc`` and a ``github`` provider configured (both pointed at the one
-    stub IdP, which serves both shapes at one origin) lists both from
-    ``GET /api/auth/providers``, and a full dance against one of them still ends
-    authenticated — proving the two-provider registry the AC names, not just a
-    single-provider hub."""
+    """#92 criterion 1: a hub with both an ``oidc`` and ``github`` provider configured
+    lists both from ``GET /api/auth/providers``, and a full dance against one still ends
+    authenticated."""
     bin_dir = require_stub_idp()
     idp_port = _free_port()
     hub_port = _free_port()
@@ -218,12 +207,8 @@ def test_refused_callback_lever_surfaces_as_a_login_failure(tmp_path: Path) -> N
         )
         with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,)) as hub:
             resp = hub.get("/api/auth/oidc-co/authorize", follow_redirects=True)
-            # The stub redirects back to the hub's own callback with `error=
-            # access_denied` and no `code` — the hub's callback still runs (the
-            # round-tripped `state` still resolves) but the missing code fails the
-            # exchange step, landing on the same `login_failed` response the
-            # component-tier fake-provider test already covers, now proven over the
-            # real wire.
+            # The stub redirects back with `error=access_denied` and no `code`; the
+            # callback's `state` still resolves but the missing code fails the exchange.
             assert resp.status_code == 400
             assert resp.json()["error"] == "login_failed"
             assert "bz_session" not in hub.cookies
@@ -231,10 +216,8 @@ def test_refused_callback_lever_surfaces_as_a_login_failure(tmp_path: Path) -> N
 
 def test_named_superuser_email_lands_superuser_on_first_verified_login(tmp_path: Path) -> None:
     """Issue #94's bootstrap-claim AC, over the real wire: a fresh store with
-    ``auth.superuser`` set to an email no user holds yet pre-provisions an unclaimed
-    intent at boot; the first verified login for that exact email claims it, landing
-    the freshly-minted user as ``superuser`` — extending the #92 login scenario this
-    reuses (the plan's own "no new matrix method" call for this phase)."""
+    ``auth.superuser`` set pre-provisions an unclaimed intent, and the first verified
+    login for that exact email lands the freshly-minted user as ``superuser``."""
     bin_dir = require_stub_idp()
     idp_port = _free_port()
     hub_port = _free_port()

@@ -1,20 +1,9 @@
 """The review node and its fail cycle (component tier) — MVP criterion 9.
 
-Drives the full ``build -> review -> deliver`` graph through the real hub API over a
-tmp store, proving the P7 workflow-engine additions end to end at the hub seam:
-
-* a **review node** routes ``pass -> deliver`` and ``fail -> build``;
-* a review **fail** carries its ``review-findings`` **asset** artifact back into the
-  build node's next envelope, latest-by-epoch;
-* the fail edge's **prompt_addendum** is appended to build's re-entry prompt;
-* the runner-reported **lease.minted** facts (``POST /chunks/{id}/leases``) advance the
-  hub's epoch fence in lockstep, so a chunk visiting a second runner node is not
-  rejected as stale — the keystone that makes a multi-runner-node graph work.
-
-The prompts here are inline prose (POST /graphs stores them verbatim); the scripted
-mock-harness end-to-end variant is the e2e tier (test_acceptance_loop is the standing
-smoke; the review cycle rides the same rails).
-"""
+Drives the full ``build -> review -> deliver`` graph through the real hub API: a review
+node routes ``pass -> deliver`` and ``fail -> build``, carrying its findings artifact
+and prompt_addendum back into build's re-entry, with reported lease.minted facts
+advancing the hub's epoch fence so the second runner node is not rejected as stale."""
 
 from __future__ import annotations
 
@@ -159,10 +148,9 @@ def test_review_fail_carries_findings_and_addendum_back_into_build(tmp_path: Pat
 
 
 def test_chunk_detail_exposes_the_review_fail_loop_and_findings_asset(tmp_path: Path) -> None:
-    """The chunk detail (``GET /chunks/{id}``) surfaces the full transition history —
-    including the review-fail loop back to build — and the review-findings asset content
-    (MVP criterion 9/11: "the hub's record shows every transition"; "every chunk's node
-    history, artifacts … render")."""
+    """The chunk detail surfaces the full transition history — including the
+    review-fail loop back to build — and the review-findings asset content
+    (MVP criterion 9/11)."""
     hub = build_hub(tmp_path)
     chunk_id, nodes = _mint_and_claim(hub)
 
@@ -248,12 +236,8 @@ def test_review_cycle_second_pass_delivers_and_lands(tmp_path: Path) -> None:
 
 
 def test_review_completion_without_lease_report_is_stale(tmp_path: Path) -> None:
-    """Without the runner reporting review's fresh lease, its epoch is stale.
-
-    This is the negative that motivates the lease-report route: the hub's fence only
-    advances on a recorded lease mint, so a second-node completion under an
-    unreported epoch is rejected — proving the report is what keeps the two in sync.
-    """
+    """Without the runner reporting review's fresh lease, its epoch is stale — the
+    hub's fence only advances on a recorded lease mint."""
     hub = build_hub(tmp_path)
     chunk_id, nodes = _mint_and_claim(hub)
     hub.client.post(

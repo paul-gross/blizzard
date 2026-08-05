@@ -1,17 +1,9 @@
 """The single-use ``jti`` replay-cache seam (issue #95, decision D4).
 
-Store-backed (a runner-store table, ``jwt_jti_seen``) rather than in-memory: the
-single-use guarantee then survives a runner restart within the JWT's own short
-lifetime, at negligible cost. The concrete SQLAlchemy adapter lives at
-``internal/jti_cache_repository.py`` (``bzh:dependency-inversion``); this Protocol is
-all ``runner/auth/federation.py`` depends on.
-
-**Crash correctness (D4).** :meth:`IJtiCache.check_and_record` is a single-transaction
-insert under the ``jti`` primary key, so there is no partial-write window a crash could
-land in — and it is a store-level PK constraint, not a derived cross-fact invariant.
-No ``bzh:crash-point-registry`` entry and no ``bzh:invariant-checker`` assertion are
-required; recorded here explicitly rather than left implicit.
-"""
+Store-backed (``jwt_jti_seen``) rather than in-memory, so the single-use guarantee
+survives a runner restart. **Crash correctness (D4):** ``check_and_record`` is a
+single-transaction insert under the ``jti`` primary key, so no crash lands in a partial
+write — no ``bzh:crash-point-registry`` entry or ``bzh:invariant-checker`` assertion."""
 
 from __future__ import annotations
 

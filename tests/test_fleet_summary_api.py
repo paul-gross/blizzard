@@ -1,13 +1,9 @@
 """``GET /api/fleet/summary`` — the runner-panel fleet-pulse read (issue #76, component tier).
 
-The fleet router's counterpart to the runner-local pass-through
-(``tests/test_fleet_summary_proxy.py`` covers the runner half). It folds every chunk's
-**derived** status into the four bucket counts the machine panel's strip shows — never a
-stored column (``bzh:facts-not-status``). The fold itself is unit-tested exhaustively in
-``tests/test_fleet_summary_derivation.py``; this file proves the *route* wires the live
-derivation to the wire model: an empty fleet is all-zeros, and a live fleet's ready and
-running chunks land in their buckets.
-"""
+Folds every chunk's derived status into the four bucket counts the machine panel's
+strip shows, never a stored column. Proves the route wires the live derivation to the
+wire model: an empty fleet is all-zeros, and a live fleet's chunks land in their
+buckets."""
 
 from __future__ import annotations
 

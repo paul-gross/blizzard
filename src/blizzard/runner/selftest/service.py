@@ -1,10 +1,8 @@
 """The selftest job resource's in-memory service — the adapter-drift canary (issue #54).
 
-Mints and runs a selftest against a chosen coding harness off the request thread, in
-a throwaway scratch repo the ``IScratchGit`` seam owns — no chunk, lease,
-environment binding, or hub call is ever involved, so the run needs no store: it is
-process-local job state, gone on daemon restart (unlike every other runner fact,
-which is durable — the canary itself is not a fact worth keeping).
+Mints and runs a selftest against a chosen coding harness off the request thread, in a
+throwaway scratch repo the ``IScratchGit`` seam owns. Deliberately store-free: run state
+is process-local and gone on daemon restart.
 """
 
 from __future__ import annotations
@@ -20,10 +18,8 @@ from blizzard.runner.selftest.checks import IProcessProbe, run_selftest_checks
 from blizzard.runner.selftest.model import SelfTestCheck, SelfTestRun, SelfTestStatus
 from blizzard.runner.selftest.scratch_git import IScratchGit
 
-# The whole-run wall-clock budget (issue #54): the canary exists to catch a drifted
-# adapter loudly, so a hung `subprocess.run`/poll loop inside a check must not wedge
-# it silently — generous enough for five real subprocess round trips against a live
-# coding harness.
+# The whole-run wall-clock budget (issue #54): a hung check must fail the canary loudly
+# rather than wedge it silently.
 _DEFAULT_RUN_BUDGET_SECONDS = 300.0
 
 
@@ -39,12 +35,8 @@ class UnknownHarnessError(Exception):
 class SelfTestService:
     """Mint selftest runs and execute them off the request thread.
 
-    ``adapters`` is the registry of coding harnesses this runner is actually
-    configured with — today, at most ``{"claude_code": <the bound
-    ClaudeCodeAdapter>}`` (OpenCode/Codex adapters are out of scope, issue #54). A
-    name outside that registry is a client error (``422``, at the API edge) — the
-    resource never existed for that name, so nothing was "not found."
-    """
+    A ``harness`` outside the configured ``adapters`` registry raises
+    :class:`UnknownHarnessError` — a client error, never a missing resource."""
 
     def __init__(
         self,
@@ -81,9 +73,8 @@ class SelfTestService:
     def get(self, selftest_id: str) -> SelfTestRun | None:
         """Read back a run's current state — a snapshot, not the live mutable object.
 
-        ``_finish`` reassigns ``checks``/``status``/``error`` as a whole under the
-        lock, so a caller reading the returned object outside the lock (the API view)
-        must not race that reassignment against a torn read of the live instance.
+        ``_finish`` reassigns the run's fields as a whole under the lock, so a caller
+        reading outside the lock must not be handed the live instance.
         """
         with self._lock:
             run = self._runs.get(selftest_id)
@@ -92,12 +83,8 @@ class SelfTestService:
             return replace(run, checks=list(run.checks))
 
     def _execute(self, selftest_id: str, adapter: IHarnessAdapter) -> None:
-        # A per-run wall-clock budget (issue #54): `run_selftest_checks` performs
-        # unbounded I/O for the real adapter, so it runs in its own thread joined against
-        # the budget — a hung harness fails the run loudly rather than leaving it
-        # `running` forever. An overrun thread cannot be killed; it is abandoned as a
-        # daemon thread and the run resolves regardless. Pinned by
-        # tests/test_runner_selftest.py::test_selftest_run_that_exceeds_its_budget_fails_loudly_instead_of_hanging.
+        # Joined against the budget in its own thread: an overrun cannot be killed, so it
+        # is abandoned as a daemon thread and the run resolves anyway (issue #54).
         outcome: list[tuple[list[SelfTestCheck], str | None]] = []
 
         def _run() -> None:

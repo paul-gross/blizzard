@@ -1,12 +1,6 @@
-"""``blizzard runner artifact create`` (née ``attach``) — wire body (issue #113, Phase 2;
-issue #169).
-
-``AttachmentRequest``/``AttachmentResponse`` are behind ``POST
-/api/leases/{lease_id}/attachments``.
-``StagedAttachment`` is behind the read counterpart, ``GET
-/api/leases/{lease_id}/attachments`` — a worker's read-back of its own node-step's
-staged (not-yet-published) submissions.
-"""
+"""Wire bodies for a worker's own artifact submissions (issues #113, #169):
+``AttachmentRequest``/``AttachmentResponse`` for the write, and ``StagedAttachment`` for the read-back
+of a node-step's staged, not-yet-published submissions."""
 
 from __future__ import annotations
 

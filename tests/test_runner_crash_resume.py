@@ -1,14 +1,8 @@
 """Runner crash-resume — the ungraceful-restart re-attach (issue #13, unit tier).
 
-An involuntary ``kill -9`` / OOM / reboot never runs the graceful shutdown marker, so startup
-must detect the sessions killed mid-work itself: :func:`mark_crash_resume_intents` marks an
-in-flight lease for same-lease resume iff its worker's process is gone, its **current spawn**
-recorded no session-end (it did not declare done), and its heartbeat was **not** stale *when the
-daemon died* (it was working when killed). The mark feeds the *same* startup RESUME step #12
-built, so these drive the marking against a real tmp store with fakes at the seams
-(``bzh:steppable-loop``), then hand off to the existing resume machinery. The routing
-counterparts — clean exit → judge, stall → reap+retry — are asserted as skips here and exercised
-end to end in ``test_runner_restart_resume.py`` / ``test_runner_loop.py``.
+:func:`mark_crash_resume_intents` marks an in-flight lease for same-lease resume iff its
+worker's process is gone, its current spawn recorded no session-end, and its heartbeat
+was not stale when the daemon died (``bzh:steppable-loop``).
 """
 
 from __future__ import annotations
@@ -78,7 +72,6 @@ def _crashed_at(store, when):  # type: ignore[no-untyped-def]
 
 # --------------------------------------------------------------------------- #
 # Marking — startup crash detection
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -110,10 +103,8 @@ def test_skips_worker_that_declared_done(tmp_path):  # type: ignore[no-untyped-d
 
 @pytest.mark.unit
 def test_skips_stalled_worker(tmp_path):  # type: ignore[no-untyped-def]
-    """A worker already stalled at crash time (stale heartbeat) is left to reap+retry — unchanged.
-
-    Stalled *before* the crash: it last beat at _NOW but the daemon lived on to _STALE_LATER,
-    so the gap the classifier judges is the worker's own idleness, with no outage in it."""
+    """A worker already stalled at crash time (stale heartbeat) is left to reap+retry —
+    the gap the classifier judges is the worker's own idleness, with no outage in it."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # last tool call, two hours before the crash
@@ -127,10 +118,8 @@ def test_skips_stalled_worker(tmp_path):  # type: ignore[no-untyped-def]
 
 @pytest.mark.unit
 def test_marks_worker_killed_before_a_long_outage(tmp_path):  # type: ignore[no-untyped-def]
-    """The reboot case: downtime past the staleness threshold is not the worker's
-    idleness — staleness is judged against the daemon's last liveness beat, not the
-    clock at recovery, so a worker beating right up to the crash resumes however long
-    the machine stays down."""
+    """The reboot case: staleness is judged against the daemon's last liveness beat, not
+    the clock at recovery, so a worker beating up to the crash resumes however long down."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # actively working when killed
@@ -166,11 +155,9 @@ def test_marks_crash_after_an_earlier_session_ended(tmp_path):  # type: ignore[n
 
 @pytest.mark.unit
 def test_marks_worker_respawned_just_before_the_crash_with_no_beat_of_its_own(tmp_path):  # type: ignore[no-untyped-def]
-    """Issue #150: a lease resumed long after its last heartbeat — the ask/answer case,
-    where the park outlasted the staleness threshold — is killed before its fresh worker
-    makes its first tool call. Every heartbeat it holds belongs to the *previous*
-    generation, so the spawn fact is what actually describes the running process: it
-    resumes."""
+    """Issue #150: a lease resumed after its last heartbeat and killed before its fresh
+    worker's first tool call still resumes — the spawn fact, not the stale heartbeat,
+    describes the running process."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # the pre-park generation's last beat
@@ -281,7 +268,6 @@ def test_skips_parked_pending_and_unspawned(tmp_path):  # type: ignore[no-untype
 
 # --------------------------------------------------------------------------- #
 # Hand-off — the marked lease flows through the existing RESUME step
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit

@@ -1,14 +1,9 @@
 """Artifact domain — a chunk's durable outputs and their storage model.
 
 A discriminated union: code works with the typed variants (:class:`GitCommitArtifact`,
-:class:`AssetArtifact`); the compact single-string :class:`ArtifactRow` is the
-storage model the variants compress to and uncompress from at the store boundary.
-The round trip is exact in both directions — the property the unit tests
-pin.
-
-Dependency-free (``bzh:domain-core``): no SQLAlchemy here. :class:`ArtifactRow` is a
-plain dataclass; the store maps it to columns.
-"""
+:class:`AssetArtifact`), which compress to and uncompress from the single-string
+:class:`ArtifactRow` at the store boundary, exactly in both directions.
+Dependency-free (``bzh:domain-core``): no SQLAlchemy here."""
 
 from __future__ import annotations
 
@@ -36,9 +31,7 @@ class Provenance:
 class GitCommitArtifact:
     """A branch pushed to the forge before submission, pinned by commit hash.
 
-    ``forge`` is the worker's own declared origin (issue #143, Phase 4 — decision
-    R7); ``""`` only for a pre-Phase-4 row this shape predates (a legacy null reads
-    back as "the repo's origin" — see :func:`from_row`)."""
+    ``forge`` is the declared origin; ``""`` reads back as "the repo's origin"."""
 
     artifact_id: str
     name: str
@@ -70,13 +63,8 @@ Artifact = GitCommitArtifact | AssetArtifact
 class ArtifactRow:
     """The flat storage row: variant fields compressed into one ``data`` string.
 
-    ``data`` is keyed by ``kind``: ``git_commit`` -> ``<branch>:<commit>``; ``asset``
-    -> the raw content. ``repo`` and ``forge`` are ``git_commit``-only sibling columns,
-    not encoded in ``data`` (``forge`` added issue #143, Phase 4 — a nullable column
-    mirroring ``repo``; ``None`` on a legacy pre-Phase-4 row reads back as "the repo's
-    origin", :func:`from_row`). The ``{node}`` component of the store key is the node
-    *name* (``bzh:facts-not-status``); ``node_id`` here is the exact provenance.
-    """
+    ``data`` is keyed by ``kind``: ``git_commit`` -> ``<branch>:<commit>``, ``asset``
+    -> the raw content. ``repo``/``forge`` are ``git_commit``-only sibling columns."""
 
     kind: ArtifactKind
     name: str

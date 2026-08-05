@@ -1,21 +1,9 @@
 """Session-cookie/bearer resolution + the ``require(<permission>)`` route dependency —
 the human-plane edge seam (issue #91).
 
-Mirrors ``hub/api/auth.py``'s runner-bearer-token seam in shape: a presented
-credential is hashed and resolved via the **read** repository
-(``services.sessions.get_by_hash``), and the sliding-expiry write is delegated to the
-domain (``services.auth.touch_session`` — ``bzh:controller-read-only``: no mutation
-happens here). There is no ``warn``/``enforce`` rollout brake: ``mode = "none"`` (the
-default) is the brake, short-circuiting every resolution to the implicit
-operator/superuser identity with **no store read at all**.
-
-``require(permission)`` deliberately does **not** declare ``Depends(get_services)`` as a
-parameter — it checks ``auth.mode`` first and only reaches for services under ``oauth``,
-so a route gated under the default ``none`` mode never 503s on an unwired store (the SSE
-stream, ``hub/api/events.py``, is dependency-free on the store-free app and must stay
-that way). Both are pinned by
-``tests/test_pin_hub_api.py::test_require_grants_the_implicit_operator_with_no_store_wired``.
-"""
+A presented credential is hashed and resolved via the **read** repository; the
+sliding-expiry write is delegated to the domain (``bzh:controller-read-only``).
+``auth.mode = "none"`` (the default) short-circuits to the implicit operator identity."""
 
 from __future__ import annotations
 
@@ -34,9 +22,7 @@ _SESSION_COOKIE_NAME = "bz_session"
 _BEARER_PREFIX = "Bearer "
 
 #: The implicit identity every request resolves to under ``auth.mode = "none"`` — the
-#: unauthenticated ``"operator"`` singleton every existing route/test already assumes,
-#: now expressed as a full :class:`ResolvedIdentity` carrying every permission
-#: (``superuser``).
+#: unauthenticated ``"operator"`` singleton, carrying every permission (``superuser``).
 IMPLICIT_OPERATOR = ResolvedIdentity(
     user_id="operator",
     username="operator",
@@ -62,13 +48,8 @@ def resolve_identity(request: Request, services: HubServices | None) -> Resolved
     """Resolve the presented session to a :class:`ResolvedIdentity`, or ``None`` when
     no session is presented, it does not resolve, or it has expired.
 
-    Under ``auth.mode = "none"`` this never touches ``services`` (``None`` is a legal
-    argument in that case — the store-free export/unit app calls this with none wired)
-    — it always answers :data:`IMPLICIT_OPERATOR`. Under ``oauth`` it looks up the
-    session by its stored hash via the **read** session repository, then delegates the
-    sliding-expiry write and role expansion to the domain
-    (``services.auth.touch_session`` — ``bzh:domain-takes-objects``: the loaded
-    ``Session`` is handed in, never an id)."""
+    Under ``auth.mode = "none"`` this never touches ``services`` (``None`` is legal
+    then) and always answers :data:`IMPLICIT_OPERATOR`."""
     mode = request.app.state.config.auth.mode
     if mode == AUTH_MODE_NONE:
         return IMPLICIT_OPERATOR
@@ -83,13 +64,11 @@ def resolve_identity(request: Request, services: HubServices | None) -> Resolved
 
 
 def resolved_username(request: Request) -> str:
-    """The attribution sites' (``questions.py``, ``decisions.py``) resolved identity
-    username — ``"operator"`` under ``none``, or the resolved session's username under
-    ``oauth``. Reads ``request.app.state`` directly (rather than taking a
-    ``Depends(get_services)`` parameter) because this is a plain helper a route body
-    calls after its own ``require(<permission>)`` dependency has already run — by then,
-    under ``oauth``, services are guaranteed wired (``require`` would already have
-    503'd otherwise)."""
+    """The resolved identity's username — ``"operator"`` under ``none``, the session's
+    username under ``oauth``.
+
+    Reads ``request.app.state`` directly: a plain helper a route body calls once its own
+    ``require(<permission>)`` dependency has already guaranteed services are wired."""
     mode = request.app.state.config.auth.mode
     if mode == AUTH_MODE_NONE:
         return IMPLICIT_OPERATOR.username
@@ -101,9 +80,7 @@ def resolved_username(request: Request) -> str:
 def require(permission: Permission) -> Callable[[Request], ResolvedIdentity]:
     """A dependency factory: the returned dependency resolves the identity and raises
     ``401`` (no/expired session) or ``403`` (insufficient permission); grants under
-    ``auth.mode = "none"`` unconditionally. Each human route declares the one
-    permission it needs — reshaping a role touches only ``ROLE_PERMISSIONS``
-    (``blizzard.auth_core``), never a call site."""
+    ``auth.mode = "none"`` unconditionally, without reaching for services."""
 
     def _dependency(request: Request) -> ResolvedIdentity:
         mode = request.app.state.config.auth.mode

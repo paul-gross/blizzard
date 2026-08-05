@@ -1,17 +1,9 @@
 """The per-chunk hub workdir seam (#65).
 
-A generic hub command node's commands run somewhere: a disposable, per-chunk
-filesystem cache under the hub runtime dir. The lifecycle — lazily created,
-reused across commands/re-runs/subsequent hub nodes, expired at ``done`` and any
-chunk-ending event, with an orphan janitor — is filesystem I/O and stays behind this
-Protocol (``bzh:dependency-inversion``, ``bzh:domain-core``): the executor never
-imports ``pathlib``/``shutil`` directly, it asks for a path.
-
-Losing the folder loses time, never correctness — hub facts/marker artifacts are the
-only truth (``bzh:facts-not-status``); a command tolerates an empty/missing folder
-(the adapter's first-use full clone, or a later warm ``git fetch``). Never a shallow
-clone (spike #68 finding 4 — shallow refuses an "unrelated histories" merge).
-"""
+A disposable, per-chunk filesystem cache under the hub runtime dir: lazily created,
+reused across commands and re-runs, expired at any chunk-ending event, with an orphan
+janitor. Filesystem I/O stays behind this Protocol (``bzh:dependency-inversion``).
+Losing the folder loses time, never correctness (``bzh:facts-not-status``)."""
 
 from __future__ import annotations
 

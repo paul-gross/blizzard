@@ -1,9 +1,7 @@
 """``derive_activity_feed`` (unit tier) — the pure merge/sort/cap behind the board's
-Event log page-load backfill (issue #213). Built straight from already-loaded
-:class:`ActivityRow`/:class:`EventRow` literals — no store, no hub harness; the
-per-source bounded reads themselves (``IReadChunkRepository.activity_facts_since``,
-``IReadRunnerRegistry.list_pause_facts_since``) are exercised at the component tier
-(``tests/test_activity_feed_store.py``).
+Event log page-load backfill (issue #213). Built from already-loaded
+:class:`ActivityRow`/:class:`EventRow` literals — no store; the per-source bounded reads
+are exercised at the component tier (``tests/test_activity_feed_store.py``).
 """
 
 from __future__ import annotations

@@ -1,18 +1,6 @@
 """cross-graph edge per-choice model override — add ``graph_edges.to_graph_model`` (hub store tree, issue #90)
 
-Phase 2 of the cross-graph-migration change: a judgement choice may declare a
-cross-graph target (``to: graph:<name>``) and, optionally, a per-choice ``model:``
-override applied when that choice migrates the chunk to the target graph. The target
-graph itself needs no column — it rides in the existing ``to_node_name`` as the raw
-``graph:<name>`` string and is re-derived on load (``graph.target_graph_of``). The
-model override is the one authored value not encoded there, so it gets this column.
-
-Additive, nullable — no backfill (a pre-#90 edge has no override, which is exactly
-``NULL``). Guarded by an existence check so it is idempotent and no-ops on a fresh
-store, where the walking-skeleton revision's frozen ``graph_edges`` literal is the one
-that shipped without the column (see that revision's docstring — the same freeze the
-``chunks``/``transitions`` reshapes use).
-
+The target graph rides in ``to_node_name``; only the ``model:`` override needs a column.
 Revision ID: 20260718_1220_hub_edge_target_graph_model
 Revises: 20260718_1215_hub_transition_graph_id
 """

@@ -1,11 +1,8 @@
-"""Fleet-summary bucket fold (unit tier) — ``derive_fleet_summary`` over derived statuses.
+"""Fleet-summary bucket fold — ``derive_fleet_summary`` over derived statuses (issue #76).
 
-The runner machine panel's counts strip shows a fleet-level pulse: ready / running /
-waiting / needs (issue #76). The fold from each chunk's derived status to those four
-buckets is a pure function of the statuses (``bzh:domain-takes-objects``), so these tests
-feed statuses directly — no store, no tokens. They pin the fold the wire model and the
-strip both mirror: ``running`` unions ``delivering``, ``waiting`` unions ``paused``, and
-the resting/terminal statuses (``not_ready``/``stopped``/``done``) count toward no bucket.
+A pure fold of each chunk's status to four buckets (``bzh:domain-takes-objects``):
+``running`` unions ``delivering``, ``waiting`` unions ``paused``, terminal statuses count
+toward no bucket.
 """
 
 from __future__ import annotations

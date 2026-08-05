@@ -1,12 +1,8 @@
 """``IReadChunkRepository.activity_facts_since`` / ``IReadRunnerRegistry.list_pause_facts_since``
 (component tier) — the activity feed's bounded per-source reads (issue #213, AC4).
 
-One case per ``ChunkChangeCause`` member mapped to a fact table (``edited`` excepted —
-no table backs it, asserted separately), plus the ``since`` window, the per-source
-``limit`` bound, and the repository-split seam boundary between the two Protocols.
-:func:`~blizzard.hub.domain.work.derive_activity_feed`'s own merge/sort/cap is the unit
-tier (``tests/test_activity_feed.py``); this drives the real store instead.
-"""
+One case per ``ChunkChangeCause`` member mapped to a fact table, plus the ``since``
+window and the per-source ``limit`` bound, against a real store."""
 
 from __future__ import annotations
 

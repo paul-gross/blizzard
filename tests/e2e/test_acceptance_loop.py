@@ -1,27 +1,9 @@
 """The acceptance loop — scenario 1 of the standing e2e smoke.
 
-ONE chunk travels the whole default lifecycle — ingest -> acquire -> mock-scripted
-commit -> **review (scripted PASS)** -> deliver -> landed in the bare origin — and the
-assertion holds at **both ends**: the commit is reachable from the bare origin's
-``main`` (git truth) *and* the hub's facts derive the chunk ``done`` (fleet truth).
-
-**Self-managed, zero-token, no-network.** The test mints its own disposable fixture
-world (bare ``file://`` origins + a real winter workspace, via ``blizzard-mock-fixture``)
-and drives the real seams — the mock forge, a real hub over a fresh sqlite store, and the
-real runner reconciliation loop stepped one synchronous
-:func:`~blizzard.runner.loop.build.run_single_tick` at a time (``bzh:steppable-loop``) —
-with no in-process shortcuts.
-
-It is the **e2e tier**: **skipped unless ``BLIZZARD_E2E=1``**, and also skipped when the
-workspace layout it needs (a provisioned sibling ``blizzard-mock``, a local winter source)
-is not discoverable.
-
-Reproduce it — from the ``blizzard`` worktree in a provisioned feature env — with::
-
-    BLIZZARD_E2E=1 uv run pytest tests/e2e/test_acceptance_loop.py
-
-(The workspace runs it under ``mise run e2e``; see the repo README.)
-"""
+One chunk travels ingest -> acquire -> build -> review (scripted PASS) -> deliver ->
+landed, asserted at both the bare origin (git truth) and the hub's derived ``done``
+status (fleet truth). Self-managed, zero-token, no-network, no in-process shortcuts.
+Skipped unless ``BLIZZARD_E2E=1`` and the fixture workspace layout is discoverable."""
 
 from __future__ import annotations
 
@@ -65,9 +47,8 @@ REPO = f"{OWNER}/{REPO_NAME}"
 FIXTURE_ENV = "e2e"
 RUNNER_ENV = "e1"
 
-# The mock harness's fence var: scaffolding sets it in the daemon's own ``os.environ``
-# before driving a tick, and every scenario declares it in ``worker_env_passthrough`` so
-# the adapter's spawn-environment allowlist (issue #88) forwards it to the child.
+# The mock harness's fence var, forwarded to workers through the spawn-environment
+# allowlist's operator-extension knob (issue #88); see MOCK_HARNESS_ENV_PASSTHROUGH.
 MOCK_HARNESS_FENCE_VAR = "BLIZZARD_MOCK_HARNESS_FENCE"
 # The vars every scripted mock-fleet scenario's worker child needs — mock-only names, so
 # they ride the allowlist's operator-extension knob rather than the base allowlist.
@@ -77,11 +58,8 @@ MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT)
 # a dummy value suffices, since the mock forge checks no token.
 WORK_SOURCE_TOKEN_ENV = "BZ_WORK_SOURCE_TOKEN_TOYAPI"
 
-# Appended to every scripted build-node prompt that makes a real commit meant to be
-# delivered (issue #143, Phase 4): the worker pushes its branch and declares it through
-# the real `blizzard runner artifact commit` verb. Declaring twice for the same repo
-# within one lease is harmless (latest-wins), so a script that makes more than one commit
-# in a turn can safely append this after each.
+# Appended to a build prompt after a real commit: pushes the branch and declares it via
+# `blizzard runner artifact commit` (issue #143); declaring twice per lease is harmless.
 _PUSH_AND_DECLARE_SCRIPT = (
     "_branch = subprocess.run(\n"
     '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
@@ -99,9 +77,8 @@ _PUSH_AND_DECLARE_SCRIPT = (
     ")\n"
 )
 
-# The scripted build-node prompt: *the prompt is the program*. It runs under the mock
-# harness with the acquired env dir as cwd, so it targets the ``toy-api`` worktree by
-# relative path.
+# The scripted build-node prompt: the prompt is the program, run under the mock harness
+# with the acquired env dir as cwd, so it targets `toy-api` by relative path.
 _BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
@@ -117,9 +94,8 @@ _BUILD_SCRIPT = (
 # The judgement-resume prompt: also arrives as code.
 _JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
-# The review node scripted to PASS on the first look, so the build commit travels straight
-# to deliver with no re-build. The base turn is a no-op; the verdict comes on the
-# judgement resume.
+# The review node scripted to PASS on first look, so the build commit travels straight to
+# deliver with no re-build; the base turn is a no-op, the verdict comes on judgement resume.
 _REVIEW_SCRIPT = "pass\n"
 _REVIEW_JUDGEMENT = "verdict('pass', 'cold-eyes review: the committed change is clean; ready to deliver')\n"
 
@@ -128,9 +104,8 @@ _REVIEW_JUDGEMENT = "verdict('pass', 'cold-eyes review: the committed change is 
 _WORK_ITEM_BODY = "PASSTHROUGH-BODY: the widget flake reproduces under load"
 _WORK_ITEM_COMMENT = "PASSTHROUGH-COMMENT: attached a failing repro in the linked gist"
 
-# build turn (prompt-is-program): read the chunk's work item with the *real*
-# ``blizzard runner work-items`` verb, then commit the fetched body + comment so the
-# pass-through's output lands as git truth.
+# Build turn: reads the chunk's work item via the real `blizzard runner work-items` verb,
+# then commits the fetched body + comment so the pass-through's output lands as git truth.
 _WORK_ITEM_BUILD_SCRIPT = (
     "import os, json, subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
@@ -213,7 +188,6 @@ def _graph_yaml() -> str:
 
 # --------------------------------------------------------------------------- #
 # Workspace-layout discovery (the sibling blizzard-mock worktree + winter source)
-# --------------------------------------------------------------------------- #
 
 
 def _blizzard_root() -> Path:
@@ -241,7 +215,6 @@ def _winter_source() -> Path | None:
 
 # --------------------------------------------------------------------------- #
 # Process helpers
-# --------------------------------------------------------------------------- #
 
 
 def _free_port() -> int:
@@ -259,10 +232,8 @@ def _await_http(
 ) -> None:
     """Block until ``path`` answers 200, or fail naming why.
 
-    ``log`` is the daemon's own log file (issue #145) — every spawn site here writes its
-    merged output to one rather than to a pipe nothing drains, so the early-exit
-    diagnostic reads the file rather than ``proc.stdout``. The exit code is named either
-    way, so a daemon that died before writing anything still reports something actionable.
+    ``log`` is the daemon's own log file (issue #145); the early-exit diagnostic reads it
+    rather than a drained pipe, and always names the exit code too.
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -312,9 +283,8 @@ def _hub(
     }
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    # Declare the one work source every scenario ingests against — ingest 422s a pointer
-    # no configured source claims. `annotate` opts this source into the forge-status
-    # label sweep (issue #179).
+    # Declare the one work source every scenario ingests against; `annotate` opts it into
+    # the forge-status label sweep (issue #179).
     write_work_sources(
         hub_dir,
         [
@@ -368,7 +338,6 @@ def _terminate(proc: subprocess.Popen[str]) -> None:
 
 # --------------------------------------------------------------------------- #
 # The loop
-# --------------------------------------------------------------------------- #
 
 
 def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
@@ -404,9 +373,8 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
     origin_bare = origins / f"{REPO_NAME}.git"
     assert workspace.is_dir() and origin_bare.is_dir(), "fixture mint did not lay out the expected tree"
 
-    # Fence the fixture tree so the mock harness will run (arbitrary code execution is
-    # the feature, gated on a marker file + env var). The marker at the workspace root
-    # covers every acquired env worktree under it via the engine's ancestor walk.
+    # Fence the fixture tree so the mock harness will run (gated on this marker file + env
+    # var); it covers every acquired env worktree under it via the engine's ancestor walk.
     (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
@@ -457,12 +425,9 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
 def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int) -> RunnerConfig:
     """A migrated runner runtime pointed at the fixture workspace and the mock harness.
 
-    ``host``/``port`` are bound to a genuinely free port rather than the base config's
-    default (issue #143, Phase 4): that default collides with this machine's real
-    dogfood runner deployment (``AGENTS.local.md``), so leaving it unbound would
-    silently POST a worker's artifact declaration at a live, unrelated daemon instead
-    of erroring. ``_drive_until_done`` wraps every tick in :func:`_runner_api`, which
-    serves this exact host/port."""
+    ``host``/``port`` bind to a free port rather than the base config's default, which
+    can collide with this machine's live dogfood runner (issue #143, Phase 4;
+    see ``AGENTS.local.md``)."""
     base = init_runner_environment(runner_dir)  # scaffolds config + migrates the store
     return dataclasses.replace(
         base,
@@ -475,9 +440,8 @@ def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: i
         # The mock façade rejects an unknown ``--permission-mode`` flag, so it must be
         # omitted (``None``).
         harness_permission_mode=None,
-        # A path that is never created — the external-usage sampler's missing-credentials
-        # soft failure trips before any request is built, keeping this real daemon's
-        # no-network-access guarantee real for that step too (issue #218).
+        # A path that is never created, so the external-usage sampler's missing-credentials
+        # soft failure trips before any request is built (issue #218).
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
         base_branch="main",
         worker_env_passthrough=MOCK_HARNESS_ENV_PASSTHROUGH,
@@ -489,10 +453,8 @@ def _drive_until_done(
 ) -> str:
     """Tick the reconciliation loop until the chunk is terminal; return its last status.
 
-    Each tick is one synchronous REAP->PULL->FILL->ADVANCE pass; the spawned mock
-    worker runs asynchronously, so ticks are interleaved with short waits that let it
-    make its commit and exit before ADVANCE judges it. Wrapped in :func:`_runner_api` so
-    the worker's own CLI verbs have a live local API to reach (issue #143).
+    Each tick is one synchronous REAP->PULL->FILL->ADVANCE pass, interleaved with short
+    waits so the asynchronously spawned mock worker can commit before ADVANCE judges it.
     """
     prior = dict(os.environ)
     os.environ.update(fenced_env)  # the runner spawns the fenced mock harness in-process
@@ -516,7 +478,6 @@ def _drive_until_done(
 
 # --------------------------------------------------------------------------- #
 # Scenario: the work item reaches the build worker through the pass-through (criterion 1)
-# --------------------------------------------------------------------------- #
 
 
 def _work_item_graph_yaml() -> str:
@@ -569,9 +530,8 @@ def _work_item_graph_yaml() -> str:
 def _runner_api(config: RunnerConfig) -> Iterator[None]:
     """Serve the runner's local API in a thread — the daemon the worker's verbs POST/GET to.
 
-    The reconciliation loop is still driven synchronously by the test (``run_single_tick``);
-    this only stands up the local-API surface. It touches no store, so it runs alongside the
-    tick without contention.
+    Touches no store, so it runs alongside the synchronously driven reconciliation tick
+    without contention.
     """
     app = build_hosted_app(config)
     server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port, log_level="warning"))
@@ -595,13 +555,8 @@ def _runner_api(config: RunnerConfig) -> Iterator[None]:
 
 
 def test_build_worker_reads_work_item_through_the_passthrough(tmp_path: Path) -> None:
-    """The build worker fetches its issue body + comments through the runner->hub proxy.
-
-    The chunk's issue carries a distinctive body and comment; the build node reads them
-    with the *real* ``blizzard runner work-items`` verb, commits the fetched text, and the
-    chunk lands. The exact body and comment are then asserted reachable from the bare
-    origin's ``main``.
-    """
+    """The build worker fetches its issue body + comments through the runner->hub proxy
+    and commits the fetched text; asserted reachable from the bare origin's ``main``."""
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")

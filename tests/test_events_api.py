@@ -1,12 +1,8 @@
-"""``GET /api/events`` — the operational event feed read (issue #125, Phase 1, component
-tier).
+"""``GET /api/events`` — the operational event feed read (issue #125, Phase 1).
 
-Off a real, migrated hub app this proves the acceptance criteria AC#2 and AC#5: the read
-returns the ``event_log`` unified with every currently-open escalation (a superseded one
-excluded), newest-and-most-severe first, honouring the ``severity`` / ``runner_id`` /
-``chunk_id`` / ``since`` filters and the bounded default page — and a malformed ``since``
-422s. Events and escalations are seeded through the domain store, exactly the path the
-runner-fed fold (Phase 2) will write.
+Proves AC#2 and AC#5: the read returns ``event_log`` unified with every open escalation,
+newest-and-most-severe first, honouring the ``severity``/``runner_id``/``chunk_id``/
+``since`` filters and the bounded default page — and a malformed ``since`` 422s.
 """
 
 from __future__ import annotations
@@ -118,9 +114,8 @@ def test_malformed_since_422s(tmp_path: Path) -> None:
 
 
 def test_naive_since_with_open_escalation_does_not_500(tmp_path: Path) -> None:
-    # A well-formed but tz-NAIVE `since` (an offset-less ISO string — an ordinary client /
-    # date-picker input) must not 500 when the feed projects an open escalation, whose
-    # `recorded_at` is tz-aware.
+    # A well-formed but tz-NAIVE `since` (an ordinary date-picker input) must not 500
+    # when the feed projects an open escalation, whose `recorded_at` is tz-aware.
     hub = build_hub(tmp_path)
     store = ChunkStore(hub.engine, hub.clock)
     t0 = hub.clock.now()

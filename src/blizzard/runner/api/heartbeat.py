@@ -1,17 +1,9 @@
 """The runner-local heartbeat endpoint — ``POST /api/heartbeat``.
 
-A worker heartbeats as a side effect of working: its ``PostToolUse`` hook runs
-``blizzard runner heartbeat`` on every tool call, which posts here with the lease id
-it inherited from the spawn environment (``BLIZZARD_LEASE_ID``). The daemon appends a
-heartbeat fact to its store — the only writer of that file — and REAP reads
-the last beat to catch a stalled-but-alive worker. The CLI is
-a pure client; it never opens the store itself.
-
-The edge is read-only over its wiring (``bzh:controller-read-only``): it records
-through the store the ``host`` composition root wired on ``app.state``. On the
-store-free app (OpenAPI export / unit tests) the store is unwired and the probe
-answers 503 rather than pretending — the daemon's ``host`` path always wires one.
-"""
+Posted with the lease id the caller inherited from its spawn environment
+(``BLIZZARD_LEASE_ID``); the daemon appends a heartbeat fact to its store and is the
+only writer of that file. Read-only over its wiring (``bzh:controller-read-only``): an
+unwired store answers 503 rather than pretending, which only the store-free app hits."""
 
 from __future__ import annotations
 

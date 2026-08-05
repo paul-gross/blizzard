@@ -1,13 +1,9 @@
 """The forge-status projection (issue #179) — derivation and the reconciler.
 
-``derive_marker`` is a pure, exhaustive function (unit tier). ``live_work_refs()``
-is exercised against a real, migrated :class:`ChunkStore` (component tier) — the
-inverse of ``find_live_holder``, so a grouped or terminal chunk must be excluded
-exactly like it already is there. ``AnnotationReconciler.sweep()`` is exercised
-against that same real store with a :class:`FakeAnnotator` standing in for the
-forge (component tier) — the diff/write logic, not the HTTP shaping the GitHub
-adapter's own tests (``tests/test_work_source.py``) already cover.
-"""
+``derive_marker`` is a pure, exhaustive function (unit tier); ``live_work_refs()`` and
+``AnnotationReconciler.sweep()`` are exercised against a real, migrated
+:class:`ChunkStore` with a :class:`FakeAnnotator` standing in for the forge (component
+tier), not the HTTP shaping ``tests/test_work_source.py`` already covers."""
 
 from __future__ import annotations
 
@@ -21,9 +17,7 @@ from blizzard.hub.work_sources.annotator import WorkStatusMarker
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from tests.support import FakeAnnotator, FakeWorkSource, build_hub, ingest
 
-# --------------------------------------------------------------------------- #
-# derive_marker — pure, exhaustive over ChunkStatus
-# --------------------------------------------------------------------------- #
+# --- derive_marker — pure, exhaustive over ChunkStatus ---
 
 pytestmark = pytest.mark.unit
 
@@ -58,9 +52,7 @@ def test_derive_marker_maps_terminal_statuses_to_none(status: ChunkStatus) -> No
     assert derive_marker(status) is None
 
 
-# --------------------------------------------------------------------------- #
-# IReadChunkRepository.live_work_refs() — real ChunkStore, real migrations
-# --------------------------------------------------------------------------- #
+# --- IReadChunkRepository.live_work_refs() — real ChunkStore, real migrations ---
 
 
 @pytest.mark.component
@@ -101,9 +93,7 @@ def test_live_work_refs_excludes_a_grouped_chunk_but_carries_its_ref_via_the_sur
     assert refs[WorkRef(source="default", ref="2")] is ChunkStatus.NOT_READY  # via the survivor now
 
 
-# --------------------------------------------------------------------------- #
-# AnnotationReconciler.sweep() — real store, FakeAnnotator standing in for the forge
-# --------------------------------------------------------------------------- #
+# --- AnnotationReconciler.sweep() — real store, FakeAnnotator standing in for the forge ---
 
 
 @pytest.mark.component

@@ -1,32 +1,9 @@
 """Runner presents its bearer token on every hub call — service tier (issue #86b).
 
-Phase 1 (#86a) landed the hub-side check, warn-only, at registration. This phase makes
-the **runner** the presenting side: every outbound ``httpx.Client`` construction
-(``build.py``) and the work-items proxy fold in the same ``Authorization: Bearer`` header
-built from :meth:`~blizzard.runner.config.RunnerConfig.auth_headers`. The header-inspection
-lever (``blizzard-mock`` ``GET /_captured``, issue #86b) makes that assertable against a
-**real** mock-hub subprocess rather than a stub: every fleet-facing ``/api/*`` request it
-receives is logged with its headers, in arrival order.
-
-Two scenarios:
-
-* a runner configured with a token carries it on every call — registration, queue peek,
-  the claim/completion path that lands a chunk, and the work-items proxy forward — asserted
-  against the mock hub's captured log;
-* a runner configured with **no** token (unenrolled — the still-supported warn-mode
-  default) sends no ``Authorization`` header at all, and the hub (which stays ``warn``
-  by default) still serves it.
-
-The test's *own* status polling reaches the same ``GET /api/chunks/{id}`` path the real
-runner also calls (``HttpHubClient.get_chunk``), so both would otherwise land in the
-capture indistinguishably; the polling client marks its own calls with a probe header
-(``X-Test-Probe``) so the assertion below can filter its own noise out and check only what
-the runner itself sent.
-
-Reproduce — from a provisioned feature env — with::
-
-    BLIZZARD_SERVICE=1 uv run pytest tests/service/test_runner_auth_service.py
-"""
+Every outbound ``httpx.Client`` and the work-items proxy fold in the same
+``Authorization: Bearer`` header, assertable against a real mock-hub subprocess via
+``GET /_captured``. Covers a token-bearing runner (every call carries it) and an
+unenrolled runner (no header, hub still serves it in warn mode)."""
 
 from __future__ import annotations
 
@@ -104,11 +81,8 @@ def test_runner_presents_the_bearer_token_on_every_hub_call(tmp_path: Path) -> N
                 proxied = runner_client.get(f"/api/chunks/{chunk_id}/work-items")
             finally:
                 runner_client.close()
-        # Assert the status *and* the payload, not just that a call was captured — a
-        # capture-only check passed green while the mock hub 404'd the forwarded call,
-        # exactly what happened when the real runner moved to `/work-items` ahead of the
-        # mock (issue #55). The payload half matters too: `work_refs` is defaulted on both
-        # sides, so only reading a seeded ref back proves the field name agrees end to end.
+        # Assert the payload too, not just status: a capture-only check passed green
+        # while the mock hub 404'd the forwarded call (issue #55).
         assert proxied.status_code == 200, f"the proxy forward failed upstream: {proxied.status_code} {proxied.text}"
         proxied_items = proxied.json()["items"]
         assert [i["ref"] for i in proxied_items] == [_WORK_REF_URL], (

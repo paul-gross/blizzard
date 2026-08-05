@@ -1,16 +1,5 @@
 """asks and park/resume fact tables (runner store tree)
 
-P7 lands the ask/answer protocol's machine-local facts: ``asks``
-(the worker's local open-ask fact ``blizzard runner ask`` records before the worker
-exits — how ADVANCE tells a park from a verdict-less death), and
-``park_facts``/``park_resumes`` (the chunk's dormancy on a question and the
-resume-with-answer that ends it). Before this the runner had no home for an ask, so a
-parked worker's exit was indistinguishable from a crash.
-
-Each revision in this tree creates a subset of the current ``schema`` metadata's
-tables (the live-schema pattern); this one creates exactly the three new tables,
-``checkfirst`` so a fresh ``base -> head`` and an in-place upgrade both converge.
-
 Revision ID: 20260713_1801_runner_asks_and_parks
 Revises: 20260713_1635_runner_heartbeats
 """

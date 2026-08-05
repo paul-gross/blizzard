@@ -1,23 +1,6 @@
 """runner-side check results + checks-ran guard — check_results, checks_ran (runner store tree, issue #114)
 
-The runner runs a node's ``checks:`` at worker exit, before the judgement is elicited,
-and records each command's outcome as a durable fact so a runner kill between check-run
-and judgement resumes at the right point without re-running or losing results (modeled on
-``nudge_facts``/``attachments``).
-
-- ``check_results`` — one row per check command per ``(lease_id, epoch)``, append-only,
-  carrying ``passed`` + a bounded ``output_tail`` (the tail stays runner-local; only
-  ``passed``/``command`` ride the wire to the hub's gate, [MF3]).
-- ``checks_ran`` — the guard marker, at most one row per ``(lease_id, epoch)``, written
-  AFTER the result rows and only for a node with a non-empty ``checks:``. On recovery it
-  gates re-run: unset ⇒ re-run all (latest-wins, safe); set ⇒ read the recorded results
-  back and judge.
-
-Each revision in this tree creates a subset of the current ``schema`` metadata's tables
-(the live-schema pattern, mirroring ``20260719_1100_runner_nudge_facts``); this one creates
-the two new tables ``checkfirst`` so a fresh ``base -> head`` and an in-place upgrade both
-converge.
-
+``checks_ran`` is written AFTER the ``check_results`` rows: unset on recovery ⇒ re-run all.
 Revision ID: 20260725_1200_runner_check_results
 Revises: 20260722_1000_runner_git_commit_declarations
 """

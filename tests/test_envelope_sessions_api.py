@@ -1,11 +1,8 @@
 """The effective session declaration on the envelope, over HTTP (component tier, issue #144).
 
-The precedence — a graph ``sessions:`` declaration over the chunk's own defaults, merged
-field by field — is resolved hub-side because the hub owns both halves; the runner applies
-only its own default as the last resort. :mod:`tests.test_envelope` unit-tests the
-resolution itself; this file proves the fields survive a real mint, a real chunk edit, and
-the ``GET /chunks/{id}/envelope`` read.
-"""
+:mod:`tests.test_envelope` unit-tests the precedence resolution itself; this file proves
+the fields survive a real mint, a real chunk edit, and the ``GET /chunks/{id}/envelope``
+read."""
 
 from __future__ import annotations
 
@@ -19,9 +16,8 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "7"}
 
-# A graph declaring no `sessions:` at all. Minted explicitly rather than leaning on the
-# packaged default: what these two tests pin is that a graph declaring nothing behaves
-# consistently, not whatever the default happens to be today.
+# A graph declaring no `sessions:` at all, minted explicitly rather than leaning on
+# the packaged default.
 _NO_SESSIONS_YAML = """
 name: unsessioned
 entry: build

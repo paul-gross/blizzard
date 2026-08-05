@@ -1,13 +1,9 @@
 """The runner adheres to the hub's pause brake — loop component tier.
 
-The declarative pause brake lives at the hub; the runner reads it on PULL (a
-``GET /runners/{id}`` behind the hub client), mirrors it to its store, and FILL adheres:
-paused = no new claims, in-flight chunks run on. When the hub is unreachable the runner
-keeps its last-mirrored directive. Driven directly against a real (tmp sqlite)
-runner store with :class:`FakeHub`/:class:`FakeHarness`/:class:`FakeProvider`/
-:class:`FakeProbe` standing in only at the seams — the harness matrix's component
-definition.
-"""
+The declarative pause brake lives at the hub; the runner reads it on PULL, mirrors it
+to its store, and FILL adheres: paused = no new claims, in-flight chunks run on. When
+the hub is unreachable the runner keeps its last-mirrored directive. Driven against a
+real (tmp sqlite) runner store with fakes standing in only at the seams."""
 
 from __future__ import annotations
 
@@ -63,14 +59,10 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
 
 
 class _BlipOnceHub(FakeHub):
-    """A :class:`FakeHub` whose **first** ``get_chunk`` raises, then serves normally.
+    """A ``FakeHub`` whose first ``get_chunk`` raises, then serves normally.
 
-    `FakeHub.down` is all-or-nothing, which cannot express the interleaving that matters
-    here: RESUME's ownership check failing while ADVANCE's envelope fetch, a moment later
-    in the same tick, succeeds. That transient blip is the non-paused way RESUME leaves an
-    intent open, so it needs a hub that recovers between two calls rather than one that is
-    down for both.
-    """
+    ``FakeHub.down`` is all-or-nothing, which cannot express RESUME's ownership check
+    failing while ADVANCE's envelope fetch, a moment later, succeeds."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -184,14 +176,8 @@ def test_unreachable_hub_keeps_last_mirrored_brake(tmp_path):  # type: ignore[no
     assert hub.claims == []  # still adhering to the last directive
 
 
-# --------------------------------------------------------------------------- #
-# The runner's own brake (issue #43) — a second, independent surface
-# --------------------------------------------------------------------------- #
-#
-# The local brake is the runner declining to claim ("I won't try"), set through its own
-# local API and needing no hub. The hub's brake coerces it from the fleet side. Effective
-# paused is the OR, and each is cleared only where it was set — so these assert both the
-# gating and the independence.
+# The runner's own local brake (issue #43), independent of the hub's; effective paused
+# is the OR of both, each cleared only where it was set.
 
 
 def test_fill_claims_nothing_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
@@ -255,13 +241,8 @@ def test_in_flight_chunk_runs_on_while_locally_paused(tmp_path):  # type: ignore
     assert probe.killed == []  # a live worker already running is not killed
 
 
-# --------------------------------------------------------------------------- #
-# The local brake reaches every spawn site, not just FILL's claim (issue #45)
-# --------------------------------------------------------------------------- #
-#
-# The hub brake is claims-only. These exercise the local brake at every other spawn site:
-# restart-resume, answer-resume, and each ``_spawn_attempt`` caller (ADVANCE's next-node,
-# a requeue, a claim-adopt/reclaim).
+# The local brake reaches every spawn site, not just FILL's claim (issue #45): also
+# restart-resume, answer-resume, and every ``_spawn_attempt`` caller.
 
 
 def _seed_running_lease(  # type: ignore[no-untyped-def]
@@ -339,9 +320,8 @@ def test_restart_resume_suppressed_while_locally_paused(tmp_path):  # type: igno
     hub.chunks["ch_1"] = _running_chunk()
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     harness.resume_pid = 4321
-    # RESUME's precondition is a lease whose worker is *dead* (mark_crash_resume_intents
-    # only marks a dead pid; the graceful marker's own worker dies on the way down too) —
-    # pid 100 is not in the alive set, matching what RESUME actually recovers.
+    # RESUME's precondition is a lease whose worker is dead; pid 100 is not in the
+    # alive set, matching what RESUME actually recovers.
     probe = FakeProbe(alive={(4321, "start-4321")})
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
     _pause_locally(store, ctx, paused=True)
@@ -366,13 +346,8 @@ def test_restart_resume_suppressed_while_locally_paused(tmp_path):  # type: igno
 
 
 def test_restart_resume_suppressed_then_advance_does_not_judge_or_spawn(tmp_path):  # type: ignore[no-untyped-def]
-    """A suppressed restart-resume must not leak the lease to ADVANCE (issue #45 review).
-
-    Left active with a dead pid and an open resume intent, the lease is exactly the shape
-    ADVANCE would otherwise read as an exited worker to judge — and judging it spawns a
-    harness process and reads a worker killed mid-work as a done declaration. Driven in
-    RESUME-then-ADVANCE order, the shape a restart under a standing local pause produces.
-    """
+    """A suppressed restart-resume must not leak the lease to ADVANCE (issue #45 review),
+    which would otherwise spawn a harness process and judge a killed worker as done."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     mark_resume_intents(store, now=_NOW)
@@ -382,9 +357,8 @@ def test_restart_resume_suppressed_then_advance_does_not_judge_or_spawn(tmp_path
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     harness.resume_pid = 4321
-    # The restart-stranded worker (pid 100) is dead — RESUME's precondition. Pid 4321
-    # reads alive once resumed, so the post-unpause pass finds a running worker, not
-    # another exit to judge.
+    # The restart-stranded worker (pid 100) is dead; pid 4321 reads alive once resumed,
+    # so the post-unpause pass finds a running worker, not another exit to judge.
     probe = FakeProbe(alive={(4321, "start-4321")})
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
     _pause_locally(store, ctx, paused=True)
@@ -455,10 +429,8 @@ def test_answer_resume_suppressed_while_locally_paused(tmp_path):  # type: ignor
 
 def test_exited_worker_judgement_suppressed_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
     """ADVANCE's judgement resume is the fourth spawn primitive (issue #45 review): a
-    worker that exits naturally while paused (no resume intent involved at all — it was
-    running before the pause and finished during it) must not be judged, because judging
-    it resumes its session headlessly. It waits, unjudged, for the brake to clear.
-    """
+    worker that exits naturally while paused must not be judged, since judging it
+    resumes its session headlessly."""
     store = _store(tmp_path)
     _seed_exited_lease(store)  # no resume intent — a plain, already-exited worker
 
@@ -501,9 +473,8 @@ def test_apply_response_next_spawn_suppressed_then_adopted_at_unpause(tmp_path):
     _pause_locally(store, ctx, paused=True)
     pull(ctx)  # flushes the completion; the apply-response's next-node spawn is suppressed
 
-    # The old attempt still closes normally — only the fresh spawn is suppressed. No new
-    # lease is minted, so the chunk is left in the shape of an interrupted claim: a live
-    # binding, no active lease.
+    # The old attempt still closes normally — only the fresh spawn is suppressed, leaving
+    # the chunk in the shape of an interrupted claim: a live binding, no active lease.
     assert store.active_lease_for_chunk("ch_1") is None
     assert harness.spawns == []
     assert store.held_environment_ids() == ["e1"]
@@ -604,16 +575,8 @@ def test_suppression_logged_once_per_lease_per_tick_per_site(tmp_path):  # type:
         assert entry["chunk_id"] == by_lease[entry["lease_id"]]["chunk_id"]
 
 
-# --------------------------------------------------------------------------- #
-# REAP's own guard — killing a live worker is deferred, escalation is deferred,
-# neither is blanket-suspended (issue #45)
-# --------------------------------------------------------------------------- #
-#
-# REAP's exhausted-retries branch never calls a spawn primitive, so the shared
-# `_spawn_suppressed` gate cannot see it. REAP's own local_paused check guards only the
-# stall case's kill (a live worker is never killed while paused); the orphan case runs
-# unguarded, having no process to kill, and self-defers both its branches. These
-# exercise both.
+# REAP's own guard (issue #45): local_paused guards only the stall case's kill, while
+# the orphan case (no process to kill) self-defers both branches.
 
 
 def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=2, epoch=1):  # type: ignore[no-untyped-def]
@@ -635,10 +598,8 @@ def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=2, e
 
 
 def test_reap_orphan_requeue_respawn_suppressed_then_adopted_at_unpause(tmp_path):  # type: ignore[no-untyped-def]
-    """REAP's orphan case is not suspended by the local brake — it has no process to
-    kill, so it reaps and requeues as always; only the requeue's respawn is suppressed.
-    That leaves the chunk shaped like an interrupted claim — bound, no active lease —
-    which FILL's reconcile pass adopts once the brake clears."""
+    """REAP's orphan case reaps and requeues as always; only the respawn is suppressed,
+    leaving the chunk shaped like an interrupted claim that FILL adopts once unpaused."""
     store = _store(tmp_path)
     _seed_orphan_lease(store)
     hub = FakeHub()
@@ -651,10 +612,8 @@ def test_reap_orphan_requeue_respawn_suppressed_then_adopted_at_unpause(tmp_path
 
     reap(ctx)
 
-    # Reaped and requeued as always (REAP itself is not suspended for an orphan) — but the
-    # requeue's respawn is suppressed, so no new lease is minted and the retry budget is
-    # untouched by construction: the old lease is closed, the chunk holds its binding with
-    # no active lease, exactly the interrupted-claim shape.
+    # Reaped and requeued as always, but the requeue's respawn is suppressed: the old
+    # lease is closed and the chunk holds its binding with no active lease.
     assert store.active_lease("lease_1") is None
     assert store.active_lease_for_chunk("ch_1") is None
     assert store.attempt_count("ch_1", "nd_build") == 1
@@ -693,10 +652,8 @@ def test_hub_paused_only_reap_still_requeues(tmp_path):  # type: ignore[no-untyp
 
 
 def test_reap_orphan_at_exhausted_retries_defers_escalation_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
-    """The must-fix-2 scenario (issue #45 review): REAP's orphan case is not blanket-
-    suspended — it has no process to kill, so it reaches `_fail_attempt` even while
-    paused. At an exhausted budget that lands on the escalate branch, where the deferral
-    lives — the one gate every `_fail_attempt` caller (REAP, ADVANCE, PULL) shares."""
+    """Issue #45 review: REAP's orphan case reaches `_fail_attempt` even while paused,
+    and an exhausted budget lands on the escalate branch, where the deferral lives."""
     store = _store(tmp_path)
     _seed_orphan_lease(store, retries_max=0)  # exhausted on the very first attempt
     hub = FakeHub()
@@ -709,9 +666,8 @@ def test_reap_orphan_at_exhausted_retries_defers_escalation_while_locally_paused
 
     reap(ctx)
 
-    # No closure, no escalation — the orphan lease waits exactly as it was, its retry
-    # budget unmoved (REAP itself is not suspended for this case; only the escalate
-    # branch it reaches is).
+    # No closure, no escalation: the orphan lease waits exactly as it was, its retry
+    # budget unmoved.
     lease = store.active_lease("lease_1")
     assert lease is not None and lease.pid is None
     assert store.attempt_count("ch_1", "nd_build") == 1
@@ -730,9 +686,8 @@ def test_reap_at_exhausted_retries_does_not_escalate_while_locally_paused(tmp_pa
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)  # retries_max=2
     provider = FakeProvider({"e1": "/ws/e1"})
-    # Two verdict-less exits requeue in place: attempt 1 -> 2, attempt 2 -> 3. The
-    # active lease left behind — attempt 3 — has exhausted the retry budget: REAP reaping
-    # it next would ordinarily escalate.
+    # Two verdict-less exits requeue in place, leaving attempt 3 with the retry budget
+    # exhausted: REAP reaping it next would ordinarily escalate.
     for i in range(1, 3):
         handle = WorkerHandle(session_id=f"sess-{i}", pid=300 + i, process_start_time=f"start-{i}")
         harness = FakeHarness(handle=handle, verdict=None)
@@ -773,22 +728,13 @@ def test_reap_at_exhausted_retries_does_not_escalate_while_locally_paused(tmp_pa
     assert deferred[0]["count"] == 1
 
 
-# --------------------------------------------------------------------------- #
-# The whole tick, not hand-picked steps (issue #45 review)
-# --------------------------------------------------------------------------- #
-#
-# Every test above drives the one or two steps it reasons about, which cannot see a bug
-# living in the *hand-off* between two steps that are each green alone. These two drive
-# the composed pass instead.
+# The whole tick, not hand-picked steps (issue #45 review): a bug in the hand-off
+# between two steps that are each green alone needs the composed pass to surface.
 
 
 def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path):  # type: ignore[no-untyped-def]
-    """The headline regression driven as a **full tick** (REAP → RESUME → PULL → FILL →
-    ADVANCE), not as the hand-picked RESUME-then-ADVANCE pair — the shape a real restart
-    under a standing local pause produces, and the only driver that can catch a gap in the
-    hand-off between two steps that are each green alone. The hub brake is **off**: the
-    local brake alone must stop every one of the four spawn primitives.
-    """
+    """Driven as a full tick (REAP -> RESUME -> PULL -> FILL -> ADVANCE), not hand-picked
+    steps. Hub brake off: the local brake alone must stop all four spawn primitives."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     mark_resume_intents(store, now=_NOW)
@@ -852,17 +798,9 @@ def test_full_tick_while_locally_paused_spawns_no_process_by_any_path(tmp_path):
 
 
 def test_advance_does_not_judge_a_lease_resume_left_open_after_a_hub_blip(tmp_path):  # type: ignore[no-untyped-def]
-    """ADVANCE's resume-intent skip is a **general** correctness rule, not a pause artifact
-    — so it is proven here with **no pause anywhere**.
-
-    A transient blip — the hub down for RESUME's ``get_chunk``, back up by ADVANCE's
-    ``get_envelope`` a moment later in the same tick — leaves an intent open with no brake
-    involved, and a lease that is active, session-bearing and dead-pid: exactly what
-    ADVANCE reads as exited work. Judging it would elicit a verdict from a session RESUME
-    never re-attached and read a worker killed mid-work as a done declaration. Only the
-    resume-intent skip stops it; the judge's local-brake gate cannot, because nothing here
-    is paused.
-    """
+    """ADVANCE's resume-intent skip is a general correctness rule, not a pause artifact,
+    proven here with no pause anywhere: a transient hub blip leaves an intent open on a
+    dead-pid lease that only the resume-intent skip stops from being judged."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     mark_resume_intents(store, now=_NOW)
@@ -901,16 +839,9 @@ def test_advance_does_not_judge_a_lease_resume_left_open_after_a_hub_blip(tmp_pa
 
 
 def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
-    """The escalate gate's **third** caller (issue #45). ``_fail_attempt`` is shared by
-    REAP's orphan case, ADVANCE's verdict-less exit and PULL's flush rejections, and each
-    *reachable* caller is proven rather than argued from the sharing.
-
-    ADVANCE's is unreachable while locally paused, and REAP's orphan case is covered
-    above. This is PULL's: a completion buffered just before the operator paused is
-    flushed during the pause, the hub rejects it as stale, and the exhausted budget lands
-    it on the escalate branch — the one-way door that must not open while the runner is
-    paused.
-    """
+    """The escalate gate's third `_fail_attempt` caller (issue #45): a completion
+    buffered just before pause flushes during it, the hub rejects it as stale, and the
+    exhausted budget must not open the escalate door while paused."""
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -961,26 +892,14 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
     assert store.active_lease("lease_1") is None  # closed — escalated
 
 
-# --------------------------------------------------------------------------- #
 # Two brakes at once (issue #46 row 14): the runner's own, and the hub's per-chunk pause.
 # --------------------------------------------------------------------------- #
 
 
 def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alone(tmp_path):  # type: ignore[no-untyped-def]
-    """The two brakes are independent authorities: the chunk resumes only when **both** clear.
-
-    They are deliberately not the same lever (issue #46). The runner's own brake says "start no
-    processes on this machine"; the hub's chunk pause says "stop this one chunk". So:
-
-    * :func:`_kill_and_park_paused` is **ungated** — the local brake does not veto the hub's
-      instruction about a specific chunk, and a kill is not a spawn. The park below therefore
-      happens on a fully locally-paused runner, which is the first assertion here.
-    * :func:`_resume_if_unpaused` **is** gated — its ``resume_with_message`` is a real (fifth)
-      spawn primitive, and a spawn primitive outside the gate is issue #45's failure mode.
-
-    Driven as full ticks, since the interplay spans PULL (which parks) and ADVANCE (which
-    resumes).
-    """
+    """The two brakes are independent authorities (issue #46): the chunk resumes only
+    when both clear. `_kill_and_park_paused` is ungated (a kill is not a spawn);
+    `_resume_if_unpaused` is gated, since its resume is a real spawn primitive."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     probe = FakeProbe(alive={(100, "start-100")})  # a live worker for the pause to kill
@@ -1046,18 +965,13 @@ def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alo
     assert store.attempt_count("ch_1", "nd_build") == 1
 
 
-# --------------------------------------------------------------------------- #
-# The hub backstops the advisory brake above with an outright claim denial
-# (issue #44) — closing the tick-window gap between a hub pause landing and the
-# runner's next PULL mirroring it.
+# The hub backstops the advisory brake with an outright claim denial (issue #44).
 # --------------------------------------------------------------------------- #
 
 
 def test_fill_stops_on_hub_denial_in_the_tick_window_race(tmp_path):  # type: ignore[no-untyped-def]
-    """The motivating race: the hub pauses the runner *after* PULL last mirrored
-    ``paused=False``, but *before* FILL's claim lands — the exact tick-window gap
-    issue #44 closes. FILL's own locally-mirrored copy of the brake still says "go",
-    yet the hub refuses the claim with a distinct denial rather than granting it."""
+    """The tick-window gap issue #44 closes: the hub pauses after PULL last mirrored
+    ``paused=False`` but before FILL's claim lands, and the hub refuses it anyway."""
     ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
     pull(ctx)  # mirrors paused=False — the runner has not yet observed the pause
     assert store.hub_paused("r1") is False
@@ -1088,10 +1002,7 @@ def test_fill_denial_logs_distinctly_from_a_race_conflict(tmp_path):  # type: ig
     assert lost_race == []  # the two outcomes are logged legibly apart, not conflated
 
 
-# --------------------------------------------------------------------------- #
-# Runner spend ceiling (issue #61b) — the tick-level kill-switch over the SAME
-# local pause brake this whole module exercises, engaged by `check_spend_ceiling`
-# rather than the operator's own `PATCH /runner` / `blizzard runner pause`.
+# Runner spend ceiling (issue #61b): the tick-level kill-switch over the same local brake.
 # --------------------------------------------------------------------------- #
 
 
@@ -1204,11 +1115,8 @@ def test_ceiling_under_cap_does_not_engage(tmp_path):  # type: ignore[no-untyped
 
 @pytest.mark.unit
 def test_ceiling_partial_total_trips_the_lower_bound_and_flags_partial(tmp_path):  # type: ignore[no-untyped-def]
-    """A cost-absent row (envelope-less fallback) still contributes its tokens to the
-    window but $0 to the cost sum — the ceiling trips on that LOWER BOUND, and both the
-    log line and the buffered report say PARTIAL, so an operator is never told a partial
-    total is the whole spend (issue #61's lower-bound + PARTIAL treatment, carried into
-    the runner ceiling from the per-chunk cap)."""
+    """A cost-absent row contributes tokens but $0 to the cost sum; the ceiling trips
+    on that lower bound, and both the log line and report say partial (issue #61)."""
     store = _store(tmp_path)
     _record_usage(store, cost=None, recorded_at=_NOW)  # $0 lower bound, cost_partial=True
     ctx = make_context(
@@ -1296,9 +1204,7 @@ def test_ceiling_does_not_auto_lift_when_the_window_rolls_the_spend_back_under_c
 @pytest.mark.unit
 def test_ceiling_engaged_defers_reap_kill_and_suppresses_fill_in_the_same_tick(tmp_path):  # type: ignore[no-untyped-def]
     """Driven as a full tick: a live worker whose runner just crossed its ceiling is left
-    running untouched (a ceiling is not a drain, exactly like a manual pause), consumes no
-    retry, and a second, otherwise-claimable chunk is not spawned into either — the fresh
-    engagement is already visible to every later step in the SAME tick it fires in."""
+    running untouched, and a second, otherwise-claimable chunk is not spawned into either."""
     store = _store(tmp_path)
     _seed_running_lease(store)  # lease_1 / ch_1, a live worker (pid 100)
     _record_usage(store, cost=7.0, recorded_at=_NOW)
@@ -1334,10 +1240,8 @@ def test_ceiling_engaged_defers_reap_kill_and_suppresses_fill_in_the_same_tick(t
 
 @pytest.mark.unit
 def test_runner_start_clears_the_ceiling_brake_exactly_like_a_manual_pause(tmp_path):  # type: ignore[no-untyped-def]
-    """`blizzard runner start` (``PATCH /api/runner`` with ``paused=False`` — the same
-    write :func:`_pause_locally` makes here) clears a ceiling-engaged brake exactly as it
-    clears an operator's own pause, with no ceiling-specific code path. Once cleared and
-    the window no longer holds the tripping spend, FILL claims again."""
+    """`blizzard runner start` clears a ceiling-engaged brake exactly as it clears an
+    operator's own pause, with no ceiling-specific code path."""
     store = _store(tmp_path)
     _record_usage(store, cost=7.0, recorded_at=_NOW)
     clock = FixedClock(_NOW)

@@ -94,10 +94,9 @@ def _blocked_forge_with_a_terminal_check(calls: list[tuple[str, str, dict[str, A
 def test_a_terminal_failure_findings_write_failure_exits_non_zero_instead_of_routing_failure(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """The terminal-CI-failure findings write is deliberately unguarded, unlike the
-    wait-path write: an unwritten set of findings is the only signal a resolve worker has
-    nothing to read, so it exits non-zero rather than printing the `failure` edge over it
-    (issue #243)."""
+    """The terminal-CI-failure findings write is deliberately unguarded: an unwritten
+    set of findings is the only signal a resolve worker has nothing to read, so it exits
+    non-zero rather than printing the `failure` edge over it (issue #243)."""
     monkeypatch.setenv("BZ_FORGE_URL", "http://forge")
     monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
     monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps([{"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT}]))

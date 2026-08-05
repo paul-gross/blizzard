@@ -1,15 +1,9 @@
 """The runner readiness probe — ``GET /api/ready``.
 
-Where ``/api/health`` is a dependency-free *liveness* signal (the process is up),
-readiness answers "is this daemon fit to serve?" — its store reachable and at the
-expected schema revision. The edge holds a read-only view (``bzh:controller-read-only``):
-it calls the composition-root-wired :class:`ReadinessService` and maps the domain
-:class:`Readiness` to a response model — it never opens the store itself.
-
-When no readiness service is wired (the store-free ``create_app`` used by the
-OpenAPI export and unit tests), the probe reports ``ready=false`` with a clear
-detail rather than pretending — the daemon's ``host`` path always wires one.
-"""
+"Is this daemon fit to serve?" — its store reachable and at the expected schema
+revision. Read-only over its wiring (``bzh:controller-read-only``): it never opens the
+store itself. With no readiness service wired, the probe reports ``ready=false`` with a
+detail rather than pretending — the daemon's ``host`` path always wires one."""
 
 from __future__ import annotations
 

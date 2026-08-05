@@ -1,28 +1,6 @@
 """``pr.opened`` idempotent per (chunk, repo) — a DB-level close of a write race (issue #10)
 
-The open-pr deliver mode's coordinator runs on both a fresh apply and an
-idempotent completion replay — deliberate, so a mid-delivery crash resumes
-rather than wedges the chunk (``blizzard.hub.delivery.coordinator``). Its DB-backed
-``open_prs`` skip-set (a store read each call, not an in-memory cache) has a narrow
-read-then-write race between two overlapping runs, so a dogfood run accumulated two
-``delivery_pr_opened`` rows for the same (chunk, repo)
-— the board double-listed one PR. Harmless in effect (the forge's ``open_pr`` reuses an
-existing PR for the head; GitHub has one PR), but the write itself should not be able
-to produce a second row.
-
-This revision adds ``uq_delivery_pr_opened_chunk_repo`` — a unique constraint on
-(chunk_id, repo) — so the race can no longer land a duplicate; the store adapter
-(``ChunkStore.record_pr_opened``) now catches the collision and discards it as the
-harmless duplicate write it is, the same CAS shape ``question_answers`` already uses.
-
-**De-duplicate before constraining:** a store carrying the dogfood duplicates would fail
-the constraint add outright, so ``upgrade()`` first deletes every row but the earliest
-(lowest ``id``) per (chunk_id, repo) — the one the coordinator's first write landed
-(pinned by ``tests/test_pin_hub_api.py::test_pr_opened_upgrade_keeps_only_the_earliest_duplicate``).
-
-Local ``sa.Table`` literals, not an import of ``blizzard.hub.store.schema`` — the reason
-is recorded in ``0013_pm_pointer_source_ref``'s docstring.
-
+Adds a unique constraint on (chunk_id, repo), keeping the earliest row of each duplicate pair first.
 Revision ID: 20260716_2206_hub_pr_opened_idempotent
 Revises: 20260716_1512_hub_pm_pointer_source_ref
 """

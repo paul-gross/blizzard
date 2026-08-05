@@ -1,16 +1,8 @@
-"""Session-cookie/bearer resolution + ``require(<permission>)`` gating under
-``auth.mode = "oauth"`` (component tier, issue #91; roles reshaped by issue #210).
+"""Session-cookie/bearer resolution + ``require(<permission>)`` gating (issue #91; #210).
 
-``auth.mode = "none"`` (the default) is exercised implicitly by the whole rest of the
-suite — every pre-#91 test builds a hub with no ``auth_mode`` override and keeps
-passing unchanged. This file is the ``oauth``-mode half of the AC: ``require()``
-grants/denies per the static role map, a ``pending`` identity reaches only
-``GET /api/me`` (and, per the route table, the not-yet-landed login surface) and is
-refused on the SSE stream, a ``guest`` reaches every ``fleet:view`` read (including the
-SSE stream) but is refused every mutation, an expired/absent session is 401, and the
-attribution overwrite lands the *session* identity even under real gating (not just the
-``none``-mode implicit "operator" case ``test_ask_answer.py``/``test_decisions_api.py``
-already cover).
+A ``pending`` identity reaches only ``GET /api/me`` and is refused on the SSE stream; a
+``guest`` reaches every ``fleet:view`` read but is refused every mutation; an
+expired/absent session is 401; attribution lands the session identity under real gating.
 """
 
 from __future__ import annotations

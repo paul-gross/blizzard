@@ -1,16 +1,9 @@
 """``GET /api/me`` — the resolved identity and its expanded permission set (issue #91).
 
 Public plane (no ``require(<permission>)``): a ``pending`` identity must reach this
-route to discover it has no permissions, so gating it on a permission would be
-self-defeating. It is the one route that distinguishes *anonymous* (no/expired
-session — 401) from *denied* (a resolved identity lacking a permission — every other
-route's 403) by calling :func:`~blizzard.hub.api.auth_session.resolve_identity`
-directly rather than going through ``require()``.
-
-Permissions are computed server-side here and nowhere else on the client — the web
-frontend (#93) reads this response's ``permissions`` list rather than re-typing
-``ROLE_PERMISSIONS``.
-"""
+route to discover it has no permissions. It is the one route that distinguishes
+*anonymous* (no or expired session — 401) from *denied* (a resolved identity lacking
+a permission — 403), resolving the identity directly."""
 
 from __future__ import annotations
 

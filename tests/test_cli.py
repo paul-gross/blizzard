@@ -34,9 +34,8 @@ def test_hub_lists_its_verbs() -> None:
 
 
 def test_hub_removed_flat_verbs_are_unknown() -> None:
-    """Flat verbs removed in issue #105 no longer name a command in `--help` (checked by
-    each line's own first token, not a substring match — a group's summary prose may
-    legitimately mention e.g. "answer"), and invoking one fails with click's
+    """Flat verbs removed in issue #105 no longer name a command in `--help` (matched by
+    each line's own first token, not a substring), and invoking one fails with click's
     unknown-command error rather than silently delegating."""
     result = CliRunner().invoke(blizzard, ["hub", "--help"])
     assert result.exit_code == 0
@@ -69,13 +68,9 @@ def test_hub_init_and_migrate(tmp_path: Path) -> None:
 
 
 def test_hub_migrate_rejects_a_leftover_pm_source_block(tmp_path: Path) -> None:
-    """`migrate` — not just `host` — must reject the pre-rename key (issue #55).
-
-    The check lives in the shared ``HubConfig.load``, not the daemon's startup path, since
-    the dogfooding deploy runs `migrate` before `systemctl restart`. If the rejection fired
-    only at `host`, migrate would pass, the restart would take the hub down, and the runner
-    (`After=` hub) would go with it too — a wedged fleet instead of an aborted deploy.
-    """
+    """`migrate` — not just `host` — must reject the pre-rename key (issue #55): the
+    dogfooding deploy runs `migrate` before `systemctl restart`, so a `host`-only guard
+    would pass migrate, take the hub down at restart, and the runner with it."""
     root = tmp_path / "hub"
     runner = CliRunner()
     assert runner.invoke(blizzard, ["hub", "init", str(root)]).exit_code == 0
@@ -93,12 +88,9 @@ def test_hub_migrate_rejects_a_leftover_pm_source_block(tmp_path: Path) -> None:
 
 
 def test_hub_migrate_refuses_a_db_url_copied_from_elsewhere(tmp_path: Path) -> None:
-    """The bug scenario in issue #234: `cp -r <live-store>/* <copy>/ && blizzard hub
-    migrate --dir <copy>` must refuse rather than silently migrate the live store.
-
-    `hub init` doesn't embed an absolute db_url for a fresh scaffold, so this test
-    writes one in directly — an unpatched-era init, or an operator's explicit
-    override — the case the guard still has to catch."""
+    """issue #234: `cp -r <live-store>/* <copy>/ && blizzard hub migrate --dir <copy>`
+    must refuse rather than silently migrate the live store — an absolute db_url is
+    written in directly to model an unpatched-era init or an explicit override."""
     runner = CliRunner()
     live = tmp_path / "live"
     assert runner.invoke(blizzard, ["hub", "init", str(live)]).exit_code == 0
@@ -188,10 +180,8 @@ def test_runner_init(tmp_path: Path) -> None:
     assert (tmp_path / "runner" / "blizzard-runner.toml").exists()
 
 
-# The runtime-dir env fallback (issue #39). Each daemon's dir-taking verbs resolve
-# --dir > $BZ_<daemon>_DIR > cwd, so winter's per-env band can aim one feature env at a
-# chosen runtime root. Parametrized over both daemons: the two CLIs are parallel, and a
-# fallback wired on one but not the other is exactly the drift worth catching.
+# The runtime-dir env fallback (issue #39): --dir > $BZ_<daemon>_DIR > cwd. Parametrized
+# over both daemons — a fallback wired on one but not the other is the drift worth catching.
 _DAEMONS = [("hub", "BZ_HUB_DIR", "blizzard-hub.toml"), ("runner", "BZ_RUNNER_DIR", "blizzard-runner.toml")]
 
 
@@ -250,11 +240,8 @@ def test_dir_help_names_the_env_fallback(daemon: str, env_var: str, config_name:
     assert f"${env_var}" in result.output
 
 
-# `host` accepting a positional DIRECTORY like `init` does (issue #3). Each case drives
-# `host` against an *uninitialized* runtime dir: the daemon can't be driven to a live
-# `uvicorn.run`/`server.run` from a unit test (it blocks), but the config-load guard fails
-# fast, before serving, naming the exact directory it resolved — so it proves resolution
-# without starting anything. The conflict case never reaches that guard at all.
+# `host` accepting a positional DIRECTORY like `init` does (issue #3): the config-load
+# guard fails fast, before serving, naming the resolved directory — proof with nothing started.
 @pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
 def test_host_accepts_positional_directory(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
     root = tmp_path / "runtime"
@@ -360,11 +347,8 @@ def test_hub_host_reports_an_unset_work_source_token_env_as_a_clean_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A `[[work_source]]` naming an unset `token_env` fails at boot as the same
-    clean CLI error the config-load guard raises — not an unhandled traceback.
-
-    The boot failure is by design; the traceback was not. `host` builds the app after
-    the revision guard, so this exercises the composition root through the real verb.
-    """
+    clean CLI error the config-load guard raises — not an unhandled traceback; the
+    boot failure is by design, the traceback was not."""
     runner = CliRunner()
     root = tmp_path / "hub"
     assert runner.invoke(blizzard, ["hub", "init", str(root)]).exit_code == 0
@@ -385,11 +369,8 @@ def test_hub_host_reports_an_unset_work_source_token_env_as_a_clean_error(
 
 def test_runner_host_reports_a_missing_runner_prompt_file_as_a_clean_error(tmp_path: Path) -> None:
     """A configured-but-missing ``runner_prompt_file`` (issue #103) fails at boot as a
-    clean CLI error, not a traceback from inside the loop's background thread.
-
-    ``PeriodicDriver`` resolves it in its constructor, on `host`'s own thread, before
-    any socket binds — so the failure surfaces here rather than silently killing the
-    reconciliation loop while uvicorn keeps serving."""
+    clean CLI error: ``PeriodicDriver`` resolves it before any socket binds, rather than
+    silently killing the reconciliation loop while uvicorn keeps serving."""
     runner = CliRunner()
     root = tmp_path / "runner"
     assert runner.invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0

@@ -1,14 +1,8 @@
 """The runner-owned worker hook file.
 
-:func:`worker_settings_document` is the single source of its content. The
-``PostToolUse`` hook fires ``blizzard runner heartbeat`` on every tool call; the
-``SessionEnd`` hook fires ``blizzard runner session-end`` when the session exits. Both
-verbs take their identity from the spawn environment (``BLIZZARD_LEASE_ID`` /
-``BLIZZARD_RUNNER_URL``), so the hook commands need no arguments.
-
-The file ships with the runner and is versioned with it — nothing is materialized into
-a project repo (repos know nothing about the fleet).
-"""
+:func:`worker_settings_document` is the single source of its content. Both hook verbs
+take their identity from the spawn environment, so the hook commands need no arguments.
+The file ships with the runner — nothing is materialized into a project repo."""
 
 from __future__ import annotations
 

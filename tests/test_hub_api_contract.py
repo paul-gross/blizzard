@@ -1,12 +1,9 @@
 """Hub API contract surface (component tier) — the P6 route shapes.
 
-The walking-skeleton routes must exist, appear in the committed OpenAPI schema (so
-the generated TS client carries them), and validate their bodies against the wire
-models. Behavioural coverage of each route lives in the per-feature component tests
-(``test_ingest_and_queue``, ``test_route_claim``, ``test_completion_apply``,
-``test_delivery_loop``); this file pins the surface: schema presence, and that a
-wired route rejects a malformed body with 422 rather than accepting a loose one.
-"""
+Pins the surface: the walking-skeleton routes exist, appear in the committed OpenAPI
+schema, and a wired route rejects a malformed body with 422 rather than accepting a
+loose one. Behavioral coverage of each route lives in the per-feature component
+tests."""
 
 from __future__ import annotations
 
@@ -54,8 +51,6 @@ _NEW_PATHS = [
 ]
 
 # The work-source rename's deprecated HTTP aliases (issue #55) — `(canonical, alias)`.
-# The runner's own `/api/chunks/{id}/pm-items` proxy alias is the same decision on the
-# other daemon; it is pinned in `test_work_items_proxy.py`, against a runner app.
 _DEPRECATED_ALIAS_PAIRS = [
     ("/api/chunks/{chunk_id}/work-items", "/api/chunks/{chunk_id}/pm-items"),
     ("/api/fleet/chunks/{chunk_id}/work-items", "/api/fleet/chunks/{chunk_id}/pm-items"),
@@ -75,9 +70,7 @@ def test_events_stream_excluded_from_openapi() -> None:
 
 
 def test_the_only_deprecated_operations_are_the_sanctioned_aliases() -> None:
-    # `/pm-items` stays as a deprecated alias (issue #55) since the HTTP surface is
-    # reachable by out-of-tree callers. The assertion is an allow-list, not a
-    # relaxation — a *new* deprecated route still fails here until it is named.
+    # An allow-list, not a relaxation — a *new* deprecated route fails until named.
     paths = create_app_for_export().openapi()["paths"]
     deprecated = {
         f"{method.upper()} {path}"

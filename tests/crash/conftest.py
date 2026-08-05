@@ -1,14 +1,7 @@
 """Session scaffolding for the kill-9 sweep — one fixture mint, one forge, for all points.
 
-Skipped unless ``BLIZZARD_CRASH_SWEEP=1`` and the layout is discoverable (the sibling
-``blizzard-mock`` worktree plus a local winter source). Run it with::
-
-    BLIZZARD_CRASH_SWEEP=1 uv run pytest -m crash_sweep
-
-The fixture world (bare origins + a real winter workspace) is minted **once per
-session** (``bzh:crash-point-registry`` — keep per-point runtime tight); each point runs
-against fresh hub + runner stores over that one workspace, landing a unique file so the
-shared origins never collide.
+Skipped unless ``BLIZZARD_CRASH_SWEEP=1``; run with ``BLIZZARD_CRASH_SWEEP=1 uv run pytest
+-m crash_sweep``. See ``bzh:crash-point-registry`` for the once-per-session mint rationale.
 """
 
 from __future__ import annotations

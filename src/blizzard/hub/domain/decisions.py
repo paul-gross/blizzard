@@ -1,19 +1,8 @@
 """Human-gate domain rules — decisions and requeue closure.
 
-Two services carry this wave's human-loop writes; both hold the **write** chunk
-repository (``bzh:controller-read-only``) and stamp time from the injected clock:
-
-* :class:`DecisionService` — the runner-config gate (``POST /chunks/{id}/decisions``)
-  and resolution (``POST /decisions/{id}/resolutions``). A runner submits a decision in
-  place of a transition for a node it was configured to gate: the choice set is
-  the node's own (the hub owns the graph), and the step's artifacts commit atomically
-  with the decision. Resolution is first-write-wins, like an answer. The
-  *graph* gate — opening a decision when a transition lands on a human-judged node — is
-  the apply rule's job (:mod:`blizzard.hub.domain.apply`), not this service.
-* :class:`RequeueService` — ``POST /chunks/{id}/requeues`` closes an open escalation by
-  supersession: a ``requeue.recorded`` fact supersedes the escalation and the
-  route is released, so the chunk re-derives ``ready`` and re-enters FILL at its current
-  node — a fresh attempt. Never a resolution fact.
+Both services hold the **write** chunk repository (``bzh:controller-read-only``) and
+stamp time from the injected clock: :class:`DecisionService` gates a runner-configured
+node and resolves first-write-wins; :class:`RequeueService` closes an escalation.
 """
 
 from __future__ import annotations
@@ -47,12 +36,9 @@ def _failure(detail: str) -> DecisionSubmitResult:
 @dataclass(frozen=True)
 class DecisionSubmitResult:
     """:meth:`DecisionService.submit`'s own return — the wire :class:`ApplyResponse` plus
-    the identity of the durable fact this call itself just wrote (issue #213), not a
-    wire type: the route controller unwraps ``response`` for the HTTP body and reads
-    ``decision_id`` to build the ``chunk-changed`` frame's ``key``.
-
-    ``decision_id`` is set only on a fresh ``decisions`` row — never on a failure or the
-    idempotent-replay branch (a lost-ack re-submission of an already-open decision)."""
+    the identity of the durable fact this call just wrote (issue #213). ``decision_id``
+    is set only on a fresh ``decisions`` row, never on a failure or an idempotent
+    replay."""
 
     response: ApplyResponse
     decision_id: str | None = None
@@ -92,9 +78,8 @@ class DecisionService:
         if facts is None:
             return _failure(f"unknown chunk {chunk.chunk_id}")
 
-        # Route-token authorization (issue #84b) — same order and rationale as
-        # ``apply.py``'s own check: ahead of the idempotent-replay probe (a
-        # post-release zombie's replayed decision is rejected too) and the epoch fence.
+        # Route-token authorization (issue #84b): ahead of the idempotent-replay probe and
+        # the epoch fence, so a post-release zombie's replayed decision is rejected too.
         route = self._chunks.route_of(chunk.chunk_id)
         detail = check_route_token(
             facts,
@@ -167,10 +152,8 @@ class RequeueService:
     def requeue(self, chunk_id: str) -> int:
         """Supersede the open escalation and release the route so the chunk re-derives ready.
 
-        Raises :class:`NotEscalated` if the chunk is not ``needs_human`` — there is no
-        escalation to close, so a requeue would be meaningless. Returns the freshly-written
-        ``requeues.id`` (issue #213's activity-feed key) — the ``route_released`` row this
-        also writes is not the ``requeued`` cause's own mapped fact table."""
+        Raises :class:`NotEscalated` if the chunk is not ``needs_human``. Returns the
+        freshly-written ``requeues.id`` (issue #213)."""
         facts = self._chunks.load_facts(chunk_id)
         if facts is None or open_escalation(facts) is None:
             raise NotEscalated(f"chunk {chunk_id} is not escalated (needs_human)")

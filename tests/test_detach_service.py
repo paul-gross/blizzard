@@ -1,21 +1,7 @@
 """DetachService (unit tier) — the operator-release write, facts only.
 
 A fake stands in for the store — only ``route_of`` and ``record_route_released`` are
-meaningfully implemented; every other seam is unreachable from
-:meth:`DetachService.detach` and raises loudly if a regression starts calling it
-(``bzh:domain-core`` — no store, no tokens).
-
-``DetachService`` needs exactly those two members of :class:`IWriteChunkRepository`,
-but every domain service in this package (``claim.py``, ``decisions.py``,
-``ingest.py``, ``queue.py``, ``promote.py``, ``questions.py``, ...) takes the same
-wide read+write Protocol — a service-specific narrower Protocol would be the lone
-exception to that established shape (``bzh:repository-split`` names exactly the two
-read/write variants, not a per-service slice), so this fake stays typed against the
-full ``IWriteChunkRepository`` rather than inventing one. To keep the fake itself
-small anyway, it implements only the two live methods and falls back to
-``__getattr__`` for everything else — so growing the write repository with a new
-method no longer breaks this file; pyright's structural check is bypassed with an
-explicit, documented :func:`typing.cast` at the one call site that needs it.
+meaningfully implemented; every other seam raises loudly if called (``bzh:domain-core``).
 """
 
 from __future__ import annotations
@@ -41,9 +27,7 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 class _FakeChunkRepo:
     """Only ``route_of``/``record_route_released`` are live; anything else is a bug.
 
-    Not typed against :class:`IWriteChunkRepository` directly — pyright cannot verify
-    ``__getattr__``-backed structural conformance, so callers wrap an instance in
-    :func:`_as_write_repo` instead."""
+    Callers wrap an instance in :func:`_as_write_repo` for pyright's structural check."""
 
     route: Route | None
     released: list[tuple[str, datetime]] = field(default_factory=list)

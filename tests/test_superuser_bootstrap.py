@@ -1,11 +1,8 @@
 """The ``auth.superuser`` bootstrap lifecycle at boot (component tier, issue #94).
 
-``build_hosted_app`` runs ``ensure_superuser_bootstrap`` once the store is confirmed at
-the expected schema head, mirroring the provider-name-immutability check's own
-``readiness.evaluate().ready`` guard (``tests/test_auth_provider_immutability.py``).
-Exercises the full lifecycle against a real migrated store: pre-provision when unclaimed,
-promote-in-place when the email already resolves to a user, idempotence across repeated
-boots, and the config-change demotion of the *previous* bootstrapped superuser.
+Exercises the full lifecycle against a real migrated store: pre-provision when
+unclaimed, promote-in-place when the email resolves to a user, idempotence across
+repeated boots, and config-change demotion of the previous superuser.
 """
 
 from __future__ import annotations

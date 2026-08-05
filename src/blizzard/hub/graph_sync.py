@@ -1,26 +1,9 @@
 """Reconcile the packaged graph set against the store — ``blizzard hub graph sync`` (#146).
 
-The gap this closes: a graph the hub serves lives in its **store**, so shipping a changed
-graph in a new wheel changes no fleet behavior until something mints it — silently, with
-every deploy check green.
-
-This module is the **edge half** of the fix: it walks the packaged set, loads and inlines
-each ``graph.yaml`` (filesystem + PyYAML, both outside the domain — ``bzh:domain-core``),
-re-parses what the store already holds, and hands both to
-:meth:`~blizzard.hub.domain.graph_authoring.GraphMintService.mint_if_changed`, which owns
-the mint-only-if-changed rule itself. It is deliberately not a route body: the same
-function is what an at-startup reconciliation would call, so both delivery shapes share
-one implementation rather than two that must agree.
-
-**Per-graph isolation.** One packaged graph failing to load, parse, or validate must not
-stop the others reconciling — a wheel that ships one bad graph should still converge the
-rest and say plainly which one it could not. Every outcome, good or bad, is reported;
-only a :attr:`GraphSyncStatus.FAILED` row makes the caller's exit non-zero.
-
-**Additive, never re-pinning.** A mint appends a new definition and supersedes the prior
-one for *future* resolution; nothing here touches a chunk. Deliberate migration of
-in-flight work is issue #124's standing intent and #164's follow-latest policy, not this.
-"""
+The edge half: walk the packaged set, load and inline each ``graph.yaml`` (filesystem and
+PyYAML, both outside the domain — ``bzh:domain-core``), and hand it with the stored definition
+to the domain, which owns the mint-only-if-changed rule. Per-graph isolated — one graph
+failing to load is a report row, not a stop — and additive: nothing re-pins a chunk."""
 
 from __future__ import annotations
 
@@ -50,12 +33,8 @@ class GraphSyncStatus(StrEnum):
 class GraphSyncOutcome:
     """One packaged graph's reconciliation result — a row of the report.
 
-    ``name`` is the graph's authored name where one could be read, else the packaged
-    directory name: a graph that fails to *parse* has no authored name, and a report row
-    with no way to name the file it came from would be useless for the one job it has.
-    ``detail`` explains a :attr:`GraphSyncStatus.MINTED` ("why") or a
-    :attr:`GraphSyncStatus.FAILED` (the error); ``None`` for up-to-date, which needs none.
-    """
+    ``name`` is the authored name where one could be read, else the packaged directory
+    name. ``detail`` explains a mint or a failure, and is ``None`` for up-to-date."""
 
     name: str
     status: GraphSyncStatus
@@ -68,11 +47,9 @@ def reconcile_packaged_graphs(
 ) -> list[GraphSyncOutcome]:
     """Reconcile every packaged graph against the store; mint only what changed.
 
-    Idempotent: run twice against an unchanged wheel and the second run mints nothing, so
-    a deploy can call it unconditionally without churning graph lineage. ``paths``
-    overrides the packaged set (tests point it at a fixture directory); it defaults to
-    :func:`~blizzard.hub.graphs.packaged_graph_paths`.
-    """
+    Idempotent: a second run against an unchanged packaged set mints nothing. ``paths``
+    overrides the packaged set, defaulting to
+    :func:`~blizzard.hub.graphs.packaged_graph_paths`."""
     return [
         _reconcile_one(mint_service, graphs, path) for path in (paths if paths is not None else packaged_graph_paths())
     ]
@@ -81,11 +58,8 @@ def reconcile_packaged_graphs(
 def _reconcile_one(mint_service: GraphMintService, graphs: IReadGraphRepository, path: Path) -> GraphSyncOutcome:
     """One packaged graph, with every failure mode folded into a report row.
 
-    The load and the compare are separate ``try`` blocks on purpose. A packaged graph that
-    cannot be loaded has no name to reconcile *against*, so it fails immediately; once
-    loaded, a validation error is reported under the graph's own authored name, which is
-    what an operator reading the report needs to find it.
-    """
+    The load and the compare are separate ``try`` blocks: a graph that cannot be loaded
+    has no authored name to report a validation failure under."""
     try:
         doc = load_graph_doc(path)
         definition_yaml = inline_graph_yaml(path)
@@ -113,13 +87,9 @@ def _reconcile_one(mint_service: GraphMintService, graphs: IReadGraphRepository,
 def _parse_stored(stored: str | None, name: str) -> GraphDoc | None:
     """A stored definition re-parsed into an authoring doc, or ``None``.
 
-    ``None`` means "nothing to compare against", which mints. That covers the name that
-    was never minted *and* the stored definition that no longer parses (an older
-    authoring schema the current parser cannot express) — the reconciler mints the
-    packaged graph rather than wedging on a definition nobody can compare against, and the
-    unparseable one stays in the store, superseded rather than lost. The two are told
-    apart by the caller for the report's ``detail``, from ``stored`` itself.
-    """
+    ``None`` means "nothing to compare against", which mints. It covers both the
+    never-minted name and the stored definition that no longer parses — that one stays in
+    the store, superseded rather than lost."""
     if stored is None:
         return None
     try:

@@ -1,11 +1,9 @@
 """``blizzard hub login``'s own mechanics (issue #96) — PKCE challenge/verifier
 minting, the ephemeral loopback listener, and the paste-code fallback.
 
-Kept out of ``hub/cli.py`` so the click glue there stays thin. The
-CLI never contacts a provider — every network call here targets the hub itself: the
-browser is pointed at the hub's own ``authorize`` endpoint (issue #95), and the code it
-delivers is redeemed at ``POST /api/auth/cli/token``.
-"""
+No network call here reaches a provider — every one targets the hub itself: the browser
+is pointed at the hub's ``authorize`` endpoint, and the code it delivers is redeemed at
+``POST /api/auth/cli/token``."""
 
 from __future__ import annotations
 
@@ -20,10 +18,8 @@ from blizzard.hub.auth.pkce import challenge_from_verifier
 
 _CLIENT_ID = "cli"
 _LOOPBACK_HOST = "127.0.0.1"
-#: The out-of-band redirect form the paste-code fallback registers as (mirrors
-#: ``hub/api/idp.py``'s own ``CLI_OOB_REDIRECT_URI`` — kept as a separate literal
-#: rather than an import so this client-side module carries no dependency on the
-#: server route module).
+#: The out-of-band redirect form the paste-code fallback registers as — a separate
+#: literal, so this client-side module depends on no server module.
 OOB_REDIRECT_URI = "urn:ietf:wg:oauth:2.0:oob"
 #: How long the loopback listener waits for the browser to complete the hub login
 #: before giving up.
@@ -32,14 +28,12 @@ _EXCHANGE_TIMEOUT = 15.0
 
 
 class LoginError(Exception):
-    """Any step of the login dance failed — the CLI command wraps this in a
-    ``click.ClickException``."""
+    """Any step of the login dance failed."""
 
 
 def _new_pkce_pair() -> tuple[str, str]:
-    """``(code_verifier, code_challenge)`` — a fresh, high-entropy verifier and its
-    S256 challenge (``blizzard.hub.auth.pkce``, the exact function the hub's own
-    exchange calls, so the two sides can never drift onto a different encoding)."""
+    """``(code_verifier, code_challenge)`` — a fresh, high-entropy verifier and its S256
+    challenge, derived through ``blizzard.hub.auth.pkce``."""
     verifier = secrets.token_urlsafe(48)
     return verifier, challenge_from_verifier(verifier)
 
@@ -107,10 +101,7 @@ def _make_handler(result: _CallbackResult, expected_state: str) -> type[http.ser
 def loopback_login(base_url: str, *, open_browser: bool = True, timeout: float = CALLBACK_TIMEOUT_SECONDS) -> str:
     """Bind an ephemeral ``127.0.0.1`` port, open the browser to the hub's authorize
     endpoint, wait for the one callback request, and exchange the delivered code (with
-    the PKCE verifier) for a hub session token. ``timeout`` (default
-    :data:`CALLBACK_TIMEOUT_SECONDS`) is a constructor parameter rather than a bare
-    module constant so a test can drive a fast, deterministic "browser never shows up"
-    case."""
+    the PKCE verifier) for a hub session token. ``timeout`` bounds that wait."""
     verifier, challenge = _new_pkce_pair()
     state = secrets.token_urlsafe(18)
     result = _CallbackResult()

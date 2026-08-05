@@ -1,9 +1,8 @@
 """The late-write fence after a detach (issue #38 acceptance criterion).
 
-The issue's explicit criterion: "A detached runner's late completion for that chunk
-is rejected by the lease floor and does not resurrect the route." Detach relies on
-the existing epoch fence as-is — this test proves that reliance holds, not the fence's
-own mechanics (owned by ``tests/test_zombie_fence.py``).
+A detached runner's late completion is rejected by the lease floor and does not
+resurrect the route. Detach relies on the existing epoch fence as-is — this test
+proves that reliance holds, not the fence's own mechanics.
 """
 
 from __future__ import annotations
@@ -90,17 +89,14 @@ def test_a_detached_runners_late_completion_is_rejected_and_does_not_resurrect_t
     report_lease(hub, chunk_id, epoch=1, seq=1, runner_id="r1")
 
     # The operator detaches — one `route.released` fact; the chunk re-derives `ready`.
-    # Runner A's route is gone, but the lease floor is still epoch 1 (detach does not
-    # bump it — guardrail 3, out of scope for this issue).
+    # The lease floor stays epoch 1 — detach does not bump it (guardrail 3).
     hub.clock.advance(timedelta(seconds=1))
     detach = hub.client.post(f"/api/chunks/{chunk_id}/detach")
     assert detach.status_code == 202, detach.text
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
 
     # Another runner claims the now-ready chunk and mints its OWN lease at epoch 2 —
-    # this is what raises the lease floor. Before this claim+lease, the
-    # fence would not yet reject runner A's epoch-1 completion (it would still be
-    # current); the fence only bites from here on.
+    # this raises the lease floor; before it, A's epoch-1 completion was still current.
     hub.clock.advance(timedelta(seconds=1))
     claim_b = hub.client.post(
         "/api/fleet/routes",
@@ -126,9 +122,8 @@ def test_a_detached_runners_late_completion_is_rejected_and_does_not_resurrect_t
     assert detail["status"] == "running"
     assert detail["current_node_id"] == build_node_id
 
-    # Critically, the route was NOT resurrected: the chunk still belongs to runner
-    # B's fresh route — runner A's late write did not revive A's release-severed
-    # route, and it did not re-derive the chunk back to `ready`.
+    # The route was NOT resurrected: the chunk still belongs to runner B's fresh
+    # route, and did not re-derive back to `ready`.
     assert detail["route"] is not None
     assert detail["route"]["runner_id"] == "r2"
     assert detail["status"] != "ready"

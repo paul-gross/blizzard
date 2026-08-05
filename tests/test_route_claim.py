@@ -75,9 +75,6 @@ def test_summary_environment_count_counts_the_routes_environments(tmp_path: Path
 
 # A graph whose single **runner** node authors `pass -> done` — landing the terminal
 # from a runner node stamps no `route.released` (only a hub node landing does, #140).
-# Deliberately hub-node-free: `deliver` in `test_completion_apply.py`'s graph would
-# release the route and dissolve the bug. Named `default-delivery` so ingest reuses it
-# by name; no `produces:`, so a completion needs no artifact.
 _RUNNER_TERMINAL_YAML = """
 name: default-delivery
 entry: build
@@ -98,14 +95,8 @@ nodes:
 
 def test_summary_reports_a_finished_chunk_as_unrouted(tmp_path: Path) -> None:
     """A terminal chunk holds no claim (issue #140), so its ``runner_id``/
-    ``environment_count`` read unrouted even while its route facts still show a route.
-
-    This ``done`` chunk reaches that state through a real completion posted to
-    ``POST /api/fleet/chunks/{id}/completions``, not a hand-written transition row, so
-    the ``route_of`` assertion below fails the moment apply starts releasing the route
-    on this path. ``stop`` releases its route already; it is here because status, not
-    the release, is what the summary keys on.
-    """
+    ``environment_count`` read unrouted even while its route facts still show a route —
+    proven through a real completion, not a hand-written transition row."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _RUNNER_TERMINAL_YAML}).status_code == 201
     running = _ingest(hub, ref="7")
@@ -152,9 +143,7 @@ def test_summary_reports_a_finished_chunk_as_unrouted(tmp_path: Path) -> None:
     assert detail["route"]["runner_id"] == "r1"
 
 
-# --------------------------------------------------------------------------- #
-# Route capability token — mint at claim, hash-only at rest, returned once (issue #84a)
-# --------------------------------------------------------------------------- #
+# --- Route capability token — mint at claim, hash-only at rest, returned once (#84a) ---
 
 
 def test_winning_claim_carries_a_plaintext_route_token(tmp_path: Path) -> None:
@@ -242,14 +231,8 @@ def test_envelope_reread_is_idempotent(tmp_path: Path) -> None:
     assert reread["epoch"] == claimed["epoch"]
 
 
-# --------------------------------------------------------------------------- #
-# The hub denies a claim from a registry-paused runner outright (issue #44)
-# --------------------------------------------------------------------------- #
-#
-# A distinct outcome from the 409 race loss above: this claim never enters the
-# exactly-once race at all — the hub refuses it because its own registry already
-# marks the claiming runner paused, independent of whether the runner has read the
-# flag back on its own pull yet.
+# --- The hub denies a claim from a registry-paused runner outright (issue #44) ---
+# Distinct from the 409 race loss above: this claim never enters the race at all.
 
 
 def test_claim_denied_while_hub_paused(tmp_path: Path) -> None:
@@ -284,11 +267,9 @@ def test_claim_allowed_after_resume(tmp_path: Path) -> None:
 
 
 def test_claim_denied_the_instant_the_pause_lands_mid_tick(tmp_path: Path) -> None:
-    """The motivating race: a pause landing at the hub *between* a runner's last pull and
-    its claim POST — the window this issue closes. There is no PULL/tick machinery at
-    this tier, so the race is expressed the way the hub actually sees it: the pause fact
-    is already durable by the time ``POST /routes`` arrives, whatever the claiming
-    runner's own (possibly stale) local copy of the brake says."""
+    """The motivating race: a pause landing at the hub between a runner's last pull
+    and its claim POST — the pause fact is already durable by the time the claim
+    arrives, whatever the runner's stale local copy says."""
     hub = build_hub(tmp_path)
     chunk_id = _ingest(hub)
     _register(hub, "r1")
@@ -356,14 +337,8 @@ def test_in_flight_submission_unaffected_while_hub_paused(tmp_path: Path) -> Non
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
 
-# --------------------------------------------------------------------------- #
-# The hub refuses a claim on an already-terminal chunk outright (issue #118, the
-# #118 pre-push review's must-fix 1) — the peek-then-claim race `hub stop` opens: a
-# runner peeks a ready chunk, an operator stops it, and the runner's in-flight
-# `POST /fleet/routes` must not be granted a route on a chunk that can never run
-# again. The ready queue's own peek-time filter cannot see a stop landing after the
-# peek — this is the hub's own re-derive-under-the-lock backstop.
-# --------------------------------------------------------------------------- #
+# --- The hub refuses a claim on an already-terminal chunk outright (issue #118) ---
+# The peek-then-claim race `hub stop` opens; the hub re-derives status under the lock.
 
 
 def test_claim_denied_when_the_chunk_is_already_stopped(tmp_path: Path) -> None:

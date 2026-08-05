@@ -12,12 +12,9 @@ from pydantic import BaseModel
 
 class ActivityView(BaseModel):
     """One activity-feed row on the wire — present-when-meaningful: a field its source
-    doesn't fill is absent, never a placeholder ``None``-as-a-present-field.
-
-    ``type`` is one of ``"chunk-changed"`` / ``"event-logged"`` / ``"runner-changed"``;
-    ``key`` is the identity of the underlying fact, the merge's own recency tiebreak,
-    never a stable frame id. ``status``/``prev_status``/``node``/``prev_node`` stay
-    absent for every row this phase produces — present in the shape for a later one."""
+    doesn't fill is absent, never a placeholder ``None``-as-a-present-field. ``type`` is
+    one of ``"chunk-changed"`` / ``"event-logged"`` / ``"runner-changed"``; ``key`` is the
+    identity of the underlying fact, never a stable frame id."""
 
     type: str
     key: str

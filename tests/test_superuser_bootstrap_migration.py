@@ -1,10 +1,7 @@
-"""The superuser-bootstrap migration — ``superuser_bootstrap`` (component tier, issue
-#94).
+"""The superuser-bootstrap migration — ``superuser_bootstrap`` (component tier, issue #94).
 
-Mirrors ``test_auth_oauth_migration.py``'s own shape: a fresh ``base -> head`` store is
-covered generically by ``test_store_migrations.py``'s whole-ladder test; this covers
-the "existing store, upgraded onward" half plus the downgrade.
-"""
+Covers the "existing store, upgraded onward" half plus the downgrade; a fresh
+``base -> head`` store is already covered by ``test_store_migrations.py``."""
 
 from __future__ import annotations
 

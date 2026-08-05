@@ -1,17 +1,5 @@
-"""event_log — the hub's durable, append-only operational event feed (issue #125, hub store tree)
-
-Phase 1 of the operational event log: one append-only row per operational event the
-hub records (typed, severity-ranked, clock-stamped), unified at read time with open
-escalations (``GET /api/events``, ``bzh:facts-not-status`` — no ``status`` column).
-``chunk_id`` is nullable — some events are runner-scoped, naming no chunk.
-
-``table.create(bind, checkfirst=True)`` also emits the ``ix_event_log_recorded_at``
-index declared alongside the ``event_log`` table in ``schema.py`` — it is associated
-with that table's metadata, so it rides the same ``CREATE`` (mirrors
-``20260721_1100_hub_auth_identity_spine``'s ``uq_users_email``). The live-schema
-pattern (mirrors ``20260717_2330_hub_usage_facts``): this revision creates exactly the
-one new table, ``checkfirst`` so a fresh ``base -> head`` and an in-place upgrade both
-converge.
+"""event_log — creates the hub's durable, append-only operational event feed: typed,
+severity-ranked, clock-stamped (issue #125, hub store tree)
 
 Revision ID: 20260721_1600_hub_event_log
 Revises: 20260721_1500_hub_cli_auth_state_user

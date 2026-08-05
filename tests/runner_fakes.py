@@ -1,10 +1,8 @@
 """Test doubles for the runner loop's seams — injected at the boundaries only.
 
 The reconciliation steps are a pure function of ``(store, clock, seam clients)``
-(``bzh:steppable-loop``), so the unit tier drives them against a real (tmp sqlite)
-runner store with these fakes standing in for the hub, workspace provider, harness
-adapter, process probe, and worktree git. Each fake conforms to its Protocol by
-type — pyright rejects drift.
+(``bzh:steppable-loop``), so the unit tier drives them against a real store with these
+fakes standing in for the hub, provider, harness, probe, and worktree git.
 """
 
 from __future__ import annotations
@@ -62,21 +60,12 @@ def _create_all(md: MetaData, engine: object) -> None:
 class FakeHub:
     """A scriptable :class:`IHubClient`: canned queue/claim/apply/envelope/chunk.
 
-    ``down`` simulates an unreachable hub — ``submit_completion`` and ``push_facts``
-    raise :class:`HubClientError` so store-and-forward buffering can be exercised.
-    ``push_facts`` keeps a per-runner high-water mark and re-acks a replayed
-    seq without re-applying, mirroring the hub's idempotency contract. ``not_found``
-    simulates a chunk the hub no longer knows about (blizzard#9) — ``get_chunk`` and
-    ``get_envelope`` raise :class:`ChunkNotFoundError` for any chunk id it names,
-    checked before ``down`` since a 404 is a distinguishable outcome, not a transport
-    failure.
+    ``down`` raises :class:`HubClientError`; ``not_found`` (blizzard#9) 404s `get_chunk`/`get_envelope`.
     """
 
     def __init__(self, *, default_runner_id: str = "r1") -> None:
         # The runner id the unscripted `get_chunk` fallback's route reports as holding the
-        # chunk. `make_context` sets this to match whatever `LoopConfig.runner_id` the context
-        # is actually wired to (default or explicit), so "the route is ours" stays true by
-        # construction rather than by two literals happening to agree (blizzard#38).
+        # chunk; `make_context` keeps this in sync with `LoopConfig.runner_id` (blizzard#38).
         self.default_runner_id = default_runner_id
         self.queue: list[QueuePeekEntry] = []
         self.claim_outcome: RouteClaimOutcome | None = None
@@ -89,11 +78,8 @@ class FakeHub:
         self.decision_responses: list[ApplyResponse] = []
         self.leases: list[tuple[str, int, str]] = []  # (chunk_id, epoch, runner_id)
         self.escalations: list[tuple[str, int, str, str]] = []
-        # (chunk_id, epoch, runner_id, takeover) — `report_escalation` also accepts
-        # `wrapped_takeover_command` (protocol parity with the real hub client), but
-        # nothing in `src/` calls this dedicated route (escalation reporting rides the
-        # buffered `push_facts` path instead) and no test reads a wider tuple here, so
-        # it stays untracked rather than widening this bookkeeping shape for nothing.
+        # (chunk_id, epoch, runner_id, takeover) — `wrapped_takeover_command` stays
+        # untracked here; nothing in `src/` calls this route (push_facts carries it instead).
         self.pushed: list[RunnerFact] = []
         self.high_water: dict[str, int] = {}
         self.questions: dict[str, QuestionView] = {}
@@ -158,11 +144,8 @@ class FakeHub:
             raise ChunkNotFoundError(f"chunk {chunk_id} unknown")
         if self.down:
             raise HubClientError("fake hub is down")
-        # Default a hub-node-held chunk to `delivering` (the merge queue is still
-        # working) with its route still ours — the common case, since a test that
-        # seeds a lease this fake never claimed still owns a live route in reality
-        # (nothing has told the hub otherwise) — unless a test scripts something else,
-        # e.g. a released/reassigned route.
+        # Default a hub-node-held chunk to `delivering` with its route still ours — the
+        # common case — unless a test scripts something else (e.g. a released route).
         if chunk_id in self.chunks:
             return self.chunks[chunk_id]
         return ChunkDetail(
@@ -229,11 +212,7 @@ class FakeHub:
 class FakeProvider:
     """A scriptable :class:`IWorkspaceProvider` over a fixed pool of workdirs.
 
-    ``repos`` scripts the per-env manifest as ``{env_id: [(name, origin_url), ...]}``.
-    It defaults to the suite's stock ``toy-api`` repo for every pooled env, since almost
-    every test that reaches a git-commit declaration declares exactly that one; a test
-    exercising several repos, a differing origin, or an empty (nothing-authorized)
-    manifest names its own.
+    ``repos`` scripts the per-env manifest, defaulting to the stock ``toy-api`` repo.
     """
 
     _DEFAULT_REPOS = (("toy-api", "file:///origins/toy-api.git"),)
@@ -277,10 +256,8 @@ class FakeProvider:
 
 class FakeTranscriptSource:
     """A scriptable :class:`IHarnessTranscriptSource`: canned batches, raw lines, and
-    sizes by session id (blizzard#245) — the one fake every consumer of the harness's
-    transcript seam scripts against, panel and loop alike (``FakeHarness.transcript_source``,
-    ``harness.transcript_source()``). An unscripted session reads as ``not_found`` — today's
-    null-source shape — so a test only names the sessions it cares about.
+    sizes by session id (blizzard#245). An unscripted session reads as ``not_found``, so
+    a test only names the sessions it cares about.
     """
 
     def __init__(
@@ -324,13 +301,7 @@ class FakeTranscriptSource:
 class FakeHarness:
     """A scriptable :class:`IHarnessAdapter`: canned spawn handle + verdict.
 
-    ``usage`` is the blanket ``parse_usage``/``sum_transcript_usage`` reply used by
-    most tests (one sample regardless of ``kind`` or which stdout/transcript is read);
-    ``usage_by_kind`` (issue #58) overrides it per :class:`UsageKind` for a test that
-    needs to tell the spawn/resume fact from the judge fact apart, or to force one
-    ``kind`` envelope-less (``None`` in the map) while another still parses — a
-    per-kind entry set to ``None`` explicitly returns no envelope for that kind rather
-    than falling back to ``usage``.
+    ``usage`` is the blanket reply; ``usage_by_kind`` (issue #58) overrides it per kind.
     """
 
     def __init__(
@@ -362,31 +333,24 @@ class FakeHarness:
         self.resumed_identity: list[tuple[WorkerPreamble | None, str]] = []  # (preamble, chunk_id) per resume
         self.resume_pid = 4321
         # The (model, effort) each invocation was handed (issue #144) — one entry per
-        # call, so a test can assert the application contract per call site rather than
-        # only per node-entry path.
+        # call, for per-call-site assertions.
         self.spawn_model_effort: list[tuple[str | None, str | None]] = []
         self.judge_model_effort: list[tuple[str | None, str | None]] = []
         self.resume_efforts: list[str | None] = []
         self.usage_models: list[str | None] = []
         # The (model, effort) each `resume_command` composition was handed (issue #144).
         self.resume_command_config: list[tuple[str | None, str | None]] = []
-        # Scripted `resolve_model`/`resolve_effort` replies (issue #144). The default
-        # echoes the first preference / the value verbatim, so a test that does not care
-        # about resolution sees what it passed in.
+        # Scripted `resolve_model`/`resolve_effort` replies (issue #144); default echoes
+        # the input verbatim for a test that doesn't care about resolution.
         self.resolved_model = "fake-model"
         self.resolved_effort: str | None = None
-        # The scripted `sample_external_subscription_usage` reply (issue #218, phase 2):
-        # `external_usage_snapshot` is returned verbatim; `external_usage_raises`, when
-        # set, is raised instead, though the real adapter contract promises never to
-        # raise. `external_usage_calls` counts every invocation so a test can assert the
-        # cadence gate skipped (or did not skip) sampling.
+        # Scripted `sample_external_subscription_usage` reply (issue #218): snapshot
+        # returned verbatim, or `external_usage_raises` raised; calls counted for cadence asserts.
         self.external_usage_snapshot = external_usage_snapshot
         self.external_usage_raises = external_usage_raises
         self.external_usage_calls = 0
-        # Scriptable, not the null source (blizzard#245) — a test that drives the panel
-        # projection or the loop's usage-fallback/rotation reads needs canned batches,
-        # lines, or sizes. Defaults to an empty `FakeTranscriptSource` (every session
-        # `not_found`, no lines, no size).
+        # Scriptable, not the null source (blizzard#245); defaults to an empty
+        # `FakeTranscriptSource` (every session `not_found`, no lines, no size).
         self._transcript_source: IHarnessTranscriptSource = transcript_source or FakeTranscriptSource()
 
     def spawn(
@@ -402,9 +366,8 @@ class FakeHarness:
         self.spawns.append((envelope, preamble))
         self.resume_froms.append(resume_from)
         self.spawn_model_effort.append((model, effort))
-        # Mirrors the real in-place adapter contract (issue #115, plan Q1): a resume
-        # continues under the SAME id it was given, never the scripted handle's; a
-        # fresh spawn (`resume_from is None`) keeps today's scripted-handle behavior.
+        # Mirrors the real in-place adapter contract (issue #115): a resume continues
+        # under the SAME id given; a fresh spawn keeps the scripted-handle behavior.
         session_id = resume_from if resume_from is not None else self._handle.session_id
         return WorkerHandle(
             session_id=session_id,
@@ -460,10 +423,8 @@ class FakeHarness:
         return f"cd {workdir} && claude --resume {session_id}{flags}"
 
     def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
-        # Mirrors the real adapter's shape (issue #258): the BLIZZARD_* identity ON TOP
-        # of an allowlisted-base stand-in — fixed daemon-side values for PATH/HOME plus
-        # vars a takeover must NOT forward (the daemon's TERM, an env_passthrough
-        # secret), so a consumer that fails to bound what it takes is caught by a test.
+        # Mirrors the real adapter's shape (issue #258): BLIZZARD_* identity on top of an
+        # allowlisted-base stand-in, plus vars a takeover must NOT forward (TERM, a secret).
         return {
             "PATH": "/daemon/venv/bin:/usr/bin",
             "HOME": "/daemon/home",
@@ -542,10 +503,8 @@ class FakeProbe:
 class FakeWorktreeGit:
     """A scriptable :class:`IWorktreeGit`: a canned verify verdict, records every call.
 
-    ``verified`` is either a single bool applied to every call, or a
-    ``{origin_url: bool}`` mapping for a test that needs some declarations to verify
-    and others not to — an absent key defaults ``True`` (the common case: every
-    declaration verifies)."""
+    ``verified`` is a single bool or a ``{origin_url: bool}`` mapping; an absent key
+    defaults ``True``."""
 
     def __init__(self, verified: bool | dict[str, bool] = True) -> None:
         self._verified = verified
@@ -559,13 +518,10 @@ class FakeWorktreeGit:
 
 
 class FakeCheckRunner:
-    """A scriptable :class:`~blizzard.runner.loop.checks.ICheckRunner`: a canned outcome
-    per command (or a default), records every call (issue #114).
+    """A scriptable :class:`~blizzard.runner.loop.checks.ICheckRunner`: canned outcomes
+    per command, records every call (issue #114).
 
-    ``outcomes`` maps a check command to its :class:`CheckOutcome`; an unlisted command
-    returns ``default`` (a green, empty-tail pass unless overridden) — so the common
-    "every check green" case needs no scripting, and a red-check test names just the one
-    it wants failing."""
+    ``outcomes`` maps a command to its :class:`CheckOutcome`; unlisted returns ``default``."""
 
     def __init__(self, outcomes: dict[str, CheckOutcome] | None = None, *, default: CheckOutcome | None = None) -> None:
         self._outcomes = outcomes or {}
@@ -591,9 +547,8 @@ def make_context(
 ) -> LoopContext:
     """Assemble a :class:`LoopContext` from a real store and injected fakes."""
     resolved_config = config if config is not None else LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1)
-    # Derived, not duplicated (blizzard#38): the fake's unscripted `get_chunk` route always
-    # reports the runner this context is actually for, so a test that passes a custom
-    # `LoopConfig(runner_id=...)` can never have every lease silently read as reassigned.
+    # Derived, not duplicated (blizzard#38): keeps the fake's unscripted `get_chunk` route
+    # matching this context's actual runner_id.
     hub.default_runner_id = resolved_config.runner_id
     _hub: IHubClient = hub
     _provider: IWorkspaceProvider = provider
@@ -638,21 +593,9 @@ def make_envelope(
 ) -> NodeEnvelope:
     """A minimal runner-node envelope for a step test.
 
-    ``epoch`` is the hub-supplied epoch floor the claim response carries — the runner's
-    mint seeds off ``max(local, envelope.epoch)`` since #112. It defaults to 0, the value
-    the hub sends for a fresh, never-leased claim (``latest_epoch(facts) or 0``); a test
-    modelling a reclaim of a chunk with prior hub history (e.g. a migration) passes the
-    carried-forward floor explicitly.
-
-    ``session``/``session_source`` (issue #115) default to ``SessionMode.FRESH``/``None``
-    — today's unchanged behavior — unless a resume-mode test overrides them.
-    ``session_name``/``session_model``/``session_effort``/``session_rotate`` (issue #144)
-    are the hub-resolved effective declaration; all absent is a node belonging to no pool
-    and expressing no preference, which is every pre-#144 envelope.
-
-    ``produces`` entries are a bare name (``kind=asset``, the pre-#143 shape every
-    existing caller passes) or an explicit :class:`~blizzard.wire.graph.ProducesEntry`
-    (e.g. carrying ``kind=git_commit``) for a test that needs a kind-carrying spec."""
+    ``epoch`` defaults to 0 (fresh, never-leased); pass the carried-forward floor to
+    model a reclaim. ``session`` defaults ``FRESH``; ``produces`` is a bare name
+    (``kind=asset``) or an explicit :class:`~blizzard.wire.graph.ProducesEntry`."""
     from blizzard.hub.domain.graph import Executor, JudgedBy
     from blizzard.wire.envelope import EnvelopeChoice
 

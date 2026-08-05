@@ -1,10 +1,8 @@
 """Subprocess-git adapter for the worker-artifact seam (package-private).
 
-The reference :class:`~blizzard.runner.loop.worktree.IWorktreeGit` binding: a
-read-only confirmation, via the real ``git`` CLI, of a git-commit declaration the
-worker already pushed (issue #143, Phase 4). All ``subprocess`` usage is confined
-here; a git failure is wrapped once into :class:`WorktreeGitError` and logged
-(``bzh:structlog-logging``).
+A read-only confirmation, via the real ``git`` CLI, of an already-pushed git-commit
+declaration (issue #143). All ``subprocess`` usage is confined here, and a git failure is
+wrapped once into :class:`WorktreeGitError` and logged (``bzh:structlog-logging``).
 """
 
 from __future__ import annotations
@@ -45,8 +43,7 @@ class SubprocessWorktreeGit:
 
     def _git(self, *args: str) -> str:
         # No `-C`: `ls-remote <url>` is answered by the remote, so this runs without a
-        # local repository at all — the seam takes no working directory to consult
-        # (`blizzard.runner.loop.worktree`).
+        # local repository at all.
         result = subprocess.run(
             ["git", *args],
             capture_output=True,

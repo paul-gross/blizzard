@@ -1,17 +1,8 @@
-"""Runner operational-event emission — the failure funnel and the per-adapter command
-catches (issue #125, Phase 3, unit tier).
+"""Runner operational-event emission — the failure funnel (issue #125, Phase 3).
 
-Change K: every surfaced attempt failure emits ONE ``event.recorded`` at the
-``_fail_attempt`` choke point, its severity+kind chosen by branch — retry→``warning``
-``attempt-failed``, escalate→``critical`` ``worker-lost``, reassign-abandon→``info``
-``attempt-abandoned``, locally-paused defer→**nothing**. The retry/escalate events are
-enqueued atomically with the closure; the abandon event is emitted in the
-``_fail_attempt`` branch itself (plan-findings SF-6), so a plain RESUME/PULL detach — which
-reaches the shared ``_abandon_reassigned`` without going through the funnel — stays silent.
-
-Change L: each captured command failure (env-prep, git push, spawn launch) emits a
-``warning`` ``command-failed`` carrying the command + stderr tail; the git-push and spawn
-catches RE-RAISE so today's propagation is unchanged.
+Every surfaced attempt failure emits ONE ``event.recorded`` at ``_fail_attempt`` —
+retry→``warning``, escalate→``critical``, abandon→``info``, paused-defer→nothing. Each
+captured command failure emits a ``warning`` ``command-failed``; some catches RE-RAISE.
 """
 
 from __future__ import annotations
@@ -164,10 +155,9 @@ def test_reap_stalled_but_alive_worker_emits_via_reap(tmp_path):  # type: ignore
 
 
 def test_reassign_abandon_branch_emits_an_info_attempt_abandoned(tmp_path):  # type: ignore[no-untyped-def]
-    """The abandon branch (plan-findings SF-6): retries exhausted AND the hub now routes the
-    chunk elsewhere → the attempt is given up as an `info` `attempt-abandoned`, emitted in
-    the `_fail_attempt` branch itself (not the shared `_abandon_reassigned`, which
-    RESUME/PULL detach also reach and which must stay silent)."""
+    """The abandon branch (SF-6): retries exhausted AND the hub now routes the chunk
+    elsewhere → `info` `attempt-abandoned`, emitted in `_fail_attempt` itself, not the
+    shared `_abandon_reassigned` (which RESUME/PULL detach also reach and stays silent)."""
     store = _store(tmp_path)
     _seed_lease(store, retries_max=0)  # exhausted -> the reassign check runs
     hub = FakeHub()
@@ -244,10 +234,9 @@ class _VerifyFailsWorktreeGit(FakeWorktreeGit):
 
 
 def test_git_verify_failure_emits_a_command_failed_and_continues(tmp_path):  # type: ignore[no-untyped-def]
-    """A verify failure is informational only (issue #143, Phase 4): unlike the push
-    it replaces, a read-only re-derivation opens no unsafe window, so it is never
-    re-raised — the declaration is simply dropped (uncovered) and ADVANCE proceeds
-    into its ordinary verdict-less-exit failure path."""
+    """A verify failure is informational only (issue #143): a read-only re-derivation
+    opens no unsafe window, so it is never re-raised — the declaration is simply
+    dropped and ADVANCE proceeds into its ordinary verdict-less-exit failure path."""
     store = _store(tmp_path)
     _seed_lease(store, retries_max=2)
     store.record_git_commit_declaration(

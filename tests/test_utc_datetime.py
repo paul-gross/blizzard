@@ -1,10 +1,8 @@
 """``UtcDateTime`` / ``as_utc`` / ``iso_utc`` — the store-to-wire UTC primitives (unit tier).
 
-``UtcDateTime`` is exercised through a real sqlite engine, not by calling its
-``process_*`` hooks directly: the bug this type fixes is specifically that sqlite's
-own driver drops ``tzinfo`` on write, so a round-trip through a real connection is
-the only test that would fail without the type (issue #28, ``bzh:utc-instants``).
-"""
+``UtcDateTime`` is exercised through a real sqlite engine, not its ``process_*`` hooks
+directly — sqlite's driver drops ``tzinfo`` on write, so only a round trip through a
+real connection would fail without the type (issue #28, ``bzh:utc-instants``)."""
 
 from __future__ import annotations
 

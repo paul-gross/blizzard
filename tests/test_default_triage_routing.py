@@ -1,13 +1,8 @@
-"""The packaged triage router drives real migrations (component tier, issues #229, #231).
+"""The packaged triage router drives real migrations (issues #229, #231).
 
-``test_migration_apply.py`` proves the migration machinery over fixture graphs; this
-proves the **packaged wiring**: reconciling the shipped set mints every graph the
-default graph's choices name, a default-pinned chunk claims at ``triage``, and each
-authored choice does what the front door promises — ``basic`` lands the chunk at
-``bas-dwf``'s ``build``, ``advanced`` at ``adv-dwf``'s ``plan``, ``harness`` at
-``bas-hwf``'s ``build`` (entry landings: no lane declares a ``triage`` node to
-name-match), and ``already-done`` closes the chunk at the terminal with the
-``triage-findings`` asset on record and nothing delivered.
+Proves the packaged wiring: reconciling the shipped set mints every graph the default
+graph's choices name, a default-pinned chunk claims at ``triage``, and each authored
+choice routes to its promised lane/node.
 """
 
 from __future__ import annotations

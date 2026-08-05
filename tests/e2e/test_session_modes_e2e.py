@@ -1,32 +1,8 @@
 """Node ``session:`` modes end to end — scenario 11 of the standing e2e smoke — issues #115, #144.
 
-The full-stack proof that a node's authored ``session:`` mode actually governs which
-harness session a node-entry spawn continues, on the real forge + hub + runner +
-``mock-claude-code`` rails — *session continuity across a graph transition*.
-
-Here the graph carries ``build`` on ``session: resume:build`` and ``review`` on
-``session: fresh``. The ``resume:<node>`` form is deliberate: it is the back-compat
-surface nothing else drives end to end, and its named-pool sibling below covers #144's own
-shape. A scripted review **fails once then passes**, so ``build`` is entered twice. The
-mock harness persists each session's ``turns`` keyed by ``session_id`` and the runner
-store records the ``session_id`` of every node-step lease, so together they show:
-
-* **(a) re-entered build resumed its OWN prior build session** — both ``build`` leases
-  carry the *same* ``session_id``, and that session's persisted ``turns`` grew past a
-  single visit's worth (spawn + judgement resume), i.e. the second entry continued the
-  first in place rather than spawning fresh;
-* **(b) each ``fresh`` review ran on a NEW session** — the two ``review`` leases carry
-  two *distinct* ``session_id``s, disjoint from build's;
-* **(c) first arrival at build spawned fresh** — the chunk's very first lease can resume
-  nothing, so build's shared session was minted fresh at first entry and *re-entered*,
-  never re-spawned (the single-build-session cardinality is exactly this);
-* **why the targeted form is load-bearing (plan Q4)** — the chunk's most-recent session
-  overall (what bare ``resume`` would inherit) is the *reviewer's* fresh session, NOT
-  build's; ``resume:build`` is what makes the re-entered build resume the right one.
-
-Reuses the acceptance loop's live-stack scaffolding (forge/hub/runner harnesses, fixture
-mint, port helpers) exactly like the sibling scenarios. Skipped unless ``BLIZZARD_E2E=1``
-with the sibling ``blizzard-mock`` worktree provisioned.
+Proves a node's authored ``session:`` mode governs which harness session a node-entry
+spawn continues across a graph transition, on the real forge + hub + runner rails. The
+scenarios below cover ``resume:<node>`` and, for issue #144, a named pool.
 """
 
 from __future__ import annotations
@@ -100,9 +76,8 @@ def _graph_yaml() -> str:
     """A ``build -> review -> deliver`` graph carrying the real feature's session modes.
 
     ``build`` is ``session: resume:build`` and ``review`` is ``session: fresh`` — the
-    exact shape plan Q4 exists to express, and the standing end-to-end coverage of the
-    ``resume:<node>`` form.
-    """
+    exact shape plan Q4 exists to express, and the standing coverage of the
+    ``resume:<node>`` form."""
     import yaml
 
     graph = {
@@ -230,9 +205,8 @@ def test_session_modes_resume_targeted_and_fresh_across_a_cycle(tmp_path: Path) 
 
         assert status == "done", f"chunk did not reach done (last status {status!r})"
 
-    # The review-fail cycle ran build TWICE — two 'build pass' lines land on main. This is
-    # the same observable the sibling review-cycle scenario asserts, and here it is the
-    # precondition for the session assertions: build was genuinely entered twice.
+    # The review-fail cycle ran build TWICE — the precondition for the session assertions
+    # below: build was genuinely entered twice.
     build_md = subprocess.run(
         ["git", "--git-dir", str(origin_bare), "show", "main:BUILD.md"],
         check=True,
@@ -261,10 +235,8 @@ def test_session_modes_resume_targeted_and_fresh_across_a_cycle(tmp_path: Path) 
         f"a review session collided with build's: reviews={review_sessions} build={build_session}"
     )
 
-    # The mock-persisted turn count proves build's session was CONTINUED, not merely
-    # reused as a label: a single build visit is spawn + judgement resume (2 turns); two
-    # entries continuing the same session accumulate strictly more. Each fresh review, by
-    # contrast, is its own single-visit session.
+    # Turn count proves build's session was CONTINUED, not merely relabeled: a single
+    # visit is 2 turns (spawn + judgement resume); two entries accumulate strictly more.
     assert _session_turns(workspace, build_session) > 2, (
         f"build session {build_session} did not accumulate turns across two entries "
         f"(turns={_session_turns(workspace, build_session)}) — it was not resumed in place"
@@ -272,9 +244,8 @@ def test_session_modes_resume_targeted_and_fresh_across_a_cycle(tmp_path: Path) 
     for review_session in set(review_sessions):
         assert _session_turns(workspace, review_session) >= 1, f"review session {review_session} has no persisted turns"
 
-    # Why the TARGETED form is load-bearing (plan Q4): the chunk's most-recent session
-    # overall — what a bare `resume` would inherit — is the reviewer's fresh session, NOT
-    # build's own. `resume:build` is exactly what avoids that wrong inheritance.
+    # Why the TARGETED form matters (plan Q4): the chunk's most-recent session overall is
+    # the reviewer's, not build's — `resume:build` avoids that wrong inheritance.
     store = SqlAlchemyRunnerStore(create_engine_from_url(db_url))
     assert store.latest_session_id(chunk_id, "build") == build_session
     chunk_most_recent = store.latest_session_id(chunk_id, None)
@@ -286,36 +257,21 @@ def test_session_modes_resume_targeted_and_fresh_across_a_cycle(tmp_path: Path) 
     )
 
 
-# --------------------------------------------------------------------------- #
-# Named session pools end to end (issue #144) — the same live rails, the #144
-# vocabulary. What the sibling above proves for `resume:<node>`, this proves for
-# a declared pool, plus the two things only a pool can express:
-#
-#   * `fresh:<name>` mints a head a LATER, DIFFERENT node's `resume:<name>`
-#     continues — a lineage `resume:<node>` cannot describe at all;
-#   * the mint-only model contract, read off the mock's recorded argv: the mint
-#     carried the resolved model, every resume carried none.
-#
-# The second is a check of the FLAG, not the effective model — the facade sees
-# only argv. That gap is recorded in the verifiability matrix.
-# --------------------------------------------------------------------------- #
+# Named session pools end to end (issue #144). The mint-only model check is argv-only,
+# a known gap the verifiability matrix records.
 
 
 def _pooled_graph_yaml() -> str:
     """The same build -> review -> deliver shape, expressed with a named pool.
 
-    `build` is `fresh:code` — a forced rotation point, so each entry mints — and `review`
-    is `resume:code`, so it continues the head `build` just minted. That pairing is the
-    whole point: `review` has never run at its own node when it first resumes, so no
-    `resume:<node>` form could express it.
-    """
+    `build` is `fresh:code`, minting each entry; `review` is `resume:code`, continuing the
+    head `build` just minted — a pairing no `resume:<node>` form could express, since
+    `review` has never run at its own node when it first resumes."""
     import yaml
 
     graph = _yaml_graph_dict()
-    # The name must stay the hub's configured default-graph name: ingest pins a fresh
-    # chunk to the default BY NAME, so a differently-named graph mints fine and is then
-    # never used — the chunk silently runs the packaged default instead, whose prose
-    # prompts the mock cannot exec.
+    # Must stay the hub's configured default-graph name — ingest pins a fresh chunk to
+    # the default by name; a differently-named graph mints but is silently never used.
     graph["sessions"] = {"code": {"model": ["blizzard:basic"], "effort": "medium"}}
     graph["nodes"]["build"]["session"] = "fresh:code"
     graph["nodes"]["review"]["session"] = "resume:code"

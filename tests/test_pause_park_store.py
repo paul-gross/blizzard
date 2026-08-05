@@ -1,13 +1,9 @@
 """The runner-side pause-park store — a separate table pair from park_facts (issue #46).
 
-``_pause_park_is_open`` must use a timestamp-correlated ``NOT EXISTS`` predicate
-(mirroring ``_intent_is_open``), not a naive ``lease_id NOT IN (select lease_id from
-pause_park_resumes)`` set-difference: the naive form reads a chunk paused -> resumed ->
-paused again on the *same* lease as still resumed, leaving the second pause invisible and
-its worker running. The three existing skip sites (REAP, ``mark_resume_intents``,
-``mark_crash_resume_intents``) all derive from the same ``parked_lease_ids()`` union, so
-this module also pins that inheritance against the real loop steps.
-"""
+``_pause_park_is_open`` must use a timestamp-correlated ``NOT EXISTS`` predicate, not a
+naive set-difference — the naive form reads a re-parked lease as still resumed. Also
+pins the three skip sites (REAP, ``mark_resume_intents``, ``mark_crash_resume_intents``)
+that derive from ``parked_lease_ids()``'s union."""
 
 from __future__ import annotations
 
@@ -67,12 +63,8 @@ def _ctx(store, *, probe=None, clock=None):  # type: ignore[no-untyped-def]
 
 
 def test_repark_after_resume_on_the_same_lease_reads_as_parked(tmp_path):  # type: ignore[no-untyped-def]
-    """Pause -> resume -> pause again, all on ``lease_1``: the second pause must be open.
-
-    A naive ``lease_id NOT IN (select lease_id from pause_park_resumes)`` predicate
-    reads *any* resume as closing *every* pause on the lease, forever — so this test
-    fails against that shape and only passes against the timestamp-correlated one.
-    """
+    """Pause -> resume -> pause again, all on ``lease_1``: the second pause must be
+    open, not read as still-resumed by a naive set-difference predicate."""
     store = _store(tmp_path)
     t0 = _NOW
     t1 = _NOW + timedelta(minutes=1)
@@ -94,14 +86,8 @@ def test_same_instant_resume_wins_over_its_pause(tmp_path):  # type: ignore[no-u
 
 
 def test_a_resume_closes_only_its_own_leases_pause_park(tmp_path):  # type: ignore[no-untyped-def]
-    """The ``lease_id`` correlation in ``_pause_park_is_open`` is load-bearing.
-
-    Without the ``pause_park_resumes.c.lease_id == pause_parks.c.lease_id`` conjunct the
-    predicate reads *any* resume stamped at or after a park as closing it — so resuming
-    one chunk would silently un-pause **every** paused chunk on the runner, and their
-    workers would be resumed against the operator's standing instruction. The timestamp
-    half alone cannot fence that: both parks here share one instant.
-    """
+    """The ``lease_id`` correlation in ``_pause_park_is_open`` is load-bearing — without
+    it, resuming one chunk would silently un-pause every paused chunk on the runner."""
     store = _store(tmp_path)
     store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW)
     store.record_pause_park(lease_id="lease_2", chunk_id="ch_2", parked_at=_NOW)
@@ -135,20 +121,12 @@ def test_parked_lease_ids_is_the_union_of_ask_and_pause_parks(tmp_path):  # type
     assert store.parked_lease_ids() == {"lease_2", "lease_3", "lease_4"}
 
 
-# --------------------------------------------------------------------------- #
-# Zero-diff inheritance (plan §1.3): parked_lease_ids()'s union makes the existing
-# skip sites correct for a pause-park with no diff to steps.py.
-# --------------------------------------------------------------------------- #
+# --- Zero-diff inheritance: parked_lease_ids()'s union covers pause-parks too ---
 
 
 def test_reap_skips_a_pause_parked_lease_though_pid_reads_alive_and_stale(tmp_path):  # type: ignore[no-untyped-def]
-    """REAP's skip (``steps.py:227``, ``:230-234``) inherits pause-parks via the union.
-
-    The mirror of ``test_parked_lease_is_not_reaped_though_pid_reads_alive_and_stale``
-    for the pause half: the recorded pid reads **alive** and the heartbeat is far past
-    the staleness threshold, so without the skip REAP would kill the worker and burn a
-    retry on a chunk the operator merely paused. The reap clock is stopped instead.
-    """
+    """REAP's skip inherits pause-parks via the union — without it, REAP would kill
+    the worker and burn a retry on a chunk the operator merely paused."""
     store = _store(tmp_path)
     _seed_spawned_lease(store)
     store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW)
@@ -165,11 +143,8 @@ def test_reap_skips_a_pause_parked_lease_though_pid_reads_alive_and_stale(tmp_pa
 
 
 def test_mark_resume_intents_skips_a_pause_parked_lease(tmp_path):  # type: ignore[no-untyped-def]
-    """The graceful-restart marker (``steps.py:285``, ``:291``) inherits the skip.
-
-    A pause-parked lease has no live worker to resume, so a graceful shutdown must not
-    mark it — RESUME would otherwise resume the worker the pause exists to stop.
-    """
+    """The graceful-restart marker inherits the skip — a pause-parked lease has no
+    live worker to resume, so a graceful shutdown must not mark it."""
     store = _store(tmp_path)
     _seed_spawned_lease(store)
     assert mark_resume_intents(store, now=_NOW) == 1  # unparked: marked
@@ -181,12 +156,8 @@ def test_mark_resume_intents_skips_a_pause_parked_lease(tmp_path):  # type: igno
 
 
 def test_mark_crash_resume_intents_skips_a_pause_parked_lease(tmp_path):  # type: ignore[no-untyped-def]
-    """The crash-recovery marker (``steps.py:342``, ``:353``) inherits the skip.
-
-    The counterpart to the graceful marker above: after a ``kill -9`` the startup scan
-    must not re-detect a pause-parked lease as a crash to resume. (P4's RESUME branch
-    then handles the *unparked* paused lease — the plan's §7 crash point.)
-    """
+    """The crash-recovery marker inherits the skip — after a ``kill -9`` the startup
+    scan must not re-detect a pause-parked lease as a crash to resume."""
     store = _store(tmp_path)
     _seed_spawned_lease(store)
     store.record_daemon_liveness(runner_id="r1", alive_at=_NOW)

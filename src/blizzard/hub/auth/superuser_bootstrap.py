@@ -1,11 +1,8 @@
 """The superuser-bootstrap repository seam — read/write Protocols (issue #94,
 ``bzh:repository-split``).
 
-Backs the ``superuser_bootstrap`` singleton row: ``AuthService``'s bootstrap methods
-(``hub/auth/bootstrap.py``'s own boot-time orchestration, and the first-login claim
-inside ``AuthService.link_or_mint``) are the only writers — the edge never touches
-this repository directly.
-"""
+Backs the ``superuser_bootstrap`` singleton row: a domain-only seam, never reached
+from the edge."""
 
 from __future__ import annotations
 

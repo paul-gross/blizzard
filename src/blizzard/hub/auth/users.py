@@ -1,10 +1,8 @@
 """The user repository seam — read/write Protocols (issue #91, ``bzh:repository-split``).
 
 The concrete SQLAlchemy adapter lives at ``internal/user_repository.py``
-(``bzh:dependency-inversion``); this module holds only the Protocol pair a
-collaborator depends on by the narrowest variant its job needs
-(``bzh:controller-read-only``).
-"""
+(``bzh:dependency-inversion``); this module holds only the Protocol pair, depended on
+by the narrowest variant a job needs (``bzh:controller-read-only``)."""
 
 from __future__ import annotations
 

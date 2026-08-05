@@ -1,13 +1,9 @@
 """``blizzard.hub.session_store`` — the CLI's local session-token file (unit tier,
 issue #96).
 
-Pins the two acceptance-criteria-load-bearing facts directly: the file (and its
-parent directory) are created owner-only, and ``logout`` (``delete_session``) removes
-the entry so it stops being sent. The real machine's config dir is never touched:
-``conftest``'s suite-wide ``_isolated_session_store`` already redirects
-``platformdirs.user_config_dir`` at a ``tmp_path`` for every test, so this module needs
-no isolation fixture of its own.
-"""
+Pins the two acceptance-criteria facts directly: the file (and its parent directory)
+are created owner-only, and ``logout`` removes the entry. The real machine's config
+dir is never touched — ``conftest``'s suite-wide fixture redirects it already."""
 
 from __future__ import annotations
 

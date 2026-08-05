@@ -1,10 +1,7 @@
 """RunnerEnrollmentService (unit tier) — mint/rotate a runner's bearer token (issue #86a).
 
 A fake registry stands in for the store — only ``set_token_hash`` is meaningfully
-implemented; anything else is unreachable from :meth:`RunnerEnrollmentService.enroll`
-and raises loudly if a regression starts calling it (``bzh:domain-core`` — no store, no
-network). Copies :mod:`tests.test_pause_service`'s fake-repo pattern.
-"""
+implemented; anything else raises loudly if called (``bzh:domain-core``)."""
 
 from __future__ import annotations
 

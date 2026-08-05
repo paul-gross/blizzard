@@ -1,14 +1,8 @@
-"""The operational event log — store writes/reads, the unified-feed derivation, and the
-migration (issue #125, Phase 1, unit tier).
+"""The operational event log: store writes/reads, feed derivation, migration (#125).
 
 ``event_log`` is an append-only operational-fact table (``bzh:facts-not-status``): one
-row per operationally-significant thing that happened, clock-stamped by the caller, no
-status column. These tests pin, in isolation: a row round-trips its columns and its JSON
-``detail``; a runner-scoped event carries no ``chunk_id``; ``list_events`` filters and
-orders newest-first, bounded; ``list_open_escalations`` applies the same supersession rule
-``open_escalation`` does, fleet-wide; ``derive_event_feed`` unifies the two
-severity-then-recency; and the migration creates the table on a fresh ``base -> head`` and
-an in-place upgrade alike.
+row per thing that happened, no status column. These tests pin round-trip, filtering,
+supersession, feed ordering, and the migration.
 """
 
 from __future__ import annotations
@@ -209,11 +203,9 @@ def test_derive_event_feed_sorts_severity_then_recency() -> None:
 
 
 def test_derive_event_feed_escalation_message_does_not_overclaim_resume() -> None:
-    """The feed message points at the escalation without reproducing what it carries:
-    a runner-composed escalation holds a real resume command and a hub-authored one's
-    raw field can be operator prose (cross-graph-unresolvable), and neither string may
-    leak into the message itself — the two-branch wording keys only on whether the raw
-    field is populated."""
+    """The feed message points at the escalation without reproducing what it carries —
+    neither a runner-composed resume command nor a hub-authored prose field may leak
+    into the message; the two-branch wording keys only on whether the raw field is set."""
     runner_composed = EscalationOpen(
         chunk_id="ch_a", recorded_at=_at(1), takeover_command="cd /ws/e1 && claude --resume sess-a"
     )

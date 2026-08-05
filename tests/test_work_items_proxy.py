@@ -1,19 +1,8 @@
 """The runner-local work-item pass-through proxy — route + ``blizzard runner work-items`` verb.
 
-The layered pass-through: a build worker reads its chunk's issue through the
-runner's ``GET /api/chunks/{id}/work-items`` route, which **forwards** to the hub's
-pass-through — the worker never talks to the hub or the work source directly. The
-hub half (forge read, contents-not-stored) is covered by ``test_work_item``; this proves
-the *runner's* half — that it forwards, and that the hub's own status passes through.
-
-Two tiers, no live hub:
-
-* **component** — the runner route over a real app (TestClient), the hub reached through
-  a stubbed ``httpx.get`` so the forward, the pass-through of a hub ``404``, and the
-  ``502`` on an unreachable hub are all asserted against the real controller;
-* **unit** — the ``blizzard runner work-items`` verb's inherited-identity handling and its
-  GET against the local API (``httpx.get`` stubbed), the CLI half.
-"""
+A build worker reads its chunk's issue through the runner's ``GET
+/api/chunks/{id}/work-items`` route, which **forwards** to the hub's pass-through route.
+Proves the *runner's* half: that it forwards, and the hub's status passes through."""
 
 from __future__ import annotations
 
@@ -67,17 +56,14 @@ def _runner_app(tmp_path: Path) -> TestClient:
     return TestClient(create_app(config))
 
 
-# --------------------------------------------------------------------------- #
 # The proxy route (component tier)
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component
 def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The route forwards to the hub's work-items route and returns the items verbatim.
-
-    ``title`` is carried by the shared ``WorkItemsView`` wire model's pass-through
-    point, so it rides through this proxy untouched with no proxy-side code change."""
+    """The route forwards to the hub's work-items route and returns the items verbatim
+    — ``title`` rides through the shared ``WorkItemsView`` wire model's pass-through
+    point untouched, with no proxy-side code change."""
     seen: list[str] = []
 
     def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
@@ -215,9 +201,7 @@ def test_proxy_502_when_the_hub_is_unreachable(tmp_path: Path, monkeypatch: pyte
     assert "unreachable" in resp.json()["detail"]
 
 
-# --------------------------------------------------------------------------- #
 # The `blizzard runner work-items` verb (unit tier)
-# --------------------------------------------------------------------------- #
 
 
 class _FakeLocalResponse:

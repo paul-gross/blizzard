@@ -1,26 +1,9 @@
 """``blizzard runner selftest`` — the adapter-drift canary (issue #54).
 
-The job resource (``POST``/``GET /api/selftests``) is exercised over a real app
-(TestClient), driving the full check suite against a fake harness binary that mimics
-``mock-claude-code``'s CLI surface — spawn honors the pre-assigned session id, the
-worker actually edits and commits in the scratch repo, the judgement resume parses to
-a ``<Choice>``, an automated follow-up resume returns a pid, and ``resume_command``
-composes a sane string. Runs entirely in a throwaway scratch dir: no chunk, lease,
-environment binding, or hub call is on this path (the app is built with no store).
-
-The CLI verb (``blizzard runner selftest``) is exercised against a real running
-daemon over its unix socket, mirroring ``tests/test_ingest_and_pause_verbs.py``'s
-``_serve_local_api`` convention — the pass path prints every check and exits 0, the
-fail path (a broken fake binary that ignores the pre-assigned session id) prints the
-failing check and exits non-zero, and an unknown harness name is rejected with a 422
-naming the one configured harness.
-
-Two more component tests cover the canary's own must-not-hang requirement: a wedged
-check (an adapter whose ``spawn`` never returns) must resolve the run ``failed``
-within the service's own wall-clock budget rather than leaving it ``running``
-forever, and the automated-resume check must reap (kill) the pid it gets back before
-the scratch repo it ran against is torn down.
-"""
+The job resource is exercised over a real app against a fake harness binary mimicking
+``mock-claude-code``'s CLI surface. The CLI verb runs against a real daemon over its
+unix socket: pass exits 0, fail (a broken binary) exits non-zero, an unknown harness
+name 422s. Two component tests cover must-not-hang and reaping the resume pid."""
 
 from __future__ import annotations
 
@@ -53,11 +36,8 @@ from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessS
 from blizzard.runner.selftest.scratch_git import ScratchRepo
 from blizzard.runner.selftest.service import SelfTestService
 
-# A fake harness binary mimicking `mock-claude-code`'s CLI surface (mirrors
-# `tests/test_runner_harness_adapter.py`'s `_FAKE_HARNESS`), extended to actually
-# perform the trivial end-to-end task: on a fresh spawn (no --resume) it edits and
-# commits a file in its cwd — the scratch repo the selftest minted — rather than just
-# marking that it ran.
+# A fake harness binary mimicking `mock-claude-code`'s CLI surface, extended to actually
+# perform the trivial task: on a fresh spawn it edits and commits a file in its cwd.
 _FAKE_HARNESS = """#!/usr/bin/env python3
 import json
 import subprocess
@@ -92,12 +72,8 @@ else:
 print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": result, "session_id": sid}))
 """
 
-# A drifted harness binding: spawns and exits cleanly (the process mechanics still
-# work), but never performs the trivial edit+commit and never emits a parseable
-# `<Choice>` on resume — the shape a harness's own CLI update actually breaks (its
-# task/verdict conventions), as opposed to a missing binary. Catches drift in the
-# end-to-end and verdict-elicitation checks while leaving spawn/resume/resume_command
-# — which only exercise process mechanics ClaudeCodeAdapter itself controls — passing.
+# A drifted harness binding: spawns and exits cleanly, but never performs the trivial
+# edit+commit or emits a parseable `<Choice>` on resume — the shape a CLI update breaks.
 _BROKEN_HARNESS = """#!/usr/bin/env python3
 import json
 print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "", "session_id": "auto"}))
@@ -112,7 +88,6 @@ def _fake_binary(tmp_path: Path, source: str = _FAKE_HARNESS) -> str:
     return str(script)
 
 
-# --------------------------------------------------------------------------- #
 # The job resource (component tier, TestClient)
 # --------------------------------------------------------------------------- #
 
@@ -232,7 +207,6 @@ def test_get_unknown_selftest_id_is_404(tmp_path: Path) -> None:
     assert resp.status_code == 404
 
 
-# --------------------------------------------------------------------------- #
 # The canary must not itself hang or leak (findings folded into a7c082f)
 # --------------------------------------------------------------------------- #
 
@@ -494,13 +468,11 @@ def test_resume_check_reaps_the_resumed_pid_before_the_scratch_repo_is_torn_down
     # `_FixedPidAdapter` never actually edits/commits, so `end_to_end_edit_commit`
     # legitimately fails — irrelevant to what this test is proving.
     assert by_name["automated_resume"].passed is True, checks
-    # The spawn pid is never touched by the resume check; the resumed pid — the one
-    # `resume_with_message` handed back — must be killed before `run_selftest_checks`
-    # returns and the scratch repo it ran against is torn down.
+    # The resumed pid `resume_with_message` handed back must be killed before
+    # `run_selftest_checks` returns and the scratch repo is torn down.
     assert probe.killed == [222]
 
 
-# --------------------------------------------------------------------------- #
 # The CLI verb, against a real daemon over its socket
 # --------------------------------------------------------------------------- #
 
@@ -516,10 +488,8 @@ def _init_runner_with_binary(tmp_path: Path, binary: str) -> Path:
 def _serve_local_api(root: Path) -> Iterator[Path]:
     """A live runner daemon's local API on its real unix socket.
 
-    Mirrors ``tests/test_ingest_and_pause_verbs.py``'s helper of the same shape: the
-    CLI verb is a pure client of this API, so it is driven against a real server over
-    a real socket rather than a stubbed transport.
-    """
+    The CLI verb is a pure client of this API, driven against a real server over a
+    real socket rather than a stubbed transport."""
     config = RunnerConfig.load(root, port=0)
     app = build_hosted_app(config)
     sockets = bind_listeners(config)

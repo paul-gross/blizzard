@@ -1,16 +1,8 @@
 """SQLAlchemy adapter for the chunk repository seam (package-private).
 
-Implements :class:`~blizzard.hub.domain.work.IWriteChunkRepository` over the hub's
-fact tables. All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``);
-the domain sees only :class:`~blizzard.hub.domain.work.Chunk`,
-:class:`~blizzard.hub.domain.work.ChunkFacts`, artifact rows, and routes.
-
-Facts only (``bzh:facts-not-status``): every write appends a row that happened, and
-status is **derived** by :func:`~blizzard.hub.domain.work.derive_chunk_status` over
-:meth:`load_facts` — never read from a column. The transition-and-artifacts write is
-one transaction (atomicity). Timestamps arrive already stamped from the
-injected clock (``bzh:injected-clock``); the store never calls ``datetime.now``
-except to source the ULID instant of a surrogate route id.
+All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only
+(``bzh:facts-not-status``): every write appends a row that happened and status is
+derived. Timestamps arrive already stamped (``bzh:injected-clock``).
 """
 
 from __future__ import annotations
@@ -69,12 +61,8 @@ from blizzard.hub.store import schema as s
 
 _ROUTE_PREFIX = "route"
 
-# The hub coordinator's own reserved ``transitions.runner_id`` (issue #213) — a private
-# copy of ``delivery.hub_node``'s own literal, not an import (``bzh:repository-split``:
-# the store owns its own read concerns). What discriminates a ``hub-advanced`` transition
-# from a ``node-completed`` one in :meth:`ChunkStore.activity_facts_since`: both write the
-# same ``transitions`` row shape, and this column is the only fact-table difference
-# between the two causes.
+# The hub coordinator's own reserved ``transitions.runner_id`` (issue #213) — the only
+# fact-table difference between a ``hub-advanced`` and a ``node-completed`` transition.
 _HUB_RUNNER_ID = "hub"
 
 
@@ -97,12 +85,7 @@ def _serialize_default_model(preferences: list[str]) -> str | None:
     """``chunks.default_model``'s column shape — a JSON ``list[str]`` (issue #144).
 
     An empty preference list writes ``NULL`` rather than ``"[]"``, so "express no
-    preference" reads identically whether the chunk was minted before this column existed,
-    minted after it (ingest mints no default), or edited back to empty.
-
-    Shared by the edit path (:meth:`ChunkStore.set_defaults`) and the migration re-pin,
-    which shapes its value here but writes it inline in its own transaction — the value
-    shaping is what the two paths share, never a second transactional write.
+    preference" reads identically however the chunk reached it.
     """
     return json.dumps(list(preferences)) if preferences else None
 
@@ -115,19 +98,8 @@ def _deserialize_default_model(value: str | None) -> list[str]:
 def _question_select():  # type: ignore[no-untyped-def]
     """A question row with its derived answer and delivery state, in one query.
 
-    The three question reads (``get_question``, ``list_open_questions``,
-    ``load_questions``) share this so they cannot disagree about a row: each derived
-    field comes from the same joins for all of them. Both joins are **outer** — an
-    unanswered or undelivered question still yields its row, with NULLs for the rest.
-
-    Deliveries are pre-aggregated to the **earliest** instant per question rather than
-    joined row-for-row: ``answer_deliveries`` is append-only with no per-question
-    uniqueness, so a re-delivery would otherwise multiply the question's row. The first
-    delivery is when the agent actually woke; a later one is a re-delivery, not a
-    correction of that instant.
-
-    One query rather than the 2N+1 a per-question fetch costs — the chunk detail is the
-    board's hottest read, re-fetched on every ``chunk-changed`` frame.
+    Both joins are **outer**. Deliveries pre-aggregate to the **earliest** instant per
+    question, since ``answer_deliveries`` is append-only with no per-question uniqueness.
     """
     earliest_delivery = (
         select(
@@ -176,16 +148,8 @@ class ChunkStore:
             migration_rows = conn.execute(
                 select(s.chunk_migrations).where(s.chunk_migrations.c.chunk_id == chunk_id)
             ).all()
-            # Resolve each transition's executor against *its own* graph (issue #90):
-            # after a cross-graph migration re-pins ``chunk.graph_id``, an old-graph
-            # transition's ``to_node_id`` lives in a graph the chunk no longer points at,
-            # so the executor map must span the set of graphs the chunk's transitions
-            # touched, not only its current pin. Node ids are globally-unique ULIDs, so a
-            # single node_id -> executor dict keyed across graphs resolves each transition
-            # unambiguously (no silent ``RUNNER`` fallback for a known node). Also union in
-            # every migration's ``to_graph_id`` (issue #111): the newest migration's target
-            # is already covered via ``chunk.graph_id`` (a migration re-pins it), but an
-            # older, superseded migration's landing node otherwise falls outside the span.
+            # The executor map must span every graph the chunk's transitions and migrations
+            # touched, not only its current pin (issues #90, #111).
             graph_ids = (
                 {chunk.graph_id} | {t.graph_id for t in transition_rows} | {m.to_graph_id for m in migration_rows}
             )
@@ -336,9 +300,8 @@ class ChunkStore:
                 delivery_landed=self._exists(conn, s.delivery_landed, chunk_id),
                 landed_repos=landed_repos,
                 pr_closed=bool(pr_closed_rows),
-                # Newest across every repo's row (issue #175/#173) — a multi-repo chunk in
-                # open-PR mode carries one row per repo (`delivery_pr_closed` has no
-                # chunk_id-unique constraint, unlike `delivery_pr_opened`).
+                # Newest across every repo's row (issue #175/#173) — `delivery_pr_closed`
+                # has no chunk_id-unique constraint, unlike `delivery_pr_opened`.
                 pr_closed_at=max((r.closed_at for r in pr_closed_rows), default=None),
                 escalations=escalations,
                 leases=leases,
@@ -382,18 +345,10 @@ class ChunkStore:
 
     @staticmethod
     def _route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
-        """:meth:`route_of`'s query body, taking an already-open ``conn`` — shared with
-        :meth:`record_stop` (issue #118, must-fix 2), which must resolve the same
-        question *inside* its own write transaction to fold the route release into
-        the same commit as the ``chunk.stopped`` fact, rather than a second
-        read-then-write against a stale ``route_of()`` snapshot.
-
-        Delegates the tie-break to :func:`~blizzard.hub.domain.work.newest_live_route`
-        — the same function :func:`~blizzard.hub.domain.work._has_live_route` calls for
-        chunk-status derivation — so route liveness has exactly one answer at a
-        same-instant tie (issue #41) rather than two independently-maintained
-        comparisons that can drift apart.
-        """
+        """:meth:`route_of`'s query body, taking an already-open ``conn`` so a write
+        transaction can resolve the same question inside its own commit (issue #118).
+        Delegates the tie-break to :func:`~blizzard.hub.domain.work.newest_live_route`,
+        so route liveness has exactly one answer at a same-instant tie (issue #41)."""
         # (created_at, seq) desc — must stay in lockstep with the key
         # newest_live_route orders by; that function, not this query, owns it.
         created = conn.execute(
@@ -660,10 +615,8 @@ class ChunkStore:
             ]
 
     def list_open_escalations(self) -> list[EscalationOpen]:
-        # Escalations are low-volume (retries-exhausted / dead-worker events only), so a
-        # full table scan here — joined against every named chunk's leases/requeues in
-        # Python, mirroring the per-chunk supersession rule `open_escalation` applies —
-        # is fine; see IReadChunkRepository.list_open_escalations.
+        # Escalations are low-volume, so a full table scan joined in Python is fine;
+        # the supersession rule is `open_escalation`'s.
         with self._engine.connect() as conn:
             escalation_rows = conn.execute(select(s.escalations)).all()
             if not escalation_rows:
@@ -699,12 +652,9 @@ class ChunkStore:
 
     def activity_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
         """See :meth:`IReadChunkRepository.activity_facts_since` — one bounded read per
-        mapped ``ChunkChangeCause`` fact table (``edited`` excepted, no table backs it),
-        concatenated, unsorted across sources; :func:`~blizzard.hub.domain.work.derive_activity_feed`
-        does the merge/sort/cap. Every per-chunk source is joined to ``chunks`` for its
-        current ``graph_id`` — the same pin a live frame's own ``describe_chunk_change``
-        reports — except ``transitions``/``chunk_migrations``, which already carry their
-        own (more historically-accurate) graph id column."""
+        mapped ``ChunkChangeCause`` fact table, concatenated, unsorted across sources.
+        Every per-chunk source joins ``chunks`` for its current ``graph_id``, except
+        ``transitions``/``chunk_migrations``, which carry their own column."""
         with self._engine.connect() as conn:
             rows: list[ActivityRow] = []
             rows += self._bounded(
@@ -1039,9 +989,8 @@ class ChunkStore:
                     chunk_id=chunk.chunk_id,
                     graph_id=chunk.graph_id,
                     minted_at=chunk.minted_at,
-                    # `chunks.model` is deliberately omitted (issue #144): the column is
-                    # retained for pre-#144 history only and the insert leans on its
-                    # `server_default`. See the schema comment on the column.
+                    # `chunks.model` is deliberately omitted (issue #144) — the insert
+                    # leans on its `server_default`.
                     default_model=_serialize_default_model(chunk.default_model),
                     default_effort=chunk.default_effort,
                 )
@@ -1085,12 +1034,8 @@ class ChunkStore:
         """Record the route and mint its capability token's fact, one transaction (issue #84a).
 
         The token fact is a second row on the same shared per-chunk seq counter
-        (:meth:`_next_route_seq`), allocated *after* the route's own seq is taken —
-        its own call to the same allocator, not a fixed +1, so it stays correct if a
-        future caller inserts anything else into this transaction between the two.
-
-        Returns the freshly-minted ``route_created.route_id`` (issue #213's
-        activity-feed key for the ``claimed`` cause)."""
+        (:meth:`_next_route_seq`), allocated by its own call to the allocator, never a
+        fixed +1. Returns the freshly-minted ``route_created.route_id`` (issue #213)."""
         route_id = mint(_ROUTE_PREFIX, self._clock)
         with self._engine.begin() as conn:
             conn.execute(
@@ -1240,14 +1185,8 @@ class ChunkStore:
     ) -> bool:
         """Land the terminal delivery **atomically and idempotently** (crash recovery).
 
-        The hub lease, the ``delivery.landed`` fact, the terminal transition, and the
-        route release are written in **one transaction**, so a ``kill -9`` mid-delivery
-        can never leave a chunk landed-but-not-terminal (the ``merge-queue-single-state``
-        invariant). Guarded by the ``delivery.landed`` existence check: a redelivery — a
-        completion re-flushed after a mid-delivery hub crash — re-enters harmlessly and
-        writes nothing a second time. Returns True when it wrote the terminal facts,
-        False when the chunk was already landed.
-        """
+        The hub lease, ``delivery.landed``, the terminal transition and the route release
+        are one transaction; guarded by ``delivery.landed``, True only when it wrote."""
         with self._engine.begin() as conn:
             already = conn.execute(
                 select(s.delivery_landed.c.id).where(s.delivery_landed.c.chunk_id == chunk_id)
@@ -1306,9 +1245,8 @@ class ChunkStore:
         """Escalate a bounce-capped chunk **atomically and idempotently** (#64).
 
         The hub lease and the escalation fact land in one transaction, guarded by the
-        escalation's existence at this epoch — a redelivery replay re-enters harmlessly
-        and never double-escalates. No transition: the chunk's held route and stuck node
-        are untouched. Returns True iff it wrote."""
+        escalation's existence at this epoch. No transition: the chunk's held route and
+        stuck node are untouched. Returns True iff it wrote."""
         with self._engine.begin() as conn:
             already = conn.execute(
                 select(s.escalations.c.id).where(
@@ -1367,9 +1305,8 @@ class ChunkStore:
         cost_usd: float | None,
         at: datetime,
     ) -> None:
-        # Append-only, no epoch fence, no second dedup key — see IWriteChunkRepository's
-        # docstring: the caller's per-runner seq high-water mark already guarantees this
-        # is called at most once per landed fact.
+        # Append-only, no epoch fence, no second dedup key — the caller's per-runner seq
+        # high-water mark already guarantees at most one call per landed fact.
         with self._engine.begin() as conn:
             conn.execute(
                 insert(s.usage_facts).values(
@@ -1401,9 +1338,8 @@ class ChunkStore:
         detail: dict | None,
         at: datetime,
     ) -> int:
-        # Append-only operational fact (issue #125) — never mutated once written, no
-        # epoch fence (it is not a transition). `detail` is serialized to JSON text here;
-        # `chunk_id` is None for a runner-scoped event. See IWriteChunkRepository.record_event.
+        # Append-only operational fact (issue #125), no epoch fence. `detail` serializes
+        # to JSON text here; `chunk_id` is None for a runner-scoped event.
         with self._engine.begin() as conn:
             result = conn.execute(
                 insert(s.event_log).values(
@@ -1553,9 +1489,8 @@ class ChunkStore:
         """True iff a migration is already recorded for ``(chunk_id, from_node_id, epoch)``
         — the idempotency probe a re-applied cross-graph completion short-circuits on (#90).
 
-        A migration writes no ``transitions`` row, so the transition-replay probe
-        (:meth:`accepted_transition_target`) can never see it; this is its migration
-        counterpart, keyed the same way (:meth:`record_migration`'s natural key)."""
+        A migration writes no ``transitions`` row, so the transition-replay probe cannot
+        see it; this is its counterpart, on :meth:`record_migration`'s natural key."""
         with self._engine.connect() as conn:
             return self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch)
 
@@ -1580,37 +1515,9 @@ class ChunkStore:
     ) -> str | None:
         """Record a cross-graph migration **atomically and idempotently** (#90).
 
-        In **one transaction**: insert the ``chunk_migrations`` fact, re-pin
-        ``chunks.graph_id`` (and ``chunks.default_model`` when ``model`` is given —
-        issue #144), release the route (unless ``release_route`` is ``False``), **and
-        persist this node-step's artifacts** (the migration branch bypasses
-        ``record_transition``, which is where a step's artifacts normally commit; without
-        this a submitting step's assets are never persisted). When ``decision_id``
-        is given — a **human gate's** resolved choice was itself the cross-graph migration
-        (#90) — it is stamped on the fact so that decision derives ``transitioned``
-        (closed), exactly as a resolving transition would; without it the gate's decision
-        would stay live forever. ``release_route`` (issue #111) is executor-aware: a hub-landing
-        migration passes ``False`` so the holding runner's route is retained — no route
-        release means no other runner can poll ``hub-advance`` out from under it, and the
-        holding runner's own ADVANCE poll drives the landed hub node's ``run:`` steps.
-        Default ``True`` preserves the runner-landing behavior (release + re-queue). Guarded
-        by the natural key ``(chunk_id, from_node_id, epoch)``: a redelivery replay after a
-        ``kill -9`` re-enters harmlessly, writing nothing a second time — the migration is
-        all-or-nothing, never a half-written re-pin with orphaned artifacts. ``migration_id``
-        (issue #213) is caller-minted when supplied (mirrors ``record_transition``'s own
-        ``transition_id``); ``None`` mints one internally. Returns the ``migration_id`` used
-        iff this call wrote, ``None`` on a replay.
-
-        No lease is minted here (unlike :meth:`finalize_delivery`): the migration is
-        recorded at the *submitting* epoch, and the re-queue means the **next** claim mints
-        a fresh higher lease above it, fencing the abandoned attempt.
-
-        ``clear_intent`` (issue #124), when ``True``, folds ``chunks.intended_migration =
-        NULL`` into this same ``chunks`` update — the applied intent's fact and its clear
-        land in the one transaction the fact itself does, so a durable fact implies a
-        durably-cleared intent (a crash between them is impossible; there is no between).
-        ``False`` (default) for an ordinary #90 authored-choice migration, which carries no
-        intent to clear."""
+        One transaction: the fact, the ``chunks.graph_id`` re-pin, the route release
+        (unless ``release_route``, #111), this step's artifacts, and the intent clear
+        (``clear_intent``, #124). Keyed ``(chunk_id, from_node_id, epoch)``."""
         with self._engine.begin() as conn:
             if self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch):
                 return None
@@ -1633,13 +1540,8 @@ class ChunkStore:
             )
             values: dict[str, str | None] = {"graph_id": to_graph_id}
             if model is not None:
-                # The `default_model` re-pin is written INLINE rather than through a
-                # `set_defaults` call (issue #144): this block writes the migration fact,
-                # the graph re-pin, the route release, the artifacts and the intent clear
-                # all-or-nothing, and a second transactional write would split the durable
-                # fact from the pin it implies — a `hub:migration-pin-consistent` violation
-                # in a window the crash-point registry does not cover. Only the crash tier
-                # could observe that; the two paths share `_serialize_default_model`.
+                # Written INLINE (issue #144): a second transactional write would split the
+                # durable fact from the pin it implies (`hub:migration-pin-consistent`).
                 values["default_model"] = _serialize_default_model([model])
             if clear_intent:
                 values["intended_migration"] = None
@@ -1725,21 +1627,10 @@ class ChunkStore:
 
     def record_stop(self, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.stopped`` fact, release any live route, and release any
-        held fleet-wide hub-exec slot — all in **one** transaction (issue #118,
-        must-fix 2 from the #118 pre-push review).
-
-        Previously two store calls in two commits: a ``kill -9`` between them could
-        leave the chunk durably ``stopped`` with its route (or hub-exec slot) still
-        live, and ``stop`` refuses a retry on an already-terminal chunk (``_REFUSED``
-        in :mod:`~blizzard.hub.domain.stop`) — a wedge only ``detach`` could clear.
-        Folding both facts and the slot release into one ``self._engine.begin()``
-        closes that window the same way :meth:`record_route` already does for its own
-        two-fact write (issue #84a) — ``bzh:facts-not-status``'s crash-correctness
-        premise applied to a multi-fact operation. The route check runs against this
-        same connection (:meth:`_route_of_conn`), not a prior ``route_of()`` snapshot,
-        so there is no read-then-write race against a route that lands or releases
-        between the check and this commit. The hub-exec slot release is unconditional
-        and a no-op if this chunk holds none — same shape as :meth:`release_hub_exec_slot`."""
+        held fleet-wide hub-exec slot — all in **one** transaction (issue #118), so a
+        ``kill -9`` cannot leave the chunk durably ``stopped`` with its route still live.
+        The route check runs against this same connection (:meth:`_route_of_conn`), so
+        there is no read-then-write race. The slot release is unconditional."""
         with self._engine.begin() as conn:
             result = conn.execute(insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at, stopped_by=by))
             if self._route_of_conn(conn, chunk_id) is not None:
@@ -1777,11 +1668,8 @@ class ChunkStore:
     def set_intended_migration(self, chunk_id: str, *, intended: IntendedMigration | None) -> None:
         """Set, overwrite, or clear a chunk's standing migration intent (issue #124).
 
-        A plain column overwrite, mirroring :meth:`set_graph`/:meth:`set_defaults` — see
-        :meth:`IWriteChunkRepository.set_intended_migration`. Editable at any
-        non-terminal status, ``not_ready``/``ready`` included; the column carries no
-        timestamp, so this write takes no ``at`` (unlike this repository's other
-        writes, ``bzh:injected-clock``)."""
+        A plain column overwrite, editable at any non-terminal status. The column
+        carries no timestamp, so this write takes no ``at``."""
         with self._engine.begin() as conn:
             conn.execute(
                 update(s.chunks)
@@ -1797,13 +1685,8 @@ class ChunkStore:
         checker can assert at most one live slot and a ``kill -9`` mid-run leaves a
         stale, reclaimable row rather than a wedged fleet)."""
         with self._engine.begin() as conn:
-            # Force sqlite's whole-database write lock BEFORE the read-then-insert
-            # below — an identity update over the table (even zero rows) makes sqlite
-            # acquire the RESERVED lock immediately, closing the race a bare SELECT
-            # would leave open: two concurrent callers for two DIFFERENT chunks could
-            # otherwise both read "no live rows" under sqlite's SHARED read lock before
-            # either has inserted, and both mint a live slot (see
-            # ``_next_route_seq``'s docstring, the same trick, same reason).
+            # Force sqlite's whole-database write lock BEFORE the read-then-insert below,
+            # closing the race a bare SELECT leaves open (see ``_next_route_seq``).
             conn.execute(update(s.hub_exec_slot).values(node_id=s.hub_exec_slot.c.node_id))
             live_rows = conn.execute(select(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None))).all()
             for row in live_rows:
@@ -1980,30 +1863,11 @@ class ChunkStore:
 
     @staticmethod
     def _next_route_seq(conn: Connection, chunk_id: str) -> int:
-        """The next value of the per-chunk ``route_created``/``route_released``/
-        ``route_token_minted`` seq counter (see ``work.newest_live_route`` and
-        ``work.newest_live_route_token``) — one past the current max across all three
-        tables for this chunk, so a create/release/token-mint triple is totally
-        ordered by real write order even when their timestamps tie. ``route_token_minted``
-        joined the counter in issue #84a (Phase 5): without it, a release recorded
-        right after a token mint at the same instant could compute the same next value
-        the mint just took (the released-max query alone can't see the token row), so
-        the max must span all three tables, not just the original two.
-
-        This is read-then-insert, not an atomic increment, so concurrent callers for the
-        same chunk are serialized by locking the chunk's own ``chunks`` row with a no-op
-        ``UPDATE``. ``SELECT ... FOR UPDATE`` cannot serve: sqlite has no row-level
-        locking and silently drops it, and a plain ``SELECT`` takes only sqlite's SHARED
-        read lock, which does not block a second reader — while an ``UPDATE`` takes
-        sqlite's whole-database write lock immediately and postgres's row-exclusive lock,
-        one portable statement for both dialects (``bzh:sql-portable``). A per-table
-        ``UniqueConstraint`` on ``seq`` cannot close the race either, since the counter is
-        shared *across* the three tables. The tradeoff is that two route writes for the
-        same chunk serialize instead of interleaving — cheap, since route writes are
-        low-frequency and per-chunk. Pinned by
-        ``tests/test_route_seq_concurrency.py::test_next_route_seq_locks_the_chunk_row_for_update``
-        and ``::test_concurrent_seq_allocation_on_sqlite_never_duplicates``.
-        """
+        """One past the current max ``seq`` across ``route_created``, ``route_released``
+        and ``route_token_minted`` for this chunk, so the triple is totally ordered even
+        when timestamps tie. Read-then-insert, so concurrent callers are serialized by a
+        no-op ``UPDATE`` on the chunk's own row — one portable write-lock statement for
+        both dialects (``bzh:sql-portable``; ``tests/test_route_seq_concurrency.py``)."""
         conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(chunk_id=chunk_id))
         created_max = conn.execute(
             select(func.max(s.route_created.c.seq)).where(s.route_created.c.chunk_id == chunk_id)
@@ -2076,11 +1940,8 @@ class ChunkStore:
         resolution = conn.execute(
             select(s.decision_resolutions).where(s.decision_resolutions.c.decision_id == row.decision_id)
         ).one_or_none()
-        # Closed by the resolving transition that carries this decision — or, when the
-        # gate's resolved choice was itself a cross-graph migration (#90, which writes no
-        # transitions row), by the migration fact stamped with the same decision_id — or,
-        # when that migration's target was unresolvable (#110, which writes neither a
-        # transition nor a migration), by the escalation stamped with it.
+        # Closed by whichever fact carries this decision_id: the resolving transition, the
+        # cross-graph migration (#90), or the unresolvable-target escalation (#110).
         transitioned = (
             conn.execute(
                 select(s.transitions.c.transition_id).where(s.transitions.c.decision_id == row.decision_id).limit(1)

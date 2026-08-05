@@ -1,25 +1,9 @@
-"""The multi-daemon SSO bounce, driven by a real browser — e2e scenario 13 (issue #95,
-the plan's phase-5 matrix gap).
+"""The multi-daemon SSO bounce, driven by a real browser — e2e scenario 13 (issue #95).
 
-Real subprocesses throughout: a hub (``auth.mode = "oauth"``) against the real
-``blizzard-mock`` stub IdP, and **two** runners (A, B), each with its own registered
-federation identity. A real Chromium (Playwright) navigates to runner A with no
-session, is bounced through the hub (which itself bounces through the stub IdP's
-provider dance since no hub session exists yet), and lands back on runner A's own
-served page authenticated — the token delivered via the hub's auto-submitting
-``form_post`` page, never a query string (asserted by inspecting every request URL
-Chromium makes across the whole dance). The captured token (read off the real
-``POST /api/auth/callback`` Chromium itself makes) is then replayed against runner B
-(rejected — audience-bound) and against runner A a second time (rejected — single-use
-``jti``); a mismatched ``state`` is rejected; and a hub key rotation mid-run is picked
-up by a second, live browser bounce into runner B with **no restart** of either
-process.
-
-Reproduce — from a provisioned feature env::
-
-    uv run playwright install chromium   # once, out of band
-    BLIZZARD_E2E=1 uv run pytest tests/e2e/test_runner_federation_e2e.py
-"""
+A real Chromium bounces through a real hub + stub IdP into runner A, then the captured
+token is replayed against runner B (rejected, audience-bound) and against runner A again
+(rejected, single-use ``jti``); a hub key rotation mid-run is picked up by a second
+bounce into runner B with no restart. Needs ``uv run playwright install chromium`` once."""
 
 from __future__ import annotations
 
@@ -59,16 +43,9 @@ _BOUNCE_STATE_COOKIE = "bz_runner_bounce_state"
 
 def _bounce_state_cookie(response: Any) -> str:
     """Read the runner's bounce-state value straight off a login redirect's
-    ``Set-Cookie`` header, rather than through ``BrowserContext.cookies()``.
-
-    The runner mints this cookie ``Secure`` even on a loopback ``http://127.0.0.1``
-    origin. Playwright's ``APIRequestContext`` (``page.request``) does not replicate
-    Chromium's loopback handling: ``BrowserContext.cookies(url)`` never attributes a
-    ``Secure`` cookie to a plain-``http`` URL, and a later ``page.request`` call does not
-    re-attach one either. Reading the value directly off ``Set-Cookie`` sidesteps the
-    first gap; callers must pass it back explicitly via a ``Cookie`` header to sidestep
-    the second.
-    """
+    ``Set-Cookie`` header, rather than through ``BrowserContext.cookies()`` — Playwright's
+    loopback handling never attributes this ``Secure`` cookie to a plain-``http`` URL, so
+    callers must pass the value back explicitly via a ``Cookie`` header."""
     for header in response.headers_array:
         if header["name"].lower() != "set-cookie":
             continue
@@ -99,9 +76,8 @@ def _oauth_hub(hub_dir: Path, idp_port: int, port: int) -> Iterator[httpx.Client
         issuer=f"http://127.0.0.1:{idp_port}",
     )
     config = HubConfig.load(hub_dir)
-    # `superuser` (issue #94's bootstrap) is the same email the stub IdP profile below
-    # asserts — the first login claims it, giving the key-rotation step a session with
-    # `user:manage` with no separate role-assignment surface to drive.
+    # `superuser` (issue #94's bootstrap) matches the stub IdP profile below, so the
+    # first login claims `user:manage` with no separate role-assignment surface.
     config = dataclasses.replace(
         config, auth=AuthConfig(mode="oauth", oauth_providers=(provider,), superuser=_PROFILE_EMAIL)
     )
@@ -138,9 +114,8 @@ def _federated_runner(runner_dir: Path, *, hub_port: int, port: int, runner_id: 
         config,
         runner_id=runner_id,
         public_url=public_url,
-        # A path that is never created — the external-usage sampler's missing-credentials
-        # soft failure trips before any request is built, keeping this real daemon's
-        # no-network-access guarantee real for that step too (issue #218).
+        # A path that is never created — the sampler's missing-credentials soft failure
+        # trips before any request is built (issue #218).
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
     )
     config.config_path.write_text(config.to_toml())
@@ -216,9 +191,8 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
             page.on("request", _on_request)
 
             try:
-                # --- 1. Runner A, no session: bounces through the hub, which itself
-                # bounces through the stub IdP dance (no hub session yet either),
-                # and lands back on runner A's own served page authenticated.
+                # 1. Runner A, no session: bounces through the hub and the stub IdP
+                # dance, lands back on runner A's own served page authenticated.
                 page.goto(f"{runner_a_url}/", wait_until="load")
                 expect(page).to_have_title(re.compile("blizzard runner"))
                 assert any(c.get("name") == "bz_runner_session" for c in context.cookies(runner_a_url))
@@ -250,9 +224,8 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
                 )
                 assert cross_resp.status == 400
 
-                # --- 3. Replay: the same token, presented to runner A again (a fresh,
-                # A-own state so only the jti check can fail it), is rejected —
-                # single-use.
+                # 3. Replay: the same token, presented to runner A again (a fresh,
+                # A-own state so only the jti check can fail it), is rejected.
                 login_a_again = page.request.get(f"{runner_a_url}/api/auth/login?return_to=/", max_redirects=0)
                 assert login_a_again.status in (302, 307)
                 state_a2 = _bounce_state_cookie(login_a_again)
@@ -280,12 +253,8 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
                 )
                 assert mismatch_resp.status == 400
 
-                # --- 5. Key rotation, mid-run, picked up with no restart of either
-                # daemon: rotate, then drive a fresh browser bounce into runner B —
-                # the JWKS the still-running runner B fetches must name the new `kid`.
-                # The browser context (not the plain `hub` client above) holds the
-                # hub session cookie the provider dance minted, so the rotation call
-                # rides `page.request` to carry it.
+                # 5. Key rotation, mid-run, picked up with no restart: rotate, then bounce
+                # into runner B, whose JWKS fetch must name the new `kid`.
                 rotate_resp = page.request.post(f"http://127.0.0.1:{hub_port}/api/auth/rotate-signing-key")
                 assert rotate_resp.status == 204, rotate_resp.text()
 

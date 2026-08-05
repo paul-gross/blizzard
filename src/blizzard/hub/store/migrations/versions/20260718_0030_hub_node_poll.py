@@ -1,21 +1,6 @@
 """pending-poll outcome: hub_node_poll + per-node poll cadence (issue #66, hub store tree)
 
-A hub command node whose ``run:`` step reports the reserved ``pending`` outcome (#66)
-records no transition — it appends a poll-attempt fact instead, releases the fleet-wide
-``hub_exec_slot`` immediately, and is re-run once ``poll_interval`` has elapsed. This
-revision adds:
-
-* ``hub_node_poll`` — one append-only row per poll attempt, stamped from the injected
-  clock. Pending-ness (``hub_node_pending``, ``hub/domain/work.py``) derives purely from
-  these rows plus the transition table, so a ``kill -9`` between polls resumes polling
-  from the store with nothing lost.
-* ``graph_nodes.poll_interval_seconds`` / ``graph_nodes.poll_timeout_seconds`` — a
-  per-node override of the executor's own defaults; null accepts them.
-
-Both are brand new as of this revision — no later revision reshapes either yet — so
-``hub_node_poll`` is imported directly from ``schema.py`` (the same exception
-``chunk_bounces``'s own migration documents).
-
+Adds append-only ``hub_node_poll`` and two per-node cadence overrides; null on either takes the default.
 Revision ID: 20260718_0030_hub_node_poll
 Revises: 20260717_2359_hub_command_nodes
 """

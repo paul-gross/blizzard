@@ -1,25 +1,8 @@
-"""The operational event feed over the wire — SSE fan-out + fold read-back (issue #125,
-Phase 2, service tier).
+"""The operational event feed over the wire — SSE fan-out + fold read-back (#125 P2).
 
-The wire leg the lower tiers cannot prove: a real running hub, driven by the
-``blizzard-mock`` mock runner's ``/_drive/report-event`` verb (its ``event.recorded``
-counterpart), folds the fact into the ``event_log`` and re-broadcasts it on the live SSE
-spine. A subscriber connected *before* the act receives ``event-logged`` **exactly once**
-(0 fails a dropped publish, 2 a broken idempotency guard) and the event reads back off the
-live ``GET /api/events`` — the mock-runner→live-hub direction, modeled on
-``test_usage_service.py``. Idempotency on the per-runner seq is pinned by a direct
-fixed-seq replay.
-
-The real runner's own emission (and its store-and-forward buffering through a hub outage)
-lands in Phase 3, where the real runner emits these facts; here the mock runner stands in
-so the hub fold + SSE fan-out are provable independently of that work.
-
-Also carries the ``GET /api/activity`` service-tier proof (issue #213, Phase 5). This
-is the tier that reads
-:class:`~blizzard.wire.activity.ActivityView`'s field names off a live JSON response
-rather than an in-process Python object, over several distinct
-:data:`~blizzard.hub.events.broker.ChunkChangeCause` families driven through the mock
-runner and a chunk-level pause.
+A real hub, driven by the mock runner's ``/_drive/report-event`` verb, folds the fact
+into ``event_log`` and fans it out over SSE exactly once; also carries the
+``GET /api/activity`` service-tier proof (#213 P5).
 """
 
 from __future__ import annotations
@@ -91,9 +74,8 @@ def test_a_replayed_event_seq_folds_exactly_once(tmp_path: Path) -> None:
     nothing twice (the same guard the usage store-and-forward test proves for usage)."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with _forge(bin_dir, origins, forge_port), _hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        # A runner-scoped event (no chunk_id — no FK dependency) pushed directly with a
-        # fixed seq, twice. The second push is at/below the high-water mark, so it is
-        # re-acked and not re-applied.
+        # A runner-scoped event pushed directly with a fixed seq, twice — the second is
+        # at/below the high-water mark, so it is re-acked and not re-applied.
         batch = {
             "runner_id": "event-pusher",
             "facts": [
@@ -115,30 +97,16 @@ def test_a_replayed_event_seq_folds_exactly_once(tmp_path: Path) -> None:
 
 
 def test_activity_backfill_merges_several_cause_families_bounded_and_newest_first(tmp_path: Path) -> None:
-    """``GET /api/activity`` against a real running hub (issue #213, Phase 5) — the wire
-    leg the component tier's in-process ``ActivityRow``/``ActivityView`` objects cannot
-    prove: that the route's JSON actually serializes the field names
-    :class:`~blizzard.wire.activity.ActivityView` declares (``type``, ``key``, ``at``,
-    ``cause``, …), off several distinct :data:`~blizzard.hub.events.broker.ChunkChangeCause`
-    families driven through the mock runner + a chunk-level pause, merged with an
-    ``event-logged`` row and a ``runner-changed`` row, newest-first, bounded by ``limit``,
-    and windowed by ``since``.
-
-    Drives (all real wire calls against the running hub, mock-runner/mock-forge
-    counterpart): ingest+promote (``minted``/``promoted``), claim+complete
-    (``claimed``/``node-completed``), escalate (``escalated``), a chunk-level pause+resume
-    (``paused``/``resumed``), an operational event report (``event-logged``), and the
-    runner's own local pause (``runner-changed``/``locally-paused``).
-    """
+    """``GET /api/activity`` (issue #213) serializes ActivityView's real field names over
+    the wire, merges chunk/event/runner cause families newest-first, bounded by ``limit``
+    and windowed by ``since``."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         chunk_id = _ingest(forge, hub, "several cause families")  # -> "minted" + "promoted"
 
         # A real wall-clock watermark between the mint/promote pair above and everything
-        # below — the service tier runs the hub against the real system clock (no
-        # injected fake clock, unlike the component tier), so this is a genuine `since`
-        # boundary a narrowed read can be checked against.
+        # below — a genuine `since` boundary a narrowed read can be checked against.
         time.sleep(0.05)
         since_marker = datetime.now(UTC)
         time.sleep(0.05)
@@ -174,8 +142,7 @@ def test_activity_backfill_merges_several_cause_families_bounded_and_newest_firs
 
         feed = _activity(hub)
         # Every row carries the wire field names ActivityView declares, off a live
-        # response — the schema a component test's Python objects never round-trip
-        # through JSON to prove.
+        # response — never round-tripped through JSON at the component tier.
         for row in feed:
             assert set(row) <= {
                 "type",
@@ -221,9 +188,8 @@ def test_activity_backfill_merges_several_cause_families_bounded_and_newest_firs
         assert len(limited) == 1
         assert limited[0]["at"] == ats[0]
 
-        # The 24h `since` window, exercised directly: a narrow `since` set strictly
-        # between "minted"/"promoted" and everything driven afterwards excludes the
-        # former and keeps the latter.
+        # The 24h `since` window: a narrow `since` set strictly between "minted"/"promoted"
+        # and everything after excludes the former, keeps the latter.
         narrowed = _activity(hub, since=since_marker.isoformat())
         narrowed_chunk_causes = {
             r["cause"] for r in narrowed if r["chunk_id"] == chunk_id and r["type"] == "chunk-changed"

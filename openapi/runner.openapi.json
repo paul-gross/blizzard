@@ -198,7 +198,7 @@
         "type": "object"
       },
       "ChunkHeaderView": {
-        "description": "The chunk-detail dock's header aggregate (issue #185) \u2014 the identity,\nwork-item links, live state, and pause fact a header needs, projected down\nfrom :class:`ChunkDetail` rather than carrying its transition/artifact\nhistory. Pydantic's default ``extra=\"ignore\"`` lets it validate straight off a\n`ChunkDetail` payload, so the runner's chunk-detail proxy never pulls this\nmodule's :class:`EscalationView` into the runner's OpenAPI schema, where it\nwould collide with ``wire.runner_status``' identically-named view (pinned by\ntests/test_pin_wire.py::test_the_runner_spec_escalation_view_is_the_runners_own).\n\n``pause`` is carried independently of ``status`` for the same reason\n:class:`ChunkDetail`'s own field is: a chunk both paused and parked on a\nquestion still derives ``waiting_on_human``.",
+        "description": "A chunk-detail header aggregate (issue #185) \u2014 identity, work-item links, live state, and the\npause fact, projected down from :class:`ChunkDetail` without its transition/artifact history.\nPydantic's default ``extra=\"ignore\"`` lets it validate straight off a ``ChunkDetail`` payload,\nkeeping this module's :class:`EscalationView` out of the runner's own OpenAPI schema.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -250,7 +250,7 @@
         "type": "string"
       },
       "ChunkSummary": {
-        "description": "One row of the fleet chunk list \u2014 derived status + current node.\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) beside\nthe raw ``nd_`` ULID; null when the chunk has no current node or its pinned graph\ncannot resolve the id.\n\nStatus-only: the summary feeds the board **card**, a passive status view (issue #42),\nso it carries no operator *fact* \u2014 those reach the detail dock through\n:class:`ChunkDetail`. ``runner_id`` and ``environment_count`` (issue #69) are passive\nwhere-is-it facts, not action keys, and ``cost``/``completed_at`` (issues #59, #173)\nare cheap derived instants that ride along rather than waiting for the detail fetch.\n\n``runner_id``/``environment_count`` are **in-progress-only** (issue #140): a chunk at\na terminal status reads unrouted even while its route facts still show a route, so a\nper-runner fold counts live occupancy with no status filter of its own (pinned by\ntests/test_route_claim.py::test_summary_reports_a_finished_chunk_as_unrouted). The\nunfiltered route fact lives on :class:`ChunkDetail.route`.\n\n``completed_at`` (issue #173) is the terminal instant \u2014 see\n:func:`~blizzard.hub.domain.work.derive_completed_at` \u2014 null for every non-terminal\nstatus. Like every wire instant it is a ``str``, populated via\n:func:`~blizzard.foundation.clock.iso_utc` at the serialization edge, never a bare\n``datetime`` (``bzh:utc-instants``).",
+        "description": "One row of the fleet chunk list \u2014 the derived status and current node. ``current_node_name`` is\nthe node's human graph name beside the raw ``nd_`` ULID, null when unresolvable.\n``runner_id``/``environment_count`` are **in-progress-only** (issue #140): a terminal chunk reads\nunrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -353,7 +353,7 @@
         "type": "object"
       },
       "ChunkUsageTotalView": {
-        "description": "A chunk's derived usage/cost total \u2014 summed over every recorded invocation\n(issue #59). Never a stored column: computed at read time by\n``derive_chunk_usage``.\n\n``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` \u2014\nsee :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical\nstatement of it, which this view's fields mirror verbatim.",
+        "description": "A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) \u2014 never a\nstored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``; see\n:class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of it.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -677,7 +677,7 @@
         "type": "object"
       },
       "FleetSummaryView": {
-        "description": "The fleet-pulse counts (issue #76) \u2014 every chunk's derived status folded to four\nbuckets:\n\n* ``ready`` \u2014 chunks derived ``ready``;\n* ``running`` \u2014 ``running`` + ``delivering`` (live work, either shape);\n* ``waiting`` \u2014 ``waiting_on_human`` + ``paused`` (human-parked);\n* ``needs`` \u2014 ``needs_human``.\n\nThe remaining derived statuses (``not_ready``, ``stopped``, ``done``) count toward no\nbucket \u2014 a live-work pulse, not a total. The fold's canonical statement:\n:func:`~blizzard.hub.domain.work.derive_fleet_summary`.",
+        "description": "The fleet-pulse counts: ``ready``; ``running`` (``running`` + ``delivering``);\n``waiting`` (``waiting_on_human`` + ``paused``); ``needs`` (``needs_human``).\n``not_ready``, ``stopped``, and ``done`` count toward no bucket \u2014 a pulse, not a total.",
         "properties": {
           "needs": {
             "title": "Needs",
@@ -706,7 +706,7 @@
         "type": "object"
       },
       "GitCommitDeclarationRequest": {
-        "description": "A worker's explicit git-commit declaration for one repo it touched.\n\nCarries no forge (issue #143): the origin a declaration is verified against is read\nfrom the environment's repo manifest, not named by the worker (pinned by\ntests/test_pin_wire.py::test_git_commit_declaration_carries_no_forge_field).\n\n``environment_id`` is optional while a chunk holds exactly one environment (the\nrunner infers it); it is required once a chunk holds several, because the same repo\nhas a worktree in each and ``repo`` alone no longer identifies one.",
+        "description": "A worker's explicit git-commit declaration for one repo it touched.\n\nCarries no forge (issue #143): the origin verified against is read from the environment's\nrepo manifest. ``environment_id`` is required once a chunk holds several.",
         "properties": {
           "branch": {
             "title": "Branch",
@@ -816,7 +816,7 @@
         "type": "object"
       },
       "HistoryRowView": {
-        "description": "One row of a chunk's own timeline, as a worker reads it \u2014 a transition, a\ncross-graph migration, or a delivery bounce, merged oldest-first by ``recorded_at``.\n\n``from_node``/``to_node`` are human-legible labels: a transition's node names, or (for\na migration) the ``graph/node`` hop\n(``from_graph/from_node --choice--> to_graph/landed_node``, see ``MigrationView``).\nBoth null for a bounce, which names no node. ``epoch`` is populated only for a\ntransition row \u2014 the wire's own ``MigrationView``/``BounceView`` carry no epoch to\nproject. ``cause``/``detail`` carry a bounce's kick-back cause and its raw envelope, or\na migration's ``source`` (``authored-edge``/``intent``/``follow-latest``) in\n``detail``; both null on a transition row.",
+        "description": "One row of a chunk's own timeline \u2014 a transition, a cross-graph migration, or a\ndelivery bounce, merged oldest-first by ``recorded_at``. ``from_node``/``to_node`` are\nnode labels (a migration's is a ``graph/node`` hop), both null for a bounce; ``epoch``\nis transition-only; ``cause``/``detail`` carry a bounce's kick-back or a migration source.",
         "properties": {
           "cause": {
             "anyOf": [
@@ -1172,7 +1172,7 @@
         "type": "object"
       },
       "PauseView": {
-        "description": "An open pause on a chunk (issue #46) \u2014 who set it and when.\n\nPresent only while ``paused=True`` is the newest pause fact; a resume clears it.\nCarried independently of ``status``: PAUSED sits below the human-gated statuses in\nthe derivation order, so a chunk both paused and parked on a question derives\n``waiting_on_human`` \u2014 this field is then the only carrier of the pause fact, and it\nalso answers \"who paused it\".",
+        "description": "An open pause on a chunk (issue #46) \u2014 who set it and when, present only while ``paused=True``\nis the newest pause fact. Carried independently of ``status``: PAUSED sits below the human-gated\nstatuses in the derivation order, so this is the only carrier of a pause on a gated chunk.",
         "properties": {
           "by": {
             "title": "By",
@@ -1258,7 +1258,7 @@
         "type": "object"
       },
       "RunnerAuthSessionView": {
-        "description": "The local panel's own-identity read (``GET /api/auth/session``, issue #129) \u2014\nwhether the human surface is gated (the hub runs oauth mode) and, if so, the\nsigned-in hub username. ``auth_enabled`` false is a ``none``-mode hub: the surface is\nauthless, so the panel renders neither the username nor the logout control.\n``username`` is ``None`` when ``auth_enabled`` but no valid session is presented\n(openapi-ts consumes this).",
+        "description": "An own-identity read (``GET /api/auth/session``, issue #129): whether the human surface is gated\nat all, and if so the signed-in hub username. ``auth_enabled`` false is a ``none``-mode hub, whose\nsurface is authless; ``username`` is ``None`` when gated but no valid session is presented.",
         "properties": {
           "auth_enabled": {
             "title": "Auth Enabled",
@@ -1513,7 +1513,7 @@
         "type": "object"
       },
       "TakeoverOpenResponse": {
-        "description": "``POST /chunks/{id}/takeovers`` \u2014 the CLI execs ``command`` verbatim in ``workdir``.\n\n``env`` (issue #258) is the bounded takeover env \u2014 the lease's ``BLIZZARD_*``\nidentity (including the re-minted lease token) plus ``PATH``/``HOME`` \u2014 never the\ndaemon's full child env (pinned by\ntests/test_runner_takeover.py::test_takeover_env_is_bounded_to_identity_plus_path_and_home).\nIt rides only this body; the ``command`` string stays printable-safe.",
+        "description": "``POST /chunks/{id}/takeovers`` \u2014 ``command`` is exec'd verbatim in ``workdir``.\n``env`` (issue #258) is the bounded takeover env \u2014 the lease's ``BLIZZARD_*`` identity\n(including the re-minted lease token) plus ``PATH``/``HOME``, never the daemon's full\nchild env. It rides only this body; the ``command`` string stays printable-safe.",
         "properties": {
           "command": {
             "title": "Command",
@@ -1740,7 +1740,7 @@
         "type": "object"
       },
       "WorkItemEntry": {
-        "description": "One pointer's pass-through work item \u2014 title, body + comment\nthread, vendor-native.\n\n``label``/``web_url`` are the legible pointer label (``blizzard#8``) and its\nbrowser address \u2014 both null when no configured source names ``source``. A\nper-pointer forge failure degrades here rather than failing the whole read:\n``error`` carries the reason and ``title``/``body`` are null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
+        "description": "One pointer's pass-through work item \u2014 title, body, and comment thread, vendor-native.\n``label``/``web_url`` are the legible pointer label and its browser address, both null when no\nconfigured source names ``source``. A per-pointer failure degrades here rather than failing the\nwhole read: ``error`` carries the reason and ``title``/``body`` are null.",
         "properties": {
           "body": {
             "anyOf": [
@@ -1842,7 +1842,7 @@
         "type": "object"
       },
       "WorkRefView": {
-        "description": "A pointer as the views carry it \u2014 the raw pair plus its legible label and browser\nURL, both resolved by the pointer's configured source binding.\n\n``label`` is the legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``\nis its browser-openable address. Both null when no configured source names\n``source``.",
+        "description": "A pointer as the views carry it \u2014 the raw pair plus its legible label and browser URL, both\nresolved by the pointer's configured source binding. ``label`` is the legible ``{name}#{ref}``;\n``web_url`` is its browser-openable address. Both null when no configured source names ``source``.",
         "properties": {
           "label": {
             "anyOf": [
@@ -1920,7 +1920,7 @@
   "paths": {
     "/api/asks": {
       "get": {
-        "description": "Every ask still awaiting an answer \u2014 ``GET /api/asks?open=true`` (issue #51).\n\nThe one **human-web-lane** route on this otherwise worker-hook router: it is the\npanel's / ``blizzard runner status``'s open-asks read, so it carries\n``require_human_api`` (issue #95) while the worker-hook POST above stays ungated. Over\nthe socket and under a ``none``-mode hub the gate resolves to the implicit identity.\n\nDerived, hub-free: an ask reads open while its ``question_id`` carries no answer\nfact (:meth:`~blizzard.runner.store.repository.IReadRunnerStore.open_asks`), whether\nor not it has been forwarded to the hub yet. There is no closed-ask history to serve,\nso ``open=false`` is refused rather than silently answered as if it were true.",
+        "description": "Every ask still awaiting an answer \u2014 ``GET /api/asks?open=true`` (issue #51).\n\nThe one **human-web-lane** route on this otherwise worker-hook router, so it carries\n``require_human_api`` (issue #95). An ask reads open while its ``question_id`` carries\nno answer fact. No closed-ask history is kept, so ``open=false`` is refused.",
         "operationId": "list_asks_api_asks_get",
         "parameters": [
           {
@@ -2024,7 +2024,7 @@
     },
     "/api/auth/logout": {
       "post": {
-        "description": "Clear the runner's own session cookie (issue #129) \u2014 the next human-lane request\ncarries no valid session, so the served surface bounces to ``GET /api/auth/login``\nand the panel's JSON reads ``401``.\n\nPublic, like the bounce it complements (and like the hub's own ``POST\n/api/auth/logout``): logging out cannot itself require a live session, and clearing\nan already-absent cookie is a harmless no-op. The runner session is a **stateless**\nsigned cookie (``runner/auth/session.py``), so there is nothing server-side to revoke\n\u2014 deleting the cookie *is* the logout. SSO stays honest: if the hub session is still\nlive, the next visit silently re-authenticates through the bounce (that is correct \u2014\nending fleet-wide access is hub logout, which stops renewals); if it too has ended,\nthe next visit lands on the hub's login surface.",
+        "description": "Clear the runner's own session cookie (issue #129). Public, like the bounce it complements:\nlogging out cannot itself require a live session, and clearing an absent cookie is a harmless no-op.\nThe session is a **stateless** signed cookie, so there is nothing server-side to revoke \u2014 deleting\nit *is* the logout. If the hub session is still live, the next visit silently re-authenticates\nthrough the bounce; ending fleet-wide access is hub logout, which stops renewals.",
         "operationId": "logout_api_auth_logout_post",
         "responses": {
           "204": {
@@ -2039,7 +2039,7 @@
     },
     "/api/auth/session": {
       "get": {
-        "description": "The panel's own-identity read behind its username/logout control (issue #129).\n\nPublic and self-resolving, mirroring the hub's own ``GET /api/me``: it reports the\nidentity a request *would* resolve to rather than gating on one, so it never\n``401``s. Under a ``none``-mode hub the surface is authless\n(``auth_enabled = False``); under oauth it carries the signed-in hub username, or\n``None`` when no valid session rode along (the served shell is bounce-gated, so the\npanel normally holds one by the time it reads this).",
+        "description": "The own-identity read (issue #129). Public and self-resolving: it reports the identity a request\n*would* resolve to rather than gating on one, so it never ``401``s. Under a ``none``-mode hub the\nsurface is authless; under oauth it carries the signed-in username, or ``None`` when none rode\nalong.",
         "operationId": "read_session_api_auth_session_get",
         "responses": {
           "200": {
@@ -2061,7 +2061,7 @@
     },
     "/api/chunks/{chunk_id}": {
       "get": {
-        "description": "Forward a chunk's detail read to the hub \u2014 the chunk-detail dock's header subject.\n\nForwards to the same fleet-mounted ``ChunkDetail`` read the build worker's own\nenvelope poll uses, but validates the response down to :class:`ChunkHeaderView`:\nthe header needs only the identity, work-item links, state, and pause fact, and\nprojecting here (rather than carrying the full aggregate over this proxy too)\nkeeps the transition/artifact history \u2014 and the schema collision its\n``EscalationView`` field would otherwise cause in the runner's own OpenAPI spec \u2014\nout of this route entirely.",
+        "description": "Forward a chunk's detail read to the hub \u2014 the chunk-detail dock's header subject.\n\nThe upstream aggregate is validated down to :class:`ChunkHeaderView`, keeping the\ntransition/artifact history out of this route's own schema entirely.",
         "operationId": "get_chunk_api_chunks__chunk_id__get",
         "parameters": [
           {
@@ -2277,7 +2277,7 @@
     },
     "/api/chunks/{chunk_id}/takeovers": {
       "post": {
-        "description": "Open a takeover over a parked chunk with no running attempt (``409`` otherwise).\n\n``force`` supersedes a live worker attempt instead of refusing: the runner kills it\nafter recording the takeover fact, fencing its in-flight submission at the hub as a\nstale epoch, exactly like a reaped lease \u2014 but consuming no retry and recording no\nescalation.",
+        "description": "Open a takeover over a parked chunk with no running attempt (``409`` otherwise).\n\n``force`` supersedes a live worker attempt instead of refusing, consuming no retry\nand recording no escalation.",
         "operationId": "open_takeover_api_chunks__chunk_id__takeovers_post",
         "parameters": [
           {
@@ -2673,7 +2673,7 @@
     },
     "/api/leases/{lease_id}/artifacts/{name}": {
       "get": {
-        "description": "One artifact by ``produces:`` name; ``404`` when this node-step has none by that\nname (optionally narrowed to one from ``node``, the producing node's name).\n\nMore than one upstream node can emit the same ``produces:`` name (issue #169) \u2014 a\nbare NAME that resolves to more than one candidate is ``409``, naming the\nproducing nodes, rather than silently returning an arbitrary one; ``?node=`` picks\na specific one.",
+        "description": "One artifact by ``produces:`` name, optionally narrowed by ``node``; ``404`` when this node-step\nhas none by that name. More than one upstream node can emit the same name (issue #169), so a bare\nname resolving to several candidates is ``409`` naming them, never an arbitrary pick.",
         "operationId": "get_artifact_api_leases__lease_id__artifacts__name__get",
         "parameters": [
           {
@@ -3099,7 +3099,7 @@
     },
     "/api/runner": {
       "get": {
-        "description": "The runner's machine-local summary: identity, pause states, capacities, hub\nconnectivity, last tick (issue #51).\n\nRead-only over its wiring (``bzh:controller-read-only``): the edge holds only the\ncomposition-root-wired :class:`RunnerStatusService`, derived entirely from local\nstore facts plus the injected clock \u2014 no hub call, so it is truthful with the hub\nunreachable. On the store-free app (OpenAPI export / unit tests) the service is\nunwired and the probe answers 503 rather than pretending.",
+        "description": "The runner's machine-local summary: identity, pause states, capacities, hub\nconnectivity, last tick (issue #51).\n\nDerived entirely from local store facts plus the injected clock \u2014 no hub call, so it\nis truthful with the hub unreachable. An unwired service answers 503.",
         "operationId": "get_runner_api_runner_get",
         "responses": {
           "200": {
@@ -3119,7 +3119,7 @@
         ]
       },
       "patch": {
-        "description": "Set this runner's own pause brake \u2014 it starts no new workers (issue #45).\n\nLocal to this machine and independent of the hub's brake: it works with the hub\nunreachable, and it neither reads nor writes the hub's flag. Every spawn site honors\nit \u2014 FILL, restart-resume, an answer-resume, ADVANCE's next-node, a requeue or\nclaim-adopt respawn, and the judgement resume that elicits a verdict from an exited\nworker's session. REAP still reaps an orphan lease (nothing to kill, and its respawn\nis itself suppressed), but does not kill a worker that is merely stalled \u2014 pause is\nnot a drain. Escalating a chunk to a human at an exhausted retry budget is deferred\ntoo, wherever it would happen (REAP, a rejected flush at PULL): a paused runner does\nnot hand work off as unrecoverable while it waits. No retry is consumed at all: the\nbudget counts lease mints, and the one mint site sits below the gate.\n\nA worker that *exits* while paused is **not** judged until the brake clears \u2014 judging\nit resumes its session headlessly, which is itself a spawn the brake forbids. It waits\nexactly like a suppressed respawn: the lease stays active, and ADVANCE retries the\njudgement every tick until the brake clears. A live worker already running is left\nalone throughout \u2014 this is not a drain, and it does not kill. Leases, routes, epochs,\nenvironments, and retry budgets are otherwise unchanged.",
+        "description": "Set this runner's own pause brake \u2014 it starts no new workers (issue #45).\n\nIndependent of the hub's brake: it works with the hub unreachable, and neither reads nor\nwrites the hub's flag. Every spawn site honors it, and escalation at an exhausted budget is\ndeferred. Not a drain: a live worker is left running, and no retry is consumed.",
         "operationId": "patch_runner_api_runner_patch",
         "requestBody": {
           "content": {

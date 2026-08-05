@@ -1,9 +1,8 @@
 """PKCE (RFC 7636) S256 challenge/verifier — the CLI public client's mandatory
 proof-of-possession (issue #96, decision D6's ``client=cli``).
 
-Dependency-free (``bzh:domain-core`` — no FastAPI, no SQLAlchemy, no network) so both the
-CLI (``hub/cli_login.py``) and the hub (``hub/auth/service.py``) import this one module
-rather than each encoding the challenge itself, and the two sides cannot drift.
+Dependency-free (``bzh:domain-core``), so both sides of the exchange derive the challenge
+from this one module and cannot drift.
 """
 
 from __future__ import annotations

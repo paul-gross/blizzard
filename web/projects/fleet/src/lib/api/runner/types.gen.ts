@@ -158,18 +158,10 @@ export type CapacitiesView = {
 /**
  * ChunkHeaderView
  *
- * The chunk-detail dock's header aggregate (issue #185) — the identity,
- * work-item links, live state, and pause fact a header needs, projected down
- * from :class:`ChunkDetail` rather than carrying its transition/artifact
- * history. Pydantic's default ``extra="ignore"`` lets it validate straight off a
- * `ChunkDetail` payload, so the runner's chunk-detail proxy never pulls this
- * module's :class:`EscalationView` into the runner's OpenAPI schema, where it
- * would collide with ``wire.runner_status``' identically-named view (pinned by
- * tests/test_pin_wire.py::test_the_runner_spec_escalation_view_is_the_runners_own).
- *
- * ``pause`` is carried independently of ``status`` for the same reason
- * :class:`ChunkDetail`'s own field is: a chunk both paused and parked on a
- * question still derives ``waiting_on_human``.
+ * A chunk-detail header aggregate (issue #185) — identity, work-item links, live state, and the
+ * pause fact, projected down from :class:`ChunkDetail` without its transition/artifact history.
+ * Pydantic's default ``extra="ignore"`` lets it validate straight off a ``ChunkDetail`` payload,
+ * keeping this module's :class:`EscalationView` out of the runner's own OpenAPI schema.
  */
 export type ChunkHeaderView = {
     /**
@@ -194,29 +186,10 @@ export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'wa
 /**
  * ChunkSummary
  *
- * One row of the fleet chunk list — derived status + current node.
- *
- * ``current_node_name`` is the node's human graph name (``build``, ``review``) beside
- * the raw ``nd_`` ULID; null when the chunk has no current node or its pinned graph
- * cannot resolve the id.
- *
- * Status-only: the summary feeds the board **card**, a passive status view (issue #42),
- * so it carries no operator *fact* — those reach the detail dock through
- * :class:`ChunkDetail`. ``runner_id`` and ``environment_count`` (issue #69) are passive
- * where-is-it facts, not action keys, and ``cost``/``completed_at`` (issues #59, #173)
- * are cheap derived instants that ride along rather than waiting for the detail fetch.
- *
- * ``runner_id``/``environment_count`` are **in-progress-only** (issue #140): a chunk at
- * a terminal status reads unrouted even while its route facts still show a route, so a
- * per-runner fold counts live occupancy with no status filter of its own (pinned by
- * tests/test_route_claim.py::test_summary_reports_a_finished_chunk_as_unrouted). The
- * unfiltered route fact lives on :class:`ChunkDetail.route`.
- *
- * ``completed_at`` (issue #173) is the terminal instant — see
- * :func:`~blizzard.hub.domain.work.derive_completed_at` — null for every non-terminal
- * status. Like every wire instant it is a ``str``, populated via
- * :func:`~blizzard.foundation.clock.iso_utc` at the serialization edge, never a bare
- * ``datetime`` (``bzh:utc-instants``).
+ * One row of the fleet chunk list — the derived status and current node. ``current_node_name`` is
+ * the node's human graph name beside the raw ``nd_`` ULID, null when unresolvable.
+ * ``runner_id``/``environment_count`` are **in-progress-only** (issue #140): a terminal chunk reads
+ * unrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null.
  */
 export type ChunkSummary = {
     /**
@@ -266,13 +239,9 @@ export type ChunkSummary = {
 /**
  * ChunkUsageTotalView
  *
- * A chunk's derived usage/cost total — summed over every recorded invocation
- * (issue #59). Never a stored column: computed at read time by
- * ``derive_chunk_usage``.
- *
- * ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` —
- * see :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical
- * statement of it, which this view's fields mirror verbatim.
+ * A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) — never a
+ * stored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``; see
+ * :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of it.
  */
 export type ChunkUsageTotalView = {
     /**
@@ -478,17 +447,9 @@ export type FactView = {
 /**
  * FleetSummaryView
  *
- * The fleet-pulse counts (issue #76) — every chunk's derived status folded to four
- * buckets:
- *
- * * ``ready`` — chunks derived ``ready``;
- * * ``running`` — ``running`` + ``delivering`` (live work, either shape);
- * * ``waiting`` — ``waiting_on_human`` + ``paused`` (human-parked);
- * * ``needs`` — ``needs_human``.
- *
- * The remaining derived statuses (``not_ready``, ``stopped``, ``done``) count toward no
- * bucket — a live-work pulse, not a total. The fold's canonical statement:
- * :func:`~blizzard.hub.domain.work.derive_fleet_summary`.
+ * The fleet-pulse counts: ``ready``; ``running`` (``running`` + ``delivering``);
+ * ``waiting`` (``waiting_on_human`` + ``paused``); ``needs`` (``needs_human``).
+ * ``not_ready``, ``stopped``, and ``done`` count toward no bucket — a pulse, not a total.
  */
 export type FleetSummaryView = {
     /**
@@ -514,13 +475,8 @@ export type FleetSummaryView = {
  *
  * A worker's explicit git-commit declaration for one repo it touched.
  *
- * Carries no forge (issue #143): the origin a declaration is verified against is read
- * from the environment's repo manifest, not named by the worker (pinned by
- * tests/test_pin_wire.py::test_git_commit_declaration_carries_no_forge_field).
- *
- * ``environment_id`` is optional while a chunk holds exactly one environment (the
- * runner infers it); it is required once a chunk holds several, because the same repo
- * has a worktree in each and ``repo`` alone no longer identifies one.
+ * Carries no forge (issue #143): the origin verified against is read from the environment's
+ * repo manifest. ``environment_id`` is required once a chunk holds several.
  */
 export type GitCommitDeclarationRequest = {
     /**
@@ -606,17 +562,10 @@ export type HeartbeatResponse = {
 /**
  * HistoryRowView
  *
- * One row of a chunk's own timeline, as a worker reads it — a transition, a
- * cross-graph migration, or a delivery bounce, merged oldest-first by ``recorded_at``.
- *
- * ``from_node``/``to_node`` are human-legible labels: a transition's node names, or (for
- * a migration) the ``graph/node`` hop
- * (``from_graph/from_node --choice--> to_graph/landed_node``, see ``MigrationView``).
- * Both null for a bounce, which names no node. ``epoch`` is populated only for a
- * transition row — the wire's own ``MigrationView``/``BounceView`` carry no epoch to
- * project. ``cause``/``detail`` carry a bounce's kick-back cause and its raw envelope, or
- * a migration's ``source`` (``authored-edge``/``intent``/``follow-latest``) in
- * ``detail``; both null on a transition row.
+ * One row of a chunk's own timeline — a transition, a cross-graph migration, or a
+ * delivery bounce, merged oldest-first by ``recorded_at``. ``from_node``/``to_node`` are
+ * node labels (a migration's is a ``graph/node`` hop), both null for a bounce; ``epoch``
+ * is transition-only; ``cause``/``detail`` carry a bounce's kick-back or a migration source.
  */
 export type HistoryRowView = {
     /**
@@ -822,13 +771,9 @@ export type PauseStateView = {
 /**
  * PauseView
  *
- * An open pause on a chunk (issue #46) — who set it and when.
- *
- * Present only while ``paused=True`` is the newest pause fact; a resume clears it.
- * Carried independently of ``status``: PAUSED sits below the human-gated statuses in
- * the derivation order, so a chunk both paused and parked on a question derives
- * ``waiting_on_human`` — this field is then the only carrier of the pause fact, and it
- * also answers "who paused it".
+ * An open pause on a chunk (issue #46) — who set it and when, present only while ``paused=True``
+ * is the newest pause fact. Carried independently of ``status``: PAUSED sits below the human-gated
+ * statuses in the derivation order, so this is the only carrier of a pause on a gated chunk.
  */
 export type PauseView = {
     /**
@@ -888,12 +833,9 @@ export type RequeueResponse = {
 /**
  * RunnerAuthSessionView
  *
- * The local panel's own-identity read (``GET /api/auth/session``, issue #129) —
- * whether the human surface is gated (the hub runs oauth mode) and, if so, the
- * signed-in hub username. ``auth_enabled`` false is a ``none``-mode hub: the surface is
- * authless, so the panel renders neither the username nor the logout control.
- * ``username`` is ``None`` when ``auth_enabled`` but no valid session is presented
- * (openapi-ts consumes this).
+ * An own-identity read (``GET /api/auth/session``, issue #129): whether the human surface is gated
+ * at all, and if so the signed-in hub username. ``auth_enabled`` false is a ``none``-mode hub, whose
+ * surface is authless; ``username`` is ``None`` when gated but no valid session is presented.
  */
 export type RunnerAuthSessionView = {
     /**
@@ -1081,13 +1023,10 @@ export type TakeoverEndResponse = {
 /**
  * TakeoverOpenResponse
  *
- * ``POST /chunks/{id}/takeovers`` — the CLI execs ``command`` verbatim in ``workdir``.
- *
- * ``env`` (issue #258) is the bounded takeover env — the lease's ``BLIZZARD_*``
- * identity (including the re-minted lease token) plus ``PATH``/``HOME`` — never the
- * daemon's full child env (pinned by
- * tests/test_runner_takeover.py::test_takeover_env_is_bounded_to_identity_plus_path_and_home).
- * It rides only this body; the ``command`` string stays printable-safe.
+ * ``POST /chunks/{id}/takeovers`` — ``command`` is exec'd verbatim in ``workdir``.
+ * ``env`` (issue #258) is the bounded takeover env — the lease's ``BLIZZARD_*`` identity
+ * (including the re-minted lease token) plus ``PATH``/``HOME``, never the daemon's full
+ * child env. It rides only this body; the ``command`` string stays printable-safe.
  */
 export type TakeoverOpenResponse = {
     /**
@@ -1225,14 +1164,10 @@ export type ValidationError = {
 /**
  * WorkItemEntry
  *
- * One pointer's pass-through work item — title, body + comment
- * thread, vendor-native.
- *
- * ``label``/``web_url`` are the legible pointer label (``blizzard#8``) and its
- * browser address — both null when no configured source names ``source``. A
- * per-pointer forge failure degrades here rather than failing the whole read:
- * ``error`` carries the reason and ``title``/``body`` are null, so one unreachable
- * pointer never blinds the reader to the pointers it did reach.
+ * One pointer's pass-through work item — title, body, and comment thread, vendor-native.
+ * ``label``/``web_url`` are the legible pointer label and its browser address, both null when no
+ * configured source names ``source``. A per-pointer failure degrades here rather than failing the
+ * whole read: ``error`` carries the reason and ``title``/``body`` are null.
  */
 export type WorkItemEntry = {
     /**
@@ -1291,12 +1226,9 @@ export type WorkItemsView = {
 /**
  * WorkRefView
  *
- * A pointer as the views carry it — the raw pair plus its legible label and browser
- * URL, both resolved by the pointer's configured source binding.
- *
- * ``label`` is the legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``
- * is its browser-openable address. Both null when no configured source names
- * ``source``.
+ * A pointer as the views carry it — the raw pair plus its legible label and browser URL, both
+ * resolved by the pointer's configured source binding. ``label`` is the legible ``{name}#{ref}``;
+ * ``web_url`` is its browser-openable address. Both null when no configured source names ``source``.
  */
 export type WorkRefView = {
     /**

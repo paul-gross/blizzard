@@ -1,10 +1,8 @@
 """``IReadChunkRepository.usage_since``'s optional upper bound (issue #183, unit tier).
 
-The fleet spend-since read's store layer: ``since`` is inclusive, ``until`` — when
-given — is exclusive, so two adjacent windows sharing a boundary instant neither
-double-count nor drop the fact recorded exactly at it. Omitting ``until`` returns
-the open-ended tail.
-"""
+``since`` is inclusive, ``until`` — when given — is exclusive, so two adjacent windows
+sharing a boundary instant neither double-count nor drop that fact. Omitting ``until``
+returns the open-ended tail."""
 
 from __future__ import annotations
 

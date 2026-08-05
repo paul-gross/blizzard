@@ -1,18 +1,9 @@
 """``blizzard hub record-marker`` — the mid-run marker callback CLI (issue #65/#230).
 
-A pure client of the injected ``BZ_HUB_MARKER_CALLBACK_URL`` — this file stubs
-``httpx.post`` (the same monkeypatch seam every other CLI unit test uses) to prove the
-command authorizes its write with the run's marker capability token
-(``BZ_HUB_MARKER_TOKEN``) via the header named by
-:data:`~blizzard.hub.api.marker_auth._MARKER_TOKEN_HEADER` — the same constant the
-route reads (issue #240) — and refuses to post at all when either the callback URL or
-the token is missing from the environment.
-
-The unit tests above assert the CLI sends the header via the shared constant; the
-component test below proves the live end-to-end claim against a real oauth hub —
-mirroring ``tests/test_hub_marker_auth.py``'s
-``test_the_token_the_executor_injects_authorizes_the_route_it_names`` land-script
-proof (issue #240 AC3)."""
+A pure client of the injected ``BZ_HUB_MARKER_CALLBACK_URL``: stubs ``httpx.post`` to
+prove the command authorizes its write with the run's marker capability token via
+:data:`~blizzard.hub.api.marker_auth._MARKER_TOKEN_HEADER` (issue #240), and refuses to
+post when either the callback URL or the token is missing."""
 
 from __future__ import annotations
 
@@ -95,14 +86,9 @@ def test_record_marker_refuses_without_a_token(monkeypatch: pytest.MonkeyPatch) 
 
 @pytest.mark.component
 def test_record_marker_is_accepted_by_a_real_oauth_hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The live end-to-end proof: the CLI's own request, header and all, is accepted by
-    a real hub with authentication genuinely on, and the marker lands durably —
-    mirroring ``tests/test_hub_marker_auth.py``'s land-script proof for the CLI path.
-
-    ``httpx.post`` is still stubbed (the CLI makes a real network call otherwise, and
-    the wired hub app here has no live socket) — but the stub forwards to the app's own
-    ``TestClient`` instead of faking a response, so the request actually runs through
-    ``require_marker_authority`` and the real marker-write route."""
+    """The CLI's own request, header and all, is accepted by a real hub with
+    authentication genuinely on, and the marker lands durably. ``httpx.post`` is stubbed
+    to forward to the app's own ``TestClient``, so the real route actually runs."""
     hub = build_hub(tmp_path, auth_mode="oauth")
     admin = seed_user(hub, username="root", role=Role.SUPERUSER)
     admin_token = seed_session(hub, admin)

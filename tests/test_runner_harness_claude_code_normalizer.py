@@ -1,11 +1,8 @@
 """``harness/internal/claude_code_normalizer.py`` (blizzard#245).
 
-All unit tier: :func:`normalize_lines` takes an iterable of strings and needs no
-filesystem, mirroring ``tests/test_runner_transcripts.py``'s coverage of the parser
-this module absorbs and extends — thinking turns, structured tool input, sidechain
-assembly and its three record-level link routes, version stamps, and the widened
-control skip list.
-"""
+Unit tier: :func:`normalize_lines` takes an iterable of strings and needs no
+filesystem — thinking turns, structured tool input, sidechain assembly and its
+record-level link routes, version stamps, and the widened control skip list."""
 
 from __future__ import annotations
 
@@ -17,9 +14,7 @@ from blizzard.runner.harness.internal import claude_code_normalizer as normalize
 from blizzard.runner.harness.internal.claude_code_normalizer import normalize_lines
 from tests import transcript_fixtures as fx
 
-# --------------------------------------------------------------------------- #
-# Record collapse — env/asst/tool
-# --------------------------------------------------------------------------- #
+# --- Record collapse — env/asst/tool ---
 
 
 @pytest.mark.unit
@@ -136,9 +131,7 @@ def test_max_block_chars_caps_a_turn(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.turns[0].truncated is True  # block-level
 
 
-# --------------------------------------------------------------------------- #
-# New: thinking turns
-# --------------------------------------------------------------------------- #
+# --- New: thinking turns ---
 
 
 @pytest.mark.unit
@@ -161,9 +154,7 @@ def test_present_thinking_text_is_not_flagged_redacted() -> None:
     assert result.turns[0].text == "reasoning about the fix"
 
 
-# --------------------------------------------------------------------------- #
-# New: structured tool input (never json.dumps'd)
-# --------------------------------------------------------------------------- #
+# --- New: structured tool input (never json.dumps'd) ---
 
 
 @pytest.mark.unit
@@ -201,10 +192,8 @@ def test_non_object_tool_input_is_kept_unparsed_not_coerced() -> None:
 
 @pytest.mark.unit
 def test_list_valued_tool_input_is_shaped_other_with_its_json_form_preserved() -> None:
-    """The fourth shape (`"other"`): a non-object, non-string, non-null `input` — a
-    list here, one of the malformed shapes the issue names — is never coerced into
-    the mapping. Its final `json.dumps` form is held verbatim on `input_unparsed`,
-    the exact bytes the re-materializing projection emits."""
+    """The fourth shape (`"other"`): a non-object, non-string, non-null `input` is
+    never coerced; its `json.dumps` form is held verbatim on `input_unparsed`."""
     content = [{"type": "tool_use", "id": "t1", "name": "Weird", "input": [1, "two", True]}]
     line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
     result = normalize_lines([line])
@@ -236,9 +225,7 @@ def test_absent_tool_input_is_shaped_absent_not_object() -> None:
     assert tool.input_shape == "absent"
 
 
-# --------------------------------------------------------------------------- #
-# New: version stamps
-# --------------------------------------------------------------------------- #
+# --- New: version stamps ---
 
 
 @pytest.mark.unit
@@ -257,9 +244,7 @@ def test_harness_version_is_none_when_no_record_carries_one() -> None:
     assert result.harness_version is None
 
 
-# --------------------------------------------------------------------------- #
-# New: sidechain link routes (blizzard#245)
-# --------------------------------------------------------------------------- #
+# --- New: sidechain link routes (blizzard#245) ---
 
 
 @pytest.mark.unit
@@ -281,10 +266,8 @@ def test_agent_id_join_candidate_surfaces_for_a_tool_result_carrying_agent_id() 
 
 @pytest.mark.unit
 def test_agent_id_is_not_attributed_when_one_record_resolves_two_tool_results() -> None:
-    """`toolUseResult.agentId` is one field on the record, not one per block, so an
-    ambiguous record with more than one `tool_result` is not stamped as *attached*
-    (F13's guard) — but must still surface as a read candidate, or the sidecar this
-    agent id names is never opened."""
+    """An ambiguous record with more than one `tool_result` is not stamped as
+    *attached* (F13's guard), but must still surface as a discovered candidate."""
     lines = [
         fx.assistant_tool_use("t1", "Task", {"prompt": "job 1"}, uuid="a1"),
         fx.assistant_tool_use("t2", "Task", {"prompt": "job 2"}, uuid="a2"),
@@ -318,10 +301,8 @@ def test_agent_id_is_not_attributed_when_one_record_resolves_two_tool_results() 
 
 @pytest.mark.unit
 def test_agent_id_is_a_discovered_candidate_even_when_its_tool_use_is_not_in_these_lines() -> None:
-    """F1: `agent_id_by_tool_turn` (attachment) is reachable only via
-    `pending_tool_index`, rebuilt fresh every `normalize_lines` call, so it never
-    carries a `tool_use` from an earlier call — `discovered_agent_ids` must not share
-    that limitation."""
+    """F1: `discovered_agent_ids` must not share `agent_id_by_tool_turn`'s limitation
+    of needing a matching `tool_use` in the same `normalize_lines` call."""
     lines = [fx.tool_result("t1", "spawned", agent_id="agent-abc")]  # no matching tool_use in these lines
     result = normalize_lines(lines)
 
@@ -413,10 +394,9 @@ def test_prompt_timestamp_route_ignores_a_call_after_the_sidechain_started() -> 
 
 @pytest.mark.unit
 def test_prompt_timestamp_route_skips_an_already_claimed_candidate() -> None:
-    """Two independent sidechain runs matching the same prompt-timestamp key, with
-    only one eligible spawning tool call: the second run must not silently overwrite
-    the first's claim on that turn (recorded nowhere) — it falls through to
-    `unlinked` instead, so both runs are always attributable to something."""
+    """Two sidechain runs matching the same prompt-timestamp key with only one
+    eligible tool call: the second falls through to `unlinked`, never overwriting
+    the first's claim."""
     lines = [
         fx.assistant_tool_use("t1", "Task", {"prompt": "same prompt"}, uuid="spawn-1", ts="2026-07-16T09:59:00Z"),
         fx.sidechain_run_record(
@@ -442,20 +422,15 @@ def test_prompt_timestamp_route_skips_an_already_claimed_candidate() -> None:
 @pytest.mark.unit
 def test_prompt_timestamp_route_treats_a_candidate_with_no_timestamp_as_a_non_match() -> None:
     """A tool turn indexed by prompt but carrying no timestamp of its own can never
-    win "nearest preceding" — `tool_turn_indices_by_prompt` excludes it entirely
-    (only a timestamped turn is ever a candidate), so a sidechain matching that
-    prompt resolves to no spawn rather than an unevaluated "first match wins"."""
+    win "nearest preceding" — it resolves to no spawn rather than an unevaluated
+    "first match wins"."""
     lines = [
-        # `control_record`-shaped: no `timestamp`/`uuid`, so this tool call is never
-        # indexed by `_index_tool_turns_by_prompt` at all.
         fx.assistant_tool_use("t1", "Task", {"prompt": "untimed prompt"}, uuid="spawn-untimed"),
         fx.sidechain_run_record(
             "untimed prompt", uuid="run-root", parent_uuid="orphan", role="user", ts="2026-07-16T10:00:00Z"
         ),
     ]
-    # Strip the timestamp from the tool-use record after minting it, since the
-    # fixture always stamps one — this is the shape `_index_tool_turns_by_prompt`'s
-    # own docstring says can never be a "nearest preceding" winner.
+    # Strip the timestamp the fixture always stamps, since it must be absent here.
     record = json.loads(lines[0])
     del record["timestamp"]
     lines[0] = json.dumps(record)
@@ -469,9 +444,8 @@ def test_prompt_timestamp_route_treats_a_candidate_with_no_timestamp_as_a_non_ma
 @pytest.mark.unit
 def test_prompt_timestamp_route_tolerates_an_offset_less_candidate_timestamp() -> None:
     """`_parse_timestamp` coerces an offset-less stamp to UTC rather than leaving it
-    naive, so a comparison between two parsed timestamps never raises `TypeError` for
-    mixing a naive and an aware one — probed here with the sidechain run's own root
-    timestamp offset-less, the tool call's aware."""
+    naive, so comparing an offset-less and an aware timestamp never raises
+    `TypeError`."""
     lines = [
         fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}, uuid="spawn-1", ts="2026-07-16T09:59:00Z"),
         fx.sidechain_run_record("find X", uuid="run-root", parent_uuid="orphan", role="user", ts="2026-07-16T10:00:00"),
@@ -505,8 +479,7 @@ def test_group_sidechain_runs_stays_fast_and_correct_under_duplicate_uuid_values
     import time
 
     # 40,000 records — the quadratic implementation measured 29.4s here, so the 5s
-    # threshold below carries ~6x headroom against a reintroduced quadratic walk even
-    # on a fast machine, while the linear implementation stays well under a second.
+    # threshold carries ~6x headroom against a reintroduced quadratic walk.
     n = 40_000
     records: list[dict[str, object]] = [
         {"type": "user", "uuid": "dup", "parentUuid": "orphan", "isSidechain": True},
@@ -532,17 +505,14 @@ def test_group_sidechain_runs_stays_fast_and_correct_under_duplicate_uuid_values
     assert [r["message"]["content"] for r in runs[0][1:]] == [f"link {i}" for i in range(n)]
 
 
-# --------------------------------------------------------------------------- #
-# New: sidecar-file normalization (is_sidechain_file=True)
-# --------------------------------------------------------------------------- #
+# --- New: sidecar-file normalization (is_sidechain_file=True) ---
 
 
 @pytest.mark.unit
 def test_sidecar_file_records_normalize_as_their_own_main_conversation() -> None:
-    """Every record in a sidecar file carries `isSidechain: true` on itself —
-    normalizing it with `is_sidechain_file=True` must treat that as
-    the whole file's own conversation, not re-route it into a further sidechain
-    bucket (which would silently produce zero turns)."""
+    """Every sidecar record carries `isSidechain: true`; `is_sidechain_file=True`
+    must treat that as the file's own conversation, not re-route it into a further
+    sidechain bucket."""
     lines = [
         fx.sidecar_record("subagent starting", role="user", agent_id="agent-abc"),
         fx.sidecar_record("subagent done", role="assistant", agent_id="agent-abc"),

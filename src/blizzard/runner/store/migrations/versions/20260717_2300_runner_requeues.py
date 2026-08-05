@@ -1,9 +1,6 @@
 """requeues — the operator's explicit hand-back after a human hold (issue #53)
 
-One brand-new table, no reshape of any existing table (mirroring
-``20260717_2245_takeovers.py``'s freeze-hazard note): the runner tree declares no
-ForeignKeys at all, so neither half of that hazard applies here either.
-
+One brand-new table, no reshape: the runner tree declares no ForeignKeys at all.
 Revision ID: 20260717_2300_runner_requeues
 Revises: 20260717_2245_runner_takeovers
 """

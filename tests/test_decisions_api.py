@@ -1,13 +1,9 @@
 """``POST /api/decisions/{id}/resolutions`` and the deprecated singular
 ``.../resolution`` alias (issue #104), component tier.
 
-``tests/test_gates.py`` covers gate mechanics end to end (graph gate, runner-config
-gate, first-write-wins) against the pre-#104 singular path. This file pins the pluralized
-successor's identical CAS behavior (200 winner / 409 loser) and proves the singular
-alias still resolves byte-identically while carrying the ``Deprecation``/``Link``
-headers and ``deprecated: true`` in the OpenAPI operation; a runner bearer token is
-still rejected on both.
-"""
+Pins the pluralized route's CAS behavior (200 winner / 409 loser) and proves the
+singular alias resolves byte-identically while carrying the ``Deprecation``/``Link``
+headers; a runner bearer token is rejected on both."""
 
 from __future__ import annotations
 

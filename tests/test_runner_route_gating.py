@@ -1,25 +1,9 @@
 """The exhaustive three-lane gating guard for the runner's API seam (issue #95).
 
-The runner counterpart to the hub's ``tests/test_route_classification.py``: every
-mounted ``/api/*`` route is asserted to be either **human-web-lane** (session-gated —
-an unauthenticated TCP request under an oauth-mode hub gets a ``401``) or **open** (the
-worker-hook lane and the public routes — never gated by a human session, so an
-unauthenticated TCP request reaches the handler, whatever non-``401`` it then returns).
-
-This is a **behavioural** guard, not an introspective one: it drives real requests
-against a real (store-free) app whose hub is oauth-mode, and reads the status the gate
-actually produces. That is deliberate — the router-level ``Depends(require_human_api)``
-attached at ``include_router`` time is not reliably visible on the pre-inclusion route
-objects in this FastAPI version, and the property that matters is the *effect* (a 401 or
-not), which only a request observes. The table is exhaustive in both directions: a newly
-added route absent from both lanes fails the suite, and a lane entry that no longer
-resolves to a live route fails too — the same "no route unclassified" guarantee the hub
-guard gives, now for the runner's own three-tenant partition.
-
-The socket lane (``request.client is None``) and the ``none``-mode hub are covered by
-``tests/test_runner_federation.py`` (both resolve to the implicit identity, ungated);
-this guard pins the *TCP-under-oauth* split those two carve-outs are measured against.
-"""
+Every mounted ``/api/*`` route is either human-web-lane (session-gated: an
+unauthenticated TCP request under an oauth-mode hub gets a ``401``) or open (never
+gated). A behavioural guard: drives real requests against a real app and reads the
+status the gate produces; an unclassified route or a stale lane entry fails the suite."""
 
 from __future__ import annotations
 
@@ -38,9 +22,7 @@ pytestmark = pytest.mark.unit
 # --- The two-lane table -----------------------------------------------------
 
 #: Human web lane — the panel's own reads/writes; ``require_human_api`` gates each so an
-#: unauthenticated TCP request under an oauth-mode hub is ``401`` (a CLI reaching these
-#: over the socket, or any request under a ``none``-mode hub, resolves to the implicit
-#: identity and is ungated — measured elsewhere).
+#: unauthenticated TCP request under an oauth-mode hub is ``401``.
 _HUMAN: set[tuple[str, str]] = {
     ("GET", "/api/asks"),
     ("GET", "/api/leases"),
@@ -64,10 +46,8 @@ _HUMAN: set[tuple[str, str]] = {
     ("POST", "/api/chunks/{chunk_id}/resume"),
 }
 
-#: Open — the worker-hook lane (workers call over TCP via ``BLIZZARD_RUNNER_URL`` and
-#: cannot SSO-bounce) plus the public routes (health/readiness, the auth bounce itself
-#: — which *establishes* a session so cannot be session-gated — and logout/session,
-#: which manage that session and self-resolve rather than gate on one). Never ``401``.
+#: Open — the worker-hook lane (workers call over TCP and cannot SSO-bounce) plus the
+#: public routes (health/readiness, the auth bounce, logout/session). Never ``401``.
 _OPEN: set[tuple[str, str]] = {
     ("GET", "/api/health"),
     ("GET", "/api/ready"),
@@ -118,10 +98,8 @@ def _live_routes(client: TestClient) -> list[APIRoute]:
         out: list[APIRoute] = []
         for route in routes:  # type: ignore[attr-defined]
             if isinstance(route, APIRoute):
-                # The web root is the SPA shell, not an API surface: with a built
-                # bundle it is a Mount (never an APIRoute), without one it is
-                # foundation/web.py's placeholder GET / — public by construction
-                # and environment-dependent, so it stays out of the lane table.
+                # The web root is the SPA shell, not an API surface, and is
+                # environment-dependent, so it stays out of the lane table.
                 if route.path == "/":
                     continue
                 out.append(route)

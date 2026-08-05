@@ -1,32 +1,9 @@
 """The hub event broker — the live SSE re-broadcast seam.
 
-Fact names double as event names: the hub re-broadcasts landed facts
-over ``GET /api/events/stream`` so the board and runners keep live views current. This
-is the **real** in-process fan-out (P7, ORCHESTRATION.md — no cross-process bus): each
-mutating route publishes a typed event here, every event carries a **monotonic id**,
-and every open SSE connection receives it live. A reconnecting client replays the
-buffered tail from its ``Last-Event-ID`` and re-GETs the REST resources to reconcile
-anything that aged out of the bounded ring (``history``).
-
-Threading: the sync FastAPI route handlers publish from an anyio worker thread, while
-each SSE stream awaits its queue on the event loop. A subscriber captures its running
-loop at :meth:`subscribe`, and :meth:`publish` hands each event across with
-``loop.call_soon_threadsafe`` — the one safe bridge from a worker thread into an
-event-loop-bound :class:`asyncio.Queue`. History mutation and the subscriber set are
-guarded by a lock; ids are minted under it, so they are strictly monotonic across
-concurrent publishers.
-
-The event **type** names are the board's live vocabulary (the prompt's ``chunk-changed``,
-``question-asked``/``-answered``, ``decision-opened``/``-resolved``, ``queue-changed``,
-plus ``runner-changed`` for the fleet's liveness column); each maps to the hub facts it
-is emitted on (see the call sites in ``blizzard.hub.api``). A frame's payload carries only
-what identifies the change — a consumer re-GETs the REST resource for the rest — except
-where a frame is itself the news: ``runner-changed`` names its :data:`RunnerChangeKind`,
-since the runner-registry read it stales cannot say which change fired it, and
-``chunk-changed`` names its :data:`ChunkChangeCause` alongside the prev/current node,
-prev status, runner id, and graph id (issue #212) — the Event log renders these directly
-rather than re-deriving them from a re-GET.
-"""
+Every published event carries a **monotonic id** and reaches every open connection live,
+with a bounded tail (``history``) a reconnect replays from its ``Last-Event-ID``. Publishers
+run on worker threads and subscribers on the event loop, so a subscriber captures its loop at
+:meth:`subscribe` and :meth:`publish` crosses over with ``loop.call_soon_threadsafe``."""
 
 from __future__ import annotations
 
@@ -60,12 +37,8 @@ QUEUE_CHANGED = "queue-changed"
 RUNNER_CHANGED = "runner-changed"
 EVENT_LOGGED = "event-logged"
 
-#: Every event-type name the broker can publish (issue #235) — the single enumerable
-#: source the SSE contract test's corpus-closure check reads, mirroring the board's own
-#: ``HUB_EVENT_TYPES`` (``fleet-live.ts``). A ninth constant added above without a slot
-#: here would still be invisible to that check, exactly as adding one to
-#: ``HUB_EVENT_TYPES`` on the TS side is what makes a new kind visible there — this
-#: tuple, not the bare constants, is the broker's declared vocabulary.
+#: Every event-type name the broker can publish (issue #235). This tuple, not the bare
+#: constants above, is the broker's declared vocabulary.
 EVENT_TYPES: tuple[str, ...] = (
     CHUNK_CHANGED,
     QUESTION_ASKED,
@@ -116,9 +89,7 @@ class EventBroker:
         """Record a typed event and fan it out live to every open connection.
 
         Returns the event's monotonic id. Minting the id, appending to the ring, and
-        snapshotting the subscriber set happen under the lock; the cross-thread handoff
-        to each subscriber's loop happens outside it.
-        """
+        snapshotting the subscriber set happen under the lock; the handoff does not."""
         data = json.dumps(payload)
         with self._lock:
             self._next_id += 1
@@ -145,17 +116,11 @@ class EventBroker:
         graph_id: str | None = None,
         key: str | None = None,
     ) -> int:
-        """A chunk's derived status changed — the board refreshes that row.
+        """A chunk's derived status changed.
 
-        The optionals are present-when-meaningful, the same shape :meth:`publish_runner_changed`
-        established for issue #151: each is added to the payload only when supplied, never
-        serialized as ``null``, so a chunk with no runner or no prior transition renders
-        without placeholder junk (issue #212). ``key`` (issue #213) names the identity of the
-        durable fact this frame describes — e.g. ``"transitions:tr_01J..."`` — the same
-        table-qualified natural key :class:`~blizzard.hub.domain.work.ActivityRow` carries, so
-        a page-load backfill row and this live frame can be recognized as the same fact by
-        exact string equality. Absent (never a placeholder) for a cause with no fact table
-        (``edited``) or when this call recorded nothing new (an idempotent no-op)."""
+        Optionals are added to the payload only when supplied, never serialized as
+        ``null`` (issue #212). ``key`` (issue #213) is the table-qualified natural key of
+        the fact this frame describes, absent when there is no such fact."""
         payload = ChunkChangedPayload(
             chunk_id=chunk_id,
             status=status,
@@ -207,27 +172,18 @@ class EventBroker:
     ) -> int:
         """A runner's registry state changed — ``kind`` names which change (issue #151).
 
-        Every kind still stales the board's fleet registry the same way, so the liveness
-        column keeps refreshing on the ``heartbeat`` flood; the kind is what lets the Event
-        log show the operator only the pause family. ``by`` rides the four pause/resume
-        kinds (who set or cleared the brake) and ``reason`` the runner-local pair, which
-        carries the free-text note off the ``runner.locally-paused``/``-resumed`` fact.
-        ``key`` (issue #213) names the pause-family fact's identity
-        (``runner_pause_facts``/``runner_local_pause_facts``); deliberately absent on
-        ``registered``/``heartbeat``, which have no fact table and are muted client-side.
-        """
+        ``by`` rides the four pause/resume kinds and ``reason`` the runner-local pair.
+        ``key`` (issue #213) names the pause-family fact's identity, absent on
+        ``registered``/``heartbeat``, which have no fact table."""
         payload = RunnerChangedPayload(runner_id=runner_id, kind=kind, by=by, reason=reason, key=key).to_payload()
         return self.publish(RUNNER_CHANGED, payload)
 
     def publish_event_logged(
         self, *, severity: str, kind: str, chunk_id: str | None, runner_id: str, key: str | None = None
     ) -> int:
-        """An operational event landed in the event log (issue #125) — the board's Events
-        tab refreshes, and a chunk-named event also refreshes that chunk's card. The frame
-        carries only the identifying fields the board's invalidation registry keys on; the
-        row itself is read back off ``GET /api/events``. ``key`` (issue #213) names the
-        ``event_log`` row's own id, matching :func:`~blizzard.hub.domain.work._event_row_to_activity`'s
-        backfill key exactly."""
+        """An operational event landed in the event log (issue #125). The frame carries
+        only identifying fields; the row itself is read back off ``GET /api/events``.
+        ``key`` (issue #213) names the ``event_log`` row's own id."""
         payload = EventLoggedPayload(
             severity=severity, kind=kind, chunk_id=chunk_id, runner_id=runner_id, key=key
         ).to_payload()

@@ -1,11 +1,8 @@
 """The runner-local fleet-summary pass-through proxy — ``GET /api/fleet-summary`` (issue #76).
 
-Forwards to the hub's fleet-router summary (``/api/fleet/summary``) — the browser never
-crosses to the hub directly. The hub half is covered by ``test_fleet_summary_api``; this
-proves the *runner's* half — that it forwards with the loop's own bearer credential, that a
-hub outage surfaces as a distinct error rather than empty counts, and that an unwired
-runner 503s instead of pretending.
-"""
+Proves the runner's half of the forward: it uses the loop's own bearer credential, a
+hub outage surfaces as a distinct error rather than empty counts, and an unwired runner
+503s instead of pretending."""
 
 from __future__ import annotations
 

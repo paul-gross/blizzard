@@ -1,31 +1,8 @@
-"""``blizzard-mock-data`` as a live hub-board seeder — the fact-composition/drift proof
-(``tool:mock-data``, issue ``blizzard-mock#5``).
+"""``blizzard-mock-data`` as a live hub-board seeder (``blizzard-mock#5``).
 
-The sibling ``blizzard-mock`` repo's mock-data CLI composes fact rows purely offline
-(unit/component-tested there, zero store). What only a **real, migrated** hub can prove:
-
-* the seeder's fact composition agrees with the hub's own ``derive_chunk_status`` — the
-  status a chunk was seeded *to derive* actually reads back that way over the wire;
-* the drift guard (``domain/schema_contract.py``) passes against the **real**
-  Alembic-migrated schema, not a hand-rolled one — every ``blizzard-mock-data`` call
-  below runs the guard first and would fail loud on any drift, so this whole test's own
-  green run (particularly the ``scenario board`` call, the richest write) *is* that proof;
-  no separate assertion is needed beyond the seeding calls exiting 0.
-
-The hub is hosted with **zero** ``[[work_source]]`` blocks (``write_work_sources`` is
-never called here, unlike ``tests.e2e.test_acceptance_loop._hub``) — every chunk here is
-written directly by the seeder, never ingested, so no work source is needed, and the
-zero-work-source pointer-rendering degradation (``label``/``web_url`` both null,
-``hub/api/chunks.py::_pointer_views``) is itself part of what this proves.
-
-The seeding subprocess writes to the hub's own sqlite file **while the hub daemon is
-already up and serving** — never restarted afterward — so every read-back below (``GET
-/api/chunks``, ``.../chunks/{id}``, ``/api/events``, ``/api/runners``) is the daemon
-picking up rows a concurrent process just landed, not a fresh boot re-reading them.
-
-sqlite only, no tokens, no network. Reproduce — from a provisioned feature env — with::
-
-    BLIZZARD_SERVICE=1 uv run pytest tests/service/test_mock_data_seeding_service.py
+A real, migrated hub proves what the offline-tested mock-data CLI can't: seeded status
+agrees with the hub's own status derivation, and the drift guard passes against the real
+schema — hosted with zero work sources, writing live to the daemon's sqlite, no restart.
 """
 
 from __future__ import annotations
@@ -55,8 +32,7 @@ def _require_mock_data_binary() -> Path:
     or skip.
 
     Distinct from :func:`~tests.service.support.require_mock_fleet`'s hub/runner probe:
-    this whole module drives the mock-data seeder specifically, and the mock hub/runner
-    binaries it also checks for are not otherwise needed here."""
+    this module drives the mock-data seeder specifically."""
     bin_dir = require_mock_fleet()
     if not (bin_dir / "blizzard-mock-data").is_file():
         pytest.skip(
@@ -69,10 +45,8 @@ def _require_mock_data_binary() -> Path:
 def _zero_work_source_hub(hub_dir: Path, port: int) -> Iterator[httpx.Client]:
     """Host a real hub with **zero** ``[[work_source]]`` blocks.
 
-    Mirrors ``tests.e2e.test_acceptance_loop._hub``'s own ``init``-then-``host`` shape,
-    but deliberately skips its ``write_work_sources`` call and sets no forge-facing env
-    — every chunk this test seeds is written directly by the mock-data CLI, never
-    ingested, so no work source or forge counterpart is needed at all."""
+    Mirrors ``tests.e2e.test_acceptance_loop._hub`` minus ``write_work_sources`` — every
+    chunk here is seeded directly, never ingested, so no work source is needed."""
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
     log = hub_dir / "daemon.log"
@@ -94,10 +68,8 @@ def _zero_work_source_hub(hub_dir: Path, port: int) -> Iterator[httpx.Client]:
 def _mock_data(bin_dir: Path, *args: str) -> str:
     """Run one ``blizzard-mock-data`` invocation to completion and return its stdout.
 
-    A short-lived one-shot CLI call (unlike the long-lived hub daemon above) — captured
-    directly rather than sunk to a log file, matching this repo's own
-    ``mint_fixture``/``blizzard-mock-fixture reset`` convention for one-shot subprocess
-    calls (``tests/service/support.py``)."""
+    A short-lived one-shot CLI call, captured directly rather than sunk to a log file —
+    this repo's own convention for one-shot subprocess calls."""
     result = subprocess.run([str(bin_dir / "blizzard-mock-data"), *args], check=True, capture_output=True, text=True)
     return result.stdout
 
@@ -142,11 +114,8 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
         assert len(intended) == 11, board_stdout
         ceiling_runner_id = _parse_ceiling_paused_runner(board_stdout)
 
-        # An individual `create` verb the scenario doesn't already fully exercise: an
-        # explicit ready chunk carrying work refs (proving the zero-work-source label/
-        # web_url-null rendering) that also gets an answered-AND-delivered question
-        # (proving the full ask -> answer -> delivery trail; --stress's own
-        # multi-question chunk never answers or delivers any of its three).
+        # An explicit ready chunk with work refs (zero-work-source label/web_url-null
+        # rendering) that also gets an answered-AND-delivered question.
         chunk_id = _mock_data(
             bin_dir,
             "create",
@@ -209,9 +178,8 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
         assert cost_partial_detail["cost"]["input_tokens"] == 400, cost_partial_detail["cost"]
         assert cost_partial_detail["cost"]["output_tokens"] == 90, cost_partial_detail["cost"]
 
-        # Position 9 (0-indexed) is --stress's own extra multi-question waiting_on_human
-        # chunk; position 3 is also waiting_on_human but carries only one question —
-        # position, not status, disambiguates the two (scenario_seed.py).
+        # Position 9 (0-indexed) is --stress's extra multi-question waiting_on_human
+        # chunk; position, not status, disambiguates it from position 3's single question.
         multi_question_chunk_id, multi_question_status = intended[9]
         assert multi_question_status == "waiting_on_human", intended[9]
         multi_question_detail = _chunk_detail(hub, multi_question_chunk_id)
@@ -219,8 +187,7 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
         assert all(not q["answered"] for q in multi_question_detail["questions"]), multi_question_detail["questions"]
 
         # The explicit chunk above: work refs render with null label/web_url (no
-        # configured work source — hub/api/chunks.py's `_pointer_views` degradation),
-        # and its question trail shows the full answer -> delivery.
+        # configured work source), and its question trail shows answer -> delivery.
         explicit_detail = _chunk_detail(hub, chunk_id)
         assert explicit_detail["status"] == "ready", explicit_detail
         work_refs = sorted(explicit_detail["work_refs"], key=lambda r: r["ref"])
@@ -258,9 +225,8 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
         assert paused_runner["locally_paused_reason"] is not None
         assert "spend ceiling" in paused_runner["locally_paused_reason"], paused_runner
 
-        # --stress's long-identity runner: present, and neither truncated nor erroring —
-        # every ordinary base runner id is short (`runner-00`..`runner-08`), so a very
-        # long one is unambiguously the stress extra.
+        # --stress's long-identity runner: present, neither truncated nor erroring — every
+        # ordinary base runner id is short, so a very long one is unambiguously the extra.
         long_identity_runners = [rid for rid in runners if len(rid) > 100]
         assert len(long_identity_runners) == 1, sorted(runners)
         long_runner = runners[long_identity_runners[0]]

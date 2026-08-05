@@ -155,9 +155,8 @@ def test_authorize_with_no_session_and_multiple_providers_bounces_to_the_login_c
         params={"client": "runner-a", "redirect_uri": "https://runner-a.example/api/auth/callback", "state": "s"},
         follow_redirects=False,
     )
-    # Two providers: no single dance to auto-run, so the browser is handed to the board's
-    # /login page carrying this pending authorize request (its client/redirect_uri/state
-    # preserved inside the encoded return_to) — never a bare 501 (issue #128).
+    # Two providers: no single dance to auto-run, so the browser is handed to the
+    # board's /login page carrying the pending authorize request (issue #128).
     assert resp.status_code in (302, 307)
     location = resp.headers["location"]
     assert location.startswith("/login?return_to=")

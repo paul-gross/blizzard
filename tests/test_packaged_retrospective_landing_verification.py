@@ -1,10 +1,8 @@
-"""Both graphs' ``retrospective`` node states the landing-verification duty (unit tier,
-issue #238 AC1/AC3).
+"""Both graphs' ``retrospective`` node states the landing-verification duty (issue #238).
 
-The duty must be pinned mechanically against the loaded, inlined packaged prompt text, not
-left as a prose-only AC, since a future prompt edit could drop it with no test failing.
-Scoped per lane: advanced-development-workflow's prompt names a PR-merge leg (``land_pr_ci``);
-basic-development-workflow's does not, since it lands via a fast-forward (``land_ff``).
+Pinned mechanically against the loaded, inlined packaged prompt text. Scoped per lane:
+advanced-development-workflow names a PR-merge leg; basic-development-workflow does not,
+since it lands via a fast-forward.
 """
 
 from __future__ import annotations
@@ -43,8 +41,7 @@ def test_basic_retrospective_states_the_sha_and_work_item_legs_and_the_gate_chec
     assert "merge-base --is-ancestor" in prompt, "sha-reachable-from-base leg missing"
     assert "work-items" in prompt, "work-item-closed leg missing"
     assert "gh run list --commit" in prompt, "merge-commit gate check missing"
-    # No PR to merge in this lane — a fast-forward, not a PR merge. Assert the prompt
-    # says so, not merely that one incidental substring is absent — a blanket "not in"
-    # check would fail on any unrelated future mention of the same verb.
+    # No PR to merge in this lane. Assert the prompt says so explicitly, not merely
+    # that one incidental substring is absent.
     assert "no PR-merge leg to check" in prompt, "must say why there is no PR-merged leg"
     assert "no `resolve` node" in prompt, "must say a discrepancy is reported, not routed"

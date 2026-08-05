@@ -1,9 +1,8 @@
 """``AuthService`` — mint/resolve/slide sessions, mint collision-free usernames (unit
 tier, issue #91).
 
-Exercised against in-memory fakes of the three repository Protocols — pure domain
-logic in isolation. The real SQLAlchemy adapters are exercised at component tier in
-``tests/test_auth_repositories.py``.
+Exercised against in-memory fakes of the three repository Protocols; the real
+SQLAlchemy adapters are exercised at component tier (``tests/test_auth_repositories.py``).
 """
 
 from __future__ import annotations
@@ -266,10 +265,8 @@ def test_touch_session_returns_none_once_idle_expired() -> None:
 
 
 def test_touch_session_returns_none_past_absolute_max_age_even_if_recently_touched() -> None:
-    """A session cannot outlive its absolute cap no matter how often it slides.
-
-    Re-fetches the freshly-slid row via ``get_by_hash`` before each ``touch_session``
-    call (see ``hub/api/auth_session.py``)."""
+    """A session cannot outlive its absolute cap no matter how often it slides;
+    re-fetches the freshly-slid row via ``get_by_hash`` before each call."""
     clock = FixedClock(_T0)
     service, users, sessions, _ident, _, _ = _service(
         clock, idle_ttl=timedelta(hours=1), absolute_max_age=timedelta(hours=3)

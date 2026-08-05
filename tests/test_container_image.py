@@ -1,9 +1,7 @@
 """The hub container image (``packaging/docker/``) — the static packaging contract
-(issue #188), modeled on ``tests/test_systemd_units.py``. No docker required — this
-is the docker-free static guard that catches packaging rot even on a machine with
-no docker at all, running in the default ``blizzard:unit-test`` tier. The image
-actually building, booting, and serving is ``blizzard:image-smoke``
-(``mise run image-smoke``), local-only.
+(issue #188). No docker required — this is the docker-free static guard that catches
+packaging rot even with no docker at all, in the default ``blizzard:unit-test`` tier.
+The image actually building and serving is ``blizzard:image-smoke``, local-only.
 """
 
 from __future__ import annotations
@@ -97,12 +95,9 @@ def test_entrypoint_scaffolds_only_when_the_config_file_is_absent() -> None:
 
 
 def test_daemon_startup_path_carries_no_migrate_call() -> None:
-    """``hub host``'s CLI command must never call migrate itself — the entrypoint (or
-    the systemd unit's ``ExecStartPre``, ``tests/test_systemd_units.py``) owns that
-    step. The daemon refuses to start on a revision mismatch instead
-    (``ensure_current_revision``); folding migrate into the host path would let a
-    concurrent instance race a migration against a daemon that just started serving.
-    """
+    """``hub host``'s CLI command must never call migrate itself — the systemd unit's
+    ``ExecStartPre`` owns that step; folding it in would let a concurrent instance race
+    a migration against a daemon that just started serving."""
     cli_text = (_REPO_ROOT / "src" / "blizzard" / "hub" / "cli.py").read_text()
     match = re.search(r"\ndef host\(.*?(?=\n@|\Z|\ndef )", cli_text, re.DOTALL)
     assert match, "could not locate hub cli's host() command body"

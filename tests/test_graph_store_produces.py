@@ -1,12 +1,9 @@
 """``graph_nodes.produces`` JSON encode/decode (unit tier, issue #143).
 
-The column stays JSON ``TEXT`` across D1 (no migration): a legacy row minted before
-#143 carries a plain ``list[str]``, and a row minted since carries
-``list[{name, kind}]``. :func:`~blizzard.hub.store.internal.graph_store._produces_specs`
-is the one read-time seam that normalizes both to :class:`ProducesSpec` —
-this pins both directions, and the round trip through
-:func:`~blizzard.hub.store.internal.graph_store._produces_spec_to_json`.
-"""
+The column stays JSON ``TEXT`` across D1 (no migration): a legacy row carries a plain
+``list[str]``, a row minted since carries ``list[{name, kind}]``, and
+:func:`~blizzard.hub.store.internal.graph_store._produces_specs` normalizes both to
+:class:`ProducesSpec`; this pins both directions plus the round trip."""
 
 from __future__ import annotations
 

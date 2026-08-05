@@ -2,13 +2,8 @@
 
 Client verbs are pure clients of the hub's HTTP API; ``host`` *becomes* the hub
 daemon. This module is CLI top-level glue, so ``echo`` for user output is fine here
-(``bzh:structlog-logging``); diagnostics go through structlog inside the runtime and
-app.
-
-The operator verbs are grouped by noun (``chunk``/``runner``/``graph``/``queue``/
-``decision``/``question``) rather than flat at the top level (issue #104). ``status`` is
-the one operator verb that stays top-level: it is a cross-resource dashboard, not one
-resource's own noun."""
+(``bzh:structlog-logging``). Operator verbs are grouped by noun (issue #104);
+``status`` stays top-level as a cross-resource dashboard."""
 
 from __future__ import annotations
 
@@ -41,12 +36,8 @@ ENV_HUB_URL = "BZ_HUB_URL"
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"
 _CLIENT_TIMEOUT = 15.0
 
-# The runtime root the dir-taking verbs resolve, highest to lowest: an explicit
-# ``--dir`` (or ``init``'s DIRECTORY), then ``BZ_HUB_DIR``, then the cwd. The env rung
-# is what lets winter's per-env band (`[env.<name>.vars]`) aim one feature env at a
-# chosen runtime root — a store snapshot, or a shared dir during an exclusive handoff —
-# without a bespoke command line per invocation (issue #39). Selectable, not shareable:
-# the store is still single-writer, so two live daemons on one `hub.db` remains unsafe.
+# The runtime root the dir-taking verbs resolve, highest to lowest: explicit ``--dir``,
+# then ``BZ_HUB_DIR``, then the cwd. Selectable, not shareable: the store is single-writer.
 ENV_HUB_DIR = "BZ_HUB_DIR"
 DEFAULT_DIR = "."
 
@@ -92,18 +83,11 @@ def _request(
     json_body: object | None = None,
     params: dict[str, str] | None = None,
 ) -> httpx.Response:
-    """The one seam every operator verb's HTTP call goes through (issue #104):
-    resolves the base URL, dispatches to ``httpx``'s module-level verb function (so a
-    test's ``monkeypatch.setattr(hub_cli.httpx, "post", ...)`` still intercepts it, no
-    persistent ``httpx.Client`` in the way), and wraps a transport failure in a
-    ``ClickException`` naming the call. Response-status handling is the caller's
-    (:func:`_check`) — a shared transport seam, not a shared status-branch policy,
-    since the right fallback message and which codes matter both vary per verb.
+    """The one seam every operator verb's HTTP call goes through (issue #104).
 
-    Attaches the stored session token (issue #96), if any, as a bearer header — the
-    same seam every verb already goes through, so login/logout are the only commands
-    that need to think about the token file at all. Omitted entirely (not even an empty
-    dict) when no session is stored, exactly like ``json``/``params`` above."""
+    Dispatches to ``httpx``'s module-level verb function so a test's
+    ``monkeypatch.setattr`` still intercepts it, wraps a transport failure in a
+    ``ClickException``, and attaches the stored session token (issue #96) when set."""
     resolved = _hub_url(hub_url)
     full_url = f"{resolved.rstrip('/')}{path}"
     call = getattr(httpx, method)
@@ -135,20 +119,16 @@ def _detail(resp: httpx.Response, fallback: str) -> str:
     return fallback
 
 
-#: The actionable hint every verb's own 401 maps to (issue #96), unless the caller
-#: named its own 401 entry in ``on_status`` (a route with a more specific meaning for
-#: it). An expired/revoked session, or none at all against an ``oauth`` hub, both land
-#: here — never a raw ``401 Unauthorized`` traceback-shaped message.
+#: The actionable hint every verb's own 401 maps to (issue #96), unless the caller named
+#: its own 401 entry in ``on_status``.
 _LOGIN_HINT = "not authenticated — run `blizzard hub login`"
 
 
 def _check(resp: httpx.Response, operation: str, *, on_status: dict[int, str] | None = None) -> None:
     """Map a handful of status codes to a ``ClickException`` reading the body's own
-    ``detail`` (falling back to the per-code default named in ``on_status``);
-    anything else still genuinely errors via ``raise_for_status``.
-
-    A bare 401 not already named in ``on_status`` gets the actionable login hint
-    (issue #96) rather than ``raise_for_status``'s generic message."""
+    ``detail`` (falling back to the per-code default named in ``on_status``); anything
+    else still errors via ``raise_for_status``. A bare 401 not named in ``on_status``
+    gets the actionable login hint (issue #96)."""
     if on_status and resp.status_code in on_status:
         raise click.ClickException(_detail(resp, on_status[resp.status_code]))
     if resp.status_code == httpx.codes.UNAUTHORIZED:
@@ -232,13 +212,8 @@ _GRACEFUL_SHUTDOWN_SECONDS = 5
 class _EarlyShutdownServer(uvicorn.Server):
     """Sets ``shutdown_signal`` the instant SIGTERM/SIGINT is caught (issue #47).
 
-    Uvicorn only sends the ASGI ``lifespan`` "shutdown" message *after* its graceful-drain
-    wait, which an SSE response never finishes, so an event set from a FastAPI
-    ``lifespan=`` handler would fire too late to unblock the stream's live-wait race
-    (``blizzard.hub.api.events._stream``). ``handle_exit`` runs synchronously the moment
-    the signal arrives, before that drain begins. Pinned by
-    ``tests/test_pin_hub_api.py::test_handle_exit_sets_the_shutdown_signal_synchronously``.
-    """
+    ``handle_exit`` runs synchronously before uvicorn's graceful drain, which an SSE
+    response never finishes (pinned by ``tests/test_pin_hub_api.py``)."""
 
     def __init__(self, config: uvicorn.Config, *, shutdown_signal: asyncio.Event) -> None:
         super().__init__(config)
@@ -275,10 +250,8 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         ensure_current_revision(config)
     except RevisionMismatchError as exc:
         raise click.ClickException(str(exc)) from exc
-    # Composition can still reject the config (an ``[[work_source]]`` naming an unset
-    # ``token_env`` fails here, at boot, by design). Surface it as the same
-    # clean CLI error the config-load and migration guards above raise, not a
-    # traceback; and build before announcing, so we never claim to serve and then die.
+    # Composition can still reject the config at boot; surface it as a clean CLI error,
+    # and build before announcing so we never claim to serve and then die.
     try:
         app = build_hosted_app(config)
     except ConfigError as exc:
@@ -333,8 +306,7 @@ def status(as_json: bool, hub_url: str | None) -> None:
     for r in fleet:
         liveness = "online" if r.get("online") else "offline"
         # Name which brake is on (issue #43): "paused" alone would hide whether the fleet
-        # stopped this runner or it stopped itself — and they are cleared by different verbs.
-        # A local brake's own reason (issue #61) rides inline when there is one.
+        # stopped this runner or it stopped itself — they are cleared by different verbs.
         brakes = []
         if r.get("hub_paused"):
             brakes.append("hub")
@@ -355,11 +327,9 @@ def status(as_json: bool, hub_url: str | None) -> None:
 def _parse_pointer(token: str) -> str:
     """The ingest token the CLI hands the hub.
 
-    The CLI carries no pointer grammar of its own — the hub resolves every token
-    against its configured work sources, so a token travels through verbatim. The one
-    exception is the deprecated ``github:<rest>`` prefix: it warns on stderr and passes
-    ``rest`` on its own merits rather than silently accepting a provider tag the pointer
-    no longer carries."""
+    The CLI carries no pointer grammar of its own; a token travels through verbatim.
+    The deprecated ``github:<rest>`` prefix warns on stderr and passes ``rest`` on its
+    own merits."""
     if token.startswith("github:"):
         rest = token[len("github:") :]
         click.echo(
@@ -376,15 +346,9 @@ def _parse_pointer(token: str) -> str:
 def record_marker(name: str, content: str) -> None:
     """A hub command node's ``run:`` script: record a marker artifact mid-run (#65).
 
-    A pure client of the mid-run marker callback — the injected
-    ``BZ_HUB_MARKER_CALLBACK_URL`` already carries this run's chunk id, node id, and
-    epoch. Enables a dynamic loop (``merge repo -> push -> record merged/<repo> -> next``)
-    without waiting for the whole step to exit. Idempotent per marker NAME.
-
-    Authorizes the write with the run's marker capability token
-    (``BZ_HUB_MARKER_TOKEN``, issue #230) via the route's own
-    :data:`~blizzard.hub.api.marker_auth._MARKER_TOKEN_HEADER` — a missing
-    token is named explicitly rather than silently posting an unauthenticated write."""
+    The injected ``BZ_HUB_MARKER_CALLBACK_URL`` already carries this run's chunk, node,
+    and epoch. Idempotent per marker NAME; authorized by ``BZ_HUB_MARKER_TOKEN``
+    (issue #230), whose absence is named rather than posted unauthenticated."""
     callback_url = os.environ.get(ENV_MARKER_CALLBACK_URL)
     if not callback_url:
         raise click.ClickException(f"record-marker: no {ENV_MARKER_CALLBACK_URL} in the environment")
@@ -430,16 +394,10 @@ def rotate_signing_key(hub_url: str | None) -> None:
 )
 def login(hub_url: str | None, paste: bool, no_browser: bool) -> None:
     """Log into the hub (issue #96) — opens the browser to the hub's own authorize
-    endpoint (PKCE, an ephemeral ``127.0.0.1`` loopback redirect); the user completes
-    login *at the hub* (an existing session, or the hub's own provider dance), and the
-    resulting session token is stored locally for subsequent verbs. The CLI never
-    contacts a provider directly.
-
-    ``--paste`` uses the paste-code fallback instead: the hub renders a short
-    one-time code the user pastes back into this prompt — for a headless/remote shell
-    with no reachable loopback listener. ``--no-browser`` alone still runs the
-    loopback flow (it only skips the automatic ``webbrowser.open`` call, printing the
-    URL to visit instead)."""
+    endpoint (PKCE, an ephemeral ``127.0.0.1`` loopback redirect) and stores the
+    resulting session token locally. The CLI never contacts a provider directly.
+    ``--paste`` uses the paste-code fallback for a shell with no reachable loopback
+    listener; ``--no-browser`` still runs the loopback flow, printing the URL."""
     base = _hub_url(hub_url)
     try:
         if paste:
@@ -466,9 +424,7 @@ def logout(hub_url: str | None) -> None:
     click.echo(f"logged out of {base}")
 
 
-# --------------------------------------------------------------------------- #
 # `blizzard hub chunk` — issue #104
-# --------------------------------------------------------------------------- #
 
 
 @hub.group("chunk")
@@ -516,9 +472,8 @@ def chunk_show(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
     )
     node = detail.get("current_node_name") or detail.get("current_node_id") or "-"
     click.echo(f"  node: {node}")
-    # Both defaults, on their own line: `chunk set` can write either, so a text-mode
-    # read-back has to exist for both or an operator can only see what they wrote via
-    # `--json`. `-` is the minted "express no preference" state, not unknown.
+    # Both defaults on their own line: `chunk set` can write either, so a text-mode
+    # read-back exists for both. `-` is "express no preference", not unknown.
     models = ", ".join(detail.get("default_model") or []) or "-"
     click.echo(f"  default model: {models}   default effort: {detail.get('default_effort') or '-'}")
     pointers = detail.get("work_refs") or []
@@ -539,12 +494,9 @@ def chunk_show(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
 def chunk_ingest(pointers: tuple[str, ...], as_json: bool, hub_url: str | None) -> None:
     """Ingest work items by token, minting a chunk.
 
-    Each POINTER is a source-native token — ``source:ref`` (e.g. ``blizzard:26``),
-    ``source#ref``, or a pasted work item URL; pass one or more — a batch mints one
-    chunk carrying every pointer. A pure client of the hub API: ``POST /api/chunks``.
-    The hub resolves each token against its configured work sources and 422s one none
-    of them claims, naming the token and what is configured; 409 when a resolved
-    pointer is already held by a live chunk."""
+    Each POINTER is a source-native token — ``source:ref``, ``source#ref``, or a pasted
+    work item URL; a batch mints one chunk carrying every pointer. 422 when no
+    configured work source claims a token; 409 when a pointer is already held."""
     base = hub_url
     tokens = [_parse_pointer(p) for p in pointers]
     resp = _request("post", "/api/chunks", hub_url=base, json_body={"tokens": tokens})
@@ -588,12 +540,9 @@ def chunk_set(
 ) -> None:
     """Repin CHUNK's graph and/or default model/effort in one call (issues #104, #144).
 
-    A pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given,
-    applied all-or-nothing under ``EditService.edit``. At least one option is required;
-    ``chunk migrate`` is the standing-migration-intent sibling of this verb.
-
-    Both defaults are editable only while CHUNK rests ``not_ready`` or sits ``ready``
-    unclaimed (409 otherwise); ``chunk show`` reads them back."""
+    A pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given and
+    applied all-or-nothing. At least one option is required; 409 once CHUNK has left
+    ``not_ready``/unclaimed-``ready``."""
     if graph_id is None and not default_model and default_effort is None:
         raise click.UsageError("at least one of --graph/--default-model/--default-effort is required")
     base = hub_url
@@ -714,11 +663,9 @@ def chunk_requeue(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
 def chunk_stop(chunk_id: str, by: str, as_json: bool, hub_url: str | None) -> None:
     """Terminally abandon CHUNK — the operator's last-resort verb (issue #118).
 
-    A pure client of the hub API: ``POST /api/chunks/{id}/stop``. The chunk derives
-    ``stopped`` and never re-derives ``ready``; any live route is released in the same
-    operation, so the holding runner frees its environments on its next tick — no
-    separate ``detach`` needed. 409 when the chunk is already done/stopped. There is no
-    ``un-stop``."""
+    A pure client of ``POST /api/chunks/{id}/stop``. The chunk derives ``stopped`` and
+    never re-derives ``ready``; any live route is released in the same operation. 409
+    when the chunk is already done/stopped. There is no ``un-stop``."""
     base = hub_url
     resp = _request("post", f"/api/chunks/{chunk_id}/stop", hub_url=base, json_body={"by": by})
     _check(resp, "POST /chunks/{id}/stop", on_status={409: "chunk is not stoppable", 404: f"no such chunk {chunk_id}"})
@@ -746,16 +693,9 @@ def chunk_migrate(
 ) -> None:
     """Set, overwrite, or clear CHUNK's standing migration intent (issue #124).
 
-    A pure client of ``PATCH /api/chunks/{id}``, naming only ``intended_migration`` in
-    the body. ``--node`` present selects ``forced`` (an unconditional landing target on
-    the target graph); absent selects ``auto`` (migrates only when the next
-    transition's own destination name also exists on the target graph). ``--cancel``
-    clears a standing intent instead (body ``{"intended_migration": null}``) and
-    conflicts with ``--to-graph``/``--node``. The intent is consulted — never applied
-    eagerly — at the chunk's next transition; 409 on a not-editable status (chunk is
-    terminal), a retired target graph, a target equal to the chunk's current pin, or a
-    ``forced`` node absent from the target; 422 on a malformed request; 404 on an
-    unknown chunk or target graph."""
+    ``--node`` present selects ``forced``, absent selects ``auto``; ``--cancel`` clears
+    a standing intent and conflicts with ``--to-graph``/``--node``. The intent is
+    consulted at the chunk's next transition, never applied eagerly."""
     if cancel and (to_graph is not None or node is not None):
         raise click.UsageError("--cancel cannot be combined with --to-graph/--node")
     if not cancel and to_graph is None:
@@ -811,9 +751,7 @@ def chunk_group_cmd(chunk_id: str, merge_ids: tuple[str, ...], as_json: bool, hu
 
     A pure client of ``POST /api/chunks/{id}/group``: the survivor and every merge id
     must currently be **unacquired** — ``not_ready`` or ``ready``, in any mix (409
-    otherwise, naming the chunk a runner holds). The survivor absorbs the union of every
-    merged chunk's work refs and keeps its own status, so merging backlog chunks needs no
-    promote first and leaves the survivor in the backlog."""
+    otherwise). The survivor absorbs the union of work refs and keeps its own status."""
     base = hub_url
     resp = _request(
         "post", f"/api/chunks/{chunk_id}/group", hub_url=base, json_body={"merge_chunk_ids": list(merge_ids)}
@@ -876,9 +814,7 @@ def chunk_pm(ctx: click.Context, chunk_id: str, as_json: bool, hub_url: str | No
     ctx.invoke(chunk_work_items, chunk_id=chunk_id, as_json=as_json, hub_url=hub_url)
 
 
-# --------------------------------------------------------------------------- #
 # `blizzard hub runner` — issue #104 (issue #86a: enroll)
-# --------------------------------------------------------------------------- #
 
 
 @hub.group("runner")
@@ -975,8 +911,7 @@ def runner_enroll(runner_id: str, as_json: bool, hub_url: str | None) -> None:
 
     A thin client of ``POST /runners/{id}/enrollments`` (issue #86a). Re-running
     rotates: the old token stops resolving immediately. RUNNER_ID must already be
-    registered at the hub (404 otherwise) — enrollment is a deliberate operator act,
-    not a trust-on-first-use grant."""
+    registered at the hub (404 otherwise)."""
     base = hub_url
     resp = _request("post", f"/api/runners/{runner_id}/enrollments", hub_url=base)
     _check(resp, "POST /runners/{id}/enrollments", on_status={404: f"unknown runner {runner_id}"})
@@ -987,9 +922,7 @@ def runner_enroll(runner_id: str, as_json: bool, hub_url: str | None) -> None:
     click.echo(f"enrolled {runner_id} — bearer token (copy now, shown only once):\n{body['token']}")
 
 
-# --------------------------------------------------------------------------- #
 # `blizzard hub graph` — issue #101, issue #104, issue #123
-# --------------------------------------------------------------------------- #
 
 
 @hub.group("graph")
@@ -1046,11 +979,8 @@ def graph_mint(path: str, as_json: bool, hub_url: str | None) -> None:
     """Mint a graph from PATH's YAML definition; PATH may be ``-`` to read stdin.
 
     A file PATH inlines ``prompt``/``prompt_addendum`` file references relative to its
-    own directory first (issue #123) before posting — ``POST /graphs`` parses
-    ``definition_yaml`` raw and does not itself resolve file references. Stdin
-    (``-``) carries no such directory, so its YAML posts verbatim — already-inlined
-    prose expected. Renders the full validation report (every error and warning) on a
-    422, not just the errors (issue #104)."""
+    own directory first (issue #123); stdin carries no such directory, so its YAML
+    posts verbatim. Renders the full validation report on a 422 (issue #104)."""
     base = hub_url
     if path == "-":
         definition_yaml = click.get_text_stream("stdin").read()
@@ -1082,15 +1012,9 @@ def graph_mint(path: str, as_json: bool, hub_url: str | None) -> None:
 def graph_sync(as_json: bool, hub_url: str | None) -> None:
     """Reconcile the hub's packaged graphs into its store, minting only what changed.
 
-    The deploy verb (issue #146). Graphs live in the store, not on disk, so installing a
-    wheel with a changed graph changes nothing until this runs. Run it at the end of
-    every deploy: it is idempotent, so a wheel that changed no graph mints nothing and
-    churns no lineage.
-
-    A pure client of ``POST /api/graphs/sync``; the **hub's own** packaged set is what is
-    reconciled, not this CLI's, so a client wheel that has drifted from the daemon's
-    cannot mint the wrong definitions. Exits non-zero only if a packaged graph failed to
-    load or validate — the others still reconciled, and their outcomes are printed."""
+    The deploy verb (issue #146) — graphs live in the store, not on disk, so run it at
+    the end of every deploy; it is idempotent. The **hub's own** packaged set is what is
+    reconciled, not this CLI's. Exits non-zero only if a packaged graph failed to load."""
     resp = _request("post", "/api/graphs/sync", hub_url=hub_url, json_body={})
     _check(resp, "POST /graphs/sync")
     body = resp.json()
@@ -1136,14 +1060,9 @@ def graph_enable(graph_id: str, by: str, as_json: bool, hub_url: str | None) -> 
 def graph_follow_latest(graph_id: str, value: str, by: str, as_json: bool, hub_url: str | None) -> None:
     """Set GRAPH_ID's follow-latest policy: true, false, or inherit (issue #164).
 
-    With the policy on, a chunk pinned to this mint re-pins to the newest enabled mint of
-    the same *name* at its next transition — so a workflow edit reaches work already in
-    flight instead of stranding it until each chunk is migrated by hand. ``inherit`` (the
-    stored ``null``, and every mint's default) defers to the hub's own ``follow_latest``;
-    ``true``/``false`` override it for this mint.
-
-    An explicit per-chunk migration intent (``hub chunk migrate``) always wins over the
-    policy. Appended as a fact, so setting it never mutates the immutable graph."""
+    With the policy on, a chunk pinned to this mint re-pins to the newest enabled mint
+    of the same *name* at its next transition. ``inherit`` (the stored ``null``, and
+    every mint's default) defers to the hub's own ``follow_latest``."""
     follow_latest = None if value == "inherit" else value == "true"
     resp = _request(
         "post",
@@ -1172,9 +1091,7 @@ def _set_graph_lifecycle(graph_id: str, *, verb: str, by: str, hub_url: str | No
     click.echo(f"graph {graph_id} is now {state}")
 
 
-# --------------------------------------------------------------------------- #
 # `blizzard hub queue` — issue #87, issue #104
-# --------------------------------------------------------------------------- #
 
 
 @hub.group("queue")
@@ -1210,9 +1127,8 @@ def queue_set(chunk_ids: tuple[str, ...], as_json: bool, hub_url: str | None) ->
     """Replace the whole ready-queue order with CHUNK_IDS, front to back.
 
     A pure client of ``PUT /api/queue`` — an idempotent whole-order replacement
-    (issue #104). Every id must currently be a ready chunk (409 otherwise) and must
-    not repeat (422); a ready chunk not named keeps its current relative order,
-    appended after the named ones."""
+    (issue #104). Every id must be a ready chunk (409) and must not repeat (422); a
+    ready chunk not named keeps its relative order, appended after the named ones."""
     base = hub_url
     resp = _request("put", "/api/queue", hub_url=base, json_body={"chunk_ids": list(chunk_ids)})
     _check(
@@ -1236,10 +1152,8 @@ def queue_move(chunk_id: str, position: int, as_json: bool, hub_url: str | None)
     """Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).
 
     A client of the single-chunk fractional ``POST /api/queue/position`` (issue #137):
-    reads the current order, drops CHUNK_ID out of it and clamps POSITION into what's
-    left to find its new neighbour, then sends one anchor — ``after_chunk_id=null`` for
-    the front, else the chunk immediately before the clamped index — rather than
-    composing and replacing the whole order. 409 when CHUNK_ID is not a ready chunk."""
+    reads the current order, drops CHUNK_ID out of it, clamps POSITION into what's left,
+    and sends one anchor. 409 when CHUNK_ID is not a ready chunk."""
     base = hub_url
     peek = _request("get", "/api/queue", hub_url=base)
     _check(peek, "GET /queue")
@@ -1257,9 +1171,7 @@ def queue_move(chunk_id: str, position: int, as_json: bool, hub_url: str | None)
     click.echo(f"moved {chunk_id} to position {position}")
 
 
-# --------------------------------------------------------------------------- #
 # `blizzard hub decision` — issue #104
-# --------------------------------------------------------------------------- #
 
 
 @hub.group("decision")
@@ -1321,9 +1233,7 @@ def decision_resolve(decision_id: str, choice: str, resolved_by: str, as_json: b
     click.echo(f"decision {decision_id} resolved: {body['choice']} (by {body['resolved_by']})")
 
 
-# --------------------------------------------------------------------------- #
 # `blizzard hub question` — issue #104
-# --------------------------------------------------------------------------- #
 
 
 @hub.group("question")

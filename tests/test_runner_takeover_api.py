@@ -1,9 +1,8 @@
 """``POST``/``PATCH /chunks/{id}/takeovers`` (issue #52).
 
-Exercised over a real store via TestClient, mirroring
-``tests/test_runner_status_api.py``'s convention: the route's shape, its 409/503/404
-forms, and the store-derivation it delegates to (:class:`TakeoverService`, pinned at
-the domain level by ``tests/test_runner_takeover.py``) are the point here.
+Exercised over a real store via TestClient: the route's shape, its 409/503/404 forms,
+and the store-derivation it delegates to (:class:`TakeoverService`, pinned at the
+domain level by ``tests/test_runner_takeover.py``).
 """
 
 from __future__ import annotations
@@ -77,9 +76,8 @@ def test_open_over_a_parked_chunk_returns_the_interactive_command(tmp_path: Path
     assert body["command"] == "cd /ws/e1 && claude --resume sess-a"
     assert body["workdir"] == "/ws/e1"
     assert body["takeover_id"]
-    # The bounded takeover env rides the response (issue #258) — the BLIZZARD_*
-    # identity (with the re-minted token) plus PATH/HOME, never the daemon's full
-    # child env, and never the printable command string.
+    # The bounded takeover env rides the response (issue #258) — BLIZZARD_* identity
+    # plus PATH/HOME, never the daemon's full child env or the printable command.
     assert body["env"]["BLIZZARD_CHUNK_ID"] == "ch_1"
     assert body["env"]["BLIZZARD_LEASE_ID"] == "lease_1"
     assert body["env"]["BLIZZARD_SESSION_ID"] == "sess-a"

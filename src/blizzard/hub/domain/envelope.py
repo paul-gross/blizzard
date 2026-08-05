@@ -1,27 +1,9 @@
-"""Node-envelope assembly — the pure builder behind every envelope.
+"""Node-envelope assembly — the pure builder behind every envelope, over already-loaded domain objects
+(``bzh:domain-core``, ``bzh:domain-takes-objects``).
 
-The runner works a node-step from a :class:`~blizzard.wire.envelope.NodeEnvelope`;
-this module builds one from already-loaded domain objects — the pinned graph, the
-target node, the chunk, its artifacts, and the executing epoch (``bzh:domain-core``,
-``bzh:domain-takes-objects``). It is a pure function: the same inputs always
-produce the same envelope, so it unit-tests with zero store.
-
-Three engine rules live here:
-
-* the **pre-prompt** is the node's base prompt plus the inlined arrival addendum of
-  the edge the chunk took to reach the node (the ``fail -> build`` addendum carries
-  the review findings back), plus a generated required-artifacts table naming every
-  ``produces:`` entry and the fleet-protocol verb that declares it (issue #143, Phase
-  5 — :func:`_required_artifacts_block`), rendered ``#``-prefixed for the same
-  harness-inertness reason as the judgement tail below;
-* the **judgement prompt** is the node's authored judgement prose *only*; the
-  generated elicitation tail naming the choice set is appended by the runner when it
-  delivers the judgement into the session (runner ``steps._elicitation_tail``).
-
-Artifacts are resolved **latest-by-epoch per name**: a node re-run under a
-higher epoch supersedes its own earlier output, and the envelope carries one entry
-per ``{node_name}.{artifact-name}``.
-"""
+The **pre-prompt** is the node's base prompt, the inlined arrival addendum of the edge the chunk took
+to reach the node, and a generated required-artifacts table (issue #143). The **judgement prompt** is
+the node's authored prose only. Artifacts resolve **latest-by-epoch per ``{node_name}.{name}``**."""
 
 from __future__ import annotations
 
@@ -59,20 +41,11 @@ def _to_envelope_artifact(row: ArtifactRow) -> EnvelopeArtifact:
 
 
 def _required_artifacts_block(node: Node) -> str:
-    """The procedurally-generated required-artifacts table appended to the pre-prompt
-    (issue #143, Phase 5): one line per ``produces:`` entry naming its kind and the
-    fleet-protocol verb that declares it. ``""`` when the node declares nothing (a hub
-    node, or a worker node with no ``produces:``), so the empty case leaves ``prompt``
-    untouched exactly as :func:`build_node_envelope` already does for a missing
-    ``arrival_addendum``.
-
-    Generated straight off ``node.produces`` — never authored app/toolchain knowledge,
-    only blizzard's own fleet-protocol verbs (``bzh:app-agnostic-graphs``). Rendered as
-    ``#``-prefixed lines for the same reason the runner's own generated tails are
-    (``runner.loop.steps._elicitation_tail``, ``_nudge_message``): a real coding harness
-    reads them as an ordinary prose comment block, while the mock harness's
-    prompt-is-program ``exec`` sees a legal no-op rather than a ``SyntaxError``.
-    """
+    """The generated required-artifacts table appended to the pre-prompt (issue #143): one line per
+    ``produces:`` entry naming its kind and the fleet-protocol verb that declares it, or ``""`` when
+    the node declares nothing. Generated straight off ``node.produces`` — never authored app or
+    toolchain knowledge, only blizzard's own fleet-protocol verbs (``bzh:app-agnostic-graphs``).
+    ``#``-prefixed so a harness reading the prompt as a program sees a legal no-op."""
     if not node.produces:
         return ""
     lines = ["", "", "# Required artifacts for this node-step:"]
@@ -95,14 +68,8 @@ def _required_artifacts_block(node: Node) -> str:
 
 
 def _judgement_prompt(node: Node) -> str | None:
-    """The node's **authored** judgement prose; ``None`` at a node with no verdict.
-
-    The author writes only the prose; the engine-generated elicitation tail is
-    appended by the runner when it delivers the judgement (runner
-    ``steps._elicitation_tail``). Baking a prose tail here too would both duplicate
-    it and break the mock's ``exec``. ``None`` at a node with no worker judgement
-    (a hub node or a human gate carries no verdict elicitation).
-    """
+    """The node's **authored** judgement prose only — the elicitation tail naming the choice set is
+    generated at delivery, not baked in here. ``None`` at a node with no choices."""
     if not node.choices:
         return None
     return node.judgement_prompt
@@ -111,14 +78,9 @@ def _judgement_prompt(node: Node) -> str | None:
 def addendum_for_transition(graph: Graph, transition: TransitionFact | None) -> str | None:
     """The inlined arrival addendum of the edge ``transition`` took, or ``None``.
 
-    Mirrors ``apply.py``'s own resolution of the just-taken edge's ``prompt_addendum``,
-    but keyed off an already-recorded :class:`~blizzard.hub.domain.work.TransitionFact`
-    rather than a live completion submission — the shape a re-fetched envelope needs
-    (``GET /chunks/{id}/envelope``, the lost-apply re-read and the held-chunk-advance
-    poll, ``runner.loop.steps._spawn_into_held_node``), where no submission is in hand.
-    ``None`` when the chunk has not yet transitioned, or the edge authored no addendum
-    (the review-fail loop's findings addendum, and #64's kick-back addendum, both ride
-    this same resolution)."""
+    Keyed off an already-recorded :class:`~blizzard.hub.domain.work.TransitionFact` rather than a live
+    completion submission — the shape a re-fetched envelope needs, where no submission is in hand.
+    ``None`` when the chunk has not yet transitioned, or the edge authored no addendum."""
     if transition is None or transition.from_node_id is None or transition.choice_name is None:
         return None
     edge = graph.edge_for_choice(transition.from_node_id, transition.choice_name)
@@ -128,26 +90,11 @@ def addendum_for_transition(graph: Graph, transition: TransitionFact | None) -> 
 def _effective_session(
     chunk: Chunk, graph: Graph, node: Node
 ) -> tuple[str | None, list[str], str | None, RotatePolicyView | None]:
-    """Resolve the node's effective session declaration (issue #144).
-
-    Precedence is **session declaration > chunk default**, merged *field by field* rather
-    than whole-record (pinned by
-    tests/test_envelope.py::test_a_declaration_outranks_the_chunk_default_field_by_field).
-    The runner's own default is the last resort and is applied there, so this never
-    invents one.
-
-    Resolved hub-side because the hub owns both halves — the graph and the chunk. Two
-    tiers of "no declaration" reach here and both are legitimate:
-
-    * a node whose ``session:`` names a **node** (``resume:<node>``, issue #115) or is
-      bare — no pool, so ``session_name`` is ``None``, but the chunk's defaults still
-      apply. That is the precedence rule's intended reach and the one behavior change
-      this phase makes to a pre-#144 graph.
-    * a node whose ``session:`` names a declared session — the declaration wins per field.
-
-    A ``session_source`` that resolves to no declaration cannot be a dangling reference:
-    the validator rejected that at mint. It is the node-name form.
-    """
+    """Resolve the node's effective session declaration (issue #144): precedence is **declaration >
+    chunk default**, merged *field by field* rather than whole-record (pinned by
+    tests/test_envelope.py::test_a_declaration_outranks_the_chunk_default_field_by_field). No default
+    is invented here. A ``session_source`` resolving to no declaration is the node-name form, never a
+    dangling reference — the validator rejected that at mint."""
     declaration = graph.session_by_name(node.session_source) if node.session_source else None
     if declaration is None:
         return (None, list(chunk.default_model), chunk.default_effort, None)
@@ -175,13 +122,9 @@ def build_node_envelope(
     epoch: int,
     arrival_addendum: str | None = None,
 ) -> NodeEnvelope:
-    """Assemble the envelope a runner works ``node`` from.
-
-    ``graph`` is required and carries no default (issue #144), so a caller that omits it
-    gets a ``TypeError`` rather than the pre-#144 "no declaration, no chunk default"
-    envelope (pinned by
-    tests/test_pin_hub_domain.py::test_build_node_envelope_requires_graph_explicitly).
-    """
+    """Assemble the envelope ``node`` is worked from. ``graph`` is required and carries no default, so
+    omitting it is a ``TypeError`` (issue #144; pinned by
+    tests/test_pin_hub_domain.py::test_build_node_envelope_requires_graph_explicitly)."""
     prompt = node.prompt
     if arrival_addendum:
         prompt = f"{prompt}\n\n{arrival_addendum}" if prompt else arrival_addendum

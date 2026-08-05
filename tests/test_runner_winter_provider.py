@@ -1,15 +1,8 @@
 """The winter workspace provider — allocation logic (unit) and the real CLI drive (component).
 
-The allocation contract is unit-tested with fake winter/git sub-seams: pick
-from the pool minus the held set, all-or-nothing refusal, the full reset-on-acquire
-sequence (standalones once per pass, then fetch → forced base checkout →
-disconnect → membership reconcile → clean → service teardown → reprovision), the
-orchestrator probe, and mid-reset failure attribution. The component tests drive the
-**real** ``winter`` CLI + git against a minimal real workspace over ``file://``
-origins — including the stale-feature-branch reproduction (one repo connected to a
-feature branch that exists only for it, siblings unconnected — issue #16). Skipped
-when no enclosing winter workspace is available to clone the framework from.
-"""
+Unit-tested with fake winter/git sub-seams: pool selection, all-or-nothing refusal, the
+reset-on-acquire sequence, and mid-reset failure attribution. Component tests drive the
+real ``winter`` CLI + git against a minimal ``file://`` workspace."""
 
 from __future__ import annotations
 
@@ -31,9 +24,8 @@ class _FakeWinter:
         self.ready = 0
         self.service_bound = service_bound
         self.fail_on = fail_on  # arg-list prefix that raises, simulating a failed winter step
-        # What `winter ws worktrees --json` reports. Defaults to the shape the real CLI
-        # emits: worktrees across every env, then standalone clones, then the workspace
-        # itself — the last two exist to be filtered out.
+        # What `winter ws worktrees --json` reports; the last two shapes exist to be
+        # filtered out.
         self.worktrees: list[dict[str, object]] = []
 
     def ensure_ready(self, workspace_root: Path) -> None:
@@ -176,19 +168,12 @@ def test_release_is_a_noop(tmp_path: Path) -> None:
     provider.release("e1")  # never raises, cleaning defers to next acquire
 
 
-# --------------------------------------------------------------------------- #
-# Component — the real winter CLI
-# --------------------------------------------------------------------------- #
+# --- Component — the real winter CLI ---
 
 
 def _enclosing_winter_workspace() -> Path | None:
-    """The winter workspace this repo develops inside, found by the shim's own rule.
-
-    The fixture workspace is minted the way ``blizzard-mock`` mints one: clone this
-    local workspace (its committed master ships ``tools/winter-cli``), then swap in
-    the test's own config — so the component tier drives the vendored CLI shape
-    ``SubprocessWinterCli`` prefers, with root resolution landing on the fixture.
-    """
+    """The winter workspace this repo develops inside, found by the shim's own rule —
+    cloned to mint the fixture workspace, the way ``blizzard-mock`` mints one."""
     for directory in Path(__file__).resolve().parents:
         if (directory / ".winter" / "config.toml").is_file() and (directory / "tools" / "winter-cli").is_dir():
             return directory
@@ -342,10 +327,8 @@ def test_repos_reads_the_env_manifest_from_winter_rather_than_guessing_paths() -
 
 @pytest.mark.unit
 def test_repos_narrows_to_the_named_env_and_drops_standalone_clones() -> None:
-    """A repo can be BOTH a project repo (a worktree in every env) and a standalone
-    extension checkout elsewhere in the workspace — same origin, two paths. Only the
-    env's own worktree is the worker's to touch, so URL is not a usable key here and the
-    standalone entry must not leak into the manifest."""
+    """A repo can be both a project repo and a standalone extension checkout with the
+    same origin — only the env's own worktree belongs in the manifest."""
     winter = _FakeWinter()
     winter.worktrees = [
         _worktree_entry("e1", "blizzard-context", "/ws"),

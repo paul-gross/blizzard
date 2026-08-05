@@ -1,11 +1,9 @@
 """``sample_external_subscription_usage`` — the tick's last step (issue #218, phase 2).
 
-Unit-drives the step in isolation against a real (tmp sqlite) runner store and a
-scriptable :class:`FakeHarness`, then a component tier that runs several full ``tick()``
-passes across an advancing :class:`FixedClock` to check the cadence gate holds across a
-realistic pass sequence and that the sampler never perturbs the other steps' own
-behavior (``bzh:steppable-loop``).
-"""
+Unit-drives the step against a real (tmp sqlite) runner store and a scriptable
+``FakeHarness``, then a component tier running several full ``tick()`` passes across
+an advancing ``FixedClock`` to check the cadence gate and that the sampler never
+perturbs the other steps' behavior."""
 
 from __future__ import annotations
 
@@ -82,10 +80,7 @@ def _ctx_with_a_claimable_chunk(store, *, harness: FakeHarness, clock: FixedCloc
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
     # The spawned worker's (pid, start_time) reads as alive to the probe, so a full
-    # `tick()` call's own ADVANCE never treats this same-tick spawn as an exited
-    # worker to judge (which would need `hub.envelopes` wired too, a distraction from
-    # what this module actually tests: FILL's own claim+spawn effect surviving a
-    # raising external-usage sampler).
+    # `tick()` call's own ADVANCE never treats this same-tick spawn as an exited worker.
     probe = FakeProbe(alive={(_HANDLE.pid, _HANDLE.process_start_time)})
     ctx = make_context(
         store,
@@ -101,7 +96,6 @@ def _ctx_with_a_claimable_chunk(store, *, harness: FakeHarness, clock: FixedCloc
     return ctx, hub
 
 
-# --------------------------------------------------------------------------- #
 # AC 1 — cadence gate.
 # --------------------------------------------------------------------------- #
 
@@ -163,9 +157,7 @@ def test_past_the_interval_the_adapter_is_called(tmp_path) -> None:  # type: ign
     assert harness.external_usage_calls == 2
 
 
-# --------------------------------------------------------------------------- #
-# AC 2 — a successful sample writes one attempt row and enqueues exactly one
-# runner-scoped outbound entry.
+# AC 2 — a successful sample writes one attempt row and enqueues one outbound entry.
 # --------------------------------------------------------------------------- #
 
 
@@ -196,9 +188,7 @@ def test_a_successful_sample_records_one_attempt_and_enqueues_one_runner_scoped_
     assert "resets_at" in five_hour
 
 
-# --------------------------------------------------------------------------- #
-# AC 3 — a None sample writes a NULL-payload attempt row, enqueues nothing, and the
-# next (still-within-interval) tick does not re-sample.
+# AC 3 — a None sample writes a NULL-payload attempt row and enqueues nothing.
 # --------------------------------------------------------------------------- #
 
 
@@ -222,7 +212,6 @@ def test_no_sample_records_a_null_payload_attempt_and_enqueues_nothing(tmp_path)
     assert store.last_external_usage_attempt_at() == _NOW  # unchanged — no new attempt
 
 
-# --------------------------------------------------------------------------- #
 # AC 4 — a raising adapter leaves the tick completing normally, other steps intact.
 # --------------------------------------------------------------------------- #
 
@@ -259,10 +248,7 @@ def test_a_raising_step_called_directly_returns_without_raising(tmp_path) -> Non
     assert store.last_external_usage_attempt_at() is None
 
 
-# --------------------------------------------------------------------------- #
-# AC 5 — component: several ticks across a virtual clock; adapter-call count matches
-# expectation, and disabling the sampler (a very large interval) changes nothing about
-# the other steps' behavior.
+# AC 5 — component: several ticks across a virtual clock match the adapter-call count.
 # --------------------------------------------------------------------------- #
 
 

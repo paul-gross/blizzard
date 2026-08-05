@@ -1,10 +1,9 @@
 """Queue shaping — ready-queue ordering and grouping, component tier.
 
-Drives the real hub over a tmp store: ``GET /api/queue`` honours the explicit order,
-``PUT /api/queue`` replaces the whole order, and ``POST /chunks/{id}/group`` merges
-unacquired chunks into one surviving chunk. Ordering and grouping are fact-derived,
-so every assertion reads the derived surface, never a stored column.
-"""
+Drives the real hub over a tmp store: ``GET``/``PUT /api/queue`` read/replace the
+explicit order, and ``POST /chunks/{id}/group`` merges unacquired chunks into one
+survivor. Ordering and grouping are fact-derived; every assertion reads the derived
+surface, never a stored column."""
 
 from __future__ import annotations
 
@@ -78,9 +77,8 @@ def _pause(tmp_path: Path, hub: HubHarness, chunk_id: str) -> None:
 
 
 def test_paused_ready_chunk_is_excluded_from_the_queue(tmp_path: Path) -> None:
-    # The free win (issue #46 §4): list_ready()/peek filter on status is ChunkStatus.READY,
-    # so a paused chunk drops out with no queue filter at all — pinned here as a property,
-    # not an accident.
+    # The free win (issue #46 §4): list_ready()/peek filter on ChunkStatus.READY, so a
+    # paused chunk drops out with no queue filter at all — pinned as a property.
     hub = build_hub(tmp_path)
     a, b = _ingest(hub, 1), _ingest(hub, 2)
     _pause(tmp_path, hub, a)
@@ -104,14 +102,8 @@ def test_paused_chunk_with_a_live_route_is_still_excluded_from_the_queue(tmp_pat
     assert hub.client.get(f"/api/chunks/{a}").json()["status"] == "paused"
 
 
-# --- Newest-fact-wins across the store seam (issue #46) -----------------------
-#
-# ``_is_paused`` reads the pause list's tail, which only means "newest" because
-# ``load_facts`` hydrates ``chunk_pause_facts`` ordered by ``id``. The unit tier proves the
-# pure function over a hand-built list and structurally cannot see that ordering — reverse
-# the hydration and every resume silently becomes a no-op, with the whole unit tier green.
-# These pin the two halves together over multi-fact sequences the single-fact tests above
-# cannot distinguish.
+# Newest-fact-wins across the store seam (issue #46): reverse the ``id``-ordered
+# hydration and every resume silently becomes a no-op — the unit tier can't see that.
 
 
 def test_pause_then_resume_returns_the_chunk_to_the_queue(tmp_path: Path) -> None:
@@ -139,9 +131,8 @@ def test_re_pause_after_resume_stays_out_of_the_queue(tmp_path: Path) -> None:
 
 
 def test_same_instant_pause_and_resume_resolve_by_write_order(tmp_path: Path) -> None:
-    # Two facts can share a ``set_at`` — timestamps have finite granularity and a pause and
-    # its resume can land inside one tick. Append-only write order (the ``id`` the hydration
-    # orders by) is the tiebreak, not ``set_at``: the resume written second wins.
+    # Two facts can share a ``set_at``; append-only write order (the ``id`` hydration
+    # orders by) is the tiebreak, not ``set_at`` — the resume written second wins.
     hub = build_hub(tmp_path)
     a, b = _ingest(hub, 1), _ingest(hub, 2)
     now = hub.clock.now()
@@ -185,9 +176,8 @@ def test_group_is_pointer_union_deduped(tmp_path: Path) -> None:
 
 
 def test_group_merges_backlog_chunks_without_promoting_any_of_them(tmp_path: Path) -> None:
-    # Issue #141: the dogfooded flow. Three freshly minted chunks merge as they are —
-    # no promote, so none of them is ever claimable by a live runner mid-flow, and the
-    # survivor is left in the backlog rather than ready as a side effect.
+    # Issue #141: three freshly minted chunks merge as they are — no promote, so none
+    # is claimable mid-flow, and the survivor stays in the backlog.
     hub = build_hub(tmp_path)
     survivor, b, c = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2), _ingest_backlog(hub, 3)
     assert [_status(hub, i) for i in (survivor, b, c)] == ["not_ready"] * 3
@@ -276,13 +266,9 @@ def test_grouped_pointer_reingest_points_at_survivor(tmp_path: Path) -> None:
 
 
 def test_group_refuses_a_paused_backlog_chunk_without_claiming_a_runner_holds_it(tmp_path: Path) -> None:
-    """A never-claimed backlog chunk can be paused (`PauseService` refuses only
-    done/stopped/delivering), and `PAUSED` outranks the un-promoted branch in the
-    derivation, so it reads `paused` with no runner anywhere near it.
-
-    Grouping still refuses it, since a pause is a standing human hold folding doesn't
-    override — but the refusal must not *claim* a runner holds it, the same
-    wrong-invariant wording issue #141 removed, one status over."""
+    """A never-claimed backlog chunk can be paused (`PAUSED` outranks the un-promoted
+    branch in the derivation) and reads `paused` with no runner near it. Grouping still
+    refuses it, but must not claim a runner holds it."""
     hub = build_hub(tmp_path)
     survivor, held = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2)
     assert hub.client.post(f"/api/chunks/{held}/pause", json={"by": "operator"}).status_code == 202

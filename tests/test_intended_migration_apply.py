@@ -1,15 +1,9 @@
 """The transition-time consult of a chunk's standing migration intent (issue #124,
-Phase 4) — `hub/domain/apply.py`'s shared consult helper, wired at both common-apply-
-path transition sites, plus the `submit_completion` controller resolution
-(`hub/api/fleet.py`).
+Phase 4), component tier over the real HTTP surface.
 
-Component tier over the real HTTP surface, mirroring `test_migration_apply.py`'s shape
-for #90: a claimed chunk's `PATCH .../intended_migration` sets the intent, an ordinary
-completion's transition either fires it (recording a `chunk_migrations` fact instead of
-a `transitions` row, re-pinning the graph, clearing the intent) or falls through
-unchanged (`auto` with no destination-name match). Unlike #90's migration edge, the
-transition itself never names the target graph — the intent does, set out of band.
-"""
+A claimed chunk's `PATCH .../intended_migration` sets the intent; an ordinary
+completion's transition either fires it (a `chunk_migrations` fact, re-pinned graph,
+cleared intent) or falls through unchanged (`auto` with no destination-name match)."""
 
 from __future__ import annotations
 
@@ -21,11 +15,8 @@ from tests.support import build_hub, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "9"}
 
-# A source graph with no cross-graph edges at all — every transition here is ordinary;
-# the migration intent (set out of band via PATCH) is what makes one of them migrate.
-# Three runner nodes so the "auto, no match" case can be proven across two transitions:
-# the first (`build` -pass-> `deliver`) leaves the intent set, the second
-# (`deliver` -pass-> `ship`) fires it.
+# Every transition here is ordinary; the out-of-band intent is what makes one migrate:
+# `build`->`deliver` leaves it set, `deliver`->`ship` fires it.
 _SRC_YAML = """
 name: default-delivery
 entry: build
@@ -109,9 +100,8 @@ nodes:
           to: ship
 """
 
-# A migration target carrying `ship` but NOT `deliver` — the auto-no-match-then-match
-# test's target: the first transition's destination (`deliver`) doesn't exist here (no
-# match, intent stays set), the second (`ship`) does (fires).
+# Carries `ship` but not `deliver`, so the first transition's destination doesn't
+# match here (intent stays set) and the second (`ship`) fires.
 _TARGET_NO_DELIVER_YAML = """
 name: triage-nomatch
 entry: build
@@ -139,10 +129,8 @@ nodes:
           to: ship
 """
 
-# A migration target whose `deliver` node (the auto-match name) is hub-executed (issue
-# #111) — mirrors `test_migration_apply.py`'s `_HUB_TARGET_YAML`: `success` routes
-# onward to a non-terminal runner node so the retained route is what the test observes,
-# not the terminal chunk's own release.
+# `deliver` (the auto-match name) is hub-executed (issue #111); `success` routes onward
+# to a non-terminal runner node so the retained route is what the test observes.
 _TARGET_HUB_YAML = """
 name: triage-hub
 entry: build
@@ -182,9 +170,8 @@ nodes:
           to: deliver
 """
 
-# A gate-source graph whose human gate's resolved choice is a plain (never `graph:`)
-# transition to `deliver` — the resolving completion is where the gate-resolution
-# consult site fires when an intent is standing.
+# The human gate's resolved choice is a plain (never `graph:`) transition to `deliver`;
+# the resolving completion is where the gate-resolution consult site fires.
 _GATE_SRC_YAML = """
 name: default-delivery
 entry: build

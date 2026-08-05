@@ -1,42 +1,8 @@
 """Board browser e2e — scenario 6 of the standing e2e smoke.
 
-The browser half of the e2e tier: a **real Chromium**, driven by Playwright, over the
-**served mission-control board** wired to the same live stack the sibling in-process
-scenarios drive — the real forge, the real hub, and the real runner reconciliation loop
-over a minted ``blizzard-mock`` fixture, every seam real, no tokens and no network. What
-this scenario drives and asserts, in order:
-
-0. **Promote from the board.** Three ingested chunks render in the BACKLOG column and are
-   promoted from their cards into the **READY column** (issue #137).
-1. **Live board, no reload.** The board is loaded once and never reloaded; status chips
-   are asserted to flip in place over SSE, and the fleet runner strip to read ``online``.
-2. **Detail dock.** Selecting a card fills the bottom chunk-detail dock; its node history
-   and artifact links (issue #160) are asserted, and the board's bounding box is asserted
-   **pixel-identical** across fill and clear (issue #21) — the one claim here that only a
-   laying-out browser can prove. A dock artifact link is followed to the routed chunk
-   detail page's Artifacts tab with that artifact pre-selected, then back to the board.
-3. **Queue shaping honored by FILL.** Two ready chunks are **grouped** from their cards'
-   select boxes and the survivor is **reordered** to the lane top with real pointer
-   events; the next FILL is asserted to claim that survivor, first, with its plural
-   pointers.
-4. **Answer from the board.** A parked chunk's question is answered from the dock; the
-   chunk resumes and lands.
-5. **Pause brake from the board.** Pausing the runner from the fleet strip is asserted to
-   stop new claims across several ticks; resuming lets the claim resume.
-6. **Per-chunk pause from the board (issue #46).** A running chunk is paused from its
-   detail dock: the chip is asserted to flip to ``paused`` live, the card to relocate to
-   WAIT/HUMAN, the route to survive (the claim is kept), ``chunk-pause-by`` to name the
-   pauser, and resuming from the dock to return it to a progressing status.
-
-It is the **e2e tier**: it needs the full live stack, the sibling ``blizzard-mock``
-worktree, a local winter source, and an installed Chromium, so it is **skipped unless
-``BLIZZARD_E2E=1``** and those are present. Reproduce it — from the ``blizzard``
-worktree in a provisioned feature env — with::
-
-    uv run playwright install chromium   # once, out of band
-    BLIZZARD_E2E=1 uv run pytest tests/e2e/test_board_browser_e2e.py
-
-(The workspace runs it under ``mise run e2e`` with the sibling scenarios.)
+A real Chromium, driven by Playwright, over the served mission-control board: promote,
+live updates, the detail dock, drag-reorder, board answer, and pause/resume. Skipped
+unless ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock`` worktree and Chromium.
 """
 
 from __future__ import annotations
@@ -86,10 +52,8 @@ pytestmark = [
 # build turn 1: ask an undecidable question and exit (ask-and-exit) — here the human
 # answers from the *board* rather than the CLI.
 _ASK_SCRIPT = 'ask("Which API style should the grouped endpoint use?", ["rest", "graphql"])\n'
-# The answer the operator types into the board's answer input. It arrives as the resume
-# message and makes the real commit the build node owes. The board's answer field is a
-# single-line <input>, which collapses newlines, so the resume script is written as one
-# line of semicolon-separated Python (still valid, still real).
+# The board's answer <input> is single-line and collapses newlines, so this resume
+# script is written as one line of semicolon-separated Python.
 _ANSWER_SCRIPT = (
     "import subprocess, pathlib; "
     f"repo = {REPO_NAME!r}; "
@@ -119,8 +83,7 @@ def _graph_yaml() -> str:
     """The scripted ``default-delivery`` graph — build (ask/answer) → review → deliver.
 
     Named ``default-delivery`` so the hub's lazy default-graph mint reuses it by name.
-    The build node parks on a question and the review node produces a findings asset, so
-    the detail dock has both history and artifacts to render.
+    Build parks on a question; review produces a findings asset, for the dock to render.
     """
     import yaml
 
@@ -170,9 +133,8 @@ def _graph_yaml() -> str:
 def _runner_api(config: RunnerConfig) -> Iterator[None]:
     """Serve the runner's local API in a thread — the daemon `blizzard runner ask` POSTs to.
 
-    The reconciliation loop is still driven synchronously by the test (``run_single_tick``);
-    this only stands up the local API surface so the real ask verb has somewhere to land.
-    Both share the runner's sqlite store (its busy timeout covers the brief contention).
+    The reconciliation loop is still driven synchronously by the test; this only stands
+    up the local API so the real ask verb has somewhere to land.
     """
     app = build_hosted_app(config)
     server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port, log_level="warning"))
@@ -232,13 +194,8 @@ def _tick_n(config: RunnerConfig, fenced: dict[str, str], count: int) -> None:
 def _drag_ready_card_to_top(page: Page, dragged: Locator, top: Locator) -> None:
     """Drag one READY card above the lane's current top card, with real pointer events.
 
-    ``@angular/cdk``'s drop list is driven by ``pointerdown`` on the draggable, a run of
-    ``pointermove``\\ s past its own start threshold, and ``pointerup`` — so the gesture is
-    spelled out with ``page.mouse`` rather than Playwright's ``drag_to``, which fires the
-    HTML5 drag pair (``dragstart``/``drop``) that the cdk never listens for. The first,
-    short move is what crosses the threshold and arms the drag; the long one carries the
-    preview over the target's **upper** half, which is where the cdk's sort decides the
-    dragged item now belongs above it.
+    ``@angular/cdk``'s drop list needs raw pointer events, not Playwright's ``drag_to``.
+    The short first move arms the drag; the long one settles it over the target's top half.
     """
     source = dragged.bounding_box()
     target = top.bounding_box()
@@ -321,16 +278,13 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
         with _runner_api(config), sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True)
             page = browser.new_page()
-            # The dock's operator actions are guarded by a native `confirm()`. Playwright
-            # *dismisses* dialogs by default, which would silently make every guarded
-            # action a no-op — accept them, the way the operator clicking Pause does.
+            # Dock actions are guarded by a native `confirm()`; Playwright dismisses
+            # dialogs by default, so accept them here or every guarded action no-ops.
             page.on("dialog", lambda dialog: dialog.accept())
             expect.set_options(timeout=20_000)
             try:
-                # --- Load the board ONCE. It is never reloaded again. -------------------
-                # Chunk ids minted in the same instant share a 12-char prefix, so the
-                # board's short-id label is not unique — cards are located by column
-                # (data-col), and a particular chunk by its full id (data-chunk).
+                # Load the board ONCE; never reloaded. Same-instant chunk ids share a
+                # 12-char prefix, so cards are located by column + full id, not short id.
                 page.goto(f"http://127.0.0.1:{hub_port}/", wait_until="load")
                 expect(page.get_by_test_id("board-shell")).to_be_visible()
 
@@ -356,10 +310,8 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 expect(page.get_by_test_id("runners-empty")).to_be_visible()
                 expect(col_cards("ready")).to_have_count(0)
 
-                # --- Promote all three from the board ---------------------------------
-                # Each promote names its chunk by data-chunk instead of taking `.first`:
-                # promote order is queue order (a promote stamps the tail), and the queue
-                # this scenario goes on to reshape has to start known.
+                # Promote each chunk by data-chunk, not `.first`: promote order is queue
+                # order, and the queue this scenario reshapes has to start known.
                 for promoted, (chunk_id, remaining) in enumerate(((chunk_a, 2), (chunk_b, 1), (chunk_c, 0)), start=1):
                     col("notready").locator(f'[data-chunk="{chunk_id}"]').get_by_test_id("promote-chunk").click()
                     expect(col_cards("notready")).to_have_count(remaining)
@@ -385,11 +337,8 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                     f"survivor's chips don't match its union of pointer labels: {grouped_labels}"
                 )
 
-                # --- Reorder from the UI: drag the grouped survivor to the top ---------
-                # Promote stamped B at the tail, so A leads the lane; B is dragged over it
-                # with a real pointer sequence (see `_drag_ready_card_to_top`). The
-                # before-shot is asserted too, so the after-shot cannot pass vacuously on
-                # a lane that already had B on top.
+                # Promote stamped B at the tail, so A leads; B is dragged over it
+                # (`_drag_ready_card_to_top`). Before-shot asserted so after can't pass vacuously.
                 expect(col_cards("ready").first).to_have_attribute("data-chunk", chunk_a)
                 _drag_ready_card_to_top(page, ready_block(chunk_b), ready_block(chunk_a))
                 expect(col_cards("ready").first).to_have_attribute("data-chunk", chunk_b)
@@ -420,11 +369,8 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 expect(col("waiting").get_by_test_id("chunk-status")).to_have_text("waiting_on_human")
                 expect(ready_card(chunk_a)).to_have_count(1)  # A still ready, still queued
 
-                # --- Detail dock: selecting must not move the board (issue #21) --------
-                # This is the one assertion in the suite that needs a real layout: the unit
-                # tier runs in jsdom, which does not lay out, so it cannot see the board
-                # move. Geometry is compared exactly — the board's box is not supposed to
-                # answer to the dock's content at all.
+                # Selecting must not move the board (issue #21) — the one assertion here
+                # that needs real layout; the unit tier's jsdom cannot see this at all.
                 expect(page.get_by_test_id("chunk-detail-empty")).to_be_visible()
                 board_at_rest = page.get_by_test_id("board").bounding_box()
 
@@ -460,9 +406,8 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 assert page.get_by_test_id("artifact").count() >= 1, "detail shows no artifacts"
                 expect(page.get_by_test_id("artifact-ref").first).to_be_visible()  # the build git_commit
 
-                # --- Dock link → chunk detail page, Artifacts tab, pre-selected (#160) --
-                # The one tier that exercises the link, the route, and the built bundle
-                # together.
+                # Dock link → chunk detail page, Artifacts tab, pre-selected (#160) — the
+                # one tier exercising the link, route, and built bundle together.
                 first_link = page.get_by_test_id("artifact-link").first
                 target_key = first_link.get_attribute("data-artifact-key")
                 assert target_key, "dock artifact link carries no key"
@@ -483,9 +428,8 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 else:
                     expect(viewer).to_contain_text(target_artifact["commit_hash"])
 
-                # --- `< board` breadcrumb → back to the board, chunk re-selected (blizzard#203) --
-                # A client-side navigation — distinct from the fresh-mount `page.goto`
-                # just below.
+                # `< board` breadcrumb → back, chunk re-selected (blizzard#203) — client-side
+                # nav, distinct from the fresh-mount `page.goto` below.
                 page.get_by_test_id("mobile-chunk-back").click()
                 expect(page).to_have_url(f"http://127.0.0.1:{hub_port}/board?chunk={chunk_b}")
                 expect(page.get_by_test_id("chunk-detail")).to_be_visible()
@@ -522,14 +466,8 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 assert status == "running", f"resumed runner did not claim A as running (status {status!r})"
                 expect(ready_card(chunk_a)).to_have_count(0)  # A left the READY lane — the claim resumed
 
-                # --- Per-chunk pause from the board (issue #46) -------------------------
-                # A must be caught genuinely running, not already parked: `paused` is
-                # ranked below the human-gated states (`hub/domain/work.py`), so a paused
-                # `waiting_on_human` chunk's chip would not read `paused` and the flip
-                # below would be unobservable.
-                #
-                # Scoped to the board card: runner-view claim rows carry the same
-                # data-status attribute, so the bare selector would match both.
+                # A must be caught genuinely running (paused ranks below human-gated
+                # states); scoped to the board card since runner-view rows share data-status.
                 a_card = page.locator('[data-testid="chunk-card"][data-status="running"]')
                 expect(a_card).to_have_count(1)
                 a_card.click()
@@ -562,9 +500,8 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 page.get_by_test_id("resume-chunk").click()
                 expect(page.get_by_test_id("chunk-pause-by")).to_have_count(0)  # the dock live-updates too
 
-                # A few bounded ticks — enough to see the resumed chunk making forward
-                # progress again (issue #46), without racing the full journey B already
-                # travelled above.
+                # A few bounded ticks — enough to see forward progress again (issue #46),
+                # without racing the full journey B already travelled.
                 _tick_n(config, fenced, 3)
                 resumed_status = hub.get(f"/api/chunks/{chunk_a}").json()["status"]
                 assert resumed_status in {"running", "waiting_on_human"}, (

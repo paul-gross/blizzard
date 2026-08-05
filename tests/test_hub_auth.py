@@ -1,10 +1,8 @@
 """``assert_owns`` (unit tier) — the per-route runner_id confinement helper (issue #86a).
 
 Pure function over :class:`~blizzard.hub.api.auth.RunnerPrincipal`, no FastAPI request
-needed — the mode-dependent HTTP/log behavior is what's under test here;
-``require_runner_principal``'s bearer-token resolution is exercised at component tier
-against a real hub (``tests/test_runner_enrollment.py``), since it needs a real
-registry to resolve against.
+needed. ``require_runner_principal``'s bearer-token resolution is exercised at
+component tier (``tests/test_runner_enrollment.py``), against a real registry.
 """
 
 from __future__ import annotations

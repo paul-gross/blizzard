@@ -1,12 +1,9 @@
 """``ClaudeCodeAdapter.sample_external_subscription_usage`` (issue #218, phase 1).
 
-Driven with an injected ``httpx.Client`` (an ``httpx.MockTransport``-backed fake, the
-same pattern as ``test_runner_hub_client.py``) and an injected ``FixedClock`` — no
-real credential file location, no real network. Every failure path is asserted to
-return ``None`` and log exactly one warning, never raise (``bzh:structlog-logging``);
-the credential file is asserted read-only throughout (``bzh:injected-clock`` covers
-the clock half of the seam, the read-only contract is this adapter's own).
-"""
+Driven with an injected ``httpx.Client`` (an ``httpx.MockTransport``-backed fake) and
+an injected ``FixedClock`` — no real credential file location, no real network. Every
+failure path returns ``None`` and logs exactly one warning, never raises; the
+credential file is asserted read-only throughout."""
 
 from __future__ import annotations
 
@@ -81,9 +78,7 @@ def _guard_against_writes(monkeypatch: pytest.MonkeyPatch, path: Path) -> None:
     monkeypatch.setattr(Path, "open", guarded_open)
 
 
-# --------------------------------------------------------------------------- #
 # Happy path.
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -118,9 +113,8 @@ def test_happy_path_parses_both_windows_with_correct_scale_and_units(
     assert set(by_window) == {"5h", "7d"}
 
     five_hour = by_window["5h"]
-    # A wrong `*100`-on-an-already-percent misreading would land here as 4200.0; a
-    # wrong /100 read (assuming a 0-1 fraction) would land as 0.42. Neither survives
-    # this assertion.
+    # A wrong `*100` misreading would land here as 4200.0; a wrong /100 read would
+    # land as 0.42 — neither survives this assertion.
     assert five_hour.utilization_pct == 42.0
     assert five_hour.window_seconds == 18_000
     assert five_hour.resets_at == datetime(2026, 8, 1, 18, 0, 0, tzinfo=UTC)
@@ -153,9 +147,7 @@ def test_a_window_absent_from_the_response_is_an_absent_entry_not_a_fabricated_z
     assert [w.window for w in snapshot.windows] == ["5h"]
 
 
-# --------------------------------------------------------------------------- #
 # resets_at: epoch seconds and ISO-8601 coerce to the same instant.
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -180,9 +172,7 @@ def test_resets_at_epoch_seconds_and_iso_string_parse_to_the_same_instant(
     assert snap_epoch.windows[0].resets_at == snap_iso.windows[0].resets_at == instant
 
 
-# --------------------------------------------------------------------------- #
 # Failure paths: every one returns None, logs exactly one warning, raises nothing.
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -356,9 +346,7 @@ def test_zero_parseable_windows_returns_none_and_warns_once(tmp_path: Path, monk
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
 
 
-# --------------------------------------------------------------------------- #
 # Every existing construction site keeps building an adapter unchanged.
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit

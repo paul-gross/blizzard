@@ -1,13 +1,6 @@
 """heartbeats fact table (runner store tree)
 
-P7 progress detection adds the ``heartbeats`` fact table 0002/0003 do not carry: a
-worker beats via its ``PostToolUse`` hook, and REAP reads the last beat to catch a
-stalled-but-alive worker. The ``outbound_buffer.lease_id``
-column that store-and-forward's completion flush needs is part of the ``outbound_buffer``
-definition in ``blizzard.runner.store.schema`` — created with the table in 0002, the
-same live-schema pattern these revisions use (each creates a subset of the schema's
-tables). This revision creates exactly the one new table.
-
+Creates the one new table; ``outbound_buffer.lease_id`` ships with its own table's create.
 Revision ID: 20260713_1635_runner_heartbeats
 Revises: 20260713_1245_runner_lease_lifecycle
 """

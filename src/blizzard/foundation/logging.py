@@ -1,10 +1,7 @@
 """structlog wiring (``bzh:structlog-logging``), routed to **stderr**.
 
-Diagnostics go to stderr so a daemon's stdout stays a clean surface; the renderer
-is chosen by configuration, defaulting on TTY detection — a colored console for
-interactive runs, a JSON renderer when an agent, a service, or CI consumes the
-logs. One call-site convention regardless of renderer: pass structured fields as
-key-value pairs, never interpolated into the message string.
+Diagnostics go to stderr so a daemon's stdout stays a clean surface; the renderer is
+chosen by configuration, defaulting on TTY detection.
 """
 
 from __future__ import annotations
@@ -22,13 +19,7 @@ ENV_LOG_FORMAT = "BZ_LOG_FORMAT"
 
 
 def _resolve_use_json(json_logs: bool | None) -> bool:
-    """Pick the renderer: explicit arg > ``$BZ_LOG_FORMAT`` > TTY detection.
-
-    The precedence realizes ``bzh:structlog-logging``'s "defaulting by TTY
-    detection and overridable by config/env": an interactive run gets the console
-    renderer, an agent/CI pipe gets JSON, and either can be forced by config
-    (the ``json_logs`` argument) or the environment.
-    """
+    """Pick the renderer: explicit arg > ``$BZ_LOG_FORMAT`` > TTY detection."""
     if json_logs is not None:
         return json_logs
     fmt = os.environ.get(ENV_LOG_FORMAT, "").strip().lower()

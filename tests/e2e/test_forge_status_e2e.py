@@ -1,26 +1,9 @@
 """The forge-status projection, end to end (issue #179) — scenario 16 of the standing e2e smoke.
 
-Reuses the acceptance loop's live-stack scaffolding (real forge, real hub, real runner
-loop, ``mock-claude-code`` façade) with the one work source opted into ``annotate =
-true`` and a low ``annotation_interval_seconds``, so the projection's own convergence is
-observable within the test's real wall-clock budget rather than the operator default of
-120s. Four properties, one minted fixture:
-
-* **The happy path** — ingest shows ``blizzard:ingested``; driving the chunk through
-  build/review/deliver flips it to ``blizzard:in-progress`` at some point before it
-  reaches ``done``, where both clear.
-* **A stopped chunk clears** — a separate chunk stopped mid-flight (never claimed) has
-  its marker cleared on the next sweep.
-* **A hand-deleted label is re-asserted** — the hub holds no annotation state of its
-  own, so a label removed out of band comes back on the next sweep rather than staying
-  gone.
-* **A down forge degrades to a skip, then re-converges** — the forge's own
-  ``unreachable`` lever stands in for an outage: the hub keeps serving, the sweep logs a
-  skip, and the label lands once the lever clears.
-
-Skipped unless ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock`` worktree
-provisioned — exactly like the other acceptance-loop scenarios.
-"""
+Reuses the acceptance loop's live-stack scaffolding with a low
+``annotation_interval_seconds``. Covers: ingested -> in-progress -> cleared on done; a
+stopped chunk's marker clearing; a hand-deleted label re-asserted (no annotation state
+lives in the hub); a down forge degrading to a logged skip and re-converging."""
 
 from __future__ import annotations
 
@@ -189,12 +172,8 @@ def test_forge_status_projection_e2e(tmp_path: Path) -> None:
             "the sweep did not re-assert the hand-deleted label"
         )
 
-        # -- the forge stopped mid-run: the hub keeps serving, the sweep logs a skip
-        #    (not a crash), and the projection re-converges once the forge returns.
-        #    The `unreachable` lever stands in for a real process kill: killing the
-        #    forge subprocess would also wipe its in-memory issue/label state, which
-        #    would make "re-converges once the forge returns" untestable (there would
-        #    be nothing left to converge back onto). --
+        # The `unreachable` lever stands in for a process kill, which would also wipe the
+        # forge's in-memory state and make "re-converges" untestable.
         chunk_d, number_d = _ingest_and_promote(hub, forge, "outlive a forge outage")
         assert _poll_until(lambda: _labels(forge, number_d) == {"blizzard:ingested"}, timeout=15.0), _labels(
             forge, number_d

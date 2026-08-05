@@ -1,16 +1,6 @@
 """worker attachment channel — attachments (runner store tree, issue #113 Phase 2)
 
-The runner's local stash of a worker's explicit ``produces:`` submissions
-(``blizzard runner attach --name <n>``): one append-only row per attach call
-(``id`` PK), latest-wins per ``(lease_id, name)``. Authorized by the lease's own
-capability token (``lease_tokens``, Phase 1) — this revision adds only the
-storage; no caller yet reads it back to prefer it over the judgement assessment
-(Phase 3).
-
-Each revision in this tree creates a subset of the current ``schema`` metadata's
-tables (the live-schema pattern); this one creates exactly the one new table,
-``checkfirst`` so a fresh ``base -> head`` and an in-place upgrade both converge.
-
+Append-only, one row per attach call, latest-wins per ``(lease_id, name)``; ``checkfirst``.
 Revision ID: 20260719_1000_runner_attachments
 Revises: 20260719_0900_runner_lease_tokens
 """

@@ -1,15 +1,8 @@
 """The transition-graph-id revision — add ``transitions.graph_id`` + backfill (issue #90).
 
-Exercises the backfill on a store migrated to the revision just before it
-(``route_token_minted``), seeded with transitions in the **pre-graph_id** shape across
-two chunks pinned to two different graphs. Asserts each transition backfills to *its
-chunk's* graph pin, that a fresh store reaches head with the column NOT NULL, that the
-revision is idempotent, and that down-then-up re-derives the identical provenance.
-
-Seeded with revision-pinned ``sa.Table`` literals rather than ``from
-blizzard.hub.store import schema as s`` — the same reason the migration itself freezes
-its literals (see its docstring): ``schema.py`` is head-of-tree and would move under a
-test pinned to a revision before the reshape.
+Exercises the backfill on a store migrated to the prior revision, seeded with
+pre-graph_id transitions across two chunks pinned to two graphs: each backfills to its
+own chunk's pin, a fresh store reaches head NOT NULL, and down-then-up is idempotent.
 """
 
 from __future__ import annotations
@@ -162,12 +155,9 @@ def test_a_fresh_store_reaches_head_with_graph_id_not_null(tmp_path: Path) -> No
 
 
 def test_the_walking_skeleton_revision_creates_the_pre_graph_id_shape(tmp_path: Path) -> None:
-    """The walking-skeleton revision must freeze ``transitions`` at its pre-#90 shape.
-
-    If it imported ``transitions`` from head-of-tree ``schema.py`` instead, this
-    revision's ``if "graph_id" in columns: return`` guard would fire on a fresh
-    store, leaving the backfill dead while a live store still needs it. This asserts
-    the freeze holds from both ends."""
+    """The walking-skeleton revision must freeze ``transitions`` at its pre-#90 shape:
+    importing from head-of-tree ``schema.py`` instead would fire the backfill's
+    ``if "graph_id" in columns: return`` guard on a fresh store, leaving it dead."""
     runner, db_url = _runner(tmp_path)
     engine = create_engine_from_url(db_url)
 

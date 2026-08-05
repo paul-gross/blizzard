@@ -1,11 +1,8 @@
 """Shared fixtures — the two daemon runtimes, driven through one uniform surface.
 
-The hub and the runner expose identical offline-admin surfaces (``init_environment``,
-``migrate``, ``ensure_current_revision``, ``migration_runner``, ``MIGRATE_COMMAND``),
-so the store tests parametrize over both trees from a single fixture.
-
-Also makes the suite hermetic against blizzard's own worker identity vars — see
-``_strip_worker_identity_env``.
+The hub and the runner expose identical offline-admin surfaces, so store tests
+parametrize over both via the ``daemon`` fixture. Also strips blizzard's own worker
+identity vars — see ``_strip_worker_identity_env``.
 """
 
 from __future__ import annotations
@@ -23,13 +20,8 @@ from blizzard.hub import session_store
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 
-# The identity a runner injects into every worker spawn (``ClaudeCodeAdapter._spawn_env``).
-# Strip them in every test, since blizzard's own suite routinely runs inside a blizzard
-# worker and inherits all of these; a test that wants one sets it explicitly. Tier-gating
-# vars (``BLIZZARD_E2E``, ``BLIZZARD_SERVICE``, ``BLIZZARD_CRASH_SWEEP``,
-# ``BLIZZARD_JOURNEY``, ``BLIZZARD_MOCK_*``) are deliberately absent, since those select
-# which tiers run. ``test_runner_harness_adapter.py`` guards this list against drifting
-# from ``_spawn_env``.
+# Identity vars a runner injects into worker spawn (``ClaudeCodeAdapter._spawn_env``);
+# kept in sync by ``test_runner_harness_adapter.py``.
 _WORKER_IDENTITY_ENV = (
     "BLIZZARD_ENV_IDS",
     "BLIZZARD_ENV_WORKDIRS",
@@ -53,12 +45,8 @@ def _strip_worker_identity_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def _isolated_session_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Point the CLI's session-token file at a per-test temp dir.
 
-    Without isolation, an operator's real on-disk ``blizzard hub login`` token
-    (``session_store`` resolves via ``platformdirs.user_config_dir``) leaks into any unit
-    test that doesn't override ``BZ_HUB_URL``, breaking its ``httpx`` fake with an
-    unexpected ``headers`` kwarg — the same ambient-*host*-state hazard
-    :func:`_strip_worker_identity_env` closes for env vars. Isolate it once, for every
-    test; a test that wants a stored session saves one itself.
+    Without isolation, a real on-disk ``blizzard hub login`` token leaks into any test —
+    the same ambient-host-state hazard :func:`_strip_worker_identity_env` closes for env vars.
     """
     monkeypatch.setattr(
         session_store.platformdirs, "user_config_dir", lambda _app: str(tmp_path / "config" / "blizzard")

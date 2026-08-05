@@ -1,15 +1,8 @@
-"""The provider-login surface — ``GET /api/auth/providers``, ``GET /api/auth/{name}/
-authorize``, ``GET /api/auth/{name}/callback``, ``POST /api/auth/logout`` (issue #92).
+"""The provider-login surface (issue #92) — providers, authorize, callback, logout.
 
 Public plane throughout — no ``require(<permission>)``: an unauthenticated visitor must
 reach these to log in at all. Under ``auth.mode = "none"`` every route here is inert
-(``providers`` empty, ``authorize``/``callback`` 404) — there is no login mechanism to
-run, mirroring #95's own "no IdP surface under none".
-
-The route stays a deterministic shell over the provider seam (``bzh:deterministic-shell``):
-all provider wire-shape/JWT/httpx knowledge lives in ``hub/auth/oauth/internal/``; this
-module only orchestrates ``state`` issuance, the provider's ``authorize_url``/``exchange``,
-the domain's ``link_or_mint``/``mint_session``, and the cookie.
+(``providers`` empty, ``authorize``/``callback`` 404).
 """
 
 from __future__ import annotations
@@ -108,8 +101,7 @@ def callback(name: str, request: Request, code: str | None = None, state: str | 
         return _login_failed(services.auth_facts, actor=client_ip, subject=name, detail="bad or expired state")
     if entry.provider_name != name:
         # A state minted for one provider presented to another's callback — a
-        # cross-provider replay/tamper attempt, refused outright rather than treated as
-        # a plain expired/missing state.
+        # cross-provider replay/tamper attempt, refused outright.
         services.auth_facts.sso_refused(
             actor=client_ip,
             subject=name,

@@ -1,10 +1,8 @@
 """Store-migration behaviour for both daemon trees (unit tier).
 
-Covers the three guarantees the scaffold owes the migration policy
-(``bzh:manual-migrations``): ``init`` is idempotent, ``migrate`` goes up
-and down, and a daemon refuses to start on a revision mismatch — naming its exact
-migrate command.
-"""
+Covers the three guarantees the scaffold owes ``bzh:manual-migrations``: ``init`` is
+idempotent, ``migrate`` goes up and down, and a daemon refuses to start on a revision
+mismatch, naming its exact migrate command."""
 
 from __future__ import annotations
 
@@ -76,19 +74,9 @@ def test_ensure_current_revision_passes_at_head(daemon: Daemon, tmp_path: Path) 
 
 
 def test_wrapped_takeover_command_column_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """Hub-only (``escalations.wrapped_takeover_command`` has no runner counterpart).
-
-    A ``base -> head`` round trip alone would exercise this revision's
-    ``add_column`` branch vacuously, since the walking-skeleton revision already
-    creates the column — the downgrade below to this revision's own parent is what
-    actually proves its ``upgrade()``/``downgrade()`` bodies (the guard's *acting*
-    branch; ``test_migrate_up_and_down[hub]`` already covers the *skip* branch).
-
-    The downgrade target is this revision's own parent by id
-    (``20260801_1600_hub_runner_external_usage``), not ``"-1"``, so a future
-    revision landing between this one and its parent can't silently break this
-    test's premise.
-    """
+    """Hub-only (``escalations.wrapped_takeover_command`` has no runner counterpart) —
+    downgrades to this revision's own parent by id, not ``"-1"``, so a future revision
+    landing between them can't silently break this test's premise."""
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 

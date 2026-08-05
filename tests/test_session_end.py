@@ -1,9 +1,8 @@
 """The worker session-end path — local-API endpoint + ``blizzard runner session-end`` verb.
 
-Mirrors ``test_heartbeat.py`` — the same two tiers with no live socket: **component**
-exercises the endpoint over a real store (TestClient); **unit** exercises the verb's
-identity handling and soft-fail (``httpx.post`` stubbed). A third block asserts the
-settings document actually wires the hook.
+Component exercises the endpoint over a real store (TestClient); unit exercises the
+verb's identity handling and soft-fail. A third block asserts the settings document
+actually wires the hook.
 """
 
 from __future__ import annotations
@@ -31,7 +30,6 @@ def _runner_app_with_store(tmp_path: Path):  # type: ignore[no-untyped-def]
 
 # --------------------------------------------------------------------------- #
 # The local-API endpoint (component tier)
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component
@@ -58,7 +56,6 @@ def test_session_end_endpoint_503_when_store_unwired(tmp_path: Path) -> None:
 
 # --------------------------------------------------------------------------- #
 # The `blizzard runner session-end` verb (unit tier)
-# --------------------------------------------------------------------------- #
 
 
 class _FakeResponse:
@@ -121,7 +118,6 @@ def test_session_end_verb_soft_fails_when_runner_unreachable(monkeypatch: pytest
 
 # --------------------------------------------------------------------------- #
 # The worker settings document wires the hook
-# --------------------------------------------------------------------------- #
 
 
 def test_worker_settings_wires_the_session_end_hook() -> None:

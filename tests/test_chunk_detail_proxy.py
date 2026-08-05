@@ -1,12 +1,8 @@
 """The runner-local chunk-detail pass-through proxy (issue #185) — route + forward shape.
 
-Mirrors ``tests/test_work_items_proxy.py``'s convention: the runner route over a real
-app (``TestClient``), the hub reached through a stubbed ``httpx.request`` so the
-forward, the 202/404/409 pass-through, and the 502 on an unreachable hub are all
-asserted against the real controller. The hub half of pause/resume (the domain
-refusal, the pause fact) is covered by ``test_chunks_api.py``; this proves the
-*runner's* half — that it forwards to the fleet-mounted counterpart and the hub's
-status passes through.
+Proves the *runner's* half of pause/resume: the runner route over a real app, the hub
+reached through a stubbed ``httpx.request``, and the 202/404/409 + 502-on-unreachable
+pass-through. The hub half (the domain refusal, the pause fact) is ``test_chunks_api.py``'s.
 """
 
 from __future__ import annotations

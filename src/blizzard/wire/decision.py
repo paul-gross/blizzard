@@ -1,18 +1,8 @@
 """Gate-decision wire bodies — the human-loop surface.
 
-A **Decision** is a gate's durable parking row: a multiple-choice ask whose
-resolution moves the chunk. Two shapes write one:
-
-* the **runner-config gate** submits a :class:`DecisionSubmission` to
-  ``POST /chunks/{id}/decisions`` — a decision in place of a transition, for a node
-  the runner was configured to gate. The choice set is the node's own, so the
-  submission carries only the step's artifacts and its fence.
-* a **graph gate** needs no submission — see :mod:`blizzard.hub.domain.apply`.
-
-Resolution — a person picking one choice — is first-write-wins at
-``POST /decisions/{id}/resolutions`` (:class:`DecisionResolutionRequest`), exactly
-like an answer.
-"""
+A **Decision** is a gate's durable parking row: a multiple-choice ask whose resolution moves
+the chunk. A configured gate writes one with a :class:`DecisionSubmission`, in place of a
+transition; a graph gate needs none. Resolution — a person picking one — is first-write-wins."""
 
 from __future__ import annotations
 
@@ -31,10 +21,8 @@ class DecisionChoiceModel(BaseModel):
 class DecisionSubmission(BaseModel):
     """A runner-config gate: submit a decision in place of a transition.
 
-    Carries the gated step's artifacts and its fencing epoch — one atomic, epoch-fenced
-    write, exactly where a worker-judged node would have submitted its transition. The
-    node's choice set is supplied by the hub from the pinned graph, not sent here.
-    """
+    Carries the gated step's artifacts and its fencing epoch as one atomic write; the
+    node's choice set is resolved from the pinned graph, not sent here."""
 
     from_node_id: str  # the gated node — its choices become the decision's
     epoch: int  # the step's lease fence, checked against the chunk's latest
@@ -48,9 +36,8 @@ class DecisionSubmission(BaseModel):
 class DecisionView(BaseModel):
     """A gate decision in full.
 
-    ``resolved_choice`` is set once a person has decided; ``transitioned`` is true once
-    the resolving transition has been recorded.
-    """
+    ``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the
+    resolving transition has been recorded."""
 
     decision_id: str
     chunk_id: str

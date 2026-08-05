@@ -1,18 +1,8 @@
 """The runner-local escalations list — ``GET /api/escalations`` (issue #51).
 
-``blizzard runner status``'s parked-escalations section: every chunk this runner
-has escalated to needs-human and not yet seen superseded by a later lease mint,
-each carrying its literal, ready-to-paste resume command. Derived at read time from
-the closed-``escalated`` lease facts ``_escalate`` (``runner/loop/steps.py``) records
-plus the chunk's still-held binding — the resume command is **recomputed** from the
-harness adapter, not read back off the outbound buffer (which only holds the unacked
-tail and would go blank the moment the fact flushes to the hub).
-
-Read-only over its wiring (``bzh:controller-read-only``): the edge holds only the
-composition-root-wired :class:`~blizzard.runner.domain.status.RunnerStatusService`.
-On the store-free app the service is unwired and the probe answers 503 rather than
-pretending.
-"""
+Every chunk escalated to needs-human and not yet superseded by a later lease mint, each with
+its ready-to-paste resume command. Derived at read time, with that command **recomputed**
+rather than read back off the outbound buffer, which holds only the unacked tail."""
 
 from __future__ import annotations
 

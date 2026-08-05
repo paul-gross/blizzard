@@ -367,7 +367,6 @@ def test_missing_workspace_prompt_file_raises(tmp_path: Path) -> None:
 
 # --------------------------------------------------------------------------- #
 # `[[work_source]]` — the hub's configured work sources.
-# --------------------------------------------------------------------------- #
 
 
 def _hub_config(tmp_path: Path) -> HubConfig:
@@ -620,7 +619,6 @@ def test_a_leftover_pm_source_block_fails_even_beside_a_valid_work_source(tmp_pa
 
 # --------------------------------------------------------------------------- #
 # `runner_auth_mode` — the runner-authentication rollout brake (issue #86a).
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -660,9 +658,7 @@ def test_runner_auth_mode_unknown_value_raises(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# `route_token_mode` — the route-capability-token rollout brake (issue #84b), a
-# separate flag from `runner_auth_mode` above.
-# --------------------------------------------------------------------------- #
+# `route_token_mode` — the route-capability-token rollout brake (issue #84b).
 
 
 @pytest.mark.unit
@@ -713,9 +709,7 @@ def test_route_token_mode_enforces_independently_of_runner_auth_mode(tmp_path: P
 
 
 # --------------------------------------------------------------------------- #
-# `produces_mode` — the produces-artifact rollout brake (issue #113 phase 5), a
-# separate flag from `runner_auth_mode`/`route_token_mode` above.
-# --------------------------------------------------------------------------- #
+# `produces_mode` — the produces-artifact rollout brake (issue #113 phase 5).
 
 
 @pytest.mark.unit
@@ -768,7 +762,6 @@ def test_produces_mode_enforces_independently_of_the_other_modes(tmp_path: Path)
 
 # --------------------------------------------------------------------------- #
 # `token_env` / `hub_token` — the runner presents its bearer token (issue #86b).
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -879,9 +872,6 @@ def test_runner_trusted_proxies_rejects_a_malformed_entry(tmp_path: Path) -> Non
 
 # --------------------------------------------------------------------------- #
 # `follow_latest` — the fleet-wide auto-migration policy default (issue #164).
-# Not a `*_mode` rollout ramp like the three above: a plain on/off, so the trio
-# here pins the boolean shape rather than a value set.
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -935,9 +925,7 @@ def test_follow_latest_non_boolean_raises(tmp_path: Path, value: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# `BZ_HUB_DB_URL` / `BZ_HUB_HOST` / `BZ_HUB_PORT` — load-time env overrides
-# (issue #187). Precedence: CLI flag > environment > toml > default.
-# --------------------------------------------------------------------------- #
+# `BZ_HUB_DB_URL` / `BZ_HUB_HOST` / `BZ_HUB_PORT` — load-time env overrides (issue #187).
 
 
 @pytest.mark.unit
@@ -1051,10 +1039,7 @@ def test_hub_db_url_honored_identically_by_host_and_migrate(tmp_path: Path, monk
 
 
 # --------------------------------------------------------------------------- #
-# The db_url --dir isolation guard (issue #234) — a copied store directory whose
-# config still names an absolute path elsewhere must not silently operate on the
-# original database.
-# --------------------------------------------------------------------------- #
+# The db_url --dir isolation guard (issue #234).
 
 
 @pytest.mark.unit
@@ -1131,8 +1116,7 @@ def test_postgres_db_url_bypasses_the_guard(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_fresh_scaffold_omits_db_url_from_to_toml(tmp_path: Path) -> None:
     # issue #234: a fresh scaffold's db_url is the resolved default, which `to_toml`
-    # omits rather than serializing absolute — a copied dir must not carry a live
-    # pointer back to the directory it was copied from.
+    # omits rather than serializing an absolute path a copied dir shouldn't carry.
     root = tmp_path / "hub"
     root.mkdir()
     config = HubConfig.scaffold(root)

@@ -1,23 +1,5 @@
-"""chunk intended migration — a nullable, mutable ``intended_migration`` column on
-chunks (issue #124, hub store tree)
-
-A claimed chunk gains a standing intent to move onto another graph at its next
-transition: ``auto`` (name-match the transition's own destination) or ``forced`` (an
-unconditional named target). Consulted, never applied eagerly, by the common apply path
-(``domain/apply.py``, a later phase); this revision only lands the column and the
-domain/store plumbing around it — no behavior change.
-
-A single nullable ``Text`` column carrying JSON (``{"mode", "graph_id", "node_name"}``)
-rather than a fact table — the same ``bzh:facts-not-status`` shape ``graph_id``/``model``
-already carry (``20260717_2318_chunk_model_selection``): a plain mutable property read
-whole at consult time, with nothing filtering on its contents.
-
-No backfill: nullable, and every chunk in flight before this column existed correctly
-reads ``NULL`` — no chunk has ever had a migration intent.
-
-Idempotent like ``20260717_2318_hub_chunk_model_selection``: it adds the column only
-where an older database created ``chunks`` without it, so a fresh ``base -> head`` and
-an in-place upgrade both land at exactly one column.
+"""chunk intended migration — a nullable, mutable JSON ``intended_migration`` column on
+chunks, consulted (never applied eagerly) at the next transition (hub store tree, #124)
 
 Revision ID: 20260720_1000_hub_chunk_intended_migration
 Revises: 20260719_2000_hub_chunk_stopped_by

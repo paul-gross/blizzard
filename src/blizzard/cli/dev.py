@@ -1,13 +1,8 @@
 """``blizzard dev <cmd>`` — a hidden developer/operator surface.
 
 Not part of the product CLI (``hub`` / ``runner``): these verbs inspect a store's raw
-facts for debugging and crash-recovery verification. The group is ``hidden=True`` so it
-never clutters ``blizzard --help``, but it is a real, tested entrypoint.
-
-``check-invariants`` runs the facts-level invariant checker (``bzh:invariant-checker``,
-:mod:`blizzard.foundation.store.invariants`) against a runner store, a hub store, or
-both. Exit 0 means every durable invariant holds; exit 1 prints each violation and its
-stable slug.
+facts for debugging and crash-recovery verification, so the group is ``hidden=True``.
+``check-invariants`` runs the invariant checker (``bzh:invariant-checker``); exit 1 prints each violation.
 """
 
 from __future__ import annotations

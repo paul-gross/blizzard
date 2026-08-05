@@ -1,15 +1,9 @@
 """No packaged node prompt claims "cold eyes" unless its node actually runs fresh (unit
 tier, issue #148).
 
-For every packaged ``*/graph.yaml``, a runner node whose **main** prompt says "cold
-eyes" must be ``session: fresh``; nothing in graph loading or validation objects,
-because a prompt is opaque prose to the parser. Scope is the main prompt deliberately
-— a judgement prompt describes the nodes its choices route *to*, which is a statement
-about another node, not a claim about the worker reading it.
-
-Runs under the ``blizzard:unit-test`` tier (``uv run pytest -m unit``), alongside the
-declaration-CLI prompt guards in ``test_packaged_prompts_attach.py``.
-"""
+For every packaged ``*/graph.yaml``, a runner node whose main prompt says "cold eyes"
+must be ``session: fresh``, since a prompt is opaque prose to the parser. Excludes
+judgement prompts, which describe the nodes their choices route to."""
 
 from __future__ import annotations
 
@@ -35,12 +29,8 @@ def _worker_nodes() -> list[tuple[str, NodeDoc]]:
 
 
 def test_some_packaged_prompt_claims_cold_eyes() -> None:
-    """Anchor: the phrase is still in use somewhere, so a green run means the guard ran.
-
-    Today it is ``review`` (every graph) and ``plan-review`` (advanced), both ``fresh``. If
-    the phrase disappears from the packaged prompts entirely this fails loudly rather than
-    leaving a guard that can no longer catch anything.
-    """
+    """Anchor: the phrase is still in use somewhere, so a green run means the guard ran;
+    if it disappears from every packaged prompt this fails loudly instead of going inert."""
     claimants = [(g, n.name) for g, n in _worker_nodes() if COLD_EYES in (n.prompt or "")]
     assert claimants, "no packaged worker prompt claims 'cold eyes' — the guard below matches nothing"
 

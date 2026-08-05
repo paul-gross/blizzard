@@ -1,26 +1,8 @@
 """Concurrent allocation of the route-event ``seq`` counter (issue #41).
 
-``ChunkStore._next_route_seq`` is read-then-insert, not an atomic increment. Two
-concurrent writers for the same chunk must not both compute the same next value — that
-is exactly the tie #41's tiebreak was built to close, and a duplicate seq silently
-reopens it (see the invariant checker's ``hub:route-seq-unique`` in
-``tests/test_invariant_checker.py``).
-
-This module proves two different things, deliberately kept apart:
-
-- :func:`test_next_route_seq_locks_the_chunk_row_for_update` proves the *mechanism* —
-  the allocator issues a no-op ``UPDATE`` against the chunk's own row before computing
-  the max (rather than ``SELECT ... FOR UPDATE``, which sqlite silently drops — see the
-  allocator's own docstring), and that statement is an ``UPDATE`` whichever dialect it
-  is compiled for, so it takes postgres's row-exclusive lock the same way it forces
-  sqlite's whole-database write lock. This does not run against a live postgres server
-  (none is available here); it is a static proof that the statement the allocator
-  issues is the write postgres would lock on.
-- :func:`test_concurrent_seq_allocation_on_sqlite_never_duplicates` drives the real
-  allocator from two threads against a real sqlite store and asserts no duplicate seq
-  is ever committed. This is evidence only for sqlite's own write-lock serialization —
-  it says nothing about postgres, whose locking semantics differ and which this suite
-  cannot reach; postgres correctness rests on the static proof above, not on this.
+``ChunkStore._next_route_seq`` is read-then-insert, not atomic; two concurrent writers
+must not compute the same next value. Proves the allocator's statement locks the chunk
+row under any dialect (static proof, no live postgres), and sqlite never duplicates.
 """
 
 from __future__ import annotations
@@ -110,7 +92,6 @@ def test_concurrent_seq_allocation_on_sqlite_never_duplicates(tmp_path: Path) ->
         t.join()
 
     # Either both writers committed distinct seqs, or a loser raised rather than
-    # silently committing a duplicate — both are an acceptable outcome; a duplicate
-    # committed seq is not.
+    # silently committing a duplicate — a duplicate committed seq is not acceptable.
     assert len(seqs) + len(errors) == 2
     assert len(set(seqs)) == len(seqs)

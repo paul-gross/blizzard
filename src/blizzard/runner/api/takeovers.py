@@ -1,20 +1,8 @@
 """``blizzard runner takeover`` — ``POST``/``PATCH /chunks/{id}/takeovers`` (issue #52).
 
-The CLI is a pure client of these two routes: ``POST`` opens a takeover (verifying the
-chunk is parked with no running attempt, ``409`` otherwise) and returns the
-adapter-composed interactive command plus its working directory for the CLI to exec as
-its own child — the daemon never touches a TTY; ``PATCH`` marks it ended once that
-child exits. Read-only over its wiring (``bzh:controller-read-only``): the edge holds
-only the composition-root-wired :class:`~blizzard.runner.domain.takeover.TakeoverService`.
-On the store-free app the service is unwired and the probe answers 503 rather than
-pretending.
-
-``GET /takeovers`` (issue #51) is the stranded-takeover recovery surface: a takeover an
-interrupted terminal never reached the end-PATCH for would otherwise wedge its chunk
-with no way to find the ``takeover_id`` back — this lists every one still open, reusing
-the :class:`~blizzard.runner.domain.status.RunnerStatusService` the rest of ``blizzard
-runner status`` reads from.
-"""
+``POST`` opens a takeover and returns the adapter-composed interactive command plus its
+workdir — the daemon never touches a TTY; ``PATCH`` marks it ended. ``GET /takeovers``
+(issue #51) lists every one still open, the stranded-takeover recovery surface."""
 
 from __future__ import annotations
 
@@ -61,10 +49,8 @@ def _status_service(request: Request) -> RunnerStatusService:
 def open_takeover(chunk_id: str, request_body: TakeoverRequest, request: Request) -> TakeoverOpenResponse:
     """Open a takeover over a parked chunk with no running attempt (``409`` otherwise).
 
-    ``force`` supersedes a live worker attempt instead of refusing: the runner kills it
-    after recording the takeover fact, fencing its in-flight submission at the hub as a
-    stale epoch, exactly like a reaped lease — but consuming no retry and recording no
-    escalation."""
+    ``force`` supersedes a live worker attempt instead of refusing, consuming no retry
+    and recording no escalation."""
     service = _service(request)
     try:
         opened = service.open(chunk_id, force=request_body.force)

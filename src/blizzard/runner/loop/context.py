@@ -1,11 +1,8 @@
 """The loop context — the ``(store, clock, seam clients)`` a step is a function of.
 
 ``bzh:steppable-loop`` requires each phase to be a pure function of its parameters,
-reading the clock and every seam from them rather than a module global — so tests
-drive one step at a time against a virtual clock and injected fakes. This bundle is
-that parameter object: the write store (the loop is the domain layer, it may
-mutate), the injected clock, and the five seam clients (hub, workspace provider,
-harness adapter, process probe, worktree git), plus the loop's static config.
+reading the clock and every seam from them rather than a module global. This bundle is
+that parameter object, plus the loop's static config.
 """
 
 from __future__ import annotations
@@ -22,9 +19,8 @@ from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.repository import IWriteRunnerStore
 
-#: The retry budget a node with no ``retries.max`` falls back to (a chosen constant,
-#: not derived from a formula): an execution-attempt cap of 2 before escalation to
-#: needs-human.
+#: The retry budget a node with no ``retries.max`` falls back to — a chosen constant:
+#: two execution attempts before escalation to needs-human.
 DEFAULT_RETRIES_MAX = 2
 
 
@@ -36,20 +32,12 @@ class LoopConfig:
     workspace_id: str
     max_agents: int = 1
     base_branch: str = "main"
-    #: The runner's configured environment-pool size (issue #69) — ``len(workspace_envs)``,
-    #: mirrored once at composition from :class:`~blizzard.runner.config.RunnerConfig`.
-    #: Reported to the hub on each registration; the loop consumes only the count, so the
-    #: full pool stays with the provider. ``None`` means unreported.
+    #: The runner's configured environment-pool size (issue #69); ``None`` unreported.
     env_capacity: int | None = None
-    #: This runner's own browser-reachable base URL (issue #95), mirrored once at
-    #: composition from :attr:`~blizzard.runner.config.RunnerConfig.public_url`.
-    #: Reported to the hub on each registration alongside :attr:`redirect_uris`; empty
-    #: means this runner registers no federation identity.
+    #: This runner's own browser-reachable base URL (issue #95); empty registers no
+    #: federation identity.
     public_url: str = ""
-    #: The redirect URI(s) this runner presents to the hub's IdP authorize endpoint
-    #: (issue #95), mirrored once from
-    #: :attr:`~blizzard.runner.config.RunnerConfig.redirect_uris` (itself derived from
-    #: ``public_url``).
+    #: The redirect URI(s) this runner presents to the hub's IdP authorize endpoint (#95).
     redirect_uris: tuple[str, ...] = ()
     default_retries_max: int = DEFAULT_RETRIES_MAX
     #: The runner's own local-API base URL, handed to a spawned worker as
@@ -59,53 +47,28 @@ class LoopConfig:
     #: the workspace's shared context instead of starting below it in an env subdir.
     workspace_root: str = ""
     #: The static workspace prompt from config (issue #17), resolved once at ``host``
-    #: startup. The fallback under the store's runtime override: the effective spawn
-    #: preamble prose is ``store.workspace_prompt_override(workspace_id)`` when set, else this.
+    #: startup — the fallback under the store's runtime override.
     workspace_prompt: str = ""
     #: The operator's override of the baked-in blizzard preamble (issue #103), resolved
-    #: once at ``host`` startup from ``RunnerConfig.resolved_runner_prompt()``. Empty
-    #: means unset — ``render_worker_preamble`` falls back to
-    #: ``DEFAULT_BLIZZARD_PREAMBLE`` in that case. Config/startup only: unlike
-    #: ``workspace_prompt`` there is no store-backed runtime override.
+    #: once at ``host`` startup. Empty means unset; there is no runtime override.
     runner_prompt: str = ""
-    #: Node NAMES this runner imposes a human gate on: for a gated
-    #: node the runner submits a Decision instead of a transition, so an operator dials
-    #: their own HITL level without forking the fleet's graph. Matched by name across all
-    #: graphs, read fresh from config at context build — so under the hosted daemon's
-    #: ``PeriodicDriver`` (one context for its lifetime) a config edit needs a restart to
-    #: take effect, not just a new tick.
+    #: Node NAMES this runner imposes a human gate on — matched across all graphs and read
+    #: at context build, so a config edit needs a restart, not just a new tick.
     gates: tuple[str, ...] = ()
-    #: The directory the per-lease harness-stdout files live in (issue #58) — resolved
-    #: once at the composition root from the runner's own data directory, empty meaning
-    #: "no redirect" (discard/inherit). A worker's stdout is redirected to
-    #: ``<this>/<lease_id>.<generation>.stdout`` so a killed/reaped worker's result envelope
-    #: survives the process for ADVANCE's usage extraction to read back.
+    #: The directory the per-lease harness-stdout files live in (issue #58); empty means
+    #: no redirect. A worker's envelope survives the process there for later read-back.
     worker_stdout_dir: str = ""
-    #: The per-chunk spend cap (issue #61a), mirrored from ``RunnerConfig.chunk_cap_usd``.
-    #: ``None`` means no cap — ADVANCE's step boundary (:func:`blizzard.runner.loop.steps.
-    #: _park_on_cost_cap`) never parks a chunk on spend.
+    #: The per-chunk spend cap (issue #61a); ``None`` means no cap.
     chunk_cap_usd: float | None = None
-    #: The runner-wide spend ceiling (issue #61b), mirrored from ``RunnerConfig.
-    #: runner_ceiling_usd``. ``None`` means no ceiling — the tick's ceiling check
-    #: (:func:`blizzard.runner.loop.steps.check_spend_ceiling`) never engages the local
-    #: pause brake on spend alone.
+    #: The runner-wide spend ceiling (issue #61b); ``None`` means no ceiling.
     runner_ceiling_usd: float | None = None
-    #: The runner ceiling's rolling window, in hours, mirrored from ``RunnerConfig.
-    #: runner_ceiling_window_hours``. Unused while :attr:`runner_ceiling_usd` is ``None``.
+    #: The runner ceiling's rolling window in hours; unused while the ceiling is ``None``.
     runner_ceiling_window_hours: float = 24.0
-    #: The external-subscription-usage sample step's cadence in seconds (issue #218),
-    #: mirrored from ``RunnerConfig.external_usage_sample_interval_seconds``. The tick's
-    #: sample step (:func:`blizzard.runner.loop.steps.sample_external_subscription_usage`)
-    #: re-samples only once this many seconds have elapsed since the runner's last
-    #: sampling attempt (:meth:`~blizzard.runner.store.repository.
-    #: IReadRunnerStore.last_external_usage_attempt_at`).
+    #: The external-subscription-usage sample step's cadence in seconds (issue #218) —
+    #: seconds that must elapse since the runner's last sampling attempt.
     external_usage_sample_interval_seconds: int = 300
-    #: This runner's runtime directory (``RunnerConfig.root``), mirrored once at
-    #: composition (``build_loop_context``, ``runner/loop/build.py``) as
-    #: ``str(config.root)`` — absolute only because every real ``src/`` caller builds its
-    #: ``RunnerConfig`` through ``.load()``, which is what resolves it. ``_escalate``
-    #: (issue #251) composes the wrapped takeover command from it; empty means unresolved,
-    #: and the guard there composes no wrapped command rather than guessing.
+    #: This runner's runtime directory (``RunnerConfig.root``), absolute; empty means
+    #: unresolved, and readers compose nothing from it rather than guessing (issue #251).
     runner_dir: str = ""
 
 
@@ -121,14 +84,9 @@ class LoopContext:
     process: IProcessProbe
     worktree_git: IWorktreeGit
     config: LoopConfig
-    #: The check-runner seam (issue #114) — runs a node's ``checks:`` at worker exit.
-    #: ``None`` when not wired (loop tests that never exercise checks), so a node with no
-    #: ``checks:`` still ticks with the seam absent; a node that declares ``checks:`` needs it.
+    #: The check-runner seam (issue #114) — ``None`` when not wired, so a node with no
+    #: ``checks:`` still ticks; a node that declares ``checks:`` needs it.
     check_runner: ICheckRunner | None = None
-    #: The harness transcript source (blizzard#245) — resolved once at
-    #: ``build_loop_context`` and read directly by the envelope-less usage fallback and
-    #: the rotation size check, rather than reached through :attr:`harness`. A declared
-    #: field, not an inline ``ctx.harness.transcript_source()`` reach-through, so the
-    #: loop's own dependency on it is visible on this dataclass like every other seam.
-    #: ``None`` when not wired (a loop test that never exercises either caller).
+    #: The harness transcript source (blizzard#245) — a declared field so the loop's own
+    #: dependency is visible here; ``None`` when not wired.
     transcripts: IHarnessTranscriptSource | None = None

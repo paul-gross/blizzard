@@ -1,15 +1,5 @@
-"""resume intent fact tables (runner store tree)
-
-The graceful-restart resume marker: ``resume_intents`` (the mark a graceful
-``blizzard-runner`` shutdown writes for every active, non-parked, session-bearing lease)
-and ``resume_clears`` (the RESUME step's record that it has resumed — or abandoned — the
-marked lease). Together they let a runner spin down and back up and re-attach to its own
-in-flight Claude sessions in place, instead of retrying each node-step fresh. Before this
-the runner had no home for a resume-intent, so every restart discarded in-flight context.
-
-Each revision in this tree creates a subset of the current ``schema`` metadata's tables
-(the live-schema pattern); this one creates exactly the two new tables, ``checkfirst`` so
-a fresh ``base -> head`` and an in-place upgrade both converge.
+"""resume intent fact tables — ``resume_intents`` (the mark a graceful shutdown writes per
+resumable lease) and ``resume_clears`` (resumed or abandoned) (runner store tree)
 
 Revision ID: 20260714_1656_runner_resume_intents
 Revises: 20260713_1946_runner_hub_control

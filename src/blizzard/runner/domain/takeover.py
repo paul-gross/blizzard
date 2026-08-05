@@ -1,26 +1,9 @@
 """The operator takeover — ``blizzard runner takeover <chunk-id>`` (issue #52).
 
-Behind ``POST /chunks/{id}/takeovers`` / ``PATCH /chunks/{id}/takeovers/{tid}``:
-resolves environment, session, and harness itself, so the operator addresses only the
-chunk they have in hand from ``runner status`` or the board.
-
-A chunk is **takeable** while this runner holds it (a live env binding) and carries
-**no running attempt** — the three parked shapes issue #52 names (needs_human, parked
-on an ask, parked at a gate) all satisfy this: none has a *live* worker, whether
-because the lease closed (escalated / gate-parked) or is merely dormant (ask-parked).
-:meth:`TakeoverService.open` raises :class:`ChunkNotTakeable` for anything else
-(no binding, already under an open takeover, or no resumable session) and
-:class:`LiveWorkerConflict` for a genuine live attempt with no ``force`` — both map to
-``409`` at the API edge.
-
-The **fact-before-command** ordering (``bzh:crash-correctness``) holds regardless of
-``force``: :meth:`open` records the takeover fact — which is what makes the chunk
-unreachable to every loop step — before it kills anything or composes the interactive
-command, so no supervisor tick can race the human for the chunk. ``force`` additionally
-kills the live worker's pid *after* the fact lands and reports a bumped epoch to the hub,
-but records no execution-attempt fact (no ``lease_context`` row, no closure), so the kill
-consumes no retry and triggers no escalation: the attempt is superseded, not failed.
-"""
+A chunk is **takeable** while this runner holds it and carries no running attempt; anything else
+raises a refusal the edge maps to ``409``. The **fact-before-command** ordering holds regardless
+of ``force`` (``bzh:crash-correctness``): the takeover fact, which makes the chunk unreachable to
+every loop step, lands first — and a forced kill writes no attempt fact, so it consumes no retry."""
 
 from __future__ import annotations
 
@@ -37,12 +20,8 @@ from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.store.repository import IWriteRunnerStore, LeaseRecord
 from blizzard.wire.facts import LEASE_MINTED
 
-# What a takeover forwards from the adapter's identity env (issue #258): the lease's
-# ``BLIZZARD_*`` identity, plus the two execution vars an interactive resume needs from
-# the daemon side — ``PATH`` (the deployment venv, so bare ``blizzard`` resolves) and
-# ``HOME`` (the harness session store ``--resume`` reads). Nothing else leaves the
-# daemon: the operator's own terminal supplies the rest, and a ``[worker]
-# env_passthrough`` secret never crosses the local API in a response body.
+# What a takeover forwards from the identity env (issue #258). Nothing else leaves the
+# daemon: the operator's terminal supplies the rest, and no secret crosses the local API.
 _IDENTITY_PREFIX = "BLIZZARD_"
 _FORWARDED_EXECUTION_VARS = ("PATH", "HOME")
 
@@ -81,10 +60,8 @@ class LiveWorkerConflict(TakeoverError):
 class SubmissionPending(TakeoverError):
     """The lease's completion (or gate decision) is already buffered, unacked.
 
-    A fence minted now would land at a *higher* buffer seq than the already-queued
-    submission — PULL is strict FIFO, so the submission would still flush and advance
-    the node before the fence took effect. Not force-fencible; wait for the flush to
-    land, then ``requeue``."""
+    A fence minted now would sit at a higher buffer seq than the queued submission, which is
+    strict FIFO, so the submission would flush first and the fence never take effect."""
 
 
 class TakeoverEndedElsewhere(TakeoverError):
@@ -98,15 +75,11 @@ class OpenedTakeover:
     takeover_id: str
     command: str
     workdir: str
-    # The declared pool this session belongs to (issue #144), so an operator can be told
-    # *which* lineage they are taking over rather than only its opaque session id.
-    # ``None`` for a session on the bare/``resume:<node>`` vocabulary, which belongs to
-    # no pool, and for one predating the stamps.
+    # The declared pool this session belongs to (issue #144); ``None`` when it belongs to
+    # no pool, or predates the stamps.
     session_name: str | None = None
-    # The bounded takeover env (issue #258) — the lease's ``BLIZZARD_*`` identity plus
-    # ``PATH``/``HOME`` — for the CLI to layer over the operator's terminal env on exec.
-    # Carries the freshly re-minted lease token — env only, never part of the printable
-    # ``command`` string.
+    # The bounded takeover env (issue #258), layered over the operator's terminal on exec.
+    # Carries the re-minted lease token — env only, never the printable ``command``.
     env: dict[str, str] = field(default_factory=dict)
 
 
@@ -165,10 +138,8 @@ class TakeoverService:
         )
 
         if live and active is not None:
-            # The fence bump: reported to the hub exactly like a fresh lease mint, so the
-            # killed worker's buffered completion lands on a stale epoch — but no
-            # ``lease_context``/closure is written, so no retry is consumed and no
-            # escalation follows.
+            # The fence bump: reported like a fresh lease mint, so the killed worker's
+            # buffered completion lands on a stale epoch.
             self._store.enqueue_outbound(
                 kind=LEASE_MINTED,
                 chunk_id=chunk_id,
@@ -179,10 +150,8 @@ class TakeoverService:
             if active.pid is not None:
                 self._process.kill(active.pid)  # the reap machinery's own best-effort kill
 
-        # Read the reference lease's stamps (issue #144) rather than re-resolving: the
-        # operator continues under exactly the configuration the session ran with, not
-        # whatever a fresh resolution would produce now. `None` on any of them is
-        # *unknown* (a lease predating the stamps) and renders the bare command.
+        # Read the reference lease's stamps (issue #144) rather than re-resolving, so the
+        # operator continues under exactly the configuration the session ran with.
         command = self._harness.resume_command(
             workdir,
             session_id,
@@ -190,11 +159,8 @@ class TakeoverService:
             effort=reference.resolved_effort,
             attended=True,
         )
-        # The taken-over session's worker identity (issue #258): ``--resume`` inherits no
-        # spawn env, so without these vars its ``blizzard runner`` verbs (attach/ask/
-        # artifact) cannot reach the runner. The token plaintext is never persisted, so it
-        # is **re-minted** here, invalidating the prior one. The env rides the API response
-        # and the CLI's exec, never the printable ``command`` above.
+        # A resume inherits no spawn env, so identity must be handed over (issue #258).
+        # The token plaintext is never persisted, so it is re-minted, invalidating the prior.
         lease_token, token_hash = mint_lease_token()
         self._store.record_lease_token(reference.lease_id, token_hash, now)
         preamble = WorkerPreamble(
@@ -203,10 +169,8 @@ class TakeoverService:
             local_api_url=self._local_api_url,
             lease_token=lease_token,
         )
-        # Bound what leaves the daemon: forward only the identity vars plus the named
-        # execution vars, never the adapter's whole allowlisted child env — the base
-        # allowlist carries the daemon's TERM/LANG/LC_* (which would clobber the
-        # operator's terminal on exec) and any ``env_passthrough`` secret.
+        # Bound what leaves the daemon: never the whole allowlisted child env, which
+        # carries terminal vars that would clobber the operator's and any secret.
         full_env = self._harness.identity_env(preamble, chunk_id, session_id)
         env = {
             name: value

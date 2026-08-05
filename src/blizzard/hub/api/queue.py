@@ -1,21 +1,9 @@
-"""Queue routes — read, replace, and group — the anonymous **operator**
-surface (issues #87, #104).
+"""Queue routes — read, replace, and group — the operator surface (issues #87, #104).
 
-``GET /api/queue`` is the read-only ready-queue view the board's queue panel polls;
-ready is a **derived** status (a minted chunk with no live route) and the queue's order
-is an explicit hub-side property. A runner's FILL step peeks the same ready queue
-through its own fleet-side counterpart (``GET /api/fleet/queue/peek``,
-:mod:`blizzard.hub.api.fleet`) rather than this route — both share :func:`_entries`.
-``PUT /api/queue`` is the explicit whole-order operator verb behind ``blizzard hub queue
-set``. ``POST /api/queue/position`` (issue #137) is the single-chunk fractional write
-the board's drag-and-drop and ``blizzard hub queue move`` both drive.
-``POST /chunks/{id}/group`` is the Group
-control. Controllers stay read-only over the store and delegate the writes to the
-queue-shaping domain services (``bzh:controller-read-only``).
-
-``dependencies=[Depends(reject_runner_principal)]`` rejects a runner's bearer token
-here rather than treating it as anonymous-plus-credential.
-"""
+Ready is a **derived** status (a minted chunk with no live route) and the queue's order
+is an explicit hub-side property. Controllers stay read-only over the store and delegate
+the writes to the queue-shaping domain services (``bzh:controller-read-only``); a
+runner's bearer token is rejected rather than treated as anonymous-plus-credential."""
 
 from __future__ import annotations
 
@@ -67,14 +55,11 @@ def get_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueueP
 def replace_queue(
     request: QueueReplaceRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> QueuePeekResponse:
-    """Idempotent whole-order replacement of the ready queue — the explicit operator
-    verb behind ``blizzard hub queue set``.
+    """Idempotent whole-order replacement of the ready queue.
 
-    Resolves every named id against the current ready set here (the edge concern,
-    ``bzh:domain-takes-objects``): ``409`` names the first id that is not a ready
-    chunk, ``422`` rejects a duplicate id. A ready chunk not named keeps its current
-    relative order, appended after the named ones, so the replacement is total and
-    idempotent."""
+    Resolves every named id against the current ready set (``bzh:domain-takes-objects``):
+    ``409`` names the first id that is not ready, ``422`` a duplicate id. An unnamed
+    ready chunk keeps its relative order, appended after the named ones."""
     if len(set(request.chunk_ids)) != len(request.chunk_ids):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="chunk_ids must not repeat")
     ready = services.queue.ordered_ready()
@@ -94,15 +79,11 @@ def replace_queue(
 def reposition_queue(
     request: QueuePositionRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> QueuePeekResponse:
-    """Single-chunk fractional reorder — the board's drag-and-drop and
-    ``blizzard hub queue move`` (issue #137).
+    """Single-chunk fractional reorder (issue #137).
 
-    Resolves both ``chunk_id`` and ``after_chunk_id`` (if not null) against the current
-    ready set here (the edge concern, ``bzh:domain-takes-objects``): ``409`` names
-    either one if it is not a ready chunk, ``422`` rejects ``after_chunk_id`` naming
-    ``chunk_id`` itself (self-anchor is nonsensical). ``after_chunk_id=null`` moves the
-    chunk to the very top of the queue.
-    """
+    Resolves both ids against the current ready set (``bzh:domain-takes-objects``):
+    ``409`` names either one if it is not ready, ``422`` rejects a self-anchor.
+    ``after_chunk_id=null`` moves the chunk to the top of the queue."""
     if request.after_chunk_id == request.chunk_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="after_chunk_id must not equal chunk_id"
@@ -133,7 +114,7 @@ def group_chunks(
     request: ChunkGroupRequest,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> object:
-    """Merge unacquired chunks into ``chunk_id`` — the board's Group control.
+    """Merge unacquired chunks into ``chunk_id``.
 
     Accepts ``not_ready`` and ``ready`` participants alike (issue #141); 409 names the
     first chunk a runner holds, or one already finished.
@@ -145,11 +126,8 @@ def group_chunks(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ChunkNotGroupable as exc:
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)})
-    # Each merged-away chunk vanished from the listings, and the survivor's pointers grew:
-    # refresh the queue and the survivor's row on the board. The survivor's status comes
-    # from the group result rather than a ``"ready"`` constant — grouping backlog chunks
-    # leaves a backlog survivor, and a frame claiming otherwise would flip the board's row
-    # to a status the store never derives (issue #141).
+    # The survivor's status comes from the group result, never a ``"ready"`` constant:
+    # grouping backlog chunks leaves a backlog survivor (issue #141).
     survivor = result.survivor
     services.events.publish_queue_changed()
     key = f"chunk_grouped:{result.grouped_id}" if result.grouped_id is not None else None

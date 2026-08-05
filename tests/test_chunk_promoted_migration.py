@@ -1,10 +1,8 @@
-"""The chunk-promoted back-fill — existing chunks stay claimable after the not-ready state lands.
+"""The chunk-promoted back-fill — existing chunks stay claimable after not-ready lands.
 
-Adding the not-ready resting state makes an un-promoted chunk derive ``not_ready``. A bare
-table create would silently un-ready every chunk already in flight, so the chunk-promoted migration
-back-fills a ``chunk.promoted`` fact for every pre-existing chunk. This exercises that on a
-store migrated to the revision *before* ``chunk_promoted``, carrying a chunk minted the old
-way: after the upgrade it must derive ``ready`` (claimable), unaffected by the change.
+A bare table create would silently un-ready every chunk already in flight, so the
+migration back-fills a ``chunk.promoted`` fact for every pre-existing chunk. Pins that a
+chunk minted the old way derives ``ready`` after the upgrade — unaffected by the change.
 """
 
 from __future__ import annotations

@@ -1,9 +1,8 @@
 """Pinning tests for hub decisions that were previously defended by comment alone
 (issue #270, ``bzh:mutation-review-selection``).
 
-Each test here exists because a long comment argued for a decision no assertion
-covered. The comment at each site now points back at the test that fails when the
-decision is reverted.
+Each test exists because a long comment argued for a decision no assertion covered;
+the comment at each site now points back at the test that fails on revert.
 """
 
 from __future__ import annotations
@@ -62,9 +61,7 @@ def _unique_constraint_names(url: str, table: str) -> set[str]:
         engine.dispose()
 
 
-# --------------------------------------------------------------------------- #
 # Frozen historical schema shapes — the local ``sa.Table`` literal decision
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.parametrize(
@@ -84,9 +81,8 @@ def test_a_revisions_table_shape_is_frozen_at_its_own_revision(
     tmp_path: Path, revision: str, table: str, expected: set[str]
 ) -> None:
     """A ``base -> <revision>`` build lands the shape that revision shipped with, not
-    head-of-tree ``schema.py``'s shape — the frozen local ``sa.Table`` literal decision.
-    The ``chunk_pm_pointers`` rows also pin that the pre-rename revisions still speak the
-    old table name (``canon:no-retro``)."""
+    head-of-tree ``schema.py``'s — the frozen local ``sa.Table`` literal decision. Also
+    pins that pre-rename revisions still speak the old table name (``canon:no-retro``)."""
     _runner, url = _store(tmp_path, revision)
 
     assert _columns(url, table) == expected
@@ -102,9 +98,7 @@ def test_delivery_pr_opened_gains_its_uniqueness_only_at_the_revision_that_adds_
     assert "uq_delivery_pr_opened_chunk_repo" in _unique_constraint_names(url, "delivery_pr_opened")
 
 
-# --------------------------------------------------------------------------- #
 # Data migrations
-# --------------------------------------------------------------------------- #
 
 
 def test_pr_opened_upgrade_keeps_only_the_earliest_duplicate(tmp_path: Path) -> None:
@@ -201,9 +195,7 @@ def test_chunk_defaults_retains_model_and_backfills_no_default_model(tmp_path: P
     assert row.default_model is None  # not backfilled from `model`
 
 
-# --------------------------------------------------------------------------- #
 # The human-plane auth seam under the default ``auth.mode = "none"``
-# --------------------------------------------------------------------------- #
 
 
 def test_require_grants_the_implicit_operator_with_no_store_wired() -> None:
@@ -225,9 +217,7 @@ def test_require_grants_the_implicit_operator_with_no_store_wired() -> None:
     assert resp.json() == {"username": "operator"}
 
 
-# --------------------------------------------------------------------------- #
 # `hub host`'s early-shutdown server
-# --------------------------------------------------------------------------- #
 
 
 def test_handle_exit_sets_the_shutdown_signal_synchronously() -> None:

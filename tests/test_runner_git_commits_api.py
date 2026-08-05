@@ -1,11 +1,8 @@
 """``POST /api/leases/{id}/git-commits`` (issue #143, Phase 3).
 
-Exercised over a real store via TestClient, mirroring
-``tests/test_runner_attachments_api.py``'s convention: the route's shape, its
-403/404/503 forms, and the round-trip it delegates to
-(:class:`~blizzard.runner.domain.git_commit_declaration.GitCommitDeclarationService`,
-pinned at the unit level by ``tests/test_lease_auth.py`` and the store level by
-``tests/test_runner_store.py``) are the point here.
+Exercised over a real store via TestClient: the route's shape, its 403/404/503 forms,
+and the round-trip it delegates to
+:class:`~blizzard.runner.domain.git_commit_declaration.GitCommitDeclarationService`.
 """
 
 from __future__ import annotations

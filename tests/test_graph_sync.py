@@ -1,14 +1,8 @@
-"""Packaged-graph reconciliation — mint only what changed (issue #146, component tier).
+"""Packaged-graph reconciliation — mint only what changed (issue #146).
 
 Graphs live in the store, not on disk, so shipping a changed graph in a new wheel used to
-change nothing: the deploy went green and every new chunk kept running the previous
-definition. These drive the real reconciler over a real hub store, against a fixture
-"packaged set" on ``tmp_path`` (``paths=``) rather than the shipped one — the behaviour
-under test is *mint iff the inlined definition differs*, and asserting it against graphs
-that change with the product would pin the product, not the rule.
-
-One case deliberately uses the **real** packaged set: that reconciling the shipped wheel
-twice is a no-op is the property a deploy relies on, and only the real graphs prove it.
+change nothing. Drives the real reconciler over a fixture "packaged set" — mint iff the
+inlined definition differs. One case uses the real set: reconciling the wheel twice is a no-op.
 """
 
 from __future__ import annotations
@@ -91,9 +85,8 @@ def test_reconciling_twice_mints_nothing_the_second_time(tmp_path: Path) -> None
 
 
 def test_a_prompt_only_edit_is_detected_and_minted(tmp_path: Path) -> None:
-    # The case a `graph.yaml` diff misses entirely: `mint` inlines every prompt file
-    # reference into the stored definition, so editing `prompts/build.md` changes the
-    # minted graph while leaving `graph.yaml` byte-identical.
+    # The case a `graph.yaml` diff misses: `mint` inlines every prompt file reference, so
+    # editing `prompts/build.md` changes the minted graph while `graph.yaml` stays identical.
     hub = build_hub(tmp_path)
     path = _packaged(tmp_path, "prompted", prompt="do the work")
     first = _sync(hub, [path])[0]
@@ -172,10 +165,8 @@ def test_an_in_flight_chunk_stays_on_the_definition_it_started_under(tmp_path: P
 
 
 def test_the_shipped_packaged_set_reconciles_and_then_reports_up_to_date(tmp_path: Path) -> None:
-    """The real wheel, twice — the property a deploy actually leans on.
-
-    Also the guard that every shipped graph *validates*: a packaged graph that cannot be
-    minted fails here rather than at the operator's deploy."""
+    """The real wheel, twice — the property a deploy leans on, and the guard that every
+    shipped graph validates rather than failing at the operator's deploy."""
     hub = build_hub(tmp_path)
     paths = packaged_graph_paths()
     assert paths, "the wheel ships at least one packaged graph"

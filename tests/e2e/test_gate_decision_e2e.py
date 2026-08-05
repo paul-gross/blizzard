@@ -1,19 +1,9 @@
 """Human-gate decision park→decide→deliver — scenario 5 of the e2e smoke — MVP criterion 12.
 
-The other half of the human loop, end to end over the real stack: a graph whose
-``build`` node passes into a **human gate ahead of deliver**.
-The build worker makes a real commit and its verdict transitions the chunk *into* the
-gate; the hub opens an **open Decision** carrying the build's artifacts and the chunk
-derives **waiting_on_human**. A human lists the gate with the real
-``blizzard hub decision list`` and approves it with the real
-``blizzard hub decision resolve``; the holding runner picks the resolution up on its next
-tick and the hub's deliver node lands the build commit on the bare origin's ``main`` —
-the chunk reaches **done**.
-
-Reuses the acceptance loop's live-stack scaffolding (forge/hub/runner harnesses, fixture
-mint, port helpers). Skipped unless ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock``
-worktree provisioned — exactly like the sibling scenarios.
-"""
+A build passes into a human gate ahead of deliver: the hub opens a Decision, a human
+resolves it with the real ``blizzard hub decision`` CLI, and the holding runner's next
+tick delivers the build commit to ``done``. Skipped unless ``BLIZZARD_E2E=1`` with the
+sibling ``blizzard-mock`` worktree provisioned."""
 
 from __future__ import annotations
 

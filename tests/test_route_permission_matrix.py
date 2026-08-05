@@ -1,20 +1,9 @@
-"""The human-plane route-permission matrix, proven end to end over a real hub
-(component tier, issue #210): ``pending`` is refused everywhere except ``GET
-/api/me``; ``guest`` reads every ``FLEET_VIEW`` route and is refused every mutation.
+"""The human-plane route-permission matrix, proven end to end (component tier, #210):
+``pending`` is refused everywhere except ``GET /api/me``; ``guest`` reads every
+``FLEET_VIEW`` route and is refused every mutation.
 
-``tests/test_route_classification.py`` proves the *static* claim (every route's
-``require(<permission>)`` dependency closes over the table's declared permission);
-this file proves the *dynamic* one — an actual session of each role gets the actual
-status code that claim predicts. The two together are the AC's full proof: a route
-whose permission is misclassified fails the static test, and a role whose bundle is
-wrong fails this one.
-
-The SSE stream (``GET /api/events/stream``) is gated on the same ``FLEET_VIEW``
-permission as every other read (pinned in ``test_route_classification.py`` and
-exercised for the 403 path in ``tests/test_auth_session.py`` — a 403 fires before
-streaming starts) but is not live-called here for the 200 path: its handler streams
-indefinitely, so a bounded ``TestClient.get()`` would hang rather than return.
-"""
+Proves the *dynamic* half — an actual session of each role gets the status code the
+static route-classification test predicts."""
 
 from __future__ import annotations
 

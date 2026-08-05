@@ -16,9 +16,8 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "9"}
 
-# A build -> deliver graph named `default-delivery`, reused by name on ingest,
-# so these apply-mechanics tests reach a terminal chunk in one build pass — decoupled
-# from the packaged default graph's P7 build -> review -> deliver shape.
+# A build -> deliver graph named `default-delivery`, reused by name on ingest, so these
+# apply-mechanics tests reach a terminal chunk in one build pass.
 _BUILD_DELIVER_YAML = """
 name: default-delivery
 entry: build
@@ -53,8 +52,7 @@ nodes:
 
 
 # A spike -> deliver graph: one read-only work node that `produces` an asset and no
-# code, routing into the same hub deliver node a code chunk uses — the non-code
-# terminal (MVP criterion 10, 2nd sentence), reached hermetically at the apply tier.
+# code, routing into the same hub deliver node a code chunk uses.
 _SPIKE_DELIVER_YAML = """
 name: default-delivery
 entry: spike
@@ -147,9 +145,7 @@ def test_unknown_choice_is_a_failure(tmp_path: Path) -> None:
 
 def test_non_code_chunk_completes_with_only_asset_artifacts(tmp_path: Path) -> None:
     """A spike chunk carrying only an asset reaches ``done`` — no code lands (criterion
-    10, 2nd sentence). See ``tests/e2e/test_spike_terminal_e2e.py`` for the full-rails
-    equivalent.
-    """
+    10, 2nd sentence)."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claimed(hub, graph_yaml=_SPIKE_DELIVER_YAML)
 

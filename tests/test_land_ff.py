@@ -1,11 +1,8 @@
 """The fast-forward `deliver` node script — unit tier.
 
-Exercises :func:`~blizzard.hub.graphs.scripts.land_ff.main` in-process against a scripted
-``forge_request`` fake (this script's own HTTP seam, ``bzh:deterministic-shell`` — no live
-forge, no subprocess, no git). Mirrors ``tests/test_land_scripts.py``'s shape for
-``land_default``/``land_pr_ci``, but proves ``land_ff``'s distinct policy: a repo's base
-branch ref is advanced directly (``PATCH .../git/refs/heads/<base>``) rather than opened
-and merged as a PR — so no ``/pulls`` endpoint is ever hit.
+Exercises :func:`~blizzard.hub.graphs.scripts.land_ff.main` against a scripted
+``forge_request`` fake (``bzh:deterministic-shell``). Proves its distinct policy: a
+repo's base branch ref is advanced directly rather than opened and merged as a PR.
 """
 
 from __future__ import annotations

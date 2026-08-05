@@ -1,25 +1,8 @@
 """The runner-local lease list — ``GET /api/leases`` (issue #28; widened issue #29).
 
-The panel's backing route: an active lease *is* an active agent, so this is
-"which agents are working, on what, on which node, and is that node healthy" —
-answered entirely from the local sqlite store and the process probe. **Hub-free**
-by design: the machine panel is precisely the part of
-the app that must not depend on the hub, so this route gains no hub call, no forge
-call, no title — those arrive separately, by a strictly severable read.
-
-Issue #29 widens the route to active leases **plus** recently-closed
-ones (:meth:`LocalLeaseService.list_recent`) so a finished agent's transcript stays
-reachable from the panel rather than vanishing the moment it closes. Response
-*shape* is unchanged (``LeaseListResponse.items``); ``LeaseView`` gains
-``closed_at``/``closure_reason`` and ``state`` gains the sixth ``"closed"`` value.
-This is a deliberate widening of the route's *meaning*, not just its body — see
-``bzh:sweep-release-only-tiers``.
-
-Read-only over its wiring (``bzh:controller-read-only``): the edge holds only the
-composition-root-wired :class:`LocalLeaseService`, no repository at all — it maps
-domain :class:`LeaseActivity` to :class:`LeaseView` (the ``_view`` precedent is
-``hub/api/runners.py``). On the store-free app (OpenAPI export / unit tests) the
-service is unwired and the probe answers 503 rather than pretending.
+Active leases plus recently-closed ones, answered entirely from the local sqlite store and
+the process probe. **Hub-free** by design: no hub call, no forge call, no title. Read-only
+over its wiring (``bzh:controller-read-only``); unwired, the probe answers 503.
 """
 
 from __future__ import annotations

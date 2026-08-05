@@ -65,7 +65,6 @@ def _seed_running_lease(store, *, lease="lease_1", chunk="ch_1", node_id="nd_bui
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-# --------------------------------------------------------------------------- #
 # RESUME keys on the pause FACT, never the derived status (issue #46).
 # --------------------------------------------------------------------------- #
 
@@ -107,7 +106,6 @@ def test_resume_parks_a_paused_chunk_whose_derived_status_hides_the_pause(tmp_pa
     assert provider.released == []
 
 
-# --------------------------------------------------------------------------- #
 # The checks re-run marker is keyed (lease, epoch) — never (chunk, node) (issue #114).
 # --------------------------------------------------------------------------- #
 
@@ -115,9 +113,7 @@ def test_resume_parks_a_paused_chunk_whose_derived_status_hides_the_pause(tmp_pa
 @pytest.mark.unit
 def test_checks_rerun_under_a_fresh_lease_epoch_at_the_same_chunk_and_node(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """A retry mints a fresh ``(lease, epoch)`` at the same ``(chunk, node)``, so the
-    marker must be unset and the checks must run again against the rebuilt tree. Keyed on
-    anything stable across a node re-entry, the retry would read the stale red result back
-    and wedge on it forever."""
+    marker must be unset and the checks must run again against the rebuilt tree."""
     store = _store(tmp_path)
     _seed_running_lease(store, lease="lease_a", epoch=1)
     store.record_lease(
@@ -165,7 +161,6 @@ def test_checks_rerun_under_a_fresh_lease_epoch_at_the_same_chunk_and_node(tmp_p
     assert [(r.command, r.passed) for r in results] == [("mise run lint", True)]
 
 
-# --------------------------------------------------------------------------- #
 # The nudge-fired guard fact lands BEFORE the nudge resume runs (issue #113).
 # --------------------------------------------------------------------------- #
 
@@ -231,7 +226,6 @@ def test_the_nudge_guard_fact_is_durable_before_the_nudge_resume_runs(tmp_path) 
     assert harness.fired_at_judge[1] is True, "the nudge resume ran before its guard fact was durable"
 
 
-# --------------------------------------------------------------------------- #
 # The prompts are resolved by the caller and injected, never re-derived here.
 # --------------------------------------------------------------------------- #
 
@@ -257,7 +251,6 @@ def test_build_loop_context_uses_the_injected_prompts_and_never_re_derives_them(
     assert (ctx.config.workspace_prompt, ctx.config.runner_prompt) == ("ws prose", "runner prose")
 
 
-# --------------------------------------------------------------------------- #
 # The external-subscription-usage sample is the tick's LAST step (issue #218).
 # --------------------------------------------------------------------------- #
 

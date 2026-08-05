@@ -1,14 +1,8 @@
 """Prefixed-ULID id minting — the hub-entity id convention.
 
-Every hub entity id is a **prefixed ULID**: a short type tag, an underscore, then a
-Crockford-base32 ULID — ``ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B``. The tag makes an id
-type-evident on sight; the ULID makes it lexically creation-ordered (its leading
-48 bits are the mint timestamp), so a plain string sort is a chronological sort.
-
-This is a foundation utility, not domain logic: it mints opaque identifiers and
-carries no rules. The minted instant comes from an injected :class:`IClock`
-(``bzh:injected-clock``) so id ordering is deterministic under test — there is no
-hidden ``datetime.now()`` here.
+A type tag, an underscore, then a Crockford-base32 ULID — ``ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B``.
+The ULID's leading 48 bits are the mint timestamp, so a plain string sort is chronological;
+the instant comes from an injected :class:`IClock` (``bzh:injected-clock``).
 """
 
 from __future__ import annotations
@@ -24,9 +18,7 @@ _TIME_CHARS = 10  # 48 bits of millisecond timestamp
 _RAND_CHARS = 16  # 80 bits of randomness
 _ULID_CHARS = _TIME_CHARS + _RAND_CHARS
 
-# The id-prefix registry: one tag per hub entity kind. `ch_` is the only
-# one the walking skeleton mints end-to-end; the rest pin the convention for the
-# entities their tables already carry so a builder never invents a second scheme.
+# The id-prefix registry: one tag per hub entity kind.
 CHUNK_PREFIX = "ch"
 GRAPH_PREFIX = "gr"
 NODE_PREFIX = "nd"

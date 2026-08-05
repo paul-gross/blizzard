@@ -1,11 +1,6 @@
 """initial empty schema (hub store tree)
 
-The initial revision of the hub store's independent Alembic tree. The
-schema is intentionally empty: the hub store is facts-only (``bzh:facts-not-status``),
-and its fact tables land in later revisions as the domain model stabilizes. Both
-``upgrade`` and ``downgrade`` are real — there is simply nothing to create or drop
-at the empty baseline.
-
+The empty baseline of the hub store's tree; fact tables land in later revisions.
 Revision ID: 20260713_1112_hub_initial
 Revises:
 """

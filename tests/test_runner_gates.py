@@ -1,11 +1,8 @@
 """Runner-side human gates — the loop's gate paths (unit tier).
 
-Two behaviours, driven against a real tmp store with fakes at the seams
-(``bzh:steppable-loop``): a **runner-config gate** submits a decision in place of a
-transition for a node the operator gates by name, parking the chunk; and a chunk parked
-on a **resolved decision** is advanced by the runner recording the resolving transition
-and continuing in place from the returned envelope.
-"""
+A runner-config gate submits a decision in place of a transition for an operator-gated
+node, parking the chunk; a chunk parked on a resolved decision is advanced by recording
+the resolving transition and continuing from the returned envelope."""
 
 from __future__ import annotations
 
@@ -238,13 +235,9 @@ def test_unresolved_gate_keeps_waiting(tmp_path):  # type: ignore[no-untyped-def
 
 @pytest.mark.unit
 def test_fill_leaves_a_resolved_gate_to_advance(tmp_path):  # type: ignore[no-untyped-def]
-    """FILL's interrupted-claim reconciler must not adopt a chunk parked on a resolved gate.
-
-    A resolved-but-not-transitioned gate keeps its route live, so it derives ``running``
-    with a bound env and no active lease — the *same* shape FILL's crash reconciler
-    (``_reconcile_interrupted_claims``) recovers. FILL must skip it and leave the
-    resolving transition to ADVANCE.
-    """
+    """FILL's interrupted-claim reconciler must not adopt a chunk parked on a resolved
+    gate — its bound-env, no-active-lease shape matches what FILL's crash reconciler
+    recovers, so it must skip and leave the resolving transition to ADVANCE."""
     store = _store(tmp_path)
     # A chunk parked at a gate the human just resolved: env bound, no active lease, RUNNING.
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)

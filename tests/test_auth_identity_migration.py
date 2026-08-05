@@ -1,10 +1,8 @@
-"""The identity-spine migration — ``users``/``identities``/``sessions`` (component
-tier, issue #91).
+"""The identity-spine migration — ``users``/``identities``/``sessions`` (issue #91).
 
-Covers the AC directly: the migration applies both to a fresh store (``base -> head``,
-exercised generically by ``test_store_migrations.py``'s whole-ladder test) and to an
-*existing* store already at the revision just before this one — and the partial
-unique index on ``users.email`` (decision D2) is enforced by sqlite.
+The migration applies both to a fresh store and to an existing store already at the
+revision just before this one; the partial unique index on ``users.email`` (decision D2)
+is enforced by sqlite.
 """
 
 from __future__ import annotations

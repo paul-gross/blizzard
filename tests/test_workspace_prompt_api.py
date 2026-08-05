@@ -1,9 +1,8 @@
-"""The runtime workspace-prompt control — ``GET``/``PUT /api/workspace-prompt`` (issue #17).
+"""The runtime workspace-prompt control — ``GET``/``PUT /api/workspace-prompt`` (#17).
 
-The runner prepends a standing workspace prompt to every worker spawn; its static source
-is config, and this local-API edge is the runtime control. ``GET`` reports the effective
-prompt (the store override when set, else static config); ``PUT`` replaces the override so
-subsequent spawns pick it up with no restart. Exercised over a real store via TestClient.
+``GET`` reports the effective prompt (the store override when set, else static
+config); ``PUT`` replaces the override so subsequent spawns pick it up with no
+restart. Exercised over a real store via TestClient.
 """
 
 from __future__ import annotations

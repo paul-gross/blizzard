@@ -1,17 +1,9 @@
 """Shared scaffolding for the service tier — the mock-fleet launchers and gate.
 
-The service tier exercises **one running daemon's HTTP API from outside the process**
-with its counterpart bound to the mock fleet (blizzard-context ``verification/blizzard.md``
-test tiers): the runner against the **mock hub**, the hub against the **mock runner** +
-the **mock forge**. Like the e2e tier it needs the sibling provisioned ``blizzard-mock``
-worktree (whose venv ships ``blizzard-mock-hub`` / ``blizzard-mock-runner`` / ``-forge`` /
-``-fixture`` / ``mock-claude-code``) and a local winter source, so it is **skipped unless
-``BLIZZARD_SERVICE=1``** and those are present — the default gate stays hermetic.
-
-It reuses the e2e module's process helpers (``_forge``, ``_hub``, ``_free_port``,
-``_runner_config``, the fixture-workspace discovery) so both tiers stand the stack up the
-same way; only the *counterpart* differs.
-"""
+Exercises one running daemon's HTTP API from outside the process with its counterpart
+bound to the mock fleet: the runner against the mock hub, the hub against the mock
+runner + forge. Skipped unless ``BLIZZARD_SERVICE=1`` and the sibling ``blizzard-mock``
+worktree is provisioned — see ``verification/blizzard.md`` for the test tiers."""
 
 from __future__ import annotations
 
@@ -111,11 +103,9 @@ def require_stub_idp() -> Path:
 def _mock_daemon_log(name: str, port: int, log_dir: Path | None) -> Path:
     """Where one mock daemon's merged output goes (issue #145, ``bzh:daemon-stdout-to-file``).
 
-    The mock fleet's daemons own no runtime directory of their own, so ``log_dir``
-    defaults to the per-process :func:`~tests.support.shared_daemon_log_dir`; a caller
-    with a natural home for the log (its ``tmp_path``) passes one. Named by daemon and
-    port so several concurrent instances of the same mock never share a file.
-    """
+    The mock fleet's daemons own no runtime directory, so ``log_dir`` defaults to
+    :func:`~tests.support.shared_daemon_log_dir`; named by daemon and port so several
+    concurrent instances of the same mock never share a file."""
     return (log_dir or shared_daemon_log_dir()) / f"{name}-{port}.log"
 
 
@@ -139,8 +129,7 @@ def stub_idp(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterat
 
 
 # The scripted build node: commits a file, pushes the branch, and declares it via
-# `blizzard runner artifact commit` (issue #143) — the runner no longer discovers or
-# pushes the produced pointer itself.
+# `blizzard runner artifact commit` (issue #143).
 BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
@@ -250,12 +239,10 @@ def mock_runner(
 
 @contextlib.contextmanager
 def http_hub_client(port: int) -> Iterator[HttpHubClient]:
-    """A real :class:`HttpHubClient` pointed at a mock-hub subprocess on ``port``.
-
-    The literal wire binding the parity guard checks (``blizzard.runner.loop.internal.
-    http_hub``), driven directly rather than through the runner loop — for a wire-parity
-    assertion that needs a specific ``IHubClient`` method's response, not a behavioral
-    reconciliation-loop outcome (see ``run_single_tick`` for that instead)."""
+    """A real :class:`HttpHubClient` pointed at a mock-hub subprocess on ``port``, driven
+    directly rather than through the runner loop — for a wire-parity assertion that needs
+    a specific ``IHubClient`` method's response (see ``run_single_tick`` for the
+    behavioral-outcome alternative)."""
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
         yield HttpHubClient(client)
@@ -285,10 +272,8 @@ class SseTap:
             event_type: str | None = None
             for raw in resp.iter_lines():
                 if not self._ready.is_set():
-                    # Headers arriving only proves the response started, not that
-                    # broker.subscribe() has run (that's inside the body generator); the
-                    # first line on the wire is sent only after it has, so that's the true
-                    # readiness signal.
+                    # The first line on the wire, not headers alone, proves
+                    # broker.subscribe() has actually run inside the body generator.
                     self._ready.set()
                 if self._stop.is_set():
                     return
@@ -318,13 +303,10 @@ class SseTap:
 
 @contextlib.contextmanager
 def sse_tap(hub_port: int, *, settle: float = 2.0) -> Iterator[SseTap]:
-    """A **live** SSE subscriber on the hub's ``/api/events/stream``, connected before the act.
-
-    The component tier's replay-tail assertion (``emitted_events`` -> ``replay_since``) proves
-    an event was recorded, not that it was **delivered** over the live fan-out leg a board
-    actually depends on; this taps the wire instead. Connects, then drains and discards the
-    broker's connect-time replay, so :meth:`SseTap.collect` reports only live fan-out.
-    """
+    """A **live** SSE subscriber on the hub's ``/api/events/stream``, connected before the
+    act, proving an event was actually **delivered** rather than merely recorded. Drains
+    and discards the broker's connect-time replay, so :meth:`SseTap.collect` reports only
+    live fan-out."""
     tap = SseTap(f"http://127.0.0.1:{hub_port}")
     tap.start()
     try:

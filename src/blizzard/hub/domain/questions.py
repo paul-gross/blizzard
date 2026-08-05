@@ -1,15 +1,8 @@
 """The ask/answer domain rule.
 
-The one genuinely new primitive: a worker facing an undecidable choice asks and the
-chunk parks — ``waiting_on_human`` — until the answer arrives and the dormant session
-is resumed around it. This service owns the hub half: landing the durable question
-row a runner forwards, and applying the **first-write-wins CAS** answer (the store's
-answer-row primary key is the fence; the loser is told who won). Open/answered is
-never stored — it derives from the answer row's presence (``bzh:facts-not-status``).
-
-The controllers stay read-only over the store (``bzh:controller-read-only``); the
-service holds the write chunk repository and stamps landing times from the injected
-clock (``bzh:injected-clock``).
+Landing the durable question row (the chunk parks at ``waiting_on_human``) and applying
+the **first-write-wins CAS** answer — the answer-row primary key is the fence, and the
+loser is told who won. Open/answered derives from the answer row (``bzh:facts-not-status``).
 """
 
 from __future__ import annotations
@@ -63,9 +56,8 @@ class QuestionService:
 def _parse(value: str, clock: IClock) -> datetime:
     """Read an ISO-8601 instant, falling back to now on a malformed stamp.
 
-    Coerces a naive result to UTC (``bzh:utc-instants``, issue #28): a legacy runner's
-    outbound buffer can still replay a naive ``asked_at`` string (pinned by
-    tests/test_ask_answer.py::test_ask_question_normalizes_a_naive_asked_at).
+    Coerces a naive result to UTC (``bzh:utc-instants``, issue #28); pinned by
+    ``tests/test_ask_answer.py``.
     """
     try:
         return as_utc(datetime.fromisoformat(value))

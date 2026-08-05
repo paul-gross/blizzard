@@ -1,23 +1,9 @@
 """Work-lifecycle domain — the chunk, its facts, and its **derived** status.
 
-The center of the model. Per ``bzh:facts-not-status`` a chunk's status is
-never a stored column: it is computed here, by :func:`derive_chunk_status`, from
-the recorded facts. This module owns the derivation queries the hub
-runs — expressed as pure functions over already-loaded domain facts
-(``bzh:domain-takes-objects``), so they unit-test with zero store and zero tokens.
-
-The fact inputs (:class:`ChunkFacts`) are the domain-object form of the hub-store
-rows in :mod:`blizzard.hub.store.schema`; a read repository hydrates them (the
-:class:`IReadChunkRepository` seam), and the domain derives from the objects.
-
-Precedence is **first match wins**, top to bottom — a chunk matching several rows has
-exactly one status. ``waiting_on_human`` (open ask / open decision) sits between
-``needs_human`` and ``delivering``: a chunk parks there on an open **question**
-(``question.asked`` with no ``question.answered`` — ask/answer, MVP criterion 7) or
-an open **decision** (a gate's ``decision.submitted`` no resolution flips off —
-gates, MVP criterion 12). Both fact inputs live on :class:`ChunkFacts` and OR into
-the one ``waiting_on_human`` branch (see :func:`derive_chunk_status`).
-"""
+The center of the model: per ``bzh:facts-not-status`` a chunk's status is never a
+stored column, it is computed by :func:`derive_chunk_status` from the recorded facts.
+The derivations are pure functions over already-loaded domain facts
+(``bzh:domain-takes-objects``). Precedence is **first match wins**, top to bottom."""
 
 from __future__ import annotations
 
@@ -47,34 +33,15 @@ class ChunkStatus(StrEnum):
 
 
 # The two statuses a chunk never leaves — the one owner of "this chunk is finished",
-# defined beside the enum it folds rather than re-spelled per call site. Every other
-# status is *in progress*: work is either live (``running``/``delivering``), parked on a
-# human (``waiting_on_human``/``needs_human``/``paused``), or not yet claimed
-# (``not_ready``/``ready``) — all of which can still move.
+# defined beside the enum it folds rather than re-spelled per call site.
 TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
 
 
 def holds_claim(status: ChunkStatus) -> bool:
     """Whether a chunk at ``status`` still holds the route it may be carrying (issue #140).
-
     Terminal outranks route liveness, and this is the one place that says so for a
-    *route*. The two are independent derivations off the same facts and they routinely
-    disagree at ``done``: a terminal transition recorded from a **runner** node stamps no
-    ``route.released``, so ``route_of`` goes on answering with the route of the runner
-    that finished the chunk. That is untidy rather than unsafe: the claim path refuses a
-    terminal chunk outright (``ClaimDeniedTerminal``), so a retained route confers no
-    tenure.
-
-    It does mean route liveness is not a proxy for "being worked", so every consumer
-    folding routes into **live occupancy** asks this rather than re-deriving the
-    vocabulary of "in progress" for itself. :func:`derive_chunk_status` already encodes
-    the same precedence for the chunk's own status; this is its counterpart for the
-    route, kept in the domain so no controller has to hold the rule.
-
-    Deliberately *not* consulted by :meth:`IReadChunkRepository.route_of` or
-    :func:`_has_live_route`, which answer the raw fact — a "where was this worked" read
-    (the chunk detail) and the runner's own reassignment check both need it unfiltered.
-    """
+    *route*: a terminal transition from a runner node stamps no ``route.released``, so
+    the raw route fact outlives it. Not consulted by :func:`_has_live_route`."""
     return status not in TERMINAL_STATUSES
 
 
@@ -94,9 +61,8 @@ class WorkRef:
 class WorkItemCloseOutcome(StrEnum):
     """The result of one close attempt against a work item's source (issue #216).
 
-    ``CLOSED``/``GONE`` are terminal — :func:`~blizzard.hub.domain.work.IReadChunkRepository.closable_work_refs`
-    never returns a ref once either lands. ``FAILED`` is not: the reconciler retries it
-    on every later sweep until it converges to a terminal outcome."""
+    ``CLOSED``/``GONE`` are terminal; ``FAILED`` is retried on every later sweep until
+    it converges to a terminal outcome."""
 
     CLOSED = "closed"
     GONE = "gone"
@@ -118,11 +84,7 @@ class MigrationMode(StrEnum):
     """How a chunk's :class:`IntendedMigration` fires at its next transition (issue #124).
 
     ``AUTO`` fires only when the transition's own destination node name also exists on
-    the target graph (a name match); with no match the transition applies unchanged and
-    the intent stays set for the transition after. ``FORCED`` fires unconditionally,
-    landing on the intent's named ``node_name`` regardless of the transition's own
-    destination.
-    """
+    the target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``."""
 
     AUTO = "auto"
     FORCED = "forced"
@@ -130,22 +92,10 @@ class MigrationMode(StrEnum):
 
 @dataclass(frozen=True)
 class IntendedMigration:
-    """A chunk's standing intent to move onto another graph (issue #124).
-
-    Editable at any non-terminal status — ``not_ready``/``ready`` included, not just
-    once a chunk is claimed. Consulted — never applied eagerly — at the chunk's next
-    transition: only *that* transition either fires the intent (recording a
-    :class:`MigrationFact`, never a ``transitions`` row, and clearing the intent) or,
-    for :attr:`MigrationMode.AUTO` with no name match, leaves the intent set for the
-    transition after. A plain mutable chunk property (``bzh:facts-not-status`` governs
-    status derivation, not every mutable field), the same precedent
-    :attr:`Chunk.graph_id` sets — the durable record of a migration that actually
-    happened remains the :class:`MigrationFact`.
-
-    ``node_name`` is required for :attr:`MigrationMode.FORCED` (the unconditional
-    landing target) and ``None`` for :attr:`MigrationMode.AUTO` (the landing name is the
-    transition's own destination, resolved at consult time, not carried here).
-    """
+    """A chunk's standing intent to move onto another graph (issue #124), consulted —
+    never applied eagerly — at its next transition. ``node_name`` is required for
+    :attr:`MigrationMode.FORCED` and ``None`` for :attr:`MigrationMode.AUTO`, whose
+    landing name is the transition's own destination, resolved at consult time."""
 
     mode: MigrationMode
     graph_id: str
@@ -161,21 +111,7 @@ class Chunk:
     work_refs: list[WorkRef]
     minted_at: datetime
     # The chunk's **default** model preference and effort (issue #144) — what a surface
-    # that declares neither inherits. Effective precedence is session declaration >
-    # chunk default > runner default, so these sit between a graph's ``sessions:`` entry
-    # and the runner's own fallback: they supply what a session omitting ``model:``/
-    # ``effort:`` needs, and what a node on the bare ``fresh``/``resume`` vocabulary —
-    # which references no declaration at all — needs.
-    #
-    # ``default_model`` is a prioritized preference list in the same vocabulary a session
-    # declaration uses (a ``blizzard:`` tier alias or a harness-native name, opaque to the
-    # hub); ``default_effort`` is its single-value twin. Both are editable while the chunk
-    # rests pre-claim (``domain/edit.py``).
-    #
-    # Empty/``None`` is the minted value and means *express no preference*, which is what
-    # lets a runner's own default apply: minting a concrete model here would pin a
-    # harness-native name on every chunk and outrank every session declaration that omits
-    # ``model:``.
+    # declaring neither inherits; empty/``None`` means *express no preference*.
     default_model: list[str] = field(default_factory=list)
     default_effort: str | None = None
     # The chunk's standing intent to migrate onto another graph at its next transition
@@ -184,9 +120,7 @@ class Chunk:
 
 
 # --- Facts that feed the derivations ---------------------------------------
-#
-# Each is the domain-object form of a fact row. Only the fields the derivations
-# read are carried; a hydrating repository fills them.
+# Each is the domain-object form of a fact row; a hydrating repository fills them.
 
 
 @dataclass(frozen=True)
@@ -194,9 +128,7 @@ class RouteCreatedFact:
     """A ``route.created`` fact — the claim.
 
     ``seq`` is the monotonic route-event tiebreak (see :func:`_has_live_route`): a
-    per-chunk counter shared with :class:`RouteReleasedFact`, assigned in real write
-    order. Defaults to ``0`` for callers (mostly tests) that don't construct a tie.
-    """
+    per-chunk counter shared with :class:`RouteReleasedFact`, in real write order."""
 
     created_at: datetime
     seq: int = 0
@@ -213,15 +145,9 @@ class RouteReleasedFact:
 @dataclass(frozen=True)
 class RouteTokenMintedFact:
     """A ``route_token_minted`` fact — the route capability token, hashed (issue #84a).
-
-    Minted alongside a claim's :class:`RouteCreatedFact` and appended, never rewritten
-    (``bzh:facts-not-status`` — a re-key appends a fresh fact rather than mutating this
-    one). ``token_hash`` is the sha256 hex digest only; the plaintext is returned once
-    in the claim response and never stored. ``seq`` shares the same per-chunk counter
-    :class:`RouteCreatedFact`/:class:`RouteReleasedFact` do (see
-    :func:`newest_live_route_token`), so it totally orders against a create/release
-    even on a timestamp tie.
-    """
+    Appended, never rewritten (``bzh:facts-not-status``). ``token_hash`` is the sha256
+    hex digest only. ``seq`` shares the per-chunk counter :class:`RouteCreatedFact` uses,
+    so it totally orders against a create/release even on a timestamp tie."""
 
     token_hash: str
     minted_at: datetime
@@ -230,14 +156,10 @@ class RouteTokenMintedFact:
 
 @dataclass(frozen=True)
 class PrOpenedFact:
-    """A ``pr.opened`` fact — the open-pr deliver mode's park record.
-
-    One per repo whose branch the coordinator opened a PR for instead of merging. It
-    carries no terminal weight: while a chunk has ``pr.opened`` facts and no ``pr.closed``,
-    it derives ``delivering`` (awaiting an external merge) with environments held.
-    ``number``/``url`` are the forge handle a later ``check_pr`` polls; ``repo`` is
-    also the reconciliation skip-set that keeps a redelivery from opening a duplicate PR.
-    """
+    """A ``pr.opened`` fact — the open-pr deliver mode's park record. One per repo whose
+    branch got a PR instead of a merge; it carries no terminal weight, deriving
+    ``delivering`` while no ``pr.closed`` matches. ``repo`` is also the skip-set that
+    keeps a redelivery from opening a duplicate PR."""
 
     repo: str
     number: int
@@ -256,21 +178,10 @@ class LeaseFact:
 
 @dataclass(frozen=True)
 class TransitionFact:
-    """A ``transition.recorded`` fact with its target node's executor.
-
-    ``to_node_executor`` is resolved by the hydrating repository (a join to the
-    pinned graph's nodes) so the derivation stays a pure function — the domain
-    never re-opens a store to learn whether the target is a hub node.
-
-    ``from_node_id`` and ``choice_name`` describe the edge that was taken — the
-    step's origin node and the judgement choice that routed it. The status
-    derivations read only ``to_node_id``/``to_node_executor``/``epoch``/``recorded_at``;
-    the edge fields feed the chunk's transition-history view.
-
-    ``graph_id`` is the graph the transition happened in (issue #90 — graph-provenance).
-    Node names resolve against *this* graph rather than the chunk's current pin, so a
-    chunk that later migrates to another graph still reads its old-graph steps correctly.
-    """
+    """A ``transition.recorded`` fact with its target node's executor, resolved by the
+    hydrating repository so the derivation stays a pure function. ``from_node_id`` and
+    ``choice_name`` describe the edge taken. ``graph_id`` is the graph the transition
+    happened in (issue #90), so node names resolve against it, not the current pin."""
 
     to_node_id: str
     to_node_executor: Executor
@@ -284,18 +195,9 @@ class TransitionFact:
 @dataclass(frozen=True)
 class EscalationFact:
     """An ``escalation.recorded`` fact — the system ran out of moves on this chunk.
-
-    Carries the **takeover command**: not always the literal ``cd <workdir> &&
-    <harness resume>`` a human pastes — a hub-authored escalation's raw field can
-    carry operator prose instead, or be empty. It is surfaced on the chunk detail so
-    ``needs_human`` is actionable; the status derivation itself keys only on
-    ``(epoch, recorded_at)`` supersession.
-
-    ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent the board
-    prefers as primary. Wrapped implies raw, never the reverse — see
-    `blizzard-context:/domain/humans.md` for the full enumeration of when each is
-    empty.
-    """
+    Carries the takeover command (raw, and the wrapped equivalent; wrapped implies raw,
+    never the reverse — `blizzard-context:/domain/humans.md`). The status derivation
+    keys only on ``(epoch, recorded_at)`` supersession."""
 
     epoch: int
     recorded_at: datetime
@@ -305,15 +207,10 @@ class EscalationFact:
 
 @dataclass(frozen=True)
 class QuestionFact:
-    """A ``question.asked`` row and whether it has been answered.
-
-    Open/answered is **derived**: a question is open exactly while no
-    ``question.answered`` row exists, and an open question is the fact the chunk's
-    ``waiting_on_human`` status derives from. ``answered`` is resolved by the
-    hydrating repository (the presence of the answer row) so the derivation stays a
-    pure function; ``question_id`` and ``asked_at`` order the asks for a chunk carrying
-    more than one.
-    """
+    """A ``question.asked`` row and whether it has been answered. Open/answered is
+    **derived**: a question is open exactly while no ``question.answered`` row exists.
+    ``answered`` is resolved by the hydrating repository so the derivation stays a pure
+    function; ``question_id`` and ``asked_at`` order a chunk's asks."""
 
     question_id: str
     asked_at: datetime
@@ -322,14 +219,10 @@ class QuestionFact:
 
 @dataclass(frozen=True)
 class DecisionFact:
-    """A gate's ``decision.submitted`` row and whether a transition references it.
-
-    Kin to :class:`QuestionFact`: the chunk derives ``waiting_on_human`` from an
-    **open** decision — one no transition resolves — the same open/unresolved pending
-    pattern an open question follows. ``resolved`` is computed by the hydrating
-    repository (a transition carrying this ``decision_id``) so the derivation reads a
-    plain boolean.
-    """
+    """A gate's ``decision.submitted`` row and whether a transition references it. An
+    **open** decision — one no transition resolves — is what ``waiting_on_human``
+    derives from. ``resolved`` is computed by the hydrating repository so the
+    derivation reads a plain boolean."""
 
     decision_id: str
     submitted_at: datetime
@@ -338,17 +231,10 @@ class DecisionFact:
 
 @dataclass(frozen=True)
 class BounceFact:
-    """A ``chunk_bounces`` row — one delivery kick-back (#64).
-
-    Contention, not failure: a bounce consumes no node retry and is not itself an
-    escalation — it is counted separately, and only crossing the node's ``bounce_cap``
-    escalates. ``epoch`` is the coordinator's own ``hub_epoch`` at bounce time — the
-    natural key (``chunk_id``, ``epoch``) a hydrating repository's write guards against a
-    redelivery replay double-counting. ``cause`` names the kick-back reason; ``envelope``
-    is the opaque JSON kick-back payload (cause detail, the repo, the base branch) the
-    routed edge's artifact carries into the fix node so it never rediscovers what
-    bounced it.
-    """
+    """A ``chunk_bounces`` row — one delivery kick-back (#64). Contention, not failure: a
+    bounce consumes no node retry, and only crossing the node's ``bounce_cap`` escalates.
+    ``(chunk_id, epoch)`` is the natural key guarding against a redelivery replay
+    double-counting; ``envelope`` is the opaque JSON kick-back payload."""
 
     epoch: int
     cause: str
@@ -359,14 +245,9 @@ class BounceFact:
 @dataclass(frozen=True)
 class HubNodePollFact:
     """A ``hub_node_poll`` row — one pending-poll attempt at a hub command node (#66).
-
-    Append-only, stamped from the injected clock. ``epoch`` is the arrival epoch of
-    the current visit to ``node_id`` — the same value the node's own marker/log
-    artifacts are recorded under (:class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor`),
-    not a fresh one minted per poll. Pending-ness (:func:`hub_node_pending`) derives
-    from these rows plus the newest transition — nothing in-memory, so a ``kill -9``
-    between polls resumes polling straight from the store.
-    """
+    Append-only. ``epoch`` is the arrival epoch of the current visit to ``node_id``, not
+    a fresh one per poll. Pending-ness (:func:`hub_node_pending`) derives from these rows
+    plus the newest transition, so a ``kill -9`` between polls resumes from the store."""
 
     node_id: str
     epoch: int
@@ -377,19 +258,9 @@ class MigrationSource(StrEnum):
     """What moved a chunk onto another graph — a migration's attribution (issue #164).
 
     Three paths reach the same :meth:`IWriteChunkRepository.record_migration`, and without
-    a discriminator their facts are byte-identical in history. Two of them are
-    operator-initiated, so an operator finding a chunk on a graph it did not start on can
-    at least reconstruct their own action; the third is a **standing policy** that moves
-    chunks with nobody having asked, and that one has to be able to answer "why is this
-    chunk here" on its own.
+    a discriminator their facts are byte-identical in history."""
 
-    Same-name is not a usable tell, because ``hub chunk migrate`` by name also resolves to
-    a newer mint of the same name — so the fact records the source rather than leaving a
-    reader to infer it.
-    """
-
-    #: A judgement choice whose ``to:`` named ``graph:<name>`` (issue #90) — authored into
-    #: the graph itself, so the move is part of the workflow's own design.
+    #: A judgement choice whose ``to:`` named ``graph:<name>`` (issue #90).
     AUTHORED_EDGE = "authored-edge"
     #: The chunk's standing ``intended_migration``, set by an operator (issue #124).
     INTENT = "intent"
@@ -399,30 +270,10 @@ class MigrationSource(StrEnum):
 
 @dataclass(frozen=True)
 class MigrationFact:
-    """A ``chunk_migrations`` fact — a cross-graph migration re-pinned the chunk (issue #90).
-
-    Its own recorded fact, **never a transition** (``bzh:migration-not-transition``): a
-    judgement choice targeting another graph ends the current attempt, re-pins the chunk
-    to ``to_graph_id``, releases the route, and re-queues the chunk at ``landed_node_id``
-    (name-match-else-entry against the target graph, resolved concretely at write time —
-    ``None`` only as a schema allowance, read as the target's entry). Recorded at the
-    submitting ``epoch`` (the fence the next claim mints above); ``model`` is the
-    re-pinned model, or ``None`` when the migration kept the chunk's current model.
-    ``from_node_id``/``from_graph_id``/``choice_name`` describe the edge for the history
-    view. The status derivations key on ``(recorded_at, epoch)`` supersession of the
-    newest transition and read ``landed_node_id``.
-
-    ``landed_node_executor`` is the landing node's executor facet, resolved at read time
-    from ``graph_nodes.executor`` against ``to_graph_id`` — mirroring
-    :attr:`TransitionFact.to_node_executor` — so a migration landing on a hub-executed
-    node derives ``delivering``, not ``ready`` (issue #111).
-
-    ``source`` (issue #164) attributes the move — see :class:`MigrationSource`. ``None``
-    for a row written before the discriminator existed: deliberately *unrecorded* rather
-    than back-filled to a guess, since the two operator-driven sources are
-    indistinguishable in a legacy row and claiming either would be a fabricated
-    provenance.
-    """
+    """A ``chunk_migrations`` fact — a cross-graph migration re-pinned the chunk (issue
+    #90). Its own recorded fact, **never a transition** (``bzh:migration-not-transition``).
+    ``landed_node_executor`` is resolved at read time against ``to_graph_id``; ``source``
+    (issue #164) attributes the move, and is ``None`` on a row predating it."""
 
     from_node_id: str | None
     from_graph_id: str
@@ -455,15 +306,9 @@ class PauseFact:
 @dataclass(frozen=True)
 class UsageFact:
     """A ``usage.recorded`` fact — one harness invocation's usage/cost telemetry (issue #59).
-
-    Unlike :class:`LeaseFact`/:class:`EscalationFact`, usage is deliberately **not**
-    epoch-fenced: a row whose epoch trails the chunk's latest is real spend incurred by a
-    fenced-out zombie attempt, and must be attributed and summed exactly like every other
-    row — never dropped (the completion path's stale-epoch rejection, ``apply.py``, is the
-    contrast). ``node_id``/``epoch``/``kind``/``model`` identify the invocation for the
-    per-node-step history view; the chunk-level total (:func:`derive_chunk_usage`) sums
-    every row's tokens/cost regardless of epoch.
-    """
+    Deliberately **not** epoch-fenced: a row whose epoch trails the chunk's latest is real
+    spend by a fenced-out zombie attempt and must still be summed, never dropped. The
+    chunk-level total (:func:`derive_chunk_usage`) sums every row regardless of epoch."""
 
     node_id: str
     epoch: int
@@ -479,20 +324,10 @@ class UsageFact:
 
 @dataclass(frozen=True)
 class EventRow:
-    """One ``event_log`` row — a durable, typed, severity-ranked operational fact
-    (issue #125). Distinct from every chunk-scoped ``*Fact`` above: ``chunk_id`` is
-    ``None`` for a runner-scoped event (no single chunk to name), and, like every fact
-    here, an ``EventRow`` never changes once recorded (``bzh:facts-not-status``).
-    ``detail`` is the event-specific payload the fixed columns don't carry, already
-    decoded from its JSON-on-the-wire storage. A negative ``id`` marks a row
-    :func:`derive_event_feed` **synthesized** from an open escalation rather than one
-    actually read from ``event_log`` — see that function.
-
-    ``runner_id`` is ``None`` **only** on such a projected row: an escalation is a
-    chunk-scoped standing surface that names no runner. Every row actually read from
-    ``event_log`` carries one (the column is ``NOT NULL``). It is spelled ``None``
-    rather than ``""`` so "names no runner" is absent-by-type, and no consumer has to
-    special-case an empty string (issue #155)."""
+    """One ``event_log`` row — a durable, typed, severity-ranked operational fact (issue
+    #125). ``chunk_id`` is ``None`` for a runner-scoped event; ``detail`` is the
+    event-specific payload, already decoded from JSON. A negative ``id`` and a ``None``
+    ``runner_id`` mark a row :func:`derive_event_feed` synthesized rather than read."""
 
     id: int
     recorded_at: datetime
@@ -509,19 +344,15 @@ class EventRow:
 @dataclass(frozen=True)
 class EscalationOpen:
     """One fleet-wide **open** escalation — the input :func:`derive_event_feed` folds
-    into the unified event feed (issue #125). Unlike :class:`EscalationFact` (one
-    chunk's own escalation facts, read off :attr:`ChunkFacts.escalations`), this
-    carries its own ``chunk_id`` since :meth:`IReadChunkRepository.list_open_escalations`
-    spans every chunk at once."""
+    into the unified event feed (issue #125). Carries its own ``chunk_id``, since the
+    read it comes from spans every chunk at once."""
 
     chunk_id: str
     recorded_at: datetime
     takeover_command: str
 
 
-#: The default cap on :meth:`IReadChunkRepository.list_events` — an unbounded read of
-#: an append-only table is an unbounded response; ``GET /api/events`` inherits this as
-#: its own default ``limit``.
+#: Default cap on ``list_events`` — an unbounded read of an append-only table is an unbounded response.
 DEFAULT_EVENT_LIST_LIMIT = 200
 
 _SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
@@ -530,14 +361,9 @@ _SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
 def derive_event_feed(events: list[EventRow], escalations: list[EscalationOpen]) -> list[EventRow]:
     """Unify ``event_log`` rows with every currently-open escalation (issue #125).
 
-    Each open escalation projects into a synthetic ``EventRow`` — ``severity="critical"``,
-    ``kind="needs-human"``, the escalation's own ``chunk_id``/``recorded_at``, a
-    ``runner_id`` of ``None`` (an escalation names no runner), and a ``message`` naming
-    the takeover — carrying a **negative, synthetic** ``id`` (it is
-    not an ``event_log`` row; escalations are never written there). The merged list
-    sorts **severity-then-recency**: critical before warning before info, newest
-    ``recorded_at`` first within a severity band. A pure function of already-loaded
-    rows (``bzh:domain-takes-objects``), unit-testable with zero store."""
+    Each open escalation projects into a synthetic ``EventRow`` carrying a **negative**
+    ``id`` — it is not an ``event_log`` row. The merged list sorts severity-then-recency:
+    critical before warning before info, newest ``recorded_at`` first within a band."""
     projected = [
         EventRow(
             id=-(i + 1),
@@ -548,10 +374,8 @@ def derive_event_feed(events: list[EventRow], escalations: list[EscalationOpen])
             chunk_id=esc.chunk_id,
             lease_id=None,
             node_name=None,
-            # `esc.takeover_command` is not always a resume command: a hub-authored
-            # escalation's raw field can carry operator prose (or be empty), so this
-            # only claims "resume" when there is actually something to resume — see
-            # `blizzard-context:/domain/humans.md` for the full enumeration.
+            # `esc.takeover_command` is not always a resume command, so this promises a
+            # way to proceed only when one exists (`blizzard-context:/domain/humans.md`).
             message=(
                 f"chunk {esc.chunk_id} needs a human — see the chunk's escalation for how to proceed"
                 if esc.takeover_command
@@ -570,49 +394,9 @@ def derive_event_feed(events: list[EventRow], escalations: list[EscalationOpen])
 @dataclass(frozen=True)
 class ActivityRow:
     """One row of the activity feed (issue #213) — a historical fact reshaped into the
-    same vocabulary a live SSE frame carries.
-
-    ``type`` mirrors one of the event broker's own frame-type constants
-    (``"chunk-changed"`` / ``"event-logged"`` / ``"runner-changed"``) as a plain string,
-    never the ``events.broker`` module itself (``bzh:domain-core`` — the domain stays
-    events-layer-free, the same reason :attr:`ChunkChange.cause` widens to ``str``).
-
-    ``key`` is the identity of the underlying fact — a table-qualified natural key, e.g.
-    ``"transitions:tr_01J..."`` or ``"chunk_pause_facts:57"`` — the tiebreak
-    :func:`derive_activity_feed` sorts on beneath ``at``; never itself surfaced as a
-    stable frame id (unlike :class:`~blizzard.hub.events.broker.Event`'s monotonic
-    ``id``, which this row has no equivalent of).
-
-    ``at`` is the sort/window instant: the fact's own recorded timestamp for every
-    source except the runner-*local*-pause pair, which has no hub-side receipt instant
-    to use instead (see :meth:`IReadRunnerRegistry.list_pause_facts_since`) and so
-    risks clock skew against the runner's own reported clock — a documented, deliberate
-    gap, not silently assumed away.
-
-    The remaining fields are present-when-derivable-here, mirroring the live frame's own
-    present-when-meaningful shape (:meth:`~blizzard.hub.events.broker.EventBroker.publish_chunk_changed`
-    / ``publish_runner_changed``) — never placeholder ``None`` standing in for "checked
-    and absent" versus "not this row's concern".
-
-    Chunk-changed fields: ``chunk_id``, ``runner_id`` (only where the source fact table
-    itself records one — a route, a transition, a question), ``cause`` (one of
-    :data:`~blizzard.hub.events.broker.ChunkChangeCause`'s members, widened to ``str``
-    for the same reason ``type`` is), and ``graph_id``. ``status``/``prev_status``/
-    ``node``/``prev_node`` need a full graph resolution this derivation deliberately does
-    not perform (no :class:`~blizzard.hub.domain.graph.IReadGraphRepository` seam is
-    threaded through here) — they stay ``None``. ``prev_status`` is *always* absent for a
-    historical row regardless: unlike the live frame, there is no "immediately-prior"
-    snapshot to have taken.
-
-    Event-logged fields: ``severity``, ``kind``, ``chunk_id``, ``runner_id`` — read
-    straight off an already-loaded :class:`EventRow` (:meth:`IReadChunkRepository.list_events`).
-
-    Runner-changed fields: ``runner_id``, ``kind`` (one of
-    :data:`~blizzard.hub.events.broker.RunnerChangeKind`'s pause-family members —
-    ``registered``/``heartbeat`` are muted client-side and never sourced here), ``by``,
-    ``reason`` (the runner-*local*-pause pair's free-text cause; always ``None`` off the
-    fleet-brake pair).
-    """
+    same vocabulary a live SSE frame carries. ``type`` mirrors a frame-type constant as a
+    plain string (``bzh:domain-core``); ``key`` is a table-qualified natural key used only
+    as the sort tiebreak; ``at`` is the fact's own recorded instant."""
 
     type: str
     key: str
@@ -656,23 +440,9 @@ def derive_activity_feed(
     limit: int,
 ) -> list[ActivityRow]:
     """Merge the activity feed's three already-bounded per-source reads into one feed
-    (issue #213) — the board's Event log backfill on page load.
-
-    ``chunk_changed`` is :meth:`IReadChunkRepository.activity_facts_since`'s own read
-    (one row per :data:`~blizzard.hub.events.broker.ChunkChangeCause` member, ``edited``
-    excepted — no fact table backs it); ``events`` is the existing
-    :meth:`IReadChunkRepository.list_events` read, reused rather than reinvented and
-    reshaped here (:func:`_event_row_to_activity`); ``runner_changed`` is
-    :meth:`~blizzard.hub.domain.registry.IReadRunnerRegistry.list_pause_facts_since`'s
-    own read, pause-family only.
-
-    Each argument is already bounded (``since``+``limit``) by its own repository seam
-    (``bzh:repository-split``) — this performs no filtering of its own, only the merge:
-    sorts the union by ``(at desc, key desc)`` — recency first, ``key`` breaking an
-    exact-instant tie deterministically — and caps to ``limit`` on the way out (worst
-    case every source contributes its own ``limit`` rows, so up to ``n_sources * limit``
-    enter this merge). A pure function of already-loaded rows (``bzh:domain-takes-objects``);
-    an empty source set — every argument empty — returns an empty list."""
+    (issue #213). Each argument is already bounded by its own repository seam
+    (``bzh:repository-split``), so this only merges: sorts the union by ``(at desc, key
+    desc)`` — ``key`` breaking an exact-instant tie — and caps to ``limit``."""
     merged = [*chunk_changed, *(_event_row_to_activity(e) for e in events), *runner_changed]
     merged.sort(key=lambda row: (row.at, row.key), reverse=True)
     return merged[:limit]
@@ -680,7 +450,7 @@ def derive_activity_feed(
 
 @dataclass(frozen=True)
 class DecisionChoice:
-    """One selectable gate outcome — a button on the board/bot."""
+    """One selectable gate outcome."""
 
     name: str
     description: str
@@ -690,11 +460,8 @@ class DecisionChoice:
 class DecisionRow:
     """A gate decision in full — the surfacing/read model.
 
-    Resolution and resolving-transition state are **derived**: ``resolved_choice`` is
-    set once a resolution row exists, and ``transitioned`` is true once a transition
-    references this decision (the runner has advanced the chunk). The holding
-    runner acts on a decision that is resolved but not yet transitioned.
-    """
+    Resolution state is **derived**: ``resolved_choice`` is set once a resolution row
+    exists, and ``transitioned`` is true once a transition references this decision."""
 
     decision_id: str
     chunk_id: str
@@ -715,35 +482,23 @@ class DecisionRow:
 
 @dataclass(frozen=True)
 class ChunkFacts:
-    """Every fact a chunk's status derives from, already loaded.
-
-    The derivation is a pure function of this aggregate — the unit tests build it
-    directly, no store required.
-    """
+    """Every fact a chunk's status derives from, already loaded. The derivation is a
+    pure function of this aggregate — the unit tests build it directly, no store."""
 
     minted: bool
     promoted: bool = False
     stopped: bool = False
-    # ``chunk.stopped``'s own instant (issue #173) — kept alongside ``stopped`` rather
-    # than replacing it: the status derivation keeps reading the boolean, so no existing
-    # derivation unit test changes, and this stays render-only (:func:`derive_completed_at`).
-    # ``None`` exactly when ``stopped`` is False.
+    # ``chunk.stopped``'s own instant (issue #173) — render-only; ``None`` exactly when not stopped.
     stopped_at: datetime | None = None
-    # ``delivery.landed`` — the whole-chunk terminal fact ``finalize_delivery`` writes
-    # atomically with the terminal transition (merge-to-main). Informational only
-    # (``bzh:facts-not-status``): DONE derives from :func:`newest_transition_is_terminal`,
-    # while this feeds :func:`has_landed_repos` alongside ``landed_repos`` below, so a
-    # merged-but-not-yet-terminal chunk still reads "landed" honestly in chunk detail.
+    # ``delivery.landed`` — the whole-chunk terminal fact, informational only
+    # (``bzh:facts-not-status``): DONE derives from the terminal transition, not this.
     delivery_landed: bool = False
-    # The chunk's per-repo ``delivery.repo_landed`` facts — recorded as each repo lands,
-    # independent of whether the chunk's delivery has reached a terminal transition yet.
-    # Feeds :func:`has_landed_repos`; the derivation reads only non-emptiness.
+    # The chunk's per-repo ``delivery.repo_landed`` facts, independent of whether delivery
+    # has reached a terminal transition; the derivation reads only non-emptiness.
     landed_repos: frozenset[str] = field(default_factory=frozenset)
     pr_closed: bool = False
-    # The newest ``delivery_pr_closed.closed_at`` across every repo's row (issue #173) —
-    # kept alongside ``pr_closed`` for the same reason as ``stopped_at`` above. A
-    # multi-repo chunk in open-PR mode can carry several rows (no chunk_id-unique
-    # constraint, unlike ``delivery_pr_opened``); this is the newest one.
+    # The newest ``delivery_pr_closed.closed_at`` across every repo's row (issue #173) — a
+    # multi-repo chunk in open-PR mode can carry several.
     pr_closed_at: datetime | None = None
     escalations: list[EscalationFact] = field(default_factory=list)
     leases: list[LeaseFact] = field(default_factory=list)
@@ -754,11 +509,8 @@ class ChunkFacts:
     questions: list[QuestionFact] = field(default_factory=list)
     decisions: list[DecisionFact] = field(default_factory=list)
     requeues: list[RequeueFact] = field(default_factory=list)
-    # The chunk's cross-graph migration facts (issue #90) — each re-pins the chunk to
-    # another graph and re-queues it. Feeds :func:`newest_migration` /
-    # :func:`current_node_id` and gates the terminal/hub-node checks, so a re-queued chunk
-    # derives ``ready`` at its new landing node rather than ``done``/``delivering`` off its
-    # superseded pre-migration transition.
+    # The chunk's cross-graph migration facts (issue #90) — each re-pins the chunk and
+    # re-queues it, superseding an earlier transition for the terminal/hub-node checks.
     migrations: list[MigrationFact] = field(default_factory=list)
     pr_opened: list[PrOpenedFact] = field(default_factory=list)
     pauses: list[PauseFact] = field(default_factory=list)
@@ -766,9 +518,8 @@ class ChunkFacts:
     # The chunk's recorded delivery kick-backs (#64) — feeds :func:`bounce_count` /
     # :func:`bounces_over_cap` and the chunk-detail bounce history. Never a status.
     bounces: list[BounceFact] = field(default_factory=list)
-    # The chunk's recorded hub-node poll attempts (#66) — feeds :func:`hub_node_pending`
-    # and the executor's own interval/timeout gating. Never a status: pending is a
-    # facet of ``delivering`` (the newest transition still enters the hub node).
+    # The chunk's recorded hub-node poll attempts (#66) — feeds :func:`hub_node_pending`.
+    # Never a status: pending is a facet of ``delivering``.
     hub_node_polls: list[HubNodePollFact] = field(default_factory=list)
 
 
@@ -778,17 +529,14 @@ class ChunkFacts:
 def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
     """Derive a chunk's single status from its facts, first match wins.
 
-    ``done`` is the **only** terminal (#63): it derives from *reaching* the terminal
-    transition (:func:`newest_transition_is_terminal`), not from the landed fact —
-    an authored ``merged -> <node>`` edge can land every repo and keep the chunk
-    running or escalated in a post-merge node, never un-merged, never wrongly DONE.
-    """
+    ``done`` is the **only** terminal (#63) and derives from *reaching* the terminal
+    transition, not from the landed fact — an authored ``merged -> <node>`` edge can
+    land every repo and keep the chunk running in a post-merge node."""
     if facts.stopped:
         return ChunkStatus.STOPPED
     if newest_transition_is_terminal(facts) or facts.pr_closed:
-        # ``pr.closed`` is the open-pr mode's terminal fact (merged or closed-without-merge,
-        # both terminal); its finalize always lands the terminal transition too, but the
-        # explicit check keeps this branch legible about the open-pr counterpart.
+        # ``pr.closed`` is the open-pr mode's terminal fact (merged or closed unmerged); its
+        # finalize lands the terminal transition too, but the check keeps this legible.
         return ChunkStatus.DONE
     if _has_open_escalation(facts):
         return ChunkStatus.NEEDS_HUMAN
@@ -805,29 +553,17 @@ def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
     if _has_live_route(facts):
         return ChunkStatus.RUNNING
     if not facts.promoted:
-        # An un-promoted chunk rests ``not_ready`` — visible but never claimed.
-        # Sits just above the ``ready`` fall-through and below every post-claim state, so a
-        # promoted chunk that later runs/delivers/parks still derives from those facts; only
-        # a fresh, un-promoted chunk with no live route lands here.
+        # An un-promoted chunk rests ``not_ready`` — visible but never claimed. Below every
+        # post-claim state, so only a fresh chunk with no live route lands here.
         return ChunkStatus.NOT_READY
     return ChunkStatus.READY
 
 
 def derive_completed_at(facts: ChunkFacts) -> datetime | None:
     """The instant a terminal chunk finished, or ``None`` (issue #173) — render-only,
-    never a status: :func:`derive_chunk_status` alone still decides ``stopped``/``done``.
-
-    Mirrors that function's own branch order so the two never disagree: ``stopped``
-    reads :attr:`ChunkFacts.stopped_at`; ``done`` via the terminal transition reads
-    that transition's instant, or — in open-PR mode, where ``pr.closed`` can also
-    stand alone as the terminal fact — the **later** of the terminal transition and
-    the newest :attr:`ChunkFacts.pr_closed_at` across a multi-repo chunk's rows
-    (closing every repo's PR can lag the transition that already reached the
-    terminal). Every other status, including a chunk whose newest movement is a
-    **migration** that superseded an earlier terminal transition
-    (:func:`newest_transition_is_terminal` returns False for it) — not done, so this
-    reports ``None`` rather than a stale instant from the superseded transition.
-    """
+    never a status. Mirrors :func:`derive_chunk_status`'s branch order so the two never
+    disagree, taking the **later** of the terminal transition and ``pr_closed_at`` in
+    open-PR mode, where closing every repo's PR can lag the terminal transition."""
     if facts.stopped:
         return facts.stopped_at
     terminal_transition = newest_transition(facts) if newest_transition_is_terminal(facts) else None
@@ -847,12 +583,8 @@ def open_escalation(facts: ChunkFacts) -> EscalationFact | None:
     """The newest escalation not yet closed by a later lease mint, or ``None``.
 
     Requeue/takeover close an escalation by **supersession** — a later lease mint or a
-    later ``requeue.recorded`` fact, never a resolution fact — so an escalation
-    stays open exactly while nothing was recorded after it. When open, its
-    ``takeover_command`` is not always a resume command a human pastes — see
-    ``EscalationFact`` above — but the board surfaces whatever it carries on the
-    ``needs_human`` chunk.
-    """
+    later ``requeue.recorded`` fact, never a resolution fact — so an escalation stays
+    open exactly while nothing was recorded after it."""
     if not facts.escalations:
         return None
     newest = max(facts.escalations, key=lambda e: e.recorded_at)
@@ -876,22 +608,17 @@ def _is_paused(facts: ChunkFacts) -> bool:
 def open_pause(facts: ChunkFacts) -> PauseFact | None:
     """The newest pause fact iff it currently reads paused, else ``None`` (issue #46).
 
-    The wire (``PauseView``) and the runner both need the **fact** — who paused it and
-    when — not merely the derived boolean ``_is_paused`` gives the status query. PAUSED
-    sits below the human-gated states, so a status-keyed reader would miss a chunk that
-    is paused *and* parked on a question (``status == waiting_on_human``); this reads
-    the fact directly, independent of where pause sits in the derivation order.
-    """
+    Reads the fact directly rather than the derived status: PAUSED sits below the
+    human-gated states, so a status-keyed reader would miss a chunk that is paused
+    *and* parked on a question."""
     return facts.pauses[-1] if facts.pauses and facts.pauses[-1].paused else None
 
 
 def open_questions(facts: ChunkFacts) -> list[QuestionFact]:
     """The chunk's unanswered questions, oldest first.
 
-    A question is open exactly while no ``question.answered`` row exists; an
-    answer flips it out of ``waiting_on_human``. The list is what the chunk detail and
-    ``blizzard hub status`` surface, and its non-emptiness is the derivation's input.
-    """
+    A question is open exactly while no ``question.answered`` row exists; an answer
+    flips it out of ``waiting_on_human``, and non-emptiness is the derivation input."""
     return sorted((q for q in facts.questions if not q.answered), key=lambda q: (q.asked_at, q.question_id))
 
 
@@ -903,11 +630,8 @@ def has_open_decision(facts: ChunkFacts) -> bool:
 def open_decision(facts: ChunkFacts) -> DecisionFact | None:
     """The newest gate decision no resolution has flipped off, or ``None``.
 
-    A decision is open while it carries no resolution row — the person has not yet
-    picked a choice. Once resolved, ``waiting_on_human`` drops away (the chunk's route
-    is still live, so it derives ``running`` until the holding runner records the
-    resolving transition). Pending-ness is thus derived, never stored.
-    """
+    A decision is open while it carries no resolution row. Once resolved,
+    ``waiting_on_human`` drops away. Pending-ness is derived, never stored."""
     unresolved = [d for d in facts.decisions if not d.resolved]
     if not unresolved:
         return None
@@ -917,10 +641,8 @@ def open_decision(facts: ChunkFacts) -> DecisionFact | None:
 def awaiting_external_merge(facts: ChunkFacts) -> bool:
     """A ``delivering`` chunk parked on an open PR — ``pr.opened`` without ``pr.closed``.
 
-    Not a distinct status: the chunk derives ``delivering`` (its newest transition still
-    enters the deliver hub node, environments held). This is the board **detail**
-    that distinguishes an open-pr park from an in-flight merge.
-    """
+    Not a distinct status: the chunk still derives ``delivering``. A **detail** that
+    distinguishes an open-pr park from an in-flight merge."""
     return bool(facts.pr_opened) and not facts.pr_closed
 
 
@@ -928,13 +650,10 @@ _MARKER_PREFIX = "merged/"
 
 
 def landed_repos_from_markers(artifacts: Sequence[ArtifactRow]) -> frozenset[str]:
-    """Repos landed via a generic hub command node's ``merged/<repo>`` marker
-    artifact (#67) — the convention the authored default (and PR+CI example) delivery
-    graphs record per pushed repo, via the mid-run marker callback
-    (:meth:`~blizzard.hub.delivery.hub_node.HubNodeExecutor.record_marker`). No engine
-    code names a "deliver" node, so a chunk's landed detail is read off its own node
-    artifacts rather than a privileged fact family.
-    """
+    """Repos landed via a hub command node's ``merged/<repo>`` marker artifact (#67).
+
+    No engine code names a "deliver" node, so a chunk's landed detail is read off its
+    own node artifacts rather than a privileged fact family."""
     return frozenset(
         artifact.name.removeprefix(_MARKER_PREFIX) for artifact in artifacts if artifact.name.startswith(_MARKER_PREFIX)
     )
@@ -943,14 +662,9 @@ def landed_repos_from_markers(artifacts: Sequence[ArtifactRow]) -> frozenset[str
 def has_landed_repos(facts: ChunkFacts, artifacts: Sequence[ArtifactRow] = ()) -> bool:
     """True iff any repo has landed for this chunk — informational, never a status (#63).
 
-    Feeds chunk-detail truthfully whether landing is fully finalized (the whole-chunk
-    ``delivery_landed`` fact) or only some/all repos have landed while the chunk sits
-    in a post-merge node, running or escalated — "merged but stuck" honestly, never
-    un-merged. ``artifacts`` is the chunk's node artifacts, read for the generic
-    ``merged/<repo>`` marker convention (#67) — the CURRENT landing truth; the fact
-    inputs (``delivery_landed``/``landed_repos``) are read alongside for BACK-COMPAT, so
-    a historical chunk still reads landed.
-    """
+    ``artifacts`` carries the generic ``merged/<repo>`` marker convention (#67) — the
+    current landing truth; the fact inputs are read alongside for back-compat, so a
+    historical chunk still reads landed."""
     return facts.delivery_landed or bool(facts.landed_repos) or bool(landed_repos_from_markers(artifacts))
 
 
@@ -974,9 +688,7 @@ def bounces_over_cap(facts: ChunkFacts, cap: int) -> bool:
 def newest_migration(facts: ChunkFacts) -> MigrationFact | None:
     """The chunk's newest cross-graph migration fact, or ``None`` (issue #90).
 
-    Ordered by ``(recorded_at, epoch)`` — the same key :func:`newest_transition` uses —
-    so "the latest movement" is comparable across the two fact kinds.
-    """
+    Ordered by ``(recorded_at, epoch)`` — the same key :func:`newest_transition` uses."""
     if not facts.migrations:
         return None
     return max(facts.migrations, key=lambda m: (m.recorded_at, m.epoch))
@@ -985,12 +697,9 @@ def newest_migration(facts: ChunkFacts) -> MigrationFact | None:
 def _latest_movement_is_migration(facts: ChunkFacts) -> bool:
     """The chunk's newest movement fact is a migration, not a transition (issue #90).
 
-    A migration re-queues the chunk, so once it is the latest movement the chunk's
-    current node is the migration's landing node and the pre-migration transition's
-    terminal/hub identity is superseded (a re-queued chunk is ``ready``, never ``done``
-    off its old-graph terminal). Ties go to the migration — it is recorded *after* the
-    transition that brought the chunk to the node it migrates out of.
-    """
+    A migration re-queues the chunk, so once it is the latest movement the pre-migration
+    transition's terminal/hub identity is superseded. Ties go to the migration — it is
+    recorded *after* the transition that brought the chunk to the node it leaves."""
     migration = newest_migration(facts)
     if migration is None:
         return False
@@ -1004,13 +713,8 @@ def newest_transition_is_terminal(facts: ChunkFacts) -> bool:
     """The newest accepted transition's target is the reserved terminal (``done``, #63).
 
     The **sole** DONE trigger — reaching the terminal, not any landed/closed fact. A
-    chunk whose repos all landed but whose newest transition entered a post-merge node
-    (an authored ``merged -> <node>`` edge) does not derive DONE here; it derives
-    ``running``/``needs_human`` from the branches below, with :func:`has_landed_repos`
-    surfacing the landed detail truthfully alongside. A **later migration** supersedes the
-    transition entirely (issue #90): a re-queued chunk is never DONE off a pre-migration
-    terminal.
-    """
+    later migration supersedes the transition entirely (issue #90): a re-queued chunk
+    is never DONE off a pre-migration terminal."""
     if _latest_movement_is_migration(facts):
         return False
     transition = newest_transition(facts)
@@ -1020,12 +724,8 @@ def newest_transition_is_terminal(facts: ChunkFacts) -> bool:
 def _newest_transition_enters_hub_node(facts: ChunkFacts) -> bool:
     """The newest accepted transition's target is a hub-executed node.
 
-    A later migration supersedes it (issue #90) — a re-queued chunk derives its status off
-    the migration's own landing node, not the pre-migration transition. That landing node
-    can itself be hub-executed (issue #111): a migration re-pinning the chunk onto a hub
-    node is retained by the hub exactly as a transition into one is, so it derives
-    ``delivering``, not ``ready``.
-    """
+    A later migration supersedes it (issue #90), and that landing node can itself be
+    hub-executed (issue #111), deriving ``delivering`` rather than ``ready``."""
     if _latest_movement_is_migration(facts):
         migration = newest_migration(facts)
         return migration is not None and migration.landed_node_executor is Executor.HUB
@@ -1036,12 +736,9 @@ def _newest_transition_enters_hub_node(facts: ChunkFacts) -> bool:
 def landing_node(target_graph: Graph, from_node_name: str | None) -> str:
     """The node a migration lands on in ``target_graph`` — name-match-else-entry (issue #90).
 
-    ``bzh:migration-not-transition``'s landing rule: land on the node of the target graph
-    whose name matches the node the chunk migrated *from*, or the target's entry node when
-    no name matches (the triage case — the target has no same-named node). A pure function
-    of the passed-in graph (``bzh:domain-takes-objects``); the caller resolves the target
-    graph and this picks the concrete landing node id to record.
-    """
+    ``bzh:migration-not-transition``'s landing rule: match the name of the node the chunk
+    migrated *from*, or the target's entry node when no name matches. A pure function of
+    the passed-in graph (``bzh:domain-takes-objects``)."""
     if from_node_name is not None:
         node = target_graph.node_by_name(from_node_name)
         if node is not None:
@@ -1052,10 +749,8 @@ def landing_node(target_graph: Graph, from_node_name: str | None) -> str:
 def hub_node_poll_history(facts: ChunkFacts, *, node_id: str, epoch: int) -> list[HubNodePollFact]:
     """A hub node's poll attempts for one (node, epoch) visit, oldest first (#66).
 
-    The executor's own gating input: the earliest entry bounds ``poll_timeout``, the
-    newest gates ``poll_interval`` — both read off this history rather than any
-    in-memory state, so a ``kill -9`` between polls resumes exactly here.
-    """
+    The earliest entry bounds ``poll_timeout``, the newest gates ``poll_interval`` —
+    read off this history rather than in-memory state, so a ``kill -9`` resumes here."""
     return sorted(
         (p for p in facts.hub_node_polls if p.node_id == node_id and p.epoch == epoch), key=lambda p: p.polled_at
     )
@@ -1064,14 +759,9 @@ def hub_node_poll_history(facts: ChunkFacts, *, node_id: str, epoch: int) -> lis
 def hub_node_pending(facts: ChunkFacts) -> HubNodePollFact | None:
     """The chunk's in-progress hub-node poll, or ``None`` — chunk-detail honesty (#66).
 
-    Not a distinct status: the chunk still derives ``delivering`` (its newest
-    transition still enters the hub node — :func:`_newest_transition_enters_hub_node`).
-    This is the DETAIL that distinguishes a hub node about to run its first attempt
-    from one already parked mid-poll, mirroring :func:`awaiting_external_merge`. A
-    poll fact recorded for the newest transition's ``(to_node_id, epoch)`` with no
-    later transition means the node is still waiting on external state; the caller
-    resolves the node's ``poll_interval`` to compute the next-poll time.
-    """
+    Not a distinct status: the chunk still derives ``delivering``. A poll fact recorded
+    for the newest transition's ``(to_node_id, epoch)`` with no later transition means
+    the node is still waiting on external state."""
     transition = newest_transition(facts)
     if transition is None or transition.to_node_executor is not Executor.HUB:
         return None
@@ -1084,28 +774,9 @@ def newest_live_route(
 ) -> RouteCreatedFact | None:
     """The newest ``route.created`` fact still live, or ``None`` if released.
 
-    The single tie-break both :func:`_has_live_route` and :meth:`ChunkStore.route_of`
-    resolve against, so route liveness has exactly one answer at a same-instant tie
-    (issue #41). Ordered by ``(timestamp, seq)``, the same
-    shape :func:`newest_transition` uses for ``(recorded_at, epoch)``: ``seq`` is a
-    per-chunk counter shared across both fact kinds, assigned in real write order, so
-    it breaks a timestamp tie the way the timestamp itself cannot.
-
-    This resolves both directions correctly rather than picking a fixed winner:
-
-    - A same-instant **detach** records its ``route.released`` *after* the route's
-      ``route.created`` in real write order, so its ``seq`` is higher — the release
-      outranks the create and the route reads not-live (the gate a same-instant
-      detach's own 409 check relies on).
-    - A same-instant **re-claim** records a fresh ``route.created`` *after* the prior
-      release in real write order, so its ``seq`` is higher than that release's — the
-      new create outranks the old release and the route reads live (see
-      ``test_reclaimed_after_release_is_running_again``, which this must not break).
-
-    Under :class:`~blizzard.foundation.clock.SystemClock` a same-instant tie is not
-    reachable in practice (microsecond resolution); ``seq`` only matters under a
-    :class:`~blizzard.foundation.clock.FixedClock`, which is where the tie was found.
-    """
+    The single tie-break route liveness resolves against (issue #41). Ordered by
+    ``(timestamp, seq)``, where ``seq`` is a per-chunk counter assigned in real write
+    order (pinned by ``test_reclaimed_after_release_is_running_again``)."""
     if not routes_created:
         return None
     newest_created = max(routes_created, key=lambda r: (r.created_at, r.seq))
@@ -1127,20 +798,9 @@ def newest_live_route_token(
 ) -> RouteTokenMintedFact | None:
     """The chunk's live route capability token, or ``None`` if unclaimed/released (issue #84a).
 
-    The live token is the newest :class:`RouteTokenMintedFact` minted for the
-    currently-live acquisition — i.e. at or after :func:`newest_live_route`'s own
-    ``seq``. Restricting to ``seq >= live.seq`` is sufficient to scope the search to
-    the live acquisition's window with no separate upper bound against
-    ``route_released``: a token minted *before* the live route's own ``created_at``
-    fact belonged to an earlier (already-released) acquisition and is excluded by the
-    lower bound alone, and there is no later release to bound against or
-    :func:`newest_live_route` would already have returned ``None``.
-
-    Newest-fact-wins (ordered the same way :func:`newest_live_route` orders its own
-    candidates — ``(timestamp, seq)``) is what makes a re-key (Phase 6: a fresh token
-    fact appended for the same live route, same ``seq`` floor) supersede the prior
-    token immediately, with no separate revocation step.
-    """
+    The newest :class:`RouteTokenMintedFact` minted at or after :func:`newest_live_route`'s
+    own ``seq`` — that lower bound alone scopes the search to the live acquisition.
+    Newest-fact-wins is what makes a re-key supersede the prior token with no revocation."""
     live = newest_live_route(routes_created, routes_released)
     if live is None:
         return None
@@ -1153,11 +813,8 @@ def newest_live_route_token(
 def newest_transition(facts: ChunkFacts) -> TransitionFact | None:
     """The chunk's newest accepted transition — its current node derives from this.
 
-    Ordered by ``(recorded_at, epoch)``: the timestamp is the primary key, and the
-    fencing epoch (monotonic per chunk) breaks a tie between two transitions stamped
-    at the same instant — a coordinator that authors a follow-on transition under a
-    higher epoch in the same tick, or any virtual-clock test.
-    """
+    Ordered by ``(recorded_at, epoch)``: the fencing epoch breaks a tie between two
+    transitions stamped at the same instant."""
     if not facts.transitions:
         return None
     return max(facts.transitions, key=lambda t: (t.recorded_at, t.epoch))
@@ -1166,28 +823,17 @@ def newest_transition(facts: ChunkFacts) -> TransitionFact | None:
 def transition_history(facts: ChunkFacts) -> list[TransitionFact]:
     """The chunk's accepted transitions in the order they were recorded (oldest first).
 
-    The chronological walk the board renders (MVP criterion 11): each entry is
-    one node-step's edge — where it came from, the choice taken, where it went — so the
-    review-fail loop back to ``build`` reads as a visible step in the timeline. Ordered
-    by ``(recorded_at, epoch)``, the same key :func:`newest_transition` selects the tail
-    of, so "the last entry is the current node" holds by construction.
-    """
+    Ordered by ``(recorded_at, epoch)``, the same key :func:`newest_transition` selects
+    the tail of, so "the last entry is the current node" holds by construction."""
     return sorted(facts.transitions, key=lambda t: (t.recorded_at, t.epoch))
 
 
 def current_node_id(facts: ChunkFacts) -> str | None:
     """The chunk's current node id — the newest movement fact's target, else ``None``.
 
-    Normally the newest transition's ``to_node_id``. When a **migration** is the latest
-    movement (issue #90), it is the migration's ``landed_node_id`` in the re-pinned graph
-    instead — so a re-queued chunk's current node is where it landed under the new graph,
-    not the old-graph node it migrated out of.
-
-    ``None`` means the chunk has not yet moved, so its current node is the pinned graph's
-    entry node — a graph the caller already holds; resolving it is not this function's job
-    (``bzh:domain-takes-objects``). ``landed_node_id`` may itself be ``None`` (the schema
-    allowance for "the target's entry") and falls through the same ``or entry_node_id``.
-    """
+    Normally the newest transition's ``to_node_id``; when a **migration** is the latest
+    movement (issue #90), the migration's ``landed_node_id`` instead. ``None`` means the
+    chunk has not yet moved, and the caller resolves the pinned graph's entry node."""
     if _latest_movement_is_migration(facts):
         migration = newest_migration(facts)
         assert migration is not None  # _latest_movement_is_migration guarantees it
@@ -1223,20 +869,10 @@ def describe_chunk_change(
     from_graph: Graph | None = None,
 ) -> ChunkChange:
     """Derive a ``chunk-changed`` frame's content from already-loaded objects
-    (``bzh:domain-takes-objects``) — no store, no ids resolved here.
-
-    ``graph`` is the graph ``chunk`` is pinned to *after* the mutation the caller is
-    describing — ``chunk.graph_id`` names it, and this asserts the two agree rather than
-    silently deriving ``graph_id`` from a graph the chunk may not actually be on.
-
-    ``node`` is the chunk's current node **name**, resolved against ``graph``. ``prev_node``
-    is the newest transition's ``from_node_id``, resolved against ``from_graph`` when the
-    transition's own ``graph_id`` differs from ``graph.graph_id`` (a chunk that migrated
-    since that step — the same ``graph_id``-provenance :func:`transition_history` already
-    honors), else against ``graph`` itself. Both are ``None`` — omitted from the eventual
-    frame — when there is nothing to resolve, or the id resolves to no node in the graph
-    asked.
-    """
+    (``bzh:domain-takes-objects``) — no store, no ids resolved here. ``graph`` must be
+    the chunk's *post-mutation* pin. ``prev_node`` resolves against ``from_graph`` when
+    the newest transition's own ``graph_id`` differs, honoring the same
+    ``graph_id``-provenance :func:`transition_history` does."""
     assert chunk.graph_id == graph.graph_id, "graph must be the chunk's post-mutation pin"
 
     current_id = current_node_id(facts) or graph.entry_node_id
@@ -1272,24 +908,10 @@ def latest_epoch(facts: ChunkFacts) -> int | None:
 
 @dataclass(frozen=True)
 class UsageTotal:
-    """A usage/cost total summed over a set of usage facts at read time — never a
-    stored column (``bzh:facts-not-status``, the same precedent :func:`derive_chunk_status`
-    sets). Neutrally named (not ``ChunkUsage``) because it is shared by
-    :func:`derive_chunk_usage` (one chunk's own facts) and :func:`derive_fleet_usage`
-    (an arbitrary, fleet-wide set of rows) alike — describing a fleet-wide total in
-    chunk terms would be a truthful-name smell (``canon:truthful-names``).
-
-    **This is the one canonical owner of the lower-bound + PARTIAL cost contract**
-    (``canon:one-owner``) — every other usage total on the wire
-    (:class:`~blizzard.wire.chunk.ChunkUsageTotalView`,
-    :class:`~blizzard.wire.fleet.FleetSpendView`) and in the runner store
-    (:class:`~blizzard.runner.store.repository.UsageTotals`) points back to this
-    docstring rather than restating it: token counts are always exact; ``cost_usd``
-    sums only the rows that carry one — a cost-absent row (the envelope-less
-    transcript-sum fallback) contributes ``$0``, never a fabricated figure — so
-    ``cost_partial`` (True iff any summed row's ``cost_usd`` was absent) tells the
-    caller ``cost_usd`` is then a **lower bound**, never the true spend, and must be
-    surfaced as PARTIAL rather than presented as exact."""
+    """A usage/cost total summed at read time, never a stored column. **The one canonical
+    owner of the lower-bound + PARTIAL cost contract** (``canon:one-owner``): token counts
+    are exact; ``cost_usd`` sums only the rows that carry one, so ``cost_partial`` (True
+    iff any summed row lacked one) marks ``cost_usd`` a lower bound, to surface PARTIAL."""
 
     input_tokens: int
     output_tokens: int
@@ -1318,9 +940,7 @@ def derive_chunk_usage(facts: ChunkFacts) -> UsageTotal:
     """Sum a chunk's usage facts into its derived total — tokens by class + cost.
 
     Deliberately unfenced by epoch (unlike the status derivations above): every recorded
-    usage row is real spend, so every row is summed regardless of which epoch minted it.
-    A pure function of already-loaded facts, unit-testable with zero store.
-    """
+    usage row is real spend, summed regardless of which epoch minted it."""
     return _sum_usage(facts.usage)
 
 
@@ -1334,10 +954,8 @@ def derive_fleet_usage(rows: list[UsageFact]) -> UsageTotal:
 
 @dataclass(frozen=True)
 class FleetSummary:
-    """The runner machine panel's fleet-pulse counts (issue #76) — every chunk's derived
-    status folded to four buckets. Derived, never stored, same as the per-chunk status it
-    counts over. The wire shape it renders as is
-    :class:`~blizzard.wire.fleet.FleetSummaryView`."""
+    """Fleet-pulse counts (issue #76) — every chunk's derived status folded to four
+    buckets. Derived, never stored, same as the per-chunk status it counts over."""
 
     ready: int = 0
     running: int = 0
@@ -1346,14 +964,11 @@ class FleetSummary:
 
 
 def derive_fleet_summary(statuses: Iterable[ChunkStatus]) -> FleetSummary:
-    """Fold each chunk's derived status into the panel's four buckets (issue #76).
+    """Fold each chunk's derived status into the four buckets (issue #76).
 
     The one canonical statement of the fold: ``ready`` counts ``ready``; ``running``
-    counts live work in either shape (``running`` + ``delivering``); ``waiting`` counts
-    the human-parked states (``waiting_on_human`` + ``paused``); ``needs`` counts
-    ``needs_human``. The remaining statuses (``not_ready``, ``stopped``, ``done``) count
-    toward no bucket — the strip is a live-work pulse, not a fleet total. Takes already-
-    derived statuses (``bzh:domain-takes-objects``), so it unit-tests with no store."""
+    counts ``running`` + ``delivering``; ``waiting`` counts ``waiting_on_human`` +
+    ``paused``; ``needs`` counts ``needs_human``. Every other status counts toward none."""
     ready = running = waiting = needs = 0
     for st in statuses:
         if st is ChunkStatus.READY:
@@ -1372,17 +987,10 @@ def derive_fleet_summary(statuses: Iterable[ChunkStatus]) -> FleetSummary:
 
 @dataclass(frozen=True)
 class QuestionRow:
-    """A durable question row with its derived answer *and delivery* state.
-
-    The full surfacing shape behind ``blizzard hub status`` and the chunk detail's
-    questions list. Every state here is **derived**: a question is answered
-    exactly while its answer row exists, and ``answered_by``/``answer``/``answered_at``
-    are the winning first-write-wins CAS row (``None`` while open); it is *delivered*
-    exactly while an ``answer_deliveries`` row exists (issue #165) — the runner ran the
-    resume-with-answer and the dormant session woke around it. Delivery is the return
-    leg of the rendezvous: answered says a human decided, delivered says the agent
-    heard, and only the pair closes the loop for someone answering from a phone.
-    """
+    """A durable question row with its derived answer *and delivery* state. Every state
+    here is **derived**: answered exactly while an answer row exists (the winning
+    first-write-wins CAS row), delivered exactly while an ``answer_deliveries`` row
+    exists (issue #165) — answered says a human decided, delivered says the agent heard."""
 
     question_id: str
     chunk_id: str
@@ -1403,12 +1011,9 @@ class QuestionRow:
 
 @dataclass(frozen=True)
 class AnswerOutcome:
-    """The result of an answer write — first-write-wins CAS.
-
-    ``won`` is True for the write that landed the row; a later writer gets ``won=False``
-    with the **winning** row's ``answer``/``answered_by`` so the loser is told who
-    already answered (the 409 body).
-    """
+    """The result of an answer write — first-write-wins CAS. ``won`` is True for the
+    write that landed the row; a later writer gets ``won=False`` with the **winning**
+    row's ``answer``/``answered_by``, so the loser is told who already answered."""
 
     won: bool
     question_id: str
@@ -1468,14 +1073,10 @@ class IReadChunkRepository(Protocol):
         ...
 
     def closable_work_refs(self) -> list[ClosableWorkRef]:
-        """Every ``(chunk_id, ref)`` pair a landed, non-grouped chunk still owes a
-        closure attempt — :func:`has_landed_repos` over the chunk's own facts and
-        node artifacts is the sole landing gate (the same truth delivery itself
-        reads), so a chunk that landed and was *later* stopped still closes; one
-        that never landed never does, whether or not it is stopped. A ref already
-        carrying a terminal (``closed``/``gone``) closure fact is excluded; one
-        carrying only a ``failed`` fact is not, so the closure reconciler retries it.
-        Row shape: :class:`ClosableWorkRef`."""
+        """Every ``(chunk_id, ref)`` pair a landed, non-grouped chunk still owes a closure
+        attempt — :func:`has_landed_repos` is the sole landing gate, so a chunk that landed
+        and was *later* stopped still closes. A ref already carrying a terminal
+        (``closed``/``gone``) closure fact is excluded; one carrying only ``failed`` is not."""
         ...
 
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
@@ -1540,31 +1141,17 @@ class IReadChunkRepository(Protocol):
         ...
 
     def list_open_escalations(self) -> list[EscalationOpen]:
-        """Every currently-open escalation, **fleet-wide** — the same
-        supersession rule :func:`open_escalation` applies per-chunk, applied across
-        every chunk's escalations at once (issue #125). Escalations are low-volume, so
-        this is a full scan of the ``escalations`` table, not an indexed read — the
-        ``GET /api/events`` unified feed's other half."""
+        """Every currently-open escalation, **fleet-wide** — the same supersession rule
+        :func:`open_escalation` applies per-chunk, applied across every chunk at once
+        (issue #125). Escalations are low-volume, so this is a full scan."""
         ...
 
     def activity_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
-        """Every ``chunk-changed``-shaped activity row across every mapped
-        :data:`~blizzard.hub.events.broker.ChunkChangeCause` member's fact table, at or
-        after ``since`` (issue #213, AC4) — the activity feed's chunk-scoped source.
-
-        ``edited`` is deliberately unrepresented: a chunk edit (``PATCH``) mutates
-        ``chunks`` columns in place and writes no fact row, so no source exists to read
-        it from — a documented exclusion, not a gap. ``node-completed``/``hub-advanced``
-        both read ``transitions`` (discriminated by ``runner_id`` — the hub coordinator's
-        own reserved id authors a hub-advance transition, any other runner's a
-        node-completion); ``paused``/``resumed`` both read ``chunk_pause_facts``
-        (discriminated by its own ``paused`` column). Every other member reads its own
-        table (see the plan's cause -> table mapping).
-
-        Each underlying fact table is read with its own ``ORDER BY <ts> DESC, <pk> DESC
-        LIMIT :limit`` — never a full-table scan — so this method alone can return up to
-        ``n_source_tables * limit`` rows; the caller merges, sorts, and re-caps via
-        :func:`derive_activity_feed`. Unsorted across sources on its own."""
+        """Every ``chunk-changed``-shaped activity row across every mapped cause's fact
+        table, at or after ``since`` (issue #213, AC4). ``edited`` is deliberately
+        unrepresented: a chunk edit writes no fact row — a documented exclusion, not a
+        gap. Each source table is read with its own bounded ``ORDER BY … LIMIT``, so this
+        returns rows unsorted across sources."""
         ...
 
 
@@ -1575,10 +1162,9 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
     def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
         """Record a ``chunk.promoted`` fact — flips ``not_ready`` to ``ready``.
 
-        Idempotent: a chunk already promoted keeps its first row, so a re-promote (a
-        double board click, a CLI retry) writes nothing and the status is unchanged.
-        Returns the freshly-written ``chunk_promoted.id`` (issue #213's activity-feed
-        key), or ``None`` on that no-op replay — there is no fresh row to name."""
+        Idempotent: a chunk already promoted keeps its first row, so a re-promote writes
+        nothing. Returns the freshly-written ``chunk_promoted.id``, or ``None`` on that
+        no-op replay — there is no fresh row to name."""
         ...
 
     def record_lease(self, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None: ...
@@ -1589,12 +1175,9 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
     def record_route(self, route: Route, *, token_hash: str, at: datetime) -> str:
         """Record the route **and** mint its capability token's fact, atomically (issue #84a).
 
-        ``token_hash`` is the sha256 hex digest of the claim's plaintext route token —
-        already minted and hashed by the caller (``bzh:domain-takes-objects``); this
-        appends the :class:`RouteTokenMintedFact` in the same store write as
-        ``route_created`` (one transaction), never a column on the route fact itself
-        (``bzh:facts-not-status``). Returns the freshly-minted ``route_created.route_id``
-        (issue #213's activity-feed key for the ``claimed`` cause)."""
+        ``token_hash`` is the sha256 digest of the plaintext token, already hashed by the
+        caller (``bzh:domain-takes-objects``); the token fact lands in the same store
+        write, never as a column on the route fact. Returns the minted ``route_id``."""
         ...
 
     def record_route_released(self, chunk_id: str, *, at: datetime) -> int:
@@ -1603,12 +1186,9 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         ...
 
     def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:
-        """Append a fresh :class:`RouteTokenMintedFact` for the chunk's route — the
-        re-key path (issue #84b). Never mutates the prior token fact
-        (``bzh:facts-not-status``): the newest-fact-wins derivation
-        (:func:`newest_live_route_token`) supersedes it immediately, with no separate
-        revocation step. ``token_hash`` is already minted and hashed by the caller
-        (``bzh:domain-takes-objects``)."""
+        """Append a fresh :class:`RouteTokenMintedFact` for the chunk's route — the re-key
+        path (issue #84b). Never mutates the prior token fact (``bzh:facts-not-status``):
+        :func:`newest_live_route_token` supersedes it with no separate revocation step."""
         ...
 
     def record_transition(
@@ -1638,11 +1218,8 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         self, chunk_id: str, *, pointer: WorkRef, outcome: WorkItemCloseOutcome, reason: str | None, at: datetime
     ) -> bool:
         """Append one closure-attempt outcome fact, idempotent per ``(chunk_id,
-        pointer.source, pointer.ref, outcome)`` — the dedupe gate
-        :class:`DeliveryClosureReconciler`'s event emission rides on, mirroring
-        :meth:`record_hub_artifact`'s own already-existed contract. ``reason`` carries
-        the failure/gone detail; ``None`` for ``closed``. Returns True iff it wrote a
-        fresh row."""
+        pointer.source, pointer.ref, outcome)``. ``reason`` carries the failure/gone
+        detail; ``None`` for ``closed``. Returns True iff it wrote a fresh row."""
         ...
 
     def finalize_delivery(
@@ -1664,25 +1241,18 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
     def record_bounce(self, chunk_id: str, *, epoch: int, cause: str, envelope: str, at: datetime) -> bool:
         """Record one delivery kick-back (#64), idempotent by ``(chunk_id, epoch)``.
 
-        Append-only, and the sole input :func:`bounce_count` derives from. Guarded by
-        the natural key: a redelivery replay after a ``kill -9`` between this write and
-        the routing/escalation write that follows it (:meth:`record_hub_step_transition` /
-        :meth:`record_bounce_escalation`) re-enters harmlessly and never double-counts.
-        Returns True iff it wrote, False when already recorded at this epoch."""
+        Append-only, and the sole input :func:`bounce_count` derives from; the natural key
+        makes a redelivery replay after a ``kill -9`` re-enter harmlessly rather than
+        double-count. Returns True iff it wrote."""
         ...
 
     def record_bounce_escalation(
         self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str, at: datetime
     ) -> bool:
-        """Escalate a chunk whose bounce count crossed its node's cap (#64), atomically
-        and idempotently.
-
-        The hub lease and the escalation fact land in one transaction, guarded by the
-        escalation's existence at this epoch — a redelivery replay re-enters harmlessly
-        and never double-escalates. No transition is recorded: the chunk's held route and
-        stuck node are untouched, exactly like a normal retries-exhausted escalation — it
-        derives ``needs_human`` with the bounce history still readable in chunk detail.
-        Returns True iff it wrote, False when already recorded."""
+        """Escalate a chunk whose bounce count crossed its node's cap (#64), atomically and
+        idempotently. The hub lease and the escalation fact land in one transaction, guarded
+        by the escalation's existence at this epoch. No transition is recorded: the chunk's
+        held route and stuck node are untouched. Returns True iff it wrote."""
         ...
 
     def record_escalation(
@@ -1695,20 +1265,10 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         decision_id: str | None = None,
         wrapped_takeover_command: str = "",
     ) -> int:
-        """Record an ``escalation.recorded`` fact reported up by a runner.
-
-        Retries exhausted (or a dead worker past the cap): the chunk derives
-        ``needs_human`` until a later lease mint supersedes it. The takeover command
-        rides along so the parked session is resumable, alongside its
-        blizzard-runner-wrapped equivalent (``wrapped_takeover_command``, defaulted
-        empty here — this same method also lands the hub's own escalations, which
-        never have one to pass; see `blizzard-context:/domain/humans.md` for the full
-        enumeration of when each command is empty). When ``decision_id`` is set — a human
-        gate's resolved choice migrated cross-graph to an unresolvable target (issue #110)
-        — the fact carries it so that decision derives closed; neither a transition nor a
-        migration row exists to close it otherwise. Null for the ordinary escalation.
-
-        Returns the freshly-written ``escalations.id`` (issue #213's activity-feed key)."""
+        """Record an ``escalation.recorded`` fact — the chunk derives ``needs_human``
+        until a later lease mint supersedes it. The takeover command rides along so the
+        parked session is resumable (`blizzard-context:/domain/humans.md`). ``decision_id``,
+        when set, closes a gate decision no transition or migration will (issue #110)."""
         ...
 
     def record_usage(
@@ -1731,9 +1291,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
         Deliberately **not** epoch-fenced: called for every landed usage fact regardless
         of whether ``epoch`` is the chunk's latest, since it is real spend either way.
-        Idempotency rides the caller's per-runner outbound-buffer seq high-water mark
-        (:class:`FactIngestService`) — a seq already applied never reaches this method a
-        second time, so no second dedup key is needed here."""
+        Idempotency rides the caller's own applied-seq high-water mark."""
         ...
 
     def record_event(
@@ -1752,11 +1310,8 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         """Append one ``event_log`` row (issue #125) — never mutated once written.
 
         ``chunk_id`` is ``None`` for a runner-scoped event; ``detail`` is an opaque
-        event-specific payload, serialized to JSON text by the store. Clock-stamped by
-        the caller-passed ``at``, exactly like every other fact write here.
-
-        Returns the freshly-written ``event_log.id`` (issue #213's activity-feed key —
-        matches :func:`~blizzard.hub.domain.work._event_row_to_activity`'s key format)."""
+        event-specific payload, serialized to JSON text by the store. Returns the
+        freshly-written ``event_log.id``."""
         ...
 
     def record_question(
@@ -1843,32 +1398,11 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         clear_intent: bool = False,
         migration_id: str | None = None,
     ) -> str | None:
-        """Record a cross-graph migration atomically and idempotently (issue #90).
-
-        In one transaction: the ``chunk_migrations`` fact, the ``chunks.graph_id`` re-pin
-        (+ ``chunks.default_model`` when ``model`` is given), the ``route_released``
-        (unless ``release_route`` is ``False``), and the submitting node-step's
-        ``artifacts`` (so the triage node's reasoning asset carries to the landing claim —
-        the migration branch bypasses :meth:`record_transition`, where a step's artifacts
-        normally commit). When ``decision_id`` is set — a human gate's resolved choice was
-        itself the migration — the fact carries it so that decision derives closed (a
-        migration writes no transitions row, and an unclosed gate decision wedges REAP
-        recovery). ``release_route`` defaults to ``True`` — the runner-landing behavior —
-        but a hub-landing migration (issue #111) passes ``False`` so the holding runner's
-        route is retained, exactly as a transition-into-a-hub-node retains it. Idempotent
-        by ``(chunk_id, from_node_id, epoch)`` — a redelivery replay writes nothing. No
-        lease is minted: the fact is recorded at the submitting epoch, and the next claim
-        mints a fresh higher one. ``migration_id`` (issue #213) is caller-minted, mirroring
-        :meth:`record_transition`'s own ``transition_id``; ``None`` mints one internally.
-        Returns the ``migration_id`` actually used iff this call wrote, ``None`` on a
-        replay — there is no fresh row to name.
-
-        ``clear_intent`` (issue #124), when ``True``, adds ``chunks.intended_migration =
-        NULL`` to the same ``chunks`` update this already writes for the re-pin — the same
-        transaction as the fact insert, so a durable fact implies a durably-cleared intent
-        (load-bearing: a crash that recorded the migration but left the intent set would
-        re-fire it on the next transition, a double migration). ``False`` for an ordinary
-        #90 authored-choice migration, which carries no intent to clear."""
+        """Record a cross-graph migration atomically and idempotently (issue #90). One
+        transaction: the ``chunk_migrations`` fact, the ``chunks.graph_id`` re-pin, the
+        route release (unless ``release_route`` is ``False``), the submitting step's
+        ``artifacts``, and — when ``clear_intent`` — the intent clear, so a durable fact
+        implies a durably-cleared intent. Returns the ``migration_id``, ``None`` on replay."""
         ...
 
     def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
@@ -1889,73 +1423,45 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46).
 
         Always writes a fresh row (never a no-op — "newest fact wins" reads, it does not
-        skip writes), so this returns the freshly-written ``chunk_pause_facts.id`` (issue
-        #213's activity-feed key) unconditionally."""
+        skip writes), so the ``chunk_pause_facts.id`` comes back unconditionally."""
         ...
 
     def record_stop(self, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.stopped`` fact — terminal operator abandonment (issue #118) —
-        and, atomically in the same store transaction, release any live route and any
-        held fleet-wide hub-exec slot.
-
-        Returns the freshly-written ``chunk_stopped.id`` (issue #213's activity-feed key)
-        — not the ``route_released.id`` this same transaction may also write, matching
-        the ``stopped`` cause's own mapped fact table."""
+        and, atomically in the same store transaction, release any live route and any held
+        fleet-wide hub-exec slot. Returns the freshly-written ``chunk_stopped.id``, not the
+        ``route_released.id`` this same transaction may also write."""
         ...
 
     def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
         """Repin a not-ready or ready-unclaimed chunk to a different workflow graph (issue #27, #120).
 
         A plain column overwrite, not an append-only fact: ``graph_id`` was already a
-        mint-time column with no fact log behind it, and this keeps the same shape.
-        The caller (:class:`~blizzard.hub.domain.edit.EditService`) has already checked
-        the chunk is still ``not_ready`` or ``ready`` with no live route, under the
-        lock shared with :class:`~blizzard.hub.domain.claim.ClaimService` (issue #120)."""
+        mint-time column with no fact log behind it. The caller has already checked the
+        chunk is still unclaimed, under the claim lock (issue #120)."""
         ...
 
     def set_defaults(self, chunk_id: str, *, default_model: list[str], default_effort: str | None) -> None:
         """Repin a not-ready or ready-unclaimed chunk's default model/effort (issue #144)
-        — see :meth:`set_graph`.
-
-        Both together in one write, never one at a time: they are model's-twin fields
-        edited through the same all-or-nothing :meth:`~blizzard.hub.domain.edit.EditService.edit`
-        call, and a caller that could set one alone would be able to leave the pair
-        half-applied at a crash. An empty list / ``None`` is a real value — *express no
-        preference*, the minted state — not "leave unchanged".
-
-        The one caller is the edit path: a migration choice's ``model:`` re-pin (issue #90)
-        writes ``default_model`` inline inside :meth:`record_migration`'s own transaction
-        instead, so a second transactional write cannot split the durable migration fact
-        from the pin it implies.
-        """
+        — see :meth:`set_graph`. Both together in one write, never one at a time, so the
+        pair cannot be left half-applied at a crash. An empty list / ``None`` is a real
+        value — *express no preference*, the minted state — not "leave unchanged"."""
         ...
 
     def set_intended_migration(self, chunk_id: str, *, intended: IntendedMigration | None) -> None:
         """Set, overwrite, or clear a chunk's standing migration intent (issue #124).
-
-        A plain column overwrite, not an append-only fact — the same ``bzh:facts-not-status``
-        shape :meth:`set_graph`/:meth:`set_defaults` already carry: ``intended_migration`` is a
-        mutable chunk property, consulted (never applied) at the chunk's next transition
-        (``domain/apply.py``). ``intended=None`` clears it (an operator cancel); a non-``None``
-        value overwrites whatever was set before. Unlike :meth:`set_graph`/:meth:`set_defaults`,
-        this field's editable window spans every non-terminal status, ``not_ready``/``ready``
-        included — the caller (:class:`~blizzard.hub.domain.edit.EditService`) enforces the
-        window, this method only writes. Carries no timestamp — the column itself records
-        no ``at``, unlike this repository's other writes."""
+        A plain column overwrite, not an append-only fact — the same shape :meth:`set_graph`
+        carries. ``intended=None`` clears it; a non-``None`` value overwrites. Carries no
+        timestamp — the column records no ``at``, unlike this repository's other writes."""
         ...
 
     # --- The generic hub command node (#65) ---------------------------------
 
     def acquire_hub_exec_slot(self, chunk_id: str, *, node_id: str, at: datetime, stale_after: timedelta) -> str | None:
         """Acquire the fleet-wide hub-execution serialization slot, or ``None`` if busy.
-
         A FACT-based lease (``bzh:facts-not-status``), not an in-process lock: insert-if-
-        none-live in one transaction. Reentrant for the chunk that already holds it (a
-        later step of the same run re-acquires the same slot id, a no-op); a live slot
-        held by a **different** chunk defers this caller (returns ``None``) unless it is
-        older than ``stale_after`` against the injected clock, in which case it is
-        reclaimed as abandoned (a kill -9 mid-run) before this caller's own slot is
-        minted. Returns the acquired/held slot id, or ``None`` while genuinely busy."""
+        none-live in one transaction. Reentrant for the chunk that already holds it; a slot
+        held by another defers unless older than ``stale_after``, when it is reclaimed."""
         ...
 
     def release_hub_exec_slot(self, chunk_id: str, *, at: datetime) -> None:
@@ -1978,10 +1484,8 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         """Append one hub-node progress artifact OUTSIDE a transition (#65).
 
         Idempotent per ``(chunk, node, name, epoch)`` natural key: a re-run that already
-        recorded this artifact writes nothing a second time. Ordinary artifact rows —
-        durable, shown in chunk detail, fed into subsequent node envelopes exactly like a
-        worker-produced artifact. Returns True iff it wrote, False when already recorded.
-        """
+        recorded this artifact writes nothing a second time. Ordinary artifact rows,
+        durable exactly like a worker-produced one. Returns True iff it wrote."""
         ...
 
     def record_hub_step_transition(
@@ -1998,23 +1502,16 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         artifacts: list[ArtifactRow],
         release_route: bool,
     ) -> bool:
-        """Record a generic hub command node's exit transition, atomically and
-        idempotently (#65) — the ``HubNodeExecutor`` counterpart to
-        :meth:`finalize_delivery`, generalized to any authored target (including the
-        reserved terminal). The hub lease and the transition land in one transaction;
-        ``release_route`` is True only when
-        ``to_node_id`` is the reserved terminal, writing the route release alongside.
-        Guarded by the transition's existence at ``(chunk_id, from_node_id, epoch)``: a
-        redelivery replay after a ``kill -9`` re-enters harmlessly. Returns True iff it
-        wrote, False when already recorded."""
+        """Record a generic hub command node's exit transition, atomically and idempotently
+        (#65). The hub lease and the transition land in one transaction; ``release_route``
+        is True only when ``to_node_id`` is the reserved terminal, writing the route release
+        alongside. Guarded by the transition's existence at ``(chunk_id, from_node_id,
+        epoch)``, so a redelivery replay after a ``kill -9`` re-enters harmlessly."""
         ...
 
     def record_hub_node_poll(self, chunk_id: str, *, node_id: str, epoch: int, at: datetime) -> None:
         """Append one pending-poll-attempt fact (#66) — never a transition.
 
-        Append-only: an at-least-once poll attempt is harmless to record twice (it only
-        ever widens the interval/timeout gating's read, never double-counts anything
-        load-bearing), so this carries no idempotency guard. Stamped from the injected
-        clock; :func:`hub_node_pending` and :func:`hub_node_poll_history` are the sole
-        readers."""
+        Append-only: an at-least-once poll attempt is harmless to record twice — it only
+        widens the interval/timeout gating's read — so this carries no idempotency guard."""
         ...

@@ -1,10 +1,8 @@
-"""The ``github`` conformer — plain OAuth2 code flow, ``GET /user`` +
-``GET /user/emails`` for the verified primary email (issue #92, package-private).
+"""The ``github`` conformer — plain OAuth2 code flow, ``GET /user`` + ``GET /user/emails`` for the
+verified primary email (issue #92, package-private).
 
-All ``httpx`` usage is confined here (``bzh:dependency-inversion``). ``web_base``/
-``api_base`` default to real GitHub's split hosts but are overridable — a service-tier
-scenario points both at a stub IdP via one configured ``[[auth.oauth.provider]] api_base``.
-"""
+All ``httpx`` usage is confined here (``bzh:dependency-inversion``). ``web_base``/``api_base`` default
+to real GitHub's split hosts but are overridable to point at a stub IdP."""
 
 from __future__ import annotations
 

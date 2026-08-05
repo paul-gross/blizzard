@@ -1,17 +1,7 @@
 """Ask/answer park→resume round trip — scenario 4 of the e2e smoke — MVP criterion 7.
 
-End to end over the real stack: a build worker hits an undecidable choice, runs the
-**real** ``blizzard runner ask``, and **exits**. The chunk parks and derives
-**waiting_on_human**. The park is then asserted **inert**: several more ticks leave the
-chunk waiting_on_human on the same single open question.
-A human answers with ``blizzard hub question answer``; the runner picks the answer up on
-its next tick and **resumes the dormant session** around it, and the resumed worker
-commits the change. The chunk then walks build→review→deliver to **done**, and the
-mock's persisted session state is asserted to show the same session was resumed.
-
-Runs the full live stack like the sibling scenarios, plus the runner's **local API**
-(served in a thread) so the real ``blizzard runner ask`` verb has a daemon to POST to,
-while the reconciliation loop is driven one synchronous tick at a time for determinism.
+End to end: a worker asks and parks (waiting_on_human); a human answers via
+`blizzard hub question answer` and the runner resumes the dormant session to done.
 Skipped unless ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock`` worktree provisioned.
 """
 
@@ -128,9 +118,8 @@ def _graph_yaml() -> str:
 def _runner_api(config: RunnerConfig) -> Iterator[None]:
     """Serve the runner's local API in a thread — the daemon `blizzard runner ask` POSTs to.
 
-    The reconciliation loop is still driven synchronously by the test (``run_single_tick``);
-    this only stands up the local API surface so the real ask verb has somewhere to land.
-    Both share the runner's sqlite store (its busy timeout covers the brief contention).
+    The reconciliation loop is still driven synchronously by the test; this only stands
+    up the local API so the real ask verb has somewhere to land.
     """
     app = build_hosted_app(config)
     server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port, log_level="warning"))
@@ -257,9 +246,8 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
             session_id = question["session_id"]
             assert question["options"] == ["rest", "graphql"]
 
-            # Drive several more full ticks and assert the park is inert: the chunk stays
-            # waiting_on_human and the SAME single question stays open (a consumed retry
-            # would re-spawn the worker, which would ask a fresh question or fail).
+            # Assert the park is inert: several more ticks leave the chunk waiting_on_human
+            # with the same single question open (a consumed retry would re-spawn the worker).
             _tick_n(config, fenced, 4)
             still = hub.get(f"/api/chunks/{chunk_id}").json()
             assert still["status"] == "waiting_on_human", f"the park was not inert (status {still['status']!r})"
@@ -291,10 +279,8 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
             status = _tick_until(config, hub, chunk_id, fenced, {"done", "needs_human", "stopped"}, 120.0)
             assert status == "done", f"chunk did not reach done after the answer (last status {status!r})"
 
-        # `delivered` derives from the `answer.delivered` fact the **real** runner mints on
-        # resume (issue #165); this is the only tier where that fact comes from production
-        # code rather than hand-pushed, since `fleet.py`'s publish silently skips a fact
-        # whose `question_id` is absent, which every component test would still pass.
+        # `delivered` derives from the real runner's `answer.delivered` fact on resume
+        # (issue #165) — the one tier where that fact isn't hand-pushed.
         closed = hub.get(f"/api/fleet/questions/{question_id}").json()
         assert closed["answered"] is True
         assert closed["delivered"] is True, f"the resume-with-answer left no delivery fact: {closed}"

@@ -1,27 +1,9 @@
 """Checks-gate enforcement end to end — issue #114, the full-stack proof.
 
-Two scenarios over the real forge + hub + runner + ``mock-claude-code`` façade, driving a
-graph that declares ``checks:`` on ``build`` and gates its ``pass`` choice with
-``requires_checks: true``:
-
-* **the gate bounces a red pass, then lands when green** — the worker selects the gated
-  ``pass`` every attempt; on the first, the runner-executed check is red, so the engine
-  refuses the edge (a retry-consuming failure, not an accepted transition) and re-queues a
-  fresh rebuild; the rebuilt attempt makes the check green and the same ``pass`` lands. Build
-  runs **twice** — the git-truth proof the gate bounced the red pass — and only the green
-  attempt delivers (AC #4).
-* **a red check through a non-gated ``fail`` routes normally** — the worker selects the
-  ungated ``fail`` while the check is red; the gate never fires (only ``requires_checks``
-  choices gate), so it is an ordinary judged transition back to build, visible in the
-  chunk history, and the green re-entry then lands (AC #5).
-
-The check itself is real: the runner runs ``test -f .checks-ok`` in the leased env, and the
-build turn creates ``.checks-ok`` only on its second visit (a ``.build-count`` marker in the
-held env dir persists across the cycle), so the check flips red→green on the real rails.
-
-Reuses the acceptance loop's live-stack scaffolding. Skipped unless ``BLIZZARD_E2E=1`` with
-the sibling ``blizzard-mock`` worktree provisioned — exactly like test_acceptance_loop.
-"""
+Two scenarios over the real forge + hub + runner: a red gated ``pass``
+(``requires_checks: true``) is bounced and re-queued, landing once green (AC #4); a red
+check reported through a non-gated ``fail`` routes normally (AC #5). Reuses the
+acceptance loop's live-stack scaffolding; skipped unless ``BLIZZARD_E2E=1``."""
 
 from __future__ import annotations
 
@@ -57,9 +39,8 @@ pytestmark = [
 
 _LAND = "python3 -m blizzard.hub.graphs.scripts.land_default"
 
-# The build turn: bump a persistent `.build-count` (the held env dir survives the cycle),
-# create `.checks-ok` on the SECOND+ visit so the runner's `test -f .checks-ok` check flips
-# red→green, and always commit a real change so "build ran twice" is provable on bare main.
+# Bumps a persistent `.build-count`, creates `.checks-ok` on the second+ visit (flipping
+# the check red->green), and always commits so "build ran twice" is provable on bare main.
 _BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
@@ -190,9 +171,8 @@ def test_checks_gate_bounces_a_red_pass_then_lands_when_green(tmp_path: Path) ->
     ran twice, only the green attempt delivered (AC #4)."""
     _detail, origin_bare = _drive(tmp_path, _graph_yaml(build_judgement=_ALWAYS_PASS), "checks gate bounce")
 
-    # Build ran TWICE — the git-truth proof the first (red) `pass` was bounced and re-run.
-    # The gate bounce is a retry-consuming failure (no transition row), so the observable is
-    # the second build commit, not a history step.
+    # Build ran twice: the git-truth proof the first (red) `pass` was bounced and re-run
+    # (a gate bounce leaves no history transition row).
     checks_md = _git_bare(origin_bare, "show", "main:CHECKS.md")
     assert checks_md.count("build ") == 2, f"expected two build passes on main (a bounce + a land), got:\n{checks_md}"
 

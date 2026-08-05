@@ -1,9 +1,8 @@
 """The session repository seam — read/write Protocols (issue #91,
 ``bzh:repository-split``).
 
-Sessions are looked up by their **hashed** id via the read Protocol; the write side is
-reserved for :class:`~blizzard.hub.auth.service.AuthService` (``bzh:controller-read-only``
-— the edge never mutates directly).
+Sessions are looked up by their **hashed** id; the write side is reserved for the
+service layer (``bzh:controller-read-only``).
 """
 
 from __future__ import annotations

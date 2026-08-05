@@ -1,17 +1,9 @@
-"""Shared lease-scoped authorization plus hub-response detail-unwrapping
-(``canon:one-owner``). ``authorized_lease`` opens every lease-scoped worker route,
-whether or not it proxies to the hub; ``upstream_detail`` is for the ones that do.
+"""Shared lease-scoped authorization plus hub-response detail-unwrapping (``canon:one-owner``).
 
-``authorized_lease`` resolves ``lease_id`` to its active lease and checks the presented
-token, or raises the store-free ``503`` / unknown-lease ``404`` / bad-token ``403`` —
-authorization resolved before any hub call, so an unauthorized caller never learns the
-fleet's hub-wiring state. ``upstream_detail`` unwraps the hub's own JSON error body
-(falling back to raw text) so a forwarded non-200 status carries the hub's own message
-rather than a runner-side generic one.
-
-Extracted from ``runner.api.artifacts`` (issue #127) to give every lease-scoped route
-one shared copy of both rather than another inline duplicate.
-"""
+``authorized_lease`` resolves ``lease_id`` to its active lease and checks the presented token, or raises
+the store-free ``503`` / unknown-lease ``404`` / bad-token ``403`` — resolved before any hub call, so an
+unauthorized caller never learns the fleet's hub-wiring state. ``upstream_detail`` unwraps an upstream
+JSON error body, falling back to raw text, so a forwarded non-200 keeps its own message."""
 
 from __future__ import annotations
 

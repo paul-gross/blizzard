@@ -1,13 +1,8 @@
 """The pr-opened-idempotent revision's ``pr.opened`` de-duplication + unique constraint (issue #10).
 
-Exercises the migration on a store carrying the exact shape a dogfood run produced:
-two ``delivery_pr_opened`` rows for the same (chunk, repo) — see
-``blizzard.hub.delivery.coordinator``. Seeded with literal ``sa.Table`` shapes rather
-than ``from blizzard.hub.store import schema as s`` — the same reason
-``test_work_ref_migration.py`` does (see that module's docstring):
-``schema.py`` now carries the unique constraint this revision adds, so a test pinned to
-the revision *before* it must not import a table shape that has already moved on.
-"""
+Exercises the migration on a store carrying two ``delivery_pr_opened`` rows for the
+same (chunk, repo). Seeded with literal ``sa.Table`` shapes rather than importing
+``schema.py``, which now carries the unique constraint this revision adds."""
 
 from __future__ import annotations
 

@@ -1,14 +1,8 @@
 """Git reset-on-acquire plumbing for the winter binding (package-private).
 
-Reset-on-acquire drives winter's cross-repo
-verbs for everything winter can express — fetch, forced base checkout, disconnect.
-What remains here is the one step winter has no verb for: removing the previous
-tenant's **untracked** files (``winter ws checkout --force`` hard-resets tracked
-state but never runs ``git clean``). ``-fdx``, not ``-fd``: build artifacts and
-installed deps go with the outgoing tenant, and the reprovision step that follows
-restores them. All ``subprocess`` usage is confined here.
-
-Pinned by tests/test_pin_runner_misc.py::test_the_clean_sweeps_ignored_build_artifacts_out_with_the_outgoing_tenant.
+Removes the previous tenant's **untracked** files — the one reset step winter has no verb
+for. ``-fdx``, not ``-fd``: build artifacts and installed deps go with the outgoing tenant
+(tests/test_pin_runner_misc.py). All ``subprocess`` usage is confined here.
 """
 
 from __future__ import annotations
@@ -39,11 +33,8 @@ class SubprocessEnvGit:
     def origin_url(self, repo_workdir: Path) -> str:
         """``git remote get-url origin`` read **in the repo's own worktree**.
 
-        Takes the worktree path rather than running in the process cwd: git walks *up*
-        from cwd to find an enclosing repository, so a caller standing anywhere else
-        would get a plausible-looking URL for some other repo instead of an error.
-
-        Pinned by tests/test_pin_runner_misc.py::test_origin_url_reads_the_named_worktree_not_the_process_cwd.
+        Git walks *up* from cwd to find an enclosing repository, so standing anywhere else
+        yields a plausible-looking URL for another repo (tests/test_pin_runner_misc.py).
         """
         return self._capture(repo_workdir, "remote", "get-url", "origin").strip()
 

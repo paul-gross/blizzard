@@ -1,24 +1,9 @@
-"""Chunk pause — the operator's per-chunk brake, orthogonal to detach and the runner
-brake (issue #46).
+"""Chunk pause — the operator's per-chunk brake, orthogonal to detach (issue #46).
 
-``blizzard hub pause-chunk <chunk_id>`` stamps a ``chunk.paused`` fact; ``resume-chunk``
-stamps ``chunk.resumed``. Newest-fact-wins (``PauseFact``/``_is_paused``,
-``domain/work.py``), so a re-pause after a resume derives ``paused`` again with no
-extra bookkeeping. Unlike detach, pause **keeps the claim** — no route is released, no
-epoch bumped; the runner half (killing the worker and parking the lease without
-releasing it) lives in ``blizzard.runner.loop.steps``, not here.
-
-Structurally mirrors :class:`~blizzard.hub.domain.detach.DetachService`, but the
-refusal mirrors :meth:`~blizzard.hub.domain.queue.QueueService._require_ready`: load
-facts, derive status, compare, raise a typed exception. Pause refuses only
-``{done, stopped, delivering}`` — a chunk already ``waiting_on_human``/``needs_human``
-may still be paused (the lever stays broad); resume is never refused; appending
-``paused=False`` to an already-unpaused chunk is a harmless no-op (newest-fact-wins),
-matching ``POST /runners/{id}/resume``.
-
-Holds the *write* chunk repository (``bzh:controller-read-only``); the route resolves
-the chunk and delegates here.
-"""
+Pause stamps a ``chunk.paused`` fact and resume a ``chunk.resumed``; newest-fact-wins,
+so a re-pause after a resume derives ``paused`` again. Pause **keeps the claim** — no
+route released, no epoch bumped — and refuses only ``{done, stopped, delivering}``;
+resume is never refused. Holds the *write* repository (``bzh:controller-read-only``)."""
 
 from __future__ import annotations
 
@@ -47,10 +32,8 @@ class PauseService:
     def pause(self, chunk: Chunk, *, by: str) -> int:
         """Append ``chunk.paused``; raises :class:`ChunkNotPausable` for done/stopped/delivering.
 
-        No route or lease is touched here — the runner reads the resulting
-        :class:`~blizzard.hub.domain.work.PauseFact` off its next ``get_chunk`` and
-        kills/parks the worker itself, keeping the claim (issue #46 §3.1). Returns the
-        freshly-written ``chunk_pause_facts.id`` (issue #213's activity-feed key)."""
+        No route or lease is touched here (issue #46 §3.1). Returns the freshly-written
+        ``chunk_pause_facts.id`` (issue #213's activity-feed key)."""
         self._require_pausable(chunk.chunk_id)
         return self._chunks.record_pause(chunk.chunk_id, paused=True, by=by, at=self._clock.now())
 

@@ -1,17 +1,9 @@
 """Component coverage for the facts-level invariant checker (``bzh:invariant-checker``).
 
 Migrates real hub + runner stores, asserts a clean store yields no violations, then
-injects each kind of corruption and asserts the matching invariant is named.
-
-Every corruption is injected on a **head-migrated** store — the only shape the checker
-is contracted to read: a daemon refuses to start on a revision mismatch
-(``bzh:manual-migrations``), so a store it ever sees is at head.
-
-``hub:pr-opened-idempotent``'s violation is what ``uq_delivery_pr_opened_chunk_repo``
-(20260716_2206_hub_pr_opened_idempotent) makes impossible to *write* at head, so that
-test drops the constraint on an otherwise head-shaped store before seeding the
-duplicate.
-"""
+injects each kind of corruption and asserts the matching invariant is named. Every
+corruption is injected on a head-migrated store, the only shape the checker is
+contracted to read."""
 
 from __future__ import annotations
 
@@ -139,10 +131,9 @@ def test_distinct_generation_or_kind_usage_rows_are_not_a_violation(tmp_path: Pa
 
 
 def test_duplicate_nudge_fact_for_one_lease_epoch_is_a_violation(tmp_path: Path) -> None:
-    """`record_nudge_fired` is an insert never an upsert, gated by
-    `_advance_exited_worker`'s own check-then-insert, not a DB constraint
-    (``bzh:sql-portable``, issue #113) — so two rows for the same ``(lease, epoch)``
-    mean that guard was bypassed, and the checker names it."""
+    """`record_nudge_fired` is an insert never an upsert, gated in code not by a DB
+    constraint (issue #113); two rows for the same ``(lease, epoch)`` mean that guard
+    was bypassed."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         for _ in range(2):
@@ -238,11 +229,9 @@ def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> 
 
 
 def test_landed_fact_without_terminal_transition_is_a_two_state_violation(tmp_path: Path) -> None:
-    """``hub:merge-queue-single-state`` — #63's "a merged chunk is never left non-terminal":
-    a whole-chunk ``delivery.landed`` fact paired with a non-terminal newest transition
-    reads as both landed and mid-flight. A real store never writes this shape
-    (``finalize_delivery`` writes both atomically); the check is defense-in-depth behind
-    that."""
+    """``hub:merge-queue-single-state`` — a whole-chunk ``delivery.landed`` fact paired
+    with a non-terminal newest transition reads as both landed and mid-flight (issue #63);
+    defense-in-depth, since a real store never writes this shape."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
@@ -470,9 +459,8 @@ def test_a_migration_without_its_route_release_is_a_violation(tmp_path: Path) ->
 
 
 def test_a_hub_landing_migration_retains_its_route_and_is_not_a_violation(tmp_path: Path) -> None:
-    """``hub:migration-route-released`` exempts a migration landing on a **hub-executed**
-    node (issue #111): it deliberately retains the route so the hub keeps the chunk and
-    drives it via the holding runner's ADVANCE poll — no violation, even with no
+    """``hub:migration-route-released`` exempts a migration landing on a hub-executed
+    node (issue #111): it deliberately retains the route, so no violation even with no
     ``route_released``."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:

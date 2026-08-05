@@ -1,12 +1,9 @@
 """The single-use ``state`` repository seam (issue #92, decision D5,
 ``bzh:repository-split``).
 
-``authorize`` writes one :class:`~blizzard.hub.auth.models.AuthStateEntry` per redirect;
-``callback`` reads-and-deletes it in one call (:meth:`IWriteAuthStateRepository.consume`)
-so a replayed ``state`` query parameter can never resolve twice. The same table (and this
-same seam) is reused by #95's hub-as-IdP authorize endpoint — nothing here is
-provider-login-specific.
-"""
+One :class:`~blizzard.hub.auth.models.AuthStateEntry` is written per redirect, and
+:meth:`IWriteAuthStateRepository.consume` reads-and-deletes it in one call, so a
+replayed ``state`` value can never resolve twice."""
 
 from __future__ import annotations
 

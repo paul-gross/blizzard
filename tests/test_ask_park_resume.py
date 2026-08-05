@@ -1,17 +1,8 @@
 """Ask-and-exit park/resume in the reconciliation loop (unit tier) — MVP criterion 7.
 
-Drives the loop steps directly against a real tmp runner store with fakes at the seams
-(``bzh:steppable-loop``) to pin the runner half of the ask-and-exit protocol:
-
-* an exited worker holding an unforwarded ask **parks** — ADVANCE forwards the
-  ``question.asked`` up the outbound buffer, records the park fact, and elicits **no**
-  verdict and consumes **no** retry;
-* a parked lease's reap clock is **stopped** — REAP skips it even when its recorded pid
-  reads alive and its heartbeat is long stale (the design's "no live lease while parked");
-* the answer's arrival **resumes the dormant session** — same lease, same session
-   — records the park-resume and ``answer.delivered``, and the lease reads live
-  again;
-* the park is not repeated once forwarded, so the verdict is never elicited on the ask.
+Pins: an exited worker holding an unforwarded ask parks (no verdict, no retry consumed);
+a parked lease's reap clock stops; the answer resumes the dormant session under the same
+lease; the park is not repeated once forwarded.
 """
 
 from __future__ import annotations
@@ -179,17 +170,9 @@ def test_parked_lease_is_not_reaped_though_pid_reads_alive_and_stale(tmp_path): 
 
 
 def test_ask_forwards_correctly_while_a_pause_park_exists(tmp_path):  # type: ignore[no-untyped-def]
-    """The §0.2 A landmine fence (issue #46 plan).
-
-    ``unforwarded_ask`` reads ``asks.c.question_id.not_in(select(park_facts.c.
-    question_id))`` — if a pause-park were ever modeled as a ``park_facts`` row with a
-    nullable ``question_id`` (the design this plan rejects), SQL's ``x NOT IN (subquery
-    containing NULL)`` would evaluate to NULL for *every* row, so this ask would stop
-    being forwarded — not just this chunk's, every chunk's, fleet-wide, with a green
-    gate. Pause-parks live in their own table (``pause_parks``/``pause_park_resumes``),
-    untouched by this predicate, so a pause-park coexisting with an open ask must not
-    change this outcome at all.
-    """
+    """issue #46: a pause-park on another lease must not disturb `unforwarded_ask`'s
+    predicate — a NULL-poisoned NOT IN would silently stop forwarding fleet-wide if
+    pause-parks shared the `park_facts` table; they live in their own table instead."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
     store.record_ask(
@@ -213,8 +196,7 @@ def test_ask_forwards_correctly_while_a_pause_park_exists(tmp_path):  # type: ig
     advance(ctx)
 
     # The ask-park landed on lease_1 alongside the pre-existing pause-park on the
-    # unrelated lease_other — parked_lease_ids() is their union (§1.3), and neither
-    # predicate disturbed the other.
+    # unrelated lease_other — parked_lease_ids() is their union (§1.3).
     assert store.ask_parked_lease_ids() == {"lease_1"}
     assert store.pause_parked_lease_ids() == {"lease_other"}
     assert store.parked_lease_ids() == {"lease_1", "lease_other"}
@@ -257,10 +239,8 @@ def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path):  # t
 
 
 def test_worker_resumed_after_a_park_past_the_threshold_survives_the_next_reap(tmp_path):  # type: ignore[no-untyped-def]
-    """Issue #150: a build worker asks and exits, then is answered past
-    ``HEARTBEAT_STALENESS_THRESHOLD``. The resumed worker must survive the very next
-    REAP tick.
-    """
+    """Issue #150: a worker answered past ``HEARTBEAT_STALENESS_THRESHOLD`` must
+    survive the very next REAP tick after resuming."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)

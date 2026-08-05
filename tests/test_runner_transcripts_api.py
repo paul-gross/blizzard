@@ -1,14 +1,8 @@
 """The runner-local transcript route — ``GET /api/leases/{lease_id}/transcript`` (issue #29).
 
-Exercised over a real store via ``TestClient`` (the same tier and shape as
-``test_runner_leases_api.py``'s ``_app_with_leases``/``_seed_lease``): a real sqlite
-store for lease facts, and a fake :class:`IReadTranscriptRepository` standing in for
-the filesystem — the harness transcript source and the panel projection over it own
-their own unit tiers (``tests/test_runner_harness_claude_code_transcript.py``,
-``tests/test_runner_harness_claude_code_normalizer.py``,
-``tests/test_runner_transcripts.py``), so this file's job is the route's resolution
-and status-code contract, not re-testing the normalization.
-"""
+Exercised over a real store via ``TestClient``: a real sqlite store for lease facts,
+and a fake ``IReadTranscriptRepository`` standing in for the filesystem, so this
+file's job is the route's resolution and status-code contract, not the normalization."""
 
 from __future__ import annotations
 
@@ -30,12 +24,10 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
 class FakeTranscriptRepository:
-    """An in-process ``IReadTranscriptRepository`` — one canned :class:`Transcript` per session id.
+    """An in-process ``IReadTranscriptRepository`` — one canned ``Transcript`` per session id.
 
-    ``spawn_cwd`` is recorded but not consulted (the disambiguation hint is Slice A's
-    own concern, ``tests/test_runner_transcripts.py``); this fake exists to control
-    what the *route* sees, not to re-derive the hint.
-    """
+    ``spawn_cwd`` is recorded but not consulted; this fake exists to control what the
+    route sees, not to re-derive the disambiguation hint."""
 
     def __init__(self, by_session_id: dict[str, Transcript] | None = None) -> None:
         self._by_session_id = by_session_id or {}

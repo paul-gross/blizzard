@@ -41,9 +41,8 @@ def test_health_reports_the_installed_version_not_a_literal(daemon: Daemon) -> N
 
 
 def test_frontend_mount_serves_placeholder(daemon: Daemon, tmp_path: Path) -> None:
-    # Mount an EMPTY static dir here so the test is hermetic — it exercises the
-    # absent-index path regardless of whether a real build has filled the package's
-    # (gitignored) static dirs (mirrors the SPA-fallback test below).
+    # An EMPTY static dir keeps this hermetic, independent of a real build's
+    # (gitignored) static dirs.
     static_dir = tmp_path / "static"
     static_dir.mkdir()
     app = FastAPI()
@@ -56,8 +55,7 @@ def test_frontend_mount_serves_placeholder(daemon: Daemon, tmp_path: Path) -> No
 
 
 def test_spa_fallback_serves_index_for_client_route(tmp_path: Path) -> None:
-    # Build a minimal static dir here so the test exercises the present-index path
-    # independent of whether a real build has filled the package's (gitignored)
+    # A minimal static dir keeps this independent of a real build's (gitignored)
     # static dirs.
     static_dir = tmp_path / "static"
     static_dir.mkdir()

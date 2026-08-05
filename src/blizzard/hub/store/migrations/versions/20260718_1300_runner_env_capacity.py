@@ -1,19 +1,5 @@
-"""runner environment-pool capacity: env_capacity on the registry (hub store tree)
-
-Issue #69 has the runner report its configured environment-pool size (the length of its
-``workspace_envs``). This revision adds the column that total lands in.
-
-Nullable: a runner registered by a client that predates this field reports none, rather
-than guess a total. A rotating column, not an append-only fact (``bzh:facts-not-status``'s
-one deliberate exception — the registration row is already a mutable upsert; see
-``hub/domain/registry.py``'s module docstring): a re-registration (the runner's
-heartbeat) overwrites it in place, so a ``workspace_envs`` change converges on the next
-pull.
-
-Idempotent like ``20260718_1130_hub_runner_token``: the column is added only where an
-older database lacks it, so a fresh ``base -> head`` and an in-place upgrade both land at
-exactly one column. ``op.add_column`` on the existing table — no table recreation, so no
-frozen-literal schema copy is needed.
+"""runner environment-pool capacity: ``env_capacity`` on the registry (issue #69). Nullable — a client
+predating the field reports none rather than a guessed total. A rotating column, added idempotently.
 
 Revision ID: 20260718_1300_hub_runner_env_capacity
 Revises: 20260718_1225_hub_chunk_migrations

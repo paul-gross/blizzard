@@ -1,20 +1,8 @@
 """The edit/claim race is atomic (issue #120, component tier).
 
-Issue #120 widens ``EditService``'s admit set from ``not_ready`` to also admit
-``ready`` — a promoted-but-unclaimed chunk. That opens the edit window onto the same
-chunk a runner's claim (``POST /api/fleet/routes``) can land against concurrently: both
-are now check-then-act sequences reading and then acting on whether the chunk has a
-live route. An unguarded pair is a torn read — the edit's status check could pass just
-before a claim lands, then write against a chunk that is now leased.
-
-These tests **force** the interleaving rather than hoping a bare ``threading.Barrier``
-happens to expose it: a patched store call pauses one side mid-critical-section (after
-its own check, before its write lands), and the other side's HTTP call is proven to
-*block* on the very same lock rather than slip in underneath it — the only way to prove
-the two services share one lock rather than each holding a private one that just
-happens not to collide in a given run. A closing repeated-trial test (mirroring
-``test_claim_exactly_once.py``) then races many bare, un-instrumented requests through a
-barrier and asserts the same invariant holds regardless of which side's OS thread wins.
+Issue #120 widens ``EditService``'s admit set to also admit ``ready``, opening a window
+where a runner's claim lands against the same chunk concurrently — an unguarded pair is
+a torn read. These tests force the interleaving with a patched store call.
 """
 
 from __future__ import annotations
@@ -84,9 +72,8 @@ def _claim_body(chunk_id: str, runner: str = "r1") -> dict:
 
 def test_a_claim_blocks_while_an_edit_holds_the_shared_lock_mid_write(tmp_path: Path) -> None:
     """Force the edit to pause after its status check but before its write lands, and
-    prove a concurrent claim cannot complete underneath it — it must block on the same
-    lock. Once the edit releases, the claim proceeds and lands against the new graph,
-    never a torn mix of the two."""
+    prove a concurrent claim blocks on the same lock rather than completing underneath
+    it — once released, the claim lands against the new graph, never a torn mix."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])  # promote=True by default -> ready
     alt_graph_id = _mint_alt_graph(hub)
@@ -135,20 +122,16 @@ def test_a_claim_blocks_while_an_edit_holds_the_shared_lock_mid_write(tmp_path: 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["graph_id"] == alt_graph_id
     assert detail["status"] == "running"
-    # The edit's write landed first (this is exactly that interleaving) — the
-    # claim's own envelope resolution must agree with the persisted graph_id,
-    # never build the runner's first node from the graph the edge resolved
-    # before the edit repinned it.
+    # The edit's write landed first — the claim's envelope resolution must agree with
+    # the persisted graph_id, never the graph resolved before the repin.
     body = cast(dict, claim_response["body"])
     assert body["envelope"]["graph_id"] == alt_graph_id, body
 
 
 def test_an_edit_is_refused_while_a_claim_holds_the_shared_lock_mid_route_creation(tmp_path: Path) -> None:
-    """The reverse interleaving: force the claim to pause after it has confirmed no
-    live route exists but before its route fact lands, and prove a concurrent edit
-    blocks on the same lock rather than writing underneath it — surfacing only after
-    the claim finishes, and then refused (409), never a graph repin against a chunk
-    that is (from the edit's perspective, once it can finally check) already running."""
+    """The reverse interleaving: force the claim to pause before its route fact lands,
+    and prove a concurrent edit blocks on the same lock rather than writing underneath
+    it — surfacing only after, and then refused (409) against the now-running chunk."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "2"}])  # promote=True by default -> ready
     alt_graph_id = _mint_alt_graph(hub)
@@ -199,10 +182,9 @@ def test_an_edit_is_refused_while_a_claim_holds_the_shared_lock_mid_route_creati
 
 
 def test_repeated_edit_claim_races_never_yield_a_torn_graph(tmp_path: Path) -> None:
-    """Many chunks, each raced by a bare (un-instrumented) edit and claim released
-    together through a barrier — whichever side's OS thread wins the shared lock, the
-    result is always one of the two atomic outcomes, never a chunk left claimed with an
-    edit that also silently landed against a graph the running route never saw."""
+    """Many chunks, each raced by a bare edit and claim released together through a
+    barrier — whichever side wins the shared lock, the result is always one of the two
+    atomic outcomes, never a torn claim-plus-silent-repin."""
     hub = build_hub(tmp_path)
     alt_graph_id = _mint_alt_graph(hub)
     for i in range(8):

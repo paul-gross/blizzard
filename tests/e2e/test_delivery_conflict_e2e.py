@@ -1,24 +1,8 @@
 """A conflict at the default graph's `deliver` node lands ZERO repos (#67).
 
-With the mock forge's `merge_conflict` lever armed for the fixture repo, the default
-graph's `deliver` node finds the freshly-opened PR not cleanly mergeable — so nothing
-lands, the bounce routes the chunk back to `build` (#64), and the route is retained.
-
-Asserted at both ends over the full live stack (mock forge + mock harness + fixture
-workspace + real hub/runner), exactly like the sibling e2e scenarios:
-
-* **fleet truth** — the chunk derives `running` back at `build`, its detail carries
-  exactly one recorded bounce (cause `conflict`) and a `bounce-envelope` asset, and
-  `landed` reads false (nothing landed via a `merged/<repo>` marker);
-* **git truth** — bare `main` is exactly where it started; the forge holds no merged PR
-  for the fixture repo.
-
-Gated exactly like the sibling e2e scenarios — skipped unless `BLIZZARD_E2E=1` and the
-sibling `blizzard-mock` worktree + a local winter source are discoverable.
-
-Reproduce it — from the `blizzard` worktree in a provisioned feature env — with::
-
-    BLIZZARD_E2E=1 uv run pytest tests/e2e/test_delivery_conflict_e2e.py
+With the mock forge's `merge_conflict` lever armed, `deliver` finds the PR not cleanly
+mergeable: nothing lands, the bounce routes back to `build` (#64), and the route is kept.
+Skipped unless `BLIZZARD_E2E=1` with the sibling `blizzard-mock` worktree provisioned.
 """
 
 from __future__ import annotations
@@ -103,13 +87,10 @@ def _graph_yaml() -> str:
 
 
 def _drive_one_bounce(config: RunnerConfig, hub: httpx.Client, chunk_id: str, fenced_env: dict[str, str]) -> str:
-    """Tick until the chunk is back at `build` (post-bounce) or reaches a terminal
-    status — whichever comes first. A conflict never terminates the chunk (#64: a
-    bounce is contention, not failure), so this stops on the FIRST bounce rather than
-    driving to `done`, which a repo armed to always conflict would never reach.
+    """Tick until the chunk is back at `build` (post-bounce) or reaches a terminal status.
 
-    Wrapped in :func:`_runner_api` so the build node's scripted push+declare has a live
-    local API to POST to (issue #143).
+    A conflict never terminates the chunk (#64), so this stops on the first bounce rather
+    than driving to `done`, which an always-conflicting repo would never reach.
     """
     prior = dict(os.environ)
     os.environ.update(fenced_env)

@@ -1,11 +1,8 @@
 """Chunk usage derivation (unit tier) — the derived cost/token total, facts only.
 
 Usage is a fact, never a stored aggregate (``bzh:facts-not-status``): a chunk's total is
-a **sum over facts at read time**, the same discipline :func:`derive_chunk_status`
-established. These tests build :class:`ChunkFacts` directly — no store, no tokens
-(``bzh:domain-takes-objects``) — and pin the cost-absent lower-bound + PARTIAL
-treatment: a row with no ``cost_usd`` still contributes its tokens, but flags the
-chunk's derived cost as a lower bound rather than the true spend.
+a sum over facts at read time. Pins the cost-absent lower-bound treatment: a row with no
+``cost_usd`` still contributes its tokens, but flags the derived cost as a lower bound.
 """
 
 from __future__ import annotations

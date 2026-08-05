@@ -1,14 +1,8 @@
 """The hub<->runner seam, end to end at the component tier (issue #38, slice 6).
 
-Slice 2 (the hub endpoint) and slice 4 (the runner PULL step) each mock the other
-side — the hub's tests never call a runner, and the runner's tests drive a
-``FakeHub``. Nothing yet proves the two halves agree on the wire. These tests drive
-the **real** hub app and the **real** ``pull`` step in one process: ``POST
-/chunks/{id}/detach`` (or, since issue #118, ``/stop``) against the real FastAPI app,
-then a real PULL tick reads it back through ``HttpHubClient`` — the very same
-production adapter the daemon runs — wrapping the hub's own ``TestClient`` (itself an
-``httpx.Client``, so no new production code or wiring was needed to point the
-runner's outbound-only hub client at the in-process hub).
+Slice 2 and slice 4 each mock the other side, so nothing yet proves the two halves
+agree on the wire. Drives the real hub app and real ``pull`` step in one process:
+``POST /chunks/{id}/detach``/``/stop``, then a PULL tick reads it back for real.
 """
 
 from __future__ import annotations
@@ -82,9 +76,7 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
 
     # Seed the runner-side store with the in-flight lease + binding a real runner
-    # would already hold from claim/spawn time. Stamped off the same clock the hub
-    # uses, so the store's own held-binding predicate (timestamp-ordered releases,
-    # `bzh:facts-not-status`) sees a coherent history once the clock advances below.
+    # would hold, stamped off the same clock the hub uses (`bzh:facts-not-status`).
     seed_time = hub.clock.now()
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     store.record_lease(
@@ -136,12 +128,9 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
 
 
 def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> None:
-    """The consider-7 gap from the #118 pre-push review: both docstrings
-    (``blizzard.hub.domain.stop``, ``docs/deployment.md``) claim the holding runner
-    "frees the environments on its next tick" — this is the end-to-end test that
-    actually drives that tick, the same shape as the detach seam test above, so a
-    regression in either the hub's route release or the runner's must-fix-1 status
-    branch (:func:`~blizzard.runner.loop.steps._reconcile_leases`) fails here."""
+    """The consider-7 gap from the #118 pre-push review: drives the actual tick that
+    frees the environments, so a regression in either the hub's route release or the
+    runner's must-fix-1 status branch fails here."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _PLAIN_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]

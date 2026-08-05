@@ -1,15 +1,9 @@
 """Named session pools, resolution, and the lease stamps (issue #144, phase 5).
 
 Component tier over a **real store**, doubles only at the hub/harness/provider/probe
-seams — so each phase's assertion reads back the *previous* phase's actually-recorded
-lease rather than a scripted double, exactly as ``test_runner_loop``'s #115 session-mode
-tests do. That is what makes the pool-head resolution and the stamp inheritance provable
-here at all: both are reads over facts the prior spawn wrote.
-
-The unit-tier halves — argv placement, resolution order — live in
-``test_runner_harness_adapter``; this file is about which session a spawn continues, and
-what it records about it.
-"""
+seams — each phase's assertion reads back the *previous* phase's actually-recorded
+lease. That is what makes the pool-head resolution and stamp inheritance provable
+here at all."""
 
 from __future__ import annotations
 
@@ -74,9 +68,7 @@ def _ctx(store, hub, provider, harness, *, minutes: int = 0):  # type: ignore[no
     )
 
 
-# --------------------------------------------------------------------------- #
 # Pool resolution: `fresh:<name>` mints the head a later `resume:<name>` continues.
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component
@@ -134,13 +126,8 @@ def test_an_empty_pool_falls_back_to_minting_rather_than_erroring(tmp_path):  # 
 @pytest.mark.component
 def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_linear(tmp_path):  # type: ignore[no-untyped-def]
     """A cyclic graph: build(`fresh:code`) → verify(`resume:code`) → build → verify.
-
-    Two assertions in one traversal. (1) `fresh:<name>` is a **forced rotation point** —
-    re-entering it mints a second head rather than continuing the first, so each iteration
-    starts clean. (2) D2's pool-member serialization: the pool's session-id sequence is
-    **linear** — every member continues the current head and the lineage never forks,
-    which holds structurally because a chunk has at most one live lease.
-    """
+    Two assertions: `fresh:<name>` is a **forced rotation point** (re-entry mints a
+    second head), and D2's pool-member sequence stays **linear**, never forking."""
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -203,20 +190,14 @@ def _pool_leases(store, chunk_id: str, session_name: str):  # type: ignore[no-un
     return list(rows)
 
 
-# --------------------------------------------------------------------------- #
 # Re-spawns join the pool (the retry regression the plan names).
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component
 def test_a_retry_at_a_pooled_node_becomes_the_head_a_later_member_continues(tmp_path):  # type: ignore[no-untyped-def]
-    """A `fresh:code` node fails and retries; the retry's session — not the failed first
-    attempt's — is what the next `resume:code` member continues.
-
-    Without the retry stamping `session_name`, `pool_head` would not see it and a later
-    member would resume the **failed** attempt — a regression against #115's
-    `resume:<node>`, which already returns the newest lease at that node.
-    """
+    """A `fresh:code` node fails and retries; the retry's session, not the failed first
+    attempt's, is what the next `resume:code` member continues — without the retry
+    stamping `session_name`, a later member would resume the **failed** attempt."""
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -252,9 +233,7 @@ def test_a_retry_at_a_pooled_node_becomes_the_head_a_later_member_continues(tmp_
     assert h3.resume_froms == ["sess-attempt-2"]
 
 
-# --------------------------------------------------------------------------- #
 # The stamp describes the session, not the preference.
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component
@@ -280,15 +259,9 @@ def test_a_mint_stamps_what_it_resolved(tmp_path):  # type: ignore[no-untyped-de
 
 @pytest.mark.component
 def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tmp_path):  # type: ignore[no-untyped-def]
-    """The case that makes stamp-inheritance load-bearing rather than tidy.
-
-    `retrospective` carries a bare `resume:` — no pool, no declaration, and (here) no
-    chunk default, so a *fresh* resolution for it would fall to the runner default. But it
-    resumes the `code` pool's session and passes no `--model`, so the process keeps
-    running what that session was minted with. Stamping the fresh preference would book
-    this turn's spend against the wrong model, and hand a takeover command that flips a
-    live session's model on an operator.
-    """
+    """The case that makes stamp-inheritance load-bearing: `retrospective` carries a
+    bare `resume:` (no pool, no declaration) that resumes the `code` pool's session with
+    no `--model` — stamping the fresh preference would book spend against the wrong model."""
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -364,12 +337,8 @@ def _blank_stamps(store, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
         )
 
 
-# --------------------------------------------------------------------------- #
-# Rotation (issue #144, phase 6). A head is resumed only while every *readable*
-# declared threshold is under bound AND its stamped model still matches the pool's
-# currently-resolved one. An unreadable signal is NOT a breach — a missing
-# measurement would otherwise make every freshly minted head instantly ineligible.
-# --------------------------------------------------------------------------- #
+# Rotation (issue #144, phase 6): a head is resumed only while every readable declared
+# threshold is under bound AND its stamped model matches; an unreadable signal is not a breach.
 
 
 def _rotate(**bounds):  # type: ignore[no-untyped-def]
@@ -584,13 +553,9 @@ def test_a_head_with_no_model_stamp_cannot_drift(tmp_path):  # type: ignore[no-u
 
 @pytest.mark.component
 def test_max_transcript_bytes_fires_against_the_real_repository_at_the_production_root(tmp_path):  # type: ignore[no-untyped-def]
-    """The threshold end to end over the **real** transcript source (blizzard#245),
-    against a file at the production path shape — not a scripted size.
-
-    The scripted-size cases above pin the comparison; this pins that the comparison is
-    reading the thing it thinks it is. A `size_bytes` that silently returned `None` for
-    every real transcript would leave every one of them green.
-    """
+    """The threshold end to end over the **real** transcript source (blizzard#245), at a
+    production path shape — not a scripted size. Pins that the comparison actually reads
+    the thing it thinks it is, since a silently-``None`` ``size_bytes`` would stay green."""
     store = _store(tmp_path)
     head = _seed_head(store)
     projects_root = tmp_path / "projects"

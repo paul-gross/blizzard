@@ -1,8 +1,5 @@
-"""takeovers — the operator's interactive session over a parked chunk (issue #52)
-
-Two brand-new tables, no reshape of any existing table (mirroring
-``20260717_0446_pause_parks.py``'s freeze-hazard note): the runner tree declares no
-ForeignKeys at all, so neither half of that hazard applies here either.
+"""takeovers — the operator's interactive session over a parked chunk; two brand-new
+tables, reshaping none (issue #52)
 
 Revision ID: 20260717_2245_runner_takeovers
 Revises: 20260717_0446_runner_pause_parks

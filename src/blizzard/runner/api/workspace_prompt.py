@@ -1,25 +1,8 @@
 """The runner-local workspace-prompt endpoint — ``GET``/``PUT /api/workspace-prompt``.
 
-The runner prepends a standing workspace prompt to a worker's spawn (issue #17). Its
-static source is config (``blizzard-runner.toml``, loaded at ``host`` startup); this edge
-is the **runtime** control over it:
-
-* ``GET`` returns the effective prompt — the store's runtime override when one has been
-  set, else the static config value.
-* ``PUT`` replaces the override in the store, so it applies to subsequent spawns with no
-  restart (the loop reads the override at each spawn).
-
-A spawn that *resumes* a session sends the prompt only when it differs from what that
-session was last given, and announces it explicitly when it does (issue #149) — so a
-replace written here reaches the chunk's next resumed node-step marked as new rather than
-arriving in the position the superseded prose occupied.
-
-The edge is read-only over its wiring (``bzh:controller-read-only``): it reads/writes
-through the store the ``host`` composition root wired on ``app.state`` and reads the static
-fallback off ``app.state.config``. ``PUT`` needs the store, so on the store-free app (OpenAPI
-export / unit tests) it answers 503 rather than pretending; ``GET`` still reports the static
-config value there. The CLI/operator is a pure client — it never opens the store itself.
-"""
+The **runtime** control over the standing workspace prompt (issue #17): ``GET`` returns the
+store's override when one is set and the static config value otherwise, and ``PUT`` replaces
+the override so it applies to subsequent spawns with no restart. ``PUT`` 503s with no store."""
 
 from __future__ import annotations
 

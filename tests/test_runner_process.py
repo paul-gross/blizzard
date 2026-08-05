@@ -43,12 +43,8 @@ def test_mismatched_start_time_reads_dead_across_pid_reuse() -> None:
 
 @pytest.mark.unit
 def test_exited_but_unreaped_worker_reads_dead() -> None:
-    """A fire-and-forget child that exited but is not yet wait()ed is a zombie -> dead.
-
-    This is exactly the harness worker's shape: the runner spawns it and never
-    ``wait()``s it, so ADVANCE must see the finished worker as dead (not a lingering
-    ``/proc`` entry at the same start time) to judge it.
-    """
+    """A fire-and-forget child that exited but is not yet wait()ed is a zombie -> dead —
+    exactly the harness worker's shape ADVANCE must see as dead to judge it."""
     probe = LinuxProcessProbe()
     proc = subprocess.Popen(["true"])
     start = _await_start_time(probe, proc.pid)

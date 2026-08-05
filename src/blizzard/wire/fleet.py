@@ -1,13 +1,8 @@
 """Fleet-wide wire views — reads that span every chunk rather than one.
 
-``FleetSpendView`` is the ``GET /api/spend`` read's shape (issues #60, #87): a
-fleet-wide usage/cost total, summed at read time over every usage fact recorded at or
-after a caller-chosen instant (:func:`~blizzard.hub.domain.work.derive_fleet_usage`) —
-never a stored column.
-
-``FleetSummaryView`` is the ``GET /api/fleet/summary`` fleet-pulse read (issue #76):
-every chunk's derived status folded to four buckets
-(:func:`~blizzard.hub.domain.work.derive_fleet_summary`).
+``FleetSpendView`` is a usage/cost total summed at read time over a caller-chosen window,
+never a stored column. ``FleetSummaryView`` folds every chunk's derived status to four
+buckets (issues #60, #76, #87).
 """
 
 from __future__ import annotations
@@ -16,11 +11,9 @@ from pydantic import BaseModel
 
 
 class FleetSpendView(BaseModel):
-    """The fleet's usage/cost total since ``since`` — and, when the caller bounded the
-    window, strictly before ``until`` (issue #183; ``None`` for the original open-ended
-    tail). ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` —
-    see :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of
-    it, which this view's fields mirror verbatim."""
+    """The fleet's usage/cost total since ``since`` and, when the caller bounded the
+    window, strictly before ``until`` (``None`` for the open-ended tail). ``cost_partial``
+    marks ``cost_usd`` as a lower bound — see :class:`~blizzard.hub.domain.work.UsageTotal`."""
 
     since: str
     until: str | None = None
@@ -33,17 +26,9 @@ class FleetSpendView(BaseModel):
 
 
 class FleetSummaryView(BaseModel):
-    """The fleet-pulse counts (issue #76) — every chunk's derived status folded to four
-    buckets:
-
-    * ``ready`` — chunks derived ``ready``;
-    * ``running`` — ``running`` + ``delivering`` (live work, either shape);
-    * ``waiting`` — ``waiting_on_human`` + ``paused`` (human-parked);
-    * ``needs`` — ``needs_human``.
-
-    The remaining derived statuses (``not_ready``, ``stopped``, ``done``) count toward no
-    bucket — a live-work pulse, not a total. The fold's canonical statement:
-    :func:`~blizzard.hub.domain.work.derive_fleet_summary`."""
+    """The fleet-pulse counts: ``ready``; ``running`` (``running`` + ``delivering``);
+    ``waiting`` (``waiting_on_human`` + ``paused``); ``needs`` (``needs_human``).
+    ``not_ready``, ``stopped``, and ``done`` count toward no bucket — a pulse, not a total."""
 
     ready: int
     running: int

@@ -1,15 +1,8 @@
 """Operational event log — end to end (issue #125, Phase 5, e2e tier).
 
-The in-process scenario: a real mock worker driven to a **verdict-less** exit exhausts its
-retry budget, so the runner escalates — and a **critical** ``worker-lost`` operational
-event (a) reads back off the live ``GET /api/events`` and (b) arrives on the SSE spine as
-an ``event-logged`` frame. Every seam real (mock forge + hub + runner over a minted
-fixture), no tokens, no network. Skipped unless ``BLIZZARD_E2E=1``.
-
-The browser half is
-:func:`test_the_events_tab_renders_filters_and_updates_live_in_the_browser`, over the
-built bundle; the Event log **rail** gets its own reload proof (issue #213) in
-:func:`test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows`.
+A verdict-less exit exhausts the retry budget and escalates; a critical `worker-lost`
+event must read back off `GET /api/events` and arrive on the SSE spine. Skipped unless
+``BLIZZARD_E2E=1``. Browser coverage lives in the tests below (issue #213 for the rail).
 """
 
 from __future__ import annotations
@@ -39,9 +32,8 @@ from tests.e2e.test_acceptance_loop import (
     _winter_source,
 )
 
-# The built Angular bundle `blizzard hub host` mounts at `/`; the browser scenario needs it
-# (like every other browser e2e — `mise run e2e` `depends = ["web-build"]`). Absent it, the
-# board renders no app, so the scenario skips rather than fails against a placeholder.
+# The built Angular bundle `blizzard hub host` mounts at `/`, needed for the browser
+# scenarios; absent it, they skip rather than fail against a placeholder.
 _HUB_BUNDLE = Path(__file__).resolve().parents[2] / "src" / "blizzard" / "static" / "hub" / "index.html"
 
 pytestmark = [
@@ -89,12 +81,10 @@ def _graph_yaml() -> str:
 
 
 def _sse_event_types(hub: httpx.Client) -> list[str]:
-    """The event types on the live SSE spine's replay tail (``Last-Event-ID: 0`` replays
-    the buffered frames the instant the stream opens).
-
-    The tail flushes immediately on connect, then the live connection blocks awaiting the
-    next event/keepalive — so a short read window captures the whole tail and the ensuing
-    ``ReadTimeout`` is the expected end-of-tail signal, not a fault."""
+    """The event types on the SSE spine's replay tail (``Last-Event-ID: 0`` replays the
+    buffered frames on connect). The tail flushes immediately, then the live connection
+    blocks — so a short read window captures it, and the ensuing ``ReadTimeout`` is
+    expected, not a fault."""
     types: list[str] = []
     try:
         with hub.stream("GET", "/api/events/stream", headers={"Last-Event-ID": "0"}, timeout=3.0) as resp:
@@ -200,10 +190,9 @@ def _push_event(
 def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
     tmp_path: Path, chromium_available: bool
 ) -> None:
-    """The board's Events tab over the **built** bundle in a real browser: rows render
-    severity-then-recency, a severity filter narrows them, a fresh event arrives **live over
-    SSE with no reload**, and a row deep-links to its chunk (AC#6). Release-only tier — skips
-    cleanly without Chromium or a built bundle, runs in the tag `release` full e2e tier."""
+    """The board's Events tab over the built bundle: rows render severity-then-recency, a
+    severity filter narrows them, a fresh event arrives live over SSE, and a row deep-links
+    to its chunk (AC#6)."""
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     if not _HUB_BUNDLE.is_file():
@@ -286,17 +275,9 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
 def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
     tmp_path: Path, chromium_available: bool, narrow_viewport: ViewportSize
 ) -> None:
-    """The Events tab's time-first grid (issue #153/#154) has a narrow-viewport fallback
-    (issue #155) — below the board's own mobile cutoff the fixed grid tracks would
-    otherwise leave the message column at ~0px, and `overflow-wrap: anywhere` wraps it one
-    character per line, ballooning a single row to hundreds of pixels tall. This asserts the
-    fallback holds at a real ~390px phone width: a row with a long message stays a bounded
-    height and the page never gains horizontal scroll (issue #171's narrow-viewport tier
-    rule).
-
-    Release-only tier — skips cleanly without Chromium or a built bundle, runs in the tag
-    `release` full e2e tier.
-    """
+    """Narrow-viewport fallback (issue #155) for the Events tab's time-first grid (issue
+    #153/#154): at ~390px width a long-message row stays a bounded height and the page
+    gains no horizontal scroll (issue #171's narrow-viewport tier rule)."""
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     if not _HUB_BUNDLE.is_file():
@@ -335,9 +316,8 @@ def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
 
                 box = page.get_by_test_id("events-row").first.bounding_box()
                 assert box is not None, "the events row has no layout box"
-                # A broken grid measured ~848px for one row pre-fix; the flex fallback
-                # measured 74px. A generous ceiling catches the collapse class of defect
-                # without pinning an exact pixel height.
+                # A generous ceiling catches the collapse-class defect without pinning
+                # an exact pixel height (broken: ~848px; fixed: ~74px).
                 assert box["height"] < 200, f"row height {box['height']}px — the grid collapsed at a narrow width"
 
                 no_overflow = page.evaluate(
@@ -349,46 +329,9 @@ def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
 
 
 def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: Path, chromium_available: bool) -> None:
-    """The Event log **rail** (``fleet-event-log-panel`` on the board, distinct from the
-    Events tab above) backfills on load and survives a reload with no gap and no
-    duplicate at the seam (issue #213 — the whole point of the issue).
-
-    Restarts the hub daemon mid-test rather than calling ``page.reload()``, because
-    ``EventBroker``'s replay ring (``events/broker.py``) is process-scoped and
-    in-memory: a plain reload against a still-running hub gets replayed the entire
-    still-resident ring regardless of the backfill fix, so "rows survive a plain
-    reload" would pass on both sides of it and prove nothing. Only a fresh process
-    (empty ring, on-disk facts intact) isolates the Phase 3/4 ``GET /api/activity``
-    backfill this test targets (issue #213).
-
-    So this test drives a few facts, loads the board once (over the
-    still-running hub, establishing a baseline row set), **restarts the hub daemon
-    against the same on-disk store** (facts are durable; the in-memory ring is not),
-    then reloads the page against the new process and asserts the same rows are
-    still there — which only the Phase 3/4 ``GET /api/activity`` backfill can supply,
-    since the fresh broker's replay tail is now empty. Against the pre-Phase-4 code
-    this fails on the reloaded page's now-empty rail; on this code it also proves no
-    duplicate at the seam (a broken ``key`` dedup would double every row the first
-    load's live-replay-plus-backfill overlap already covers, not just the reload).
-
-    Drives only chunk **mints** (``cause="minted"``, a lone ``chunk-changed`` publish
-    with no ``queue-changed`` companion) and one pushed operational event — deliberately
-    avoiding promote/pause/resume, which each also publish a live-only ``queue-changed``
-    frame (excluded from backfill by design, issue #213 §2): that would make the
-    first-load and post-restart row sets legitimately differ by design, not by a bug,
-    which would make an exact before/after comparison meaningless.
-
-    The two mint rows' rendered *text* is expected to differ — not stay byte-identical
-    — across the two loads, and this is itself a documented Phase 1/4 boundary worth
-    asserting rather than papering over: the **live** (replay-ring-sourced) rendering of
-    a `minted` frame carries a publish-time-derived `status`/`node` (`describe_chunk_change`
-    always derives the chunk's *current* state at publish, regardless of cause), so it
-    renders as `<ref> -> not_ready -> build`; the **backfilled** rendering of the exact
-    same historical fact structurally cannot reconstruct `status` for a past instant
-    (`ActivityRow`'s own docstring, `hub/domain/work.py`), so it renders as bare `<ref>`,
-    with no arrow. The row *identity* (which two chunks, exactly once each) must still
-    match across both loads; only the arrow's presence is expected to flip.
-    """
+    """Event log rail backfill (issue #213): after a hub restart (fresh replay ring, same
+    on-disk store), a reload shows the same row count and chunk-ref set as before restart —
+    proving `GET /api/activity` backfill, not leftover live replay."""
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     if not _HUB_BUNDLE.is_file():
@@ -432,24 +375,18 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
                 page.goto(f"http://127.0.0.1:{hub_port}/", wait_until="load")
                 expect(page.get_by_test_id("board-shell")).to_be_visible()
                 expect(page.get_by_test_id("event-log-panel")).to_be_visible()
-                # Both chunk mints and the pushed event have already landed on the wire
-                # by the time this subscribes, so the connect-time SSE replay tail alone
-                # already carries them — this establishes the baseline row set, not yet
-                # the assertion the restart below makes meaningful.
+                # Facts already landed before this subscribes, so the replay tail alone
+                # carries them — this is the baseline row set, not yet the restart assertion.
                 expect(page.get_by_test_id("event-log-row")).to_have_count(3)
                 first_load_messages = page.get_by_test_id("event-log-message").all_text_contents()
 
-            # The hub process exits here (`_hub`'s context manager terminates it) — the
-            # facts above are durable (sqlite under `hub_dir`), but `EventBroker`'s
-            # in-memory replay ring is not: the next `_hub()` call starts a fresh one,
-            # empty, over the SAME store.
+            # The hub exits here; facts are durable (sqlite) but `EventBroker`'s replay
+            # ring is not — the next `_hub()` call starts a fresh, empty one over the same store.
             with _hub(hub_dir, forge_port, hub_port):
                 page.reload(wait_until="load")
                 expect(page.get_by_test_id("event-log-panel")).to_be_visible()
-                # The fresh broker's replay tail is empty — only `GET /api/activity`'s
-                # backfill (Phase 3/4) can repopulate these rows now: same row COUNT (no
-                # row silently dropped, none doubled by a broken key-dedup) as the
-                # pre-restart baseline.
+                # The fresh broker's replay tail is empty — only `GET /api/activity`
+                # backfill can repopulate these rows, at the same count as the baseline.
                 expect(page.get_by_test_id("event-log-row")).to_have_count(3)
                 reload_messages = page.get_by_test_id("event-log-message").all_text_contents()
 
@@ -459,12 +396,8 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
                 reload_event_message = next(m for m in reload_messages if "reload-seam-probe" in m)
                 assert reload_event_message == event_message, (reload_messages, first_load_messages)
 
-                # The two mint rows: live-rendered (first load) carries the `→ … → …`
-                # transition arrow; backfill-rendered (post-restart) is the bare chunk
-                # ref (see the docstring). Confirming the arrow flips as expected is
-                # itself part of the proof this exercises the backfill path, not a
-                # leftover live replay — and the *set* of chunk refs must be identical
-                # either way: nothing missing, nothing duplicated.
+                # Live-rendered rows carry the `→` transition arrow; backfill-rendered rows
+                # are the bare chunk ref — the flip proves the backfill path, not leftover replay.
                 first_mint_rows = [m for m in first_load_messages if m != event_message]
                 reload_mint_rows = [m for m in reload_messages if m != reload_event_message]
                 assert len(first_mint_rows) == len(reload_mint_rows) == 2, (first_mint_rows, reload_mint_rows)

@@ -1,12 +1,9 @@
 """The runner-local machine-status routes — ``GET /runner`` / ``/environments`` /
 ``/asks`` / ``/escalations`` (issue #51).
 
-Exercised over a real store via TestClient, mirroring ``tests/test_runner_leases_api.py``'s
-convention. Hub-free but for the derived reachability read: nothing here reaches for
-the hub or the forge — every route's shape, its empty and unwired forms, and the
-derivation->wire mapping (capacities, hub reachability from staleness, open-ask
-filtering, escalation supersession) are the point.
-"""
+Exercised over a real store via TestClient. Hub-free but for the derived reachability
+read: every route's shape, its empty and unwired forms, and the derivation->wire
+mapping are the point."""
 
 from __future__ import annotations
 
@@ -72,9 +69,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
     store.record_lease(NewLease(**fields))  # type: ignore[arg-type]
 
 
-# --------------------------------------------------------------------------- #
-# GET /runner
-# --------------------------------------------------------------------------- #
+# --- GET /runner ---
 
 
 @pytest.mark.component
@@ -183,9 +178,7 @@ def test_last_tick_reflects_daemon_liveness(tmp_path: Path) -> None:
     assert resp.json()["last_tick_at"] == _NOW.isoformat()
 
 
-# --------------------------------------------------------------------------- #
-# GET /environments
-# --------------------------------------------------------------------------- #
+# --- GET /environments ---
 
 
 @pytest.mark.component
@@ -251,9 +244,7 @@ def test_a_held_binding_outside_the_configured_pool_still_surfaces(tmp_path: Pat
 @pytest.mark.component
 def test_two_held_bindings_on_one_environment_id_both_surface(tmp_path: Path) -> None:
     """A crash/requeue race can leave two held bindings on the same environment id —
-    ``env_bindings`` carries no unique constraint on ``environment_id``. The anomaly
-    must not collapse into a single ordinary row: the first binding fills the pool
-    slot, the second still surfaces as its own extra row rather than being dropped."""
+    the anomaly must not collapse into a single row or be silently dropped."""
     app, store = _app_with_status(tmp_path, env_pool=("e1",))
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_binding(chunk_id="ch_2", environment_id="e1", workdir="/ws/e1", bound_at=_NOW + timedelta(minutes=1))
@@ -268,9 +259,7 @@ def test_two_held_bindings_on_one_environment_id_both_surface(tmp_path: Path) ->
     ]
 
 
-# --------------------------------------------------------------------------- #
-# GET /asks?open=true
-# --------------------------------------------------------------------------- #
+# --- GET /asks?open=true ---
 
 
 @pytest.mark.component
@@ -388,9 +377,7 @@ def test_open_false_is_refused_rather_than_answered_wrong(tmp_path: Path) -> Non
     assert resp.status_code == 400
 
 
-# --------------------------------------------------------------------------- #
-# GET /escalations
-# --------------------------------------------------------------------------- #
+# --- GET /escalations ---
 
 
 @pytest.mark.component
@@ -427,10 +414,9 @@ def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> N
 
 @pytest.mark.component
 def test_the_escalation_paste_string_carries_no_permission_mode_even_when_configured(tmp_path: Path) -> None:
-    """Pins the paste surface to the REAL adapter (issue #258 review): the escalation's
-    ``resume_command`` is run by a human in a bare terminal with none of the identity
-    env, so it must stay at the interactive permission default — only the takeover
-    door's attended exec reasserts the configured mode."""
+    """Pins the paste surface to the REAL adapter (issue #258 review): a human running
+    ``resume_command`` in a bare terminal must stay at the interactive permission
+    default."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     service = RunnerStatusService(
         store,
@@ -481,9 +467,7 @@ def test_a_non_escalated_closure_does_not_appear(tmp_path: Path) -> None:
     assert resp.json()["items"] == []
 
 
-# --------------------------------------------------------------------------- #
-# GET /takeovers — the stranded-takeover recovery surface (issue #52)
-# --------------------------------------------------------------------------- #
+# --- GET /takeovers — the stranded-takeover recovery surface (issue #52) ---
 
 
 @pytest.mark.component
@@ -542,9 +526,7 @@ def test_no_open_takeovers_is_an_empty_list(tmp_path: Path) -> None:
     assert resp.json()["items"] == []
 
 
-# --------------------------------------------------------------------------- #
-# GET /facts — the local fact log
-# --------------------------------------------------------------------------- #
+# --- GET /facts — the local fact log ---
 
 
 @pytest.mark.component

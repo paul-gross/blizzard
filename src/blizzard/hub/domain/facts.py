@@ -1,29 +1,9 @@
-"""Runner-reported fact intake — lease mints and escalations.
+"""Runner-reported fact intake — lease mints, escalations, and the rest of the runner's outbound facts.
 
-The runner mints facts locally and reports the fleet-visible ones up to the hub:
-``lease.minted`` (every node-step attempt) and ``escalation.recorded`` (retries
-exhausted). Two landing points share the same domain writes:
-
-* :class:`RunnerFactsService` — the direct, single-fact intake behind the typed
-  ``POST /chunks/{id}/leases`` and ``/chunks/{id}/escalations`` routes.
-* :class:`FactIngestService` — the batched, seq-idempotent store-and-forward push
-  behind ``POST /api/events``: every fact rides the runner's outbound buffer
-  with a per-runner monotonic seq, and a replay (lost ack, outage backlog) is re-acked
-  against the hub's per-runner **high-water mark** without re-applying. This is the
-  path the reconciliation loop uses.
-
-Both hold the **write** chunk repository (``bzh:controller-read-only``) and stamp the
-landing time from the injected clock (``bzh:injected-clock``); the routes stay
-read-only over the store and delegate here.
-
-Why the hub needs the lease mints: the epoch fence checks a completion's epoch
-against the chunk's **latest** lease epoch. A chunk that visits more than one runner
-node (build -> review) mints a fresh epoch per node-step, so without the runner
-reporting each mint the hub's latest would stall at the claim's epoch and reject the
-second node's completion as stale. Reporting the mint keeps the two in lockstep, and it
-is also what **closes an escalation by supersession**: a requeue's fresh lease
-mint, landing after the escalation, flips ``needs_human`` off with no resolution fact.
-"""
+:class:`RunnerFactsService` is the direct single-fact intake; :class:`FactIngestService` is the batched
+store-and-forward push, idempotent against a per-runner **high-water mark**. Landing each lease mint is
+what keeps the epoch fence in lockstep across a chunk's successive node-steps. Both hold the **write**
+chunk repository (``bzh:controller-read-only``) and stamp landing time from the injected clock."""
 
 from __future__ import annotations
 
@@ -54,11 +34,8 @@ from blizzard.wire.facts import (
 
 _log = get_logger("blizzard.hub.facts")
 
-# Chunk-scoped, fence-advancing/status-deriving kinds route-token-gated on intake
-# (issue #84b): a fabricated fact of one of these from a non-holder must not be able
-# to advance the fence or open a decision. `usage.recorded` is deliberately excluded —
-# see the code comment at its branch below. Runner-scoped kinds
-# (`runner.locally_paused`/`resumed`) carry no chunk_id and are never gated.
+# The chunk-scoped, fence-advancing kinds gated on intake (issue #84b): a fabricated one from a
+# non-holder must not advance the fence or open a decision. Runner-scoped kinds are never gated.
 _ROUTE_TOKEN_GATED_KINDS = frozenset({LEASE_MINTED, ESCALATION_RECORDED, QUESTION_ASKED})
 
 
@@ -90,27 +67,17 @@ class RunnerFactsService:
 
 @dataclass(frozen=True)
 class FactIngestResult:
-    """:meth:`FactIngestService.ingest`'s own return — the wire :class:`RunnerFactAck`
-    plus, per freshly-applied fact (issue #213), the identity of the row it wrote. Not
-    a wire type.
-
-    ``row_id_by_seq`` carries an entry only for a fact kind whose own id is not already
-    in its payload (``escalation.recorded`` -> ``escalations.id``, ``event.recorded`` ->
-    ``event_log.id``) — every other applied kind either carries its own id already
-    (``question.asked``/``answer.delivered`` name their ``question_id``) or needs none
-    (``lease.minted``, runner-scoped facts)."""
+    """:meth:`FactIngestService.ingest`'s own return — the wire :class:`RunnerFactAck` plus, per
+    freshly-applied fact (issue #213), the id of the row it wrote. ``row_id_by_seq`` carries an entry
+    only for a kind whose own id is not already in its payload. Not a wire type."""
 
     ack: RunnerFactAck
     row_id_by_seq: dict[int, int]
 
 
 class FactIngestService:
-    """Apply a runner's batched pushed facts idempotently against its high-water mark.
-
-    Most facts are chunk-scoped and land through ``chunks``; ``fleet`` is here for the
-    runner-scoped ones — a runner reporting a brake it set on itself is about the runner,
-    not about any chunk (issue #43).
-    """
+    """Apply a runner's batched pushed facts idempotently against its high-water mark. Most facts are
+    chunk-scoped and land through ``chunks``; ``fleet`` is here for the runner-scoped ones (issue #43)."""
 
     def __init__(self, *, chunks: IWriteChunkRepository, fleet: FleetService, clock: IClock) -> None:
         self._chunks = chunks
@@ -130,9 +97,8 @@ class FactIngestService:
                 continue
             ok, row_id = self._apply(batch.runner_id, fact.kind, fact.payload, route_token_mode=route_token_mode)
             if not ok:
-                # An unknown kind or a route-token rejection (issue #84b) is a contract
-                # mismatch, not an idempotency skip: do not advance the mark past it,
-                # and name it so the runner surfaces it.
+                # A contract mismatch, not an idempotency skip (issue #84b): do not advance the mark
+                # past it, and name it in the ack.
                 rejected.append(fact.seq)
                 continue
             mark = fact.seq
@@ -203,17 +169,8 @@ class FactIngestService:
             )
             return True, None
         if kind == USAGE_RECORDED:
-            # Deliberately NO epoch fence: a usage row whose epoch trails the chunk's
-            # latest is real spend a fenced-out zombie already incurred, and it must be
-            # attributed to *its own* epoch, not dropped (pinned by
-            # tests/test_usage_facts_ingest.py::test_stale_epoch_usage_is_recorded_and_attributed_not_dropped).
-            #
-            # Deliberately NOT route-token-gated either — do NOT add this kind to
-            # `_ROUTE_TOKEN_GATED_KINDS` above (issue #84b, overriding issue #84's own
-            # acceptance-criterion list, which named `usage` among the chunk-scoped facts
-            # a non-holder's call should have rejected). Same rationale: epic #57/#60's
-            # cost figures depend on every incurred cost landing (pinned by
-            # tests/test_route_token_authz.py::test_usage_recorded_applies_without_a_token_even_under_enforce).
+            # No epoch fence and no route-token gate: trailing-epoch spend is real and attributed to its
+            # own epoch (issue #84b; pinned in tests/test_usage_facts_ingest.py, test_route_token_authz.py).
             self._chunks.record_usage(
                 str(payload["chunk_id"]),
                 node_id=str(payload["node_id"]),
@@ -230,12 +187,8 @@ class FactIngestService:
             )
             return True, None
         if kind == EVENT_RECORDED:
-            # Fold one runner-surfaced operational event into the append-only event_log
-            # (issue #125). Deliberately NOT epoch-fenced and NOT route-token-gated (it is
-            # never added to `_ROUTE_TOKEN_GATED_KINDS` above): a failure event from a
-            # fenced-out or dying worker is precisely what an operator needs to see, so
-            # gating it out would drop the signal the feature exists to surface. `chunk_id`
-            # is optional (a runner-scoped event names none); `detail` is an opaque object.
+            # Neither epoch-fenced nor route-token-gated (issue #125): an event from a fenced-out or
+            # dying worker is exactly the signal this log exists to surface. `chunk_id` is optional.
             detail = payload.get("detail")
             event_id = self._chunks.record_event(
                 severity=str(payload["severity"]),
@@ -256,11 +209,8 @@ class FactIngestService:
             )
             return True, None
         if kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED:
-            # Runner-scoped and hub-read-only, same as the local-pause pair below: an
-            # advisory fact the hub derives no status from. Refresh-in-place
-            # (`bzh:facts-not-status`'s stated exception) — only the latest sample is
-            # ever of interest, so this upserts rather than appends. No row id to
-            # report: identity is the runner id, already known to the caller.
+            # Runner-scoped and hub-read-only: an advisory fact no status derives from. Refresh-in-place
+            # (`bzh:facts-not-status`'s stated exception) — only the latest sample is of interest.
             self._fleet.record_external_usage(
                 runner_id,
                 sampled_at=_parse_at(payload.get("sampled_at"), now),
@@ -269,9 +219,8 @@ class FactIngestService:
             )
             return True, None
         if kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
-            # Runner-scoped and hub-read-only. Stamped with the runner's own clock off the
-            # payload — when it decided, not when the buffer drained, which may be an
-            # outage later.
+            # Runner-scoped and hub-read-only. Stamped off the payload — when the runner decided, not
+            # when its buffer drained, which may be an outage later.
             local_pause_id = self._fleet.record_local_pause(
                 runner_id,
                 paused=kind == RUNNER_LOCALLY_PAUSED,
@@ -318,10 +267,8 @@ def _opt_float(value: object) -> float | None:
 def _parse_at(value: object, fallback: datetime) -> datetime:
     """Read an ISO-8601 instant off a batched payload, falling back on a malformed stamp.
 
-    Coerces a naive result to UTC (``bzh:utc-instants``): a buffered payload can carry
-    a naive stamp, and store-and-forward resends whatever it already buffered rather
-    than re-minting.
-    """
+    Coerces a naive result to UTC (``bzh:utc-instants``): a buffered payload can carry a naive stamp,
+    and store-and-forward resends what it already buffered rather than re-minting."""
     if isinstance(value, str):
         try:
             return as_utc(datetime.fromisoformat(value))

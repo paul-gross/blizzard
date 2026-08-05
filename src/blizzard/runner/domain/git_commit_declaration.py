@@ -1,13 +1,7 @@
-"""The worker git-commit declaration channel — ``blizzard runner artifact commit
---forge <f> --repo <r> --branch <b> --commit <sha>`` (issue #143, Phase 3).
-
-Behind ``POST /api/leases/{lease_id}/git-commits``: a worker durably declares a
-``git_commit``-kind artifact for a repo it touched, authorized by the lease token minted
-at its own spawn (issue #113) — a structural sibling of
-:class:`~blizzard.runner.domain.attachments.AttachmentService`.
-:meth:`GitCommitDeclarationService.declare` is the one place the write happens
-(``bzh:controller-read-only``).
-"""
+"""The worker git-commit declaration channel (issue #143): a worker durably declares a
+``git_commit``-kind artifact for a repo it touched, authorized by the lease token minted at its own
+spawn (issue #113). :meth:`GitCommitDeclarationService.declare` is the one place the write happens
+(``bzh:controller-read-only``)."""
 
 from __future__ import annotations
 
@@ -23,11 +17,8 @@ __all__ = [
     "GitCommitDeclarationUnknownRepo",
 ]
 
-# The armed crash window (issue #113, mirrored for issue #143): the declaration row is
-# durable — its single committed txn has returned — but the ``200`` has not. Recovery owes
-# nothing but durability. Swept by
-# ``tests/crash/test_kill9_sweep.py::test_kill9_at_declare_commit_crash_point``
-# (``bzh:crash-point-registry``).
+# Armed window: the declaration row is durable but the ``200`` has not returned; recovery owes nothing
+# but durability. Swept by tests/crash/test_kill9_sweep.py (``bzh:crash-point-registry``).
 _CP_DECLARE_COMMIT_AFTER_RECORD = crashpoint(
     "declare-commit.after-record.before-response",
     "runner recorded the git-commit declaration durably but has not returned 200 — a kill -9 here must not lose it",
@@ -40,19 +31,14 @@ class GitCommitDeclarationRejected(Exception):
 
 
 class GitCommitDeclarationUnknownRepo(Exception):
-    """The declared ``(env, repo)`` is not in the lease's environments — the API edge
-    maps this to ``400``.
-
-    Deliberately an error at declare time rather than a drop later: the worker is alive,
-    holds the context, and can re-run the verb correctly."""
+    """The declared ``(env, repo)`` is not in the lease's environments — mapped to ``400``. An error at
+    declare time rather than a drop later: the worker is alive and can re-run the verb correctly."""
 
 
 class GitCommitDeclarationService:
-    """Composition-root-wired: the write store, the workspace provider, and the clock.
-
-    The provider is here because a declaration is only meaningful against the
-    environment's repo manifest: it says which repos the lease authorizes, and it is the
-    single source of the origin each one is later verified against."""
+    """Composition-root-wired: the write store, the workspace provider, and the clock. The provider is
+    here because the environment's repo manifest says which repos the lease authorizes, and is the one
+    source of the origin each is later verified against."""
 
     def __init__(self, store: IWriteRunnerStore, clock: IClock, provider: IWorkspaceProvider) -> None:
         self._store = store
@@ -69,19 +55,11 @@ class GitCommitDeclarationService:
         commit: str,
         environment_id: str | None = None,
     ) -> str:
-        """Record ``(env, repo, branch, commit)`` for ``lease`` and return the resolved
-        environment id.
-
-        Raises :class:`GitCommitDeclarationRejected` if ``presented_token`` does not
-        authorize the lease, or :class:`GitCommitDeclarationUnknownRepo` if the env
-        cannot be resolved or does not list ``repo``.
-
-        ``lease`` is already resolved by the caller (``bzh:domain-takes-objects``) — this
-        never looks a lease id up itself. Append-and-read-newest
-        (``bzh:facts-not-status``): a repeat call for the same ``(lease, env, repo)`` is a
-        correction, not an error. The environment is part of that key so a chunk holding
-        several envs cannot have one env's declaration overwrite another's for the same
-        repo."""
+        """Record ``(env, repo, branch, commit)`` for ``lease`` and return the resolved environment id.
+        Raises :class:`GitCommitDeclarationRejected` on an unauthorizing token, or
+        :class:`GitCommitDeclarationUnknownRepo` when the env is unresolvable or does not list ``repo``.
+        Append-and-read-newest (``bzh:facts-not-status``): a repeat call for the same ``(lease, env,
+        repo)`` is a correction. The env is part of that key, so one env cannot overwrite another."""
         stored_hash = self._store.lease_token_hash(lease.lease_id)
         if not check_lease_token(presented_token=presented_token, stored_hash=stored_hash):
             raise GitCommitDeclarationRejected(f"presented token does not authorize lease {lease.lease_id}")

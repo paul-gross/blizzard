@@ -1,22 +1,5 @@
-"""per-session spawn-preamble fingerprints — session_preamble_facts (issue #149)
-
-The comparison key behind resume-time preamble elision: one row per spawn recording the
-sha256 of the two *standing* preamble layers as that spawn resolved them — layer 1 (the
-blizzard preamble) and layer 2 (the operator's workspace prompt). The next spawn that
-resumes the session compares against the newest row and sends a layer only when it moved,
-announcing the difference when it exists.
-
-Digests, not the prose: the operator's text stays in ``workspace_prompt`` and in config,
-and this table never becomes a second copy of it.
-
-Append-only, keyed on the harness session — the thing that already holds the earlier
-prose, and which outlives the per-attempt lease a node-entry resume mints fresh. No
-back-fill is owed: a session with no row reads back ``None`` and renders in full, which is
-exactly the pre-revision behaviour.
-
-The table is declared as a frozen ``sa.Table`` literal in a local ``MetaData`` rather than
-imported from ``schema.py`` (``bzh:frozen-revisions``), so a later reshape cannot silently
-change what this revision creates on a fresh store.
+"""per-session spawn-preamble fingerprints (issue #149): one row per spawn holding the sha256 of the
+two standing preamble layers, so a resume sends a layer only when it moved. Digests, not prose.
 
 Revision ID: 20260727_1000_runner_session_preamble_facts
 Revises: 20260726_1000_runner_declaration_environment_id

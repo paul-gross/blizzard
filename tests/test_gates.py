@@ -1,10 +1,8 @@
 """Human gates on the wired hub — component tier.
 
-The gate mechanics against a fully-wired hub over a tmp sqlite store (doubles only at
-the forge/work-source seams — ``bzh:pluggable-seams``): a graph gate opens a decision on arrival
-and rejects a worker transition out of it; a runner-config gate submits a decision in
-place of a transition for a worker node; resolution is first-write-wins; the resolving
-transition advances the chunk; and ``requeue`` closes an escalation by supersession.
+A graph gate opens a decision on arrival and rejects a worker transition out of it; a
+runner-config gate submits a decision in place of a transition; resolution is
+first-write-wins, and ``requeue`` closes an escalation by supersession.
 """
 
 from __future__ import annotations
@@ -140,7 +138,6 @@ def _completion(node_id: str, *, choice: str, epoch: int = 1, decision_id: str |
 
 # --------------------------------------------------------------------------- #
 # Graph gate
-# --------------------------------------------------------------------------- #
 
 
 def test_graph_gate_opens_a_decision_and_parks(tmp_path: Path) -> None:
@@ -261,7 +258,6 @@ def test_decide_unknown_choice_is_400(tmp_path: Path) -> None:
 
 # --------------------------------------------------------------------------- #
 # Runner-config gate (a worker node, gated by the runner)
-# --------------------------------------------------------------------------- #
 
 
 def test_runner_config_gate_submits_a_decision_for_a_worker_node(tmp_path: Path) -> None:
@@ -309,7 +305,6 @@ def test_runner_config_gate_submission_is_idempotent(tmp_path: Path) -> None:
 
 # --------------------------------------------------------------------------- #
 # Requeue supersession
-# --------------------------------------------------------------------------- #
 
 
 def test_requeue_closes_an_escalation_by_supersession(tmp_path: Path) -> None:
@@ -349,16 +344,14 @@ def test_requeue_on_a_non_escalated_chunk_is_409(tmp_path: Path) -> None:
 
 # --------------------------------------------------------------------------- #
 # Detach
-# --------------------------------------------------------------------------- #
 
 
 def test_detach_a_claimed_chunk_re_derives_ready_and_reenters_the_queue(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, _ = _ingest(hub, _PLAIN_YAML)
     _claim_and_lease(hub, chunk_id)
-    # No clock.advance: the route creation and the release land at the same fixed
-    # instant. The route-event seq tiebreak (issue #41), not the timestamp, is what
-    # decides the tie — see test_detach_at_a_same_instant_tie_still_takes_effect.
+    # No clock.advance: route creation and release land at the same fixed instant. The
+    # route-event seq tiebreak (issue #41), not the timestamp, decides the tie.
     resp = hub.client.post(f"/api/chunks/{chunk_id}/detach")
     assert resp.status_code == 202, resp.text
     # The response is the transitioned chunk's summary (issue #104), not a bare
@@ -431,11 +424,8 @@ def test_detach_publishes_chunk_changed_and_queue_changed(tmp_path: Path) -> Non
 
 def test_reclaim_at_a_same_instant_tie_still_derives_running(tmp_path: Path) -> None:
     """The other half of issue #41's tie: a fresh claim landing at the exact instant of
-    a prior release must not lose the live route. Detach releases the route, and —
-    with no ``clock.advance`` — the re-claim lands at the identical fixed instant; the
-    route-event seq tiebreak, not the timestamp, is what keeps this a live route
-    (generalizes ``test_reclaimed_after_release_is_running_again``, which pins the same
-    guarantee at the domain-unit tier)."""
+    a prior release must not lose the live route — the route-event seq tiebreak, not the
+    timestamp, is what keeps this a live route."""
     hub = build_hub(tmp_path)
     chunk_id, _ = _ingest(hub, _PLAIN_YAML)
     _claim_and_lease(hub, chunk_id)

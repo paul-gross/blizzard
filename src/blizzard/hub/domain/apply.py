@@ -1,22 +1,9 @@
 """Completion apply — the advancement checkpoint.
 
-``POST /chunks/{id}/completions`` submits one node-step's completion; this rule
-applies it. The write is **atomic** (the transition and its artifacts land together),
-**epoch-fenced** (a submission whose epoch is not the chunk's latest is
-rejected before anything is written), and **idempotent** (a re-applied completion
-returns the same outcome without a second transition).
-
-The apply-response carries the outcome: ``next`` with the next envelope, ``hub_node_taken``
-for a hub-executed node, ``done`` at the reserved terminal, or ``parked_at_gate`` on an open
-**Decision**. Ordering matters — the idempotency probe runs **before** the terminal check,
-so replaying the very completion that delivered the chunk still returns its original outcome
-rather than a spurious ``failure``.
-
-Human gates cut two ways here. A transition **into** a human-judged node opens
-a decision and parks (the graph gate). A transition **out of** one is only legal as
-the **resolving transition** — a completion carrying the resolved decision's id;
-a plain worker transition out of a gate is rejected (human signoff required).
-"""
+One node-step's completion is applied here. The write is **atomic**, **epoch-fenced**,
+and **idempotent** — and the idempotency probe runs **before** the terminal check. A
+transition **into** a human-judged node opens a decision and parks; leaving one is legal
+only as the resolving transition."""
 
 from __future__ import annotations
 
@@ -47,14 +34,8 @@ from blizzard.hub.domain.work import (
 from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, checks_gate_violated
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 
-# The cross-graph migration crash window (issue #90, ``bzh:crash-point-registry``): the
-# migration fact, the graph/model re-pin, the route release (unless the migration lands on
-# a hub node — issue #111 — in which case the route is retained instead), and the
-# node-step's artifacts are already committed in one transaction — a ``kill -9`` here loses
-# only the ``MIGRATED``/``HUB_NODE_TAKEN`` response, which the replayed completion re-derives
-# via the ``accepted_migration`` probe (idempotent). On a hub landing that replay probe
-# short-circuits *above* the inline ``HubNodeExecutor.run``, so recovery comes from the
-# RETAINED route rather than from re-running it here.
+# The cross-graph migration crash window (issue #90, ``bzh:crash-point-registry``): the whole
+# migration is committed but its response is not; the replayed completion re-derives it.
 _CP_MIGRATE_AFTER_RECORD = crashpoint(
     "migrate.after-record.before-response",
     "migration recorded (graph/model re-pinned, route released unless hub-landing, artifacts committed);"
@@ -64,13 +45,9 @@ _CP_MIGRATE_AFTER_RECORD = crashpoint(
 
 @dataclass(frozen=True)
 class ApplyResult:
-    """:meth:`ApplyService.apply`'s own return — the wire :class:`ApplyResponse` plus
-    the identity of the durable fact this call itself just wrote (issue #213). Not a
-    wire type.
-
-    At most one of the two is ever set, and only on a genuinely fresh write this call
-    performed — never on a replay, a failure, or a branch that recorded a different
-    fact entirely (e.g. the unresolvable cross-graph target's escalation)."""
+    """:meth:`ApplyService.apply`'s own return — the wire :class:`ApplyResponse` plus the
+    identity of the durable fact this call itself just wrote (issue #213). At most one of
+    the two is ever set, and only on a genuinely fresh write. Not a wire type."""
 
     response: ApplyResponse
     transition_id: str | None = None
@@ -99,13 +76,10 @@ def _migrated_replay() -> ApplyResult:
 
 def _hub_node_taken_replay() -> ApplyResult:
     """The replayed ``HUB_NODE_TAKEN`` apply-response (issue #111) — a lost-ack re-flush of a
-    completion whose migration landed on a **hub-executed** node. Like :func:`_migrated_replay`
-    it carries no node/graph detail (the natural-key probe alone resolves the replay), but its
-    outcome is ``HUB_NODE_TAKEN``, not ``MIGRATED``: a hub landing **retained** the route, so a
-    ``MIGRATED`` reply would make the runner release it and strand the chunk at ``delivering``
-    (pinned by
-    tests/test_migration_apply.py::test_a_replayed_hub_landing_migration_completion_returns_hub_node_taken).
-    No fresh fact was written this call."""
+    completion whose migration landed on a **hub-executed** node.
+
+    Distinct from :func:`_migrated_replay` because a hub landing **retained** the route, which
+    a ``MIGRATED`` reply would release (pinned by tests/test_migration_apply.py)."""
     return ApplyResult(
         response=ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN, detail="chunk migrated onto a hub node (replay)")
     )
@@ -139,37 +113,20 @@ class ApplyService:
     ) -> ApplyResult:
         """Apply a completion.
 
-        ``target_graph`` is the pre-resolved cross-graph migration target (issue #90),
-        ``intended_target_graph`` the chunk's own standing migration intent's target
-        (issue #124), and ``follow_latest_graph`` the standing follow-latest **policy**'s
-        target (issue #164), already ``None`` whenever the policy is a no-op. All three
-        arrive pre-resolved — ``None`` meaning "names no enabled graph" — so this stays a
-        pure taker-of-objects (``bzh:domain-takes-objects``) holding no graph repo of its own.
-
-        The intent is only ever *consulted*, never applied eagerly: at the first fresh
-        transition this completion produces, it either fires (recording a migration, never
-        this transition) or — for ``auto`` with no destination-name match — falls through
-        to an ordinary transition, leaving the intent set for next time. An explicit intent
-        outranks the follow-latest policy."""
+        ``target_graph`` (#90), ``intended_target_graph`` (#124), and ``follow_latest_graph``
+        (#164) all arrive pre-resolved — ``None`` meaning "names no enabled graph" — so this
+        holds no graph repo of its own (``bzh:domain-takes-objects``)."""
         facts = self._chunks.load_facts(chunk.chunk_id)
         if facts is None:
             return _failure(f"unknown chunk {chunk.chunk_id}")
 
-        # A migration writes no transition and **re-pins the graph** (issue #90), so on a
-        # replay the submission's ``from_node_id`` no longer lives in the chunk's now-current
-        # pinned graph — probe it by the natural key *before* the graph-node lookup below,
-        # else a legitimate lost-ack replay 404s its own from-node in the new graph. Ordered
-        # **ahead of** the route-token check below (issue #108): ``record_migration``
-        # itself releases the route as part of landing, so a lost-ack replay of an already
-        # -accepted migration presents a token whose route the migration's own completion
-        # released — that is not a zombie signal, and must short-circuit here before the
-        # token check would otherwise reject it.
+        # Probed by natural key ahead of the graph lookup and the route-token check (issues
+        # #90, #108): a migration re-pins the graph and releases the route a replay presents.
         if self._chunks.accepted_migration(
             chunk.chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
         ):
             # A **hub-landing** migration (issue #111) retained the route, so its replay must
-            # return ``HUB_NODE_TAKEN`` rather than ``MIGRATED`` — see ``_hub_node_taken_replay``.
-            # The migration fact carries the landed executor, resolved at read time.
+            # return ``HUB_NODE_TAKEN`` rather than ``MIGRATED``.
             replayed = next(
                 (
                     m
@@ -182,12 +139,8 @@ class ApplyService:
                 return _hub_node_taken_replay()
             return _migrated_replay()
 
-        # Route-token authorization (issue #84b) — ordered ahead of everything else
-        # below, including the ordinary idempotent-replay probe (``accepted_transition_target``):
-        # a replay is a write-path short-circuit too, and a post-release zombie's replayed
-        # completion must be rejected exactly as a fresh one would be ("release invalidates
-        # the token") — for any submission that isn't already carved out above as an accepted
-        # migration's own replay (issue #108). The epoch fence runs after this.
+        # Route-token authorization (issue #84b) — ordered ahead of the replay probe and the
+        # epoch fence, so a post-release zombie's replay is rejected as a fresh one is.
         rejection = self._check_route_token(chunk, facts, submission, route_token_mode=route_token_mode)
         if rejection is not None:
             return rejection
@@ -196,18 +149,16 @@ class ApplyService:
         if from_node is None:
             return _failure(f"no node {submission.from_node_id} in graph {graph.graph_id}")
 
-        # Idempotent replay first: a completion already applied at this
-        # (node, epoch) returns its original outcome — even once the chunk is terminal.
-        # This covers both an ordinary transition and a gate-resolving one (same key).
+        # Idempotent replay first: a completion already applied at this (node, epoch)
+        # returns its original outcome — even once the chunk is terminal.
         replayed = self._chunks.accepted_transition_target(
             chunk.chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
         )
         if replayed is not None:
             return self._respond(chunk, graph, from_node, submission, to_node_id=replayed, is_fresh_apply=False)
 
-        # A completion carrying a decision id is a gate-resolving transition —
-        # graph gate (human node) or runner-config gate (worker node): validate and
-        # record it against the resolved decision, marking that decision transitioned.
+        # A completion carrying a decision id is a gate-resolving transition — a graph gate
+        # (human node) or a runner-config gate (worker node).
         if submission.decision_id is not None:
             return self._apply_gate_resolution(
                 chunk, graph, from_node, submission, target_graph, intended_target_graph, follow_latest_graph
@@ -232,33 +183,20 @@ class ApplyService:
         if to_node_id is None:
             return _failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
 
-        # Produces-artifact backstop (issue #113 phase 5) — ordered here, after every
-        # other rejection ahead of this fresh transition, so the check only runs on a
-        # submission that is genuinely about to be recorded: never on a replay (probed
-        # above), never on a gate resolution (no produces of its own — the decision's
-        # artifacts already landed), and never once the chunk is already terminal or
-        # stale. Under ``enforce`` a rejection here leaves the fence and the transition
-        # untouched, exactly like ``_check_route_token``'s failure above.
+        # Produces-artifact backstop (issue #113) — ordered after every other rejection, so
+        # it runs only on a submission genuinely about to be recorded.
         produces_rejection = check_produces(from_node, submission.artifacts, mode=produces_mode)
         if produces_rejection is not None:
             return _failure(produces_rejection)
 
-        # Checks gate backstop (issue #114) — the hub-side analogue of the runner's own
-        # checks gate, via the SAME shared predicate (`checks_gate_violated`), so the two
-        # cannot drift (`test_checks_gate_agreement.py`). No global mode flag: gating applies
-        # iff a choice declares `requires_checks`. Ordered beside the produces backstop, for
-        # the same reason — only on a fresh transition genuinely about to be recorded.
+        # Checks gate backstop (issue #114) — the same shared predicate `checks_gate_violated`
+        # both gates run, so the two cannot drift (`test_checks_gate_agreement.py`).
         selected = next((c for c in from_node.choices if c.name == submission.choice), None)
         if selected is not None and checks_gate_violated(selected.requires_checks, submission.check_results):
             return _failure(f"choice `{submission.choice}` requires green checks but a check is red")
 
-        # The transition-time consult (issue #124) — the chunk's own standing migration
-        # intent, if any, gets its one shot at THIS fresh transition: it either fires
-        # (recording a migration in place of the transition below and clearing the
-        # intent) or falls through, leaving the intent untouched for the transition
-        # after. Ordered after every rejection above (never on a replay, a stale/terminal
-        # chunk, or a produces-backstop refusal) and before ``record_transition`` so a
-        # firing intent writes no transition row of its own.
+        # The transition-time consult (issue #124) — ordered after every rejection above and
+        # before ``record_transition``, so a firing intent writes no transition row of its own.
         migrated = self._consult_intended_migration(
             chunk, from_node, submission, edge, intended_target_graph, follow_latest_graph
         )
@@ -300,10 +238,8 @@ class ApplyService:
     ) -> ApplyResult:
         """Advance a chunk past a resolved gate — the resolving transition.
 
-        Records the transition along the chosen edge, referencing the decision (which marks
-        it transitioned). Works for both a graph gate (human node) and a runner-config gate
-        (worker node); the decision's artifacts already landed, so this carries none.
-        ``intended_target_graph`` (issue #124) — see :meth:`apply`."""
+        Records the transition along the chosen edge, referencing the decision, whose own
+        artifacts already landed — so this transition carries none."""
         assert submission.decision_id is not None  # the caller dispatches only when set
         decision = self._chunks.get_decision(submission.decision_id)
         if decision is None or decision.chunk_id != chunk.chunk_id or decision.node_id != gate_node.node_id:
@@ -325,22 +261,16 @@ class ApplyService:
         edge = graph.edge_for_choice(gate_node.node_id, submission.choice)
         if edge is None:
             return _failure(f"gate `{gate_node.name}` has no choice `{submission.choice}`")
-        # A human gate's resolved choice may itself target another graph (issue #90) —
-        # the migration branch is reached through here too (the gate's decision artifacts
-        # already landed, so the migration carries none of its own). It threads
-        # ``submission.decision_id`` through so the resolved decision derives closed: a
-        # migration writes no transitions row, and an unclosed gate decision wedges REAP
-        # recovery (``steps.py``).
+        # A resolved choice may itself target another graph (issue #90) — threading
+        # ``decision_id`` through is what keeps the gate's decision from staying live.
         if edge.target_graph is not None:
             return self._apply_migration(chunk, gate_node, submission, edge, target_graph, artifacts=[])
         to_node_id = RESERVED_TERMINAL if edge.to_node_name == RESERVED_TERMINAL else _resolve(graph, edge.to_node_name)
         if to_node_id is None:
             return _failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
 
-        # The transition-time consult (issue #124) — see the sibling call in ``apply``.
-        # A resolved gate's own migration intent gets its one shot here too, threading
-        # ``submission.decision_id`` through so the resolved decision derives closed
-        # exactly as the #90 gate-migration branch above does.
+        # The transition-time consult (issue #124) — see the sibling call in ``apply``;
+        # ``decision_id`` threads through so the resolved decision derives closed.
         migrated = self._consult_intended_migration(
             chunk, gate_node, submission, edge, intended_target_graph, follow_latest_graph
         )
@@ -383,24 +313,9 @@ class ApplyService:
     ) -> ApplyResult:
         """Take a cross-graph migration edge (issue #90) — re-pin + re-queue, or escalate.
 
-        When the caller resolved the target (``target_graph`` set): record the migration
-        (which re-pins the graph/model and commits this node-step's artifacts atomically),
-        landing on the name-match-else-entry node of the target graph — the landing tail is
-        :meth:`_land_migration`. When this migration is a **human gate's** resolved choice
-        (``submission.decision_id`` set), the migration fact carries that ``decision_id`` so
-        the decision derives closed; without it the gate's decision stays live and blocks
-        REAP from ever reclaiming the chunk.
-
-        When the caller could **not** resolve the target (``target_graph is None`` — the
-        ``graph:<name>`` names no enabled graph): ``record_escalation`` so the chunk
-        derives ``needs_human``, rather than crash or silently drop — and return
-        ``PARKED_AT_GATE`` so the runner stops without re-leasing (a ``FAILURE`` would
-        requeue and *supersede* the very escalation just recorded). A gate's resolved
-        choice threads its ``decision_id`` into the escalation too (issue #110): this
-        branch writes neither a transition nor a migration row, so without it the gate's
-        decision stays live forever. Idempotent on replay by the migration natural key
-        (checked in ``apply``) and, on the escalation branch, by an existing escalation at
-        this epoch."""
+        With ``target_graph`` set it records the migration and lands via
+        :meth:`_land_migration`. Unresolved, it escalates to ``needs_human`` and answers
+        ``PARKED_AT_GATE`` — ``FAILURE`` would requeue and supersede it (issue #110)."""
         if target_graph is None:
             facts = self._chunks.load_facts(chunk.chunk_id)
             already = facts is not None and any(e.epoch == submission.epoch for e in facts.escalations)
@@ -448,27 +363,11 @@ class ApplyService:
         intended_target_graph: Graph | None,
         follow_latest_graph: Graph | None,
     ) -> ApplyResult | None:
-        """The transition-time consult (issue #124) — the shared helper wired at both
-        transition sites (:meth:`apply`'s ordinary worker verdict and
-        :meth:`_apply_gate_resolution`'s resolved gate), each after its own destination is
-        resolved and before its own ``record_transition``.
+        """The transition-time consult (issue #124) — the shared helper both transition sites
+        call once their destination resolves and before their own ``record_transition``.
 
-        Returns the migration's :class:`ApplyResult` when the chunk's standing intent
-        fires, or ``None`` to fall through to the caller's ordinary ``record_transition``.
-        ``intent is None`` and ``intended_target_graph is None`` (the intent's target is
-        unresolvable — never minted, or retired since it was set) both fall through the
-        same way: a retired target is not an error here, just a deferred no-op, so the
-        operator still sees the intent set and can cancel or re-aim it.
-
-        ``forced`` fires unconditionally, landing on the intent's own named node
-        regardless of this transition's destination. ``auto`` fires only when this
-        transition's own destination node name also exists on the target graph (a name
-        match) — otherwise the transition applies unchanged and the intent stays set for
-        the transition after.
-
-        The **explicit intent outranks** ``follow_latest_graph`` (issue #164): the policy
-        is consulted only on the ``intent is None`` fall-through, so neither side can fire
-        twice or fire together."""
+        ``forced`` fires unconditionally on the intent's own named node; ``auto`` fires only
+        on a destination-name match. Anything else returns ``None`` and falls through."""
         intent = chunk.intended_migration
         if intent is None:
             return self._consult_follow_latest(chunk, from_node, submission, edge, follow_latest_graph)
@@ -510,45 +409,9 @@ class ApplyService:
     ) -> ApplyResult | None:
         """The standing follow-latest policy's own consult (issue #164).
 
-        Reached only when the chunk carries **no** explicit intent — an operator's aim
-        outranks a standing drift. ``follow_latest_graph is None`` covers every no-op the
-        edge already folded together (policy off, no newer enabled mint, the chunk is
-        already on the newest).
-
-        **A transition to the reserved terminal is the one further no-op, and it is
-        load-bearing.** ``RESERVED_TERMINAL`` is a sentinel destination rather than a node
-        any graph declares, so under name-match-else-entry below it would match nothing
-        and fall to the target's **entry node**, restarting the whole workflow on the
-        newer mint. It is checked *here* rather than in :meth:`_respond`'s terminal
-        branch because the consult runs first and wins (pinned by
-        tests/test_follow_latest_policy.py::test_the_terminal_transition_is_never_hijacked_by_the_policy).
-
-        Landing is otherwise **name-match-else-entry** on this transition's own
-        destination — :func:`~blizzard.hub.domain.work.landing_node`, the same rule a #90
-        authored migration edge lands by. Two halves, both deliberate:
-
-        * matching on the *destination* rather than the departed node keeps the chunk
-          moving forward: it lands where this transition was already going, just on the
-          newer mint. Landing on the departed node's name would re-run the node-step that
-          just finished.
-        * the **entry fallback** is what makes the policy total for a *non-terminal*
-          destination, and is where it differs from a ``#124`` ``auto`` intent (which
-          falls through and stays set for next time). There is nothing to stay set for
-          here — the policy is standing, so falling through would defer it forever,
-          transition after transition, on exactly the graph whose shape changed enough to
-          drop the destination node. Sending such a chunk back to the target's entry is
-          the same triage answer #90 gives a cross-graph move into an unfamiliar graph.
-
-        Recorded as a **migration** fact, never disguised as a transition, carrying
-        :attr:`~blizzard.hub.domain.work.MigrationSource.FOLLOW_LATEST` so the move is
-        attributable to the policy rather than to an operator. ``clear_intent=False``
-        because there is no per-chunk intent to clear.
-
-        Note this is a **per-mint** policy, not a per-lineage one: the chunk lands on the
-        newer mint, which carries its own (default ``null``) tri-state, so a graph-level
-        ``true`` governs one hop. Sustaining the drift across a lineage is the hub-level
-        flag's job — see ``docs/deployment.md``.
-        """
+        Reached only when the chunk carries **no** explicit intent. A transition to the
+        reserved terminal is the load-bearing no-op: it names no node, so it would land on
+        the target's **entry** and restart the workflow (tests/test_follow_latest_policy.py)."""
         if follow_latest_graph is None or edge.to_node_name == RESERVED_TERMINAL:
             return None
         return self._land_migration(
@@ -580,19 +443,11 @@ class ApplyService:
         clear_intent: bool,
         source: MigrationSource,
     ) -> ApplyResult:
-        """The landing tail shared by a #90 authored-choice migration
-        (:meth:`_apply_migration`), an issue #124 applied intent
-        (:meth:`_consult_intended_migration`), and the #164 follow-latest policy
-        (:meth:`_consult_follow_latest`).
+        """The landing tail shared by every migration path.
 
-        Records the migration atomically (fact + graph/model re-pin + artifacts +
-        route release/retain + intent clear, all in :meth:`record_migration`'s one
-        transaction), fires the crash point, then governs by the landed node's executor
-        exactly as a transition into that node would (issue #111): a hub-executed
-        landing runs inline and retains the route (``HUB_NODE_TAKEN``); a runner-executed
-        landing releases the route and re-queues (``MIGRATED``). The returned
-        :class:`ApplyResult`'s ``migration_id`` (issue #213) is the freshly-minted
-        ``chunk_migrations.migration_id`` this call itself just wrote."""
+        Records the migration atomically (fact + re-pin + artifacts + route release/retain +
+        intent clear), then governs by the landed node's executor as a transition into it
+        would (issue #111). ``migration_id`` is the fresh fact this call wrote (issue #213)."""
         landed_node = target_graph.node_by_id(landed_node_id)
         lands_on_hub = landed_node is not None and landed_node.executor is Executor.HUB
         migration_id = self._chunks.record_migration(
@@ -650,10 +505,8 @@ class ApplyService:
             return _failure(f"transition target {to_node_id} is not a node")
 
         if to_node.executor is Executor.HUB:
-            # Run on BOTH the fresh apply and the idempotent replay (``is_fresh_apply``
-            # is ignored here): the executor is itself idempotent and resumable, so a
-            # completion re-flushed after a mid-run hub crash RESUMES the interrupted
-            # run rather than wedging the chunk at ``delivering`` (#67).
+            # Run on BOTH the fresh apply and the idempotent replay: the executor is itself
+            # idempotent and resumable, so a re-flush RESUMES an interrupted run (#67).
             self._hub_node_executor.run(chunk, graph, to_node, epoch=submission.epoch)
             return ApplyResult(
                 response=ApplyResponse(

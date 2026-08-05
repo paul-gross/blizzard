@@ -1,10 +1,7 @@
 """Offline store administration for the hub (``bzh:manual-migrations``).
 
-The ``init`` / ``migrate`` verbs run while the daemon is **down**: they are the
-only carve-out to "only a daemon opens its own store". Everything here is
-deterministic and store-only — no model calls, no server. ``init`` is idempotent;
-``ensure_current_revision`` is the guard the daemon calls at startup to refuse to
-run on a schema mismatch.
+The ``init`` / ``migrate`` verbs run while the daemon is **down** — the only carve-out
+to "only a daemon opens its own store". Everything here is deterministic and store-only.
 """
 
 from __future__ import annotations
@@ -28,12 +25,8 @@ def migration_runner(config: HubConfig) -> MigrationRunner:
 def init_environment(root: Path, *, allow_external_db: bool = False) -> HubConfig:
     """Scaffold config + data dir + a migrated store under ``root``. Idempotent.
 
-    Re-running reconciles: an existing config file is left untouched, the data dir
-    is ensured, and the store is migrated to head — a no-op when already current
-    (the Alembic version table makes re-application safe). The re-run's load is
-    guarded the same as ``migrate``/``host`` (issue #234): re-running ``init`` against
-    a directory copied from elsewhere, whose config still carries an absolute db_url
-    from the original, refuses rather than silently reconciling the original store.
+    Re-running leaves an existing config untouched and migrates the store to head. A
+    config whose db_url points outside ``root`` is refused, not reconciled (issue #234).
     """
     root = root.resolve()
     root.mkdir(parents=True, exist_ok=True)

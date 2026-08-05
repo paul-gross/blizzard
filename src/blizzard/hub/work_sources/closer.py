@@ -1,17 +1,8 @@
 """The write-half work-source seam's close capability — delivery-time item closure.
 
-A sibling seam to :mod:`~blizzard.hub.work_sources.annotator`'s own sibling-Protocol
-design, for the identical reason that module's docstring already gives: ``IWorkSource``
-is a deliberately read-only pass-through, and optional methods on a structurally-typed
-Protocol would force every consumer into ``hasattr`` probing. A sibling Protocol turns
-"this source may not close" into a *presence* question the registry answers
-(``IWorkSourceRegistry.closer``) instead.
-
-Only a per-source, opted-in binding builds one of these (``bzh:dependency-injection``,
-the factory) — a non-opted source's registry entry has no closer at all, so "never
-closed" is a property of the object graph rather than a branch someone has to
-remember. The reconciler (``blizzard.hub.domain.work_closure.DeliveryClosureReconciler``)
-is the sole caller.
+A sibling Protocol to ``IWorkSource``'s read-only pass-through, so "this source may not
+close" is a *presence* question the registry answers rather than a ``hasattr`` probe. A
+non-opted source's registry entry has no closer at all — never-closed is structural.
 """
 
 from __future__ import annotations

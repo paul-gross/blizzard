@@ -1,12 +1,8 @@
 """``land_common``'s shared helpers — unit tier (issue #230).
 
-Exercises :func:`~blizzard.hub.graphs.scripts.land_common.require_env`,
-:func:`~blizzard.hub.graphs.scripts.land_common.require_json_env`, and
-:func:`~blizzard.hub.graphs.scripts.land_common.marker_recorder` directly, with no forge
-or script involved — the one place these three land scripts' shared durable-write and
-env-diagnostic behavior is proven without re-deriving it through a whole ``main()`` per
-script.
-"""
+Exercises ``require_env``, ``require_json_env``, and ``marker_recorder`` directly, with
+no forge or script involved, proving the shared durable-write and env-diagnostic
+behavior without re-deriving it through a whole ``main()`` per script."""
 
 from __future__ import annotations
 

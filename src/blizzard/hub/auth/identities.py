@@ -1,9 +1,8 @@
 """The identity-link repository seam — read/write Protocols (issue #91,
 ``bzh:repository-split``).
 
-:meth:`~IWriteIdentityRepository.update_handle` is the handle-refresh half of "subject
-mapping wins" (a provider rename never re-mints a user); :meth:`IReadIdentityRepository.
-distinct_provider_names` backs the boot-time provider-immutability check.
+The subject mapping is authoritative: a provider rename refreshes the stored handle
+rather than minting a second user.
 """
 
 from __future__ import annotations

@@ -1,11 +1,8 @@
 """ADVANCE's produces-unmet nudge-once (issue #113, Phase 4).
 
-Component tier: a real ADVANCE tick (:func:`~blizzard.runner.loop.steps.advance`)
-against a real tmp store and the virtual clock (``FixedClock``), proving criterion 5
-(nudge fires once, lists missing names, before submission) and the durable
-"at most one nudge per (lease, epoch)" guarantee the crash points
-(``nudge.after-fired-fact.before-resume`` / ``nudge.after-resume.before-reassemble``)
-exist to protect.
+A real ADVANCE tick against a real tmp store and virtual clock, proving criterion 5
+(nudge fires once, lists missing names, before submission) and the durable "at most one
+nudge per (lease, epoch)" guarantee the nudge crash points exist to protect.
 """
 
 from __future__ import annotations
@@ -83,10 +80,8 @@ class _AttachingOnNudgeHarness(FakeHarness):
 
 class _DeclaringGitCommitOnNudgeHarness(FakeHarness):
     """A :class:`FakeHarness` whose SECOND ``judge`` call — the nudge resume — declares
-    a git commit on the worker's behalf, standing in for a worker that pushes its
-    branch and runs ``blizzard runner artifact commit`` in response to the nudge it was
-    resumed with (issue #143 re-review: the nudge solicited a ``git_commit`` declaration
-    that ADVANCE never harvested back into this attempt's completion)."""
+    a git commit on the worker's behalf, standing in for a worker that pushes and
+    declares in response to the nudge (issue #143 re-review)."""
 
     def __init__(
         self,
@@ -223,10 +218,8 @@ def test_nudge_fires_once_lists_missing_name_and_picks_up_the_attach(tmp_path: P
 @pytest.mark.component
 def test_nudge_fires_once_and_picks_up_a_git_commit_declared_mid_nudge(tmp_path: Path) -> None:
     """The mirror of the asset-only nudge-harvest test above, but for a `git_commit`
-    spec: a worker nudged for a missing declaration that pushes and declares
-    (``blizzard runner artifact commit``) in response must have that declaration
-    verified and folded into THIS attempt's completion — not just land durably in the
-    store for some later, uncorrelated ADVANCE pass to notice."""
+    spec: a worker's declaration in response to the nudge must fold into THIS attempt's
+    completion, not just land durably for some later ADVANCE pass to notice."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(_NOW)
     _seed_exited_lease(store, lease_id="lease_r", chunk_id="ch_1", node_id="nd_build", epoch=1)
@@ -282,10 +275,8 @@ def test_nudge_fires_once_and_picks_up_a_git_commit_declared_mid_nudge(tmp_path:
     assert git_artifacts[0].repo == "toy-api"
     assert git_artifacts[0].branch_name == "feature/worker-declared"
     assert git_artifacts[0].commit_hash == "deadbeef"
-    # The `git_commit`-kind `commit` spec is satisfied by kind (the GIT_COMMIT artifact
-    # above, named by repo), never asset-collected by its own spec name — no phantom
-    # `commit` ASSET should ride alongside it (the re-review fix: a build node
-    # producing repo commits yields no assets).
+    # The `git_commit`-kind spec is satisfied by kind, never asset-collected by its own
+    # spec name — no phantom `commit` ASSET should ride alongside it.
     assert [a for a in submission.artifacts if a.name == "commit"] == []
     assert not any(a.kind is ArtifactKind.ASSET for a in submission.artifacts)
 
@@ -293,12 +284,8 @@ def test_nudge_fires_once_and_picks_up_a_git_commit_declared_mid_nudge(tmp_path:
 @pytest.mark.component
 def test_nudge_resume_records_its_own_usage_fact(tmp_path: Path) -> None:
     """The nudge resume is its own harness invocation and burns its own tokens (epic
-    #57/#58's spend-capture goal) — it must not go unrecorded just because its verdict
-    reply is discarded. Isolated from the spawn/judge invocations' own usage by giving
-    the fake harness no default `usage` sample (so their `parse_usage` reads are `None`
-    and, with no transcripts wired, no fallback either) and scripting `usage_by_kind`
-    to return a sample for `nudge` alone — any usage total after this attempt can then
-    only have come from the nudge."""
+    #57/#58) — it must not go unrecorded just because its verdict reply is discarded.
+    Isolated by scripting `usage_by_kind` to return a sample for `nudge` alone."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(_NOW)
     _seed_exited_lease(store, lease_id="lease_r", chunk_id="ch_1", node_id="nd_review", epoch=1)
@@ -352,9 +339,8 @@ def test_nudge_does_not_refire_on_a_second_advance_pass(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(_NOW)
     _seed_exited_lease(store, lease_id="lease_r", chunk_id="ch_1", node_id="nd_review", epoch=1)
-    # Simulate recovery from a crash that landed exactly at
-    # `nudge.after-fired-fact.before-resume` on a prior pass: the fact is durable, the
-    # resume it guards may or may not have actually run.
+    # Simulate recovery from a crash at `nudge.after-fired-fact.before-resume`: the
+    # fact is durable, the resume it guards may or may not have actually run.
     store.record_nudge_fired(lease_id="lease_r", epoch=1, at=_NOW)
 
     hub = FakeHub()
@@ -444,10 +430,8 @@ def test_fully_attached_node_does_not_nudge(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_nudge_message_branches_on_kind_and_stays_harness_inert() -> None:
     """`_nudge_message` (issue #143, Phase 5) names the kind-appropriate declaration verb
-    per unmet spec — `artifact create --name <name>` for an asset, `artifact commit` (with
-    its four flags) for a git_commit expectation — never the deprecated `attach` alias, and
-    every rendered line is `#`-prefixed so the mock harness's prompt-is-program `exec`
-    still sees a legal no-op."""
+    per unmet spec, never the deprecated `attach` alias, and every rendered line is
+    `#`-prefixed so the mock harness's prompt-is-program `exec` still sees a legal no-op."""
     missing = [
         ProducesEntry(name="review-findings", kind=ArtifactKind.ASSET),
         ProducesEntry(name="commit", kind=ArtifactKind.GIT_COMMIT),

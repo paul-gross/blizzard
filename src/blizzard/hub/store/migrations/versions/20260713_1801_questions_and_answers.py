@@ -1,18 +1,5 @@
 """questions, answers, and answer-deliveries (hub store tree)
 
-P7 lands the ask/answer rendezvous (MVP criterion 7): a worker's
-``blizzard runner ask`` becomes a durable ``questions`` row the chunk parks on, its
-answer a ``question_answers`` row whose primary-key CAS makes answering
-first-write-wins, and the resume-with-answer an ``answer_deliveries`` fact (board
-detail). Before this the hub had no home for a question, so a parked worker's exit
-looked like an ordinary verdict-less failure.
-
-The hub store's Alembic tree targets one shared ``schema`` metadata whose table
-objects reflect the *current* definition, so a fresh database's create runs the
-head schema. This revision creates exactly the three new tables (the same
-live-schema pattern the sibling revisions use), ``checkfirst`` so ``base -> head``
-on a fresh store and an in-place upgrade of a pre-P7 store both converge.
-
 Revision ID: 20260713_1801_hub_questions_and_answers
 Revises: 20260713_1716_hub_graph_node_produces_checks
 """

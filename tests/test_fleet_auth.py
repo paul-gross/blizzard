@@ -1,13 +1,9 @@
 """The fleet-router partition — structural runner-auth enforcement (component tier,
 issue #87).
 
-``tests/test_hub_auth.py`` covers ``assert_owns`` in isolation (unit tier) and
-``tests/test_runner_enrollment.py`` covers ``require_runner_principal`` at the one
-route Phase 1 landed it on. This file proves the Phase 3 partition itself: a valid
-runner token is confined to the fleet router — it authenticates a fleet verb and is
-*rejected* on an operator verb, not silently treated as anonymous-plus-credential —
-and every verb this phase moved is gone from its old anonymous path.
-"""
+Proves the Phase 3 partition: a valid runner token is confined to the fleet router
+(authenticates a fleet verb, rejected on an operator verb) and every verb this phase
+moved is gone from its old anonymous path."""
 
 from __future__ import annotations
 
@@ -46,7 +42,6 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-# --------------------------------------------------------------------------- #
 # A valid runner token succeeds on a fleet verb
 # --------------------------------------------------------------------------- #
 
@@ -64,7 +59,6 @@ def test_missing_token_is_rejected_on_a_fleet_verb_under_enforce(tmp_path: Path)
     assert hub.client.get("/api/fleet/queue/peek").status_code == 401
 
 
-# --------------------------------------------------------------------------- #
 # The same token is rejected on an operator verb — not anonymous-plus-credential
 # --------------------------------------------------------------------------- #
 
@@ -106,7 +100,6 @@ def test_valid_runner_token_under_warn_is_logged_and_proceeds_on_an_operator_ver
     assert resp.status_code in (201, 409)  # not 403 — a normal ingest outcome
 
 
-# --------------------------------------------------------------------------- #
 # Operator verbs stay accessible with no credential
 # --------------------------------------------------------------------------- #
 
@@ -117,7 +110,6 @@ def test_operator_verbs_are_accessible_with_no_credential(tmp_path: Path) -> Non
     assert hub.client.get("/api/spend", params={"since": "1970-01-01T00:00:00+00:00"}).status_code == 200
 
 
-# --------------------------------------------------------------------------- #
 # Declared-runner_id confinement on a fleet write
 # --------------------------------------------------------------------------- #
 
@@ -135,7 +127,6 @@ def test_wrong_runner_id_is_rejected_on_a_fleet_write(tmp_path: Path) -> None:
     assert resp.status_code == 403
 
 
-# --------------------------------------------------------------------------- #
 # No fleet route reachable at its old anonymous path
 # --------------------------------------------------------------------------- #
 
@@ -158,14 +149,9 @@ def test_moved_write_verbs_404_or_405_at_their_old_path(tmp_path: Path) -> None:
 
 
 def test_moved_read_verbs_are_gone_from_the_route_inventory(tmp_path: Path) -> None:
-    """The moved GET reads (envelope, the runner's answer poll) no longer resolve as
-    operator API routes: their old path templates are absent from the app's OpenAPI
-    path inventory, and the fleet-side counterparts are present. Asserted against the
-    inventory rather than over HTTP because what a dead GET path serves depends on
-    whether the SPA bundle is built (catch-all HTML) or not (a JSON 404).
-
-    ``/api/runners/{runner_id}`` is excluded from this table (issue #104, S5) — see
-    ``test_runners_api.py``."""
+    """The moved GET reads no longer resolve as operator API routes, and the
+    fleet-side counterparts are present. Asserted against the OpenAPI inventory,
+    since what a dead GET serves depends on whether the SPA bundle is built."""
     hub = build_hub(tmp_path)
     app = hub.client.app
     assert isinstance(app, FastAPI)

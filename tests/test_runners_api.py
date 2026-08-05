@@ -2,9 +2,7 @@
 
 Symmetric with ``GET /api/runners``: reuses :func:`~blizzard.hub.api.runners.runner_view`
 for the same derived-liveness shape, 404 on unknown, and rejects a runner's bearer
-token like every other verb on this router. This is the operator router's own detail
-read — distinct from the runner-authenticated ``GET /api/fleet/runners/{id}`` (the
-runner's own pull read), which coexists at a different prefix and is untouched here.
+token like every other verb on this router.
 """
 
 from __future__ import annotations

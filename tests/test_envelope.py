@@ -153,9 +153,7 @@ def test_required_artifacts_table_renders_name_and_kind_and_is_harness_inert() -
 
 
 def test_required_artifacts_table_is_empty_when_node_produces_nothing() -> None:
-    # Mirrors `_node()`'s own `produces=[]` — asserted already by
-    # `test_envelope_carries_authored_judgement_prose_and_choice_set`'s exact `env.prompt`
-    # match; this test names the reason explicitly.
+    # Mirrors `_node()`'s own `produces=[]`; this test names the reason explicitly.
     env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1)
     assert env.prompt == "do the work"
 
@@ -206,10 +204,7 @@ def test_envelope_checks_gating_fields_default_off() -> None:
     assert all(not c.requires_checks for c in env.node.choices)
 
 
-# --------------------------------------------------------------------------- #
-# The effective session declaration (issue #144) — precedence resolved hub-side:
-# session declaration > chunk default.
-# --------------------------------------------------------------------------- #
+# --- The effective session declaration (issue #144) — precedence resolved hub-side ---
 
 
 def _chunk_with_defaults(model: list[str], effort: str | None) -> Chunk:
@@ -279,8 +274,7 @@ def test_neither_a_declaration_nor_a_chunk_default_expresses_no_preference() -> 
 
 def test_a_node_name_session_target_carries_no_pool_but_still_the_chunk_default() -> None:
     # `resume:<node>` (issue #115) resolves against node names, not the `sessions:` map,
-    # so it names no pool. The validator already rejected a reference that resolves to
-    # neither, so a source that misses the map here IS the node-name form.
+    # so it names no pool.
     node = replace(_node(), session_source="build")
     chunk = _chunk_with_defaults(["blizzard:advanced"], "high")
 

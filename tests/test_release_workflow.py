@@ -1,19 +1,8 @@
-"""``.github/workflows/release.yml``'s ``release`` job — two static properties the
-next tag cut can't rehearse locally (no buildx plugin on this machine, and a
-regression here surfaces only as a broken release, never as a failing build):
-
-1. The image build-push step runs **before** `gh release create` (decision 5 —
-   a failed image build must never leave a published Release advertising an
-   image that does not exist).
-2. The job's `permissions:` block declares **both** `contents: write` (the
-   existing `gh release create` step needs it) and `packages: write` (the GHCR
-   push needs it) — a job-level `permissions:` block *replaces* the
-   workflow-level one rather than merging with it, so declaring `packages:
-   write` alone would silently strip `contents: write` and 403 every tagged
-   release right after a successful image build.
-
-No docker/GHCR credentials needed — this is a pure YAML parse, same docker-free
-static-guard shape as ``tests/test_container_image.py`` / ``tests/test_systemd_units.py``.
+"""``.github/workflows/release.yml``'s ``release`` job — two static properties a tag
+cut can't rehearse locally: the image build-push step runs before `gh release create`
+(decision 5), and the job's `permissions:` block declares both `contents: write` and
+`packages: write` (a job-level block replaces the workflow-level one rather than
+merging). A pure YAML parse — no docker/GHCR credentials needed.
 """
 
 from __future__ import annotations

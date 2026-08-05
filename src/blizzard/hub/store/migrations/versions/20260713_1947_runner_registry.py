@@ -1,14 +1,6 @@
 """fleet registry — runner registrations and pause/resume facts (hub store tree)
 
-The P7W3 runner-registry tables:
-
-* ``runner_registrations`` — one upserted row per runner (runner_id + workspace_id)
-  with a refreshed ``last_seen_at`` liveness derives from.
-* ``runner_pause_facts`` — append-only pause/resume facts; ``paused`` derives from
-  the newest one, read back by the runner on its outbound pull and adhered to.
-
-Parents before children so the FK from ``runner_pause_facts`` resolves.
-
+``runner_pause_facts`` is append-only, newest-fact-wins; parents before children.
 Revision ID: 20260713_1947_hub_runner_registry
 Revises: 20260713_1946_hub_queue_shaping
 """

@@ -1,17 +1,9 @@
-"""Lease-token authorization — the check a worker's attach call must pass before its
-own semantics run (issue #113, Phase 2).
+"""Lease-token authorization — the check a worker's attach call must pass first (issue #113).
 
-Shaped after ``hub/domain/route_auth.py``'s ``check_route_token``: a plain function
-taking already-loaded values (``bzh:domain-takes-objects``), so it stays pure with no
-store dependency of its own. Comparison is constant-time (``hmac.compare_digest``)
-against the same :func:`~blizzard.hub.domain.enrollment.hash_token` digest the mint
-uses, so mint and check can never drift onto different digests of the same secret.
-
-There is no ``warn``/``enforce`` rollout mode: a lease token is minted fresh at every
-spawn and never leaves this runner, so there is no existing-deployment population to
-roll out against — a mismatch is always a rejection. Pinned by
-tests/test_lease_auth.py::test_mismatched_token_is_rejected.
-"""
+A plain function over already-loaded values (``bzh:domain-takes-objects``), comparing constant-time
+against the same :func:`~blizzard.hub.domain.enrollment.hash_token` digest the mint uses. There is no
+``warn``/``enforce`` rollout mode — a token is minted fresh at every spawn and never leaves this
+runner, so a mismatch is always a rejection (pinned by tests/test_lease_auth.py)."""
 
 from __future__ import annotations
 
@@ -27,12 +19,8 @@ _LEASE_TOKEN_BYTES = 32
 
 
 def mint_lease_token() -> tuple[str, str]:
-    """Mint a lease capability token: ``(plaintext, hash)``.
-
-    Pure — the caller records the hash and carries the plaintext to the child env. Every
-    mint is a **re-mint** for its lease id (overwrite-recorded), invalidating any prior
-    token, since the plaintext is never persisted.
-    """
+    """Mint a lease capability token: ``(plaintext, hash)``. Every mint is a **re-mint** for its lease
+    id — overwrite-recorded, invalidating any prior token, since the plaintext is never persisted."""
     token = secrets.token_urlsafe(_LEASE_TOKEN_BYTES)
     return token, hash_token(token)
 

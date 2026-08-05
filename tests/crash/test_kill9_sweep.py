@@ -1,36 +1,9 @@
 """The kill-9 sweep (``blizzard:crash-sweep``) — MVP acceptance criterion 4.
 
-For **every** crash point in the registry (``bzh:crash-point-registry``), this sweep:
-
-1. runs a real ``build -> deliver`` mini-scenario over the mock fleet with hub + runner
-   as real subprocesses;
-2. arms the point so the owning daemon SIGKILLs itself the instant it reaches that
-   boundary (a faithful ``kill -9``);
-3. asserts the facts-level invariant checker (``bzh:invariant-checker``) is green over
-   both stores immediately after the crash;
-4. restarts the killed daemon **unarmed** and lets the scenario converge;
-5. asserts the chunk still lands **exactly once** — one ``delivery.landed`` fact, the
-   file reachable from bare ``main`` exactly once — and the invariants are green again.
-
-Families whose boundary the plain ``build -> deliver`` scenario never reaches are
-partitioned out of the generic sweep and swept by a dedicated scenario each: ``resume.*``,
-``abandon.*``, ``pause.*``, ``hubnode.*``, ``hubnode.after-poll.*``, ``migrate.*``,
-``attach.*``, ``declare-commit.*``, ``nudge.*``, ``checks.*``. Each partition's own comment
-below names its scenario and what that scenario drives.
-
-Three whole-process cases round it out, never parametrized: an external ``kill -9`` of the
-runner daemon mid-flight, and — a window no per-step registry point can express, since the
-registry arms points inside blizzard's OWN process, never inside a spawned script — an
-external ``kill -9`` of the whole hub process group MID-SCRIPT, inside the between-repos
-window of each packaged deliver script: ``land_default.py``
-(``test_kill9_between_default_graph_repo_pushes``) and its PR-free sibling ``land_ff.py``
-(``test_kill9_between_ff_graph_repo_pushes``, #123).
-
-Gated like the e2e tier — needs the sibling ``blizzard-mock`` worktree, a local winter
-source, and ``BLIZZARD_CRASH_SWEEP=1``; skipped otherwise (see ``conftest.py``). Run it::
-
-    BLIZZARD_CRASH_SWEEP=1 uv run pytest -m crash_sweep
-"""
+For each crash point in the registry (``bzh:crash-point-registry``): arms it so the
+owning daemon SIGKILLs itself there, restarts unarmed, and asserts invariants stay
+green and the chunk lands exactly once. Families the generic scenario can't reach get
+a dedicated scenario each. Gated by ``BLIZZARD_CRASH_SWEEP=1``; see ``conftest.py``."""
 
 from __future__ import annotations
 
@@ -88,12 +61,8 @@ pytestmark = pytest.mark.crash_sweep
 # Enumerated from the registry at collection — no hand-maintained point list (bzh:crash-point-registry).
 _ALL_POINTS = [p.name for p in discover_crash_points()]
 
-# RESUME's crash points fire only on the FIRST tick after a *graceful* restart, and the
-# `abandon.*` boundary only when a chunk is detached out from under an active lease — neither
-# of which the generic `build -> deliver` scenario below ever does. Partition the registry: the
-# generic sweep drives every remaining boundary; resume points are swept by the graceful-restart
-# scenario (`test_kill9_at_resume_crash_point`) and abandon points by the dedicated detach
-# scenario (`test_kill9_at_abandon_crash_point`), further down.
+# RESUME's and abandon's crash points fire only on conditions the generic scenario below
+# never creates; each dedicated scenario named in ``_DEDICATED_PREFIXES`` sweeps its own.
 _DEDICATED_PREFIXES = (
     "resume.",
     "abandon.",
@@ -108,55 +77,29 @@ _DEDICATED_PREFIXES = (
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
 _PAUSE_POINTS = [p for p in _ALL_POINTS if p.startswith("pause.")]
-# The generic hub command node's per-step windows (#65) — `hubnode.*` fires inside the hub's
-# synchronous ``HubNodeExecutor``, which the generic `build -> deliver` scenario below (it
-# mints no `run:` node) cannot reach. Excluded from `_GENERIC_POINTS` for that reason and
-# swept by `test_kill9_at_hub_command_node_crash_point`, which drives a
-# `build -> merge(run:) -> done` graph and crashes the hub inside one of the two per-step
-# windows.
-#
-# `hubnode.after-poll.` is a further, NARROWER carve-out within the `hubnode.` family
-# (issue #66): its boundary opens only when a `run:` step reports the reserved `pending`
-# outcome, which the two-step land/verify scenario above never mints. Folding it into
-# `_HUBNODE_POINTS` would silently parametrize `test_kill9_at_hub_command_node_crash_point`
-# against a point its own scenario can never reach, so it is swept by
-# `test_kill9_at_hub_node_pending_crash_point` instead.
+# `hubnode.*` (#65) and its narrower `hubnode.after-poll.` carve-out (#66) fire inside the
+# hub's synchronous executor; each is swept by its own dedicated test below.
 _HUBNODE_PENDING_POINTS = [p for p in _ALL_POINTS if p.startswith("hubnode.after-poll.")]
 _HUBNODE_POINTS = [p for p in _ALL_POINTS if p.startswith("hubnode.") and p not in _HUBNODE_PENDING_POINTS]
-# `migrate.*` fires inside the HUB (`ApplyService._apply_migration`, issue #90), only when a
-# worker selects a cross-graph judgement choice — which the generic single-graph scenario
-# never mints. Swept by `test_kill9_at_migrate_crash_point`, which drives a two-graph
-# `source --migrate--> triage-delivery` graph.
+# `migrate.*` fires inside the HUB on a cross-graph judgement choice (issue #90). Swept by
+# `test_kill9_at_migrate_crash_point`.
 _MIGRATE_POINTS = [p for p in _ALL_POINTS if p.startswith("migrate.")]
-# `attach.*` fires inside the RUNNER's local attach endpoint (`AttachmentService.attach`,
-# issue #113), an out-of-band HTTP write the generic sweep never drives. Swept by
-# `test_kill9_at_attach_crash_point`, which makes the real attach call against a real runner
-# daemon.
+# `attach.*` fires on the RUNNER's out-of-band attach endpoint (issue #113). Swept by
+# `test_kill9_at_attach_crash_point`.
 _ATTACH_POINTS = [p for p in _ALL_POINTS if p.startswith("attach.")]
-# `declare-commit.*` fires inside the RUNNER's local git-commit declaration endpoint
-# (`GitCommitDeclarationService.declare`, issue #143 Phase 3), `attach.*`'s structural sibling
-# for the `git_commit` artifact kind and likewise never driven by the generic sweep. Swept by
-# `test_kill9_at_declare_commit_crash_point`.
+# `declare-commit.*` fires on the RUNNER's out-of-band declare endpoint, `attach.*`'s
+# sibling (issue #143). Swept by `test_kill9_at_declare_commit_crash_point`.
 _DECLARE_COMMIT_POINTS = [p for p in _ALL_POINTS if p.startswith("declare-commit.")]
-# `nudge.*` fires inside the RUNNER's own ADVANCE step (`_advance_exited_worker`, issue #113
-# Phase 4), only when a node's `produces:` name has neither a pushed git commit nor an
-# explicit attachment — a condition the plain `build -> deliver` graph above never creates
-# (its `build` node declares no `produces:` at all). Swept by `test_kill9_at_nudge_crash_point`
-# against `nudge_graph_yaml`'s graph.
+# `nudge.*` fires in the RUNNER's ADVANCE step for an unattached `produces:` name (issue
+# #113 Phase 4). Swept by `test_kill9_at_nudge_crash_point`.
 _NUDGE_POINTS = [p for p in _ALL_POINTS if p.startswith("nudge.")]
-# The checks-at-exit windows (#114) — `checks.*` fires inside the RUNNER's own ADVANCE step,
-# only for a node carrying a `checks:` command, which the generic graph does not. Swept by
-# `test_kill9_at_checks_crash_point` against `checks_graph_yaml`'s graph.
+# `checks.*` fires in the RUNNER's ADVANCE step for a node's `checks:` command (#114).
+# Swept by `test_kill9_at_checks_crash_point`.
 _CHECKS_POINTS = [p for p in _ALL_POINTS if p.startswith("checks.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
-# A representative CI subset — one crash point per boundary family, biased toward the
-# recovery-critical windows the sweep's two real bugs lived in. Running the whole generic
-# sweep as real subprocesses is ~130s locally, multiples of that on a 2-core GitHub runner,
-# so the master `push` workflow (BLIZZARD_CRASH_SWEEP_CI=1) runs this subset as a bounded-
-# runtime real gate; the FULL sweep stays the documented local command (`mise run
-# crash-sweep`) and the `release` workflow. The three whole-process cases below are never
-# parametrized, so they run in both profiles.
+# A representative CI subset, one point per family, run as a bounded-runtime gate under
+# `BLIZZARD_CRASH_SWEEP_CI=1`; the full sweep is the local/`release`-workflow command.
 _CI_SUBSET = (
     "reap.after-expire",
     "pull.after-flush",
@@ -169,20 +112,16 @@ _CI_SUBSET = (
     "claim.after-persist.before-response",
 )
 
-# The resume CI subset: the recovery-critical kill-first window. The full graceful-restart
-# sweep exercises all three resume boundaries; CI runs just this one to bound the added
-# real-subprocess wall time (each resume case restarts the runner twice).
+# The resume CI subset: the recovery-critical kill-first window, bounding wall time
+# (each resume case restarts the runner twice).
 _RESUME_CI_SUBSET = ("resume.after-kill.before-reattach",)
 
-# The abandon CI subset: `abandon.*` is a new boundary family (blizzard#38 slice 5) with exactly
-# one point today — its lone member is that family's CI representative, so a new family never
-# ships with zero CI coverage (bzh:crash-point-registry).
+# The abandon CI subset: `abandon.*`'s lone point is its own CI representative
+# (bzh:crash-point-registry).
 _ABANDON_CI_SUBSET = ("abandon.after-kill.before-release",)
 
-# The pause CI subset (issue #46): the family's lone member is its own CI representative. It
-# earns the CI time on its own merit rather than by symmetry — this window is the regression
-# fence on the issue's central bug, and a regression there fails this case and nothing else in
-# the sweep (see `test_kill9_at_pause_park_crash_point`).
+# The pause CI subset (#46): the family's lone point, the regression fence on the
+# issue's central bug.
 _PAUSE_CI_SUBSET = ("pause.after-kill.before-park",)
 
 # The hub command node CI subset (#65): the family's first-declared member is its own CI
@@ -237,18 +176,8 @@ _DECLARE_COMMIT_SWEEP = _select(_DECLARE_COMMIT_POINTS, _DECLARE_COMMIT_CI_SUBSE
 
 
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Every family prefix in the registry yields a non-empty CI-profile selection.
-
-    ``_select`` only asserts a *named* CI-subset point still exists (catching a rename), never
-    the converse: the named subsets are closed allowlists, so a new point added to an
-    already-partitioned family would be silently absent from CI with no failure to say so. This
-    makes the "a new family never ships with zero CI coverage" claim (see ``_ABANDON_CI_SUBSET``
-    above) mechanical rather than aspirational.
-
-    Forces the CI profile via ``monkeypatch`` rather than trusting the ambient environment, so
-    this assertion holds standalone or under ``mise run crash-sweep-ci`` — a fast, registry-only
-    computation, independent of ``crash_env`` and ``BLIZZARD_CRASH_SWEEP``.
-    """
+    """Every family prefix in the registry yields a non-empty CI-profile selection —
+    a new registry point never silently drops out of CI coverage."""
     monkeypatch.setenv("BLIZZARD_CRASH_SWEEP_CI", "1")
     families = {p.split(".", 1)[0] for p in _ALL_POINTS}
     assert families, "the crash-point registry is empty — nothing to partition"
@@ -292,9 +221,8 @@ def _ingest_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> s
     return chunk_id
 
 
-# `claim.*` fires inside the HUB process (`ClaimService._claim_locked`, issue #84b) — the
-# one `_GENERIC_POINTS` family that arms the hub rather than the runner.
-# `test_kill9_at_crash_point` below reads this to pick which daemon to arm and restart.
+# `claim.*` fires inside the HUB (issue #84b) — the one `_GENERIC_POINTS` family that
+# arms the hub rather than the runner; `test_kill9_at_crash_point` reads this to pick.
 _HUB_SIDE_GENERIC_PREFIXES = ("claim.",)
 
 
@@ -370,14 +298,9 @@ def _ingest_migrate_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: s
 
 @pytest.mark.parametrize("point", _MIGRATE_SWEEP)
 def test_kill9_at_migrate_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """A ``kill -9`` right after a cross-graph migration is recorded still recovers (#90).
-
-    ``migrate.*`` fires inside the HUB (``ApplyService._apply_migration``): the worker at
-    the source graph's ``build`` node selects the ``migrate`` choice and the hub self-SIGKILLs
-    after recording the migration, before returning ``MIGRATED``. The claim under test: the
-    migration fact is durable across the crash, the chunk re-queues at the target graph's
-    ``build`` node under the new pin, and a claim there runs it to ``done`` — landing the file
-    on bare ``main`` exactly once, its history carrying exactly one migration."""
+    """A ``kill -9`` right after a cross-graph migration is recorded still recovers (#90) —
+    the migration fact survives the crash and the chunk lands on bare ``main`` exactly
+    once, its history carrying exactly one migration."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -464,19 +387,8 @@ def test_kill9_at_migrate_crash_point_for_an_intended_migration(
     crash_env: CrashEnv, tmp_path: Path, point: str
 ) -> None:
     """A ``kill -9`` right after an **intended** migration is recorded still recovers
-    (issue #124) — the same durable write and recovery path #90's crash coverage above
-    proves, now reached through a claimed chunk's standing intent rather than a
-    ``graph:<name>`` edge.
-
-    The source graph here is entirely ordinary — no cross-graph edge at all. A ``forced``
-    intent, PATCHed onto the chunk before the runner ever claims it, names the migration
-    target's own ``build`` node; the consult fires at the source's ordinary
-    ``build -pass-> deliver`` transition and the hub self-SIGKILLs right after the atomic
-    re-pin (the same ``migrate.after-record.before-response`` window). The claim under test:
-    the intent is durably cleared in the same transaction as the migration fact (so recovery
-    never re-fires it — a double migration), the chunk re-queues at the target's ``build``
-    node, and a claim there runs the target's own real build + deliver to ``done`` — landing
-    the file on bare ``main`` exactly once."""
+    (issue #124) — the intent is durably cleared in the same transaction as the migration
+    fact, so recovery never re-fires it, and the target's build + deliver lands once."""
     landed_file = f"LANDED-INTENDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -500,9 +412,8 @@ def test_kill9_at_migrate_crash_point_for_an_intended_migration(
         assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
         _assert_invariants(runner_dir, hub_dir, when=f"immediately after intended-migration kill at {point}")
 
-        # The migration is durable even though the MIGRATED response never returned, and
-        # the intent was cleared in the SAME transaction (load-bearing: a crash that
-        # recorded the fact but left the intent set would re-fire it on recovery).
+        # The intent must be cleared in the SAME transaction as the migration fact — a
+        # crash that recorded one but not the other would re-fire the migration on recovery.
         hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
         with hub_engine.connect() as conn:
             migrations = conn.execute(
@@ -559,24 +470,8 @@ def _ingest_migrate_hub_chunk(hub: httpx.Client, forge: httpx.Client, title: str
 @pytest.mark.parametrize("point", _MIGRATE_SWEEP)
 def test_kill9_at_migrate_crash_point_landing_on_a_hub_node(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` at the migrate window when the migration lands on a **hub** node
-    (issue #111) still recovers — it must not wedge at ``delivering``.
-
-    The sibling ``test_kill9_at_migrate_crash_point`` lands on a *runner* node, where the
-    chunk re-queues ``ready`` for a fresh claim. A **hub-landing** migration is the harder
-    case this scenario fences: the route is retained and the chunk derives ``delivering``
-    (never runner-claimable ``ready``), so recovery must come from the **holding runner's
-    ADVANCE poll** driving the landed hub node. The crash fires at
-    ``migrate.after-record.before-response``, *before* the inline ``HubNodeExecutor.run`` in
-    ``_apply_migration``, so only the retained route + that poll can carry the chunk to
-    ``done``. A regression that released the route (or derived ``ready``) would strand the
-    chunk with nothing driving it, and ``wait_status`` below would time out at ``delivering``.
-
-    The source ``build`` commits nothing (it hands the chunk off), so the landed hub node
-    has no submitted branches to merge — ``LAND_STEP`` is a clean no-op that routes
-    ``success -> done``. The assertion is therefore on **convergence and the retained-route
-    derivation**, not a landed file: the chunk reaches ``done`` under the target graph, its
-    history records exactly one migration onto the hub-executed node, and the invariants are
-    green after the crash and after convergence."""
+    (issue #111) still recovers — the retained route and derived ``delivering`` state
+    let the holding runner's ADVANCE poll carry the chunk to ``done`` without wedging."""
     title = f"HUB-MIGRATE-{point.replace('.', '_')}"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -639,23 +534,9 @@ _ATTACH_NOW = datetime(2026, 7, 19, 12, 0, 0, tzinfo=UTC)
 
 @pytest.mark.parametrize("point", _ATTACH_SWEEP)
 def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """A ``kill -9`` right after the runner records a worker attachment keeps it (issue #113 criterion 3).
-
-    ``attach.*`` fires inside the RUNNER's local attach endpoint
-    (``AttachmentService.attach``, behind ``POST /api/leases/{id}/attachments``), the instant
-    ``record_attachment``'s single committed txn returns and before the ``200`` does. The
-    attach channel is an out-of-band HTTP write no loop step drives, so this dedicated
-    scenario stands up a real runner daemon (no hub, no forge: the attach path is
-    loop-independent), seeds a lease + its capability token directly, and makes the real
-    attach call. The runner writes the row durably, self-SIGKILLs in the after-record window,
-    and the claim under test is that the attachment — with full provenance — is still readable
-    against the **same store** after the ungraceful death.
-
-    The seeded lease is **parked** so REAP — which ticks at startup and would otherwise expire
-    an unspawned, pid-less lease (``steps.reap``) — leaves it be; ADVANCE skips a pid-less
-    lease outright, so nothing else in the hub-less loop touches it. The park is scaffolding to
-    keep the lease alive for the out-of-band write, not part of the property under test.
-    """
+    """A ``kill -9`` right after the runner records a worker attachment keeps it, with
+    full provenance readable against the same store after the ungraceful death (issue
+    #113 criterion 3)."""
     runner_dir = tmp_path / "runner"
     # Nothing listens on ``hub_port`` — the attach path never calls the hub; the loop's hub
     # polls just fail and are swallowed, and the local API serves regardless.
@@ -711,9 +592,8 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         code = wait_death(runner_proc)
         assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
 
-        # Durable across the kill -9: reopen the same store — the attachment and its full
-        # provenance (lease/chunk/node/epoch/name) are exactly what the worker submitted,
-        # though the 200 never returned.
+        # Durable across the kill -9: reopen the same store — the attachment is what the
+        # worker submitted, though the 200 never returned.
         engine2 = create_engine_from_url(db_url)
         try:
             assert SqlAlchemyRunnerStore(engine2).attachments_for_lease("lease_attach") == {
@@ -755,8 +635,7 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
 
 _DECLARE_COMMIT_TOKEN = "the-declare-commit-lease-token"
 # The fixture workspace's one env and its one repo — the declare edge checks the repo
-# against that env's real manifest (`winter ws worktrees`), so these must be the actual
-# ones, not stand-ins.
+# against that env's real manifest, so these must be the actual ones, not stand-ins.
 _DECLARE_COMMIT_ENV = RUNNER_ENV
 _DECLARE_COMMIT_REPO = REPO_NAME
 _DECLARE_COMMIT_BRANCH = "feat/declare-commit"
@@ -767,32 +646,11 @@ _DECLARE_COMMIT_NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
 @pytest.mark.parametrize("point", _DECLARE_COMMIT_SWEEP)
 def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` right after the runner records a worker git-commit declaration keeps
-    it (issue #143, `attach.*`'s structural sibling for the ``git_commit`` kind).
-
-    ``declare-commit.*`` fires inside the RUNNER's local declare endpoint
-    (``GitCommitDeclarationService.declare``, behind ``POST /api/leases/{id}/git-commits``),
-    the instant ``record_git_commit_declaration``'s single committed txn returns and before
-    the ``200`` does. The declare channel is an out-of-band HTTP write no loop step drives,
-    so this dedicated scenario stands up a real runner daemon (no hub, no forge: the declare
-    path is loop-independent), seeds a lease + its capability token directly, and makes the
-    real declare call. The runner writes the row durably, self-SIGKILLs in the after-record
-    window, and the claim under test is that the declaration — with full provenance — is
-    still readable against the **same store** after the ungraceful death.
-
-    The seeded lease is **parked** so REAP — which ticks at startup and would otherwise
-    expire an unspawned, pid-less lease (``steps.reap``) — leaves it be; ADVANCE skips a
-    pid-less lease outright, so nothing else in the hub-less loop touches it. The park is
-    scaffolding to keep the lease alive for the out-of-band write, not part of the
-    property under test.
-    """
+    it, with full provenance readable against the same store after the ungraceful death
+    (issue #143)."""
     runner_dir = tmp_path / "runner"
-    # Materialize the env's worktrees. Every other scenario gets them from FILL's
-    # acquire; this one seeds its lease + binding directly, and a binding whose env was
-    # never prepared is a state production cannot reach — the declare edge checks the
-    # repo against the env's real manifest, and an unmaterialized env truthfully holds
-    # nothing. Driven through the same winter-CLI seam the daemon uses: the fixture
-    # workspace vendors ``tools/winter-cli``, so this needs no global ``winter`` binary
-    # (CI has none).
+    # Materialize the env's worktrees directly (this scenario seeds its lease + binding,
+    # skipping FILL's acquire), via the same winter-CLI seam the daemon uses.
     winter_cli = SubprocessWinterCli()
     winter_cli.ensure_ready(crash_env.workspace)
     winter_cli.run(crash_env.workspace, ["ws", "init", _DECLARE_COMMIT_ENV])
@@ -867,9 +725,8 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
         code = wait_death(runner_proc)
         assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
 
-        # Durable across the kill -9: reopen the same store — the declaration and its
-        # full provenance (lease/chunk/node/epoch/env/repo/branch/commit) are exactly
-        # what the worker submitted, though the 200 never returned.
+        # Durable across the kill -9: reopen the same store — the declaration is what
+        # the worker submitted, though the 200 never returned.
         engine2 = create_engine_from_url(db_url)
         try:
             declarations = SqlAlchemyRunnerStore(engine2).git_commit_declarations_for_lease("lease_declare_commit")
@@ -935,14 +792,7 @@ def _ingest_nudge_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str
 @pytest.mark.parametrize("point", _NUDGE_SWEEP)
 def test_kill9_at_nudge_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` at a `nudge.*` window recovers with the nudge fired at most once
-    and the chunk still landing exactly once (issue #113, Phase 4).
-
-    ``nudge.*`` fires inside the RUNNER's own ADVANCE step, so — unlike ``attach.*`` —
-    this scenario needs a real hub too: the window's condition is an unattached
-    ``produces:`` name on a real node-step, reached through a real judgement resume
-    against the mock harness. It always arms the runner, never the hub: both windows are
-    runner-local.
-    """
+    and the chunk still landing exactly once (issue #113, Phase 4)."""
     landed_file = f"NUDGE-LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -1000,14 +850,7 @@ def _ingest_checks_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: st
 @pytest.mark.parametrize("point", _CHECKS_SWEEP)
 def test_kill9_at_checks_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` at a `checks.*` window recovers with the chunk still landing exactly
-    once and ``runner:checks-recorded-when-marked`` green (issue #114).
-
-    ``checks.*`` fires inside the RUNNER's own ADVANCE step (the runner runs the node's
-    ``checks:`` at worker exit, records the result rows, then the marker), so this arms the
-    runner, never the hub. Either window — `checks.after-results.before-marker` (rows durable,
-    marker not) or `checks.after-marker.before-judge` (marker durable) — must still converge:
-    the chunk lands exactly once and the invariant checker is green.
-    """
+    once and ``runner:checks-recorded-when-marked`` green (issue #114)."""
     landed_file = f"CHECKS-LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -1080,9 +923,7 @@ def test_kill9_runner_daemon_mid_flight(crash_env: CrashEnv, tmp_path: Path) -> 
         terminate(hub_proc)
 
 
-# --------------------------------------------------------------------------- #
-# Graceful restart-resume (issue #12) — re-attach to an in-flight session in place
-# --------------------------------------------------------------------------- #
+# --- Graceful restart-resume (issue #12) — re-attach to an in-flight session in place ---
 
 
 def _hanging_graph_yaml(landed_file: str) -> str:
@@ -1176,13 +1017,8 @@ def _open_resume_intents(runner_dir: Path) -> set[str]:
 
 def _await_committed(runner_dir: Path, chunk_id: str, landed_file: str, *, timeout: float = 30.0) -> None:
     """Block until the mid-flight build worker has committed **and durably declared** its
-    git commit (issue #143, Phase 4).
-
-    The declaration, not the bare commit, is the durable in-flight fact a resume relies on
-    to submit a ``git_commit`` artifact and land. Waiting on the committed file alone would
-    race the push+declare that now follows the commit and detach the chunk before the
-    declaration is recorded, so the chunk would never land. This is the loop-resume analogue
-    of :func:`_await_marker`, which the abandon scenario uses for the same reason."""
+    git commit (issue #143, Phase 4) — the declaration, not the bare commit, is the durable
+    in-flight fact a resume relies on to submit and land."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         store, engine = _runner_store(runner_dir)
@@ -1202,12 +1038,9 @@ def _await_committed(runner_dir: Path, chunk_id: str, landed_file: str, *, timeo
 
 
 def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: Path) -> None:
-    """A graceful runner restart re-attaches to its in-flight session in place (issue #12).
-
-    The build worker commits and then hangs; a graceful stop (SIGTERM) marks its lease with a
-    resume-intent, and the restart RESUMEs the *same* session — same lease/epoch/session, only
-    the pid rewritten, no retry consumed — so the chunk lands **exactly once** rather than being
-    redone under a fresh lease."""
+    """A graceful runner restart re-attaches to its in-flight session in place (issue #12) —
+    same lease/epoch/session, only the pid rewritten, no retry consumed, and the chunk lands
+    exactly once."""
     landed_file = "LANDED-restart-resume.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -1259,9 +1092,7 @@ def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_pat
         terminate(hub_proc)
 
 
-# --------------------------------------------------------------------------- #
-# Ungraceful restart-resume (issue #13) — crash mid-work, no graceful marker
-# --------------------------------------------------------------------------- #
+# --- Ungraceful restart-resume (issue #13) — crash mid-work, no graceful marker ---
 
 
 def _session_ends(runner_dir: Path) -> set[str]:
@@ -1273,15 +1104,9 @@ def _session_ends(runner_dir: Path) -> set[str]:
 
 
 def test_kill9_runner_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: Path) -> None:
-    """An involuntary ``kill -9`` mid-build (no graceful marker) still re-attaches the session (issue #13).
-
-    The graceful scenario's twin, crashed instead of stopped: the build worker commits then hangs,
-    and a ``kill -9`` of the whole tree — the runner *and* its in-flight worker, a faithful reboot —
-    skips the shutdown ``finally`` entirely, so **no resume-intent marker** is written. Startup
-    crash-recovery must find the killed-mid-work lease itself (dead pid, no recorded session-end,
-    heartbeat not stale) and route it to the *same* RESUME the graceful path uses, so the chunk
-    lands **exactly once** under the same lease/epoch/session — only the pid rewritten — rather than
-    being redone under a fresh retry — the acceptance criterion #12's marker could not cover."""
+    """An involuntary ``kill -9`` mid-build (no graceful marker) still re-attaches the session
+    (issue #13) — startup crash-recovery finds the killed-mid-work lease itself and routes it
+    to the same RESUME the graceful path uses, landing the chunk exactly once."""
     landed_file = "LANDED-crash-resume.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -1305,9 +1130,8 @@ def test_kill9_runner_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: P
         lease_id, epoch, session_id, pid_before = before[0]
         assert session_id and pid_before is not None
 
-        # kill -9 the whole tree: the runner AND its hanging worker. The runner never runs its
-        # shutdown finally, and the SIGKILL'd worker never fires its SessionEnd hook — so there is
-        # neither a graceful resume-intent marker nor a session-end fact, exactly a reboot mid-run.
+        # kill -9 the whole tree, runner and worker, so neither a graceful resume-intent
+        # marker nor a session-end fact is written — a faithful reboot mid-run.
         runner_proc.kill()
         runner_proc.wait(timeout=10)
         with contextlib.suppress(ProcessLookupError, PermissionError):
@@ -1343,14 +1167,9 @@ def test_kill9_runner_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: P
 
 @pytest.mark.parametrize("point", _RESUME_SWEEP)
 def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """A ``kill -9`` at a RESUME boundary (armed on the restart) still re-attaches exactly once.
-
-    The graceful-restart scenario, crashed mid-recovery: the worker commits then hangs, a graceful
-    stop marks the lease, and the restart RESUMEs it — but this restart is ARMED at ``point`` so the
-    runner SIGKILLs itself the instant RESUME reaches that boundary. A second, unarmed restart must
-    still converge to ``done`` under the *same* lease/epoch/session, with the chunk landing exactly
-    once and the invariant checker green — every RESUME boundary the registry enumerates recovers
-    from a crash, not just the clean case ``test_graceful_restart_resumes_in_flight_session`` proves."""
+    """A ``kill -9`` at a RESUME boundary (armed on the restart) still re-attaches exactly once —
+    a second, unarmed restart converges to ``done`` under the same lease/epoch/session, with
+    invariants green."""
     landed_file = f"LANDED-resume-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -1401,19 +1220,13 @@ def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         terminate(hub_proc)
 
 
-# --------------------------------------------------------------------------- #
-# Live detach recovery (blizzard#38) — the abandon crash point
-# --------------------------------------------------------------------------- #
+# --- Live detach recovery (blizzard#38) — the abandon crash point ---
 
 
 def _hang_once_build_script(landed_file: str, marker: Path) -> str:
-    """Commit ``landed_file``, then ``hang()`` — but only the *first* time.
-
-    Identical to :func:`build_script` plus a ``hang()`` gated on ``marker``: the first
-    attempt (no marker yet) hangs mid-flight, which is the window this scenario detaches
-    the chunk in; a fresh re-claim after the abandon runs the same script again in a new
-    workdir, finds the marker, and returns normally so the chunk can actually reach
-    ``done`` instead of hanging forever a second time."""
+    """Commit ``landed_file``, then ``hang()`` — but only the *first* time, so a fresh
+    re-claim after the detach finds the marker and returns normally instead of hanging
+    a second time."""
     return (
         "import pathlib, subprocess\n"
         f"repo = {REPO_NAME!r}\n"
@@ -1498,13 +1311,9 @@ def _ingest_abandon_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: s
 
 
 def _await_marker(marker: Path, *, timeout: float = 30.0) -> None:
-    """Block until ``marker`` exists — proof the first attempt reached its hang, past the commit.
-
-    Waiting on the committed file alone (:func:`_await_committed`) is not enough here: the file
-    is written *before* the commit, so a detach racing in right after would kill the worker before
-    it ever reaches the ``hang()`` line — leaving the marker unwritten, so the fresh re-claim
-    would hang all over again instead of landing. Waiting on the marker pins the detach to
-    strictly after the point the first attempt is actually parked at."""
+    """Block until ``marker`` exists — proof the first attempt reached its hang, past the
+    commit, so the detach it races is pinned strictly after that point rather than racing
+    the pre-commit write."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if marker.exists():
@@ -1540,16 +1349,9 @@ def _wait_for_closure(runner_dir: Path, lease_id: str, *, timeout: float = 30.0)
 
 @pytest.mark.parametrize("point", _ABANDON_SWEEP)
 def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """A ``kill -9`` right after the abandon's kill (worker dead, envs still held) still recovers.
-
-    A live operator detach reaches this window (blizzard#38 slice 5): the chunk is claimed and
-    hung mid-flight, the operator detaches it via the real hub endpoint, and the armed runner's
-    next PULL discovers the detach, kills the hung worker, and self-SIGKILLs at ``point`` before
-    the environments are released. The claim under test is that this recovers through the **same**
-    path restart-resume already carries, not REAP's retry path: the original lease must close
-    ``released`` — not ``reaped`` — which is exactly the distinction that would catch REAP's
-    expire path retrying the chunk instead of releasing it. The chunk is then re-claimable and
-    lands exactly once."""
+    """A ``kill -9`` right after the abandon's kill (worker dead, envs still held) still
+    recovers through restart-resume's path, not REAP's: the lease closes ``released``, not
+    ``reaped``, and the chunk is re-claimable and lands exactly once (blizzard#38 slice 5)."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     marker = tmp_path / "hang-once.marker"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
@@ -1564,9 +1366,8 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         write_runner_config(
             runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
         )
-        # Armed from the start: unarmed in effect until a live PULL discovers the detach and
-        # reaches `point` inside the abandon it triggers — the claim + spawn + commit + hang
-        # happen normally first.
+        # Armed from the start, but unarmed in effect until a live PULL discovers the
+        # detach and reaches `point` inside the abandon it triggers.
         runner_proc = start_runner(runner_dir, crash_point=point)
 
         assert wait_status(hub, chunk_id, {"running"}) == "running"
@@ -1622,9 +1423,7 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         terminate(hub_proc)
 
 
-# --------------------------------------------------------------------------- #
-# Operator chunk pause (issue #46) — the pause-park crash point
-# --------------------------------------------------------------------------- #
+# --- Operator chunk pause (issue #46) — the pause-park crash point ---
 
 
 def _open_pause_parks(runner_dir: Path) -> set[str]:
@@ -1637,23 +1436,9 @@ def _open_pause_parks(runner_dir: Path) -> set[str]:
 
 @pytest.mark.parametrize("point", _PAUSE_SWEEP)
 def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """A ``kill -9`` between a paused worker's kill and its durable park still keeps the claim.
-
-    The abandon scenario's inverse (issue #46). The operator pauses a chunk that is hung
-    mid-flight; the armed runner's PULL discovers the pause, kills the worker, and self-SIGKILLs
-    *before* the ``pause_parks`` row is durable — leaving a lease that is active,
-    session-bearing, pid-dead and unparked.
-
-    That residue is the whole point. It is exactly the shape startup crash-recovery marks for
-    resume, so recovery runs straight back through ``_resume_marked_lease`` — which converges
-    **only because** it parks a paused chunk rather than abandoning it. A regression there
-    surfaces right here as a ``released`` closure and freed environments instead of a held claim.
-    That is what earns this point its place in the CI subset.
-
-    The claim is then proven end to end: the chunk stays paused with its environments held, the
-    operator resumes it, the *same* session finishes the work, and it lands exactly once under
-    the same lease — no retry consumed anywhere.
-    """
+    """A ``kill -9`` between a paused worker's kill and its durable park still keeps the
+    claim (issue #46) — recovery parks the chunk rather than abandoning it, and the resumed
+    session lands exactly once under the same lease, no retry consumed."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -1725,18 +1510,15 @@ def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, po
         terminate(hub_proc)
 
 
-# --------------------------------------------------------------------------- #
-# Generic hub command node (#65) — the hubnode.* per-step crash windows
-# --------------------------------------------------------------------------- #
+# --- Generic hub command node (#65) — the hubnode.* per-step crash windows ---
 
 
 # The land step's command, shared with the generic sweep graph's own ``deliver`` step — see
 # :data:`support.LAND_STEP` for what it runs and why re-running it lands nothing twice.
 _LAND_STEP = LAND_STEP
 
-# The verify step: a no-op second step whose only job is to be an UNMARKED step past the
-# marked land step, so ``hubnode.after-marker.before-next`` has a "next" step to skip the
-# land in favour of. It prints a non-choice line, so the run ends on the default success.
+# A no-op second step, unmarked, so ``hubnode.after-marker.before-next`` has a "next"
+# step to skip the marked land step in favour of.
 _VERIFY_STEP = """python3 - <<'PYEOF'
 print("post-land verification ran")
 PYEOF
@@ -1744,11 +1526,8 @@ PYEOF
 
 
 def _hub_command_graph_yaml(landed_file: str) -> str:
-    """A ``build -> merge(run:) -> done`` graph whose ``merge`` is a generic hub command node.
-
-    ``build`` commits ``landed_file``; ``merge`` is an ``executor: hub`` node with a two-step
-    ``run:`` list — ``land`` (``produces: merged``) opens+merges a PR by pinned SHA, ``verify``
-    (``produces: verified``) is a no-op post-land step. Its judgement authors the reserved
+    """A ``build -> merge(run:) -> done`` graph whose ``merge`` is a generic hub command node
+    with a two-step ``run:`` list (``land`` then ``verify``), judging the reserved
     ``success``/``failure`` choices (#65); a clean run ends on ``success -> done`` (#63)."""
     import yaml
 
@@ -1823,27 +1602,9 @@ def _count_pulls(forge: httpx.Client) -> int:
 
 @pytest.mark.parametrize("point", _HUBNODE_SWEEP)
 def test_kill9_at_hub_command_node_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """A ``kill -9`` inside a generic hub command node's per-step window recovers, lands once (#65).
-
-    The dedicated hub-command scenario the generic ``build -> deliver`` sweep cannot reach: a
-    ``build -> merge(run:) -> done`` graph whose ``merge`` node runs a two-step ``run:`` list —
-    ``land`` (``produces: merged``) then ``verify`` (``produces: verified``) — synchronously on
-    the build completion, serialized by the fleet-wide ``hub_exec_slot`` FACT. The hub self-
-    SIGKILLs inside one of the two per-step windows, and a restart re-drives the executor off the
-    re-flushed build completion.
-
-    The claim under test is the **at-least-once-per-step** contract:
-
-    * ``hubnode.after-step.before-marker`` — the crash is *after* ``land`` ran (its PR is merged)
-      but *before* its ``merged`` marker is durable, so recovery **re-runs** ``land`` (a second PR,
-      whose merge of an already-merged head is a git no-op). The branch lands on bare ``main``
-      **exactly once** despite the step running twice — re-running a step is safe.
-    * ``hubnode.after-marker.before-next`` — the crash is *after* ``land``'s marker is durable but
-      *before* ``verify`` starts, so recovery **skips** the marked ``land`` (no second PR) and runs
-      only ``verify``. The marker is what makes the skip exact.
-
-    Either way the invariant checker is green immediately after the crash and after convergence,
-    the ``hub:one-live-exec-slot`` slot is released (no leak), and the file lands exactly once."""
+    """A ``kill -9`` inside a generic hub command node's per-step window recovers, lands once
+    (#65): a crash before the step's marker is durable re-runs it safely, a crash after skips
+    it, no ``hub:one-live-exec-slot`` leak."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -1898,18 +1659,11 @@ def test_kill9_at_hub_command_node_crash_point(crash_env: CrashEnv, tmp_path: Pa
         terminate(hub_proc)
 
 
-# --------------------------------------------------------------------------- #
-# Pending hub command node (#66) — the hubnode.after-poll.* between-polls window
-# --------------------------------------------------------------------------- #
+# --- Pending hub command node (#66) — the hubnode.after-poll.* between-polls window ---
 
 
-# The poll-then-land step: a single ``run:`` step that reports the reserved ``pending``
-# outcome on its FIRST poll and lands on every subsequent one. It switches on a durable
-# workdir sentinel, which survives the hub restart the crash forces (losing it would only
-# cost a re-poll, never correctness). The land body is ``_LAND_STEP``'s merge-by-pinned-SHA
-# gated behind the sentinel, printing a non-choice line so a clean land falls through to the
-# default ``success`` edge; the pending branch prints the reserved ``pending`` literal and
-# exits 0 — no marker, no transition (#66).
+# Reports the reserved ``pending`` outcome on its first poll, lands on every subsequent
+# one, switching on a durable workdir sentinel that survives the crash-forced restart.
 _POLL_THEN_LAND_STEP = """python3 - <<'PYEOF'
 import json, os, pathlib, urllib.error, urllib.request
 
@@ -1955,14 +1709,9 @@ PYEOF
 
 
 def _pending_graph_yaml(landed_file: str) -> str:
-    """A ``build -> merge(run:) -> done`` graph whose ``merge`` hub node polls then lands (#66).
-
-    ``build`` commits ``landed_file``; ``merge`` is an ``executor: hub`` node with a single
-    ``run:`` step that reports ``pending`` on its first poll and lands on the next. A brisk
-    ``poll_interval`` (1s) keeps the between-polls gap short so the scenario converges in
-    seconds; a generous ``poll_timeout`` (600s) keeps the poll from ever timing out into
-    #64's kick-back — this scenario proves the *resume* path, not the timeout path. A clean
-    land ends on the reserved ``success -> done`` edge (#63)."""
+    """A ``build -> merge(run:) -> done`` graph whose ``merge`` hub node polls then lands
+    (#66) — a brisk ``poll_interval`` and generous ``poll_timeout`` keep this scenario on
+    the resume path rather than #64's timeout kick-back."""
     import yaml
 
     graph = {
@@ -2012,30 +1761,9 @@ def _ingest_pending_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: s
 
 @pytest.mark.parametrize("point", _HUBNODE_PENDING_SWEEP)
 def test_kill9_at_hub_node_pending_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """A ``kill -9`` in a hub node's between-polls window resumes polling and lands once (#66).
-
-    The dedicated pending scenario the generic hub-command sweep cannot reach (its steps
-    always succeed): a ``build -> merge(run:) -> done`` graph whose ``merge`` node reports
-    ``pending`` on its first poll — recording a durable ``hub_node_poll`` FACT, no
-    transition — then lands on the next. The hub self-SIGKILLs at
-    ``hubnode.after-poll.before-slot-release``: the poll fact is durable, but the fleet-wide
-    slot's release (in :meth:`HubNodeExecutor.run`'s ``finally``) never ran, so the slot is
-    left LIVE.
-
-    The claim under test is that recovery is "keep polling", not a special recovery path,
-    because pending-ness is DERIVED from the durable poll fact
-    (:func:`~blizzard.hub.domain.work.hub_node_pending`), never held in memory:
-
-    * The invariant checker is green the instant after the crash — one leaked live slot is
-      still ``<= 1``, the ``hub:one-live-exec-slot`` bound.
-    * A restart re-drives the merge node off the runner's ADVANCE poll. The SAME chunk
-      reentrantly reclaims its own still-live slot on its next due poll (no wait on the
-      staleness TTL, which only matters for a *different* chunk), the poll-then-land step
-      finds its durable workdir sentinel and lands, and the run's ``finally`` releases the
-      slot — so no slot is leaked live after convergence.
-    * The chunk reaches ``done`` and the file lands on bare ``main`` exactly once, despite
-      the node's ``run:`` step running across the crash.
-    """
+    """A ``kill -9`` in a hub node's between-polls window resumes polling and lands once
+    (#66) — pending-ness is derived from the durable poll fact, so recovery is just "keep
+    polling", releasing the leaked slot and landing the file exactly once."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -2052,16 +1780,14 @@ def test_kill9_at_hub_node_pending_crash_point(crash_env: CrashEnv, tmp_path: Pa
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
-        # The hub self-SIGKILLs the instant it reaches the between-polls window: the merge
-        # node reported pending on its first poll (poll fact durable), the slot release has
-        # not yet run.
+        # The hub self-SIGKILLs in the between-polls window: poll fact durable, slot
+        # release not yet run.
         code = wait_death(hub_proc)
         assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
         _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
 
-        # Restart the hub UNARMED: the runner's ADVANCE keeps polling hub-advance; pending-ness
-        # is derived from the durable poll fact, so the same chunk resumes polling, reentrantly
-        # reclaims its own still-live slot on its next due poll, and lands.
+        # Restart the hub UNARMED: pending-ness is derived from the durable poll fact, so
+        # the chunk just resumes polling and lands.
         hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
@@ -2083,14 +1809,10 @@ def test_kill9_at_hub_node_pending_crash_point(crash_env: CrashEnv, tmp_path: Pa
         terminate(hub_proc)
 
 
-# --------------------------------------------------------------------------- #
-# Mid-script inter-repo-push crash (#67) — the packaged default graph's own window
-# --------------------------------------------------------------------------- #
-#
-# A window the per-step `hubnode.*` registry points cannot reach, because `land_default.py`
-# loops over a chunk-dynamic number of repos INSIDE ONE `run:` step, marking each through the
-# mid-run callback rather than a static per-step `produces:` — see
-# `test_kill9_between_default_graph_repo_pushes` below for what the scenario drives.
+# --- Mid-script inter-repo-push crash (#67) — the packaged default graph's own window ---
+
+# A window the per-step `hubnode.*` registry points cannot reach: `land_default.py` loops
+# over repos inside ONE `run:` step, marking each through a mid-run callback instead.
 
 _WEB_REPO_NAME = "toy-web"
 _LAND_STEP_COMMAND = "python3 -m blizzard.hub.graphs.scripts.land_default"
@@ -2130,13 +1852,9 @@ def _two_repo_build_script(landed_file: str) -> str:
 
 
 def _default_graph_two_repo_yaml(landed_file: str) -> str:
-    """A ``build -> deliver`` graph named ``default-delivery`` whose ``deliver`` node is
-    the REAL packaged ``land_default`` script (not the sweep's ``true`` stand-in).
-
-    The build commits in both repos; ``deliver`` runs ``land_default.py``, which opens +
-    merges a PR per repo by pinned SHA and records each ``merged/<repo>`` marker via the
-    mid-run callback. ``landed -> done`` / ``conflict -> build`` mirror the packaged
-    ``default.yaml``."""
+    """A ``build -> deliver`` graph named ``default-delivery`` whose ``deliver`` node runs
+    the REAL packaged ``land_default.py`` script (not the sweep's ``true`` stand-in),
+    mirroring the packaged ``default.yaml``'s ``landed -> done`` / ``conflict -> build``."""
     import yaml
 
     graph = {
@@ -2171,14 +1889,9 @@ _LAND_FF_STEP_COMMAND = "python3 -m blizzard.hub.graphs.scripts.land_ff"
 
 
 def _ff_graph_two_repo_yaml(landed_file: str) -> str:
-    """:func:`_default_graph_two_repo_yaml`'s twin for the PR-free lane: a ``build ->
-    deliver`` graph named ``default-delivery`` whose ``deliver`` node is the REAL
-    packaged ``land_ff`` script, not ``land_default``.
-
-    The build commits in both repos; ``deliver`` runs ``land_ff.py``, which fast-forwards
-    each repo's base branch ref directly to the chunk's own commit (no PR, no merge
-    commit) and records each ``merged/<repo>`` marker via the mid-run callback.
-    ``landed -> done`` / ``conflict -> build`` mirror the packaged graph's own edges."""
+    """:func:`_default_graph_two_repo_yaml`'s twin for the PR-free lane: ``deliver`` runs
+    the REAL packaged ``land_ff.py`` script, which fast-forwards each repo's base branch
+    directly (no PR, no merge commit) instead of ``land_default.py``'s PR merge."""
     import yaml
 
     graph = {
@@ -2223,24 +1936,9 @@ def _repo_pull_count(forge: httpx.Client, repo: str) -> int:
 
 
 def test_kill9_between_default_graph_repo_pushes(crash_env: CrashEnv, tmp_path: Path) -> None:
-    """A ``kill -9`` between two repos' pushes in the real ``land_default`` re-merges only the
-    unmarked repo, landing each exactly once (#67 — the verify finale's closed gap).
-
-    The packaged default graph's own mid-script window, unreachable by the per-step
-    ``hubnode.*`` registry points: ``land_default.py`` loops over both fixture repos inside
-    ONE ``run:`` step. Armed with its test-only pause, it stalls right after the FIRST repo's
-    ``merged/<repo>`` marker is durable; the whole hub process group (the hub daemon plus the
-    land subprocess it spawned) is ``kill -9``ed inside that pause — a faithful reboot mid-land.
-
-    The claim: recovery re-drives the executor off the re-flushed build completion, and the
-    re-run of ``land_default`` skips the already-marked repo and pushes only the unmarked one.
-
-    * the invariant checker is green the instant after the crash and again after convergence;
-    * exactly one ``merged/<repo>`` marker was durable at crash time (one repo landed, one not);
-    * both repos' change lands on their bare ``main`` **exactly once**, and each repo carries
-      exactly ONE PR — the marked repo was not re-merged;
-    * the ``hub:one-live-exec-slot`` slot is released after convergence — no leaked live slot.
-    """
+    """A ``kill -9`` between two repos' pushes in the real ``land_default`` re-merges only
+    the unmarked repo — marker-skipped, not re-merged — landing each exactly once with no
+    leaked ``hub:one-live-exec-slot`` (#67 — the verify finale's closed gap)."""
     landed_file = "LANDED-mid-script-sweep.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -2329,35 +2027,16 @@ def test_kill9_between_default_graph_repo_pushes(crash_env: CrashEnv, tmp_path: 
         terminate(hub_proc)
 
 
-# --------------------------------------------------------------------------- #
-# Mid-script inter-repo-update crash for the PR-free lane — `land_ff`'s own window
-# --------------------------------------------------------------------------- #
-#
-# `land_ff.py`'s mirror of the mid-script window above, for the PR-free lane: the same
-# one-`run:`-step, many-repos shape, so the same WALL-CLOCK race — see
-# `test_kill9_between_ff_graph_repo_pushes` below for what the scenario drives.
+# --- Mid-script inter-repo-update crash for the PR-free lane — `land_ff`'s own window ---
+
+# `land_ff.py`'s mirror of the mid-script window above: the same one-`run:`-step,
+# many-repos shape.
 
 
 def test_kill9_between_ff_graph_repo_pushes(crash_env: CrashEnv, tmp_path: Path) -> None:
-    """A ``kill -9`` between two repos' fast-forwards in the real ``land_ff`` re-runs only the
-    unmarked repo, landing each exactly once — ``land_ff``'s own mid-script window, the PR-free
-    lane's mirror of ``test_kill9_between_default_graph_repo_pushes`` (#67, #123).
-
-    The packaged fast-forward graph's own mid-script window, unreachable by the per-step
-    ``hubnode.*`` registry points: ``land_ff.py`` loops over both fixture repos inside ONE
-    ``run:`` step. Armed with its test-only pause, it stalls right after the FIRST repo's
-    ``merged/<repo>`` marker is durable; the whole hub process group (the hub daemon plus the
-    land subprocess it spawned) is ``kill -9``ed inside that pause — a faithful reboot mid-land.
-
-    The claim: recovery re-drives the executor off the re-flushed build completion, and the
-    re-run of ``land_ff`` skips the already-marked repo and fast-forwards only the unmarked one.
-
-    * the invariant checker is green the instant after the crash and again after convergence;
-    * exactly one ``merged/<repo>`` marker was durable at crash time (one repo landed, one not);
-    * both repos' change lands on their bare ``main`` **exactly once** (no PR to double-check —
-      the lane opens none — so exactly-once is read straight off each bare repo's history);
-    * the ``hub:one-live-exec-slot`` slot is released after convergence — no leaked live slot.
-    """
+    """A ``kill -9`` between two repos' fast-forwards in the real ``land_ff`` re-runs only
+    the unmarked repo, landing each exactly once with no leaked ``hub:one-live-exec-slot`` —
+    the PR-free lane's mirror of ``test_kill9_between_default_graph_repo_pushes`` (#67, #123)."""
     landed_file = "LANDED-mid-script-ff-sweep.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()

@@ -1,10 +1,8 @@
 """GraphLifecycleService (unit tier) — the operator's retire/re-enable brake over one
 specific ``graph_id``, facts only (issue #101).
 
-A fake stands in for the store — only ``record_lifecycle`` is meaningfully
-implemented; every other seam is unreachable from :meth:`GraphLifecycleService.retire`/
-``enable`` and raises loudly if a regression starts calling it (``bzh:domain-core`` — no
-store, no tokens). Copies :mod:`tests.test_pause_service`'s fake-repo pattern exactly.
+A fake stands in for the store — only ``record_lifecycle`` is meaningfully implemented;
+every other seam raises loudly if called (``bzh:domain-core`` — no store, no tokens).
 """
 
 from __future__ import annotations

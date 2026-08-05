@@ -1,31 +1,9 @@
 """A live runner learns its chunk was detached (issue #38).
 
-``_reconcile_leases``, folded into PULL between ``_sync_registry`` and the flush, asks the
-hub — per active lease, on every tick — whether this runner still holds the chunk's route,
-and abandons (kill the worker, release the environments, close the lease ``released``, no
-epoch bump, no requeue fact, no retry consumed) any lease it no longer holds. That same
-sweep also parks a lease the operator paused (issue #46), off the same ``get_chunk``; the
-pause half is covered by ``test_chunk_pause.py``, the detach half here. This is the
-live-tick counterpart of restart-resume's ``_resume_marked_lease`` (``test_runner_restart_
-resume.py``), which only ever runs after a restart — these tests are the live-tick half, so
-they live here rather than falsifying that file's restart-scoped docstring
-(``canon:truthful-names``).
-
-The central design point under test: the predicate is **route-only**, not status-and-route.
-A live runner legitimately holds an active lease while its chunk derives ``delivering``,
-``waiting_on_human``, or ``needs_human`` — copying restart-resume's ``status == RUNNING and
-ours`` predicate here would wrongly abandon every one of those. Route identity — ``route is
-None`` (detached) or ``route.runner_id`` naming another runner (reassigned) — is the correct
-and sufficient signal for every *non-terminal* status.
-
-One exception, added for issue #118: ``stopped`` is checked **ahead of** route identity and
-abandons even when the route still names this runner. ``stop`` releases a live route in the
-same store transaction as its terminal fact, so ordinarily the route-is-gone branch above
-already catches it — this status branch is a backstop for the narrow window where the hub's
-own claim guard or a crash could otherwise leave a stopped chunk routed to a runner that would
-never see the release (``test_pull_abandons_a_lease_whose_chunk_is_stopped_though_still_routed_
-to_this_runner`` below), not a second general status-keyed predicate.
-"""
+``_reconcile_leases``, folded into PULL, asks the hub per active lease whether this
+runner still holds the chunk's route, abandoning (kill, release, close) any it no
+longer holds. The predicate is **route-only**, not status-based, except ``stopped``
+(issue #118 backstop), checked ahead of route identity."""
 
 from __future__ import annotations
 
@@ -131,9 +109,7 @@ def _ctx(store, hub, *, provider=None, probe=None):  # type: ignore[no-untyped-d
     )
 
 
-# --------------------------------------------------------------------------- #
 # PULL abandons a detached / reassigned live lease
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -179,9 +155,8 @@ def test_pull_abandons_a_chunk_reassigned_to_another_runner(tmp_path):  # type: 
 @pytest.mark.unit
 def test_pull_abandons_a_lease_whose_chunk_is_stopped_though_still_routed_to_this_runner(tmp_path):  # type: ignore[no-untyped-def]
     """The must-fix-1 backstop (issue #118): the hub still routes the chunk to this
-    runner, but it derives ``stopped``. The route-only predicate above would leave this
-    alone (the route names this runner) — this status branch catches it directly,
-    honoring the terminal fact rather than depending on the route release having landed."""
+    runner, but it derives ``stopped`` — the status branch catches it directly, honoring
+    the terminal fact rather than depending on the route release having landed."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -197,9 +172,7 @@ def test_pull_abandons_a_lease_whose_chunk_is_stopped_though_still_routed_to_thi
     assert store.active_lease("lease_1") is None
 
 
-# --------------------------------------------------------------------------- #
 # The route-only predicate — a live runner keeps its healthy lease
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -223,11 +196,9 @@ def test_pull_leaves_a_still_running_lease_untouched(tmp_path):  # type: ignore[
 @pytest.mark.unit
 @pytest.mark.parametrize("status", [ChunkStatus.DELIVERING, ChunkStatus.WAITING_ON_HUMAN, ChunkStatus.NEEDS_HUMAN])
 def test_pull_leaves_a_still_ours_non_running_lease_untouched(tmp_path, status):  # type: ignore[no-untyped-def]
-    """The regression test for the route-only predicate: a status check here (copying
-    restart-resume's ``status == RUNNING and ours``) would wrongly abandon every one of
-    these — a live runner legitimately holds an active lease while its chunk derives
-    ``delivering`` (a hub-node hold), ``waiting_on_human`` (an open ask), or ``needs_human``
-    (an open escalation)."""
+    """The regression test for the route-only predicate: copying restart-resume's
+    ``status == RUNNING and ours`` here would wrongly abandon a live runner's lease
+    while its chunk derives ``delivering``, ``waiting_on_human``, or ``needs_human``."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -244,9 +215,7 @@ def test_pull_leaves_a_still_ours_non_running_lease_untouched(tmp_path, status):
     assert lease is not None and lease.pid == 100
 
 
-# --------------------------------------------------------------------------- #
 # Resilience — hub unreachable
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -274,9 +243,7 @@ def test_pull_defers_when_hub_unreachable(tmp_path):  # type: ignore[no-untyped-
     assert pending[0].kind == LEASE_MINTED
 
 
-# --------------------------------------------------------------------------- #
 # Ordering — the abandon happens before the flush, within one PULL
-# --------------------------------------------------------------------------- #
 
 
 class _OrderTrackingHub(FakeHub):
@@ -315,22 +282,14 @@ def test_pull_abandons_before_it_flushes(tmp_path):  # type: ignore[no-untyped-d
     assert store.active_lease("lease_1") is None
 
 
-# --------------------------------------------------------------------------- #
 # REAP races ahead of PULL's own detach sweep (blizzard#38 slice 5)
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
 def test_reap_abandons_instead_of_escalating_a_detached_chunk(tmp_path):  # type: ignore[no-untyped-def]
-    """Tick order is REAP -> RESUME -> PULL -> FILL -> ADVANCE, so a lease whose retry budget
-    REAP exhausts can reach the requeue-or-escalate decision *before* PULL's own
-    ``_reconcile_leases`` ever gets to ask the hub about it this tick. If the hub already
-    detached this chunk (the operator released it to ``ready``), escalating anyway would post
-    an ``escalation.recorded`` fact this same tick's flush cannot retract — flipping the chunk
-    back to ``needs_human`` behind the operator's back, and PULL cannot un-post a fact once
-    flushed. REAP's exhausted-budget path must re-ask the same ownership question and abandon
-    in place instead of escalating — the identical outcome PULL would reach later this tick,
-    just without the intervening false escalation."""
+    """REAP's exhausted-budget path can reach requeue-or-escalate before PULL's own
+    detach sweep runs this tick; escalating anyway would post a fact the flush can't
+    retract, so REAP re-asks the same ownership question and abandons in place instead."""
     store = _store(tmp_path)
     _seed_orphan_lease(store, retries_max=0)
     hub = FakeHub()
@@ -377,9 +336,7 @@ def test_reap_still_escalates_an_exhausted_lease_that_is_still_ours(tmp_path):  
     assert store.active_lease("lease_1") is None
 
 
-# --------------------------------------------------------------------------- #
 # Component tier — the seam across two ticks: released this tick, never re-claimed next
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component
@@ -409,15 +366,8 @@ def test_tick_releases_a_detached_chunk_and_the_next_tick_does_not_reclaim_it(tm
     assert store.active_lease("lease_1") is None
 
 
-# --------------------------------------------------------------------------- #
-# A chunk unknown at the hub (404) is terminal, not a transport failure (blizzard#9)
-# --------------------------------------------------------------------------- #
-#
-# A hub store reset (or any other cause of the chunk record vanishing) surfaces as a 404
-# on the same `GET /chunks/{id}` this module's detach sweep already polls every tick —
-# `ChunkNotFoundError`, not the generic `HubClientError` an unreachable hub or a 5xx
-# raises. The 404 flows through the exact same abandon path as a genuine
-# detach/reassignment (blizzard#9).
+# A chunk unknown at the hub (404) is terminal, not a transport failure (blizzard#9):
+# `ChunkNotFoundError` flows through the same abandon path as a genuine detach.
 
 
 @pytest.mark.unit
@@ -444,11 +394,9 @@ def test_pull_abandons_a_live_lease_whose_chunk_the_hub_reports_unknown(tmp_path
 
 @pytest.mark.unit
 def test_pull_defers_a_live_lease_on_a_transient_hub_failure(tmp_path):  # type: ignore[no-untyped-def]
-    """The companion case: a transient hub failure (unreachable / 5xx) must NOT be read as
-    the chunk being gone — the env stays held and the lease survives untouched, retried
-    next tick, exactly as :func:`test_pull_defers_when_hub_unreachable` already pins for
-    the plain-detach predicate. Kept alongside the 404 regression above so the two
-    outcomes (terminal vs. retryable) are asserted side by side."""
+    """The companion case: a transient hub failure (unreachable / 5xx) must NOT be read
+    as the chunk being gone — the env stays held and the lease survives untouched,
+    retried next tick, unlike the 404 case above."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -467,10 +415,9 @@ def test_pull_defers_a_live_lease_on_a_transient_hub_failure(tmp_path):  # type:
 
 @pytest.mark.unit
 def test_advance_held_chunk_unknown_at_the_hub_releases_envs(tmp_path):  # type: ignore[no-untyped-def]
-    """The leaseless counterpart: a chunk parked at a hub node (envs held, no active lease)
+    """The leaseless counterpart: a chunk parked at a hub node (envs held, no lease)
     whose ``GET /chunks/{id}`` now 404s is released the same way a landed delivery is —
-    :func:`_advance_held_chunk`'s own terminal branch, distinct from the active-lease path
-    :func:`_reassigned_or_detached` covers above."""
+    :func:`_advance_held_chunk`'s own terminal branch."""
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
@@ -505,8 +452,7 @@ def test_advance_held_chunk_defers_on_a_transient_hub_failure(tmp_path):  # type
 def test_reap_abandons_instead_of_escalating_a_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
     """The exhausted-budget escalate guard shares the same ownership predicate
     (:func:`_reassigned_or_detached`), so a chunk that 404s there is abandoned instead of
-    escalated too — mirroring ``test_reap_abandons_instead_of_escalating_a_detached_chunk``
-    for the unknown-chunk cause."""
+    escalated too — the unknown-chunk mirror of the detached-chunk case above."""
     store = _store(tmp_path)
     _seed_orphan_lease(store, retries_max=0)
     hub = FakeHub()
@@ -530,12 +476,8 @@ def test_reap_abandons_instead_of_escalating_a_chunk_unknown_at_the_hub(tmp_path
 @pytest.mark.unit
 def test_reap_orphan_requeue_releases_envs_when_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
     """The requeue path's own 404 guard: REAP's ``_fail_attempt`` closes the exhausted
-    attempt and calls ``_requeue`` *before* PULL's own live-tick sweep
-    (``_reconcile_leases``) ever runs this tick, and by the time ``_requeue`` calls
-    ``get_envelope`` the prior lease is already closed — so there is no active lease
-    left for that sweep to find and abandon later. Left as a generic ``HubClientError``,
-    a chunk gone by requeue time would hold its environment forever, the same shape
-    issue #9 fixed for the active-lease case."""
+    attempt and calls ``_requeue`` before PULL's sweep runs, so no active lease is left
+    for that sweep to abandon — left generic, the env would hold forever (issue #9)."""
     store = _store(tmp_path)
     _seed_orphan_lease(store, retries_max=2)  # under budget — requeues rather than escalates
     hub = FakeHub()
@@ -554,9 +496,8 @@ def test_reap_orphan_requeue_releases_envs_when_chunk_unknown_at_the_hub(tmp_pat
 @pytest.mark.unit
 def test_fill_releases_an_interrupted_claim_binding_when_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
     """The interrupted-claim reconciler's own 404 guard: a binding left by a crash in
-    FILL's bind->claim->spawn window, whose chunk the hub no longer knows about, is
-    released the same way ``_advance_held_chunk`` releases a held-but-leaseless chunk
-    (blizzard#9) — not left for the reconciler to keep re-asking about forever."""
+    FILL's bind->claim->spawn window is released the same way ``_advance_held_chunk``
+    releases a held-but-leaseless chunk (blizzard#9), not re-asked about forever."""
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()

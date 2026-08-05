@@ -1,21 +1,5 @@
-"""walking-skeleton fact tables (hub store tree)
-
-The hub store's first real schema (P6): the fact tables the ingest -> claim ->
-commit -> deliver -> land loop derives every chunk status from
-(``bzh:facts-not-status``). The tables are defined once in
-``blizzard.hub.store.schema`` (the metadata Alembic targets for autogenerate);
-this revision creates exactly this revision's subset in FK-dependency order, so a
-later revision that adds tables to the same metadata does not get re-created here.
-
-``chunk_pm_pointers``, ``route_created``, ``route_released``, ``chunks``,
-``transitions``, ``graph_edges``, and ``chunk_stopped`` are the exceptions: each is a
-frozen local ``sa.Table`` literal rather than a ``schema.py`` import, so upgrading from
-``base`` recreates the column shape this revision shipped with instead of whatever
-``schema.py`` says today (``canon:no-retro``; pinned by
-``tests/test_pin_hub_api.py::test_a_revisions_table_shape_is_frozen_at_its_own_revision``).
-The frozen literals still declare their ``chunk_id``/``graph_id`` foreign keys (via
-same-MetaData resolution stubs, not live imports — see below) so a fresh store's
-schema matches ``schema.py``'s declared FKs (``bzh:sql-portable``).
+"""walking-skeleton fact tables (hub store tree) — frozen local literals, not
+``schema.py`` imports, so ``base`` recreates this revision's own column shape.
 
 Revision ID: 20260713_1218_hub_walking_skeleton
 Revises: 20260713_1112_hub_initial
@@ -46,12 +30,8 @@ down_revision: str | None = "20260713_1112_hub_initial"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape — no `model` column — reshaped by
-# 0018_chunk_model_selection. Not imported from schema.py (see the module docstring).
-# `chunks.graph_id` FKs to `graphs.graph_id`; `graphs` itself is unreshaped and created
-# below from the real schema.py import, but it lives in a *different* MetaData than this
-# frozen one, so a bare `sa.ForeignKey("graphs.graph_id")` needs its own same-MetaData
-# resolution stub — never added to `_TABLES`, never created or dropped.
+# This revision's own frozen shape — no `model` column. `graphs` lives in a different
+# MetaData, so its FK needs a same-MetaData stub, never added to `_TABLES`.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "graphs",
@@ -91,11 +71,8 @@ _route_released = sa.Table(
     sa.Column("chunk_id", sa.String, sa.ForeignKey("chunks.chunk_id"), nullable=False),
     sa.Column("released_at", UtcDateTime, nullable=False),
 )
-# This revision's own frozen shape — no ``to_graph_model`` column — reshaped by the
-# edge-target-graph-model revision (issue #90). Not imported from schema.py (see the
-# module docstring). Its ``from_node_id``/``choice_id`` FKs (to ``graph_nodes`` /
-# ``graph_choices``, both created below from the real schema.py import, unreshaped) each
-# need a same-MetaData resolution stub here — never added to ``_TABLES``, never created.
+# This revision's own frozen shape — no ``to_graph_model`` column. Its FK targets each
+# need a same-MetaData resolution stub here, never added to ``_TABLES``.
 sa.Table(
     "graph_nodes",
     _frozen_metadata,
@@ -115,9 +92,8 @@ _graph_edges = sa.Table(
     sa.Column("to_node_name", sa.String, nullable=False),
     sa.Column("prompt_addendum", sa.Text, nullable=True),
 )
-# This revision's own frozen shape — no ``graph_id`` column — reshaped by the
-# transition-graph-id revision (issue #90). Not imported from schema.py (see the module
-# docstring). Its ``chunk_id`` FK resolves against the same-MetaData ``_chunks`` stub above.
+# This revision's own frozen shape — no ``graph_id`` column. Its ``chunk_id`` FK
+# resolves against the same-MetaData ``_chunks`` stub above.
 _transitions = sa.Table(
     "transitions",
     _frozen_metadata,
@@ -131,10 +107,8 @@ _transitions = sa.Table(
     sa.Column("runner_id", sa.String, nullable=False),
     sa.Column("recorded_at", UtcDateTime, nullable=False),
 )
-# This revision's own frozen shape — no ``stopped_by`` column — reshaped by
-# ``20260719_2000_hub_chunk_stopped_by`` (issue #118). Not imported from schema.py
-# (see the module docstring). Its ``chunk_id`` FK resolves against the same-MetaData
-# ``_chunks`` stub above.
+# This revision's own frozen shape — no ``stopped_by`` column. Its ``chunk_id`` FK
+# resolves against the same-MetaData ``_chunks`` stub above.
 _chunk_stopped = sa.Table(
     "chunk_stopped",
     _frozen_metadata,

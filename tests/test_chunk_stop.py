@@ -1,12 +1,8 @@
 """The ``/chunks/{id}/stop`` route over the HTTP surface (issue #118).
 
 Proves the controller wires stop correctly end to end: 202/404/409, the fact written,
-the route released, a held fleet-wide hub-exec slot released, the events published, and
-that a stopped chunk never re-enters the ready queue. See ``test_stop_service.py`` for
-``StopService``'s own refusal matrix and
-``test_hub_runner_seam.py::test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick``
-for the end-to-end environment release.
-"""
+the route + hub-exec slot released, the events published, and that a stopped chunk
+never re-enters the ready queue."""
 
 from __future__ import annotations
 

@@ -1,9 +1,8 @@
 """The runner-local active-lease list — ``GET /api/leases`` (issue #28).
 
-Exercised over a real store via TestClient, mirroring ``tests/test_workspace_prompt_api.py``'s
-convention. Hub-free: nothing here reaches for the hub or the forge — the route's shape,
-its binding join, its empty and unwired forms, and the derivation→wire mapping (``parked``
-via real park facts, ``spawning`` via a null pid) are the point.
+Exercised over a real store via TestClient, hub-free. The route's shape, its binding
+join, its empty and unwired forms, and the derivation→wire mapping (``parked`` via real
+park facts, ``spawning`` via a null pid) are the point.
 """
 
 from __future__ import annotations
@@ -105,10 +104,8 @@ def test_running_lease_shape_and_binding_join(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_timestamps_serialize_with_an_explicit_utc_offset(tmp_path: Path) -> None:
-    """A naive (no-offset) ISO string is parsed as local time by a JS ``Date``, skewing
-    any client-side age computation — the value round-trips fine through Python, so
-    pin the **literal serialized bytes**, not just the parsed value.
-    """
+    """A naive (no-offset) ISO string is parsed as local time by a JS ``Date``, so pin
+    the literal serialized bytes, not just the round-tripped value."""
     app, store = _app_with_leases(tmp_path, probe=FakeProbe(alive={(100, "start-100")}))
     _seed_lease(store)
     store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
@@ -121,9 +118,8 @@ def test_timestamps_serialize_with_an_explicit_utc_offset(tmp_path: Path) -> Non
     item = body["items"][0]
     assert item["created_at"] == "2026-07-16T12:00:00+00:00"
     assert item["last_heartbeat_at"] == "2026-07-16T12:01:00+00:00"
-    # The unambiguous-designator property itself, stated directly, via the shared
-    # walker (``tests/support.py``) rather than an ad hoc field-by-field loop — so a
-    # later route addition is covered without touching this test.
+    # Via the shared walker rather than an ad hoc field-by-field loop, so a later
+    # route addition is covered without touching this test.
     assert_all_timestamps_utc(body)
 
     # And the property that actually matters: a JS-equivalent parse recovers the true

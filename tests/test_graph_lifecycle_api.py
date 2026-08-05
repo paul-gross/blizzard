@@ -1,14 +1,8 @@
-"""Graph retire/re-enable — ``POST /api/graphs/{id}/retire``, ``POST
-/api/graphs/{id}/enable`` (component tier, issue #101).
+"""Graph retire/re-enable — ``POST /api/graphs/{id}/retire`` and ``.../enable`` (#101).
 
-Proves the controller wires :class:`~blizzard.hub.domain.graph_lifecycle.GraphLifecycleService`
-correctly end to end: the ``graphs`` row itself never changes (immutable, insert-only),
-the wire's ``enabled``/``retired`` fields flip, ``GET /api/graphs``' ``effective``
-marker falls back to the newest **non-retired** version of a name (or ``None`` — no
-graph carries ``effective: true`` — once every version is retired), and 404s on an
-unknown id. The append-only-fact and lockstep-with-``mark_effective`` guarantees are
-unit-tested in ``test_graph_domain.py``/``test_graph_lifecycle_service.py``; this file
-is the HTTP surface.
+Proves the HTTP surface end to end: the ``graphs`` row never changes, the wire's
+``enabled``/``retired`` fields flip, ``GET /api/graphs``'s ``effective`` marker falls
+back to the newest non-retired version (or ``None`` once all are retired), and 404s.
 """
 
 from __future__ import annotations
@@ -133,10 +127,8 @@ def test_retire_defaults_by_to_operator(tmp_path: Path) -> None:
     assert resp.json()["retired"] is True
 
 
-# --------------------------------------------------------------------------- #
-# GET /api/graphs — effective falls back to the newest non-retired version;
-# a fully-retired name marks none of its versions effective.
-# --------------------------------------------------------------------------- #
+# GET /api/graphs — effective falls back to the newest non-retired version; a
+# fully-retired name marks none of its versions effective.
 
 
 def test_retiring_the_newest_version_falls_effective_back_to_the_prior_one(tmp_path: Path) -> None:
@@ -179,26 +171,22 @@ def test_re_enabling_restores_effective(tmp_path: Path) -> None:
     assert hub.client.get("/api/graphs").json()[0]["effective"] is True
 
 
-# --------------------------------------------------------------------------- #
-# Retiring every version of the packaged *default* graph must survive a
-# restart, not be silently undone by the next lazy `ensure_default` (issue #101).
-# --------------------------------------------------------------------------- #
+# Retiring every version of the packaged *default* graph must survive a restart, not
+# be silently undone by the next lazy `ensure_default` (issue #101).
 
 
 def test_retiring_every_version_of_the_default_graph_survives_a_restart(tmp_path: Path) -> None:
-    """Retiring the packaged default graph's one and only version is the operator's
-    deliberate brake — it must not be undone by a second ``ensure_default`` call
-    against a fresh ``HubServices``/engine over the same on-disk store, i.e. across a
-    hub restart."""
+    """Retiring the packaged default graph's only version is the operator's deliberate
+    brake — not undone by a second ``ensure_default`` call across a hub restart (fresh
+    ``HubServices``/engine, same on-disk store)."""
     hub = build_hub(tmp_path)
     doc = hub.services.default_graph_doc
     graph = hub.services.graph_mint.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
     hub.services.graph_lifecycle.retire(graph, by="operator")
     assert hub.services.graphs.get_enabled_by_name(doc.name) is None
 
-    # A second "boot": a fresh HubServices (fresh engine, fresh in-memory service
-    # instances) over the same sqlite file — never the same Python objects the first
-    # boot already ran `ensure_default` against.
+    # A second "boot": a fresh HubServices over the same sqlite file — never the same
+    # Python objects the first boot already ran `ensure_default` against.
     restarted = build_hub(tmp_path)
     with pytest.raises(DefaultGraphRetired):
         restarted.services.graph_mint.ensure_default(

@@ -39,6 +39,10 @@ run = "BLIZZARD_SERVICE=1 uv run pytest tests/service/"
 description = "blizzard:sse-contract — gate the SSE frame shape contract (issue #235): the Python producer+parse suite against contracts/sse/'s golden corpus, then the board's contract spec driving the same goldens through the real SseService/FetchEventSource transport"
 run = "uv run pytest tests/test_sse_contract.py && (cd web && npx ng test fleet --include='**/sse-contract.spec.ts')"
 
+[tasks.prose-check]
+description = "blizzard:prose-ratchet — fail on comment/docstring prose growth over the committed baseline; add --blocks to also report every block over its bzh:prose-budget cap"
+run = "uv run python scripts/prose_density.py check src tests ../blizzard-mock/src"
+
 [tasks.lint]
 description = "Lint with ruff"
 run = "uv run ruff check ."

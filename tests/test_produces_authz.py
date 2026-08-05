@@ -1,13 +1,9 @@
 """Produces-artifact authorization at the wired hub (component tier, issue #113 phase 5).
 
-``tests/test_produces_auth.py`` covers ``check_produces`` itself (unit tier). This file
-proves the **apply-path backstop**: a completion whose ``build`` node declares
-``produces: [notes]`` is accepted under ``produces_mode=warn`` regardless of whether
-``notes`` was explicitly attached (the assessment fallback still lands), and rejected
-under ``produces_mode=enforce`` unless the submission carries an explicit
-(``attached=True``) artifact for every declared name — leaving the fence and the
-transition untouched on rejection, mirroring ``test_route_token_authz.py``.
-"""
+Proves the apply-path backstop: a completion declaring ``produces: [notes]`` is
+accepted under ``produces_mode=warn`` regardless of explicit attachment, and rejected
+under ``produces_mode=enforce`` unless every declared name carries an explicit
+(``attached=True``) artifact, leaving the fence and transition untouched on rejection."""
 
 from __future__ import annotations
 
@@ -141,10 +137,8 @@ def test_an_explicitly_attached_artifact_is_accepted_under_enforce(tmp_path: Pat
 
 
 def test_the_rejection_under_enforce_leaves_the_fence_and_transition_untouched(tmp_path: Path) -> None:
-    """A rejected completion under ``enforce`` records no transition — a follow-up
-    completion at the same epoch, this time with the explicit attachment, still
-    succeeds; a partial apply would have already advanced the fence and made the
-    retry stale."""
+    """A rejected completion under ``enforce`` records no transition, so a follow-up
+    completion at the same epoch, now with the attachment, still succeeds."""
     hub = build_hub(tmp_path, produces_mode=PRODUCES_ENFORCE)
     chunk_id, node_id = _ingest(hub)
 

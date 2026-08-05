@@ -1,14 +1,5 @@
-"""runner external subscription usage — the latest sampled rate-limit windows (hub store tree, issue #218)
-
-Phase 3 lands the hub-side half of surfacing a metered harness's rate-limit window
-utilization on the board: a single refresh-in-place row per runner, holding its newest
-sampled snapshot (``bzh:facts-not-status``'s deliberate refresh-in-place exception,
-already documented on ``runner_registrations`` — see ``hub/store/schema.py``). This
-migration creates exactly the one new table and nothing else.
-
-Each revision in this tree creates a subset of the current ``schema`` metadata's tables
-(the live-schema pattern); this one creates exactly the one new table, ``checkfirst`` so
-a fresh ``base -> head`` and an in-place upgrade both converge.
+"""runner external subscription usage (issue #218, hub store tree) — one refresh-in-place row per runner
+holding its newest sampled rate-limit windows. Creates that one table, ``checkfirst``.
 
 Revision ID: 20260801_1600_hub_runner_external_usage
 Revises: 20260801_1400_hub_work_item_closures

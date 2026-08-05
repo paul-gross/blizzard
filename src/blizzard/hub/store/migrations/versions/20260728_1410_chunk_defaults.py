@@ -1,28 +1,5 @@
-"""chunk default model/effort — replacing #27's ``model`` column (hub store tree)
-
-Issue #144 retires ``Chunk.model``, a knob with no runtime effect: it never reached the
-envelope, so the spawn always used the runner's own default while the hub kept offering
-editing surfaces for it. In its place a chunk carries ``default_model`` (a prioritized
-preference list, same vocabulary a graph's ``sessions:`` declaration uses) and
-``default_effort``, which sit between a session declaration and the runner default.
-
-Both columns are **additive and nullable**, with no backfill and none possible: a
-pre-#144 chunk expressed no preference in this vocabulary, and NULL is exactly what
-"express no preference" means, so a legacy row keeps today's behavior — the runner
-default applies. Filling ``default_model`` in from ``chunks.model`` would be worse than
-nothing: it would pin a Claude-native name on every historical chunk in a field that
-outranks every session declaration omitting ``model:``.
-
-**``chunks.model`` is retained and no longer read.** Nothing reads or writes it, so every
-post-#144 row takes its ``server_default`` and the column is meaningful for **pre-#144
-rows only**; it is left in place rather than dropped because dropping it would destroy the
-one record of what those older chunks ran. Both halves — the retained column and the
-absent backfill — are pinned by
-``tests/test_pin_hub_api.py::test_chunk_defaults_retains_model_and_backfills_no_default_model``.
-
-Guarded on the columns already being present, like the other in-place column adds in this
-tree, so a fresh ``base -> head`` (where ``schema``'s live metadata already declares them)
-and an in-place upgrade of a live store both converge.
+"""chunk default model/effort — additive and nullable, with no backfill, since NULL is
+exactly "expresses no preference"; ``chunks.model`` is retained and unread (issue #144)
 
 Revision ID: 20260728_1410_hub_chunk_defaults
 Revises: 20260728_1400_hub_graph_sessions

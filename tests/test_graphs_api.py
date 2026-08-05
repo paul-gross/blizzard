@@ -1,12 +1,9 @@
 """Graphs router ``reject_runner_principal`` guard (issue #104, S5), component tier.
 
 ``graphs.py`` was the one operator router still missing
-``dependencies=[Depends(reject_runner_principal)]`` — every other operator router
-(``queue.py``, ``chunks.py``, ``decisions.py``, ``questions.py``, ``runners.py``)
-already carries it. This closes that gap: a runner's bearer token is rejected under
-``enforce`` the same way it is on every other operator verb, while an anonymous call
-still succeeds. Graph routes themselves are untouched (still immutable
-POST-new-version)."""
+``dependencies=[Depends(reject_runner_principal)]``. This closes that gap: a runner's
+bearer token is rejected under ``enforce`` the same way it is on every other operator
+verb, while an anonymous call still succeeds."""
 
 from __future__ import annotations
 

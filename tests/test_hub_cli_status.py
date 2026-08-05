@@ -1,11 +1,8 @@
 """``blizzard hub status`` — the per-chunk cost column and fleet total (issue #60).
 
-A pure client of the hub API: ``GET /chunks`` + ``GET /runners`` + ``GET /questions``
-+ ``GET /spend``, all through the shared ``_request`` seam (issue #104) — this file
-stubs ``httpx.get`` (the same monkeypatch seam every other CLI unit test uses) with
-canned responses keyed by the full URL, so it proves the CLI's own rendering — the
-per-chunk cost column, the fleet total, and the lower-bound PARTIAL marker — without a
-running hub.
+Stubs ``httpx.get`` with canned responses keyed by URL, proving the CLI's own
+rendering — the per-chunk cost column, the fleet total, and the lower-bound PARTIAL
+marker — without a running hub.
 """
 
 from __future__ import annotations
@@ -23,9 +20,8 @@ pytestmark = pytest.mark.component
 class _FakeResponse:
     def __init__(self, payload: object) -> None:
         self._payload = payload
-        # issue #96's `_check` reads `.status_code` unconditionally (the actionable
-        # 401 mapping), not just inside an `on_status` branch — every response this
-        # file installs is a plain 200.
+        # issue #96's `_check` reads `.status_code` unconditionally — every response
+        # this file installs is a plain 200.
         self.status_code = 200
 
     def raise_for_status(self) -> None:

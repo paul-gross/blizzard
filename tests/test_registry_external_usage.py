@@ -1,10 +1,7 @@
 """``derive_external_subscription_usage`` — the read-side staleness gate (issue #218, phase 4).
 
 Unit tier: the pure domain function in isolation, then its rendering through
-``hub/api/runners.py``'s single ``runner_view`` — no store, no HTTP. The component/service
-round trip (ingest through ``POST /api/fleet/events`` to ``GET /api/runners``) lives in
-``tests/test_external_usage_facts_ingest.py``.
-"""
+``hub/api/runners.py``'s single ``runner_view`` — no store, no HTTP."""
 
 from __future__ import annotations
 

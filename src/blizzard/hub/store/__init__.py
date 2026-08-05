@@ -1,11 +1,8 @@
 """The hub store — the fleet facts, and the hub's own Alembic tree.
 
-Facts only; status is always derived (``bzh:facts-not-status``). The migration
-tree under ``migrations/`` is **independent** of the runner's: its own
-revision line, its own lifecycle. The shared plumbing (engine, migration runner,
-revision guard) lives in ``blizzard.foundation.store``; this package supplies the
-hub's schema metadata and the location of its tree.
-"""
+Facts only; status is always derived (``bzh:facts-not-status``). The migration tree under
+``migrations/`` has its own revision line and lifecycle; this package supplies the hub's
+schema metadata and the location of that tree."""
 
 from __future__ import annotations
 

@@ -2,8 +2,7 @@
 
 The composition root threads ``RunnerConfig.worker_env_passthrough`` into the
 ``ClaudeCodeAdapter`` it constructs, so the operator's ``[worker] env_passthrough``
-toml key actually reaches the spawn-environment allowlist rather than being read and
-dropped.
+toml key reaches the spawn-environment allowlist rather than being read and dropped.
 """
 
 from __future__ import annotations
@@ -55,13 +54,8 @@ def test_build_loop_context_threads_external_usage_credentials_path_into_the_ada
 @pytest.mark.unit
 def test_build_loop_context_threads_runner_dir_from_the_resolved_root(tmp_path: Path) -> None:
     """The wrapped takeover command (issue #251) needs ``LoopConfig.runner_dir`` to
-    mirror ``RunnerConfig``'s own resolved ``root``.
-
-    Routed through ``RunnerConfig.load()`` — not the bare dataclass constructor —
-    with a deliberately un-resolved ``..``-bearing path, since ``.load()`` is where
-    resolution actually happens. Asserting against a directly-constructed
-    ``RunnerConfig`` would pass even if resolution were silently dropped, because a
-    bare ``tmp_path`` already equals its own resolved form on this platform."""
+    mirror ``RunnerConfig``'s resolved ``root``. Routed through ``RunnerConfig.load()``
+    with an un-resolved ``..``-bearing path, since a bare ``tmp_path`` already resolves."""
     real_root = tmp_path / "runner"
     real_root.mkdir()
     (real_root / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(real_root)}"\n')
@@ -77,9 +71,8 @@ def test_build_loop_context_threads_runner_dir_from_the_resolved_root(tmp_path: 
 @pytest.mark.unit
 def test_periodic_driver_resolves_prompts_eagerly_at_construction(tmp_path: Path) -> None:
     """A configured-but-missing ``runner_prompt_file`` must raise ``ConfigError`` from
-    the constructor — on the caller's (``host``'s) own thread — not from inside the
-    background loop thread it starts, where it would silently kill the loop while
-    uvicorn keeps serving (issue #103's doubled prompt surface)."""
+    the constructor, on the caller's own thread — not from inside the background loop
+    thread, where it would silently kill the loop while uvicorn keeps serving."""
     config = RunnerConfig(
         root=tmp_path,
         db_url=RunnerConfig.default_db_url(tmp_path),

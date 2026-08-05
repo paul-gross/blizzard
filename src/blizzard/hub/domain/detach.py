@@ -1,19 +1,9 @@
 """Chunk detach — the operator's forcible release of a chunk from its runner.
 
-``blizzard hub detach <chunk_id>`` stamps one fact, ``route.released``, so the chunk
-re-derives ``ready`` and re-enters the ready queue at its current node — the holding
-runner learns of the release on its own next tick and closes the lease (the
-runner half lives in ``blizzard.runner.loop.steps``, not here). Facts append, status
-derives (``bzh:facts-not-status``).
-
-Detach is deliberately **not** requeue (:class:`blizzard.hub.domain.decisions.RequeueService`):
-it writes no ``requeue.recorded`` fact, so it supersedes no escalation and bumps no epoch.
-Pinned by
-tests/test_chunk_status_derivation.py::test_detached_route_with_an_open_escalation_still_derives_needs_human.
-
-Holds the *write* chunk repository (``bzh:controller-read-only``); the route resolves
-the chunk and delegates here.
-"""
+Stamps one fact, ``route.released``, so the chunk re-derives ``ready`` at its current
+node; facts append, status derives (``bzh:facts-not-status``). It writes no
+``requeue.recorded`` fact, so it supersedes no escalation and bumps no epoch — pinned by
+tests/test_chunk_status_derivation.py::test_detached_route_with_an_open_escalation_still_derives_needs_human."""
 
 from __future__ import annotations
 

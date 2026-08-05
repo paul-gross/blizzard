@@ -1,10 +1,8 @@
 """Wire-shape pins (unit tier) — decisions a wire model makes by *not* carrying something.
 
 Five wire decisions are invisible to every other test: an absent field, a required field
-that could be defaulted, and the schema set the runner's own OpenAPI spec ends up with.
-Each reversion (re-add the field, give it a default, widen a response model) leaves the
-whole existing suite green while restoring exactly the behavior the decision removed —
-so each is pinned here (``bzh:mutation-review-selection``).
+that could be defaulted, and the exported OpenAPI schema set. Each reversion leaves the
+whole suite green while restoring the removed behavior — pinned here (``bzh:mutation-review-selection``).
 """
 
 from __future__ import annotations
@@ -31,9 +29,8 @@ def _runner_schemas() -> dict[str, Any]:
 
 def test_git_commit_declaration_carries_no_forge_field() -> None:
     """The declaration names no forge (issue #143): the origin it is verified against is
-    read from the environment's repo manifest, never from the worker. Structural, like
-    ``test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag`` is for the
-    CLI flag — re-adding the field re-opens the mismatch class the manifest lookup closed."""
+    read from the environment's repo manifest, never from the worker — re-adding the
+    field re-opens the mismatch class the manifest lookup closed."""
     assert "forge" not in GitCommitDeclarationRequest.model_fields
 
 

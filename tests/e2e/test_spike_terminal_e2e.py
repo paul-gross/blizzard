@@ -1,27 +1,8 @@
 """A non-code chunk completes with only asset artifacts — MVP criterion 10 (2nd sentence).
 
-The sibling e2e scenarios all end in a git deliver that lands **code**. This scenario
-covers the other half of criterion 10 — *"A chunk whose purpose is non-code work (a
-review, a spike) completes with only asset artifacts"* — end to end on the real rails.
-
-One chunk travels a **spike** node whose worker does read-only investigation (no commit,
-so no git-commit artifact) and ``produces`` a ``spike-notes`` **asset** whose content is
-the worker's judgement assessment. The spike routes into the same hub **deliver** node a
-code chunk uses, running the same packaged ``land_default.py`` script (#67); with no
-git-commit pointers there is nothing to land, so no PR opens and ``main`` never moves,
-yet the chunk still derives ``done`` carrying only its asset. The assertions pin the
-criterion at all three truths:
-
-* **fleet truth** — the hub derives the chunk ``done`` (an empty delivery still lands);
-* **hub-durable artifacts** — the chunk detail exposes exactly one artifact, the
-  ``spike-notes`` asset, and **zero** ``git_commit`` artifacts;
-* **git truth** — no PR is opened at the forge and bare ``main`` is untouched: a non-code
-  chunk lands no code.
-
-This is the terminal-with-only-assets case no other e2e reaches. Reuses the acceptance
-loop's live-stack scaffolding
-(forge/hub/runner harnesses, fixture mint, port helpers); skipped unless ``BLIZZARD_E2E=1``
-with the sibling ``blizzard-mock`` worktree provisioned, exactly like test_acceptance_loop.
+A **spike** node (read-only, no commit) ``produces`` a ``spike-notes`` asset and routes
+into the same ``deliver`` node a code chunk uses; with nothing to land, the chunk derives
+``done`` with no PR and exactly one artifact.
 """
 
 from __future__ import annotations
@@ -67,9 +48,7 @@ def _graph_yaml() -> str:
     """A ``default-delivery`` graph whose only work node is an asset-producing spike.
 
     Named ``default-delivery`` so the hub's lazy default-graph mint pins this pre-minted
-    graph by name instead of the packaged prose default. The spike ``produces`` a
-    ``spike-notes`` asset and routes into the same hub ``deliver`` node a code chunk uses,
-    where with no branch pointers to land the deliver is an empty land.
+    graph by name instead of the packaged default.
     """
     import yaml
 

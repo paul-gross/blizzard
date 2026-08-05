@@ -1,11 +1,8 @@
 """Derived lease state — ``derive_lease_state`` and ``LocalLeaseService`` (issue #28).
 
-Two tiers: the pure precedence tests (``derive_lease_state``, no store, no I/O) and
-the staleness-boundary pin sit at the **unit** tier ([tiers], `blizzard-context:/
-verification/blizzard.md`); ``LocalLeaseService.list_active()`` — wired against a real
-tmp sqlite runner store with the fake process probe (``bzh:pluggable-seams``) — sits at
-the **component** tier, mirroring ``test_runner_loop.py``'s own store-backed unit tests
-and ``test_runner_registry.py``'s component convention.
+Two tiers: the pure precedence tests (no store, no I/O) sit at unit; ``LocalLeaseService
+.list_active()`` — wired against a real tmp sqlite store with the fake process probe
+(``bzh:pluggable-seams``) — sits at component, mirroring ``test_runner_loop.py``.
 """
 
 from __future__ import annotations
@@ -51,9 +48,7 @@ def _lease_record(**overrides: object) -> LeaseRecord:
     return LeaseRecord(**fields)  # type: ignore[arg-type]
 
 
-# --------------------------------------------------------------------------- #
 # derive_lease_state — pure, all six states + precedence
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -141,9 +136,7 @@ def test_derive_lease_state_closed_wins_over_parked() -> None:
     assert derive_lease_state(lease, is_closed=True, is_parked=True, is_alive=True, is_stale=False) == "closed"
 
 
-# --------------------------------------------------------------------------- #
 # is_heartbeat_stale — the staleness-boundary pin (Phase 1 escalation #2)
-# --------------------------------------------------------------------------- #
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]
@@ -194,11 +187,9 @@ def test_is_heartbeat_stale_just_past_threshold_is_stale(tmp_path) -> None:  # t
 
 @pytest.mark.unit
 def test_a_worker_resumed_after_a_long_park_gets_the_full_staleness_window(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """Issue #150's live incident, at the predicate. A lease minted at T ask-parks, and
-    the answer arrives at T+2h — far past the threshold, so every heartbeat it has is
-    ancient. The resume records a fresh ``lease_spawns`` row, and from that instant the
-    worker gets the whole window back rather than being stale at birth and reaped
-    seconds into its first inference turn."""
+    """Issue #150's live incident, at the predicate: an ask-park resumed at T+2h, far
+    past the threshold, records a fresh ``lease_spawns`` row — the worker gets the
+    whole window back, not stale at birth and reaped seconds into its first turn."""
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_spawn("lease_1", pid=1, process_start_time="s1", session_id="sess", spawned_at=_NOW)
@@ -249,9 +240,7 @@ def test_a_lease_with_neither_a_beat_nor_a_spawn_falls_back_to_its_mint(tmp_path
     assert is_heartbeat_stale(store, lease, _NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
 
 
-# --------------------------------------------------------------------------- #
 # LocalLeaseService.list_active() — component tier, real sqlite store
-# --------------------------------------------------------------------------- #
 
 
 class _CountingParkedIdsStore(SqlAlchemyRunnerStore):
@@ -300,8 +289,7 @@ def test_list_active_joins_binding_and_heartbeat(tmp_path) -> None:  # type: ign
     assert activity.environment_id == "e1"
     assert activity.workdir == "/ws/e1"
     # The store column is UtcDateTime-typed (issue #28, ``bzh:utc-instants``): a read
-    # comes back UTC-aware, so the domain read model's value already equals what was
-    # written — no coercion needed at this call site.
+    # comes back UTC-aware, no coercion needed at this call site.
     assert activity.last_heartbeat_at == beat_at
 
 
@@ -309,8 +297,7 @@ def test_list_active_joins_binding_and_heartbeat(tmp_path) -> None:  # type: ign
 def test_list_active_renders_a_just_resumed_lease_running_not_stale(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """Reuses REAP's baseline (issue #150): a lease resumed after a long park does not
     render ``stale``. Its ``last_heartbeat_at`` stays honest — the old beat, not the
-    spawn — since it reports what the worker last did, not when staleness is measured
-    from."""
+    spawn — reporting what the worker last did, not when staleness is measured from."""
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
@@ -342,9 +329,7 @@ def test_list_active_reads_parked_lease_ids_once_not_per_lease(tmp_path) -> None
     assert store.parked_lease_ids_calls == 1
 
 
-# --------------------------------------------------------------------------- #
 # LocalLeaseService.list_recent() — active + recent-closed (issue #29)
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component
@@ -408,9 +393,8 @@ def test_list_recent_active_lease_not_crowded_out_by_newer_closed_leases(tmp_pat
 @pytest.mark.component
 def test_list_recent_closed_activity_carries_no_environment_binding(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """A closed lease's bindings are always released by the time closure is recorded
-    (``bindings_for_chunk`` returns only *unreleased* bindings, issue #29) — the
-    read model must be honest about that rather than pretending the join resolves, so
-    ``environment_id``/``workdir`` come back ``None`` even though a binding once existed."""
+    (issue #29) — the read model must be honest about that, so ``environment_id``/
+    ``workdir`` come back ``None`` even though a binding once existed."""
     store = _store(tmp_path)
     _seed_lease(store, chunk="ch_1", lease="lease_1")
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
@@ -427,10 +411,9 @@ def test_list_recent_closed_activity_carries_no_environment_binding(tmp_path) ->
 
 @pytest.mark.unit
 def test_last_activity_uses_a_supplied_heartbeat_without_re_reading_it(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The caller may already have read `latest_heartbeat` for its own use, so it can
-    hand the value in rather than have `last_activity` issue the identical query again.
-    The sentinel keeps a supplied `None` — a lease that genuinely never beat — distinct
-    from "not supplied, go read it"."""
+    """The caller may already have read `latest_heartbeat`, so it can hand it in
+    rather than have `last_activity` re-query. The sentinel keeps a supplied `None`
+    (a lease that genuinely never beat) distinct from "not supplied, go read it"."""
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_spawn("lease_1", pid=1, process_start_time="s1", session_id="sess", spawned_at=_NOW)

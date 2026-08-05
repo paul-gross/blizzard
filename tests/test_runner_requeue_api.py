@@ -1,9 +1,7 @@
 """``POST /chunks/{id}/requeues`` (issue #53).
 
-Exercised over a real store via TestClient, mirroring
-``tests/test_runner_takeover_api.py``'s convention: the route's shape, its 409/503
-forms, and the store-derivation it delegates to (:class:`RequeueService`, pinned at
-the domain level by ``tests/test_runner_requeue.py``) are the point here.
+Exercised over a real store via TestClient: the route's shape, its 409/503 forms, and
+the store-derivation it delegates to :class:`RequeueService`.
 """
 
 from __future__ import annotations

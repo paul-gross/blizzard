@@ -1,12 +1,9 @@
 """The ``oidc``/``github`` provider conformers — driven against a fake transport via
 ``httpx.MockTransport`` (unit tier, issue #92).
 
-Mirrors ``tests/test_runner_hub_client.py``'s own no-network shape: the whole
-authorize-url/exchange dance runs against canned responses, including a real RSA
-signature verification of the ``oidc`` conformer's ``id_token`` — no network, no
-running stub server (that is the service tier's job, against the real
-``blizzard-mock`` stub IdP).
-"""
+The whole authorize-url/exchange dance runs against canned responses, including a
+real RSA signature verification of the ``oidc`` conformer's ``id_token`` — no network,
+no running stub server."""
 
 from __future__ import annotations
 
@@ -146,9 +143,7 @@ def test_oidc_exchange_raises_on_a_signature_that_does_not_verify() -> None:
         if path == "/token":
             return httpx.Response(200, json={"id_token": forged})
         if path == "/jwks":
-            # A JWKS whose kid never matches the forged token's kid (`_KID`), forcing a
-            # provider that DID publish a same-kid entry to be the only way to pass —
-            # here it publishes something else entirely.
+            # A JWKS whose kid never matches the forged token's kid (`_KID`).
             _, real_jwk = _rsa_keypair()
             return httpx.Response(200, json={"keys": [real_jwk]})
         return httpx.Response(404)
@@ -168,9 +163,8 @@ def test_oidc_exchange_rejects_an_alg_confusion_token_when_jwk_omits_alg() -> No
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
-    # PyJWT's own ``encode`` refuses a PEM-shaped HMAC secret (a second guard against
-    # this exact confusion attack), so the forged token is built by hand: an attacker
-    # forging a token off a leaked/published public key would do the same.
+    # PyJWT's own ``encode`` refuses a PEM-shaped HMAC secret, so the forged token is
+    # built by hand.
     header_b64 = base64.urlsafe_b64encode(json.dumps({"alg": "HS256", "typ": "JWT", "kid": _KID}).encode()).rstrip(b"=")
     payload_b64 = base64.urlsafe_b64encode(
         json.dumps(

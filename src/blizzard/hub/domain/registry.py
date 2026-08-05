@@ -1,38 +1,9 @@
 """Fleet-registry domain — runner registration, liveness, and the pause brake.
 
-The registry is the fleet's view of its runners: a
-runner registers on startup (runner_id + workspace_id) and appears on the board, its
-``last_seen_at`` refreshed by registration and the dedicated liveness heartbeat.
-Three things derive over the registry, never stored as columns:
-
-* **liveness** — ``last_seen_at`` against a staleness threshold yields online/offline;
-  it is time-relative, so it is computed with the injected clock at read time, not on
-  the row.
-* **paused** — the operator's brake: pause/resume facts append and ``paused``
-  derives from the newest one, exactly as a graph's enabled-ness does. The runner
-  reads it back on its outbound pull and adheres — pausing stops new leases, in-flight
-  chunks run on.
-* **external subscription usage** (issue #218) — the runner's newest sampled
-  harness-subscription rate-limit window snapshot (``runner_external_usage``) against
-  its own, wider staleness threshold; renders when a sample exists and is recent
-  enough, else ``None`` (never sampled, or too stale to trust).
-
-:class:`FleetService` is the domain service the routes delegate to
-(``bzh:controller-read-only``); it holds the write registry repository and the injected
-clock. The :class:`RunnerRegistration` it returns already carries the **derived**
-``paused`` (resolved in the store adapter, like a decision's resolved-ness); liveness is
-returned alongside it by the service because it needs the clock.
-
-``token_hash`` (issue #86a) is the one deliberate exception to facts-only
-(``bzh:facts-not-status``): the registration row is already a mutable upsert
-(``last_seen_at``/``workspace_id`` rewritten in place), so a rotating hash column is
-consistent with the rest of the row, unlike the route capability token (#84's
-append-only fact table) — a re-enrollment overwrites it, and the prior token stops
-resolving immediately. It is minted and rotated by the separate
-:class:`~blizzard.hub.domain.enrollment.RunnerEnrollmentService`, not
-:class:`FleetService`, since enrollment is an operator act on identity, not a fleet
-registration event.
-"""
+Three things derive over the registry rather than being stored: **liveness** (``last_seen_at`` against a
+staleness threshold, clock-relative so it is computed at read time), **paused** (the newest appended
+pause/resume fact), and **external subscription usage** (issue #218, newest sample against its own wider
+threshold). ``token_hash`` is the one exception to facts-only: the row is already a mutable upsert."""
 
 from __future__ import annotations
 
@@ -47,39 +18,20 @@ from blizzard.hub.domain.work import ActivityRow
 
 _log = get_logger("blizzard.hub.registry")
 
-#: Liveness staleness threshold — a chosen constant, not derived from a formula.
-#: The runner-level heartbeat is deliberately much slower than the machine-local worker
-#: heartbeat; a runner unheard-from for longer than this reads offline on the board. The
-#: runner's reconciliation tick (~30s) refreshes it many times over inside this window.
+#: Liveness staleness threshold — a chosen constant; a runner unheard-from for longer reads offline.
 STALE_AFTER = timedelta(minutes=5)
 
-#: External-subscription-usage staleness threshold (issue #218) — a chosen constant,
-#: deliberately its own, wider than :data:`STALE_AFTER`: the sample rides the runner's
-#: slow reconciliation tick rather than the fast worker heartbeat, so a usage-specific
-#: window avoids flapping a merely-slow-to-resample runner's block to ``None`` on the
-#: same cadence liveness would flip it offline.
+#: External-subscription-usage staleness threshold (issue #218) — deliberately wider than
+#: :data:`STALE_AFTER`, since the sample rides a slower cadence than the liveness heartbeat.
 EXTERNAL_USAGE_STALE_AFTER = timedelta(minutes=15)
 
 
 @dataclass(frozen=True)
 class RunnerRegistration:
-    """A fleet-registry row with its two **derived** brakes (issue #43).
-
-    They are separate concepts, so they are separate fields rather than one ``paused``:
-
-    * ``hub_paused`` — the fleet's brake, set here and pulled down by the runner, which
-      adheres; the hub also refuses a paused runner's claim (#44).
-    * ``locally_paused`` — the runner's own brake, set on its machine and reported up. The
-      hub only ever reads this one.
-
-    Either stops new claims, so a reader wanting "is it claiming?" wants both.
-
-    ``locally_paused_by``/``locally_paused_reason`` are the newest local-pause fact's cause
-    (issue #61's spend-ceiling escalation composes a reason naming the ceiling and the
-    spend; a manual ``blizzard runner pause`` carries none) — populated only alongside a
-    *true* ``locally_paused`` (``None``/``None`` once resumed or if never paused), so a
-    stale cause never renders past its brake clearing.
-    """
+    """A fleet-registry row with its two **derived** brakes (issue #43): ``hub_paused``, the fleet's own,
+    which a runner adheres to and which also refuses that runner's claim (#44); and ``locally_paused``,
+    the runner's own, which the hub only reads. Either stops new claims, so a reader asking "is it
+    claiming?" wants both. ``locally_paused_by``/``_reason`` populate only alongside a *true* brake."""
 
     runner_id: str
     workspace_id: str
@@ -89,30 +41,21 @@ class RunnerRegistration:
     locally_paused: bool = False
     locally_paused_by: str | None = None
     locally_paused_reason: str | None = None
-    #: The enrolled bearer token's sha256 hex digest (issue #86a) — ``None`` for an
-    #: unenrolled runner. Never the plaintext: the token is returned once, at enroll
-    #: time, and this is the only copy the hub ever keeps.
+    #: The enrolled bearer token's sha256 hex digest (issue #86a) — never the plaintext, which the
+    #: hub keeps no copy of. ``None`` for an unenrolled runner.
     token_hash: str | None = None
-    #: The runner's configured environment-pool size (issue #69) — a reported **fact**
-    #: (the runner's own ``len(workspace_envs)``), refreshed in place on each
+    #: The runner's reported environment-pool size (issue #69), refreshed in place on each
     #: re-registration so a config change converges; ``None`` when none was reported.
     env_capacity: int | None = None
-    #: The runner's own browser-reachable base URL (issue #95) — ``None`` for a runner
-    #: that has never registered one. A prerequisite for federation, together with
-    #: :attr:`redirect_uris`.
+    #: The runner's own browser-reachable base URL (issue #95) — ``None`` when never registered.
     public_url: str | None = None
-    #: The runner's allowed redirect URIs (issue #95) — the open-redirect guard a
-    #: presented ``redirect_uri`` is exact-matched against. Empty for a runner that has
-    #: registered none.
+    #: The runner's allowed redirect URIs (issue #95) — the open-redirect guard a presented
+    #: ``redirect_uri`` is exact-matched against. Empty for a runner that has registered none.
     redirect_uris: tuple[str, ...] = ()
-    #: The runner's newest reported external-subscription-usage sample (issue #218),
-    #: raw, not yet staleness-derived — ``None`` for a runner that has never reported
-    #: one. Staleness is *not* applied here (the store read is not clock-aware); see
-    #: :func:`derive_external_subscription_usage`, mirroring how ``last_seen_at`` stays
-    #: a raw column here while :func:`derive_online` is the clock-relative read.
+    #: The newest reported external-subscription-usage sample (issue #218), raw — staleness is applied
+    #: at derive time (:func:`derive_external_subscription_usage`), not here.
     external_usage_sampled_at: datetime | None = None
-    #: The sample's windows, parsed off the stored JSON array — empty when
-    #: ``external_usage_sampled_at`` is ``None``.
+    #: The sample's windows, parsed off the stored JSON array — empty when there is no sample.
     external_usage_windows: tuple[ExternalSubscriptionUsageWindow, ...] = ()
 
 
@@ -126,13 +69,10 @@ class RunnerLiveness:
 
 @dataclass(frozen=True)
 class ExternalSubscriptionUsageWindow:
-    """One rate-limit window's utilization, read back off ``runner_external_usage``
-    (issue #218) — mirrors :class:`blizzard.runner.harness.external_usage.ExternalSubscriptionUsageWindow`'s
-    shape. A separate, hub-domain-owned copy rather than an import of the runner
-    package: the hub domain depends on nothing under ``blizzard.runner``
-    (``bzh:domain-core``), so the shape is duplicated at the wire boundary the fact
-    already crossed, not shared across it.
-    """
+    """One rate-limit window's utilization, read back off ``runner_external_usage`` (issue #218). A
+    hub-domain-owned copy rather than a shared import: the hub domain depends on nothing under
+    ``blizzard.runner`` (``bzh:domain-core``), so the shape is duplicated at the wire boundary the fact
+    already crossed, not shared across it."""
 
     window: str
     utilization_pct: float
@@ -152,12 +92,9 @@ class ExternalSubscriptionUsageView:
 def derive_online(last_seen_at: datetime, now: datetime, *, threshold: timedelta) -> bool:
     """True iff the runner was seen within ``threshold`` of ``now``.
 
-    Both operands are coerced to UTC-aware first via :func:`~blizzard.foundation.store.utc.as_utc`
-    (idempotent — every store column is ``UtcDateTime``-typed): this is a public pure
-    function whose inputs are not guaranteed to come from the store, so the domain keeps
-    its own defensive coercion rather than depending on unnamed adapter behavior
-    (``bzh:domain-core``).
-    """
+    Both operands are coerced UTC-aware via :func:`~blizzard.foundation.store.utc.as_utc` (idempotent):
+    a public pure function whose inputs are not guaranteed to come from the store keeps its own
+    defensive coercion rather than depending on unnamed adapter behavior (``bzh:domain-core``)."""
     return (as_utc(now) - as_utc(last_seen_at)) <= threshold
 
 
@@ -169,13 +106,9 @@ def derive_external_subscription_usage(
 ) -> ExternalSubscriptionUsageView | None:
     """The renderable external-subscription-usage view, or ``None`` (issue #218).
 
-    ``None`` for a runner that has never sampled (``sampled_at is None``) or whose
-    newest sample is older than :data:`EXTERNAL_USAGE_STALE_AFTER` relative to ``now``
-    — never a fabricated empty/zero view. Both operands coerced via
-    :func:`~blizzard.foundation.store.utc.as_utc` for the same reason
-    :func:`derive_online` does (``bzh:domain-core``): a public pure function whose
-    inputs are not guaranteed to come from the store.
-    """
+    ``None`` for a runner that has never sampled, or whose newest sample is older than
+    :data:`EXTERNAL_USAGE_STALE_AFTER` relative to ``now`` — never a fabricated zero view. Both operands
+    coerced via :func:`~blizzard.foundation.store.utc.as_utc`, as :func:`derive_online` does."""
     if sampled_at is None:
         return None
     sampled_at = as_utc(sampled_at)
@@ -191,27 +124,17 @@ class IReadRunnerRegistry(Protocol):
     def list_runners(self) -> list[RunnerRegistration]: ...
 
     def registration_for_token_hash(self, token_hash: str) -> RunnerRegistration | None:
-        """The reverse, hash-indexed lookup a presented bearer token resolves through
-        (issue #86a) — the mirror image of every other read here, which key on
-        ``runner_id``. Resolving a principal from the token alone is what the auth
-        dependency needs (``hub/api/auth.py``), since a ``runner_id`` is not uniformly
-        readable off a request."""
+        """The reverse, hash-indexed lookup a presented bearer token resolves through (issue #86a) — the
+        mirror image of every other read here, which key on ``runner_id``. A ``runner_id`` is not
+        uniformly readable off a request, so a principal resolves from the token alone."""
         ...
 
     def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
-        """Every ``runner-changed`` activity row off the fleet's two pause-family fact
-        tables, at or after ``since`` — the activity feed's runner-scoped source (issue
-        #213), pause family only: ``registered``/``heartbeat`` carry no fact table.
-
-        Deliberately **not** on :class:`~blizzard.hub.domain.work.IReadChunkRepository`
-        (``bzh:repository-split``): a runner-pause fact names no chunk, so it belongs on
-        the registry seam its two source tables (``runner_pause_facts``,
-        ``runner_local_pause_facts``) already live behind.
-
-        Each source table is read with its own ``ORDER BY <ts> DESC, <pk> DESC LIMIT
-        :limit`` — never a full-table scan — so this can return up to ``2 * limit`` rows,
-        unsorted across the two; the caller merges, sorts, and re-caps via
-        :func:`~blizzard.hub.domain.work.derive_activity_feed`."""
+        """Every ``runner-changed`` activity row off the fleet's two pause-family fact tables, at or
+        after ``since`` (issue #213); ``registered``/``heartbeat`` carry no fact table. On this seam,
+        not the chunk one (``bzh:repository-split``): a runner-pause fact names no chunk. Each table is
+        read with its own ``ORDER BY <ts> DESC, <pk> DESC LIMIT :limit``, never a full scan, so this
+        returns up to ``2 * limit`` rows unsorted across the two; the caller merges and re-caps."""
         ...
 
 
@@ -228,19 +151,10 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         redirect_uris: tuple[str, ...] = (),
         at: datetime,
     ) -> bool:
-        """Register a runner (idempotent upsert), refreshing ``last_seen_at``.
-
-        Returns True if the row was newly created (a first registration), False if it
-        already existed and was refreshed — so the caller can emit the right event.
-
-        ``env_capacity`` (issue #69) is the runner's reported environment-pool size,
-        written on **both** the insert and the refresh branch so a ``workspace_envs``
-        change converges on the next re-registration; an absent value (``None`` from an
-        older client) is written verbatim, correctly resetting the stored total to null.
-
-        ``public_url``/``redirect_uris`` (issue #95) are written the same way — an
-        operator changing a runner's registered URL/callbacks converges on the next
-        re-registration, and an absent value resets the stored fields to null/empty."""
+        """Register a runner (idempotent upsert), refreshing ``last_seen_at``; returns True if the row
+        was newly created. ``env_capacity`` (issue #69) and ``public_url``/``redirect_uris`` (issue #95)
+        are written on **both** the insert and the refresh branch, so a change converges on the next
+        re-registration; an absent value is written verbatim, resetting the stored field to null."""
         ...
 
     def touch_last_seen(self, runner_id: str, *, at: datetime) -> bool:
@@ -267,25 +181,17 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         ...
 
     def set_token_hash(self, runner_id: str, *, token_hash: str, at: datetime) -> None:
-        """Overwrite the registration's bearer-token hash (issue #86a) — a rotation, not
-        a fact append (the registration row is already a mutable upsert; see this
-        module's docstring). Re-enrolling a runner calls this again: the new hash
-        replaces the old one in place, so the prior token stops resolving via
-        ``registration_for_token_hash`` immediately. ``at`` is threaded from the
-        injected clock (``bzh:injected-clock``) for signature symmetry with this
-        seam's other writes; no separate rotation-audit column exists yet to stamp
-        it into."""
+        """Overwrite the registration's bearer-token hash (issue #86a) — a rotation, not a fact append.
+        Re-enrolling replaces the hash in place, so the prior token stops resolving immediately. ``at``
+        is threaded from the injected clock (``bzh:injected-clock``) for signature symmetry with this
+        seam's other writes; no rotation-audit column exists yet to stamp it into."""
         ...
 
     def record_external_usage(self, runner_id: str, *, sampled_at: datetime, windows_json: str, at: datetime) -> None:
-        """Upsert the runner's newest sampled external-subscription-usage snapshot
-        (issue #218) — refresh-in-place, not an append (``runner_external_usage``'s own
-        schema comment states the exception this shares with ``token_hash``/
-        ``env_capacity`` above). ``sampled_at`` is the snapshot's own reported instant;
-        ``at`` is the hub's landing time (``bzh:injected-clock``), stamped into
-        ``updated_at``. Unlike ``upsert_registration``, this never requires a known
-        runner — a fact for one the registry has not seen yet lands anyway, and is
-        simply never read until a registration exists."""
+        """Upsert the runner's newest sampled external-subscription-usage snapshot (issue #218) —
+        refresh-in-place, not an append. ``sampled_at`` is the snapshot's own reported instant; ``at``
+        is the landing time (``bzh:injected-clock``). Unlike ``upsert_registration``, never requires a
+        known runner: a fact for one the registry has not seen lands anyway, and is read once it has."""
         ...
 
 
@@ -308,14 +214,9 @@ class FleetService:
     ) -> bool:
         """Register (or refresh) a runner; returns True on a first registration.
 
-        ``env_capacity`` (issue #69) rides the registration — the runner reports its
-        ``len(workspace_envs)`` here, and a re-registration (its heartbeat) converges a
-        changed pool. ``None`` from a client that predates the field stores as null.
-
-        ``public_url``/``redirect_uris`` (issue #95) are the runner's own optional
-        federation identity — its browser-reachable base URL and the callback(s) the
-        hub's IdP authorize endpoint is allowed to bounce a browser to. Recorded the
-        same way: unconditionally overwritten on every (re-)registration."""
+        ``env_capacity`` (issue #69) and ``public_url``/``redirect_uris`` (issue #95) are the runner's
+        own reported facts, unconditionally overwritten on every (re-)registration so a change
+        converges; ``None`` from a client that predates a field stores as null."""
         created = self._registry.upsert_registration(
             runner_id,
             workspace_id=workspace_id,
@@ -351,20 +252,11 @@ class FleetService:
     def record_local_pause(
         self, runner_id: str, *, paused: bool, at: datetime, by: str, reason: str | None = None
     ) -> int:
-        """Land a runner's report that it paused or started *itself* (issue #43).
-
-        Not a control: the runner has already stopped claiming by the time this arrives, and
-        the hub cannot set this brake.
-
-        ``reason`` (issue #61) carries the fact's own composed cause — e.g. a spend-ceiling
-        crossing names the ceiling and the spend — so an operator sees *why*, not just
-        *that*. ``None`` for a manual pause and always on a start.
-
-        Unlike ``set_paused`` this does not require a known runner. The fact rides the
-        outbound buffer, which replays an outage in FIFO order, so a pause can legitimately
-        arrive before the registration that follows it — dropping it would lose the brake
-        exactly when the board most needs it. Returns the freshly-written
-        ``runner_local_pause_facts.id`` (issue #213's activity-feed key)."""
+        """Land a runner's report that it paused or started *itself* (issue #43) — not a control: the
+        runner has already stopped claiming, and the hub cannot set this brake. ``reason`` (issue #61)
+        carries the fact's own composed cause, ``None`` for a manual pause and always on a start. Unlike
+        ``set_paused`` this does not require a known runner: the buffer replays an outage in FIFO order,
+        so a pause can legitimately arrive before the registration that follows it."""
         fact_id = self._registry.record_local_pause(runner_id, paused=paused, at=at, by=by, reason=reason)
         _log.info("runner local pause reported", runner_id=runner_id, paused=paused, by=by, reason=reason)
         return fact_id

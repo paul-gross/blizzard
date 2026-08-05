@@ -1,19 +1,8 @@
 """The delivery closure fact and reconciler (issue #216).
 
 ``ChunkStore.closable_work_refs()``/``record_work_item_closure()`` are exercised
-against a real, migrated store (component tier) — the same choice
-``tests/test_forge_status.py`` makes for ``live_work_refs()``, its own structural
-twin. The landing gate is ``has_landed_repos`` alone, not chunk status: a chunk that
-landed and was *later* stopped still owes a closure attempt, while one that never
-landed never does, whether or not it is stopped (the plan's own recorded deviation
-from an inline deliver-step close).
-
-``DeliveryClosureReconciler.sweep()`` is exercised twice: over fakes (unit tier,
-mirroring ``AnnotationReconciler``'s own fakes-first split in this same file's sibling)
-for the diff/dispatch logic, then against the real store + ``tests.support.FakeCloser``
-(component tier) for the idempotent double-sweep and failed-then-converges-to-closed
-retry — the mutation-review re-read (``bzh:mutation-review-selection``).
-"""
+against a real, migrated store. The landing gate is ``has_landed_repos`` alone, not
+chunk status — a landed-then-stopped chunk still owes a closure attempt."""
 
 from __future__ import annotations
 
@@ -55,9 +44,7 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
     )
 
 
-# --------------------------------------------------------------------------- #
 # IReadChunkRepository.closable_work_refs() — real ChunkStore, real migrations
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component
@@ -166,9 +153,7 @@ def test_closable_work_refs_still_includes_a_ref_with_only_a_failed_fact(tmp_pat
     assert ClosableWorkRef(chunk_id=chunk_id, ref=pointer) in refs
 
 
-# --------------------------------------------------------------------------- #
 # IWriteChunkRepository.record_work_item_closure() — the idempotent-bool contract
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component
@@ -227,9 +212,7 @@ def test_record_work_item_closure_allows_a_distinct_outcome_for_the_same_ref(tmp
     assert closed is True
 
 
-# --------------------------------------------------------------------------- #
 # DeliveryClosureReconciler.sweep() — fakes (unit tier)
-# --------------------------------------------------------------------------- #
 
 
 @dataclass
@@ -245,8 +228,7 @@ class _FakeClosureChunks:
     """The minimal slice of :class:`IWriteChunkRepository`
     :class:`DeliveryClosureReconciler` calls — ``closable_work_refs`` returns a fixed
     candidate list; ``record_work_item_closure``/``record_event`` are recorded rather
-    than persisted, mirroring :class:`~blizzard.hub.work_sources.annotator`-adjacent
-    fakes elsewhere in this suite."""
+    than persisted."""
 
     def __init__(self, candidates: list[ClosableWorkRef]) -> None:
         self._candidates = candidates
@@ -371,9 +353,7 @@ def test_sweep_over_no_candidates_does_nothing() -> None:
     assert closer.closed == []
 
 
-# --------------------------------------------------------------------------- #
 # DeliveryClosureReconciler.sweep() — real store + FakeCloser (component tier)
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component

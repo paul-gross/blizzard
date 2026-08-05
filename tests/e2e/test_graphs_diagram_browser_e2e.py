@@ -1,33 +1,9 @@
 """Graph-explorer diagram browser e2e — scenario 7 of the standing e2e smoke.
 
-The browser half of the e2e tier for the **graph explorer's static DAG diagram** (issue
-#75 phase 4). A **real Chromium**, driven by Playwright, over the **served mission-control
-board**: it visits ``/graphs``, opens a minted graph's detail from the explorer, and
-asserts the ``<fleet-graph-diagram>`` SVG DAG renders against the *built* bundle from real
-minted data — the one surface no unit test reaches, since the layout runs
-``@dagrejs/dagre`` and a canvas text-measurer jsdom cannot execute. It also covers the
-ever-present fallback path (``graph-diagram-fallback``).
-
-``test_diagram_geometry_matches_the_rendered_text`` runs **every shipped seed graph**
-(``src/blizzard/hub/graphs/*/graph.yaml``) plus a name-row-bound graph through the
-rendered board, asserting the laid-out geometry against what the browser drew — see that
-test's own docstring, and ``_MEASURE_DIAGRAM_JS`` for which kind each assertion binds on.
-
-This needs **no runner and no forge traffic** — a diagram is a pure read of an immutable
-graph already at the hub — so it stands up only the served hub and POSTs one graph.
-
-It is the **e2e tier**: it drives the **built** bundle ``blizzard hub host`` serves out
-of ``src/blizzard/static/`` (never the sources), so ``mise run e2e`` runs it with
-``depends = ["web-build"]``. It is **skipped unless ``BLIZZARD_E2E=1``** and a launchable
-Chromium is present. Reproduce it — from the ``blizzard`` worktree in a provisioned
-feature env — with::
-
-    mise run build                      # or `mise run web-build` — refresh the served bundle
-    uv run playwright install chromium  # once, out of band
-    BLIZZARD_E2E=1 uv run pytest tests/e2e/test_graphs_diagram_browser_e2e.py
-
-(The workspace runs it under ``mise run e2e`` with the sibling scenarios.)
-"""
+A real Chromium (Playwright) over the served board asserts the ``<fleet-graph-diagram>``
+SVG DAG renders against the built bundle from real minted data — the one surface no unit
+test reaches, since dagre layout needs a real canvas text-measurer. Also covers the
+fallback path. No runner or forge traffic. Needs the built bundle (``mise run web-build``)."""
 
 from __future__ import annotations
 
@@ -51,17 +27,9 @@ pytestmark = [
 def _graph_yaml() -> str:
     """A valid ``build -> review -> deliver`` graph, the same shape scenario 6 mints.
 
-    It gives the diagram everything the render exercises: an **entry** node, **advance**
-    edges, a **retry** back-edge, a **self-loop** retry edge (blizzard#159's selection
-    scenario needs one exercised for real), and **mixed executors** driving the two
-    stripe/badge colour classes. A known-valid shape dagre lays out cleanly, so the
-    diagram — not the fallback — is the expected render here.
-
-    ``review`` additionally carries a **targeted resume** (``session: resume:build``,
-    issue #115) and a **three-name ``produces``** list, so its meta line is both long
-    enough to wrap onto a second line and rich enough to exercise the authored
-    ``resume:<node>`` form in the render (issue #158).
-    """
+    Exercises an entry node, an advance edge, a retry back-edge, a self-loop retry edge,
+    mixed executors, a targeted resume (``session: resume:build``), and a three-name
+    ``produces`` list so the meta line wraps onto a second line."""
     import yaml
 
     graph = {
@@ -135,10 +103,8 @@ def test_graphs_diagram_renders_in_the_browser(tmp_path: Path, chromium_availabl
                 group = page.locator(f'[data-testid="graph-explorer-group"][data-name="{graph_name}"]')
                 expect(group).to_have_count(1)
 
-                # --- Open the graph's detail from the explorer --------------------------
                 # Groups render collapsed; expanding one already selects its effective
-                # version (issue #152), and clicking the version row selects it explicitly.
-                # Either navigates to /graphs/:graphId.
+                # version (issue #152); either navigates to /graphs/:graphId.
                 group.get_by_test_id("graph-explorer-group-toggle").click()
                 expect(page).to_have_url(f"http://127.0.0.1:{hub_port}/graphs/{graph_id}")
                 row = group.locator(f'[data-testid="graph-explorer-row"][data-graph-id="{graph_id}"]')
@@ -150,10 +116,8 @@ def test_graphs_diagram_renders_in_the_browser(tmp_path: Path, chromium_availabl
                 diagram = page.get_by_test_id("graph-diagram")
                 expect(diagram).to_be_visible()
 
-                # --- Assert the diagram (or its fallback) rendered ----------------------
-                # This graph is a known-valid DAG-with-back-edge dagre lays out cleanly,
-                # so the SVG — not the fallback — is the expected render; a fallback here
-                # would flag a layout regression.
+                # This graph is a known-valid DAG-with-back-edge, so the SVG — not the
+                # fallback — is the expected render; a fallback here flags a layout regression.
                 if diagram.get_by_test_id("graph-diagram-fallback").count() > 0:
                     expect(diagram.get_by_test_id("graph-diagram-fallback")).to_be_visible()
                     raise AssertionError(
@@ -180,12 +144,8 @@ def test_graphs_diagram_renders_in_the_browser(tmp_path: Path, chromium_availabl
                 browser.close()
 
 
-# The point along a path's own curve `getPointAtLength` samples, offset from the
-# midpoint — the label pill and its background sit near the midpoint, so a genuine
-# hit-testing proof has to click somewhere the visible glyphs can't be mistaken for
-# the cause of the hit. Returns viewport (client) coordinates via `getScreenCTM()`,
-# so the result is a real `page.mouse.click` target regardless of the `.diagram-scroll`
-# container's current scroll position.
+# A point on the path's own curve, offset from the midpoint (where the label pill sits),
+# in viewport coordinates via `getScreenCTM()` — a real `page.mouse.click` target.
 _OFFSET_POINT_ON_PATH_JS = """
 (el) => {
   const path = el.querySelector('path.edge');
@@ -198,13 +158,8 @@ _OFFSET_POINT_ON_PATH_JS = """
 
 
 def test_graphs_diagram_selection_in_the_browser(tmp_path: Path, chromium_available: bool) -> None:
-    """Node/edge/self-loop selection and the detail pane, in a real browser (blizzard#159).
-
-    jsdom does no geometry or hit-testing, so the unit tier cannot see whether a click
-    merely *near* a curve selects it. This tier can: it clicks a point on the rendered
-    curve derived from the path's own `getPointAtLength`, offset from the midpoint the
-    label pill sits near, and asserts the edge selects.
-    """
+    """Node/edge/self-loop selection and the detail pane, in a real browser (blizzard#159);
+    clicks a point on the rendered curve since jsdom cannot hit-test geometry."""
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     from playwright.sync_api import expect, sync_playwright
@@ -226,10 +181,8 @@ def test_graphs_diagram_selection_in_the_browser(tmp_path: Path, chromium_availa
                 pane = page.get_by_test_id("graph-diagram-detail")
                 expect(pane.get_by_test_id("graph-diagram-detail-empty")).to_be_visible()
 
-                # --- Click the build node: selects it, marks incident edges, fills the pane
                 # The wire node id is opaque (a ULID); resolve the node by its rendered
-                # name instead — "build" alone, not `review`'s "resume:build" meta text —
-                # then climb from the name text to its enclosing node group.
+                # name instead, then climb from the name text to its enclosing node group.
                 build_name = svg.get_by_test_id("graph-diagram-node-name").get_by_text("build", exact=True)
                 build_node = build_name.locator("xpath=ancestor::*[@data-testid='graph-diagram-node']")
                 build_node.click()
@@ -270,10 +223,8 @@ def test_graphs_diagram_selection_in_the_browser(tmp_path: Path, chromium_availa
                 browser.close()
 
 
-# Harvests the diagram's laid-out geometry alongside what the browser actually rendered.
-# `getComputedTextLength()` is the rendered advance width of a `<text>`; every box and
-# position here was computed by the *production* measurer, via `graph-layout.ts`. Nothing
-# is re-measured with a canvas of the test's own — see the module docstring for why.
+# Harvests the diagram's laid-out geometry alongside what the browser rendered.
+# `getComputedTextLength()` gives each `<text>`'s rendered advance width.
 _MEASURE_DIAGRAM_JS = """
 () => {
   const advance = (el) => (el ? el.getComputedTextLength() : null);
@@ -314,26 +265,21 @@ _MEASURE_DIAGRAM_JS = """
 """
 
 # `graph-layout.ts`'s box-sizing constants, mirrored so the test can recompute the box
-# widths the production measurer produced from what the browser rendered. A drift here
-# fails the reconstruction loudly rather than silently weakening it.
+# widths the production measurer produced.
 _NAME_PAD_L, _NAME_GAP, _BADGE_PAD_X, _BADGE_GAP_R = 14, 10, 6, 8
 _META_PAD_X, _MIN_NODE_WIDTH, _LABEL_PAD_X = 14, 150, 7
 _BASE_NODE_HEIGHT, _META_LINE_HEIGHT = 60, 15
-# Sub-pixel slack: SVG advance widths and canvas `measureText` agree to ~0.02% but not
-# bit-for-bit, and the layout applies `Math.ceil`. Every real defect this guards against
-# is off by whole pixels — the badge's missing tracking was 3.6px, the unresolved font
-# tens of px.
+# Sub-pixel slack: SVG and canvas text measurement agree to ~0.02% but not bit-for-bit.
+# Real defects are off by whole pixels (e.g. missing tracking cost 3.6px).
 _GEOMETRY_SLACK = 1.5
 
 
 def _assert_node_geometry(seed_name: str, node: dict) -> None:
     """The node's box is exactly what `nodeBox` derives from correctly-measured text.
 
-    Recomputes `max(MIN_NODE_WIDTH, ceil(nameRow), ceil(metaRow))` from the *rendered*
-    advance widths and asserts the laid-out box matches. Whichever row binds is the kind
-    this node proves: a name-row-bound node binds `name` **and** `badge`, a meta-bound
-    one binds `meta`. Mis-measure any of them and the reconstruction diverges.
-    """
+    Recomputes `max(MIN_NODE_WIDTH, ceil(nameRow), ceil(metaRow))` from the rendered
+    advance widths. Whichever row binds is the kind this node proves: name-row-bound
+    binds `name` and `badge`, meta-bound binds `meta`."""
     name_row = _NAME_PAD_L + node["nameWidth"] + _NAME_GAP + (node["badgeWidth"] + _BADGE_PAD_X * 2) + _BADGE_GAP_R
     meta_row = max((_META_PAD_X * 2 + meta["width"] for meta in node["metas"]), default=0)
     expected = max(_MIN_NODE_WIDTH, math.ceil(name_row), math.ceil(meta_row))
@@ -342,9 +288,8 @@ def _assert_node_geometry(seed_name: str, node: dict) -> None:
         f"{expected}px (name row {name_row:.1f}, meta row {meta_row:.1f}) — the measurer and the render disagree"
     )
 
-    # The reserve between the name and the right-anchored badge. Always at least
-    # NAME_GAP + the badge's own padding when both are measured correctly; under-measure
-    # either and the narrower box drags the badge leftward into the name.
+    # The reserve between the name and the right-anchored badge; under-measuring either
+    # drags the badge leftward into the name.
     gap = node["badgeLeft"] - node["nameRight"]
     assert gap >= _NAME_GAP + _BADGE_PAD_X * 2 - _GEOMETRY_SLACK, (
         f"{seed_name}: node {node['name']!r} leaves only {gap:.1f}px between its name and its "
@@ -365,12 +310,10 @@ def _assert_node_geometry(seed_name: str, node: dict) -> None:
 
 
 def _seed_graph_yamls() -> dict[str, str]:
-    """Every graph blizzard **ships** — ``src/blizzard/hub/graphs/*/graph.yaml``.
+    """Every graph blizzard ships — ``src/blizzard/hub/graphs/*/graph.yaml``.
 
-    The real corpus, not a fixture (issue #157's reported overflow was on a shipped
-    graph). Discovered from the tree rather than listed, so a newly shipped graph is
-    covered the day it lands.
-    """
+    Discovered from the tree rather than listed, so a newly shipped graph is covered
+    the day it lands."""
     seed_dir = Path(__file__).resolve().parents[2] / "src" / "blizzard" / "hub" / "graphs"
     yamls = {path.parent.name: path.read_text() for path in sorted(seed_dir.glob("*/graph.yaml"))}
     assert yamls, f"no shipped seed graphs found under {seed_dir}"
@@ -378,15 +321,11 @@ def _seed_graph_yamls() -> dict[str, str]:
 
 
 def _name_bound_graph_yaml() -> str:
-    """A graph whose every node is sized by its **name row**, not its meta line.
+    """A graph whose every node is sized by its name row, not its meta line.
 
-    The shipped graphs all carry meta lines long enough to dictate their box width, which
-    leaves the `name` and `badge` measurements unobservable in the rendered geometry —
-    mis-measure them and nothing moves. Long node names plus the barest possible meta (a
-    bare `session`, no `produces`/`retries`/`mode`) invert that, so `nameRow` binds and
-    :func:`_assert_node_geometry`'s reconstruction becomes sensitive to both kinds. Mixed
-    executors give the two badge widths (`RUNNER`, `HUB`).
-    """
+    The shipped graphs' meta lines dominate their box width, leaving `name`/`badge`
+    unobservable; long names with a bare meta invert that so `nameRow` binds. Mixed
+    executors give both badge widths."""
     import yaml
 
     graph = {
@@ -414,16 +353,9 @@ def _name_bound_graph_yaml() -> str:
 
 
 def test_diagram_geometry_matches_the_rendered_text(tmp_path: Path, chromium_available: bool) -> None:
-    """Every box the measurer sized fits the text the browser drew (issue #157).
-
-    Reconstructs each box from the rendered SVG advance widths rather than re-measuring
-    with a canvas of its own, because a canvas-vs-SVG comparison would only assert that
-    Chromium's own canvas and SVG measurements agree — a fact about the browser, true
-    for any measurer, not a fact about this app's layout. Coverage per kind: ``meta``
-    and ``label`` bind on every graph; ``name`` and ``badge`` bind only on the
-    name-row-bound graph, whose nodes are deliberately sized by their name row (the
-    shipped graphs' meta lines otherwise dominate and hide those two kinds entirely).
-    """
+    """Every box the measurer sized fits the text the browser drew (issue #157);
+    reconstructed from rendered SVG advance widths rather than a canvas of its own,
+    which would only prove Chromium's own measurers agree with each other."""
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     from playwright.sync_api import expect, sync_playwright
@@ -482,10 +414,8 @@ def test_diagram_geometry_matches_the_rendered_text(tmp_path: Path, chromium_ava
                             f"{seed_name}: no meta line rendered a targeted resume's `resume:<node>` form"
                         )
 
-                # Both sensitivities are load-bearing, not merely available: some node
-                # wrapped (binding `meta`), and some node was sized by its name row
-                # (binding `name` and `badge`). Without the latter the reconstruction
-                # would pass against a badge measured with no tracking at all.
+                # Both sensitivities are load-bearing: some node wrapped (`meta`), and
+                # some was sized by its name row (`name`/`badge`), not merely available.
                 assert wrapped_somewhere, "no graph exercised the meta-line wrap"
                 assert name_bound_nodes >= 2, (
                     f"only {name_bound_nodes} node(s) were sized by their name row — the reconstruction "

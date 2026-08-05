@@ -1,19 +1,9 @@
 """Workflow-graph domain model — the definition chunks travel.
 
-Two representations live here, and the split is deliberate:
-
-* the **authoring doc** (:class:`GraphDoc` and friends) — the plain-data shape a
-  ``POST /graphs`` YAML body parses into, before any ids are minted. It is what
-  the mint-time validator (:mod:`blizzard.hub.domain.graph_validation`) checks.
-* the **reified graph** (:class:`Graph`, :class:`Node`, :class:`Choice`,
-  :class:`Edge`) — the immutable, id-carrying entities a validated doc compiles
-  into at mint, and what the hub store persists.
-
-Everything here is a dependency-free domain type (``bzh:domain-core``): no YAML, no
-SQLAlchemy, no FastAPI. Parsing YAML text into a ``dict`` and inlining prompt
-*file* references are edge concerns done before :func:`parse_graph_doc` and the
-validator run — the domain sees only already-loaded data.
-"""
+Two representations: the **authoring doc** (:class:`GraphDoc` and friends), a plain-data
+shape carrying no ids, and the **reified graph** (:class:`Graph`, :class:`Node`,
+:class:`Choice`, :class:`Edge`), the immutable id-carrying entities a validated doc
+compiles into at mint. Every type is dependency-free (``bzh:domain-core``)."""
 
 from __future__ import annotations
 
@@ -28,27 +18,17 @@ from blizzard.hub.domain.artifacts import ArtifactKind
 # The reserved terminal a choice may point at instead of a node name.
 RESERVED_TERMINAL = "done"
 
-# The reserved cross-graph target prefix (issue #90). A judgement choice whose ``to:``
-# is ``graph:<name>`` targets **another graph** — taking it re-pins the chunk to that
-# graph and re-queues it (a migration, not a same-graph transition). Graph-only: the
-# landing node is resolved at apply time by name-match-else-entry against the target
-# graph (``bzh:migration-not-transition``); an explicit ``graph:<name>:<node>`` landing
-# override is deferred (issue #90 out-of-scope).
+# The cross-graph target prefix (issue #90): a ``to: graph:<name>`` choice re-pins the
+# chunk rather than transitioning it (``bzh:migration-not-transition``).
 GRAPH_TARGET_PREFIX = "graph:"
 
 
 def classify_choice_target(to: str) -> tuple[str, str | None]:
-    """Classify a choice ``to:`` value into ``(kind, value)`` — a pure syntax parser (issue #90).
+    """Classify a choice ``to:`` value into ``(kind, value)`` — pure syntax (issue #90).
 
-    - ``("node", <name>)`` — a same-graph node name, or the reserved terminal ``done``.
-    - ``("graph", <name>)`` — a well-formed cross-graph target ``graph:<name>``.
-    - ``("malformed", None)`` — a ``graph:``-prefixed value that is not ``graph:<name>``
-      (empty name, or an extra ``:`` — the deferred explicit-node override).
-
-    Kept a pure function so both the mint-time validator (which rejects ``malformed``)
-    and the store's edge hydration (which re-derives the target from the persisted raw
-    ``to_node_name``) classify identically.
-    """
+    ``("node", <name>)`` a same-graph node or the reserved terminal; ``("graph", <name>)``
+    a well-formed ``graph:<name>``; ``("malformed", None)`` any other ``graph:``-prefixed
+    value. Parsing never validates."""
     if not to.startswith(GRAPH_TARGET_PREFIX):
         return ("node", to)
     name = to[len(GRAPH_TARGET_PREFIX) :]
@@ -58,13 +38,11 @@ def classify_choice_target(to: str) -> tuple[str, str | None]:
 
 
 def target_graph_of(to_node_name: str) -> str | None:
-    """The cross-graph target graph name a reified edge's ``to_node_name`` encodes, or
-    ``None`` for a same-graph node / terminal target (issue #90).
+    """The target graph name a reified edge's ``to_node_name`` encodes, or ``None`` for
+    a same-graph node or terminal target (issue #90).
 
-    A cross-graph edge persists its target as the raw ``graph:<name>`` string in
-    ``to_node_name`` (no separate column) — this re-derives the structured name on load.
-    A malformed form never reaches here: the validator rejects it before mint.
-    """
+    A cross-graph edge persists its target as the raw ``graph:<name>`` string, with no
+    separate column; this re-derives the structured name on load."""
     kind, value = classify_choice_target(to_node_name)
     return value if kind == "graph" else None
 
@@ -90,43 +68,24 @@ class SessionMode(StrEnum):
     FRESH = "fresh"
 
 
-# The prefix for a node-entry targeted resume (issue #115): ``session: resume:<node>``
-# resumes node ``<node>``'s most-recent session instead of the chunk's most-recent
-# session overall (bare ``resume``). The ``<name>`` may also name a graph-level **declared
-# session** (a ``sessions:`` entry, issue #144) — resolution is declared-session-first,
-# node-name-second, and belongs to the runner, not to this parser.
+# ``session: resume:<name>`` (issues #115, #144) — resume ``<name>``'s most-recent
+# session rather than the chunk's most-recent overall.
 SESSION_RESUME_TARGET_PREFIX = "resume:"
 
-# The prefix for a named-session fresh mint (issue #144): ``session: fresh:<name>`` always
-# mints a session and makes it the named pool's new head, which a later ``resume:<name>``
-# member continues. ``<name>`` must name a declared session — a node name would mean
-# nothing here, since ``fresh`` always mints and a session minted at node Y is not in node
-# X's implicit lineage (D1). The validator enforces that; this stays a pure parser.
+# ``session: fresh:<name>`` (issue #144) — mint a session and make it ``<name>``'s new
+# head, which a later ``resume:<name>`` member continues.
 SESSION_FRESH_TARGET_PREFIX = "fresh:"
 
-# Every legal authored ``session:`` form, in the malformed-value error message's own words —
-# one owner for the vocabulary the validator quotes back at an author (``bzh:one-owner``).
+# The one owner of the legal-form vocabulary quoted back at an author (``bzh:one-owner``).
 SESSION_LEGAL_FORMS = "`fresh`, `resume`, `resume:<node>`, `fresh:<session>`, or `resume:<session>`"
 
 
 def classify_session(raw: str) -> tuple[SessionMode, str | None, bool]:
-    """Classify a node's authored ``session:`` value into ``(mode, source, malformed)``
-    (issues #115, #144) — a pure syntax parser, mirroring :func:`classify_choice_target`.
+    """Classify an authored ``session:`` value into ``(mode, source, malformed)`` — pure
+    syntax, mirroring :func:`classify_choice_target` (issues #115, #144).
 
-    - ``"resume"`` -> ``(RESUME, None, False)`` — resume the chunk's most-recent
-      session (any node).
-    - ``"resume:<name>"`` -> ``(RESUME, "<name>", False)`` — resume ``<name>``'s
-      most-recent session, where ``<name>`` is a declared session (#144) or, failing
-      that, a node (#115). ``<name>`` is carried verbatim; which of the two it names —
-      and whether it names either — is the validator's job, exactly the
-      parse-never-validates split :func:`classify_choice_target` already keeps.
-    - ``"fresh"`` -> ``(FRESH, None, False)``.
-    - ``"fresh:<name>"`` -> ``(FRESH, "<name>", False)`` — mint a fresh head of the
-      declared session ``<name>`` (#144). Carried verbatim for the same reason.
-    - anything else (``"resume:"`` / ``"fresh:"`` with an empty name, or an
-      unrecognized token) -> ``malformed=True``; ``mode``/``source`` are placeholders
-      a caller must not rely on.
-    """
+    ``source`` is the ``<name>`` of a ``resume:``/``fresh:`` form, carried verbatim and
+    ``None`` for a bare form; under ``malformed`` neither may be relied on."""
     if raw == SessionMode.FRESH.value:
         return (SessionMode.FRESH, None, False)
     if raw == SessionMode.RESUME.value:
@@ -148,26 +107,17 @@ class RetriesExhausted(StrEnum):
     ESCALATE = "escalate"
 
 
-# The reserved default outcome names a hub command node's machinery maps a command's
-# exit code to when the command prints no explicit choice (#65): exit 0 -> success,
-# nonzero -> failure. A node authors a matching choice to route either default
-# anywhere it likes, including straight to the reserved terminal — no node name is
-# privileged by the engine (#67).
+# The reserved outcomes a command's exit code maps to absent an explicit choice (#65):
+# exit 0 -> success, nonzero -> failure. Machinery-reserved, not authored edges (#67).
 HUB_DEFAULT_SUCCESS_CHOICE = "success"
 HUB_DEFAULT_FAILURE_CHOICE = "failure"
 
-# The reserved **pending** outcome (#66) — a hub command node's ``run:`` step signals
-# it by printing this literal name on its last stdout line (exit code 0; a nonzero
-# exit is always a failure, never pending). Recognized regardless of whether the node
-# authors a matching choice — like ``success``/``failure``, it is machinery-reserved,
-# not an authored edge; the poll behavior it triggers belongs to
-# ``blizzard.hub.delivery.hub_node``.
+# The reserved **pending** outcome (#66), signalled on a step's last stdout line at
+# exit 0; a nonzero exit is always a failure, never pending.
 HUB_PENDING_CHOICE = "pending"
 
-# The fleet-wide default kick-back cap (#64) — a hub node whose author omits
-# ``bounce_cap`` tolerates this many bounces (conflict/CI-red/master-moved kick-backs)
-# before the chunk escalates. Per-node, not global: a flaky-CI node can set its own,
-# stricter or looser cap by authoring the field.
+# The default kick-back cap a hub node omitting ``bounce_cap`` tolerates before the
+# chunk escalates (#64). Per-node, not global.
 DEFAULT_BOUNCE_CAP = 5
 
 
@@ -178,12 +128,8 @@ DEFAULT_BOUNCE_CAP = 5
 class ChoiceDoc:
     """One fused choice/edge entry as authored.
 
-    ``to`` is the raw authored target — a same-graph node name, the reserved terminal,
-    or a cross-graph ``graph:<name>`` (issue #90). ``target_graph`` is the parsed graph
-    name when ``to`` is a well-formed cross-graph form (``None`` otherwise); a malformed
-    ``graph:`` form leaves it ``None`` and is rejected by the validator, which reads the
-    raw ``to``. ``model`` is an optional per-choice model override applied when the choice
-    migrates the chunk to another graph (``None`` keeps the chunk's current model)."""
+    ``target_graph`` is the raw ``to``'s parsed graph name when it is a well-formed
+    cross-graph form; ``model`` overrides the chunk's model on a migration (#90)."""
 
     name: str
     description: str | None
@@ -191,9 +137,7 @@ class ChoiceDoc:
     prompt_addendum: str | None = None
     target_graph: str | None = None
     model: str | None = None
-    # Whether this choice is gated on green checks (issue #114) — a worker may not route
-    # through it while any of its node's `checks:` is red. The validator rejects it on a
-    # choice whose node declares no `checks:`, and on hub/human-judged nodes.
+    # Gated on green checks (issue #114): unroutable while any of its node's is red.
     requires_checks: bool = False
 
 
@@ -210,11 +154,8 @@ class JudgementDoc:
 class RunStepDoc:
     """One command a hub command node executes, in authored order (#65).
 
-    ``produces``, when set, names a marker artifact: the engine records it once this
-    step exits 0, and SKIPS the step on any later re-run once it already exists — the
-    at-least-once-per-step crash contract. ``name`` is a human label only (surfaced in
-    logs/artifacts); it defaults to the step's 1-based position when omitted.
-    """
+    ``produces`` names a marker artifact recorded once the step exits 0 and skipped on
+    a re-run — the at-least-once-per-step crash contract."""
 
     command: str
     name: str | None = None
@@ -225,11 +166,8 @@ class RunStepDoc:
 class ProducesSpec:
     """One ``produces:`` entry, kind-carrying (D1, issue #143).
 
-    Authored as a bare string (``kind`` defaults to :attr:`ArtifactKind.ASSET`) or a
-    mapping ``{name, kind}`` (a ``git_commit`` expectation). :func:`_parse_node`
-    normalizes both authored forms to this one type, so every downstream reader sees a
-    single shape regardless of which form the author wrote.
-    """
+    Authored either as a bare string (``kind`` defaults to :attr:`ArtifactKind.ASSET`)
+    or as a mapping ``{name, kind}``; both forms normalize to this one type."""
 
     name: str
     kind: ArtifactKind = ArtifactKind.ASSET
@@ -249,42 +187,23 @@ class NodeDoc:
     retries_exhausted: str | None
     mode: str | None
     judgement: JudgementDoc | None
-    # The kick-back cap (#64) — ``None`` accepts the fleet default (``DEFAULT_BOUNCE_CAP``);
-    # a hub node may author its own, stricter or looser.
+    # The kick-back cap (#64) — ``None`` accepts ``DEFAULT_BOUNCE_CAP``.
     bounce_cap: int | None = None
-    # The generic hub command node's declared commands (#65, #67) — non-empty exactly on
-    # a node ``executor: hub`` authors as the generic primitive; empty on every worker node.
+    # The hub command node's declared commands (#65, #67); empty on a worker node.
     run: list[RunStepDoc] = field(default_factory=list)
-    # The pending-poll cadence (#66), in seconds — ``None`` accepts the executor's
-    # own default (:data:`blizzard.hub.delivery.hub_node.DEFAULT_POLL_INTERVAL` /
-    # ``DEFAULT_POLL_TIMEOUT``). Legal only on a generic hub command node
-    # (``executor: hub`` with ``run:``) — a node with no ``pending``-reporting step
-    # never reads either.
+    # The pending-poll cadence (#66), in seconds — ``None`` accepts the executor default.
     poll_interval_seconds: int | None = None
     poll_timeout_seconds: int | None = None
-    # The session reference target (issues #115, #144) — the parsed ``<name>`` of a
-    # ``session: resume:<name>`` or ``session: fresh:<name>`` form, ``None`` for bare
-    # ``resume``/``fresh``. Set by :func:`classify_session`; whether it names a declared
-    # session or an existing node is the validator's job. Read with ``session`` beside it:
-    # the same ``<name>`` means "resume this pool's head" under ``RESUME`` and "mint this
-    # pool a new head" under ``FRESH``.
+    # The parsed ``<name>`` of a ``resume:``/``fresh:`` form (issues #115, #144), read
+    # with ``session`` beside it; ``None`` for a bare form.
     session_source: str | None = None
-    # Whether the authored ``session:`` value was structurally malformed (issues #115, #144) —
-    # e.g. ``resume:``/``fresh:`` with an empty name, or an unrecognized token. Kept
-    # separate from ``session_source`` (which is ``None`` in this case too) so the
-    # validator can distinguish "malformed syntax" from "well-formed but names no node"
-    # without re-parsing raw YAML (parse never validates, but the validator still needs
-    # the parse's own verdict carried forward — ``bzh:one-owner``).
+    # Whether the authored ``session:`` value was structurally malformed — kept separate
+    # from ``session_source``, which is ``None`` in that case too.
     session_malformed: bool = False
-    # Where the runner runs this node's ``checks:`` (issue #114) — a path resolved
-    # *relative to the leased env's binding workdir* (``join(binding.workdir, checks_cwd)``);
-    # ``None`` runs them at the env workdir root. Meaningful only on a node with ``checks:``;
-    # the validator rejects it otherwise. Per-check cwd is a documented deferral — one
-    # node-level cwd keeps ``checks:`` a bare ``list[str]``.
+    # Where ``checks:`` run (issue #114) — relative to the leased env's binding workdir;
+    # ``None`` runs them at its root. Per-check cwd is a documented deferral.
     checks_cwd: str | None = None
-    # The per-check timeout (issue #114), in seconds — ``None`` accepts the check-runner's
-    # own default (:data:`blizzard.runner.loop.checks.DEFAULT_CHECK_TIMEOUT`). A timeout is
-    # a red check. Meaningful only on a node with ``checks:``; the validator rejects it otherwise.
+    # The per-check timeout (issue #114), in seconds; a timeout is a red check.
     checks_timeout: int | None = None
 
 
@@ -292,14 +211,8 @@ class NodeDoc:
 class RotatePolicy:
     """One declared session's rotation bounds (issue #144).
 
-    Every threshold is optional and independently declared; a policy with all three unset
-    is legal and bounds nothing. A head that breaches *any* declared threshold is not
-    resumed — the next member of its pool mints a fresh head instead.
-
-    ``max_invocations`` counts **harness invocations, not node-steps**: a single node-step
-    burns two or three (a spawn plus a judge, plus any nudge), so a bound set from a
-    node-step count runs roughly 3x tighter than its author intends.
-    """
+    Every threshold is optional; a head breaching *any* declared one is not resumed.
+    ``max_invocations`` counts **harness invocations, not node-steps**."""
 
     max_context_tokens: int | None = None
     max_transcript_bytes: int | None = None
@@ -310,23 +223,8 @@ class RotatePolicy:
 class SessionDecl:
     """One graph-level named session declaration (issue #144).
 
-    The unit ``sessions:`` declares and a node references by name (``fresh:<name>`` /
-    ``resume:<name>``). It carries workflow *policy* — a capability tier, a reasoning
-    effort, rotation bounds — never application knowledge (``bzh:app-agnostic-graphs``).
-
-    ``model`` is a **prioritized preference list**, resolved left-to-right at session mint
-    by the runner's harness adapter: the first entry that resolves wins, unresolvable
-    entries are skipped, and an all-unresolvable list falls back to the runner's default.
-    Entries are opaque preference strings to the hub — a namespaced ``blizzard:`` tier
-    alias (``blizzard:frontier``/``advanced``/``basic``) or a harness-native model name.
-    The hub never interprets either; the alias table lives in each runner's own config, so
-    a graph stays harness-agnostic (``bzh:pluggable-seams``).
-
-    ``effort`` is model's twin, a single value rather than a list — every adapter can map
-    an ordinal *somewhere*, so there is no "unrecognized, try the next one" case. The hub
-    validates it as a non-empty string only: recognizing the value (and logging an
-    unrecognized one) needs the runner's config, which the hub cannot see.
-    """
+    Carries workflow *policy* only, never application knowledge
+    (``bzh:app-agnostic-graphs``); ``model`` and ``effort`` are opaque to the hub."""
 
     name: str
     model: list[str] = field(default_factory=list)
@@ -353,9 +251,7 @@ def parse_graph_doc(raw: dict[str, object]) -> GraphDoc:
     """Parse a plain ``dict`` (from ``yaml.safe_load``) into a :class:`GraphDoc`.
 
     Structural coercion only — never validation. A malformed shape raises
-    :class:`GraphParseError`; whether a well-formed doc is *legal* is the
-    validator's job (:mod:`blizzard.hub.domain.graph_validation`).
-    """
+    :class:`GraphParseError`; whether a well-formed doc is *legal* is the validator's."""
     try:
         name = str(raw["name"])
         entry = str(raw["entry"])
@@ -372,10 +268,7 @@ def parse_graph_doc(raw: dict[str, object]) -> GraphDoc:
 def _parse_sessions(raw: object) -> dict[str, SessionDecl]:
     """Parse the optional top-level ``sessions:`` map (issue #144).
 
-    Absent reads as ``{}``. Structural coercion only — a
-    session naming a node, or a ``resume:``/``fresh:`` reference naming nothing, is the
-    validator's verdict, not this parser's.
-    """
+    Absent reads as ``{}``; structural coercion only, never validation."""
     if raw is None:
         return {}
     body = _as_dict(raw, "`sessions`")
@@ -384,10 +277,8 @@ def _parse_sessions(raw: object) -> dict[str, SessionDecl]:
 
 def _parse_session(name: str, body: dict[str, object]) -> SessionDecl:
     raw_model = body.get("model")
-    # A single string is the natural one-entry spelling (`model: blizzard:basic`) and
-    # normalizes to the same one-entry list the sequence form parses to, so downstream
-    # readers see exactly one shape — the same both-authored-forms normalization
-    # ``_parse_produces_entry`` performs.
+    # A single string is the one-entry spelling, normalized to the same one-entry list
+    # the sequence form parses to, so readers see exactly one shape.
     model = [str(raw_model)] if isinstance(raw_model, str) else [str(m) for m in _as_list(raw_model)]
     raw_effort = body.get("effort")
     raw_rotate = body.get("rotate")
@@ -463,12 +354,9 @@ def _parse_node(name: str, body: dict[str, object]) -> NodeDoc:
 def _parse_produces_entry(raw: object, node_name: str) -> ProducesSpec:
     """Normalize one authored ``produces:`` entry (D1, issue #143).
 
-    A bare string names an asset (``kind=asset``). A mapping ``{name, kind}`` names an
-    explicit kind — currently ``asset`` or ``git_commit``. Structural coercion only,
-    matching :func:`_parse_node`'s other
-    enum fields (``executor``, ``session``): an unrecognized ``kind`` value raises
-    :class:`GraphParseError` with a clear message rather than a bare :class:`ValueError`,
-    since ``produces:`` entries are user-authored graph YAML, not an internal enum."""
+    A bare string names an asset; a mapping ``{name, kind}`` names an explicit kind.
+    Structural coercion only — an unrecognized ``kind`` raises :class:`GraphParseError`
+    rather than a bare :class:`ValueError`, since these entries are user-authored."""
     if isinstance(raw, str):
         return ProducesSpec(name=raw, kind=ArtifactKind.ASSET)
     body = _as_dict(raw, f"node {node_name!r} `produces` entry")
@@ -571,8 +459,7 @@ class Choice:
     choice_id: str
     name: str
     description: str
-    # Whether this choice is gated on green checks (issue #114) — see
-    # ``ChoiceDoc.requires_checks``.
+    # Gated on green checks (issue #114) — see ``ChoiceDoc.requires_checks``.
     requires_checks: bool = False
 
 
@@ -580,12 +467,8 @@ class Choice:
 class Edge:
     """A directed, choice-keyed connection out of one node.
 
-    ``to_node_name`` is a node name of this graph, the reserved terminal, or — for a
-    cross-graph migration edge (issue #90) — the raw ``graph:<name>`` string (the target
-    is re-derived from it on load via :func:`target_graph_of`, so no separate column is
-    persisted). ``target_graph`` is that parsed name when the edge is cross-graph
-    (``None`` for a same-graph/terminal edge); ``model`` is the optional per-choice model
-    override applied when the migration re-pins the chunk (``None`` keeps its model)."""
+    ``target_graph`` is ``to_node_name``'s parsed name when the edge is cross-graph
+    (issue #90); ``model`` overrides the chunk's model when the migration re-pins it."""
 
     from_node_id: str
     choice_id: str
@@ -630,21 +513,16 @@ class Node:
     poll_interval_seconds: int | None = None
     poll_timeout_seconds: int | None = None
     # The session reference target (issues #115, #144) — see ``NodeDoc.session_source``.
-    # ``None`` means "chunk most-recent" (bare ``resume``) or bare ``fresh``; a validated
-    # graph never carries a malformed session, so there is no ``Node``-level malformed flag.
+    # A validated graph never carries a malformed session, so no malformed flag here.
     session_source: str | None = None
-    # Where the runner runs this node's ``checks:`` and the per-check timeout (issue #114) —
-    # see ``NodeDoc.checks_cwd`` / ``NodeDoc.checks_timeout``.
+    # See ``NodeDoc.checks_cwd`` / ``NodeDoc.checks_timeout`` (issue #114).
     checks_cwd: str | None = None
     checks_timeout: int | None = None
 
     @property
     def is_hub_command_node(self) -> bool:
-        """True for a generic hub command node (``executor: hub`` + a non-empty
-        ``run:``) — the shape :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor`
-        drives. False for every worker node. A plain predicate rather than an
-        assertion, since an author is free to declare a (currently pointless)
-        ``executor: hub`` node with an empty ``run:``."""
+        """True for a generic hub command node — ``executor: hub`` plus a non-empty
+        ``run:``. A predicate, not an assertion: an empty ``run:`` is authorable."""
         return self.executor is Executor.HUB and bool(self.run)
 
 
@@ -658,10 +536,8 @@ class Graph:
     nodes: list[Node]
     edges: list[Edge]
     created_at: datetime
-    # The graph-level named-session declarations (issue #144), in authored order —
-    # empty for every graph that declares none. A list rather than the doc's map: a
-    # reified :class:`SessionDecl` already carries its own ``name``, and every reified
-    # collection on this type is a list. :meth:`session_by_name` is the lookup.
+    # The graph-level named-session declarations (issue #144), in authored order;
+    # :meth:`session_by_name` is the lookup.
     sessions: list[SessionDecl] = field(default_factory=list)
 
     def session_by_name(self, name: str) -> SessionDecl | None:
@@ -687,26 +563,15 @@ class Graph:
 def mark_effective(graphs: list[Graph], *, retired_ids: Collection[str]) -> dict[str, bool]:
     """Mark the newest non-retired ``created_at`` graph per ``name`` as effective.
 
-    Keyed by ``graph_id``. Encodes the same "newest-per-name, retired excluded" rule
-    :meth:`IReadGraphRepository.get_enabled_by_name` applies at lookup time — a pure
-    domain function so the read-listing surface (``GET /graphs``) does not re-derive
-    it at the edge (``bzh:domain-core``). ``retired_ids`` names every ``graph_id``
-    whose newest lifecycle fact (issue #101) reads retired; a retired graph is never a
-    candidate, so a name whose every graph is retired marks none of them effective.
-
-    Required, keyword-only, and carries no default (issue #101 lockstep note), so a
-    caller that omits it gets a ``TypeError`` rather than the pre-#101 "every graph is a
-    candidate" behavior (pinned by
-    tests/test_graph_domain.py::test_mark_effective_requires_retired_ids_explicitly).
-    Pass ``retired_ids=frozenset()`` explicitly for the pre-#101 behavior.
-    """
+    Keyed by ``graph_id``. A retired graph is never a candidate. ``retired_ids`` carries
+    no default, so omitting it raises — pinned by
+    tests/test_graph_domain.py::test_mark_effective_requires_retired_ids_explicitly"""
     newest_by_name: dict[str, Graph] = {}
     for graph in graphs:
         if graph.graph_id in retired_ids:
             continue
         current = newest_by_name.get(graph.name)
-        # Tie-break on graph_id descending (ULIDs sort lexically by creation) — kept in
-        # lockstep with IReadGraphRepository.get_enabled_by_name's ORDER BY.
+        # Tie-break on graph_id descending — ULIDs sort lexically by creation.
         if current is None or (graph.created_at, graph.graph_id) > (current.created_at, current.graph_id):
             newest_by_name[graph.name] = graph
     effective_ids = {g.graph_id for g in newest_by_name.values()}
@@ -716,39 +581,17 @@ def mark_effective(graphs: list[Graph], *, retired_ids: Collection[str]) -> dict
 def is_newer_mint(candidate: Graph, current: Graph) -> bool:
     """Whether ``candidate`` is a strictly newer mint than ``current``.
 
-    The fourth place this codebase needs "which of two mints is newer", and the one that
-    makes it a named rule rather than a fourth open-coded tuple comparison: the ordering
-    is already owned by :func:`mark_effective`'s tie-break and
-    :meth:`IReadGraphRepository.get_enabled_by_name`'s ``ORDER BY``, and it must stay in
-    lockstep with both.
-
-    ``created_at`` first, ``graph_id`` as the tie-break — ULIDs sort lexically by creation,
-    so two mints sharing a ``created_at`` (a fixed clock, or two mints inside one tick)
-    still order deterministically rather than by whichever the store happened to return.
-
-    Its caller is the follow-latest policy (issue #164), which needs **strictly** newer:
-    ``get_enabled_by_name`` answers with the newest *non-retired* mint, so a chunk sitting
-    on a since-retired mint would otherwise be dragged **backwards** onto an older enabled
-    one (pinned by
-    tests/test_follow_latest_policy.py::test_the_policy_never_drags_a_chunk_backwards_onto_an_older_mint).
-    """
+    ``created_at`` first, ``graph_id`` as the tie-break. **Strictly** newer — pinned by
+    tests/test_follow_latest_policy.py::test_the_policy_never_drags_a_chunk_backwards_onto_an_older_mint"""
     return (candidate.created_at, candidate.graph_id) > (current.created_at, current.graph_id)
 
 
 def resolve_follow_latest(graph_policy: bool | None, *, hub_default: bool) -> bool:
     """Whether a chunk pinned to a graph follows the newest mint of its name (issue #164).
 
-    The two-level policy, resolved in one place so no caller re-spells it: the graph's own
-    tri-state wins where it is set, and ``None`` — every mint's default — inherits the
-    hub-level ``follow_latest``. A pure function over two already-read values rather than a
-    repository read, so the precedence is unit-testable with no store (``bzh:domain-core``).
-
-    ``hub_default`` is keyword-only and carries no default of its own (issue #164), so a
-    caller that omits the hub setting gets a ``TypeError`` rather than a silent ``True``
-    (migrating a fleet that never opted in) or a silent ``False`` (never migrating at
-    all) — pinned by
-    tests/test_pin_hub_domain.py::test_resolve_follow_latest_requires_hub_default_explicitly
-    """
+    The graph's own tri-state wins where set; ``None`` inherits ``hub_default``, which
+    carries no default, so omitting it raises — pinned by
+    tests/test_pin_hub_domain.py::test_resolve_follow_latest_requires_hub_default_explicitly"""
     return hub_default if graph_policy is None else graph_policy
 
 
@@ -762,25 +605,17 @@ class IReadGraphRepository(Protocol):
     def get_enabled_by_name(self, name: str) -> Graph | None:
         """The newest non-retired graph with ``name`` — the default-graph pin lookup.
 
-        Excludes every retired ``graph_id`` (issue #101); resolves to ``None`` when
-        ``name``'s every minted graph is retired, kept in lockstep with
-        :func:`mark_effective`.
-        """
+        Excludes every retired ``graph_id`` (issue #101), so a name whose every mint is
+        retired resolves to ``None``."""
         ...
 
     def list_all(self) -> list[Graph]: ...
 
     def newest_definition_yaml(self, name: str) -> str | None:
-        """The newest-minted graph of ``name``'s stored source YAML, or ``None`` if the
-        name has never been minted (issue #146).
+        """The newest-minted graph of ``name``'s source YAML, ``None`` if never minted.
 
-        Reads back the ``definition_yaml`` column the mint persists "for audit and
-        re-export" — reconciliation is that re-export. Deliberately **newest-minted**,
-        not newest-*enabled*: this answers "what does the store already hold for this
-        name", which is what makes re-running the reconciler a no-op. Retirement is a
-        separate lifecycle (issue #101) and does not change what was minted, so it is not
-        consulted here; the tie-break matches :meth:`get_enabled_by_name` and
-        :func:`mark_effective` so "newest" means the same thing everywhere.
+        Newest-*minted*, not newest-enabled: retirement does not change what was minted,
+        so it is not consulted here (issue #146).
         """
         ...
 
@@ -796,19 +631,15 @@ class IReadGraphRepository(Protocol):
         """Every ``graph_id`` whose newest lifecycle fact reads retired (issue #101).
 
         The set :func:`mark_effective` excludes from candidacy — the bulk counterpart
-        to :meth:`is_retired`, used by the ``GET /graphs`` listing so it derives
-        ``effective`` once rather than per-row.
+        to :meth:`is_retired`.
         """
         ...
 
     def follow_latest(self, graph_id: str) -> bool | None:
         """This graph's own follow-latest policy — the stored tri-state (issue #164).
 
-        ``True``/``False`` override the hub-level setting for chunks pinned to this
-        mint; ``None`` — the value for a graph with no policy fact at all, which is
-        every graph by default — inherits it (:func:`resolve_follow_latest`).
-        Newest-fact-wins over ``graph_policy_facts``, exactly like :meth:`is_retired`
-        over the lifecycle facts.
+        ``None`` — the value for a graph with no policy fact — inherits the hub-level
+        setting (:func:`resolve_follow_latest`). Newest-fact-wins.
         """
         ...
 
@@ -830,8 +661,7 @@ class IWriteGraphRepository(IReadGraphRepository, Protocol):
     def record_policy(self, graph_id: str, *, follow_latest: bool | None, at: datetime, by: str) -> None:
         """Append a follow-latest policy fact — newest-fact-wins (issue #164).
 
-        ``follow_latest=None`` is a real, recordable value (revert to inheriting the hub
-        setting), not "leave unchanged" — appending it is how a graph-level override is
-        cleared without deleting history. Never touches the ``graphs`` row.
+        ``follow_latest=None`` is a real, recordable value — "revert to inheriting",
+        not "leave unchanged". Never touches the ``graphs`` row.
         """
         ...

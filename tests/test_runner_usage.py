@@ -1,14 +1,9 @@
 """Runner usage telemetry — recording, buffering, and cleanup (epic #57, issue #58).
 
-ADVANCE records one append-only usage fact per attempt invocation — the spawn/resume
-that produced the exited worker, and the judgement resume that elicited its verdict —
-and buffers each fact's outbound report on the same store-and-forward rails as
-``lease.minted``, atomically with the local write. The per-lease stdout redirect
-(Phase 1) survives a killed/reaped worker for ADVANCE's readback; when no envelope
-survived, the fallback sums the raw session transcript with ``cost_usd`` left absent —
-never fabricated. Facts, not aggregates (``bzh:facts-not-status``): a chunk's total is a
-derived sum over these, the hub's job (Phase 3), not this module's.
-"""
+ADVANCE records one append-only usage fact per attempt invocation and buffers each
+fact's outbound report on the same store-and-forward rails as ``lease.minted``. When
+no envelope survived, the fallback sums the raw transcript with ``cost_usd`` left
+absent, never fabricated. Facts, not aggregates: a chunk's total is the hub's job."""
 
 from __future__ import annotations
 
@@ -168,12 +163,8 @@ def test_advance_records_resume_kind_on_a_later_generation(tmp_path):  # type: i
 
 @pytest.mark.unit
 def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_generations(tmp_path):  # type: ignore[no-untyped-def]
-    """Pins the cross-generation contamination fix: a generation-2 resume that exits
-    without writing its **own** result envelope must fall through to the
-    transcript-sum fallback (cost-absent) — never replay generation 1's still-present
-    envelope file under the new (``lease``, ``resume``) usage key, which the
-    ``runner:usage-attributed-once`` invariant cannot catch since it is a *distinct*
-    key from generation 1's own fact."""
+    """A generation-2 resume that exits with no envelope of its own must fall through
+    to the transcript-sum fallback, never replay generation 1's still-present file."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     # Simulate a restart/answer/pause resume that landed generation 2, same lease.
@@ -182,9 +173,8 @@ def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_gen
     stdout_dir.mkdir()
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
-    # If readback were to (mis)read generation 1's leftover file for generation 2, the
-    # content-agnostic fake would hand back this contamination sample for kind=resume —
-    # a stand-in for "the prior generation's envelope, parsed a second time".
+    # If readback misread generation 1's leftover file for generation 2, the fake would
+    # hand back this sample for kind=resume, standing in for the stale re-parse.
     contamination_sample = UsageSample(
         kind="resume",
         model="claude-x",
@@ -218,12 +208,8 @@ def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_gen
         probe=FakeProbe(),
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(stdout_dir)),
     )
-    # Generation 1's own envelope file is still on disk (not yet cleaned up — tenure
-    # hasn't ended) — but generation 2 never wrote its own file: an envelope-less
-    # done-exit. Written via the module's own path-builder (not a hardcoded name) so
-    # a mutation collapsing the per-generation path back to one shared per-lease file
-    # writes generation 1's content to the exact path generation 2's readback would
-    # then (wrongly) reuse.
+    # Generation 1's envelope file is still on disk; generation 2 never wrote its own.
+    # Written via the path-builder so a collapsed path would write where 2 reads.
     with open(steps._stdout_path(ctx, "lease_1", 1), "w") as f:
         f.write("<generation-1's own envelope>")
 
@@ -344,10 +330,8 @@ def test_usage_replay_after_crash_is_idempotent(tmp_path):  # type: ignore[no-un
 
 @pytest.mark.unit
 def test_ask_and_exit_records_the_worker_usage_before_parking(tmp_path):  # type: ignore[no-untyped-def]
-    """A worker that asked-and-exited burned its spawn invocation's tokens: ADVANCE
-    parks the chunk on the question *and* records that spawn usage (issue #58) — the
-    token-burning attempt is not silently undercounted just because no verdict followed.
-    No judgement ran, so only the worker's own fact is recorded."""
+    """A worker that asked-and-exited burned its spawn tokens: ADVANCE parks the chunk
+    and also records that spawn usage (issue #58); no judgement ran, so no judge fact."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_ask(
@@ -443,10 +427,8 @@ def test_ask_park_worker_usage_is_idempotent_across_a_re_park(tmp_path):  # type
 
 @pytest.mark.unit
 def test_verdict_less_failure_still_records_spawn_and_judge_usage(tmp_path):  # type: ignore[no-untyped-def]
-    """A dead worker whose session cannot answer a parseable <Choice> fails and requeues
-    — but it burned the same spawn + judge invocations a passing one does, so ADVANCE
-    records both facts before failing it (issue #58). The retry mints a fresh lease and
-    discards this one's stdout, so recording here is the only chance to count its spend."""
+    """A dead worker with no parseable ``<Choice>`` fails and requeues, but burned the
+    same spawn + judge invocations a passing one does, so ADVANCE records both first."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     stdout_dir = tmp_path / "stdout"

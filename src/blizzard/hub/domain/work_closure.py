@@ -1,29 +1,9 @@
-"""The delivery closure sweep — closing a delivered chunk's work items (issue #216).
+"""The delivery closure sweep — closing a delivered chunk's work items (issue #216): the **guarantee**
+half of the two-part close, idempotent against the opportunistic hint having already fired.
 
-Part 2 of the two-half close: a worker's commit metadata (the build preamble) is the
-opportunistic hint that fires forge auto-close on a fast-forward landing with no hub
-involvement at all; this reconciler is the **guarantee**, catch-all and idempotent
-against that hint having already fired. Per opted-in, close-capable work source,
-:class:`DeliveryClosureReconciler` reads every landed, non-grouped chunk's still-open
-work refs (:meth:`~blizzard.hub.domain.work.IReadChunkRepository.closable_work_refs`
-— ``has_landed_repos`` is the sole landing gate, not chunk status), attempts to close
-each through its own source binding, and records the outcome durably.
-
-Dependency-free (``bzh:domain-core``): every collaborator is an injected Protocol
-(:class:`~blizzard.hub.domain.work.IWriteChunkRepository`,
-:class:`~blizzard.hub.work_sources.source.IWorkSourceRegistry`,
-:class:`~blizzard.foundation.clock.IClock`), so :meth:`~DeliveryClosureReconciler.sweep`
-is a single, complete, directly-callable step (``bzh:steppable-loop``) — the background
-driver (``blizzard.hub.app``) is a thin sleep-and-call wrapper around it, the same
-shape :class:`~blizzard.hub.domain.forge_status.AnnotationReconciler` already
-establishes. A per-ref failure is caught, recorded as a ``failed`` fact, and retried on
-the next sweep — nothing raises past :meth:`sweep`. A mid-sweep crash loses nothing
-durable: the next pass re-derives the same candidate set from
-:meth:`~blizzard.hub.domain.work.IReadChunkRepository.closable_work_refs` and re-issues
-an idempotent close (``blizzard-context:/architecture/crash-correctness.md``'s recorded
-exemption for this sweep; pinned by
-tests/test_work_closure.py::test_sweep_against_a_real_store_is_idempotent_on_a_second_pass).
-"""
+Dependency-free (``bzh:domain-core``): every collaborator is an injected Protocol, so :meth:`sweep` is
+one complete, directly-callable step (``bzh:steppable-loop``). A per-ref failure is recorded as a
+``failed`` fact and retried next sweep (``blizzard-context:/architecture/crash-correctness.md``)."""
 
 from __future__ import annotations
 
@@ -35,9 +15,8 @@ from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _log = get_logger("blizzard.hub.work_closure")
 
-# The hub coordinator's own reserved `event_log.runner_id` for a hub-originated event —
-# mirrors `delivery.hub_node._HUB_RUNNER_ID` (kept private there too; this sweep owns
-# its own event-recording concern, `bzh:repository-split`).
+# The hub coordinator's own reserved `event_log.runner_id` for a hub-originated event; kept private
+# here because this sweep owns its own event-recording concern (`bzh:repository-split`).
 _HUB_RUNNER_ID = "hub"
 
 _EVENT_CLOSED = "work-item-closed"
@@ -56,13 +35,9 @@ class DeliveryClosureReconciler:
     def sweep(self) -> None:
         """One complete reconciliation pass over every opted-in, close-capable source.
 
-        Candidates are computed once (``closable_work_refs``), then filtered per
-        source so a closer only ever sees its own refs; a source with no closer
-        bound is skipped entirely (``closing_names()`` never names it). A per-ref
-        failure is caught and counted rather than raised — a ``gone`` or ``failed``
-        outcome is itself a successful, informative sweep result, not an error the
-        sweep needs to surface via an exception. One aggregate INFO summary is
-        emitted per pass, win or lose (``bzh:structlog-logging``)."""
+        Candidates are computed once, then filtered per source so a closer only ever sees its own refs.
+        A per-ref failure is caught and counted rather than raised — a ``gone`` or ``failed`` outcome is
+        itself an informative result. One aggregate INFO summary per pass (``bzh:structlog-logging``)."""
         candidates = self._chunks.closable_work_refs()
         closed = gone = failed = 0
         for name in self._work_sources.closing_names():

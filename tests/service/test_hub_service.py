@@ -1,47 +1,9 @@
 """Hub service tier — the real hub against the mock runner + mock forge (verification/blizzard.md).
 
-The **hub** daemon's HTTP API is exercised from outside the process, with its counterparts
-mocked ("the hub → run it against the mock runner"): the
-**mock runner** (a levered driver) issues the runner-role calls — register, peek, claim,
-complete — and the **mock forge** backs the work-source seam the chunk is ingested from.
-Every assertion is made over the wire against the running hub:
-
-* **claim + completion** — the mock runner claims a ready chunk (receiving the first node
-  envelope over the wire) and submits an epoch-fenced completion; the hub applies it and
-  advances the chunk to the next node (``next`` observed over the wire).
-* **stale-epoch rejection** — with the runner's ``stale_epoch`` lever armed, the completion
-  carries a zombie fence; the hub rejects it (``failure``, "stale epoch") and does **not**
-  advance.
-* **queue shaping** — grouping folds two ready chunks into one plural-pointer survivor and
-  a whole-order replace moves it to the top; ``GET /api/queue`` reflects both.
-* **SSE contract** — ``GET /api/events/stream`` serves a valid ``text/event-stream`` an
-  ``EventSource`` connects to (the reserved comment).
-* **SSE live fan-out** (issue #107) — a *connected* subscriber receives ``queue-changed``
-  the moment a fresh cross-graph migration re-queues a chunk, and receives exactly one
-  across the migration and its duplicate-delivery replay. The component tier can only read
-  the broker's replay tail, which shows an event was recorded, not that it was delivered;
-  this is the tier where the publish -> subscriber queue -> wire leg is real.
-* **route-token authorization** (issue #84b) — under ``route_token_mode=enforce``, the
-  mock runner's default (present the claim's own token) completes normally; its
-  ``stale_route_token``/``omit_route_token`` levers each get fenced out (``failure``) and
-  do not advance the chunk — the one-sided hub service test the mock-runner lever exists
-  to drive.
-* **produces-artifact authorization** (issue #113 phase 5) — under
-  ``produces_mode=enforce`` a completion for a node declaring ``produces: [notes]`` is
-  fenced out (``failure``, chunk not advanced) unless it carries an **explicit**
-  (``attached=True``) artifact for every declared name; a fallback-only completion still
-  applies under the default ``warn``. Driven by the mock runner's ``/_drive/complete``
-  ``artifacts`` field — the produces analogue of the route-token levers above.
-* **kind-aware produces coverage** (issue #143 phase 2) — a ``{kind: git_commit}``
-  expectation is checked by **kind**, not name: any submitted ``git_commit`` artifact
-  satisfies it regardless of its own name (real ones are named per-repo, never the
-  declared produces name), and zero ``git_commit`` artifacts fences the completion out
-  under ``enforce``.
-
-sqlite only, no tokens, no network. Reproduce — from a provisioned feature env — with::
-
-    BLIZZARD_SERVICE=1 uv run pytest tests/service/test_hub_service.py
-"""
+Exercises the hub daemon's HTTP API from outside the process, with the runner and forge
+mocked: claim/completion, stale-epoch rejection, queue shaping, SSE contract and live
+fan-out, route-token and produces-artifact authorization. sqlite only, no tokens, no
+network. Run with ``BLIZZARD_SERVICE=1``."""
 
 from __future__ import annotations
 
@@ -66,12 +28,9 @@ pytestmark = [pytest.mark.service, service_gate]
 
 
 def _graph_yaml() -> str:
-    """A scripted ``default-delivery`` graph — build -> review -> deliver.
-
-    Named ``default-delivery`` so the hub's lazy ``ensure_default`` (POST /chunks) reuses it
-    by name. The prompts are inert here: the mock runner does not execute them, it
-    just submits the judgement choice over the wire, so the hub applies the transition.
-    """
+    """A scripted ``default-delivery`` graph — build -> review -> deliver — named so the
+    hub's lazy ``ensure_default`` reuses it; prompts are inert, the mock runner just
+    submits the judgement choice over the wire."""
     import yaml
 
     graph = {
@@ -199,10 +158,8 @@ def test_sse_stream_serves_the_eventsource_contract(tmp_path: Path) -> None:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         _ingest(forge, hub, "an event")  # a chunk-changed event enters the broker's buffer
 
-        # GET /api/events/stream is the SSE surface an EventSource subscribes to:
-        # a valid text/event-stream opening with the reserved comment. Read only the first
-        # chunk (the reserved comment) rather than draining to EOF — an SSE stream may stay
-        # open, and the opening bytes are the contract an EventSource connects on.
+        # Read only the first chunk (the reserved comment) rather than draining to EOF —
+        # an SSE stream may stay open.
         with hub.stream("GET", "/api/events/stream") as resp:
             assert resp.status_code == 200
             assert resp.headers["content-type"].startswith("text/event-stream")
@@ -255,14 +212,8 @@ def _migration_graphs_yaml() -> tuple[str, str]:
 
 def test_a_fresh_migration_publishes_queue_changed_to_a_live_subscriber(tmp_path: Path) -> None:
     """A fresh cross-graph migration reaches a **live** SSE subscriber with ``queue-changed``
-    (issue #107), and its replay does not.
-
-    ``tests/test_migration_apply.py`` fences the same behaviour at the component tier, but
-    against the broker's *replay tail* — which proves the event was recorded, not delivered.
-    #107's claim is immediacy: a subscriber should learn of the re-queued chunk without
-    waiting for a poll tick. Only a real subscriber on a real socket can observe the fan-out
-    leg, so this is the row that actually closes the issue's premise.
-    """
+    (issue #107), and its replay does not — only a real subscriber on a real socket proves
+    the fan-out leg, unlike the component tier's replay-tail check."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     source_yaml, target_yaml = _migration_graphs_yaml()
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
@@ -275,9 +226,7 @@ def test_a_fresh_migration_publishes_queue_changed_to_a_live_subscriber(tmp_path
             assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
 
             # Arm the duplicate-delivery lever: one drive submits the byte-identical
-            # completion twice, so the fresh apply and its lost-ack replay both land inside
-            # a single live window. Exactly one queue-changed must come out — the fresh
-            # apply re-queues, the replay re-pins nothing and must stay silent.
+            # completion twice; exactly one queue-changed must come out.
             assert runner.post("/_levers/replay", json={"chunk_id": chunk_id}).status_code == 200
 
             # Subscribe before the act, so what arrives after is fan-out and not replay.
@@ -296,17 +245,9 @@ def test_a_fresh_migration_publishes_queue_changed_to_a_live_subscriber(tmp_path
 
 
 def test_chunk_pause_field_reflects_the_operator_chunk_brake(tmp_path: Path) -> None:
-    """The ``pause`` wire field off a live ``GET /chunks/{id}`` response (issue #46).
-
-    Nothing type-checks a wire field name off a live response (``bzh:sweep-release-only-
-    tiers``) — this is that mandatory surface, distinct from the runner-level brake above:
-    a chunk pause keeps the claim (the route stays), unlike the runner's own brake.
-
-    ``ChunkDetail.pause`` is the **only** shape the fact travels in (issue #42) — the
-    runner reads it. The summary deliberately carries no pause field — the card is a
-    passive status view — and this asserts that narrowing, since a silently re-added
-    field would be exactly as untype-checked as a removed one.
-    """
+    """The ``pause`` wire field off a live ``GET /chunks/{id}`` response (issue #46),
+    present only on the detail shape, never the summary card (issue #42) —
+    ``bzh:sweep-release-only-tiers``."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
@@ -352,10 +293,8 @@ def test_runner_registers_and_reads_its_pause_brake(tmp_path: Path) -> None:
         assert view["locally_paused"] is False
 
 
-# --------------------------------------------------------------------------- #
-# Route-token authorization over the wire (issue #84b) — the mock-runner
-# stale_route_token/omit_route_token levers driving the real hub's enforce check.
-# --------------------------------------------------------------------------- #
+# --- Route-token authorization over the wire (issue #84b) ---
+# The mock-runner's stale/omit levers driving the real hub's enforce check.
 
 
 def test_route_token_present_by_default_is_accepted_under_enforce(tmp_path: Path) -> None:
@@ -419,11 +358,8 @@ def test_route_token_omitted_is_rejected_under_enforce_over_the_wire(tmp_path: P
             assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] == before
 
 
-# --------------------------------------------------------------------------- #
-# Produces-artifact authorization over the wire (issue #113 phase 5) — the real
-# hub's `produces_mode` backstop, driven by the mock-runner /_drive/complete
-# `artifacts` field. The produces analogue of the route-token block above.
-# --------------------------------------------------------------------------- #
+# --- Produces-artifact authorization over the wire (issue #113 phase 5) ---
+# The real hub's `produces_mode` backstop, driven by mock-runner `/_drive/complete`.
 
 
 def _produces_graph_yaml() -> str:
@@ -469,9 +405,8 @@ def _produces_graph_yaml() -> str:
 
 _ATTACHED_NOTES = [{"name": "notes", "kind": "asset", "content": "the real thing", "attached": True}]
 _FALLBACK_NOTES = [{"name": "notes", "kind": "asset", "content": "assessment fallback", "attached": False}]
-#: A ``produces:`` name covered by a pushed git commit rather than an attach. Note
-#: ``attached`` is absent (it defaults False) — that is precisely the shape that made this
-#: the regression class below: a legitimate commit-covered name looks "unattached".
+#: A ``produces:`` name covered by a pushed git commit rather than an attach — note
+#: ``attached`` is absent (defaults False), the shape the regression class below covers.
 _GIT_COMMIT_NOTES = [
     {"name": "notes", "kind": "git_commit", "repo": "toy-api", "branch_name": "bz/notes", "commit_hash": "cafe1234"}
 ]
@@ -547,11 +482,8 @@ def test_explicit_attachment_is_accepted_under_enforce_over_the_wire(tmp_path: P
 
 
 def test_git_commit_covered_produces_name_is_accepted_under_enforce_over_the_wire(tmp_path: Path) -> None:
-    """Under ``enforce`` a ``produces:`` name covered by a **pushed git commit** — carrying
-    ``attached=False``, since nothing was attached — passes the backstop and advances
-    (regression guard, issue #113). The unit-tier `test_produces_coverage_agreement.py`
-    pins the two predicates together; this proves the accept end to end over the real wire.
-    """
+    """Under ``enforce`` a ``produces:`` name covered by a pushed git commit (``attached=
+    False``) still passes the backstop and advances (regression guard, issue #113)."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
         _forge(bin_dir, origins, forge_port) as forge,
@@ -615,9 +547,8 @@ def _git_commit_kind_graph_yaml() -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-#: A git-commit artifact named after the repo it came from (``toy-api``) — never the
-#: literal produces name (``commit``) — the shape a real pushed commit actually arrives
-#: in. Proves the kind-match, not a coincidental name match.
+#: Named after the repo (``toy-api``), never the literal produces name — proves the
+#: kind-match, not a coincidental name match.
 _GIT_COMMIT_REPO_NAMED = [
     {"name": "toy-api", "kind": "git_commit", "repo": "toy-api", "branch_name": "bz/build", "commit_hash": "cafe1234"}
 ]
@@ -676,12 +607,8 @@ def test_git_commit_kind_expectation_with_zero_commits_is_rejected_under_enforce
             assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] == before
 
 
-# --------------------------------------------------------------------------- #
-# Checks-gate authorization (issue #114) — the hub's `requires_checks` backstop,
-# driven by the mock-runner /_drive/complete `check_results` field. The checks
-# analogue of the produces block above; no mode flag — gating applies iff a choice
-# declares `requires_checks`.
-# --------------------------------------------------------------------------- #
+# --- Checks-gate authorization (issue #114) ---
+# The hub's `requires_checks` backstop; no mode flag — gating applies iff declared.
 
 
 def _checks_gated_graph_yaml() -> str:

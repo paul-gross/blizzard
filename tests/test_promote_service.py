@@ -1,12 +1,8 @@
 """PromoteService (unit tier) — promote-and-tail-stamp, facts only (issue #137).
 
-A fake stands in for the store — only ``load_facts``/``list_ready``/``queue_positions``/
-``promoted_ats``/``record_promote``/``record_queue_position`` are meaningfully
-implemented; every other seam is unreachable from :meth:`PromoteService.promote` and
-raises loudly if a regression starts calling it (``bzh:domain-core`` — no store, no
-tokens). Copies :mod:`tests.test_detach_service`'s fake-repo pattern exactly, including
-its ``__getattr__`` guard and the documented ``cast`` at the wide-Protocol call site
-(``bzh:repository-split``).
+A fake stands in for the store — only the methods :meth:`PromoteService.promote` calls
+are meaningfully implemented; every other seam raises loudly if called
+(``bzh:domain-core`` — no store, no tokens).
 """
 
 from __future__ import annotations
@@ -116,8 +112,7 @@ def test_promote_uses_the_effective_position_fallback_for_ready_chunks_with_no_e
 
 def test_promote_is_a_complete_no_op_on_an_already_promoted_chunk() -> None:
     # No new chunk.promoted fact and no re-stamped queue position: a repeated promote
-    # (a double board click, a CLI retry) must not shove an already-ready chunk to the
-    # back of the queue.
+    # must not shove an already-ready chunk to the back of the queue.
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=ChunkFacts(minted=True, promoted=True))
     service = PromoteService(chunks=_as_write_repo(repo), clock=clock)

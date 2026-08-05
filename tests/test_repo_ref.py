@@ -1,11 +1,7 @@
 """Deriving a forge coordinate from a repo's own origin URL — unit tier.
 
-A repo's forge coordinate must be derived by parsing its own origin URL, not reconstructed
-from a bare worktree name plus a single workspace-wide ``BZ_FORGE_OWNER`` — the latter breaks
-the moment a chunk touches repos under two owners. These pin both halves: what a URL yields
-when it encodes an owner, and that a URL encoding none yields ``None`` rather than a guess,
-so the configured fallback still governs.
-"""
+Pins both halves: what a URL yields when it encodes an owner, and that a URL encoding
+none yields ``None`` rather than a guess, so the configured fallback still governs."""
 
 from __future__ import annotations
 

@@ -52,10 +52,8 @@ class AuthStateRepository:
             ) from exc
 
     def consume(self, state: str) -> AuthStateEntry | None:
-        # DELETE ... RETURNING, not SELECT-then-DELETE: the delete is atomic with the
-        # read, so only the caller that actually removed the row gets the entry back
-        # (pinned by tests/test_auth_repositories.py::
-        # test_auth_state_consume_is_single_use_under_concurrent_callers).
+        # DELETE ... RETURNING keeps the delete atomic with the read (pinned by
+        # tests/test_auth_repositories.py::test_auth_state_consume_is_single_use_under_concurrent_callers).
         with self._engine.begin() as conn:
             row = conn.execute(
                 delete(s.auth_state).where(s.auth_state.c.state == state).returning(*s.auth_state.c)

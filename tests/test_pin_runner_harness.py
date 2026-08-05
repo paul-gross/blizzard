@@ -14,12 +14,8 @@ from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapt
 
 @pytest.mark.unit
 def test_an_unmapped_tier_alias_never_substitutes_downward(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Tier aliases are unordered roles, not an ordered scale (issue #144).
-
-    With ``blizzard:frontier`` unmapped, a scale would substitute the next tier down
-    (``blizzard:advanced`` -> ``opus``). Nothing does: the entry is unresolvable, so the
-    author's own preference list is the only fallback — here, the adapter default.
-    """
+    """Tier aliases are unordered roles, not an ordered scale (issue #144): an unmapped
+    entry is unresolvable, not substituted with the next tier down."""
     monkeypatch.setattr(adapter_module, "_BUILTIN_TIERS", {"blizzard:advanced": "opus", "blizzard:basic": "sonnet"})
     adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5")
 

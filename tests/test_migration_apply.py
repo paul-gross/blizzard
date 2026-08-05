@@ -1,11 +1,8 @@
 """Cross-graph migration through the apply path + edge caller (issue #90, Phase 4).
 
-Component tier over the real HTTP surface: a completion whose choice targets another
-graph records a migration (re-pin + route release + MIGRATED), a subsequent claim builds
-the **target** graph's landing-node envelope, an unresolvable target escalates to
-``needs_human`` (never a crash), and a replay is idempotent. The edge caller
-(``api/fleet.py``) resolves the ``graph:<name>`` target and passes it into a
-repo-free ``ApplyService`` (MUST-FIX 2).
+A completion whose choice targets another graph records a migration (re-pin + route
+release + MIGRATED); a subsequent claim builds the target graph's landing-node envelope;
+an unresolvable target escalates to ``needs_human``; and a replay is idempotent.
 """
 
 from __future__ import annotations
@@ -22,9 +19,8 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "9"}
 
-# A source graph whose ``build`` node can migrate to another graph. Named
-# ``default-delivery`` so ingest pins it. ``pass`` targets ``graph:triage`` (a name-match
-# landing on triage's own ``build`` node); ``fail`` retries.
+# A source graph whose ``build`` node can migrate to another graph, named
+# ``default-delivery`` so ingest pins it; ``pass`` targets ``graph:triage``, ``fail`` retries.
 _SRC_YAML = """
 name: default-delivery
 entry: build
@@ -62,10 +58,8 @@ nodes:
           to: build
 """
 
-# A target graph whose landing node (name-matching the source's `build`) is
-# hub-executed (issue #111): `success` routes onward to a runner node (never straight
-# to `done`) so the test observes the inline run's own route-retention, not the
-# terminal chunk's own route release.
+# A target graph whose landing node (name-matching the source's `build`) is hub-executed
+# (issue #111): `success` routes onward to a runner node, not straight to `done`.
 _HUB_TARGET_YAML = """
 name: triage
 entry: build
@@ -96,10 +90,8 @@ nodes:
           to: build
 """
 
-# A gate-source graph whose **human gate's** resolved choice is itself the cross-graph
-# migration (issue #90 M1). build (worker, pass) -> approve-gate (human, approve migrates
-# to graph:triage). The resolving migration must close the gate's decision — a migration
-# writes no transitions row, so an un-threaded decision would stay live forever.
+# A gate-source graph whose human gate's resolved choice is itself the cross-graph
+# migration (issue #90 M1): the resolving migration must close the gate's decision.
 _GATE_SRC_YAML = """
 name: default-delivery
 entry: build
@@ -129,11 +121,8 @@ nodes:
           to: build
 """
 
-# Like ``_GATE_SRC_YAML`` but the gate's ``approve`` choice targets ``graph:ghost`` — a
-# graph never minted, so the target resolves to ``None`` and the resolving migration takes
-# the escalation branch. The gate's decision must still close (issue #110): that branch
-# writes neither a transition nor a migration row, so an un-threaded decision would stay
-# live forever, wedging REAP and driving a per-tick runner re-submit.
+# Like ``_GATE_SRC_YAML`` but ``approve`` targets ``graph:ghost``, an unminted graph, so
+# the migration escalates — the gate's decision must still close (issue #110).
 _GATE_SRC_GHOST_YAML = _GATE_SRC_YAML.replace("to: graph:triage", "to: graph:ghost")
 
 
@@ -255,10 +244,8 @@ def test_a_cross_graph_choice_migrating_onto_a_hub_node_runs_it_inline_and_retai
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["graph_id"] == triage_id  # still re-pinned to the target graph
-    # The route was RETAINED, not released: the inline hub run's `success` choice routed
-    # onward to a non-terminal runner node (`review`), so the chunk derives `running` (a
-    # live route) rather than `ready` (re-queued, claimable) the way a runner-landing
-    # migration's target does.
+    # The route was RETAINED, not released: `success` routed onward to a non-terminal
+    # runner node, so the chunk derives `running`, not `ready`.
     assert detail["status"] == "running"
     assert detail["current_node_name"] == "review"
     # The triage node's reasoning asset still carried across the migration.
@@ -267,8 +254,7 @@ def test_a_cross_graph_choice_migrating_onto_a_hub_node_runs_it_inline_and_retai
     assert any(a["name"].startswith("hub-log.") for a in detail["artifacts"])
 
     # The observable consequence of a retained route: a fresh claim on this same chunk
-    # loses the race — 409, not a hand-out of the landed node the way the runner-landing
-    # test's re-claim succeeds.
+    # loses the race — 409, not a hand-out of the landed node.
     conflict = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r2", "workspace_id": "w1", "environment_ids": ["e"]},
@@ -291,18 +277,15 @@ def test_an_unresolvable_cross_graph_target_escalates_to_needs_human(tmp_path: P
     # than crashing or silently dropping the completion.
     assert detail["status"] == "needs_human"
     # The hub has no runner runtime to compose a wrapped command from, so it stays
-    # empty; the raw field carries operator guidance prose, not a runnable command —
-    # see `blizzard-context:/domain/humans.md` §Escalation.
+    # empty; see `blizzard-context:/domain/humans.md` §Escalation.
     escalation = detail["escalation"]
     assert escalation["wrapped_takeover_command"] == ""
     assert "mint a graph named `ghost`" in escalation["takeover_command"]
 
 
 def test_a_retired_cross_graph_target_escalates_to_needs_human_exactly_like_an_absent_one(tmp_path: Path) -> None:
-    """A migration edge's target resolves by name via ``get_enabled_by_name`` (issue
-    #101) — retiring `triage`'s only minted version leaves the name with **zero**
-    non-retired candidates, so it resolves to ``None`` exactly like an unminted name
-    (the prior test), and the edge caller's escalation path handles both identically."""
+    """Retiring `triage`'s only minted version leaves the name with zero non-retired
+    candidates, resolving to ``None`` exactly like an unminted name (issue #101)."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True)
     target_graph_id = hub.client.get("/api/graphs").json()
@@ -335,10 +318,8 @@ def test_a_replayed_migration_completion_is_idempotent(tmp_path: Path) -> None:
 
 def test_a_replayed_hub_landing_migration_completion_returns_hub_node_taken(tmp_path: Path) -> None:
     """A hub-landing migration's lost-ack replay must return ``hub_node_taken``, not
-    ``migrated`` (issue #111) — the route was retained, so releasing it here would strand
-    the landed hub node with nothing to drive it. See
-    ``test_kill9_at_migrate_crash_point_landing_on_a_hub_node`` for the crash-sweep fence
-    this guards."""
+    ``migrated`` (issue #111) — releasing the retained route here would strand the
+    landed hub node with nothing to drive it."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True, target_yaml=_HUB_TARGET_YAML)
 
@@ -453,11 +434,9 @@ def test_a_human_gate_resolved_migration_closes_its_decision(tmp_path: Path) -> 
 
 
 def test_a_human_gate_resolved_migration_to_an_unresolvable_target_closes_its_decision(tmp_path: Path) -> None:
-    """A human gate whose resolved choice migrates cross-graph to an **unresolvable**
-    target (issue #110) must still close its decision — this branch records an
-    escalation and returns ``PARKED_AT_GATE``, writing neither a ``transitions`` row nor
-    a ``chunk_migrations`` fact, so without threading the ``decision_id`` onto the
-    escalation the resolved decision would stay ``transitioned=False`` forever."""
+    """A human gate whose resolved choice migrates to an unresolvable target (issue
+    #110) must still close its decision — this branch writes neither a transition nor a
+    migration fact, so the decision_id must thread onto the escalation instead."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GATE_SRC_GHOST_YAML}).status_code == 201
     # `graph:ghost` is never minted — the edge caller resolves the target to None.
@@ -505,12 +484,9 @@ def test_a_human_gate_resolved_migration_to_an_unresolvable_target_closes_its_de
 
 
 def test_a_replayed_migration_completion_is_idempotent_under_route_token_enforce(tmp_path: Path) -> None:
-    """Bug #108: ``record_migration`` releases the route as part of landing, so a
-    lost-ack replay of an accepted migration presents a token whose route the migration
-    itself released. The ``accepted_migration`` natural-key probe must short-circuit to
-    the replay response *ahead of* the route-token check, even under
-    ``route_token_mode=enforce`` — the same lost-ack replay the warn-mode idempotency
-    test above proves, but now with token enforcement in play."""
+    """Bug #108: a lost-ack replay of an accepted migration presents a token whose route
+    the migration itself already released, so the ``accepted_migration`` natural-key
+    probe must short-circuit ahead of the route-token check, even under enforce mode."""
     hub = build_hub(tmp_path, route_token_mode=ROUTE_TOKEN_ENFORCE)
     chunk_id, node_id, token = _setup_under_enforce(hub, target_name="triage", mint_target=True)
 
@@ -518,9 +494,8 @@ def test_a_replayed_migration_completion_is_idempotent_under_route_token_enforce
     assert first.status_code == 200, first.text
     assert first.json()["outcome"] == "migrated"
 
-    # A re-flushed completion (lost ack) carries the IDENTICAL token — the migration's own
-    # completion already released the route, but the replay's natural key matches the
-    # accepted migration, so it short-circuits above the token check rather than failing.
+    # A re-flushed completion carries the IDENTICAL token — the replay's natural key
+    # matches the accepted migration, so it short-circuits above the token check.
     second = _migrate_with_token(hub, chunk_id, node_id, route_token=token)
     assert second.status_code == 200, second.text
     assert second.json()["outcome"] == "migrated"
@@ -531,36 +506,25 @@ def test_a_replayed_migration_completion_is_idempotent_under_route_token_enforce
 
 
 def test_a_non_matching_submission_over_a_released_migration_route_is_still_rejected(tmp_path: Path) -> None:
-    """Bug #108's carve-out is scoped to the ACCEPTED migration's own natural key only —
-    a fresh, non-matching submission (different epoch here) presented with the same
-    now-released token is still rejected by the route-token check, exactly as a fresh
-    zombie completion would be. Both cases assert the ``"live route"`` detail from
-    ``check_route_token`` specifically — not just ``outcome == "failure"`` — so the test
-    pins the route-token check as the rejecting mechanism rather than some other
-    downstream failure that would also reject a non-matching submission."""
+    """Bug #108's carve-out is scoped to the accepted migration's own natural key only —
+    a non-matching submission over the same released token is still rejected by the
+    route-token check, pinned via the ``"live route"`` detail, not just ``"failure"``."""
     hub = build_hub(tmp_path, route_token_mode=ROUTE_TOKEN_ENFORCE)
     chunk_id, node_id, token = _setup_under_enforce(hub, target_name="triage", mint_target=True)
 
     landed = _migrate_with_token(hub, chunk_id, node_id, route_token=token)
     assert landed.json()["outcome"] == "migrated"
 
-    # Same chunk_id/from_node_id, but a different epoch — no longer matches the accepted
-    # migration's (chunk_id, from_node_id, epoch) natural key, so the probe doesn't
-    # short-circuit; the released token is rejected by the route-token check first. Assert
-    # the "live route" detail specifically: an epoch=2 submission would independently fail
-    # the epoch fence downstream too, so "failure" alone wouldn't pin the route-token check
-    # as the actual rejecting mechanism.
+    # A different epoch no longer matches the accepted migration's natural key, so the
+    # released token is rejected by the route-token check first, pinned via "live route".
     mismatched = _migrate_with_token(hub, chunk_id, node_id, epoch=2, route_token=token)
 
     assert mismatched.status_code == 200, mismatched.text
     assert mismatched.json()["outcome"] == "failure"
     assert "live route" in mismatched.json()["detail"]
 
-    # Same-epoch case: epoch=1 matches the accepted migration's epoch, so the epoch fence
-    # cannot be why this is rejected — only the different from_node_id keeps it off the
-    # accepted migration's natural key. The route-token check runs ahead of any graph-node
-    # lookup, so the released token is still rejected first (not a "no node ..." lookup
-    # failure), proving the token check — not the epoch fence — is doing the rejecting.
+    # Same-epoch case: only the different from_node_id keeps it off the natural key, so
+    # the route-token check still rejects it first, ahead of any graph-node lookup.
     non_matching_node = _migrate_with_token(hub, chunk_id, "nd_does_not_match", epoch=1, route_token=token)
 
     assert non_matching_node.status_code == 200, non_matching_node.text

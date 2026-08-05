@@ -1,10 +1,8 @@
-"""``chunk-changed`` frame enrichment across the emit sites (component tier, issue #212).
+"""``chunk-changed`` frame enrichment across the emit sites (issue #212).
 
-Every mutating chunk route now publishes through the shared
-:mod:`blizzard.hub.api.chunk_events` helper — one representative site per family named
-in the plan's Phase 2 acceptance criteria, asserted on the JSON payload the broker
-actually recorded (``bzh:facts-not-status`` — the frame is a derivation, so these drive
-the real routes rather than calling the broker directly).
+Every mutating chunk route publishes through the shared
+:mod:`blizzard.hub.api.chunk_events` helper; asserted on the JSON payload the broker
+actually recorded, driving the real routes rather than calling the broker directly.
 """
 
 from __future__ import annotations
@@ -276,9 +274,8 @@ def test_promote_carries_chunk_promoted_key_and_omits_it_on_idempotent_replay(tm
     # `key` (issue #213) names the freshly-written `chunk_promoted` row.
     assert frames[-1]["key"].startswith("chunk_promoted:")
 
-    # A double-promote is a harmless no-op (already-ready) — the frame still fires, but
-    # nothing fresh was recorded, so `key` is genuinely absent rather than pointing at
-    # the earlier row.
+    # A double-promote is a harmless no-op — the frame still fires, but nothing fresh
+    # was recorded, so `key` is absent rather than pointing at the earlier row.
     before2 = _latest_event_id(hub)
     second = hub.client.post(f"/api/chunks/{chunk_id}/promote")
     assert second.status_code == 202, second.text

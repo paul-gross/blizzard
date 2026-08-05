@@ -1,12 +1,9 @@
 """The reconciliation step functions — the loop logic (unit tier).
 
 Each step is driven directly against a real tmp store with fakes at the seams
-(``bzh:steppable-loop``): FILL claims and spawns (buffering ``lease.minted``), ADVANCE
-judges an exited worker and **buffers** its completion, PULL's flusher delivers the
-buffer and drives the apply-response (store-and-forward), a hub-node hold polls
-to release, REAP expires an orphan and a stalled-but-alive worker, and the retry budget
-requeues then escalates. The full happy path is exercised as a sequence of ticks.
-"""
+(``bzh:steppable-loop``): FILL claims and spawns, ADVANCE judges and buffers a
+completion, PULL flushes and applies, a hub-node hold polls to release, REAP expires
+an orphan or stalled worker, and the retry budget requeues then escalates."""
 
 from __future__ import annotations
 
@@ -131,9 +128,7 @@ def _chunk_with_cost(  # type: ignore[no-untyped-def]
     )
 
 
-# --------------------------------------------------------------------------- #
 # FILL
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -267,10 +262,8 @@ def test_fill_stashes_the_claims_route_token(tmp_path):  # type: ignore[no-untyp
 @pytest.mark.unit
 def test_fill_mints_a_lease_capability_token_and_carries_its_plaintext_to_spawn(tmp_path):  # type: ignore[no-untyped-def]
     """A per-lease capability token (issue #113, Phase 1) is minted alongside the
-    lease: its sha256 hash lands durably in the store, and its plaintext rides only
-    the spawn preamble — never the store — for ``BLIZZARD_LEASE_TOKEN`` to carry
-    into the worker env. Pure scaffold this phase: nothing yet authorizes against
-    it, so this only pins the mint + carry, not any check."""
+    lease: its sha256 hash lands durably, and its plaintext rides only the spawn
+    preamble — never the store — for ``BLIZZARD_LEASE_TOKEN`` to carry into the env."""
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
@@ -353,10 +346,9 @@ def test_fill_conflict_releases_and_does_not_bind(tmp_path):  # type: ignore[no-
 
 @pytest.mark.unit
 def test_fill_paused_denial_releases_and_stops_filling(tmp_path):  # type: ignore[no-untyped-def]
-    """A 403 (issue #44) is a distinct outcome from a 409 conflict: the claim was refused
-    outright rather than lost to another runner, so FILL releases the binding and stops
-    trying further slots this tick rather than keep racing claims that will be refused the
-    same way."""
+    """A 403 (issue #44) is distinct from a 409 conflict: the claim was refused outright,
+    so FILL releases the binding and stops trying further slots this tick rather than
+    keep racing claims that will be refused the same way."""
     from blizzard.runner.loop.hub import RouteClaimOutcome
     from blizzard.wire.route import RouteClaimPausedDenial
 
@@ -380,9 +372,8 @@ def test_fill_paused_denial_releases_and_stops_filling(tmp_path):  # type: ignor
 @pytest.mark.unit
 def test_fill_terminal_denial_releases_and_keeps_filling(tmp_path):  # type: ignore[no-untyped-def]
     """The must-fix-1 claim guard (issue #118): the chunk was stopped between this
-    runner's peek and its claim POST. Unlike the paused denial above, this is not a
-    fleet-wide brake — only this chunk is why — so FILL releases the binding and
-    keeps trying its remaining slots this tick, same as a race-loss conflict."""
+    runner's peek and its claim POST — not a fleet-wide brake, so FILL releases the
+    binding and keeps trying its remaining slots, same as a race-loss conflict."""
     from blizzard.runner.loop.hub import RouteClaimOutcome
     from blizzard.wire.route import RouteClaimTerminalDenial
 
@@ -460,11 +451,9 @@ def test_fill_respects_max_agents(tmp_path):  # type: ignore[no-untyped-def]
 
 @pytest.mark.unit
 def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path):  # type: ignore[no-untyped-def]
-    """blizzard#202: FILL's crash reconciler (``_reconcile_interrupted_claims``) must not
-    fall through silently on a held binding whose chunk the hub reports with no live route
-    in a status that is neither ``ready`` nor ``running`` (e.g. detached and stopped
-    hub-side) — an unmatched shape leaks the binding and its environment slot indefinitely.
-    """
+    """blizzard#202: FILL's crash reconciler must not fall through silently on a held
+    binding whose chunk the hub reports with no live route in a status that is neither
+    ``ready`` nor ``running`` — an unmatched shape leaks the binding indefinitely."""
     store = _store(tmp_path)
     # A binding survives with no lease at all — the chunk's last lease already closed
     # (e.g. `transitioned`), the observed-in-production shape.
@@ -493,9 +482,7 @@ def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path
     assert store.live_tenure_chunk_ids() == []
 
 
-# --------------------------------------------------------------------------- #
 # ADVANCE — exited worker (buffer) + PULL flush (deliver)
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -547,13 +534,9 @@ def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path):  # typ
 
 @pytest.mark.unit
 def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path):  # type: ignore[no-untyped-def]
-    """A declared git commit whose read-only ``verify`` returns ``False`` (an absent or
-    moved ref — issue #143, Phase 4) is treated as *not covered*: the completion carries
-    **no** ``git_commit`` artifact, which drives the Phase-2 kind-coverage nudge.
-
-    It is also *reported*: non-coverage alone is not enough, because a coverage check that
-    cannot see the ``git_commit`` spec leaves nothing to notice and a chunk reaches `done`
-    having delivered nothing."""
+    """A declared git commit whose read-only ``verify`` returns ``False`` is treated as
+    *not covered*: the completion carries **no** ``git_commit`` artifact (Phase-2
+    nudge), and is also reported, since silent non-coverage would let a chunk land done."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_git_commit_declaration(
@@ -577,9 +560,8 @@ def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path)
 
     advance(ctx)
 
-    # verify WAS called on the declaration — against the origin the env's manifest names,
-    # with no worktree path in sight — but the False verdict dropped it, so the buffered
-    # completion names no git-commit artifact.
+    # verify WAS called on the declaration, but the False verdict dropped it, so the
+    # buffered completion names no git-commit artifact.
     assert wt.verified_calls == [("file:///origins/toy-api.git", "e1", "abc123")]
 
     pull(ctx)
@@ -591,16 +573,9 @@ def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path)
 
 @pytest.mark.unit
 def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path):  # type: ignore[no-untyped-def]
-    """ADVANCE drives only the read-only ``verify(forge, branch, commit)`` against the
-    worker's own DECLARED branch, read from the durable declaration store — never anything
-    derived from the worktree's ambient HEAD, which under a detached HEAD infers the
-    literal branch name ``"HEAD"`` and wedges the tick loop on a push git refuses
-    (issue #143). No real git repo is modelled, because no branch name is ever read off one.
-
-    Pinned structurally as well: neither :class:`IWorktreeGit` nor
-    :class:`FakeWorktreeGit` carries a ``push``, ``find_produced_artifacts``, or
-    ``_current_branch`` method, so a re-introduced push-driven inference raises
-    ``AttributeError`` rather than silently passing."""
+    """ADVANCE drives ``verify(forge, branch, commit)`` only against the worker's own
+    DECLARED branch, never the worktree's ambient HEAD (issue #143). Pinned structurally
+    too: no fake here carries a ``push``/``_current_branch`` method to infer from."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_git_commit_declaration(
@@ -686,25 +661,15 @@ def test_flush_next_spawns_next_node_in_place(tmp_path):  # type: ignore[no-unty
     assert len(review_mints) == 1
 
 
-# --------------------------------------------------------------------------- #
-# NODE-ENTRY RESUME (issue #115) — session modes across a build -> review ->
-# build cycle. Component-tier: a real store, doubles only at the hub/harness/
-# provider/probe seams, exercising `_resolve_resume_from` -> `ctx.harness.spawn`
-# -> `record_spawn` end to end, so each phase's assertion reads back the
-# *previous* phase's actually-recorded session rather than a scripted double.
-# --------------------------------------------------------------------------- #
+# NODE-ENTRY RESUME (issue #115): session modes across a build -> review -> build cycle
+# — component tier, real store, doubles only at the hub/harness/provider/probe seams.
 
 
 @pytest.mark.component
 def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session(tmp_path):  # type: ignore[no-untyped-def]
-    """`build` carries `resume:build` (targeted), `review` is `fresh`.
-
-    Covers three of the five session-mode assertions: (e) first arrival at a node
-    with no prior session for the chunk falls back to fresh; (c) a `fresh` node
-    always gets a brand-new sid, regardless of session history; (b) build's
-    re-entry resumes its OWN prior build session — not the reviewer's just-spawned,
-    more-recent one — which is the whole reason the targeted form exists (plan Q4:
-    plain `resume` would inherit the wrong session here)."""
+    """`build` carries `resume:build` (targeted), `review` is `fresh`. Covers three
+    session-mode assertions: fresh-node-always-new-sid, first-arrival-falls-back-fresh,
+    and build's re-entry resuming its OWN prior session, not the reviewer's (plan Q4)."""
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -714,9 +679,8 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
     )
     review_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES, session=SessionMode.FRESH)
 
-    # --- Phase 1 (FILL): first arrival at `build` — no session exists for this chunk
-    # at all yet, so the targeted `resume:build` lookup comes back empty and the spawn
-    # falls back to fresh (assertion e).
+    # Phase 1 (FILL): first arrival at `build` — no session exists yet, so the targeted
+    # `resume:build` lookup comes back empty and the spawn falls back to fresh.
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     harness1 = FakeHarness(
@@ -756,9 +720,8 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
         review_lease is not None and review_lease.node_name == "review" and review_lease.session_id == "sess-review-1"
     )
 
-    # --- Phase 3 (ADVANCE + PULL): review fails; apply-response NEXT routes back into
-    # build's targeted `resume:build` — it must resume BUILD's own prior session
-    # ("sess-build-1"), not the reviewer's more-recent one ("sess-review-1").
+    # Phase 3 (ADVANCE + PULL): review fails; apply-response routes back into build's
+    # targeted `resume:build` — must resume BUILD's own session, not the reviewer's.
     hub.envelopes["ch_1"] = review_env  # `_advance_exited_worker`'s own idempotent re-read
     harness3 = FakeHarness(
         handle=WorkerHandle(session_id="sess-should-not-be-used", pid=300, process_start_time="start-300"),
@@ -784,11 +747,9 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
 
 @pytest.mark.component
 def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_path):  # type: ignore[no-untyped-def]
-    """The contrast case to the targeted form above (assertion a): a node entered
-    with plain `session: resume` (no target) resumes the chunk's most-recent
-    session-bearing lease overall — here, after a `fresh` review, that is the
-    reviewer's session, not build's own prior one. This is exactly the "wrong
-    inheritance" plan Q4's `resume:build` exists to avoid."""
+    """The contrast case: a node entered with plain `session: resume` (no target)
+    resumes the chunk's most-recent session-bearing lease overall — here the reviewer's,
+    not build's own prior one, the "wrong inheritance" plan Q4's `resume:build` avoids."""
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -846,9 +807,8 @@ def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_p
 @pytest.mark.component
 def test_within_node_retry_stays_fresh_even_when_the_node_is_resume(tmp_path):  # type: ignore[no-untyped-def]
     """Q3: `session:` governs node ENTRY only. A within-node retry after a
-    verdict-less exit re-mints fresh, never resolving a resume target — even when
-    the node's own mode is `resume` and a prior session exists for it to (wrongly)
-    find (assertion d)."""
+    verdict-less exit re-mints fresh, never resolving a resume target, even when the
+    node's own mode is `resume` and a prior session exists for it to (wrongly) find."""
     store = _store(tmp_path)
     _seed_running_lease(store, session="sess-a")
     hub = FakeHub()
@@ -867,14 +827,8 @@ def test_within_node_retry_stays_fresh_even_when_the_node_is_resume(tmp_path):  
     assert lease is not None and lease.epoch == 2 and lease.session_id == "sess-b"
 
 
-# --------------------------------------------------------------------------- #
-# RESUME-TIME PREAMBLE ELISION (issue #149) — what a resumed node-entry spawn is
-# actually handed. Component-tier for the same reason the block above is: these
-# prove the WIRING (store read -> renderer -> adapter prefix, across a real
-# resume cycle with a real store recording between spawns), which the renderer's
-# own unit tier cannot. Every assertion reads
-# `harness.spawns[n][1].prompt_prefix`, never the renderer directly.
-# --------------------------------------------------------------------------- #
+# RESUME-TIME PREAMBLE ELISION (issue #149): component tier, proving the WIRING (store
+# read -> renderer -> adapter prefix) the renderer's own unit tier cannot.
 
 
 def _preamble_config(*, workspace_prompt: str = "WORKSPACE-POLICY", runner_prompt: str = "BLIZZARD-FRAMING"):  # type: ignore[no-untyped-def]
@@ -966,12 +920,9 @@ def test_fresh_spawn_sends_all_three_layers_and_records_a_fingerprint(tmp_path):
 
 @pytest.mark.component
 def test_resume_with_unchanged_prose_elides_and_keeps_eliding(tmp_path):  # type: ignore[no-untyped-def]
-    """Scenario 2 (AC2, AC6). Two node re-entries on one session with nothing changed.
-
-    The **third** spawn is the load-bearing one: it is what distinguishes digesting the
-    resolved layer inputs from digesting the emitted output. Two spawns pass under either
-    reading, because a fingerprint recorded off the collapse banner only misfires on the
-    spawn *after* the first elision."""
+    """Scenario 2 (AC2, AC6): two node re-entries on one session with nothing changed.
+    The **third** spawn is load-bearing — a fingerprint recorded off the collapse
+    banner only misfires on the spawn *after* the first elision."""
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -1055,12 +1006,9 @@ def test_resume_after_a_runner_prompt_change_announces_and_re_sends_layer_one(tm
 
 @pytest.mark.component
 def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerprint(tmp_path):  # type: ignore[no-untyped-def]
-    """Scenario 5. A restart-resume re-records the SAME session id via `record_spawn` while
-    sending no `prompt_prefix` at all. Because the fingerprint write is its own store call
-    reachable only from `_spawn_attempt`, that path cannot touch it — so the next node-entry
-    spawn still elides. Had the write ridden `record_spawn`, this session's newest row would
-    carry a fingerprint no prose backs, and the spawn below would announce an update ahead
-    of prose that never changed."""
+    """Scenario 5: a restart-resume re-records the SAME session id via `record_spawn`
+    sending no `prompt_prefix`. The fingerprint write is reachable only from
+    `_spawn_attempt`, so that path can't touch it and the next entry still elides."""
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -1103,20 +1051,9 @@ def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerp
 
 @pytest.mark.component
 def test_an_announced_change_is_announced_once_and_then_elided(tmp_path):  # type: ignore[no-untyped-def]
-    """Scenario 6 — the fingerprint is re-recorded on a **resumed** spawn, not just a fresh one.
-
-    Three spawns with one workspace-prompt replace between the first and second. The third
-    is the discriminator: it must elide, because the second spawn recorded what it actually
-    sent. If `record_session_preamble` ran only on fresh spawns, the third would compare
-    against the stale *pre-replace* fingerprint and announce "your standing instructions
-    have been updated" ahead of prose unchanged since the previous turn — then so would the
-    fourth, and every remaining resumed node of the chunk.
-
-    That false alarm is precisely what this issue exists to prevent, and it is the mirror of
-    what `test_resume_with_a_whitespace_only_workspace_replace_announces_nothing` guards from
-    the other side. Scenario 2's third spawn discriminates the *digest source* but not the
-    *write frequency*; scenarios 3 and 4 change something but stop at two spawns — one short
-    of where a missing write shows."""
+    """Scenario 6 — the fingerprint is re-recorded on a **resumed** spawn, not just a
+    fresh one. Three spawns, one workspace-prompt replace between the first and second:
+    the third must elide, since the second spawn recorded what it actually sent."""
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -1201,11 +1138,9 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # ty
 
 @pytest.mark.unit
 def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path):  # type: ignore[no-untyped-def]
-    """A node whose `produces:` is `[review-findings]` (a bare string, D1's `kind=asset`
-    normalization) drives **no** git-commit declaration or verify at all: with nothing
-    declared for the lease, ``verify`` is never invoked and no ``GIT_COMMIT`` artifact is
-    produced, while the node's findings still ride the asset attach/fallback path — the
-    two paths stay fully independent per node (issue #143)."""
+    """A node whose `produces:` is `[review-findings]` drives **no** git-commit
+    declaration or verify at all — ``verify`` is never invoked and no ``GIT_COMMIT``
+    artifact is produced, while findings still ride the asset path (issue #143)."""
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -1362,9 +1297,7 @@ def test_advance_skips_running_worker(tmp_path):  # type: ignore[no-untyped-def]
     assert store.active_lease_for_chunk("ch_1") is not None
 
 
-# --------------------------------------------------------------------------- #
 # Store-and-forward across an outage
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -1400,9 +1333,7 @@ def test_completion_survives_hub_outage_and_applies_once(tmp_path):  # type: ign
     assert store.active_lease_for_chunk("ch_1") is None
 
 
-# --------------------------------------------------------------------------- #
 # ADVANCE — hub-node poll
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -1458,14 +1389,11 @@ def test_poll_hub_node_waits_while_delivering(tmp_path):  # type: ignore[no-unty
 @pytest.mark.unit
 def test_advance_held_chunk_spawns_into_post_merge_node(tmp_path):  # type: ignore[no-untyped-def]
     """#63: an authored ``merged -> <node>`` edge lands the chunk into a post-merge
-    runner node while the coordinator retains the route (no release). ADVANCE
-    discovers the fresh transition — no active lease, the hub reports ``running``,
-    not ``delivering`` — and spawns the current node into the already-held, warm
-    environment (the same :func:`_spawn_attempt` path ``NEXT`` uses)."""
+    runner node while the coordinator retains the route. ADVANCE discovers the fresh
+    transition and spawns into the already-held, warm environment."""
     store = _store(tmp_path)
-    # A chunk held at the (former) deliver hub node: its prior build lease (epoch 1) is
-    # closed, the binding retained. The coordinator then landed and advanced the chunk into
-    # ``verify`` under its own ``hub_epoch = 2`` — a HIGHER epoch than this runner has minted.
+    # A chunk held at the (former) deliver hub node: its prior build lease is closed, the
+    # binding retained; the coordinator advanced it into ``verify`` at a HIGHER hub_epoch.
     store.record_lease(
         NewLease(
             lease_id="lease_build",
@@ -1510,14 +1438,9 @@ def test_advance_held_chunk_spawns_into_post_merge_node(tmp_path):  # type: igno
 
 @pytest.mark.unit
 def test_advance_held_chunk_does_not_respawn_a_buffered_escalation(tmp_path):  # type: ignore[no-untyped-def]
-    """The epoch gate: a locally-escalated chunk whose fact is still buffered is NOT re-spawned.
-
-    When a node exhausts its retries the runner enqueues ``escalation.recorded`` to its outbound
-    buffer and closes the lease, but until that flushes the hub still derives ``running`` — at the
-    **same** epoch this runner last minted. ``_advance_held_chunk`` must NOT mistake that for a hub
-    advance and re-spawn the escalated node: firing on ``status == running`` alone loops forever
-    (spawn → verdict-less fail → escalate → hub still running → spawn …). Only a strictly-higher hub
-    epoch is a genuine advance, so here — hub epoch == the runner's minted epoch — nothing spawns."""
+    """The epoch gate: a locally-escalated chunk whose fact is still buffered is NOT
+    re-spawned. Until the buffered escalation flushes, the hub still derives ``running``
+    at the SAME epoch — only a strictly-higher hub epoch is a genuine advance."""
     store = _store(tmp_path)
     # The runner minted a build lease at epoch 2, it failed retries-exhausted, the lease is
     # closed and the escalation buffered (not asserted here). The binding is retained.
@@ -1579,9 +1502,7 @@ def test_advance_held_chunk_with_no_binding_and_no_active_lease_is_a_noop(tmp_pa
     assert store.held_environment_ids() == []
 
 
-# --------------------------------------------------------------------------- #
 # Failure, requeue, escalation
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -1751,10 +1672,7 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path):  # type: ignore[n
 def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path):  # type: ignore[no-untyped-def]
     """A lease escalated before it ever recorded a session (`session_id` still `None`)
     composes no takeover command at all — with nothing to resume there is no raw command
-    to build and so nothing for the wrapped verb (issue #251) to wrap, even though
-    `runner_dir` is configured and bindings exist. The converse case, wrapped empty
-    alongside a present raw command, is
-    `test_cost_cap_park_leaves_wrapped_empty_without_runner_dir` below."""
+    to build, so nothing for the wrapped verb (issue #251) to wrap either."""
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -1795,11 +1713,9 @@ def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path
 
 @pytest.mark.unit
 def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_command(tmp_path):  # type: ignore[no-untyped-def]
-    """A lease with a recorded session but no surviving binding — the narrow
-    crash window `_escalate`'s guard comment names, where `_abandon_reassigned`
-    released bindings ahead of its own closure record — composes neither command
-    and raises nothing: the `and bindings` half of the guard is what keeps
-    `bindings[0].workdir` from an `IndexError` here."""
+    """A lease with a recorded session but no surviving binding — the narrow crash
+    window where `_abandon_reassigned` released bindings ahead of its closure record —
+    composes neither command and raises nothing: `and bindings` guards the `IndexError`."""
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -1838,9 +1754,7 @@ def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_comm
     assert payload["wrapped_takeover_command"] == ""
 
 
-# --------------------------------------------------------------------------- #
 # Per-chunk spend cap (issue #61a)
-# --------------------------------------------------------------------------- #
 
 
 def _cap_config(cap, runner_dir="/tmp/runner-dir"):  # type: ignore[no-untyped-def]
@@ -1881,8 +1795,7 @@ def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  # type: ig
     # back into the chunk, the same shape a retries-exhausted escalation carries.
     assert payload["takeover_command"].startswith("cd /ws/e1 &&") and "--resume sess-a" in payload["takeover_command"]
     # The cap-park caller shares the same composition-root `ctx` as every other
-    # `_escalate` call (issue #251) — with `runner_dir` configured, a real cap park
-    # composes a real wrapped command too, not just the raw fallback above.
+    # `_escalate` call — with `runner_dir` configured, it composes a real wrapped command.
     assert payload["wrapped_takeover_command"] == "blizzard runner takeover ch_1 --dir /tmp/runner-dir"
     # Envs stay held for the takeover; nothing was released on a cap park.
     assert store.held_environment_ids() == ["e1"]
@@ -2090,9 +2003,8 @@ def test_cost_cap_raised_then_requeued_resumes_normally(tmp_path):  # type: igno
     pull(ctx)
     assert store.active_lease_for_chunk("ch_1") is None  # parked
 
-    # The operator raises the cap and requeues at the hub: `running` with a live route and
-    # no active lease here — exactly FILL's interrupted-claim shape. The hub's current node
-    # is `review`, the completion having applied before the park.
+    # The operator raises the cap and requeues at the hub: `running` with a live route
+    # and no active lease — exactly FILL's interrupted-claim shape.
     hub.envelopes["ch_1"] = next_env
     hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=7.0, status=ChunkStatus.RUNNING, route_runner_id="r1")
     ctx2 = make_context(
@@ -2111,9 +2023,7 @@ def test_cost_cap_raised_then_requeued_resumes_normally(tmp_path):  # type: igno
     assert len(harness.spawns) == 1
 
 
-# --------------------------------------------------------------------------- #
 # Full happy path across ticks
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -2252,12 +2162,9 @@ class _CountingPreambleStore(SqlAlchemyRunnerStore):
 
 @pytest.mark.unit
 def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: ignore[no-untyped-def]
-    """The lookup is resume-**gated**, not merely resume-shaped (issue #149).
-
-    Without this, a refactor that hoists the read above the `resume_from` check passes
-    every other test in this file — a fresh session simply has no prior row to find *yet* —
-    and becomes wrong the moment a session id is reused, at which point a fresh spawn would
-    silently elide standing prose its brand-new session never received."""
+    """The lookup is resume-**gated**, not merely resume-shaped (issue #149): hoisting
+    the read above the `resume_from` check passes every other test here (a fresh session
+    has no prior row *yet*) but silently elides prose once a session id is reused."""
     store = _CountingPreambleStore(_engine_for(tmp_path))
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -2300,15 +2207,9 @@ def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: 
 
 @pytest.mark.unit
 def test_an_empty_resume_from_is_not_treated_as_a_resume(tmp_path):  # type: ignore[no-untyped-def]
-    """The core's "is this a resume?" predicate matches the ADAPTER's (issue #149).
-
-    The adapter treats an empty `resume_from` as a brand-new session. A core keyed on
-    `is not None` would instead look up a fingerprint for `""` and could elide, handing a
-    session that has never seen the prose a line saying its standing instructions are
-    unchanged.
-
-    Not reachable through today's callers, so this drives `_spawn_attempt` directly — the
-    point is to pin the two predicates together."""
+    """The core's "is this a resume?" predicate matches the ADAPTER's (issue #149): the
+    adapter treats an empty `resume_from` as a brand-new session, while a core keyed on
+    `is not None` would look up a fingerprint for `""` and could wrongly elide."""
     store = _CountingPreambleStore(_engine_for(tmp_path))
     hub = FakeHub()
     envelope = _build_envelope()
@@ -2332,9 +2233,8 @@ def test_an_empty_resume_from_is_not_treated_as_a_resume(tmp_path):  # type: ign
 @pytest.mark.unit
 def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path):  # type: ignore[no-untyped-def]
     """A chunk holding two environments has a worktree of the same repo in each. Reading
-    only the first binding would drop the second env's work with no error at all — the
-    silent-loss shape this seam exists to remove — so the harvest spans every binding and
-    verifies each against its own environment's origin."""
+    only the first binding would drop the second env's work with no error at all, so the
+    harvest spans every binding, verified against its own environment's origin."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)

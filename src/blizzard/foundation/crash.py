@@ -1,33 +1,9 @@
 """The crash-point registry (``bzh:crash-point-registry``).
 
-The dangerous windows of the daemon loops carry stable names in this code-owned,
-**enumerable** registry. A crash point is *declared* at module scope right beside the
-boundary it guards (the declaration is the registration; pinned by
-tests/test_crash_registry.py::test_registry_enumerates_the_daemon_loop_points) and
-*reached* inside the step, exactly at the boundary:
-
-    FILL_AFTER_CLAIM = crashpoint("fill.after-claim.before-bind", "hub holds the route; ...")
-    ...
-    FILL_AFTER_CLAIM.reached()   # <- the boundary
-
-When a point is **armed** — its name in ``BLIZZARD_CRASH_POINT`` and the test fence
-``BLIZZARD_CRASH_FENCE=1`` both set on the process — reaching it SIGKILLs the process
-on the spot: a faithful ``kill -9`` (uncatchable, no Python finalizers, no stdio
-flush), which is precisely what the kill-9 sweep needs to exercise recovery. Unarmed,
-``reached()`` is a single module-global string compare — zero meaningful overhead, and
-nothing ever fires.
-
-**Self-fencing** (the same convention as the mock harness): the kill fires only when
-``BLIZZARD_CRASH_FENCE=1`` is set, so an accidental ``BLIZZARD_CRASH_POINT`` in a
-production environment can never terminate a real daemon. The arming is read **once at
-import** — every armed run is a fresh subprocess, so there is no re-arm-mid-process
-case to serve, and the read stays off the hot path.
-
-:func:`discover_crash_points` is the enumeration entry point — it imports the
-instrumented loop modules, then returns :func:`all_points` — so a consumer enumerates
-the registry programmatically rather than hard-coding a point list that could drift
-(``bzh:crash-point-registry`` *Detect*).
-"""
+A crash point is declared at module scope beside the boundary it guards — the
+declaration is the registration — and ``reached()`` at that boundary SIGKILLs the
+process iff it is armed (``BLIZZARD_CRASH_POINT``) and fenced
+(``BLIZZARD_CRASH_FENCE=1``). Arming is read once, at import."""
 
 from __future__ import annotations
 
@@ -36,11 +12,9 @@ import os
 import signal
 from dataclasses import dataclass
 
-#: Names the armed crash point; paired with the fence below. Both must be set for a
-#: kill to fire. A fresh subprocess per armed run, so reading at import is correct.
+#: Names the armed crash point; a kill fires only with the fence below also set.
 ENV_CRASH_POINT = "BLIZZARD_CRASH_POINT"
-#: The test-scaffolding fence (``bzh:crash-point-registry`` *self-fencing*): the kill
-#: fires only when this is ``"1"``, so a stray point name can never crash production.
+#: The fence (``bzh:crash-point-registry``): a stray point name alone never kills.
 ENV_CRASH_FENCE = "BLIZZARD_CRASH_FENCE"
 
 
@@ -52,10 +26,7 @@ class CrashPoint:
     description: str
 
     def reached(self) -> None:
-        """At this boundary: SIGKILL the process iff this point is armed and fenced.
-
-        Zero meaningful overhead unarmed — one module-global compare and return.
-        """
+        """At this boundary: SIGKILL the process iff this point is armed and fenced."""
         if _ARMED_POINT is None or self.name != _ARMED_POINT:
             return
         if not _FENCED:  # never fire outside test scaffolding
@@ -78,17 +49,11 @@ def crashpoint(name: str, description: str = "") -> CrashPoint:
 
 
 def all_points() -> list[CrashPoint]:
-    """Every registered crash point, name-sorted — the enumerable list the sweep arms.
-
-    Only points whose declaring module has been imported are present; use
-    :func:`discover_crash_points` to force-import the instrumented loop modules first.
-    """
+    """Every registered crash point, name-sorted — only those whose module is imported."""
     return sorted(_registry.values(), key=lambda p: p.name)
 
 
-#: The daemon-loop modules that declare crash points at import. Importing them populates
-#: the registry — this is the one small, stable list (of *modules*, not point names, which
-#: would drift); each module owns its own points at their call sites.
+#: The modules that declare crash points; importing them populates the registry.
 _INSTRUMENTED_MODULES = (
     "blizzard.runner.loop.steps",
     "blizzard.runner.domain.attachments",
@@ -100,27 +65,21 @@ _INSTRUMENTED_MODULES = (
 
 
 def discover_crash_points() -> list[CrashPoint]:
-    """Import the instrumented loop modules, then return every registered crash point.
-
-    The sweep calls this to enumerate points programmatically — no hand-maintained
-    name list to drift out of sync with the code (``bzh:crash-point-registry``).
-    """
+    """Import the instrumented modules, then return every registered crash point."""
     for module in _INSTRUMENTED_MODULES:
         importlib.import_module(module)
     return all_points()
 
 
-# Read the arming once, at import (a fresh subprocess per armed run — see module docstring).
+# Read the arming once, at import — a fresh subprocess per armed run.
 _ARMED_POINT: str | None = os.environ.get(ENV_CRASH_POINT) or None
 _FENCED: bool = os.environ.get(ENV_CRASH_FENCE) == "1"
 
 
 def _rearm_from_env() -> None:
-    """Re-read the arming from the environment — for in-process unit tests of the mechanism only.
+    """Re-read the arming from the environment — for in-process unit tests only.
 
-    Production and the sweep never call this: every armed run is a fresh subprocess whose
-    import-time read is authoritative. A unit test that manipulates ``os.environ`` to prove
-    the fence/compare logic calls this to refresh the cached globals.
+    Every armed run is a fresh subprocess whose import-time read is authoritative.
     """
     global _ARMED_POINT, _FENCED
     _ARMED_POINT = os.environ.get(ENV_CRASH_POINT) or None

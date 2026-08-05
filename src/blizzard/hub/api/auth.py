@@ -1,18 +1,8 @@
 """Runner-bearer-token authentication — the edge dependency alongside ``get_services``
 (issue #86a).
 
-``require_runner_principal`` resolves a presented ``Authorization: Bearer`` token to a
-:class:`RunnerPrincipal`, reading only through :attr:`~blizzard.hub.composition.HubServices.registry`
-(``bzh:controller-read-only``). The lookup hashes the presented token to its sha256 hex
-digest and resolves it via ``registration_for_token_hash``. That lookup **is** the match:
-it selects on the stored hash column, so no separate ``hmac.compare_digest`` is
-load-bearing for resolution.
-
-``assert_owns`` stays out of the dependency itself because a router-level dependency
-cannot uniformly read a declared ``runner_id`` (body for some routes, path for others).
-
-``reject_runner_principal`` (issue #87) is the mirror-image router-level dependency for
-every *operator* router: a runner principal is confined to the fleet router.
+A presented token resolves by sha256-hex-digest lookup against the stored hash column;
+that selection **is** the match, so no separate ``hmac.compare_digest`` is load-bearing.
 """
 
 from __future__ import annotations
@@ -44,8 +34,7 @@ class RunnerPrincipal:
 def _resolve_principal(request: Request, services: HubServices) -> RunnerPrincipal | None:
     """Resolve a presented ``Authorization: Bearer`` token to a principal, or ``None``
     when the header is missing/malformed or the token does not resolve — no mode
-    logic, no rejection; both dependencies below layer their own failure semantics
-    on top of this shared lookup."""
+    logic, no rejection."""
     header = request.headers.get("authorization", "")
     if not header.startswith(_BEARER_PREFIX):
         return None
@@ -64,8 +53,7 @@ def require_runner_principal(
 
     Under ``enforce`` a missing/malformed header or an unresolved token raises 401;
     under ``warn`` (the default) the same conditions are logged and the route runs
-    with no principal — callers that need per-runner confinement combine this with
-    :func:`assert_owns`."""
+    with no principal."""
     mode = request.app.state.config.runner_auth_mode
     principal = _resolve_principal(request, services)
     if principal is None:
@@ -81,12 +69,9 @@ def require_runner_principal(
 def reject_runner_principal(request: Request, services: Annotated[HubServices, Depends(get_services)]) -> None:
     """Reject a request on an operator router whose bearer token resolves to a runner
     principal — a runner's token is valid only on the fleet router (issue #87). A
-    missing or unresolvable token is not flagged here — that is exactly what an
-    anonymous operator call looks like; ``require_runner_principal`` is where a
-    *missing* token matters, not this one.
-
-    ``enforce`` raises 403; ``warn`` (the default) logs and lets the call proceed,
-    matching every other rollout-mode behavior in this module."""
+    missing or unresolvable token is not flagged: that is what an anonymous operator
+    call looks like. ``enforce`` raises 403; ``warn`` (the default) logs and
+    proceeds."""
     mode = request.app.state.config.runner_auth_mode
     principal = _resolve_principal(request, services)
     if principal is None:
@@ -100,10 +85,8 @@ def reject_runner_principal(request: Request, services: Annotated[HubServices, D
 def assert_owns(principal: RunnerPrincipal | None, runner_id: str, *, mode: str) -> None:
     """Reject a request whose declared ``runner_id`` differs from the resolved principal's.
 
-    A ``None`` principal (an unresolved token under ``warn``) is not itself flagged here —
-    ``require_runner_principal`` already warn-logged the missing/invalid credential; this
-    only fires once a token *did* resolve, to a runner other than the one the request
-    declares."""
+    A ``None`` principal is not flagged here; this only fires once a token *did*
+    resolve, to a runner other than the one the request declares."""
     if principal is None or principal.runner_id == runner_id:
         return
     detail = f"token belongs to runner {principal.runner_id!r}, not the declared {runner_id!r}"

@@ -1,11 +1,8 @@
 """The ``/chunks/{id}/pause`` and ``/resume`` routes over the HTTP surface (issue #46).
 
-A pause keeps the claim — unlike detach, no route is released and no epoch bumped;
-these routes only test the wire the operator lever rides: 200/404/409, the fact
-written, the ``pause`` view on the detail, and the two events published (a pause moves
-the chunk out of the ready queue, so ``queue-changed`` fires alongside ``chunk-changed``).
-The refusal itself (``PauseService``) is unit-tested in ``test_pause_service.py``; this
-file proves the controller wires it correctly end to end.
+Tests only the wire: 200/404/409, the fact written, the ``pause`` view, and the two
+events published (``queue-changed`` alongside ``chunk-changed``). The refusal itself is
+unit-tested in ``test_pause_service.py``.
 """
 
 from __future__ import annotations
@@ -31,10 +28,8 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "12"}
 
-# The merge graph reaches `done`; the pending graph parks at `delivering` — its hub
-# node's script prints the reserved `pending` outcome (#66), so no transition ever
-# routes it onward and the chunk stays parked at the hub node. Neither status is
-# otherwise reachable through a shorter path.
+# The merge graph reaches `done`; the pending graph parks at `delivering` via the
+# reserved `pending` outcome (#66) — neither status is otherwise reachable more directly.
 _MERGE_YAML = """
 name: default-delivery
 entry: build
@@ -134,9 +129,8 @@ def test_pause_returns_200_writes_a_fact_and_the_detail_carries_it(tmp_path: Pat
     assert body["status"] == "paused"
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "paused"
-    # Pinned field by field against the clock the hub was built with — not compared to
-    # itself. `set_at` is a wire timestamp, so it carries an explicit UTC offset
-    # (`bzh:utc-instants`); `assert_all_timestamps_utc` sweeps the whole payload.
+    # Pinned field by field against the clock the hub was built with, not itself;
+    # `set_at` carries an explicit UTC offset (`bzh:utc-instants`).
     assert detail["pause"] == {"by": "alice", "set_at": iso_utc(hub.clock.now())}
     assert_all_timestamps_utc(detail)
 

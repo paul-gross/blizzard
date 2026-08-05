@@ -1,15 +1,8 @@
 """The hub's readiness rule (``bzh:domain-core``) — minimal, dependency-free.
 
-Readiness is the one operational rule the hub daemon owns at the domain layer for
-now: the hub is *ready* when its store is reachable **and** migrated to exactly
-the revision this build expects (``bzh:manual-migrations`` — a skew fails loud, it
-never serves on a mismatch). The rule imports only the store-status value type and
-the standard library; the store engine sits behind the injected reader seam, so
-this evaluates in a unit test with a fake reader and no database.
-
-The fleet business rules (chunk transitions, delivery, ask/answer) land in this
-layer in P6; this is the seam and the composition pattern they slot into.
-"""
+The hub is *ready* when its store is reachable **and** migrated to exactly the revision
+this build expects (``bzh:manual-migrations`` — a skew fails loud, it never serves on a
+mismatch). The engine sits behind an injected reader seam, so this needs no database."""
 
 from __future__ import annotations
 

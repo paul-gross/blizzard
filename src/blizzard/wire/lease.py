@@ -1,12 +1,8 @@
-"""Lease wire bodies — the runner-local lease read (issue #28).
+"""Lease wire bodies — the runner-local lease read (issues #28, #29).
 
-The runner-local, hub-free surface: ``GET /api/leases`` lists every active and
-recently-closed lease with its derived state (``bzh:facts-not-status``) — an active
-lease *is* an active agent. ``closed_at``/``closure_reason`` are both ``None`` iff the
-lease is active, and ``state`` carries a sixth ``"closed"`` value (issue #29).
-
-Datetimes are ISO-8601 strings that **always carry an explicit UTC offset**
-(``2026-07-16T12:00:00+00:00``) — ``bzh:utc-instants``.
+``closed_at``/``closure_reason`` are both ``None`` iff the lease is active, and ``state``
+carries a sixth ``"closed"`` value. Datetimes are ISO-8601 strings that **always carry an
+explicit UTC offset** (``2026-07-16T12:00:00+00:00``) — ``bzh:utc-instants``.
 """
 
 from __future__ import annotations

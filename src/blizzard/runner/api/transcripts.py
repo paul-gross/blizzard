@@ -1,24 +1,9 @@
 """The runner-local transcript read — ``GET /api/leases/{lease_id}/transcript`` (issue #29).
 
-Path matches ``POST /api/leases/{lease_id}/asks``'s nesting: a transcript is a
-sub-resource of a lease. **The URL stays lease-keyed**, not session-keyed, even
-though the read path is session-keyed underneath —
-``session_id`` is nullable (a ``spawning`` lease has none yet), and a
-``/api/sessions/{sid}/…`` route could only 404 for that state, collapsing "agent is
-starting up" into "transcript not found". Lease-keyed models ``spawning`` natively.
-
-**200-always with an in-band ``reason``**: a missing or unreadable transcript
-is a normal state of a healthy agent (still spawning, session not yet flushed,
-retained history whose file rotated away), never a 5xx. **404 means "no lease with
-this id, ever"** — copy is ``no lease {id}``, deliberately **not** ``api/asks.py``'s
-``no active lease {id}``: that route's ``active_lease()`` precedent filters to
-active *by design* (asks target live workers) and would wrongly 404 a closed
-lease's transcript here (closed leases stay readable). **503** when the
-service is unwired, matching ``api/leases.py``'s copy/pattern.
-
-Read-only over its wiring (``bzh:controller-read-only``): the edge holds only the
-composition-root-wired :class:`LocalTranscriptService`, no repository at all.
-"""
+**The URL stays lease-keyed**, not session-keyed: ``session_id`` is nullable, so a session-keyed route
+could only 404 a ``spawning`` lease, collapsing "agent is starting up" into "transcript not found".
+**200-always with an in-band ``reason``** — a missing or unreadable transcript is a normal state of a
+healthy agent, never a 5xx. **404 means "no lease with this id, ever"**; a closed lease stays readable."""
 
 from __future__ import annotations
 

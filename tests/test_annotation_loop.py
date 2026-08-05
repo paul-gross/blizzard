@@ -65,10 +65,8 @@ async def test_loop_survives_a_sweep_that_raises() -> None:
 
 
 async def test_loop_returns_promptly_when_shutdown_fires_mid_wait() -> None:
-    """A long interval, but the loop still returns almost immediately once
-    ``shutdown`` fires concurrently — proving the wait races the event rather
-    than holding a graceful drain for up to the interval (issue #47's own
-    stream-shutdown race, restated for this loop)."""
+    """A long interval, but the loop returns almost immediately once ``shutdown`` fires
+    concurrently — the wait races the event rather than holding a drain (issue #47)."""
     reconciler = _CountingReconciler()
     shutdown = asyncio.Event()
 
@@ -82,7 +80,6 @@ async def test_loop_returns_promptly_when_shutdown_fires_mid_wait() -> None:
 
 # --------------------------------------------------------------------------- #
 # _lifespan's closure-task-starting condition (issue #216)
-# --------------------------------------------------------------------------- #
 
 
 class _FakeWorkSources:

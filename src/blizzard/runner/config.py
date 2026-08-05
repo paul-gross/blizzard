@@ -1,11 +1,8 @@
 """Runner runtime configuration — resolved from a runtime directory.
 
-``blizzard runner init <dir>`` scaffolds a config file and a data directory; the
-daemon and the offline ``migrate`` verb read it back. The store URL is the single
-portability knob (``bzh:sql-portable``): sqlite (WAL, in-process) is the runner's
-embedded default. The bind port falls back to the winter service
-band's ``BZ_RUNNER_PORT`` (band +3).
-"""
+``blizzard runner init <dir>`` scaffolds a config file and a data directory; the daemon and
+the offline ``migrate`` verb read it back. The store URL is the single portability knob
+(``bzh:sql-portable``), defaulting to embedded sqlite."""
 
 from __future__ import annotations
 
@@ -19,12 +16,10 @@ from blizzard.foundation.forwarded import TrustedProxies
 
 CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"
-# The runner-owned worker hook file `init` scaffolds; the
-# adapter passes it to a spawned worker as `--settings` to deliver the heartbeat hook.
+# The runner-owned worker hook file `init` scaffolds, delivering the heartbeat hook.
 WORKER_SETTINGS_FILENAME = "worker-settings.json"
-# The local API's unix socket: it lives under the state dir beside the store, and
-# filesystem permissions are its access control — so the CLI finds it from the runtime dir
-# alone (``runner/listeners.py``).
+# The local API's unix socket, under the state dir beside the store; filesystem
+# permissions are its access control.
 SOCKET_FILENAME = "runner.sock"
 
 DEFAULT_HOST = "127.0.0.1"
@@ -33,9 +28,8 @@ DEFAULT_PORT = 8431
 ENV_HOST = "BZ_RUNNER_HOST"
 ENV_PORT = "BZ_RUNNER_PORT"
 ENV_HUB_URL = "BZ_HUB_URL"
-# The reconciliation-loop seams the winter service injects per feature env so a fresh
-# `blizzard runner init` scaffolds a runnable config without hand-editing the toml
-# (the winter-service-tmux runner slot sets these from the env band + fixture paths).
+# Injected per feature env, so a fresh `runner init` scaffolds a runnable config with no
+# hand-editing of the toml.
 ENV_WORKSPACE_ROOT = "BZ_WORKSPACE_ROOT"
 ENV_WORKSPACE_ENVS = "BZ_WORKSPACE_ENVS"  # comma-separated env-id pool
 ENV_HARNESS_BINARY = "BZ_HARNESS_BINARY"
@@ -44,51 +38,39 @@ ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
 ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates
 ENV_WORKSPACE_PROMPT = "BZ_WORKSPACE_PROMPT"  # the runner-owned workspace prompt, inline (issue #17)
 ENV_RUNNER_PROMPT = "BZ_RUNNER_PROMPT"  # the blizzard-preamble override, inline (issue #103)
-# Where the coding harness writes session transcripts (issue #29); empty defaults to
-# `~/.claude/projects`, resolved once at the composition root (`runner/app.py`), never here.
+# Where the harness writes session transcripts (issue #29); empty resolves to a default at
+# the composition root, never here.
 ENV_TRANSCRIPTS_ROOT = "BZ_TRANSCRIPTS_ROOT"
-# This runner's own browser-reachable base URL (issue #95) — seeded into a fresh
-# scaffold's `public_url` the same way the loop seams above are.
+# This runner's own browser-reachable base URL (issue #95).
 ENV_PUBLIC_URL = "BZ_RUNNER_PUBLIC_URL"
 
-# Reconciliation-loop defaults. The runner is machine-level
-# and single-workspace; these seam the loop to the hub, the workspace it
-# drives, and the coding harness it spawns.
+# Reconciliation-loop defaults — the runner is machine-level and single-workspace.
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"  # the hub's default bind (band +2)
 DEFAULT_RUNNER_ID = "runner-local"
 DEFAULT_WORKSPACE_ID = "workspace-local"
 DEFAULT_HARNESS_BINARY = "claude"
-# A workspace-isolated worker runs headless with no one to approve tool use, so it needs a
-# non-interactive permission mode to edit/commit in its sandboxed worktree;
-# ``bypassPermissions`` is the fresh-init default. A config may set it empty to omit.
+# A headless worker has no one to approve tool use, so it needs a non-interactive mode;
+# a config may set this empty to omit the flag.
 DEFAULT_HARNESS_PERMISSION_MODE = "bypassPermissions"
 DEFAULT_MAX_AGENTS = 1
 DEFAULT_BASE_BRANCH = "main"
-# The env var naming this runner's hub bearer token (issue #86b) — mirrors
-# `WorkSourceConfig.token_env` (`src/blizzard/hub/config.py`): the toml round-trips only the
-# variable NAME, never the secret, which lives in the runtime env file (systemd
-# `EnvironmentFile`, the orchestrator env in dev).
+# The env var NAMING this runner's hub bearer token (issue #86b) — the toml round-trips the
+# variable name only, never the secret.
 DEFAULT_TOKEN_ENV = "BZ_HUB_TOKEN"
 DEFAULT_ENV_POOL: tuple[str, ...] = ("e1",)
-# The runner-ceiling rolling window's default length (issue #61b) — used only when
-# `runner_ceiling_usd` is set and `window_hours` is not given alongside it; a ceiling with
-# no window still needs one to sum over, and a day is the least surprising default.
+# The runner-ceiling rolling window's default length (issue #61b) — a ceiling with no
+# declared window still needs one to sum over.
 DEFAULT_RUNNER_CEILING_WINDOW_HOURS = 24.0
-# The external-subscription-usage sample step's cadence (issue #218) — how often the tick
-# re-samples the harness's own rate-limit windows. A diagnostic, best-effort read, not a
-# spend control, so it needs no operator action to get a reasonable default: 5 minutes is
-# frequent enough for a board to look current without hammering the harness's usage
-# endpoint every ~30s tick.
+# How often the tick re-samples the harness's rate-limit windows (issue #218) — a
+# diagnostic, best-effort read, not a spend control.
 DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS = 300
 
 
 def socket_path_for(root: Path) -> Path:
     """The local API's socket under a runtime dir — derivable from the path alone.
 
-    Deliberately not a method on the loaded config: it is what lets the CLI's local verbs
-    address the daemon from ``--dir`` without reading the toml or opening the store — a
-    pure client of the local API.
-    """
+    Deliberately not a method on the loaded config: this is what lets a local verb address
+    the daemon from ``--dir`` alone, without reading the toml or opening the store."""
     return root / SOCKET_FILENAME
 
 
@@ -108,10 +90,8 @@ class RunnerConfig:
     hub_url: str = DEFAULT_HUB_URL
     runner_id: str = DEFAULT_RUNNER_ID
     workspace_id: str = DEFAULT_WORKSPACE_ID
-    #: Names the env var carrying this runner's hub bearer token (issue #86b) — never the
-    #: secret itself, which never round-trips through toml. :attr:`hub_token` is the
-    #: *resolved* secret, read from ``os.environ[token_env]`` at ``scaffold``/``load``.
-    #: Empty (``hub_token == ""``) is a valid state — see :meth:`auth_headers`.
+    #: Names the env var carrying the hub bearer token (issue #86b); :attr:`hub_token` is
+    #: the resolved secret, and empty is a valid state.
     token_env: str = DEFAULT_TOKEN_ENV
     hub_token: str = ""
     workspace_root: str = ""  # the winter workspace the provider drives; required to FILL
@@ -121,120 +101,63 @@ class RunnerConfig:
     worker_settings_path: str | None = None  # the runner-owned worker hook file (P7)
     max_agents: int = DEFAULT_MAX_AGENTS
     base_branch: str = DEFAULT_BASE_BRANCH
-    #: Node NAMES this runner imposes a human gate on. Reloaded each
-    #: tick — the loop rebuilds its context from this config on every pass.
+    #: Node NAMES this runner imposes a human gate on; reloaded every tick.
     gates: tuple[str, ...] = ()
-    #: The runner-owned workspace prompt prepended to a worker spawn (issue #17): the
-    #: standing "you are a fleet worker in this winter workspace" framing above the node
-    #: envelope. Two source knobs, one effective value (:meth:`resolved_workspace_prompt`):
-    #: ``workspace_prompt`` is the inline text; ``workspace_prompt_file`` is a path (absolute,
-    #: or relative to :attr:`root`) whose contents win over the inline text when set. Empty
-    #: on a fresh scaffold — an absent prompt still spawns a valid worker (table-only). The
-    #: runtime override (local API, no restart) lives in the store, not here.
+    #: The workspace prompt prepended to a worker spawn (issue #17) — two source knobs,
+    #: one effective value (:meth:`resolved_workspace_prompt`); the file wins when set.
     workspace_prompt: str = ""
     workspace_prompt_file: str = ""
-    #: The operator's override of the baked-in blizzard preamble (issue #103) — layer 1
-    #: of the spawn preamble, prepended ahead of :attr:`workspace_prompt`. Mirrors
-    #: ``workspace_prompt`` exactly: ``runner_prompt`` is the inline text;
-    #: ``runner_prompt_file`` (a path, absolute or relative to :attr:`root`) wins over
-    #: the inline text when set (:meth:`resolved_runner_prompt`). Empty on a fresh
-    #: scaffold means the resolved value is also empty, which the preamble renderer reads
-    #: as "use the baked default". Config/startup only — no live runtime override.
+    #: The override of the baked-in blizzard preamble (issue #103), prepended ahead of
+    #: :attr:`workspace_prompt`; empty resolves to the baked default.
     runner_prompt: str = ""
     runner_prompt_file: str = ""
-    #: Where the coding harness writes session transcripts (issue #29). Empty (the
-    #: fresh-scaffold default) means ``~/.claude/projects`` — resolved once at the
-    #: composition root (``runner/app.py``), never inside the transcript adapter.
-    #: Seeded from ``BZ_TRANSCRIPTS_ROOT`` at ``runner init`` and then read from
-    #: ``blizzard-runner.toml`` — **not** re-read from the environment live, so a changed
-    #: env var only takes effect on a re-``init``.
+    #: Where the harness writes session transcripts (issue #29); read from the toml, never
+    #: re-read from the environment live, so a changed env var needs a re-``init``.
     transcripts_root: str = ""
-    #: The per-chunk spend cap (epic #57, issue #61a) — read from the ``[cost]`` table's
-    #: ``chunk_cap_usd`` key. Absent (``None``, the fresh-scaffold default) means no cap.
-    #: When set, a chunk whose derived total cost reaches this value parks ``needs_human``
-    #: at its next step boundary. The ``[cost]`` table is shared with
-    #: ``runner_ceiling_usd`` — one section for the epic's two spend controls.
+    #: The per-chunk spend cap (issue #61a); ``None`` means no cap. A chunk reaching it
+    #: parks ``needs_human`` at its next step boundary.
     chunk_cap_usd: float | None = None
-    #: The runner-wide spend ceiling (epic #57, issue #61b) — read from the ``[cost]``
-    #: table's ``runner_ceiling_usd`` key. Absent (``None``, the fresh-scaffold default)
-    #: means no ceiling. When set, this runner's own local usage summed over the trailing
-    #: :attr:`runner_ceiling_window_hours` reaching this value engages the existing local
-    #: pause brake rather than a second suppression mechanism. There is no auto-unpause:
-    #: the brake stays engaged after the rolling window drops back under the ceiling,
-    #: until an operator consciously runs ``blizzard runner start``.
+    #: The runner-wide spend ceiling (issue #61b); ``None`` means none. Crossing it engages
+    #: the local pause brake, and there is no auto-unpause once the window drops back under.
     runner_ceiling_usd: float | None = None
-    #: The runner ceiling's rolling window length in hours (issue #61b) — read from
-    #: ``[cost].window_hours``. Meaningless (and unused) while :attr:`runner_ceiling_usd`
-    #: is ``None``; defaults to :data:`DEFAULT_RUNNER_CEILING_WINDOW_HOURS` when a ceiling
-    #: is set but no window is given alongside it.
+    #: The runner ceiling's rolling window length in hours (issue #61b) — unused while
+    #: :attr:`runner_ceiling_usd` is ``None``.
     runner_ceiling_window_hours: float = DEFAULT_RUNNER_CEILING_WINDOW_HOURS
-    #: The external-subscription-usage sample step's cadence in seconds (issue #218) —
-    #: read from the ``[external_subscription_usage]`` table's ``sample_interval_seconds``
-    #: key. Defaults to :data:`DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS` when the
-    #: table (or just this key) is absent — a diagnostic cadence, not a spend control, so
-    #: there is no "absent means never" knob here the way ``runner_ceiling_usd`` has one.
+    #: The external-usage sample cadence in seconds (issue #218) — a diagnostic cadence,
+    #: not a spend control, so absent means the default rather than never.
     external_usage_sample_interval_seconds: int = DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS
-    #: An override for the credential file the external-usage sampler reads (issue #218) —
-    #: read from the ``[external_subscription_usage]`` table's ``credentials_path`` key.
-    #: ``None`` (the key absent, the default for every real deployment) means the adapter's
-    #: own default. Test scaffolding points this at a scratch path that is never created,
-    #: so the sampler soft-fails on the missing file before any request is built —
-    #: keeping those tiers' no-network-access guarantee real for this step.
+    #: An override for the credential file the external-usage sampler reads (issue #218);
+    #: ``None`` means the adapter's own default.
     external_usage_credentials_path: str | None = None
-    #: The operator's declared extension to the worker spawn-environment allowlist
-    #: (issue #88) — read from the ``[worker]`` table's ``env_passthrough`` key. A worker
-    #: child's env is a fixed base allowlist plus this list, never a full ``os.environ``
-    #: copy, so a daemon secret (foremost ``BZ_HUB_TOKEN``) is absent by construction
-    #: unless an operator deliberately names it here. Empty on a fresh scaffold.
+    #: The declared extension to the worker spawn-environment allowlist (issue #88) — a
+    #: worker's env is that allowlist, never a full ``os.environ`` copy.
     worker_env_passthrough: tuple[str, ...] = ()
-    #: The runner's own browser-reachable base URL (issue #95) — read from the
-    #: `public_url` key. Empty (the fresh-scaffold default) means this runner does not
-    #: register a federation identity at the hub, so its human web surface stays
-    #: unreachable via the SSO bounce (and, per issue #95, stays authless when the hub
-    #: itself runs `auth.mode = "none"` — there is no IdP to bounce to either way).
+    #: The runner's own browser-reachable base URL (issue #95); empty registers no
+    #: federation identity, leaving the human web surface unreachable via the SSO bounce.
     public_url: str = ""
-    #: The hub **username** naming this runner's own sovereign (issue #95,
-    #: `[auth].superuser`) — never assignable through a JWT claim; a config-only
-    #: designation. `None` (the fresh-scaffold default) names no runner-local superuser.
+    #: The hub username naming this runner's own sovereign (issue #95) — config-only,
+    #: never assignable through a JWT claim.
     auth_superuser: str | None = None
-    #: The fallback runner-local role for a hub identity with no `[auth.users]`
-    #: override (issue #95) — `"mirror"` reproduces the hub's own `role` claim, or a
-    #: fixed cap (`"contributor"`/`"guest"`/`"pending"`) floors every unmatched identity
-    #: there regardless of hub role. Defaults to `"mirror"` — a fresh scaffold trusts the
-    #: hub's own role claims verbatim until an operator narrows it.
+    #: The fallback role for a hub identity with no `[auth.users]` override (issue #95) —
+    #: `"mirror"` reproduces the hub's claim, a fixed role floors every unmatched identity.
     auth_hub_role_default: str = "mirror"
-    #: Per-hub-username role overrides (issue #95, `[auth.users]`) — a tuple of
-    #: `(username, role)` pairs (not a `dict`, so the frozen dataclass keeps every
-    #: field hashable/immutable like `workspace_envs`/`gates` above). Resolution keys
-    #: on the JWT's `username` claim only, never `email` (mutable, may be null).
+    #: Per-username role overrides (issue #95), keyed on the JWT's `username` claim only,
+    #: never `email`, which is mutable and may be null.
     auth_users: tuple[tuple[str, str], ...] = ()
-    #: Model tier-alias mappings (issue #144, `[models.aliases]`) — a tuple of
-    #: `(alias, native_name)` pairs (not a `dict`, so the frozen dataclass keeps every
-    #: field hashable/immutable like `auth_users` above). Maps the namespaced
-    #: `blizzard:` tier aliases an authored graph names onto the model names *this*
-    #: runner's harness understands — which is what keeps a graph harness-agnostic.
-    #: An entry here overrides the adapter's own built-in tier defaults; an alias
-    #: mapped by neither is skipped at resolution, never a spawn failure.
+    #: Model tier-alias mappings (issue #144) onto the names *this* runner's harness
+    #: understands; an alias mapped by neither this nor the adapter is skipped, never fatal.
     model_aliases: tuple[tuple[str, str], ...] = ()
-    #: Effort alias mappings (issue #144, `[effort.aliases]`) — the same shape, mapping
-    #: an authored effort value onto the `low|medium|high|max` ordinal. The well-known
-    #: four need no entry; this exists so a deployment can name its own vocabulary (or
-    #: reach a native tier outside the ordinal).
+    #: Effort alias mappings (issue #144) onto the `low|medium|high|max` ordinal; the
+    #: well-known four need no entry.
     effort_aliases: tuple[tuple[str, str], ...] = ()
-    #: The reverse-proxy trust set (issue #130) — proxy addresses or CIDRs whose
-    #: `X-Forwarded-Proto` is honored when minting the runner's own SSO session cookie
-    #: (`runner/auth/federation.py`, the `Secure` flag). Empty (the default) ignores the
-    #: header from every peer. Stored as raw strings that round-trip to toml; parsed into
-    #: :class:`~blizzard.foundation.forwarded.TrustedProxies` at the composition root.
+    #: The reverse-proxy trust set (issue #130) — addresses or CIDRs whose
+    #: `X-Forwarded-Proto` is honored; empty ignores the header from every peer.
     trusted_proxies: tuple[str, ...] = ()
 
     @property
     def redirect_uris(self) -> tuple[str, ...]:
-        """The one redirect URI this runner presents to the hub's IdP authorize
-        endpoint (issue #95) — derived from :attr:`public_url`, never independently
-        configured: the runner's own federation callback route
-        (``runner/auth/federation.py``) lives at exactly this one path, so there is
-        nothing a second, independently-configured URI could ever legitimately name."""
+        """The one redirect URI this runner presents to the hub's IdP authorize endpoint
+        (issue #95) — derived from :attr:`public_url`, never independently configured."""
         if not self.public_url:
             return ()
         return (f"{self.public_url.rstrip('/')}/api/auth/callback",)
@@ -266,12 +189,9 @@ class RunnerConfig:
     def resolved_workspace_prompt(self) -> str:
         """The effective static workspace prompt (issue #17), resolved from its two knobs.
 
-        ``workspace_prompt_file`` wins when set — read once at ``host`` startup, so the
-        prompt file is loaded (not re-read per spawn); a relative path resolves under
-        :attr:`root`. A configured-but-missing file is an operator error and raises here
-        (fail fast at startup), which is not the same as an *absent* prompt — both knobs
-        empty is a valid, table-only spawn and returns ``""``.
-        """
+        ``workspace_prompt_file`` wins when set, resolving a relative path under
+        :attr:`root`. A configured-but-missing file raises, which is not the same as an
+        *absent* prompt: both knobs empty is valid and returns ``""``."""
         if self.workspace_prompt_file:
             path = Path(self.workspace_prompt_file)
             if not path.is_absolute():
@@ -284,13 +204,9 @@ class RunnerConfig:
     def resolved_runner_prompt(self) -> str:
         """The effective override for the blizzard preamble (issue #103), from its two knobs.
 
-        Mirrors :meth:`resolved_workspace_prompt` exactly: ``runner_prompt_file`` wins
-        when set — read once at ``host`` startup, a relative path resolving under
-        :attr:`root` — and a configured-but-missing file raises here (fail fast at
-        startup). Both knobs empty is a valid state and returns ``""``, which
-        ``render_worker_preamble`` treats as "use the baked default", never as an
-        absent layer.
-        """
+        Mirrors :meth:`resolved_workspace_prompt`: the file knob wins when set, and a
+        configured-but-missing file raises. Both empty returns ``""``, which the preamble
+        renderer reads as "use the baked default", never as an absent layer."""
         if self.runner_prompt_file:
             path = Path(self.runner_prompt_file)
             if not path.is_absolute():
@@ -303,12 +219,9 @@ class RunnerConfig:
     def auth_headers(self) -> dict[str, str]:
         """The outbound ``Authorization`` header every runner->hub call carries (issue #86b).
 
-        One credential path for the reconciliation loop's ``httpx.Client`` and the
-        work-items proxy alike, rather than each building its own header. Empty when
-        :attr:`hub_token` is unset — an unenrolled runner (or a fleet that has not
-        installed tokens yet) attaches nothing, and the hub's own ``runner_auth_mode``
-        (``warn`` by default) decides whether that is tolerated.
-        """
+        One credential path for every outbound call rather than a header built per call
+        site. Empty when :attr:`hub_token` is unset: an unenrolled runner attaches
+        nothing, and the hub decides whether that is tolerated."""
         if not self.hub_token:
             return {}
         return {"Authorization": f"Bearer {self.hub_token}"}
@@ -317,11 +230,8 @@ class RunnerConfig:
     def scaffold(cls, root: Path) -> RunnerConfig:
         """The default config for a fresh runtime root (used by ``init``).
 
-        The loop seams (workspace root, env pool, harness binary, base branch) are read
-        from the winter-injected environment when present so the service's
-        ``blizzard runner init`` produces a runnable config; each falls back to its
-        dataclass default otherwise.
-        """
+        The loop seams are read from the injected environment when present, so ``init``
+        produces a runnable config; each falls back to its dataclass default."""
         envs = os.environ.get(ENV_WORKSPACE_ENVS)
         gates = os.environ.get(ENV_GATES)
         return cls(
@@ -344,14 +254,10 @@ class RunnerConfig:
             # The worker hook file `init` writes alongside the config; the adapter
             # delivers it as `--settings` so a spawned worker heartbeats.
             worker_settings_path=str(root / WORKER_SETTINGS_FILENAME),
-            # The runner-owned workspace prompt (issue #17): empty on a fresh scaffold —
-            # an operator sets it inline (or points `workspace_prompt_file` at a file), or
-            # replaces it at runtime through the local API. Seeded from the environment so a
-            # service's `blizzard runner init` can inject a default without hand-editing.
+            # Empty on a fresh scaffold; seeded from the environment so `init` can inject
+            # a default without hand-editing (issue #17).
             workspace_prompt=os.environ.get(ENV_WORKSPACE_PROMPT, ""),
-            # The operator's override of the baked-in blizzard preamble (issue #103):
-            # empty on a fresh scaffold means the baked default is used. Seeded from the
-            # environment like `workspace_prompt`, for the same reason.
+            # Empty on a fresh scaffold means the baked-in preamble is used (issue #103).
             runner_prompt=os.environ.get(ENV_RUNNER_PROMPT, ""),
             transcripts_root=os.environ.get(ENV_TRANSCRIPTS_ROOT, ""),
             public_url=os.environ.get(ENV_PUBLIC_URL, ""),

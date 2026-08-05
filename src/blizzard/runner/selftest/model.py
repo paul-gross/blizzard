@@ -1,10 +1,8 @@
 """The selftest job resource's data shapes — pure, no I/O (issue #54).
 
-:class:`SelfTestRun` is the resource ``POST``/``GET /api/selftests`` mint and read
-back; a resource with a result, not an RPC verb. Check names are module constants
-(not a free-form string) so the CLI, the API view, and the checks runner all agree on
-the same five identifiers.
-"""
+:class:`SelfTestRun` is a resource with a result, not an RPC verb. Check names are
+module constants rather than free-form strings, so every reader agrees on the same
+five identifiers."""
 
 from __future__ import annotations
 

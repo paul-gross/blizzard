@@ -1,17 +1,8 @@
-"""The exhaustive three-plane route classification guard (unit tier, issue #91).
+"""The exhaustive three-plane route classification guard (issue #91).
 
-Mirrors ``reject_runner_principal``'s own structural-confinement shape
-(``tests/test_fleet_auth.py``) one level up: every mounted route is asserted to be
-**human** (gated by ``require(<permission>)``, tagged with the exact permission),
-**fleet** (mounted under ``/api/fleet/*``, gated by ``require_runner_principal`` at
-router level — issue #87), or **public** (no permission gate at all). A route this
-table does not name — or a route whose live gating no longer matches its named
-plane — fails the suite.
-
-The table is asserted **exhaustive in both directions**: every live route must appear
-in the table (catches a newly added, unclassified route) and every table entry must
-still resolve to a live route (catches a route renamed/removed out from under a stale
-entry).
+Every mounted route is asserted human (gated by ``require(<permission>)``), fleet
+(mounted under ``/api/fleet/*``, gated at router level), or public (no gate at all). The
+table is exhaustive both ways: every live route must appear, every entry must resolve.
 """
 
 from __future__ import annotations
@@ -50,8 +41,7 @@ _PUBLIC: set[tuple[str, str]] = {
     ("GET", "/api/auth/{name}/callback"),
     ("POST", "/api/auth/logout"),
     # The hub-as-IdP surface (issue #95) — `authorize` authenticates the browser
-    # itself (via an existing session, or the #92 dance) rather than being gated by
-    # one; `jwks.json` is by definition public key material.
+    # itself rather than being gated by one; `jwks.json` is public key material.
     ("GET", "/api/auth/authorize"),
     ("GET", "/api/auth/jwks.json"),
     # The CLI's PKCE code exchange (issue #96) — there is no session yet at this
@@ -139,19 +129,14 @@ _FLEET: set[tuple[str, str]] = {
 def _api_routes(app: FastAPI) -> list[APIRoute]:
     """Every mounted :class:`APIRoute`, recursively unwrapped.
 
-    This FastAPI version (0.139) does not flatten an included router's routes onto
-    ``app.routes`` eagerly — each ``include_router`` call leaves a lazy
-    ``_IncludedRouter`` wrapper whose ``original_router.routes`` holds the real,
-    already-prefixed :class:`APIRoute` objects (a sub-router's own ``prefix`` is baked
-    into ``route.path`` at the point its routes were declared, not at inclusion time),
-    so recursing through that attribute is the stable way to enumerate the live
-    surface regardless of nesting."""
+    This FastAPI version does not flatten an included router's routes onto
+    ``app.routes`` eagerly, so recursing through ``_IncludedRouter.original_router``
+    is the stable way to enumerate the live surface regardless of nesting."""
     routes: list[APIRoute] = []
     for route in app.routes:
         if isinstance(route, APIRoute):
-            # The web root is the SPA shell, not an API surface — public by
-            # construction either way and environment-dependent, so it stays out of
-            # the plane table.
+            # The web root is the SPA shell, not an API surface — stays out of the
+            # plane table.
             if route.path == "/":
                 continue
             routes.append(route)
@@ -192,21 +177,10 @@ def _dependency_names(route: APIRoute) -> set[str]:
 
 
 def _permission_of(call: object) -> Permission | None:
-    """The exact :class:`Permission` a ``require(<permission>)`` dependency (the
-    ``_dependency`` closure ``require`` returns) closes over, or ``None`` if ``call``
-    is not one — introspects the closure cell rather than trusting a second
-    hand-maintained map, so this check cannot silently drift from what the route
-    actually enforces.
-
-    ``require_marker_authority`` (issue #230) is a **second**, one-off way to pass
-    the marker-write route's gate — its module keeps its own ``_require_chunk_control
-    = require(CHUNK_CONTROL)`` module global as the human-plane fallback a live
-    marker token defers to, rather than declaring a second ``Depends(...)`` on the
-    route (a marker token is a delivery-layer credential, not a human permission, so
-    it has none to introspect here). Recursing into that module global — rather than
-    special-casing the route by path — keeps this generic to any future dependency
-    shaped the same way.
-    """
+    """The exact :class:`Permission` a ``require(<permission>)`` dependency closes
+    over, or ``None`` if ``call`` is not one — introspects the closure cell rather
+    than trusting a second hand-maintained map, so this cannot silently drift from
+    what the route actually enforces."""
     if getattr(call, "__name__", None) == "_dependency":
         freevars = call.__code__.co_freevars  # type: ignore[union-attr]
         closure = call.__closure__ or ()  # type: ignore[union-attr]

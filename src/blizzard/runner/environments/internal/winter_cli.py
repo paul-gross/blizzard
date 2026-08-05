@@ -1,20 +1,9 @@
 """Drive the real winter CLI against a workspace root (package-private).
 
-The winter binding acquires environments by running the actual ``winter`` CLI
-(``ws init``/``ws fetch``/``ws checkout``/``ws disconnect``/``service down``/
-``provision``) — winter is the reference workspace binding and its real behavior
-is exactly what verification must *see*.
-Two invocation shapes, tried in order:
-
-* the workspace's **own** ``tools/winter-cli`` via ``mise exec -- uv run`` with cwd
-  pinned to it, so winter's cwd-walk-up root resolution lands on this workspace —
-  the shape the ``blizzard-mock`` fixture ships and the tests drive;
-* a global ``winter`` binary as a fallback for a production workspace without a
-  vendored CLI.
-
-All ``subprocess`` usage is confined here (``bzh:dependency-inversion``); a failure
-is wrapped once and logged (``bzh:structlog-logging``).
-"""
+Two invocation shapes, tried in order: the workspace's **own** ``tools/winter-cli`` via
+``mise exec -- uv run`` with cwd pinned to it, so winter's cwd-walk-up root resolution
+lands on this workspace; then a global ``winter`` binary. All ``subprocess`` usage is
+confined here (``bzh:dependency-inversion``); a failure is wrapped once and logged."""
 
 from __future__ import annotations
 

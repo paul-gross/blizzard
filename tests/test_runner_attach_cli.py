@@ -1,11 +1,8 @@
 """``blizzard runner attach`` — the verb's identity handling and rejection surfacing
-(unit tier, issue #113 Phase 2), mirroring ``tests/test_heartbeat.py``'s CLI half:
-``httpx.post`` stubbed, no live socket. The endpoint itself (store round-trip,
-403/404/503) is the component tier's ``tests/test_runner_attachments_api.py``.
+(unit tier, issue #113 Phase 2). ``httpx.post`` stubbed, no live socket.
 
 Unlike the heartbeat/session-end hooks, ``attach`` does not soft-fail: a rejection
-must reach the worker as a non-zero exit so it learns the submission was not durable.
-"""
+must reach the worker as a non-zero exit so it learns the submission was not durable."""
 
 from __future__ import annotations
 

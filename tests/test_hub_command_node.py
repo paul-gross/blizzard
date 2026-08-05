@@ -1,13 +1,8 @@
 """The generic hub command node primitive (#65) — unit + component tiers.
 
-Unit tier: graph parsing/validation for ``executor: hub`` + ``run:``, and the pure
-outcome-mapping / env-injection helpers in
-:mod:`blizzard.hub.delivery.hub_node`. Component tier: the executor wired with a
-FAKE :class:`~blizzard.hub.delivery.command_runner.IHubCommandRunner` and
-:class:`~blizzard.hub.delivery.workdir.IHubWorkdir` over a real hub store — the
-``produces:`` skip, the mid-run marker callback, the stdout/stderr asset, the full
-outcome->edge routing, and the **serialization barrier** (flagged, load-bearing):
-two chunks parked at a hub command node must never run commands concurrently.
+Unit tier: graph parsing/validation plus the pure outcome-mapping/env-injection
+helpers. Component tier: the executor wired with a FAKE command runner + workdir over
+a real hub store, including the serialization barrier every parked chunk must honor.
 """
 
 from __future__ import annotations
@@ -107,9 +102,7 @@ nodes:
 """
 
 
-# --------------------------------------------------------------------------- #
 # Unit — validation
-# --------------------------------------------------------------------------- #
 
 
 def _errors(yaml_nodes: dict) -> list[str]:
@@ -238,9 +231,7 @@ def test_a_bare_hub_node_with_no_run_and_no_judgement_is_rejected() -> None:
     assert any("must declare a judgement" in e for e in errors)
 
 
-# --------------------------------------------------------------------------- #
 # Unit — pending outcome (#66)
-# --------------------------------------------------------------------------- #
 
 
 _BUILD_TO_MERGE = {
@@ -410,9 +401,7 @@ def test_hubnode_after_poll_before_slot_release_crash_point_is_registered() -> N
     assert "hubnode.after-poll.before-slot-release" in names
 
 
-# --------------------------------------------------------------------------- #
 # Unit — env injection
-# --------------------------------------------------------------------------- #
 
 
 def _reified_merge_node():  # type: ignore[no-untyped-def]
@@ -519,12 +508,9 @@ def _env_with(artifacts: list[ArtifactRow]) -> dict[str, str]:
 
 
 def test_a_rebased_tip_supersedes_the_pre_rebase_commit_for_the_same_repo() -> None:
-    """The pre-push wedge (#130): a rebase REWRITES the branch, so `build`'s commit is
-    orphaned and can never fast-forward. Delivery must see ONLY the rebased tip.
-
-    Resolved per ``(node_name, name)`` — the envelope's key — both rows survive, the
-    delivery script tries to fast-forward to each, and the orphaned one bounces it every
-    time however often the rebase re-runs. Keyed per repo, the later declaration wins."""
+    """The pre-push wedge (#130): a rebase REWRITES the branch, so `build`'s orphaned
+    commit can never fast-forward. Delivery must see ONLY the rebased tip — keyed per
+    ``(node_name, name)``, the later declaration wins."""
     env = _env_with(
         [
             _commit_row(node_name="build", epoch=2, commit="a" * 40),
@@ -595,9 +581,7 @@ def test_build_hub_env_carries_the_feature_title_when_given() -> None:
     assert env["BZ_HUB_FEATURE_TITLE"] == "Add rate limiting to the widget API"
 
 
-# --------------------------------------------------------------------------- #
 # Component — the executor wired with fakes over a real hub store
-# --------------------------------------------------------------------------- #
 
 
 def _to_merge_node(hub, pointer=_POINTER, graph_yaml: str = _HUB_CMD_GRAPH_YAML):  # type: ignore[no-untyped-def]
@@ -738,9 +722,8 @@ def test_nonzero_exit_maps_to_default_failure_edge(tmp_path: Path) -> None:
     assert detail["current_node_name"] == "build"
 
 
-#: `merge` authors only `success` — the shape every stock delivery graph has, where
-#: `deliver` offers `landed`/`conflict` and nothing for a step that simply died. A
-#: non-zero exit here defaults to `failure`, which no edge names.
+#: `merge` authors only `success`, so a non-zero exit here defaults to `failure`, which
+#: no edge names.
 _UNROUTABLE_GRAPH_YAML = _HUB_CMD_GRAPH_YAML.replace(
     """        failure:
           description: Failed to land.
@@ -753,12 +736,8 @@ _UNROUTABLE_GRAPH_YAML = _HUB_CMD_GRAPH_YAML.replace(
 @pytest.mark.component
 def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path) -> None:
     """A step exiting non-zero into an outcome the graph never authored strands the
-    node — it re-polls the identical failure forever, consuming no retry or bounce
-    budget.
-
-    It must announce itself exactly once per (node, epoch): once so an operator sees
-    it, only once so a 31-second poll loop does not flood the event feed.
-    """
+    node, re-polling the identical failure forever with no retry/bounce consumed —
+    but must announce itself exactly once per (node, epoch), not flood the event feed."""
     runner = FakeHubCommandRunner()
     runner.arm("land-the-repo", CommandResult(exit_code=1, stdout="", stderr="boom"))
     hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
@@ -834,10 +813,9 @@ def _submit_build_pass_with_commit(hub, chunk_id: str, build_node_id: str, epoch
 
 @pytest.mark.component
 def test_a_non_terminal_route_with_nothing_landed_records_a_bounce(tmp_path: Path) -> None:
-    """A hub node's outcome that routes back to a worker node while the repo it was
-    handed never landed a ``merged/<repo>`` marker is a delivery kick-back (#64) — by
-    the domain fact, never by choice name: ``failure`` here is the plain exit-code
-    default, not a specially-recognized string."""
+    """A non-terminal route with nothing landed is a delivery kick-back (#64) — by
+    the domain fact (no ``merged/<repo>`` marker), never by choice name: ``failure``
+    here is the plain exit-code default, not a specially-recognized string."""
     runner = FakeHubCommandRunner()
     runner.arm("land-the-repo", CommandResult(exit_code=1, stdout="", stderr="boom"))
     hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
@@ -857,10 +835,9 @@ def test_a_non_terminal_route_with_nothing_landed_records_a_bounce(tmp_path: Pat
 
 @pytest.mark.component
 def test_a_fully_landed_non_terminal_route_records_no_bounce(tmp_path: Path) -> None:
-    """The counterpart: every repo the node was handed already carries its
-    ``merged/<repo>`` marker, so a non-terminal continuation (an authored
-    ``landed -> <node>`` edge, #63) is forward progress, never a kick-back — no
-    bounce fact, whatever the chosen outcome's name."""
+    """The counterpart: every repo already carries its ``merged/<repo>`` marker, so a
+    non-terminal continuation (an authored ``landed -> <node>`` edge, #63) is forward
+    progress, never a kick-back — no bounce fact, whatever the outcome's name."""
     runner = FakeHubCommandRunner()
     runner.arm("land-the-repo", CommandResult(exit_code=0, stdout="landed\n", stderr=""))
     hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
@@ -988,20 +965,14 @@ def test_hub_advance_endpoint_no_ops_off_a_non_hub_command_node(tmp_path: Path) 
     assert result.json()["ran"] is False
 
 
-# --------------------------------------------------------------------------- #
 # Component — the serialization barrier (REQUIRED, flagged)
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component
 def test_serialization_barrier_two_chunks_never_run_hub_commands_concurrently(tmp_path: Path) -> None:
-    """Two chunks parked at a hub command node both call the executor; the
-    fleet-wide slot (#65) MUST ensure exactly one runs commands at a time.
-
-    Chunk A's command blocks on a latch while holding the slot; chunk B's concurrent
-    attempt must be DEFERRED (returns ``None``, no command run) rather than running
-    alongside it — proven with a shared in-flight counter the fake runner maintains,
-    never observed above 1."""
+    """Two chunks parked at a hub command node both call the executor; the fleet-wide
+    slot (#65) MUST ensure exactly one runs commands at a time — proven with a shared
+    in-flight counter the fake runner maintains, never observed above 1."""
     runner = FakeHubCommandRunner()
     hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
     assert hub.client.post("/api/graphs", json={"definition_yaml": _HUB_CMD_GRAPH_YAML}).status_code == 201
@@ -1088,9 +1059,7 @@ def test_serialization_barrier_two_chunks_never_run_hub_commands_concurrently(tm
     assert len(runner.calls) == 2
 
 
-# --------------------------------------------------------------------------- #
 # Component — pending outcome (#66): polls without blocking the queue
-# --------------------------------------------------------------------------- #
 
 _POLL_GRAPH_YAML = """
 name: default-delivery
@@ -1297,10 +1266,7 @@ def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -
     assert len(detail["bounces"]) == 1
 
     # Re-submit build -> merge a second time (bounce_cap: 1 means bounce #2 escalates).
-    # Advance the clock first: the kickback's arrival transition and this next
-    # departure transition share the same fencing epoch (2), and `newest_transition`
-    # tie-breaks same-epoch transitions by `recorded_at` — a FixedClock tick apart
-    # keeps them distinguishable, exactly as real wall-clock instants always are.
+    # Advance the clock first: same-epoch transitions tie-break by `recorded_at`.
     hub.clock.advance(timedelta(seconds=1))
     report_lease(hub, chunk_id, epoch=2, seq=2)
     second_build_node = hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
@@ -1312,8 +1278,7 @@ def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -
     assert detail2["status"] == "needs_human"
     assert len(detail2["bounces"]) == 2
     # A hub-authored escalation composes no wrapped command — the hub has no runner
-    # runtime dir to draw one from (`blizzard-context:/domain/humans.md` §Escalation,
-    # previously pinned by zero tests).
+    # runtime dir to draw one from (`blizzard-context:/domain/humans.md` §Escalation).
     assert detail2["escalation"]["wrapped_takeover_command"] == ""
 
 
@@ -1342,10 +1307,9 @@ def test_an_identical_re_declaration_at_one_epoch_is_a_correction_not_a_conflict
 
 
 def test_two_branches_for_one_repo_at_one_epoch_refuse_to_deliver() -> None:
-    """A chunk working one repo across several environments declares a branch per env at
-    the same epoch. Keeping whichever came last would deliver a fraction of the work and
-    call it a landing — so an unconverged set is refused, not tie-broken. Convergence
-    belongs to pre-push, which rolls the envs up and re-declares at a later epoch."""
+    """A chunk declaring a branch per env at the same epoch is unconverged: keeping
+    whichever came last would deliver a fraction of the work and call it a landing, so
+    it is refused, not tie-broken. Convergence belongs to pre-push."""
     with pytest.raises(UnconvergedDeliveryError) as exc:
         _env_with(
             [

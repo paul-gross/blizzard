@@ -1,13 +1,8 @@
 """``require_marker_authority`` gating the mid-run marker callback (issue #230, phase 2).
 
-Component tier: a real hub built with ``auth_mode="oauth"`` (:func:`build_hub`), hit
-with a real HTTP client — proving the *dynamic* claim (an actual request with/without
-a live marker token gets the actual status code the new gate predicts), the same way
-``tests/test_route_permission_matrix.py`` proves the human-plane permission table.
-Every refusal is proven both by status code AND by reading the marker artifact back
-through ``services.chunks.load_artifacts`` — a route that 401s but records the write
-anyway would pass a status-code-only check while still leaking the unauthenticated
-write this issue exists to close.
+A real hub built with ``auth_mode="oauth"``, hit with a real HTTP client. Every refusal
+is proven both by status code AND by reading the marker artifact back — a route that
+401s but records the write anyway would leak the write this issue closes.
 """
 
 from __future__ import annotations
@@ -136,15 +131,8 @@ def test_an_operators_own_chunk_control_session_still_works_with_no_marker_token
     assert _MARKER_NAME in _recorded_marker_names(hub, chunk_id)
 
 
-# -- the two sides of the credential, bound (issue #230) -----------------------------
-#
-# The producer (``land_common``) and consumer (``api.marker_auth``) each assert their own
-# copy of the ``_MARKER_TOKEN_HEADER`` literal, so a rename on one side alone leaves the
-# whole gate green while every real land against an ``auth.mode != "none"`` hub 401s. The
-# two tests below drive the producer's real closure through the consumer's real route
-# in-process, so that rename fails here — coverage ``blizzard:e2e`` can't provide, since
-# its hubs run at the ``init`` default (``auth.mode = "none"``), which short-circuits
-# before the header is ever read.
+# The producer and consumer each assert their own copy of the header literal (issue
+# #230); a rename on either side must fail here, driven in-process through the real route.
 
 
 def _hub_request(hub: HubHarness):
@@ -167,10 +155,9 @@ def _hub_request(hub: HubHarness):
 
 
 def test_the_land_scripts_own_recorder_records_durably_against_an_oauth_hub(tmp_path: Path) -> None:
-    """The issue's headline claim, end to end within one process: the real
-    ``marker_recorder`` closure a land script builds, holding the real token the
-    executor mints, writes a marker that is durably readable back — against a hub with
-    authentication genuinely on."""
+    """The issue's headline claim end to end: the real ``marker_recorder`` closure,
+    holding the real minted token, writes a marker durably readable back — against a
+    hub with authentication genuinely on."""
     hub = build_hub(tmp_path, auth_mode="oauth")
     chunk_id = _seed_chunk(hub)
     token = hub.services.marker_authority.issue(chunk_id, node_id=_NODE_ID, epoch=_EPOCH)
@@ -195,20 +182,8 @@ def test_the_land_scripts_own_recorder_fails_loudly_when_the_hub_refuses(tmp_pat
     assert _recorded_marker_names(hub, chunk_id) == set()
 
 
-# -- the credential the executor actually injects, spent on the actual route ---------
-#
-# ``build_services`` must hand the hub-node executor and ``HubServices`` the **same**
-# ``MarkerAuthority`` instance, and ``HubNodeExecutor._marker_callback_url``'s
-# ``?node_id=&epoch=`` must name the same node id and epoch the route re-derives — give
-# the executor its own instance instead and the whole unit+component tier stays green
-# while every real land against an ``oauth`` hub 401s, the exact production symptom
-# issue #230 exists to close.
-#
-# The test below is the only place a token travels the whole shipped path: minted by
-# the executor, injected into a real ``run:`` step's env, spent by the real
-# ``marker_recorder`` on the real route, against a hub with authentication on — the
-# subprocess boundary a land script sits at is the one thing it cannot reproduce
-# in-process.
+# The executor and ``HubServices`` must share one ``MarkerAuthority`` instance (issue
+# #230); the test below is the only place a token travels the whole shipped path.
 
 _HUB_NODE_GRAPH_YAML = """
 name: default-delivery
@@ -246,15 +221,10 @@ nodes:
 
 
 def _drive_to_the_hub_node(hub: HubHarness) -> str:
-    """Ingest, promote, claim, and pass ``build`` so the completion's own apply runs the
-    hub node executor synchronously — returning the chunk id.
-
-    Only the three human-plane calls carry the admin session; the ``/api/fleet`` calls
-    are the runner plane and deliberately set no cookie on ``hub.client`` itself. A
-    client-wide cookie would ride the nested marker POST too, letting the human
-    ``require(CHUNK_CONTROL)`` fallback grant the write the marker token was supposed to
-    be the only credential for — passing the test for the wrong reason.
-    """
+    """Ingest, promote, claim, and pass ``build`` so the completion's apply runs the hub
+    node executor synchronously — returning the chunk id. Only the human-plane calls
+    carry the admin session; ``/api/fleet`` sets no cookie, so the marker token stays
+    the only write credential."""
     admin = seed_user(hub, username="root", role=Role.SUPERUSER)
     cookie = _cookie(seed_session(hub, admin))
     assert (
@@ -306,9 +276,8 @@ def test_the_token_the_executor_injects_authorizes_the_route_it_names(tmp_path: 
         try:
             record("acme-widget", "sha:abc123")
         except MarkerWriteError as exc:
-            # Captured rather than raised: an exception here escapes through the
-            # executor into the completion request, and the test would fail on a 500
-            # naming neither the status nor the refusal.
+            # Captured rather than raised: an exception here would escape into the
+            # completion request, failing on a 500 naming neither status nor refusal.
             write_errors.append(exc)
 
     runner.before_run = land_the_repo

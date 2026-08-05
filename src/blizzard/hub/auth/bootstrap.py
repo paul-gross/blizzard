@@ -1,21 +1,9 @@
 """``auth.superuser`` bootstrap — ensure/demote/report at hub boot (issue #94).
 
-Run once from ``build_hosted_app`` (``hub/app.py``). :func:`ensure_superuser_bootstrap`
-is the deterministic-shell orchestrator (``bzh:deterministic-shell``): every store write
-it performs goes through
-:class:`~blizzard.hub.auth.service.AuthService`'s own bootstrap methods
-(``bzh:controller-read-only``), never a repository directly.
-
-Idempotent across restarts: a fresh boot with the same ``auth.superuser`` value
-re-derives the same outcome every time (promote-if-needed, or report-still-unclaimed).
-Changing ``auth.superuser`` to a *different* email demotes whichever user the
-*previous* target had claimed (tracked in the singleton ``superuser_bootstrap`` row) to
-``admin``, recorded as a ``user_role_changed`` fact — never accumulative: at most one
-user is ever the bootstrapped superuser at a time. A configured email matching no
-verified user yet is a pre-provisioned, unclaimed intent — claimed later by the first
-matching verified login (``AuthService.link_or_mint``) — and is surfaced (logged +
-faceted) at *every* boot while it stays unclaimed, never a silent dead end.
-"""
+Idempotent across restarts. Pointing ``auth.superuser`` at a *different* email demotes
+whichever user the previous target had claimed (the singleton ``superuser_bootstrap``
+row) to ``admin``, so at most one user is ever the bootstrapped superuser. An email
+matching no verified user is an unclaimed intent, surfaced at every boot until claimed."""
 
 from __future__ import annotations
 

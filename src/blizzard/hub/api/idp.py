@@ -1,47 +1,8 @@
-"""The hub-as-IdP surface (issue #95) — ``GET /api/auth/authorize`` and
-``GET /api/auth/jwks.json``.
+"""The hub-as-IdP surface (issues #95, #96) — ``authorize``, ``jwks.json``, and the
+``client=cli`` PKCE code exchange.
 
-Public plane throughout, exactly like ``hub/api/auth_login.py``: an unauthenticated
-runner-bound browser must reach ``authorize`` to *start* authenticating, and
-``jwks.json`` is by definition public key material. Under ``auth.mode = "none"`` both
-routes 404 — there is no keypair, no JWKS, no IdP surface (mirrors #92's "no login
-mechanism under none").
-
-``authorize`` serves **registered public clients generally**, not just runners — a
-``client`` is resolved by treating it as a runner id first (the only client kind this
-phase registers); #96's ``client=cli`` rides this same route later by extending the
-client-resolution step, never by forking a second authorize handler.
-
-**Chaining through the provider dance.** When the browser presents no hub session, the
-authorize request must first complete a #92 provider login and land back here with one
-established. This route reuses #92's own single-use ``auth_state``/``return_to``
-mechanism unmodified (decision D5) — it redirects into
-``GET /api/auth/{provider}/authorize?return_to=<this request's own path+query>``, and
-that route's ``callback`` already redirects to ``return_to`` once a session is minted,
-landing the browser back on this exact URL, this time with a cookie. With a *single*
-configured provider this bounce is direct (no chooser hop). With *two or more* (issue
-#128) there is no single dance to auto-run, so authorize instead redirects to the board's
-own ``/login`` page carrying this pending request as ``return_to`` — the login page
-already renders a multi-provider button list, and threads that ``return_to`` (which it
-validates to a same-origin ``/api/auth/authorize`` target only — no open redirect)
-through each provider button, so completing any provider's dance resumes *this* request
-with a session in hand. With *zero* configured providers there is nothing to
-authenticate against, so authorize refuses with 501.
-
-**``client=cli`` (issue #96).** The CLI's own public client — a built-in convention,
-not a per-user registered row like a runner's (:func:`_resolve_client` never sees it).
-Its registered redirect form is the ephemeral loopback
-``http://127.0.0.1:<port>/callback`` (exact string match, any port) or the fixed
-out-of-band marker ``urn:ietf:wg:oauth:2.0:oob`` (the paste-code fallback); PKCE
-(``code_challenge``, S256) is mandatory. Once identity resolves (an existing hub
-session, or the same provider-dance bounce above), delivery diverges from the runner's
-direct-JWT hand-off (decision D6 — the CLI is a client of the hub itself, never handed
-a runner-style JWT): ``authorize`` mints a single-use authorization *code*
-(``AuthService.mint_cli_code``) and either 302s it to the loopback redirect (standard
-query-string code delivery — the code is short-lived and single-use, unlike the
-never-a-query-string rule that governs the *token* itself) or renders it as a
-paste-able page for the OOB form. The CLI then redeems the code, together with its
-PKCE verifier, at ``POST /api/auth/cli/token`` for the actual session token.
+Public plane throughout: an unauthenticated browser must reach ``authorize`` to *start*
+authenticating. Under ``auth.mode = "none"`` every route here 404s — no keypair, no IdP.
 """
 
 from __future__ import annotations
@@ -67,16 +28,13 @@ from blizzard.hub.domain.registry import RunnerRegistration
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-#: The minted JWT's lifetime — the issue's own ceiling (``exp <= 60s``); the runner
-#: additionally honors a further ±30s clock-skew leeway on top of this.
+#: The minted JWT's lifetime — the issue's own ceiling (``exp <= 60s``).
 JWT_TTL = timedelta(seconds=60)
 
 _RESPONSE_MODES = {"form_post", "fragment"}
 
-#: The CLI's registered redirect form (issue #96) — an ephemeral ``127.0.0.1`` loopback
-#: callback (any port, exact path) or the fixed out-of-band marker for the paste-code
-#: fallback. Neither is a per-client registered row (unlike a runner's own
-#: ``redirect_uris``) — both are a built-in convention of the ``cli`` client id.
+#: The ``cli`` client id's built-in redirect form (issue #96) — an ephemeral
+#: ``127.0.0.1`` loopback callback, or the fixed out-of-band paste-code marker.
 _CLI_LOOPBACK_REDIRECT_RE = re.compile(r"^http://127\.0\.0\.1:\d+/callback$")
 CLI_OOB_REDIRECT_URI = "urn:ietf:wg:oauth:2.0:oob"
 
@@ -86,10 +44,8 @@ def _valid_cli_redirect_uri(redirect_uri: str) -> bool:
 
 
 def _resolve_client(services, client: str) -> RunnerRegistration | None:  # type: ignore[no-untyped-def]
-    """Resolve an authorize ``client`` id to its registered redirect set. Only a
-    registered runner is a valid client here — ``client=cli`` (issue #96) is resolved
-    on a separate branch in :func:`authorize` (a built-in convention, not a registered
-    row), never a second handler."""
+    """Resolve an authorize ``client`` id to its registered redirect set — only a
+    registered runner is a valid client on this branch."""
     return services.registry.get_runner(client)
 
 
@@ -126,10 +82,8 @@ def authorize(
     else:
         registration = _resolve_client(services, client)
         if registration is None or redirect_uri not in registration.redirect_uris:
-            # Deliberately one undifferentiated 400 for "unknown client" and
-            # "unregistered redirect_uri" — the open-redirect guard (AC): neither tells
-            # a caller which of the two failed, so a client can't fingerprint valid
-            # client ids by probing.
+            # One undifferentiated 400 for both cases — the open-redirect guard (AC):
+            # a caller cannot fingerprint valid client ids by probing.
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="unknown client or unregistered redirect_uri"
             )
@@ -146,16 +100,11 @@ def authorize(
         if request.url.query:
             return_to = f"{return_to}?{request.url.query}"
         if len(providers) == 1:
-            # Single-provider fast path (AC): no chooser hop — bounce straight into the
-            # one provider's dance, which lands the browser back on this exact URL with a
-            # session (decision D5, reused unmodified).
+            # Single-provider fast path (AC): no chooser hop — the dance lands the
+            # browser back on this exact URL with a session (decision D5).
             return RedirectResponse(f"/api/auth/{providers[0].name}/authorize?return_to={quote(return_to, safe='')}")
         # Two or more providers (issue #128): no single dance to auto-run, so hand the
-        # browser to the board's own login page carrying this pending authorize request
-        # as its return target. The user picks a provider there; completing any provider's
-        # dance resumes *this* request — the login page threads return_to through each
-        # provider button, honoring only a same-origin /api/auth/authorize target (no open
-        # redirect).
+        # browser to a chooser carrying this pending request as its return target.
         return RedirectResponse(f"/login?return_to={quote(return_to, safe='')}")
 
     user = services.users.get(identity.user_id)
@@ -206,11 +155,8 @@ class CliTokenResponse(BaseModel):
 def cli_token(request: Request, body: CliTokenRequest) -> CliTokenResponse:
     """Redeem a ``client=cli`` authorize code for a hub session token (issue #96).
 
-    Public plane, like ``authorize`` itself — there is no session yet at this point,
-    that is what this route mints. One undifferentiated 400 covers every failure
-    (unknown/expired/already-consumed code, a mismatched ``redirect_uri``, or a PKCE
-    verifier that does not hash to the stored challenge) — mirrors ``authorize``'s own
-    "don't tell a caller which check failed" shape."""
+    Public plane — there is no session yet; this route is what mints one. One
+    undifferentiated 400 covers every failure, telling a caller nothing about which."""
     if request.app.state.config.auth.mode == AUTH_MODE_NONE:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")
     services = get_services(request)
@@ -229,11 +175,8 @@ def cli_token(request: Request, body: CliTokenRequest) -> CliTokenResponse:
     dependencies=[Depends(reject_runner_principal), Depends(require(USER_MANAGE))],
 )
 def rotate_signing_key(request: Request) -> Response:
-    """``blizzard hub rotate-signing-key`` (issue #95) — mint a fresh current key,
-    demoting the old current to previous. Human-plane, gated on ``user:manage`` (the
-    same admin-tier permission the user-management API uses — no new permission is
-    minted for this one verb) and closed to a runner's own bearer token
-    (``reject_runner_principal``, mirroring every other operator router)."""
+    """Mint a fresh current signing key, demoting the old current to previous (issue
+    #95). Human-plane, gated on ``user:manage`` and closed to a runner bearer token."""
     if request.app.state.config.auth.mode == AUTH_MODE_NONE:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")
     services = get_services(request)
@@ -248,11 +191,8 @@ def _mint_jti() -> str:
 
 
 def _cli_delivery(*, redirect_uri: str, code: str, state: str) -> HTMLResponse | RedirectResponse:
-    """Deliver a ``client=cli`` authorize code (issue #96) — a 302 with the code in the
-    query string for the loopback form (a short-lived, single-use *code* is a normal
-    thing to put in a query string; it is the *token* itself the "never a query
-    string" rule governs, see :func:`_delivery_page`), or a paste-able HTML page for
-    the out-of-band form."""
+    """Deliver a ``client=cli`` authorize code (issue #96) — a 302 carrying the code in
+    the query string for the loopback form, or a paste-able page for out-of-band."""
     if redirect_uri == CLI_OOB_REDIRECT_URI:
         return _paste_code_page(code)
     separator = "&" if "?" in redirect_uri else "?"
@@ -261,8 +201,7 @@ def _cli_delivery(*, redirect_uri: str, code: str, state: str) -> HTMLResponse |
 
 
 def _paste_code_page(code: str) -> HTMLResponse:
-    """The paste-code fallback's rendered page (issue #96) — the user copies this code
-    into the waiting CLI prompt, which redeems it the same way the loopback path does."""
+    """The paste-code fallback's rendered page (issue #96)."""
     escaped = html.escape(code)
     body = (
         "<!doctype html><html><body>"
@@ -275,16 +214,11 @@ def _paste_code_page(code: str) -> HTMLResponse:
 
 def _delivery_page(*, redirect_uri: str, token: str, state: str, response_mode: str) -> HTMLResponse:
     """Render the token delivery — **never** a query string (AC): either an
-    auto-submitting ``form_post`` (what the runner, a plain HTTP backend, actually
-    consumes) or a client-side redirect into the URL fragment (structurally present for
-    a future browser-side consumer, e.g. #96's CLI loopback page; unused by this
-    phase's own runner federation, which reads the posted form)."""
+    auto-submitting ``form_post`` or a client-side redirect into the URL fragment."""
     if response_mode == "fragment":
         target = f"{redirect_uri}#token={token}&state={state}"
-        # `json.dumps` is not itself script-context-safe against a `</script>` breakout
-        # if `target` carried one — it can't here (`token`/`state` are opaque
-        # generated values, `redirect_uri` is exact-match validated against an
-        # operator-registered URI), but the substitution is defensive belt-and-braces.
+        # `json.dumps` alone is not script-context-safe against a `</script>` breakout;
+        # `target` cannot carry one here, but the substitution is defensive.
         script_safe = json.dumps(target).replace("</", "<\\/")
         body = f"<!doctype html><html><body><script>location.replace({script_safe});</script></body></html>"
         return HTMLResponse(body)

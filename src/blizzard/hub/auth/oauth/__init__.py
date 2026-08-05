@@ -1,12 +1,8 @@
-"""The OAuth provider seam — a Protocol (:mod:`.provider`) with two conformers
-(:mod:`.internal.oidc_provider`, :mod:`.internal.github_provider`), issue #92.
+"""The OAuth provider seam — :mod:`.provider`, with conformers in ``internal/`` (#92).
 
-A new **external system behind a new seam** (``bzh:pluggable-seams``): the provider
-Protocol owns the whole authorize/exchange dance so ``hub/api/auth_login.py`` stays a
-deterministic shell over it (``bzh:deterministic-shell``) — all ``httpx`` and provider
-wire-shape knowledge is confined to ``internal/`` (``bzh:dependency-inversion``). The
-registry (:mod:`.registry`) is built at the composition root from
-``[[auth.oauth.provider]]`` config, keyed by provider ``name``.
-"""
+An external system behind a seam (``bzh:pluggable-seams``): the Protocol owns the whole
+authorize/exchange dance, and all ``httpx`` and provider wire-shape knowledge stays in
+``internal/`` (``bzh:dependency-inversion``). The registry (:mod:`.registry`) is keyed
+by provider ``name``."""
 
 from __future__ import annotations

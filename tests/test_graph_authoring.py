@@ -54,9 +54,7 @@ def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
     targets = {e.to_node_name for e in graph.edges_from(build.node_id)}
     assert targets == {"review", "build"}
 
-    # The deliver hub node authors its own judgement (#67) exactly like a worker
-    # node's — its outcome choices reify into real choices and edges, not a
-    # machinery-applied default.
+    # The deliver hub node authors its own judgement (#67) exactly like a worker node's.
     assert {c.name for c in deliver.choices} == {"landed", "conflict", "failure"}
     deliver_targets = {e.to_node_name for e in graph.edges_from(deliver.node_id)}
     assert deliver_targets == {"retrospective", "pre-push"}
@@ -68,9 +66,8 @@ def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
 
 def test_adv_dwf_retrospective_carries_the_delivery_incomplete_choice() -> None:
     """#238 AC2: retrospective's judgement gains an authored `delivery-incomplete`
-    choice routing to `resolve`, alongside the pre-existing `recorded` -> `done`. Loading
-    the packaged doc at all proves the `resolve.from-retrospective.md` addendum resolves
-    — inlining fails loudly on a dangling `prompt_addendum` reference."""
+    choice routing to `resolve`, alongside `recorded -> done`; loading the packaged doc
+    also proves the `resolve.from-retrospective.md` addendum resolves."""
     doc = load_graph_doc(_GRAPHS_DIR / "advanced-development-workflow" / "graph.yaml")
     graph = reify_graph(doc, _clock())
     retrospective = graph.node_by_name("retrospective")
@@ -86,9 +83,8 @@ def test_adv_dwf_retrospective_carries_the_delivery_incomplete_choice() -> None:
 
 def test_adv_dwf_deliver_authors_the_conflict_edge() -> None:
     """#241 AC1: deliver's judgement gains an authored `conflict` choice routing to
-    `resolve`, alongside the pre-existing `landed`/`failure` choices — so a `dirty` PR
-    (a real merge conflict) bounces through the normal retry/bounce/escalation ladder
-    instead of falling into the no-authored-edge routing branch."""
+    `resolve`, alongside `landed`/`failure`, so a `dirty` PR bounces through the normal
+    retry/bounce/escalation ladder."""
     doc = load_graph_doc(_GRAPHS_DIR / "advanced-development-workflow" / "graph.yaml")
     graph = reify_graph(doc, _clock())
     deliver = graph.node_by_name("deliver")
@@ -105,12 +101,9 @@ def test_adv_dwf_deliver_authors_the_conflict_edge() -> None:
 
 
 def test_every_land_pr_ci_outcome_is_authored_on_the_shipped_deliver_node() -> None:
-    """#241 recurrence guard: the class of bug here is a script literal with no
-    authored edge — `land_pr_ci` prints an outcome the graph never authors a choice
-    for. Reads the script's own outcome constants rather than hardcoding them, so a
-    rename trips this test instead of leaving it silently unable to catch the next
-    instance. `_PENDING` is machinery-reserved (`bzh:hub-node-outcome-protocol`) and
-    excluded."""
+    """#241 recurrence guard: `land_pr_ci` must not print an outcome the graph never
+    authors a choice for. Reads the script's own outcome constants rather than
+    hardcoding them; `_PENDING` is machinery-reserved and excluded."""
     doc = load_graph_doc(_GRAPHS_DIR / "advanced-development-workflow" / "graph.yaml")
     graph = reify_graph(doc, _clock())
     deliver = graph.node_by_name("deliver")
@@ -212,9 +205,7 @@ def test_edge_for_choice_resolves_by_name() -> None:
     assert RESERVED_TERMINAL not in {n.name for n in graph.nodes}
 
 
-# --------------------------------------------------------------------------- #
-# `produces:` — scalar-or-mapping normalization (D1, issue #143).
-# --------------------------------------------------------------------------- #
+# --- `produces:` — scalar-or-mapping normalization (D1, issue #143) ---
 
 
 def _produces_doc(produces: object) -> dict[str, object]:

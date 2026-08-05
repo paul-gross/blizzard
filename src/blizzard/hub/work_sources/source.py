@@ -1,33 +1,9 @@
 """The work-source seam — a vendor-native pass-through read.
 
-The hub reads a chunk's work item (issue body + comment thread) straight from the
-forge on demand and **never stores its contents**: the pointer is the
-durable referent, the item is fetched fresh. The domain owns this Protocol
-(``bzh:dependency-inversion``); a vendor-shaped adapter under ``internal/`` implements
-it against a real forge — the ``blizzard-mock`` forge in tests, GitHub in production —
-one instance per configured ``[[work_source]]``, pinned to its own repo and
-carrying its own credentialed client.
-
-The seam reaches beyond ``fetch``: a binding also owns parsing its own ingest-token
-form, rendering the board-legible label, and deriving the pointer's/a branch's browser
-address — kept out of the domain layer (``bzh:domain-core``). The
-:class:`IWorkSourceRegistry` replaces the single ``work_source: IWorkSource | None``
-seam slot: the hub builds one binding per declared source, and an empty registry is a
-legal hub with no work-source reach.
-
-``parse``'s production caller is ``POST /chunks``: it takes source-native
-tokens, and :meth:`IWorkSourceRegistry.resolve` walks the configured bindings, returning
-the first pointer one claims. Exactly one binding can ever claim a token — config
-rejects a duplicate ``name`` and a duplicate ``(provider, repo)`` — so ``parse``
-returns ``None`` for "not my token" rather than raising: the registry loops cleanly over
-every binding, and the route is what raises/reports when nothing claims it (422).
-
-``fetch`` returns a small domain :class:`WorkItem`; the edge maps it onto a wire
-:class:`~blizzard.wire.chunk.WorkItemEntry` with the pointer, its label, and a ``fetched_at``.
-
-The pointer carries its own ``source`` name, so finding a pointer's binding is a
-plain registry lookup (``registry.get(pointer.source)``).
-"""
+A work item's contents are **never stored**: the pointer is the durable referent, the
+item is fetched fresh. A binding also owns parsing its own ingest-token form, its label,
+and its browser addresses (``bzh:domain-core``). ``parse`` returns ``None`` for "not my
+token" rather than raising, so a registry can loop over every binding."""
 
 from __future__ import annotations
 

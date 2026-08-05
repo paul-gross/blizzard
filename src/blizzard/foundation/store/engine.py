@@ -14,8 +14,6 @@ def create_engine_from_url(url: str) -> Engine:
     """Build an engine from a store URL, applying the sqlite-safe connect args."""
     connect_args: dict[str, object] = {}
     if url.startswith("sqlite"):
-        # The daemon serves the store from multiple request threads; sqlite's
-        # default same-thread check would reject that. WAL and the single-writer
-        # discipline are the daemon's concern.
+        # The store is served from multiple threads; sqlite's default same-thread check rejects that.
         connect_args["check_same_thread"] = False
     return create_engine(url, future=True, connect_args=connect_args)

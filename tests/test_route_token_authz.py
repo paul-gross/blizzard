@@ -1,12 +1,8 @@
 """Route-token authorization at the wired hub (component tier, issue #84b).
 
-``tests/test_route_claim.py`` covers the token's mint (issue #84a, present-only);
-``tests/test_route_auth.py`` covers ``check_route_token`` itself (unit tier). This file
-proves the **check** — completions, decisions, and buffered chunk-scoped facts are
-rejected under ``route_token_mode=enforce`` when the presented token doesn't match the
-chunk's live route, or the declared ``runner_id`` doesn't hold it — release invalidates
-the old token, re-key rotates it, ``usage.recorded`` stays ungated, and ``warn`` (the
-default) never rejects, only logs.
+Proves the check — completions, decisions, and buffered facts are rejected under
+``route_token_mode=enforce`` on a mismatched token or runner_id; release invalidates
+the old token, re-key rotates it, ``usage.recorded`` stays ungated, ``warn`` only logs.
 """
 
 from __future__ import annotations
@@ -90,9 +86,7 @@ def _submit(hub, chunk_id: str, **kwargs) -> httpx.Response:  # type: ignore[no-
     return hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(**kwargs))
 
 
-# --------------------------------------------------------------------------- #
 # Completion apply — token match/mismatch, runner mismatch (AC 2, 4)
-# --------------------------------------------------------------------------- #
 
 
 def test_completion_with_the_claims_own_token_is_accepted_under_enforce(tmp_path: Path) -> None:
@@ -154,9 +148,7 @@ def test_completion_without_a_token_proceeds_under_warn(tmp_path: Path) -> None:
     assert resp.json()["outcome"] != "failure"
 
 
-# --------------------------------------------------------------------------- #
 # Fact intake — a fabricated lease.minted cannot advance latest_epoch (AC 3)
-# --------------------------------------------------------------------------- #
 
 
 def test_fabricated_lease_minted_is_rejected_and_cannot_advance_the_fence(tmp_path: Path) -> None:
@@ -195,9 +187,7 @@ def test_escalation_from_a_non_holder_is_rejected_under_enforce(tmp_path: Path) 
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] != "needs_human"
 
 
-# --------------------------------------------------------------------------- #
 # usage.recorded stays ungated — a deliberate exclusion (issue #84b DO-NOT-GATE)
-# --------------------------------------------------------------------------- #
 
 
 def test_usage_recorded_applies_without_a_token_even_under_enforce(tmp_path: Path) -> None:
@@ -235,9 +225,7 @@ def test_usage_recorded_applies_without_a_token_even_under_enforce(tmp_path: Pat
     assert resp.json()["applied"] == [1]
 
 
-# --------------------------------------------------------------------------- #
 # route.released invalidates the token; a fresh claim's token is accepted (AC 5)
-# --------------------------------------------------------------------------- #
 
 
 def test_release_invalidates_the_old_token_and_the_next_claims_token_is_accepted(tmp_path: Path) -> None:
@@ -259,9 +247,7 @@ def test_release_invalidates_the_old_token_and_the_next_claims_token_is_accepted
     assert fresh.json()["outcome"] != "failure"
 
 
-# --------------------------------------------------------------------------- #
 # Re-key — rotates the token; the old plaintext is rejected afterward (AC 6)
-# --------------------------------------------------------------------------- #
 
 
 def test_rekey_rotates_the_token_and_the_old_one_is_rejected_afterward(tmp_path: Path) -> None:
@@ -319,9 +305,7 @@ def test_rekey_is_confined_to_the_live_routes_own_runner(tmp_path: Path) -> None
     assert allowed.status_code == 200, allowed.text
 
 
-# --------------------------------------------------------------------------- #
 # A runner-config gate decision is gated the same way as a completion
-# --------------------------------------------------------------------------- #
 
 
 def test_decision_submission_with_a_wrong_token_is_rejected_under_enforce(tmp_path: Path) -> None:

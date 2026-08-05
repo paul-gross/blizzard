@@ -1,11 +1,8 @@
 """Chunk status derivation (unit tier) — the status precedence ladder, facts only.
 
-The derivation is a pure function of :class:`ChunkFacts`, so these tests build the
-facts directly — no store, no tokens (``bzh:facts-not-status`` / ``bzh:domain-takes-objects``).
-They walk the P6 live path (ready -> running -> delivering -> done) and pin the
-precedence edges the design specifies: an escalation superseded by a later lease is
-no longer ``needs_human``, and a released route re-derives ``ready``.
-"""
+Builds ``ChunkFacts`` directly — no store, no tokens. Walks the live path (ready ->
+running -> delivering -> done) and pins the precedence edges: an escalation superseded
+by a later lease is no longer ``needs_human``, and a released route re-derives ``ready``."""
 
 from __future__ import annotations
 
@@ -138,10 +135,8 @@ def test_same_instant_detach_takes_effect() -> None:
 
 
 def test_same_instant_reclaim_still_derives_running() -> None:
-    """Issue #41's other half: a fresh ``route.created`` recorded after a prior release
-    in real write order — its ``seq`` is higher than that release's — must still win
-    the tie, so no live route is lost (generalizes
-    ``test_reclaimed_after_release_is_running_again`` to the same-instant case)."""
+    """A fresh ``route.created`` with a higher ``seq`` than a same-instant prior release
+    still wins the tie, so no live route is lost (issue #41)."""
     facts = ChunkFacts(
         minted=True,
         routes_created=[RouteCreatedFact(created_at=_at(1), seq=1), RouteCreatedFact(created_at=_at(2), seq=3)],
@@ -150,9 +145,7 @@ def test_same_instant_reclaim_still_derives_running() -> None:
     assert derive_chunk_status(facts) is ChunkStatus.RUNNING
 
 
-# --------------------------------------------------------------------------- #
-# Route capability token derivation (issue #84a) — newest-fact-wins over the live
-# acquisition's window, mirroring the route liveness derivation above.
+# Route capability token derivation (issue #84a) — newest-fact-wins, as above.
 # --------------------------------------------------------------------------- #
 
 
@@ -236,8 +229,7 @@ def test_runner_node_transition_stays_running_not_delivering() -> None:
 
 def test_delivery_landed_is_done_over_a_live_route() -> None:
     # DONE derives from *reaching* the terminal transition (#63), not the landed fact
-    # alone — ``finalize_delivery`` always writes both atomically in the no-authored-edge
-    # (default graph) case, so this pins that real shape.
+    # alone; the default graph's ``finalize_delivery`` always writes both atomically.
     facts = ChunkFacts(
         minted=True,
         delivery_landed=True,
@@ -250,11 +242,8 @@ def test_delivery_landed_is_done_over_a_live_route() -> None:
 
 
 def test_delivery_landed_without_reaching_terminal_is_not_done() -> None:
-    # The delicate #63 edit: a whole-chunk ``delivery.landed`` fact with no terminal
-    # transition (a synthetic shape unreachable via ``finalize_delivery``, but the one
-    # the derivation must not key on) must NOT derive DONE — it falls through to the
-    # live route below, exactly what makes a post-merge node's worker completion
-    # legal (``apply.py:91`` would otherwise reject it as terminal).
+    # A whole-chunk ``delivery.landed`` fact with no terminal transition (unreachable via
+    # ``finalize_delivery``) must NOT derive DONE — it falls through to the live route below.
     facts = ChunkFacts(
         minted=True,
         delivery_landed=True,
@@ -264,9 +253,8 @@ def test_delivery_landed_without_reaching_terminal_is_not_done() -> None:
 
 
 def test_merged_but_running_derives_running_not_done() -> None:
-    # An authored ``merged -> <node>`` edge: the coordinator recorded per-repo landed
-    # facts and a NON-terminal transition into the post-merge node, retaining the route.
-    # The chunk must derive its live running state, not DONE — "merged but running".
+    # An authored ``merged -> <node>`` edge retains the route via a non-terminal
+    # transition; the chunk derives its live running state, not DONE.
     facts = ChunkFacts(
         minted=True,
         landed_repos=frozenset({"acme/widget"}),
@@ -280,9 +268,8 @@ def test_merged_but_running_derives_running_not_done() -> None:
 
 
 def test_merged_but_escalated_derives_needs_human_with_landed_detail() -> None:
-    # The post-merge node exhausted retries: normal escalation, no un-merge path. The
-    # chunk derives BOTH needs_human (status) and landed (detail) — "merged but stuck",
-    # represented honestly rather than hidden or un-merged.
+    # The post-merge node exhausted retries: the chunk derives BOTH needs_human (status)
+    # and landed (detail), represented honestly rather than hidden or un-merged.
     facts = ChunkFacts(
         minted=True,
         landed_repos=frozenset({"acme/widget"}),
@@ -541,15 +528,8 @@ def test_re_pause_after_resume_derives_paused_again() -> None:
     assert derive_chunk_status(facts) is ChunkStatus.PAUSED
 
 
-# --- open_pause: the FACT, deliberately not the derived status (issue #46 §4) ---
-#
-# `open_pause` is the sole source of the wire's `ChunkDetail.pause`, which is in turn the
-# only thing the runner (P4) may key its kill-and-park on. PAUSED sits *below* the
-# human-gated states in the precedence above, so `status == PAUSED` is a **lossy** read of
-# "is this chunk paused" — the tests here are what forbid `open_pause` from ever being
-# rewritten in terms of `derive_chunk_status`. Without them that rewrite is invisible: it
-# passes every other test in the suite, and P4 then silently never learns a
-# paused-and-parked chunk is paused, resuming its worker on the answer (§3.3).
+# `open_pause` is the wire's sole pause source (issue #46 §4) and must never be
+# rewritten in terms of `derive_chunk_status`, which is a lossy read of PAUSED.
 
 
 def _paused_and_asking() -> ChunkFacts:
@@ -565,9 +545,7 @@ def _paused_and_asking() -> ChunkFacts:
 def test_open_pause_survives_a_status_that_hides_the_pause() -> None:
     """THE keystone: status is waiting_on_human, yet the pause fact is still legible.
 
-    This is the single property P4's correctness rests on. If it ever regresses, a paused
-    chunk that is also parked on a question reads as un-paused to the runner.
-    """
+    If it ever regresses, a paused chunk parked on a question reads as un-paused."""
     facts = _paused_and_asking()
     assert derive_chunk_status(facts) is ChunkStatus.WAITING_ON_HUMAN  # the status hides it...
     pause = open_pause(facts)
@@ -652,9 +630,8 @@ def test_bounces_over_cap_true_once_crossed() -> None:
 
 
 def test_bounce_is_informational_never_a_status() -> None:
-    # A bounced-but-still-routed chunk (live route, newest transition into a plain
-    # runner node) derives `running` regardless of how many bounces it carries — a
-    # bounce is contention, not failure, and never itself drives the status ladder.
+    # A bounced-but-still-routed chunk derives `running` regardless of bounce count —
+    # a bounce is contention, not failure, and never drives the status ladder.
     facts = ChunkFacts(
         minted=True,
         routes_created=[RouteCreatedFact(created_at=_at(1))],
@@ -682,9 +659,7 @@ def test_open_pause_reads_the_fact_on_a_done_chunk() -> None:
     assert open_pause(facts) is not None
 
 
-# --------------------------------------------------------------------------- #
-# derive_completed_at (issue #173) — the render-only completion instant, mirroring
-# derive_chunk_status's own branch order so the two never disagree.
+# derive_completed_at (issue #173) — mirrors derive_chunk_status's branch order.
 # --------------------------------------------------------------------------- #
 
 
@@ -749,9 +724,8 @@ def test_completed_at_in_open_pr_mode_keeps_the_transition_instant_when_it_is_la
 
 
 def test_completed_at_is_none_for_a_chunk_that_migrated_after_reaching_terminal() -> None:
-    # The newest movement is a migration recorded *after* the terminal transition, so
-    # `newest_transition_is_terminal` returns False (superseded) and the chunk is not, in
-    # fact, done — `derive_completed_at` must not report the superseded transition's instant.
+    # The newest movement is a migration after the terminal transition, so it is
+    # superseded; `derive_completed_at` must not report that transition's instant.
     facts = ChunkFacts(
         minted=True,
         promoted=True,

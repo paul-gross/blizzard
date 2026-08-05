@@ -1,11 +1,8 @@
 """Subprocess-git adapter for the selftest scratch-repo seam (package-private).
 
 All ``subprocess``/filesystem usage for the selftest's scratch repo is confined here
-(``bzh:pluggable-seams``) — the reference binding: a real ``tempfile`` directory,
-``git init``-ed and seeded with one baseline commit, torn down on context-manager
-exit. Mirrors the loop's own subprocess-git adapter
-(``runner/loop/internal/subprocess_worktree_git.py``) in shape, over an unrelated,
-throwaway repo.
+(``bzh:pluggable-seams``): a real ``tempfile`` directory, ``git init``-ed and seeded with
+one baseline commit, torn down on context-manager exit.
 """
 
 from __future__ import annotations

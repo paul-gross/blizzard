@@ -1,23 +1,8 @@
-"""Wire-parity service tests (paul-gross/blizzard-mock#4) — the real ``HttpHubClient``
-driven directly against the mock hub's wire, plus the one behavioral proof that needs
-the real runner loop.
+"""Wire-parity service tests (paul-gross/blizzard-mock#4): the real ``HttpHubClient``
+driven against the mock hub's wire.
 
-``test_parity_guard.py`` proves every ``IHubClient`` endpoint is *served*
-(openapi-shape-only); these tests prove three of them are *wire-compatible*, driving
-the actual ``HttpHubClient`` binding (``blizzard.runner.loop.internal.http_hub``) the
-real runner uses, and one behavioral outcome the mock's ``chunk_unknown`` lever exists
-to exercise (research-blizzard.md §4, commit ``68238d0``, blizzard#9):
-
-* dedicated ``report_lease`` / ``report_escalation`` — the direct, non-buffered fact
-  routes (``POST /chunks/{id}/leases`` / ``.../escalations``), previously 404 on the
-  mock;
-* the ask/answer rendezvous — ``push_facts`` minting a ``question.asked`` fact,
-  ``get_question`` polling it (previously 404), answered through the mock's own
-  ``/_seed/answer`` test-control route;
-* the **real runner loop**, driven one ``run_single_tick`` at a time, releasing a held
-  environment when the mock hub's ``chunk_unknown`` lever reports its chunk 404 —
-  the exercise commit ``68238d0`` exists for.
-"""
+Proves three ``IHubClient`` endpoints are wire-compatible, plus one behavioral case
+(env release on a chunk-unknown 404, commit ``68238d0``, blizzard#9)."""
 
 from __future__ import annotations
 
@@ -56,9 +41,7 @@ def _seed(hub) -> str:
     return resp.json()["chunk_id"]
 
 
-# --------------------------------------------------------------------------------- #
 # 1. Dedicated lease report
-# --------------------------------------------------------------------------------- #
 
 
 def test_report_lease_advances_the_mock_hubs_fence() -> None:
@@ -77,9 +60,7 @@ def test_report_lease_advances_the_mock_hubs_fence() -> None:
         assert after.json()["latest_epoch"] == 5, after.text
 
 
-# --------------------------------------------------------------------------------- #
 # 2. Escalation reporting
-# --------------------------------------------------------------------------------- #
 
 
 def test_report_escalation_lands_on_the_chunk_detail() -> None:
@@ -106,18 +87,9 @@ def test_report_escalation_lands_on_the_chunk_detail() -> None:
 
 
 def test_report_escalation_buffered_via_push_facts_lands_on_the_chunk_detail() -> None:
-    """The wire round trip production actually takes: ``escalation.recorded`` rides
-    the runner's outbound buffer through ``push_facts`` -> ``POST /api/fleet/events``,
-    not the dedicated direct route above — mirrors the ask/answer case's buffered shape
-    (case 3 below) for the escalation kind.
-
-    This is the mock hub's own echo of that wire shape, not the real hub's ingest
-    logic — ``http_hub_client`` here runs against ``mock_hub``, and the payload is
-    hand-built rather than driven through the runner's real ``_escalate`` composition,
-    so this pins neither ``FactIngestService`` nor the runner's composition. Those are
-    ``tests/test_store_and_forward.py``'s ``test_escalation_fact_rides_events_and_
-    derives_needs_human`` (the real hub) and ``tests/test_runner_loop.py``'s
-    composition-root cases (the real runner), respectively."""
+    """The escalation wire round trip through ``push_facts`` -> ``POST /api/fleet/events``,
+    not the dedicated route above. Real ingest is pinned by
+    ``tests/test_store_and_forward.py`` and ``tests/test_runner_loop.py``."""
     bin_dir = require_mock_fleet()
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port) as hub, http_hub_client(hub_port) as client:
@@ -151,9 +123,7 @@ def test_report_escalation_buffered_via_push_facts_lands_on_the_chunk_detail() -
         assert escalation["wrapped_takeover_command"] == f"blizzard runner takeover {chunk_id} --dir /tmp/runner"
 
 
-# --------------------------------------------------------------------------------- #
 # 3. Ask/answer through the mock hub
-# --------------------------------------------------------------------------------- #
 
 
 def test_question_ask_answer_round_trips_through_the_mock_hub() -> None:
@@ -197,9 +167,7 @@ def test_question_ask_answer_round_trips_through_the_mock_hub() -> None:
         assert polled_again.answer == "a"
 
 
-# --------------------------------------------------------------------------------- #
 # 4. Runner env-release on chunk-unknown (behavioral — the real runner loop)
-# --------------------------------------------------------------------------------- #
 
 
 def _tick_env() -> dict[str, str]:
@@ -237,14 +205,9 @@ def _bindings(config: RunnerConfig, chunk_id: str) -> list:
 
 
 def test_runner_releases_held_environment_when_hub_reports_chunk_unknown(tmp_path: Path) -> None:
-    """The env-release-on-404 path (commit ``68238d0``, blizzard#9): a chunk-scoped
-    read reporting 404 is terminal, not transient — the runner reaps whatever it holds
-    for the chunk and releases every bound environment. The mock hub's
-    ``chunk_unknown`` lever manufactures a genuine 404 on the next
-    ``GET /api/fleet/chunks/{id}`` without deleting the chunk's actual seeded state, so
-    the same chunk is still readable afterward — proof it was a manufactured read, not
-    a deletion.
-    """
+    """The env-release-on-404 path (commit ``68238d0``, blizzard#9): a chunk-scoped 404
+    is terminal, not transient — the runner releases every bound environment for the
+    chunk. The mock's lever manufactures the 404 without deleting seeded state."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     fenced = _tick_env()
@@ -254,10 +217,8 @@ def test_runner_releases_held_environment_when_hub_reports_chunk_unknown(tmp_pat
         chunk_id = _seed(hub)
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
-        # Drive until ADVANCE has buffered the build node's completion but PULL has not
-        # yet flushed it (the same wedge point test_runner_service.py's unreachable-hub
-        # scenario uses) — the runner still holds a live lease and a bound environment
-        # for the chunk at this point.
+        # Drive until ADVANCE has buffered the build completion but PULL has not yet
+        # flushed it — the runner still holds a live lease and bound environment.
         held = poll_until(
             lambda: _tick_then(config, fenced, lambda: _pending_outbound(config) >= 1),
             timeout=60.0,
@@ -266,8 +227,7 @@ def test_runner_releases_held_environment_when_hub_reports_chunk_unknown(tmp_pat
         assert _bindings(config, chunk_id), "no environment was bound to the chunk before the lever fires"
 
         # Arm the lever: the next chunk-identified GET (the reconcile sweep's ownership
-        # check, run before the buffered completion is flushed) reports this chunk
-        # unknown exactly once.
+        # check) reports this chunk unknown exactly once.
         armed = hub.post("/_levers/chunk_unknown", json={"chunk_id": chunk_id, "remaining": 1})
         assert armed.status_code == 200, armed.text
 
@@ -277,9 +237,8 @@ def test_runner_releases_held_environment_when_hub_reports_chunk_unknown(tmp_pat
             "the runner did not release the held environment after the hub reported the chunk unknown"
         )
 
-        # The lever is self-expiring (armed with remaining=1, already consumed by the
-        # read above) and the chunk's real seeded state was never deleted — it reads
-        # normally again, proof the 404 was a manufactured read, not a deletion.
+        # Self-expiring (remaining=1, consumed above); the chunk's seeded state was never
+        # deleted — it reads normally again, proof the 404 was manufactured.
         still_seeded = hub.get(f"/api/fleet/chunks/{chunk_id}")
         assert still_seeded.status_code == 200, still_seeded.text
 

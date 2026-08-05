@@ -1,11 +1,8 @@
 """Hub-domain signature pins (unit tier) — required arguments that carry no default.
 
 Two hub-domain callables deliberately make an argument required with no default, so a
-caller that forgets it gets a ``TypeError`` instead of a silently wrong answer. Neither
-reversion is otherwise observable: adding a default keeps every existing call site
-green while restoring the exact pre-fix behavior the argument was added to remove. Same
-shape as :func:`tests.test_graph_domain.test_mark_effective_requires_retired_ids_explicitly`.
-"""
+caller that forgets it gets a ``TypeError`` instead of a silently wrong answer — a
+reversion no other test would catch, since adding a default keeps every call site green."""
 
 from __future__ import annotations
 

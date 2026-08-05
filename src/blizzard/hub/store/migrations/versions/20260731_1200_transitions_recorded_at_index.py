@@ -1,20 +1,6 @@
 """transitions.recorded_at index — the activity feed's bounded read (issue #213, hub store tree)
 
-The Event log backfill (issue #213) reads several fact tables on a bounded,
-``recorded_at``-ordered range — never a full-table scan. ``event_log`` already carries
-``ix_event_log_recorded_at`` (20260721_1600_hub_event_log); a few FK/token columns are
-indexed elsewhere (20260718_1130_hub_runner_token). ``transitions`` is the one
-**high-volume** fact table in that bounded-read set with no timestamp index at all —
-every chunk's every node-step lands a row here, unlike the low-volume tables
-(``escalations``, ``requeues``, ...) a full scan is fine against. This revision closes
-that gap alone: index-only, no column, mirroring ``20260718_1130_hub_runner_token``'s
-plain-string-names style (not the imported, frozen ``transitions`` table object — this
-index rides no table creation).
-
-Idempotent like that revision: the index is created/dropped only where an older
-database lacks/has it, so a fresh ``base -> head`` and an in-place upgrade both
-converge, and ``downgrade()`` genuinely reverses ``upgrade()``.
-
+The one high-volume fact table read on a bounded ``recorded_at`` range, unindexed.
 Revision ID: 20260731_1200_hub_transitions_recorded_at
 Revises: 20260728_1410_hub_chunk_defaults
 """

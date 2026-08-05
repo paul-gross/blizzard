@@ -1,12 +1,8 @@
 """The route claim — how a runner takes work.
 
 ``POST /routes`` *is* acquisition: the claimant posts the **complete** route — chunk,
-runner, workspace, and the acquired env ids. Exactly one claim per chunk is accepted;
-a second claim races and loses with **409**. A winning claim's response carries the
-first node envelope. A claim from a runner the hub registry marks paused is refused
-outright with **403** — a distinct outcome from the 409 race loss, since this claim
-was never in the race (issue #44).
-"""
+runner, workspace, and the acquired env ids. Exactly one claim per chunk is accepted; a
+second races and loses with **409**, and a paused claimant is refused with **403**."""
 
 from __future__ import annotations
 
@@ -45,11 +41,9 @@ class RouteClaimConflict(BaseModel):
 
 
 class RouteClaimTerminalDenial(BaseModel):
-    """The 409 body: the chunk is already terminal ({done, stopped}) — refused
-    outright, not a race loss (issue #118).
-
-    Distinct from :class:`RouteClaimConflict`: no other runner holds this chunk —
-    the claim was refused because the chunk can never be claimed again."""
+    """The 409 body: the chunk is already terminal ({done, stopped}) — refused outright,
+    not a race loss (issue #118). Distinct from :class:`RouteClaimConflict`: no other
+    runner holds this chunk, it simply can never be claimed again."""
 
     chunk_id: str
     status: str
@@ -59,9 +53,7 @@ class RouteClaimTerminalDenial(BaseModel):
 class RouteClaimPausedDenial(BaseModel):
     """The 403 body: the claiming runner is paused at the hub registry (issue #44).
 
-    Distinct from :class:`RouteClaimConflict` — this claim never entered the
-    exactly-once race, it was refused outright because the hub's own pause brake
-    was already set for ``runner_id``."""
+    Distinct from :class:`RouteClaimConflict` — this claim never entered the race."""
 
     chunk_id: str
     runner_id: str
@@ -69,11 +61,8 @@ class RouteClaimPausedDenial(BaseModel):
 
 
 class RouteTokenRekeyResponse(BaseModel):
-    """``POST /api/fleet/chunks/{id}/route-token``'s reply — a fresh plaintext route
-    capability token for the chunk's live route (issue #84b), returned exactly once
-    here, same as the claim response's own ``route_token``. Covers the
-    crash-after-mint-before-response case: the holding runner re-keys rather than
-    being permanently locked out of a token it never read back."""
+    """A fresh plaintext route capability token for the chunk's live route (issue #84b),
+    returned exactly once here — the recovery path for a token never read back."""
 
     chunk_id: str
     route_token: str

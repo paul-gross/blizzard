@@ -1,15 +1,9 @@
 """``auth_facts`` — the append-only non-chunk auth/security event log (issue #92,
 ``bzh:facts-not-status``).
 
-The hub's existing fact model is chunk-scoped; login/session/role events are not, so
-they get their own small durable table rather than being shoehorned onto a chunk.
-``LOGIN_FAILED`` (a bad/expired ``state`` or a failed provider code exchange) and
-``SSO_REFUSED`` (a ``state`` presented to a callback for a provider other than the one
-it was minted for — a cross-provider replay/tamper attempt) land in #92.
-``USER_ROLE_CHANGED`` (every role change — API-driven or the superuser bootstrap's own
-promote/demote) and ``SUPERUSER_BOOTSTRAP_UNCLAIMED`` (a configured ``auth.superuser``
-naming no verified user yet, reported at every boot until claimed) are #94's.
-"""
+The rest of the fact model is chunk-scoped; login, session, and role events are not, so they get their
+own durable table rather than being shoehorned onto a chunk. ``SSO_REFUSED`` in particular records a
+``state`` presented to a callback for a provider other than the one it was minted for."""
 
 from __future__ import annotations
 

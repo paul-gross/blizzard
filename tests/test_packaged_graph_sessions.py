@@ -1,14 +1,8 @@
-"""The packaged graphs' session pools, and the continuity they must not change (issue #144).
+"""The packaged graphs' session pools, and the continuity they must not change (#144).
 
-Phase 8's back-compat half, over the **real packaged YAML** rather than an inline graph:
-the tuning is a re-expression of lineages these graphs already had, so what has to be
-pinned is that every node still resumes the same thing it resumed before.
-
-The load-bearing fact behind "behavior-identical" is that ``--resume <sid>`` reuses the
-session id **in place** (forking is opt-in and never passed), so the members of what is
-now the ``code`` pool already shared one session id: ``resume:build``, bare ``resume``,
-``resume:verify`` and ``resume:pre-push`` all resolved to the same value. Naming the pool
-adds the bound and the tier pin and changes nothing about which session is continued.
+Over the **real packaged YAML**: the tuning re-expresses lineages these graphs already
+had, so every node must still resume what it resumed before. ``--resume <sid>`` reuses
+the session id **in place**, so naming the pool changes nothing about the continuation.
 """
 
 from __future__ import annotations
@@ -67,9 +61,8 @@ def test_adv_dwf_declares_the_three_tiers_and_bounds_only_the_mechanical_one() -
     assert doc.sessions["planning"].effort == "high"
     assert doc.sessions["code"].model == ["blizzard:basic"]
     assert doc.sessions["gate"].model == ["blizzard:basic"]
-    # Only `code` is bounded — it is the one lineage that accumulates across a
-    # review-fail loop. A gate is only ever reached through `fresh:gate`, so its head is
-    # minted every entry and a bound would never apply.
+    # Only `code` is bounded — the one lineage that accumulates across a review-fail
+    # loop; `gate` is always `fresh:gate`, so a bound would never apply.
     assert doc.sessions["code"].rotate is not None
     assert doc.sessions["gate"].rotate is None
     assert doc.sessions["planning"].rotate is None
@@ -81,10 +74,8 @@ def test_adv_dwf_declares_the_three_tiers_and_bounds_only_the_mechanical_one() -
         (
             "advanced-development-workflow",
             {
-                # Loop-back continuity, node by node. `plan` re-entered from a
-                # plan-review must-fix resumes its OWN prior planning session; `build`
-                # re-entered from a review-fail resumes the mechanical lineage — the two
-                # deliberate `resume:<node>` decisions the graph's inline comments carry.
+                # Loop-back continuity, node by node: `plan` resumes its OWN prior
+                # planning session; `build` resumes the mechanical lineage.
                 "plan": (SessionMode.RESUME, "planning"),
                 "plan-review": (SessionMode.FRESH, "gate"),
                 "build": (SessionMode.RESUME, "code"),
@@ -110,9 +101,8 @@ def test_adv_dwf_declares_the_three_tiers_and_bounds_only_the_mechanical_one() -
             {
                 "build": (SessionMode.RESUME, "code"),
                 "review": (SessionMode.FRESH, "gate"),
-                # `pre-push` was `resume:build` — the same lineage, differently spelled.
-                # Moved onto the pool so the graph does not carry both vocabularies for
-                # one lineage with nothing saying why.
+                # `pre-push` was `resume:build` — the same lineage, differently spelled;
+                # moved onto the pool so the graph carries one vocabulary for it.
                 "pre-push": (SessionMode.RESUME, "code"),
                 "retrospective": (SessionMode.RESUME, None),
             },

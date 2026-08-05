@@ -1,14 +1,7 @@
 """``blizzard runner artifact commit`` — the verb's identity handling and rejection
-surfacing (unit tier, issue #143 Phase 3), mirroring ``tests/test_runner_attach_cli.py``:
-``httpx.post`` stubbed, no live socket. The endpoint itself (store round-trip,
-400/403/404/503) is the component tier's ``tests/test_runner_git_commits_api.py``.
-
-Like ``artifact create``, this does not soft-fail: a rejection must reach the worker as
-a non-zero exit so it learns the declaration was not durable.
-
-The verb carries no ``--forge``: the origin a declaration is verified against comes
-from the environment's repo manifest, so there is no worker-supplied value to get
-wrong.
+surfacing (unit tier, issue #143 Phase 3): ``httpx.post`` stubbed, no live socket. Like
+``artifact create``, this does not soft-fail: a rejection must reach the worker as a
+non-zero exit. Carries no ``--forge`` — the origin comes from the repo manifest.
 """
 
 from __future__ import annotations

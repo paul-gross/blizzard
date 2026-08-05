@@ -1,22 +1,8 @@
 """The review-fail cycle end to end — scenario 2 of the standing e2e smoke — MVP criterion 9.
 
-The full-stack companion to the ``build -> review -> deliver`` happy-path scenario
-(test_acceptance_loop): one chunk travels the same default shape through the real
-forge + hub + runner + ``mock-claude-code`` façade, but here a **scripted review fails
-once and then passes**. Asserted on the real rails:
-
-* the review node routes the work back into build on ``fail`` and forward to deliver
-  on the second ``pass``;
-* the review node ``produces`` a ``review-findings`` asset, and the fail edge carries
-  that finding plus its **prompt_addendum** back into build's re-entry envelope — the
-  addendum is executable and lands an observable ``REVIEW_ADDRESSED.md`` commit *only*
-  on the re-entry, so bare-``main`` reachability is the git-truth proof;
-* build runs **twice** — the observable proof the cycle happened — and the delivery
-  lands both build commits on the bare origin's ``main``.
-
-Reuses the acceptance loop's live-stack scaffolding (forge/hub/runner harnesses,
-fixture mint, port helpers). Skipped unless ``BLIZZARD_E2E=1`` with the sibling
-``blizzard-mock`` worktree provisioned — exactly like test_acceptance_loop.
+The happy-path `build -> review -> deliver` companion, but the scripted review fails once
+before passing: the `fail` edge carries its findings + `prompt_addendum` into build's
+re-entry, and build runs twice — both commits land on bare `main`.
 """
 
 from __future__ import annotations
@@ -68,11 +54,8 @@ _BUILD_SCRIPT = (
 )
 _BUILD_JUDGEMENT = "verdict('pass', 'checks are green')\n"
 
-# The fail -> build prompt_addendum: inlined onto build's re-entry prompt, so it
-# arrives as code the mock exec's *after* the base build turn (same namespace: `repo`,
-# `subprocess`, `pathlib` are already bound). It commits a distinctive marker file, so
-# REVIEW_ADDRESSED.md reaches bare `main` ONLY if the addendum threaded into the
-# re-entry envelope — git truth that the fail edge carried the findings back.
+# Inlined onto build's re-entry prompt, sharing its namespace (`repo`, `subprocess`,
+# `pathlib`); REVIEW_ADDRESSED.md lands only if the addendum threaded into re-entry.
 _REVIEW_ADDENDUM = (
     "# re-entry after a failed review — address the findings\n"
     'pathlib.Path(repo, "REVIEW_ADDRESSED.md").write_text("addressed the review findings\\n")\n'
@@ -233,8 +216,7 @@ def test_review_cycle_fails_once_then_delivers(tmp_path: Path) -> None:
     build_md = _git_bare(origin_bare, "show", "main:BUILD.md")
     assert build_md.count("build pass") == 2, f"expected two build passes on main, got:\n{build_md}"
 
-    # The fail edge's prompt_addendum threaded into build's re-entry envelope: its
-    # committed marker is reachable from bare main only if the addendum arrived as code
+    # The addendum's committed marker is reachable from main only if it arrived as code
     # the re-entry build ran.
     tree = _git_bare(origin_bare, "ls-tree", "-r", "--name-only", "main")
     assert "REVIEW_ADDRESSED.md" in tree.split(), f"re-entry addendum did not land on main:\n{tree}"

@@ -1,11 +1,8 @@
 """Offline store administration for the runner (``bzh:manual-migrations``).
 
-The ``init`` / ``migrate`` verbs run while the daemon is **down** — the only
-carve-out to "only a daemon opens its own store". Deterministic and
-store-only: no model calls, no server. ``init`` is idempotent;
-``ensure_current_revision`` is the guard the daemon calls at startup to refuse to
-run on a schema mismatch.
-"""
+The ``init``/``migrate`` verbs run while the daemon is **down** — the only carve-out to
+"only a daemon opens its own store". ``init`` is idempotent; ``ensure_current_revision``
+is the startup guard that refuses to run on a schema mismatch."""
 
 from __future__ import annotations
 
@@ -43,9 +40,8 @@ def init_environment(root: Path) -> RunnerConfig:
     else:
         config = RunnerConfig.load(root)
 
-    # The runner-owned worker hook file (heartbeat PostToolUse) the adapter delivers as
-    # `--settings`. Written idempotently: the content is
-    # versioned with the runner, so re-running `init` refreshes it to head.
+    # Written idempotently: the content is versioned with the runner, so re-running
+    # `init` refreshes it to head.
     (root / WORKER_SETTINGS_FILENAME).write_text(worker_settings_json())
 
     migration_runner(config).upgrade("head")

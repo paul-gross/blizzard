@@ -1,12 +1,5 @@
-"""runner-reported local pause facts — the runner's own brake, made visible (hub store tree)
-
-Issue #43 gives the runner a brake of its own (``PATCH /runner``), reported up through the
-outbound buffer and held here — distinct from ``runner_pause_facts``, the fleet's own brake.
-Separate table, separate concept — the hub authors the fleet's brake and only reads this one.
-
-Each revision in this tree creates a subset of the current ``schema`` metadata's tables
-(the live-schema pattern); this one creates exactly the one new table, ``checkfirst`` so
-a fresh ``base -> head`` and an in-place upgrade both converge.
+"""runner-reported local pause facts (hub store tree) — the runner's own brake (issue #43), a separate
+table from ``runner_pause_facts``, the fleet's own brake, because they are separate concepts.
 
 Revision ID: 20260716_1511_hub_runner_local_pause
 Revises: 20260715_1817_hub_chunk_promoted

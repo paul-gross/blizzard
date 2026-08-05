@@ -1,10 +1,6 @@
 """Runner-store decisions that had only a comment defending them (issue #270).
 
-Each test below pins one store-level decision whose reversion no other test caught:
-the timestamp-correlated held-binding predicate, the requeue mark's same-instant
-consumption, the pause-park table split, the route-token upsert, and the
-declaration-table migration's deliberate row discard.
-"""
+Each test below pins one store-level decision whose reversion no other test caught."""
 
 from __future__ import annotations
 
@@ -29,13 +25,8 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
 
 @pytest.mark.unit
 def test_a_rebind_after_a_release_reads_as_held(tmp_path):  # type: ignore[no-untyped-def]
-    """Bind -> release -> bind again on the same ``(chunk, env)``: the second binding is held.
-
-    A plain ``env_id NOT IN (select environment_id from binding_releases)`` set-difference
-    reads the earlier release as closing *every* binding of the pair, forever — so an
-    interrupted-claim recovery that re-binds the same env would leave it invisible to
-    ``held_environment_ids()`` and free for a second chunk to take.
-    """
+    """Bind -> release -> bind again on the same ``(chunk, env)``: the second binding
+    is held, not read as still-released by a naive set-difference predicate."""
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW + timedelta(minutes=1))
@@ -48,9 +39,8 @@ def test_a_rebind_after_a_release_reads_as_held(tmp_path):  # type: ignore[no-un
 
 @pytest.mark.unit
 def test_a_same_instant_mint_consumes_its_requeue_mark(tmp_path):  # type: ignore[no-untyped-def]
-    """``>=``, not ``>``: the spawn a requeue mark triggers may stamp its lease at the
-    mark's own instant (one tick, one injected clock), and that mint is still the one the
-    mark caused — a ``>`` comparison would leave the mark pending and requeue forever."""
+    """``>=``, not ``>``: a spawn that stamps its lease at the requeue mark's own
+    instant still consumes it — a ``>`` comparison would leave it pending forever."""
     store = _store(tmp_path)
     store.record_requeue(chunk_id="ch_1", at=_NOW)
     assert store.pending_requeue_chunk_ids() == {"ch_1"}
@@ -74,14 +64,9 @@ def test_a_same_instant_mint_consumes_its_requeue_mark(tmp_path):  # type: ignor
 
 @pytest.mark.unit
 def test_pause_parks_are_their_own_table_and_park_facts_keeps_a_non_null_question_id() -> None:
-    """The pause-park split, structurally: ``park_facts.question_id`` stays NOT NULL and
-    ``pause_parks`` carries no ``question_id`` at all.
-
-    ``unforwarded_ask`` reads ``asks.question_id NOT IN (select question_id from
-    park_facts)``; one NULL in that subquery makes the whole predicate NULL for *every*
-    row, so a nullable ``question_id`` would break ask-and-exit fleet-wide behind a green
-    gate. A separate table is what keeps the NULL unreachable.
-    """
+    """The pause-park split, structurally: ``park_facts.question_id`` stays NOT NULL
+    and ``pause_parks`` carries no ``question_id`` at all — one NULL in the
+    ``unforwarded_ask`` subquery would break ask-and-exit fleet-wide."""
     assert park_facts.c.question_id.nullable is False
     assert "question_id" not in pause_parks.c
 
@@ -100,12 +85,8 @@ def test_set_route_token_keeps_one_current_row_per_chunk(tmp_path):  # type: ign
 
 @pytest.mark.component
 def test_declaration_environment_id_migration_discards_the_pre_revision_rows(tmp_path: Path) -> None:
-    """``20260726_1000`` drops and recreates ``git_commit_declarations`` — no back-fill.
-
-    Every pre-revision row names a forge that never verified and no environment, so a
-    back-fill would have to invent an ``environment_id`` it cannot know. Downgrading to the
-    parent restores the old shape; a row seeded there must not survive the upgrade.
-    """
+    """``20260726_1000`` drops and recreates ``git_commit_declarations`` — no
+    back-fill; a row seeded at the parent revision must not survive the upgrade."""
     parent = "20260725_1200_runner_check_results"
     config = runner_runtime.init_environment(tmp_path)
     migrations = runner_runtime.migration_runner(config)

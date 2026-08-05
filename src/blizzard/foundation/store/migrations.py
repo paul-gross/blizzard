@@ -1,12 +1,8 @@
 """The Alembic migration runner and the revision-mismatch guard.
 
-Schema change is Alembic, applied manually through the CLI, never at daemon
-startup (``bzh:manual-migrations``). Each daemon owns an independent migration
-tree; this runner drives *one* tree — pointed at a ``script_location``
-and a store ``url`` — and is reused by both. The revision guard is what a daemon
-calls at startup to **refuse to run on a schema mismatch**, naming the exact
-migrate command to fix it.
-"""
+Schema change is Alembic, applied manually through the CLI, never at daemon startup
+(``bzh:manual-migrations``). The runner drives *one* migration tree, pointed at a ``script_location``
+and a store ``url``; the guard refuses to run on a revision mismatch, naming the migrate command."""
 
 from __future__ import annotations
 
@@ -21,13 +17,8 @@ from sqlalchemy import Column, MetaData, String, Table
 
 from blizzard.foundation.store.engine import create_engine_from_url
 
-# Alembic's own auto-created `alembic_version` hardcodes `version_num String(32)`, which
-# this project's `YYYYMMDD_HHMM_slug` revision ids exceed — sqlite's typeless storage
-# tolerates it, postgres raises `StringDataRightTruncation` (issue #191). Pre-creating the
-# table wide ourselves — a no-op once it exists — is the portable fix; Alembic's sanctioned
-# `version_table_impl` hook would need a registered `DefaultImpl` subclass per dialect
-# (`bzh:sql-portable`; pinned by
-# tests/test_pin_foundation.py::test_the_version_table_admits_this_projects_revision_ids).
+# Alembic's default `version_num String(32)` truncates `YYYYMMDD_HHMM_slug` ids on postgres (#191).
+# Pinned by tests/test_pin_foundation.py::test_the_version_table_admits_this_projects_revision_ids.
 _VERSION_TABLE_COLUMN_LENGTH = 255
 
 
@@ -43,11 +34,8 @@ def _ensure_wide_version_table(url: str) -> None:
 
 
 class RevisionMismatchError(RuntimeError):
-    """Raised when a store's applied revision differs from the code's expected head.
-
-    The message names the exact command to run — a version skew fails loud
-    instead of a daemon silently rewriting a schema out from under running data.
-    """
+    """Raised when a store's applied revision differs from the code's expected head; the message names
+    the command to run, so a skew fails loud instead of a schema being rewritten under running data."""
 
     def __init__(self, *, store: str, current: str | None, expected: str | None, remedy: str) -> None:
         self.store = store

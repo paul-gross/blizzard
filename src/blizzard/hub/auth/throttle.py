@@ -1,12 +1,8 @@
 """Per-IP throttling for the provider-login authorize/callback routes (issue #92).
 
 A small in-memory token bucket keyed by client IP, driven entirely off the injected
-clock (``bzh:injected-clock``) rather than wall time — deterministic under test.
-Rate-limiting is a liveness control, not a durable security invariant
-(``bzh:facts-not-status`` governs durable state; a restart legitimately resets this),
-so in-memory is the harness-consistent choice here, unlike the store-backed session/
-identity state.
-"""
+clock (``bzh:injected-clock``) — deterministic under test. Rate-limiting is a liveness
+control, not a durable invariant, so a restart legitimately resets it."""
 
 from __future__ import annotations
 

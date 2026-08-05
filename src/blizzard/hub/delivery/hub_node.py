@@ -1,47 +1,9 @@
 """The generic hub command node executor — THE primitive (#65).
 
-A hub command node (``executor: hub`` + a ``run:`` list) is the engine's one
-structurally agentless primitive: the hub itself executes a declared list of shell
-commands, serialized fleet-wide, and maps the outcome to an authored edge — the same
-fused choice/edge shape a worker node's judgement uses. No agent, no LLM, ever
-(``bzh:deterministic-shell``): the run-list is declared, never generated, and the
-env this module builds carries no model credential (see :func:`_build_env`).
-
-This module is a **pure step function** of ``(store, clock, seams)``
-(``bzh:steppable-loop``): it owns the *policy* — walk ``run:``, skip a step whose
-``produces:`` marker already exists, map the exit outcome to a choice, route via
-:func:`~blizzard.hub.domain.graph.Graph.edge_for_choice` — behind two owned Protocol
-seams for the *mechanism* (``bzh:dependency-inversion``,
-``bzh:pluggable-seams``): :class:`~blizzard.hub.delivery.command_runner.IHubCommandRunner`
-(subprocess) and :class:`~blizzard.hub.delivery.workdir.IHubWorkdir` (the per-chunk
-temp folder). No ``subprocess``/``pathlib``/``httpx`` import lives in this file
-(``bzh:domain-core``).
-
-Fleet-wide serialization is a FACT (``hub_exec_slot``, ``bzh:facts-not-status``): one
-chunk's hub node runs at a time. :meth:`HubNodeExecutor.run` returns ``None`` — never
-raises, never blocks — when the slot is held elsewhere; the caller simply tries again
-on a later tick.
-
-The crash contract narrows to **at-least-once per step** (not per script): the only
-re-run window is between a step's side effect and its marker record — so the rule a
-graph author owns is "each step is safe to re-run" (re-pushing a pushed merge is a
-no-op). This module's crash points bracket exactly those windows (see near the top of
-this file); its module name is added to ``crash._INSTRUMENTED_MODULES``
-(``bzh:crash-point-registry``).
-
-**Pending (#66):** a ``run:`` step signals it by printing the reserved literal
-``pending`` on its last stdout line with exit code 0 (a nonzero exit is always a
-failure, never pending — there is no separate designated exit code). On pending, the
-executor records a poll-attempt fact (never a transition), releases the fleet-wide
-slot immediately, and the node is re-run — skipping any step whose ``produces:``
-marker already exists, so a graph author's earlier steps must mark themselves done to
-avoid re-running on every poll — once ``poll_interval`` has elapsed since the last
-attempt. Exceeding ``poll_timeout`` (measured from the *first* recorded pending
-attempt for this node visit) stops polling and routes the node's ``failure`` edge
-through the same kick-back accounting #64's conflict path uses (a bounce fact, capped
-by ``bounce_cap``, escalating past it) — pending itself consumes no retry and no
-bounce budget; only the timeout crossing does.
-"""
+Walk a node's declared ``run:`` list, skipping any step whose ``produces:`` marker is already
+durable, and map the outcome to an authored edge. Structurally agentless
+(``bzh:deterministic-shell``); a pure step function over injected seams (``bzh:steppable-loop``,
+``bzh:domain-core``). Serialization is a fact: ``run`` returns ``None`` if the slot is held."""
 
 from __future__ import annotations
 
@@ -79,45 +41,29 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _HUB_RUNNER_ID = "hub"
-# What a hub node writes when its outcome has no authored edge (see `_route`). The
-# artifact is both the operator-visible record in chunk detail and the
-# once-per-(node, epoch) dedupe key gating the event_log row beside it.
+# Written when an outcome has no authored edge (`_route`); also the once-per-(node,
+# epoch) dedupe key gating the event_log row beside it.
 _UNROUTABLE_ARTIFACT_NAME = "hub-unroutable-outcome"
 _EVENT_UNROUTABLE_OUTCOME = "hub-node-unroutable-outcome"
 
-# The staleness window a live hub-execution slot is reclaimed after (#65's ``TTL
-# against the injected clock`` — never wall time, so tests under a
-# :class:`~blizzard.foundation.clock.FixedClock` control it exactly). Generous: a
-# genuinely long-running command must not be preempted by a second chunk mid-run;
-# only a slot abandoned by a ``kill -9`` (no matching release ever comes) is stale.
+# Measured against the injected clock, never wall time. Generous on purpose: only a slot
+# abandoned by a `kill -9` — no matching release ever comes — should be reclaimed.
 DEFAULT_SLOT_STALE_AFTER = timedelta(minutes=30)
 
-# The pending-poll cadence's own defaults (#66) — a node whose author omits
-# ``poll_interval``/``poll_timeout`` gets these. Overridable per-node
-# (``Node.poll_interval_seconds`` / ``poll_timeout_seconds``), mirroring
-# ``DEFAULT_BOUNCE_CAP``'s per-node override shape.
+# Pending-poll cadence defaults (#66), overridable per node.
 DEFAULT_POLL_INTERVAL = timedelta(seconds=30)
 DEFAULT_POLL_TIMEOUT = timedelta(minutes=30)
 
-# Crash points (``bzh:crash-point-registry``) — the generic hub command node's
-# per-step windows. Named for the boundary family the reaching scenario opens, per
-# convention: a kill inside ``hubnode.after-step.before-marker`` re-runs the just-run
-# step on the next hub-advance (the step's own side effect must be safe to redo); a
-# kill inside ``hubnode.after-marker.before-next`` leaves that step's marker durable,
-# so only the *unmarked* remainder re-runs.
+# Crash points (``bzh:crash-point-registry``) — the per-step re-run windows; recovery is
+# the next hub-advance, which re-runs whatever the markers below do not cover.
 _CP_HUBNODE_AFTER_STEP_BEFORE_MARKER = crashpoint(
     "hubnode.after-step.before-marker", "a run: step exited 0; its produces: marker is not yet durable"
 )
 _CP_HUBNODE_AFTER_MARKER_BEFORE_NEXT = crashpoint(
     "hubnode.after-marker.before-next", "a run: step's marker is durable; the next step has not started"
 )
-# The pending-poll window (#66): a kill here leaves the poll-attempt fact durable but
-# the fleet-wide slot still live (its release, in :meth:`HubNodeExecutor.run`'s
-# ``finally``, never ran) — the same shape a kill inside a ``run:`` step's own command
-# would leave, so it resolves the same way: the slot's own staleness TTL
-# (``DEFAULT_SLOT_STALE_AFTER``) reclaims it once abandoned, and pending-ness itself is
-# derived from the durable poll fact (:func:`~blizzard.hub.domain.work.hub_node_pending`),
-# never in-memory — so recovery is "keep polling", not a special recovery path.
+# A kill here leaves the slot live with no release coming; `DEFAULT_SLOT_STALE_AFTER`
+# reclaims it, and pending-ness is re-derived from the durable poll fact.
 _CP_HUBNODE_AFTER_POLL_BEFORE_SLOT_RELEASE = crashpoint(
     "hubnode.after-poll.before-slot-release",
     "the poll-attempt fact is durable; the fleet-wide slot is not yet released",
@@ -128,10 +74,8 @@ _CP_HUBNODE_AFTER_POLL_BEFORE_SLOT_RELEASE = crashpoint(
 class HubRunResult:
     """The outcome of one :meth:`HubNodeExecutor.run` call that actually ran.
 
-    ``transition_id`` (issue #213) is the freshly-recorded ``transitions.transition_id``
-    when ``wrote_transition`` is true, and ``None`` otherwise (a pending poll, a bounce,
-    a bounce-cap escalation) — there is no fresh transition row to key an activity-feed
-    frame on."""
+    ``transition_id`` (issue #213) is set only when ``wrote_transition`` is true; a
+    pending poll, a bounce, or an escalation records no transition row."""
 
     outcome_choice: str
     to_node_name: str
@@ -142,11 +86,7 @@ class HubRunResult:
 
 @dataclass(frozen=True)
 class HubEnvInputs:
-    """The already-loaded domain inputs :func:`build_hub_env` assembles into an env.
-
-    Kept as a small named bundle (rather than a long parameter list) so the env
-    contract's fields are visible in one place — see :func:`build_hub_env`'s docstring
-    for what each key means."""
+    """The already-loaded domain inputs :func:`build_hub_env` assembles into an env."""
 
     chunk: Chunk
     node: Node
@@ -190,10 +130,7 @@ def graph_declares_git_commit(graph: Graph) -> bool:
     """Whether any node in ``graph`` declares a ``git_commit``-kind ``produces:``.
 
     The graph's own statement of intent, and the only thing that tells an empty delivery
-    set apart from a failed one. A code graph promises a commit at ``build``, so reaching
-    ``deliver`` with none means something upstream lost it. A non-code graph — a review,
-    a spike — promises none and still routes through ``deliver`` as the uniform terminal
-    (MVP criterion 10), so an empty landing there is the correct answer, not a defect."""
+    set apart from a failed one."""
     return any(spec.kind is ArtifactKind.GIT_COMMIT for node in graph.nodes for spec in node.produces)
 
 
@@ -208,26 +145,16 @@ def _delivery_repo(row: ArtifactRow) -> str | None:
 class UnconvergedDeliveryError(RuntimeError):
     """Delivery was handed several distinct branches for one repo.
 
-    Raised rather than tie-broken: N branches within one repo share a base, so merging the
-    first invalidates the mergeability every other was checked against. Converging belongs
-    upstream at `pre-push`; a hub script can only bounce (pinned by
-    ``tests/test_hub_command_node.py::test_two_branches_for_one_repo_at_one_epoch_refuse_to_deliver``)."""
+    Raised rather than tie-broken: merging the first invalidates the mergeability every
+    other was checked against."""
 
 
 def _latest_commit_per_repo(rows: list[ArtifactRow]) -> list[ArtifactRow]:
     """Every ``git_commit`` artifact resolved to one row per **repo**, newest epoch wins.
 
-    Deliberately NOT :func:`~blizzard.hub.domain.envelope.latest_artifacts_by_name`, whose
-    ``(node_name, name)`` key is right for the envelope and wrong here: delivery's identity
-    for a git pointer is the **repo** alone, so a branch a later node rewrote (a ``pre-push``
-    rebase, a ``resolve``) supersedes the orphaned one instead of being delivered alongside
-    it (pinned by ``tests/test_hub_command_node.py``'s
-    ``test_a_rebased_tip_supersedes_the_pre_rebase_commit_for_the_same_repo``).
-
-    A tie at one epoch resolves to the later row — a re-declaration within a step is a
-    correction — unless the two name different branches, which raises
-    :class:`UnconvergedDeliveryError` instead.
-    """
+    Delivery's identity for a git pointer is the repo alone, so a rewritten branch
+    supersedes the orphaned one. A tie at one epoch resolves to the later row unless the
+    two name different branches, which raises :class:`UnconvergedDeliveryError`."""
     latest: dict[str | None, ArtifactRow] = {}
     for row in rows:
         if row.kind is not ArtifactKind.GIT_COMMIT:
@@ -249,20 +176,13 @@ def _latest_commit_per_repo(rows: list[ArtifactRow]) -> list[ArtifactRow]:
 def build_hub_env(inputs: HubEnvInputs) -> dict[str, str]:
     """Assemble a hub command node's injected env — pure, no I/O.
 
-    **Never a model credential** (``bzh:deterministic-shell`` — a hub node is
-    structurally agentless): this function injects only the chunk/workdir/node
-    identity, the per-repo git pointers the chunk's submitted work carries, the
-    forge credential the coordinator already holds today, the mid-run marker
-    callback and its authorizing token (:data:`ENV_MARKER_TOKEN` — a **delivery**
-    credential scoped to this one node visit's marker writes, not a model
-    credential), and (when resolved) the chunk's prose feature title. There is no
-    field here, and must never be one, naming an LLM/agent API key.
-    """
+    **Never a model credential** (``bzh:deterministic-shell``): no key injected here may
+    grant access to an LLM or agent API. :data:`ENV_MARKER_TOKEN` is a delivery credential
+    scoped to this one node visit's marker writes."""
     commits = [
         {
-            # The forge coordinate the declaring repo's own origin encodes, when it
-            # encodes one (see `_delivery_repo`) — so a chunk spanning two owners
-            # addresses each correctly.
+            # Owner-qualified when the declaring repo's origin encodes one, so a chunk
+            # spanning two owners addresses each correctly.
             "repo": _delivery_repo(row),
             "branch": row.data.partition(":")[0],
             "commit": row.data.partition(":")[2],
@@ -374,12 +294,9 @@ class HubNodeExecutor:
     def record_marker(
         self, chunk_id: str, *, node_id: str, node_name: str, epoch: int, name: str, content: str
     ) -> bool:
-        """The mid-run marker callback's write (#65) — a ``run:`` step's own dynamic-loop
-        marker, recorded ahead of that step's own exit. Delegates to the same
-        idempotent-per-``(chunk, node, name, epoch)`` store method the executor's own
-        ``produces:`` marker uses; the controller (``POST /chunks/{id}/hub-markers``)
-        calls this rather than touching the write repository directly
-        (``bzh:controller-read-only``)."""
+        """The mid-run marker callback's write (#65) — a ``run:`` step's own marker,
+        recorded ahead of that step's exit. Idempotent per
+        ``(chunk, node, name, epoch)``, like the executor's own ``produces:`` write."""
         return self._chunks.record_hub_artifact(
             chunk_id,
             node_id=node_id,
@@ -393,14 +310,9 @@ class HubNodeExecutor:
     def run(self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int) -> HubRunResult | None:
         """Execute ``node``'s ``run:`` list once, to completion; ``None`` if deferred.
 
-        Deferred means one of two things, and either way the caller simply tries again
-        on a later poll — not an error, not a retry-consuming failure: (a) the fleet-wide slot is held by a different
-        chunk right now, or (b) this exact ``(node, epoch)`` visit already recorded a
-        ``pending`` outcome and ``poll_interval`` has not yet elapsed since the last
-        attempt (#66). Case (b) is checked BEFORE acquiring the slot — a chunk not yet
-        due to poll never contends for it, which is the property that makes pending
-        never block another chunk's hub node.
-        """
+        Deferred — the slot is held elsewhere, or this visit is pending and not yet due
+        (#66) — is neither an error nor a retry-consuming failure. The due check runs
+        BEFORE the slot is acquired, so a pending chunk never contends for it."""
         now = self._clock.now()
         facts = self._chunks.load_facts(chunk.chunk_id)
         poll_history = hub_node_poll_history(facts, node_id=node.node_id, epoch=epoch) if facts is not None else []
@@ -420,16 +332,13 @@ class HubNodeExecutor:
         self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int, poll_history: list[HubNodePollFact]
     ) -> HubRunResult:
         if poll_history and self._clock.now() - poll_history[0].polled_at >= poll_timeout_for(node):
-            # The bound is elapsed since the FIRST recorded pending attempt for this
-            # visit — stop polling and kick back via #64 (below), never running the
-            # `run:` list again this call.
+            # The bound is elapsed since the FIRST pending attempt of this visit: stop
+            # polling, and never run the `run:` list again this call.
             return self._route_pending_timeout(chunk, graph, node, epoch=epoch)
         workdir = self._workdir.ensure(chunk.chunk_id)
         artifacts = self._chunks.load_artifacts(chunk.chunk_id)
-        # Minted before the env is built, revoked once this call is done with it —
-        # scoped to exactly the (chunk, node, epoch) visit whose `run:` steps are about
-        # to execute (issue #230). A land script presents this back on its own mid-run
-        # marker-write callback (see `blizzard.hub.delivery.marker_auth`).
+        # Minted before the env is built and revoked once this call is done with it, so
+        # it is live only for this (chunk, node, epoch) visit (issue #230).
         marker_token = self._marker_authority.issue(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
         try:
             try:
@@ -451,11 +360,8 @@ class HubNodeExecutor:
                     )
                 )
             except UnconvergedDeliveryError as exc:
-                # A defect in what reached this node, not a fault in running it — route the
-                # node's `failure` edge exactly as a non-zero step exit would, rather than
-                # letting it escape and crash-loop the tick; the detail lands in an artifact
-                # an operator can read (pinned by tests/test_pin_hub_delivery.py::
-                # test_an_unconverged_delivery_routes_the_failure_edge_instead_of_escaping_the_tick).
+                # Routed as a `failure` rather than allowed to escape, which would
+                # crash-loop the tick (tests/test_pin_hub_delivery.py).
                 self._chunks.record_hub_artifact(
                     chunk.chunk_id,
                     node_id=node.node_id,
@@ -490,9 +396,8 @@ class HubNodeExecutor:
                     break
                 printed = _printed_choice(result.stdout, choice_names)
                 if printed == HUB_PENDING_CHOICE:
-                    # Pending (#66): NOT a step success — no marker, no transition, no edge
-                    # lookup. Record the poll attempt and hand back to `run()`'s `finally`,
-                    # which releases the slot immediately.
+                    # Pending (#66): NOT a step success — no marker, no transition, no
+                    # edge lookup; the slot is released on the way out.
                     return self._record_pending(chunk, node, epoch=epoch)
                 _CP_HUBNODE_AFTER_STEP_BEFORE_MARKER.reached()
                 if step.produces:
@@ -518,16 +423,9 @@ class HubNodeExecutor:
             self._marker_authority.revoke(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
 
     def _record_pending(self, chunk: Chunk, node: Node, *, epoch: int) -> HubRunResult:
-        """Record one pending-poll-attempt fact (#66) — no transition, slot released
-        by the caller's ``finally`` immediately after this returns.
-
-        Consumes no retry and no bounce budget: pending is the node's normal operation
-        while it waits on external state, not contention or failure. The crash point
-        brackets exactly the window a ``kill -9`` here leaves open — the fact is
-        durable, the slot is not yet released — which the slot's own staleness TTL
-        reclaims exactly as any other mid-run crash does (no special recovery path;
-        pending-ness itself is derived from this fact, so the next poll just resumes).
-        """
+        """Record one pending-poll-attempt fact (#66) — no transition, and the slot is
+        released immediately after this returns. Consumes no retry and no bounce budget:
+        pending is the node waiting on external state, not contention or failure."""
         now = self._clock.now()
         self._chunks.record_hub_node_poll(chunk.chunk_id, node_id=node.node_id, epoch=epoch, at=now)
         _CP_HUBNODE_AFTER_POLL_BEFORE_SLOT_RELEASE.reached()
@@ -543,8 +441,6 @@ class HubNodeExecutor:
         """A pending node that exceeded its ``poll_timeout`` is a kick-back (#64), not a
         plain failure: record a bounce fact, escalate past the node's ``bounce_cap``,
         else route the ``failure`` edge with the kick-back envelope riding along.
-        Pending itself consumed no retry and no bounce budget; only the timeout
-        crossing does.
         """
         hub_epoch = epoch + 1
         now = self._clock.now()
@@ -598,13 +494,8 @@ class HubNodeExecutor:
     ) -> HubRunResult:
         edge = graph.edge_for_choice(node.node_id, choice)
         if edge is None:
-            # No authored edge for this outcome — a graph-authoring gap, not a crash;
-            # nothing is routed, so this re-polls the identical outcome forever, moving no
-            # retry, bounce or escalation budget. Left unannounced it is a silent loop, so
-            # announce it once per (node, epoch): the artifact is the operator-visible
-            # record in chunk detail AND the dedupe key gating one error-severity event_log
-            # row, rather than a row per poll (pinned by
-            # tests/test_hub_command_node.py::test_an_unroutable_outcome_is_announced_once_per_epoch).
+            # An authoring gap, not a crash: nothing routes, so the same outcome re-polls
+            # forever. Announced once per (node, epoch) rather than once per poll.
             now = self._clock.now()
             detail = f"no authored edge for choice `{choice}` on hub node `{node.name}`"
             authored = sorted(c.name for c in node.choices)
@@ -650,15 +541,8 @@ class HubNodeExecutor:
             )
         hub_epoch = epoch + 1
 
-        # A delivery kick-back (#64): this run's outcome is routing to a NON-terminal node
-        # while at least one of the repos this node's commits named has not landed a
-        # ``merged/<repo>`` marker. Detected by the domain fact
-        # (:func:`~blizzard.hub.domain.work.landed_repos_from_markers`), never by choice
-        # name — no outcome name is privileged (#67), so a fully-landed continuation into a
-        # post-merge node (#63) is forward progress, not contention (pinned by
-        # tests/test_hub_command_node.py::test_a_fully_landed_non_terminal_route_records_no_bounce
-        # and ::test_a_non_terminal_route_with_nothing_landed_records_a_bounce). Mirrors
-        # :meth:`_route_pending_timeout`'s bounce-then-route shape and cap-escalation check.
+        # A delivery kick-back (#64), detected from the landed-marker fact and never from
+        # the choice name — no outcome name is privileged (#67).
         if commits and to_node_id != RESERVED_TERMINAL:
             pending_repos = {c["repo"] for c in commits}
             landed_now = landed_repos_from_markers(self._chunks.load_artifacts(chunk.chunk_id))
@@ -719,11 +603,8 @@ class HubNodeExecutor:
 
     def _resolve_feature_title(self, chunk: Chunk) -> str | None:
         """The chunk's prose feature title (:data:`ENV_FEATURE_TITLE`) — the FIRST
-        ``work_ref``'s work item title, best-effort. Never lets a forge-read failure
-        (:class:`~blizzard.hub.work_sources.source.WorkSourceError` or otherwise) or a missing
-        registry/pointer/title break delivery: any of those degrades to ``None``, which
-        :func:`build_hub_env` simply omits — a graph author's ``run:`` script falls
-        back to its own ``blizzard: land ...`` default."""
+        ``work_ref``'s work item title, best-effort. A read failure or a missing
+        registry, pointer, or title degrades to ``None`` rather than breaking delivery."""
         if not chunk.work_refs or self._work_sources is None:
             return None
         pointer = chunk.work_refs[0]

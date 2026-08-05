@@ -1,10 +1,8 @@
 """The hub client — driven against a fake hub via ``httpx.MockTransport``.
 
-The runner's outbound edge is exercised with no live daemon (the tier rule for a
-one-sided runner test, verification/blizzard.md): peek, the 201/409 claim split,
-completion, the idempotent envelope re-read, and the chunk poll — plus a transport
-failure surfacing as :class:`HubClientError`.
-"""
+The runner's outbound edge, no live daemon: peek, the 201/409 claim split, completion,
+the idempotent envelope re-read, the chunk poll, and a transport failure surfacing as
+``HubClientError``."""
 
 from __future__ import annotations
 

@@ -1,20 +1,8 @@
-"""``blizzard hub login``'s wire leg — a real hub + the real stub IdP, no browser
-(service tier, issue #96).
+"""``blizzard hub login``'s wire leg — a real hub + the real stub IdP, no browser (#96).
 
-The plan's own matrix-gap note: no declared method drives a browserless loopback OAuth
-exchange against a running hub. This is that method — mirrors
-``tests/service/test_auth_login_service.py``'s own ``_oauth_hub`` fixture and its
-"drive the provider dance with ``httpx`` following redirects" shape, then continues
-past the hub session into the CLI's own ``client=cli`` authorize branch and
-``POST /api/auth/cli/token`` exchange: a scripted "browser" is just the same
-``httpx.Client`` (already carrying the hub session cookie from the provider dance)
-hitting ``authorize`` with ``follow_redirects=False`` to capture the delivered code,
-for both the loopback-redirect form and the paste-code (out-of-band) form. The CLI
-never contacts the stub IdP directly — only the hub's own authorize/token routes.
-
-Reproduce — from a provisioned feature env::
-
-    BLIZZARD_SERVICE=1 uv run pytest tests/service/test_cli_login_service.py
+Drives the browserless loopback OAuth exchange: the provider dance, then the CLI's
+`client=cli` authorize + `POST /api/auth/cli/token`, for both loopback-redirect and
+paste-code forms.
 """
 
 from __future__ import annotations
@@ -150,12 +138,9 @@ def test_the_loopback_form_ends_in_a_working_bearer_session(tmp_path: Path) -> N
 
 
 def test_logout_revokes_the_bearer_session_server_side(tmp_path: Path) -> None:
-    """AC 4's server-side half over the real wire: after a working bearer session is
-    minted, ``POST /api/auth/logout`` presenting that same bearer (the CLI's own
-    ``blizzard hub logout`` path — no cookie jar) must make the session stop resolving
-    at the hub, not merely disappear from the local ``sessions.json``. Proven by a
-    fresh bearer-only client whose ``GET /api/me`` succeeds, then 401s once the bearer
-    is logged out."""
+    """AC 4: `POST /api/auth/logout` with a bare bearer token makes the session stop
+    resolving at the hub — a bearer-only `GET /api/me` succeeds, then 401s once logged
+    out."""
     bin_dir = require_stub_idp()
     idp_port = _free_port()
     hub_port = _free_port()

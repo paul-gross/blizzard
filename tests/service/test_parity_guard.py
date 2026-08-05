@@ -1,29 +1,9 @@
 """The mechanical parity guard (paul-gross/blizzard-mock#4) — the service tier's own
 sentinel against the real wire growing a mock counterpart forgets to serve.
 
-Two directions, each checked against the mock fleet's own served ``/openapi.json``
-(never against ``blizzard_mock`` source — the mocks are reached over HTTP, exactly like
-every other service-tier test, per ``tests/service/support.py``'s own module docstring):
-
-1. **Mock hub ⊇ IHubClient surface** — every one of :class:`IHubClient`'s 14 endpoint
-   methods (``blizzard.runner.loop.hub``, the runner's whole outbound contract) must be
-   served by the mock hub, verb-and-path-exact. The table below is asserted to name
-   *exactly* the protocol's method set, so adding or removing an ``IHubClient`` method
-   without updating this file fails loudly here rather than silently drifting. That
-   table-vs-protocol half needs no fleet and no network, so it is also re-run at the
-   unit tier (``tests/test_ihubclient_endpoint_parity.py``) — the fast gate trips on a
-   drifted mapping table without waiting on ``BLIZZARD_SERVICE=1``; only the live
-   ``/openapi.json`` fetch below stays service-gated.
-2. **Mock runner drive plane matches the expected verb set** — the ``/_drive/*`` routes
-   a service test drives to exercise the runner *role* against a real hub (or, here,
-   against nothing at all — the openapi schema does not need a live hub) must exactly
-   match a declared set, so a verb quietly added or removed is caught too.
-
-Both directions are one-sided by design (``bzh:sweep-release-only-tiers`` companion
-rule): the mock is free to carry test-only control routes (``/_seed``, ``/_levers``,
-``/_captured``) the real hub/runner never had — only "does the mock cover the real
-contract" is checked, never the reverse.
-"""
+Two one-sided directions against the mock fleet's own served ``/openapi.json``: the mock
+hub serves every ``IHubClient`` endpoint, verb-and-path-exact; the mock runner's
+``/_drive/*`` routes match a declared verb set (``bzh:sweep-release-only-tiers``)."""
 
 from __future__ import annotations
 
@@ -37,14 +17,11 @@ from tests.service.support import mock_hub, mock_runner, require_mock_fleet, ser
 
 pytestmark = [pytest.mark.service, service_gate]
 
-# --------------------------------------------------------------------------------- #
 # Direction 1 — mock hub ⊇ IHubClient surface
 # --------------------------------------------------------------------------------- #
 
 #: One row per ``IHubClient`` endpoint method, verbatim from
-#: ``src/blizzard/runner/loop/internal/http_hub.py`` (the reference binding) — the
-#: exact (HTTP verb, path template) each method rides, per
-#: ``.winter/workflows/2026-07-21-mock-parity/research-blizzard.md`` §1.
+#: ``src/blizzard/runner/loop/internal/http_hub.py`` (the reference binding).
 _IHUBCLIENT_ENDPOINTS: dict[str, tuple[str, str]] = {
     "peek_queue": ("GET", "/api/fleet/queue/peek"),
     "claim_route": ("POST", "/api/fleet/routes"),
@@ -66,31 +43,24 @@ _PATH_PARAM = re.compile(r"\{[^{}]+\}")
 
 
 def _normalize(path: str) -> str:
-    """Collapse every ``{param}`` segment to a common placeholder so a differently
-    named path parameter (e.g. the mock's own ``{id}`` vs. the table's ``{chunk_id}``)
-    does not register as a mismatch — only the verb + literal-segment shape matters."""
+    """Collapse every ``{param}`` segment to a common placeholder, so a differently
+    named path parameter does not register as a mismatch."""
     return _PATH_PARAM.sub("{param}", path)
 
 
 def _protocol_method_names(proto: type) -> set[str]:
     """Every non-dunder method declared directly on a ``typing.Protocol`` class body.
 
-    Python 3.12 has no ``typing.get_protocol_members`` (that lands in 3.13+), so this
-    reads ``vars(proto)`` directly — ``IHubClient`` declares nothing but its own
-    endpoint methods (it does not extend any other ``Protocol``), so every non-dunder
-    name in its own ``__dict__`` *is* an endpoint method; there are no "non-endpoint
-    helpers" to additionally exclude here."""
+    Reads ``vars(proto)`` directly (no ``get_protocol_members`` before 3.13); ``IHubClient``
+    extends nothing else, so every non-dunder name in its own ``__dict__`` is an endpoint."""
     return {name for name in vars(proto) if not name.startswith("_") and callable(getattr(proto, name))}
 
 
 def _assert_ihubclient_endpoint_table_matches_protocol() -> None:
-    """The guard's own table must name exactly ``IHubClient``'s method set — the
-    mechanical trip-wire: a method added to or removed from the protocol without a
-    matching edit here fails loudly, naming exactly what drifted.
+    """The guard's own table must name exactly ``IHubClient``'s method set.
 
-    Pure import + dict compare, no fleet and no network — shared with the unit-tier
-    mirror (``tests/test_ihubclient_endpoint_parity.py``) so the fast gate trips on
-    this half without duplicating ``_IHUBCLIENT_ENDPOINTS`` itself."""
+    Pure import + dict compare, no fleet and no network; shared with the unit-tier
+    mirror (``tests/test_ihubclient_endpoint_parity.py``) so the fast gate trips on this half."""
     actual = _protocol_method_names(IHubClient)
     declared = set(_IHUBCLIENT_ENDPOINTS)
 
@@ -109,21 +79,14 @@ def _assert_ihubclient_endpoint_table_matches_protocol() -> None:
 
 
 def test_ihubclient_endpoint_table_matches_the_protocol_method_set() -> None:
-    """The guard's own table must name exactly ``IHubClient``'s method set — see
-    ``_assert_ihubclient_endpoint_table_matches_protocol`` for the check itself.
-
-    Kept (and re-run) here too, still under this module's ``service_gate``, so a
-    service-tier-only run of this file still exercises it alongside Direction 1's
-    live-openapi assertion."""
+    """Re-runs ``_assert_ihubclient_endpoint_table_matches_protocol`` under this
+    module's ``service_gate`` too."""
     _assert_ihubclient_endpoint_table_matches_protocol()
 
 
 def test_mock_hub_openapi_serves_every_ihubclient_endpoint() -> None:
-    """The mock hub's own ``GET /openapi.json`` must serve every ``IHubClient``
-    endpoint, verb-and-path-exact (path params normalized) — mock ⊇ real, one-sided;
-    the mock's own extra control routes (``/_seed``, ``/_levers``, ``/_captured``) and its
-    mirror of the hub's work-items pass-through (not an ``IHubClient`` method) are expected
-    and unchecked."""
+    """The mock hub's ``GET /openapi.json`` serves every ``IHubClient`` endpoint,
+    verb-and-path-exact (path params normalized); one-sided, mock ⊇ real."""
     bin_dir = require_mock_fleet()
     port = _free_port()
     with mock_hub(bin_dir, port) as hub:
@@ -144,13 +107,11 @@ def test_mock_hub_openapi_serves_every_ihubclient_endpoint() -> None:
     )
 
 
-# --------------------------------------------------------------------------------- #
 # Direction 2 — mock runner drive plane covers the runner role
 # --------------------------------------------------------------------------------- #
 
-#: Every ``/_drive/*`` verb the mock runner is expected to serve, each tied to the
-#: IHubClient operation (or fact kind) it exercises against a hub —
-#: ``research-mock.md`` §4c. ``reset`` is test-only control, not a runner-role call.
+#: Every ``/_drive/*`` verb the mock runner is expected to serve, tied to the
+#: IHubClient operation (or fact kind) it exercises — ``research-mock.md`` §4c.
 _EXPECTED_DRIVE_VERBS: dict[str, str] = {
     "register": "IHubClient.register_runner — POST /api/fleet/runners",
     "peek": "IHubClient.peek_queue — GET /api/fleet/queue/peek",
@@ -176,9 +137,8 @@ _EXPECTED_DRIVE_VERBS: dict[str, str] = {
 
 
 def test_mock_runner_drive_plane_matches_the_expected_verb_set() -> None:
-    """The mock runner's own ``GET /openapi.json`` must serve exactly the declared
-    ``/_drive/*`` verb set — grown or shrunk without updating this file fails loudly,
-    naming exactly which verb(s) drifted."""
+    """The mock runner's ``GET /openapi.json`` must serve exactly the declared
+    ``/_drive/*`` verb set."""
     bin_dir = require_mock_fleet()
     hub_port = _free_port()
     runner_port = _free_port()

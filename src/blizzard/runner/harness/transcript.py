@@ -1,40 +1,9 @@
-"""The harness transcript source seam (blizzard#245).
+"""The harness transcript source seam (blizzard#245) — harness-agnostic value shapes and a Protocol.
 
-Where a session's raw conversation lives and what its records mean is harness-specific
-knowledge. This module is the harness-agnostic value shape and Protocol that knowledge
-sits behind (:meth:`~blizzard.runner.harness.adapter.IHarnessAdapter.transcript_source`),
-the shape :mod:`.usage` and :mod:`.fingerprint` already have. The value shapes, the
-Protocol, and :class:`NullTranscriptSource` are stdlib-only, dependency-free
-(``bzh:domain-core``) — :class:`TranscriptErrorFactory` is the one deliberate exception
-living alongside them (the ``structlog`` import below is entirely its own): error
-logging on a source read failure is shared, harness-agnostic infrastructure in exactly
-the same sense the Protocol above it is, the same co-location the exemplar
-(``blizzard-context:/exemplars/python/repo_pattern.py``) uses for a Protocol and its
-injected error-wrapping seam. :class:`NullTranscriptSource` is likewise kept at this
-feature-package root rather than under ``internal/`` — it is not per-harness, so it has
-no adapter identity to confine.
-
-:class:`NormalizedTurn` is the turn vocabulary a per-harness source produces: ``env``/
-``asst``/``tool`` plus ``thinking``. A tool call's input stays **structured data**
-(:attr:`ToolCall.input`, a ``Mapping``), never a ``json.dumps`` string. A tool call that
-spawned a subagent nests that subagent's own turns on it
-(:attr:`NormalizedTurn.sidechain`), linked by whichever route resolved it
-(:data:`SidechainLink`) — a sidechain whose parent could not be resolved is still
-conversation, carried on :attr:`TranscriptBatch.unlinked_sidechains` rather than
-dropped.
-
-:class:`TranscriptPosition` is **opaque to blizzard**: the harness mints and interprets
-it, so a codex/opencode source (``epic:adapters``) is free to use a shape that is not a
-byte offset. :meth:`IHarnessTranscriptSource.turns_since` reads **forward** from a
-position, never backward or by recency; a batch that could not read everything asked
-reports ``complete=False`` plus a ``next_position`` the caller loops on.
-
-A harness with no on-disk transcript at all (or a source not yet wired at a given
-composition site) binds :class:`NullTranscriptSource` rather than making every caller
-handle ``None`` — the same precedent
-:meth:`~blizzard.runner.harness.adapter.IHarnessAdapter.resolve_effort` sets for "this
-harness has no such knob", expressed as a binding.
-"""
+:class:`NormalizedTurn` is the turn vocabulary a source produces; a tool call's input stays structured
+data, never a ``json.dumps`` string. :class:`TranscriptPosition` is **opaque to blizzard**, and
+:meth:`IHarnessTranscriptSource.turns_since` reads **forward** from one, never backward or by recency.
+Stdlib-only and dependency-free (``bzh:domain-core``), :class:`TranscriptErrorFactory` aside."""
 
 from __future__ import annotations
 
@@ -49,56 +18,32 @@ import structlog
 #: (:data:`~blizzard.runner.transcripts.repository.TurnKind` carries no thinking kind).
 NormalizedTurnKind = Literal["env", "asst", "tool", "thinking"]
 
-#: How a sidechain conversation's attachment to its spawning tool call was resolved,
-#: carried as data rather than left for a reader to guess at fidelity — an open,
-#: harness-native label rather than a blizzard-defined enum a second adapter would have
-#: to satisfy. The one value every harness is expected to share is ``"unlinked"`` — no
-#: route resolved a parent at all — since that resolved/unresolved distinction is the one
-#: thing blizzard itself acts on; every other value is that harness's own route name.
+#: How a sidechain's attachment to its spawning tool call resolved — an open, harness-native label.
+#: ``"unlinked"`` (no parent resolved at all) is the one value every harness shares.
 SidechainLink = str
 
-#: Why a *source* could not produce turns for a session — the two reasons reading a
-#: file can fail. Deliberately narrower than
-#: :data:`~blizzard.runner.transcripts.repository.TranscriptUnavailable`, whose extra
-#: member is the panel service's own concept, not a source's.
+#: Why a *source* could not produce turns for a session — the two ways reading a file can fail.
 TranscriptReadReason = Literal["not_found", "unreadable"]
 
-#: Which raw shape a tool call's ``input`` was minted from — the explicit discriminator
-#: a re-materializing consumer needs, since ``input``/``input_unparsed`` alone are
-#: ambiguous (an absent input and an empty object both leave ``input_unparsed`` ``None``;
-#: a bare string that happens to itself parse as JSON is indistinguishable from an
-#: already-serialized one).
-#: ``"object"`` — ``input`` holds the real mapping, ``input_unparsed`` is ``None``.
-#: ``"absent"`` — the record carried no ``input`` (or an explicit JSON ``null``).
-#: ``"string"`` — the record's ``input`` was itself a bare JSON string, held verbatim
-#: (unquoted) on ``input_unparsed``. ``"other"`` — any other non-object value (a list, a
-#: number, a bool); ``input_unparsed`` already holds its final ``json.dumps`` form.
+#: Which raw shape a tool call's ``input`` was minted from: ``"object"`` (``input`` holds the mapping,
+#: ``input_unparsed`` ``None``), ``"absent"``, ``"string"`` (held unquoted), or ``"other"`` (dumped).
 ToolInputShape = Literal["object", "absent", "string", "other"]
 
 
 @dataclass(frozen=True)
 class TranscriptPosition:
-    """An opaque forward-read cursor into a session's transcript.
-
-    ``token`` is minted and interpreted by the harness alone — blizzard never parses
-    it. Claude Code's is JSON of per-file byte offsets (the main file plus each
-    discovered sidecar); a future harness's is whatever shape fits its own storage.
-    """
+    """An opaque forward-read cursor into a session's transcript. ``token`` is minted and interpreted
+    by the harness alone — blizzard never parses it."""
 
     token: str
 
 
 @dataclass(frozen=True)
 class ToolCall:
-    """A tool invocation, structured — never flattened to a ``json.dumps`` string.
-
-    ``input`` is the parsed mapping a consumer queries directly; ``input_unparsed``
-    carries a non-object input verbatim instead of coercing it into an empty mapping, so
-    a malformed or scalar ``input`` is never silently discarded. ``input_shape`` names
-    which raw shape produced the pair (:data:`ToolInputShape`).
-    ``output``/``output_truncated``: ``output is None`` while the matching result has not
-    yet arrived in the file (a live turn, not corruption).
-    """
+    """A tool invocation, structured — never flattened to a ``json.dumps`` string. ``input`` is the
+    parsed mapping; ``input_unparsed`` carries a non-object input verbatim rather than discarding it;
+    ``input_shape`` names which raw shape produced the pair (:data:`ToolInputShape`). ``output is None``
+    while the matching result has not yet arrived — a live turn, not corruption."""
 
     name: str
     input: Mapping[str, Any]
@@ -112,12 +57,8 @@ class ToolCall:
 @dataclass(frozen=True)
 class SidechainConversation:
     """A subagent's private conversation, nested under its spawning tool call.
-
-    ``agent_id``/``agent_type`` are read off the sidecar or inline records when
-    present, else ``None`` — a fallback-linked or unlinked sidechain may carry
-    neither. ``link`` names the route that attached (or failed to attach) it; see
-    :data:`SidechainLink`.
-    """
+    ``agent_id``/``agent_type`` are ``None`` when the records carry neither; ``link`` names the route
+    that attached — or failed to attach — it (:data:`SidechainLink`)."""
 
     agent_id: str | None
     agent_type: str | None
@@ -127,18 +68,10 @@ class SidechainConversation:
 
 @dataclass(frozen=True)
 class NormalizedTurn:
-    """One normalized conversation turn.
-
-    ``tool``/``sidechain`` are populated only on a ``kind="tool"`` turn — a tool
-    call, and (when it spawned a subagent) that subagent's nested conversation.
-    ``thinking_redacted`` is ``kind="thinking"``-only: Claude Code redacts thinking
-    content universally, so a thinking turn carries *presence*, not prose, as the
-    expected shape rather than an edge case. ``truncated`` is block-level, mirroring
-    :attr:`~blizzard.runner.transcripts.repository.Turn.truncated`. ``index`` is
-    batch-local and unstable across reads — every producer restarts it at 0 for each
-    call, so two forward batches of one session both contain a turn 0; a delta-shipping
-    consumer keys and orders by position in a batch's own ``turns`` list, not this field.
-    """
+    """One normalized conversation turn. ``tool``/``sidechain`` populate only on a ``kind="tool"`` turn;
+    ``thinking_redacted`` is ``kind="thinking"``-only, a thinking turn carrying *presence*, not prose.
+    ``truncated`` is block-level. ``index`` is batch-local and unstable across reads — every producer
+    restarts it at 0, so a consumer keys and orders by position in the batch's ``turns`` list."""
 
     index: int
     kind: NormalizedTurnKind
@@ -152,29 +85,10 @@ class NormalizedTurn:
 
 @dataclass(frozen=True)
 class TranscriptBatch:
-    """:meth:`IHarnessTranscriptSource.turns_since`'s return.
-
-    ``available=False`` carries ``reason`` and empty ``turns``/``unlinked_sidechains``.
-    ``unlinked_sidechains`` is a dedicated field (not folded into ``turns``) because a
-    :class:`SidechainConversation` is otherwise reachable only through a tool turn's
-    ``.sidechain`` — with no spawning call to nest under, it would otherwise have to
-    land among the ordinary top-level turns and misstate its provenance.
-
-    ``next_position``/``complete`` are the forward-read contract: ``complete=True``
-    means every turn since ``since`` was read into this batch; ``complete=False`` means
-    the source's per-batch budget was exhausted first, and ``next_position`` is where a
-    caller resumes. ``truncated`` reflects the *tail* cap on the **main file only** — a
-    first, ``since=None`` read of a pathological session — distinct from ``complete``,
-    which reflects the *forward* batch-budget cap. ``sidechain_truncated`` is the
-    parallel signal for sidecar content alone (a sidecar's own tail cap, or the shared
-    sidecar fan-out budget running out on a cold read), kept off ``truncated`` on
-    purpose so a consumer that never renders a sidechain never reports a truncation it
-    never cut.
-
-    ``normalizer_version``/``harness_version`` stamp every batch: the former names the
-    normalizer code that produced it, the latter the harness build that wrote the source
-    records, or ``None`` when no record carried one.
-    """
+    """:meth:`IHarnessTranscriptSource.turns_since`'s return; ``available=False`` carries ``reason`` and
+    empty lists, and a sidechain with no resolvable parent lands on ``unlinked_sidechains``, not turns.
+    ``complete=False`` means the per-batch budget ran out first and ``next_position`` is where a caller
+    resumes. ``truncated`` is the main file's own *tail* cap; ``sidechain_truncated`` is the sidecars'."""
 
     session_id: str
     available: bool
@@ -190,19 +104,10 @@ class TranscriptBatch:
 
 
 class TranscriptErrorFactory:
-    """The harness seam's own injected error-logging seam (``bzh:dependency-inversion``'s
-    factory-injected error pattern — the exemplar's per-transport ``from_<transport>``
-    shape, widened here to ``not_found``: a lookup-miss carrying no exception, DEBUG
-    rather than a wrapped error).
-
-    ``from_io`` is a boundary failure — the caller's read is over — and is ERROR per
-    ``bzh:structlog-logging``. ``from_io_recovered`` is for a caller that reads on
-    regardless: WARNING, the same convention's "a recoverable condition the caller
-    continued past." ``not_found`` is DEBUG: no session file at all is this seam's most
-    routine outcome, surfaced under this seam's own logger name
-    (``blizzard.runner.harness.transcript``, bound by the composition root) — an operator
-    filter must be keyed on that name to match it.
-    """
+    """The seam's own injected error-logging seam (``bzh:dependency-inversion``). ``from_io`` is ERROR —
+    the caller's read is over; ``from_io_recovered`` and ``budget_skipped`` are WARNING — the caller
+    continued past it; ``not_found`` is DEBUG — no session file at all is this seam's most routine
+    outcome. All under this seam's own logger name, which an operator filter must key on."""
 
     def __init__(self, log: structlog.stdlib.BoundLogger) -> None:
         self._log = log
@@ -213,12 +118,9 @@ class TranscriptErrorFactory:
         self._log.error(message, session_id=session_id, detail=detail)
 
     def from_io_recovered(self, exc: Exception, message: str, *, session_id: str = "", **fields: str) -> None:
-        """Log ``exc`` once at WARNING: the caller is skipping this one failure and
-        continuing its read, not aborting it. Callers must not log it again.
-        ``**fields`` carries any caller-specific structured detail (e.g. the sidecar's
-        own ``agent_id``) as a real field rather than interpolated into ``message`` —
-        never a harness-specific keyword this shared factory's own signature would
-        have to name."""
+        """Log ``exc`` once at WARNING: the caller is skipping this one failure and continuing its read,
+        not aborting it. Callers must not log it again. ``**fields`` carries caller-specific structured
+        detail as real fields rather than interpolated into ``message``."""
         detail = str(exc).strip()
         self._log.warning(message, session_id=session_id, detail=detail, **fields)
 
@@ -240,24 +142,16 @@ class TranscriptErrorFactory:
 
 
 class IHarnessTranscriptSource(Protocol):
-    """The per-harness transcript source seam. Three operations, all reads.
-
-    ``turns_since`` is the normalization operation (blizzard#245): the harness's raw
-    session records collapsed into :class:`NormalizedTurn`\\ s, reading forward from
-    ``since`` (``None`` for "from the start"). ``read_raw_lines``/``size_bytes`` sit
-    here too, so the file-location knowledge this seam carries is never duplicated
-    outside it.
-    """
+    """The per-harness transcript source seam. Three operations, all reads: ``turns_since`` collapses
+    the harness's raw session records into :class:`NormalizedTurn`\\ s, reading forward from ``since``
+    (``None`` for "from the start"); ``read_raw_lines``/``size_bytes`` sit here too, so the
+    file-location knowledge this seam carries is never duplicated outside it."""
 
     def turns_since(
         self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None
     ) -> TranscriptBatch:
-        """Normalized turns written since ``since``, or from the start when ``None``.
-
-        ``spawn_cwd`` is the same optional disambiguation hint
-        :meth:`~blizzard.runner.transcripts.repository.IReadTranscriptRepository.read_turns`
-        takes — never the lookup key, used only to break a multi-match tie.
-        """
+        """Normalized turns written since ``since``, or from the start when ``None``. ``spawn_cwd`` is an
+        optional disambiguation hint — never the lookup key, used only to break a multi-match tie."""
         ...
 
     def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
@@ -278,10 +172,9 @@ _NO_NORMALIZER_VERSION = ""
 
 
 class NullTranscriptSource:
-    """The transcript source bound when a harness has no on-disk transcript concept
-    (or a composition site has not wired a real one — see ``ClaudeCodeAdapter``'s
-    default). Every read behaves exactly like today's absent-but-healthy transcript,
-    so a caller needs no null check of its own."""
+    """The transcript source bound when a harness has no on-disk transcript concept, or a composition
+    site has not wired a real one. Every read behaves like an absent-but-healthy transcript, so a
+    caller needs no null check of its own."""
 
     def turns_since(
         self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None
@@ -307,8 +200,7 @@ class NullTranscriptSource:
         return None
 
 
-# Typecheck-time Protocol/adapter conformance sentinel (the exemplar's shape,
-# `blizzard-context:/exemplars/python/repo_pattern.py`). Pyright rejects the return if
+# Typecheck-time Protocol conformance sentinel (the exemplar's shape): pyright rejects the return if
 # `NullTranscriptSource` drifts from `IHarnessTranscriptSource`.
 def _conforms_harness_transcript_source(x: NullTranscriptSource) -> IHarnessTranscriptSource:
     return x

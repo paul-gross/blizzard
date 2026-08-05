@@ -1,13 +1,8 @@
-"""``blizzard runner requeue`` — the domain service + loop resume (component tier, issue #53).
+"""``blizzard runner requeue`` — the domain service + loop resume (component tier, #53).
 
-Drives :class:`RequeueService` directly against a real tmp store (``bzh:steppable-loop``
-convention, mirroring ``tests/test_runner_takeover.py``): a chunk parked needs_human via
-an escalated lease closure requeues cleanly and leaves the escalation open (a requeue
-mark alone supersedes nothing — only the fresh mint that follows does); an open takeover
-refuses with a 409-mapped error; a chunk carrying no open escalation refuses too; and the
-pasted-command flow (an ended takeover with no requeue-blocking effect) requeues exactly
-like a bare escalation. A second slice drives FILL against a pending requeue mark to pin
-the fresh-attempt spawn — new lease, new epoch, carried retry budget — and its consumption.
+Drives :class:`RequeueService` against a real tmp store: an escalated closure requeues
+cleanly, leaving the escalation open; an open takeover or no escalation refuses (409).
+FILL against a pending mark spawns a fresh attempt — new lease, epoch, carried retries.
 """
 
 from __future__ import annotations
@@ -61,9 +56,7 @@ def _seed_escalated_chunk(store, *, chunk="ch_1", lease="lease_1", node_id="nd_b
     store.record_closure(lease_id=lease, chunk_id=chunk, node_id=node_id, reason="escalated", closed_at=_NOW)
 
 
-# --------------------------------------------------------------------------- #
 # The domain service — happy path, the two 409s, and the pasted-command flow
-# --------------------------------------------------------------------------- #
 
 
 def test_requeue_appends_a_clearing_fact_and_leaves_the_escalation_open(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -152,9 +145,7 @@ def test_requeue_a_chunk_with_no_recorded_takeover_at_all(tmp_path) -> None:  # 
     assert store.open_takeover_for_chunk("ch_1") is None
 
 
-# --------------------------------------------------------------------------- #
 # FILL — the fresh attempt spawned after a pending requeue mark, and its consumption
-# --------------------------------------------------------------------------- #
 
 
 def test_fill_spawns_a_fresh_attempt_after_requeue_and_consumes_the_mark(tmp_path) -> None:  # type: ignore[no-untyped-def]

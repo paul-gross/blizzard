@@ -2,8 +2,7 @@
 actually routes a printed ``conflict`` outcome — component tier.
 
 Mints the real, packaged graph, seeding the chunk directly at ``deliver``'s minted node
-id via a direct transition-fact insert (see ``tests/test_delivery_incomplete_routing.py``
-for the same technique).
+id via a direct transition-fact insert.
 """
 
 from __future__ import annotations
@@ -102,8 +101,7 @@ def test_a_dirty_conflict_routes_to_resolve_and_records_a_bounce(tmp_path: Path)
     assert body["outcome_choice"] == "conflict"
 
     # The accepted transition's target node is `resolve` — the named assertion a
-    # mutation proof (deleting the choice from graph.yaml) must break, not merely the
-    # suite's aggregate exit status.
+    # mutation proof (deleting the choice from graph.yaml) must break.
     assert body["to_node_name"] == "resolve"
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
@@ -133,10 +131,8 @@ def test_a_dirty_conflict_escalates_once_the_bounce_cap_is_crossed(tmp_path: Pat
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
 
-    # `deliver` authors no `bounce_cap`, so the executor falls back to
-    # `DEFAULT_BOUNCE_CAP` (5) — pre-seed that many prior bounces, each at its own
-    # epoch (`record_bounce` is idempotent per `(chunk_id, epoch)`), so this run's own
-    # kick-back is the one that crosses it.
+    # `deliver` falls back to `DEFAULT_BOUNCE_CAP` (5) — pre-seed that many prior bounces
+    # (idempotent per `(chunk_id, epoch)`) so this run's kick-back crosses it.
     for epoch in range(1, DEFAULT_BOUNCE_CAP + 1):
         _writable(hub).record_bounce(chunk_id, epoch=epoch, cause="conflict", envelope="{}", at=hub.clock.now())
     report_lease(hub, chunk_id, epoch=DEFAULT_BOUNCE_CAP + 1, seq=1)

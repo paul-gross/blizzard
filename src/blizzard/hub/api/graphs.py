@@ -1,32 +1,9 @@
-"""Graph routes — ``POST /api/graphs``, ``POST /api/graphs/sync``, ``GET /api/graphs``,
-``GET /api/graphs/{id}``, ``POST /api/graphs/{id}/retire``, ``POST /api/graphs/{id}/enable``.
+"""Graph routes — mint, sync, list, read, retire, and enable a workflow graph.
 
-Mint a workflow graph from a YAML definition: parse it, validate (errors reject 422
-with a :class:`GraphValidationReport`, warnings flag), reify immutable.
-``GET /api/graphs`` lists every minted graph as a summary, newest first, with the
-newest non-retired graph of each name marked ``effective`` — the domain's
-:func:`~blizzard.hub.domain.graph.mark_effective` derives the marker, so the
-"newest-per-name, retired-excluded" rule (issue #101) lives in one place.
-``POST /api/graphs/sync`` reconciles the hub's own **packaged** graph set against the
-store, minting only what changed (issue #146) — the reconciliation itself is
-:mod:`blizzard.hub.graph_sync`'s, so this route is a thin adapter and the same function
-serves an at-startup reconciliation unchanged. Hub-side rather than a CLI-composed loop:
-only the running daemon's own packaged set is authoritative, and a possibly-different
-client wheel cannot speak for it.
-``GET /api/graphs/{graph_id}`` serves the full reified graph; unknown id resolves to
-404 at the edge. ``retire``/``enable`` append a reversible lifecycle fact
-(:class:`~blizzard.hub.domain.graph_lifecycle.GraphLifecycleService`) — the ``graphs``
-row itself is never touched.
-The controller stays read-only over the store (``bzh:controller-read-only``): it
-resolves the YAML into a :class:`GraphDoc` and delegates the validate-reify-persist
-to :class:`~blizzard.hub.domain.graph_authoring.GraphMintService`, and resolves a
-``graph_id`` to its :class:`Graph` before delegating a retire/enable to
-:class:`~blizzard.hub.domain.graph_lifecycle.GraphLifecycleService`
-(``bzh:domain-takes-objects``).
-
-``dependencies=[Depends(reject_runner_principal)]`` confines a runner's bearer token
-to the fleet router (issue #104).
-"""
+The controller stays read-only over the store (``bzh:controller-read-only``), resolving a
+YAML body or a ``graph_id`` into an object before delegating to the domain
+(``bzh:domain-takes-objects``). ``reject_runner_principal`` confines a runner's bearer
+token to the fleet router (issue #104)."""
 
 from __future__ import annotations
 
@@ -161,18 +138,9 @@ def mint_graph(request: GraphMintRequest, services: Annotated[HubServices, Depen
 def sync_graphs(services: Annotated[HubServices, Depends(get_services)]) -> GraphSyncResponse:
     """Reconcile the packaged graph set against the store, minting only what changed.
 
-    Safe to run unconditionally at the end of every deploy (issue #146): a wheel whose
-    packaged graphs all match the newest mint of their name mints nothing and churns no
-    lineage, so re-running it is a no-op rather than a new generation of every graph.
-
-    Registered **above** ``/graphs/{graph_id}``'s routes so ``sync`` is not swallowed as a
-    graph id — FastAPI matches in declaration order, and the two would otherwise collide
-    only for the one literal that matters.
-
-    Always ``200``. A graph that fails to load or validate is a ``failed`` row in the
-    report rather than a status code, because the other graphs still reconciled and the
-    caller needs to see both halves; ``ok`` carries the pass/fail the CLI exits on.
-    """
+    Idempotent, so it is safe to run unconditionally (issue #146). Registered above
+    ``/graphs/{graph_id}`` so ``sync`` is not matched as a graph id. Always ``200``: a
+    graph that fails to load is a ``failed`` report row, and ``ok`` carries the verdict."""
     outcomes = reconcile_packaged_graphs(services.graph_mint, services.graphs)
     return GraphSyncResponse(
         ok=all(o.status is not GraphSyncStatus.FAILED for o in outcomes),
@@ -259,15 +227,9 @@ def set_graph_follow_latest(
 ) -> GraphView:
     """Set this graph's follow-latest policy — ``true``/``false``/``null`` (issue #164).
 
-    Appends a policy fact beside the retire/re-enable lifecycle rather than mutating the
-    immutable ``graphs`` row. ``true``/``false`` override
-    :attr:`~blizzard.hub.config.HubConfig.follow_latest` for chunks pinned to this mint;
-    explicit ``null`` reverts to inheriting it, and is itself an appended fact, so
-    clearing an override keeps the history. Idempotent, and 404 on an unknown id.
-
-    Sets the policy on **one mint**, not on the name: a chunk consults the policy of the
-    graph it is pinned to, so arming a lineage means arming the mint its chunks sit on
-    (or the hub default, which covers every name at once)."""
+    Appends a policy fact rather than mutating the immutable ``graphs`` row; explicit
+    ``null`` reverts to inheriting the hub default and is itself an appended fact. Scoped
+    to this one mint, not to the graph name. Idempotent, and 404 on an unknown id."""
     graph = services.graphs.get(graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")

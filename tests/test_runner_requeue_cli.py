@@ -1,9 +1,8 @@
 """``blizzard runner requeue`` (issue #53).
 
-Driven against a **live** daemon on a real unix socket, mirroring
-``tests/test_runner_takeover_cli.py``'s ``_serve_local_api`` convention: a real server,
-a real store, and the CLI wired together through the genuine ``build_hosted_app``
-composition root (so ``RequeueService`` is wired exactly as ``host`` wires it).
+Driven against a live daemon on a real unix socket: a real server, a real store, and
+the CLI wired together through the genuine ``build_hosted_app`` composition root — so
+``RequeueService`` is wired exactly as ``host`` wires it.
 """
 
 from __future__ import annotations

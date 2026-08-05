@@ -1,45 +1,9 @@
 """Route claim — how a runner takes work.
 
-The ``POST /routes`` domain rule: acquisition is the birth of a **complete** route
-fact. The hub accepts **exactly one** claim per chunk — a second claim on a chunk
-that already has a live route loses with a :class:`ClaimConflict` (surfaced 409),
-and the winning claim's result carries the chunk's first node envelope so the runner
-starts working without a second round-trip.
-
-A claim from a runner the registry marks paused is refused before the race is even
-run, with the distinct :class:`ClaimDeniedPaused` (surfaced 403) — the hub's own
-arbiter enforcing its pause brake rather than trusting the runner to have already read
-it back on pull (issue #44). The check reads
-:class:`~blizzard.hub.domain.registry.RunnerRegistration.hub_paused`, and only that
-brake: a *locally*-paused-only runner (``locally_paused``) is the runner's own
-restraint, not something the hub denies (issue #43 is that
-mechanism). The denial stops only new claims; a route already held, and every
-transition/completion/decision against it, is untouched (``bzh:facts-not-status`` —
-pause is read at claim time, never persisted onto the chunk or the route).
-
-The single-claim guarantee is the hub's single-writer property: the daemon
-is the fleet's one arbiter, so the load-facts → check-live-route →
-record-route sequence must run as an atomic compare-and-set. FastAPI serves sync
-routes from a threadpool, so two runners' claims can arrive concurrently; a lock
-serializes the CAS (the hub is one process — an in-process lock is the whole
-arbitration surface, cross-machine or not). The same lock is injected into
-:class:`~blizzard.hub.domain.edit.EditService` (issue #120, one instance per hub built
-at the composition root — ``bzh:dependency-injection``): widening the edit window onto
-``ready`` chunks (#120) means an edit's own check-then-act can now land in the same
-window a claim does, and sharing this lock is what makes the two resolve to exactly one
-winner rather than a torn read of a chunk's live-route state. Sharing the lock alone is
-not enough, though: the edge resolves the chunk (and its pinned graph) *before* the
-claim reaches the lock (``bzh:domain-takes-objects``), so ``_claim_locked`` re-reads
-the chunk fresh once inside it and re-resolves the graph if an edit already moved
-``graph_id`` in that window (pinned by
-tests/test_edit_claim_race.py::test_repeated_edit_claim_races_never_yield_a_torn_graph).
-
-The claim does **not** mint the executing lease: the runner mints it and reports
-``lease.minted``, and the completion fence checks against that. The claim envelope
-carries the chunk's current epoch (``latest`` reported so far, or 0 before the runner's
-first lease report) so the worker starts without a round-trip; the runner's own lease
-epoch — not this value — is what the fence consumes.
-"""
+The ``POST /routes`` domain rule: the hub accepts **exactly one** claim per chunk, and
+the winning claim's result carries the chunk's first node envelope. A runner marked
+``hub_paused`` is refused before the race is run, and only for new claims (issue #44).
+The load-facts → check-live-route → record-route sequence is an atomic CAS (issue #120)."""
 
 from __future__ import annotations
 
@@ -65,16 +29,11 @@ from blizzard.hub.domain.work import (
 )
 from blizzard.wire.envelope import NodeEnvelope
 
-#: `secrets.token_urlsafe` byte count for the route capability token — same length as
-#: the runner bearer token (`hub/domain/enrollment.py`), for the same reason: a
-#: 43-character URL-safe secret comfortably beyond brute-force range.
+#: `secrets.token_urlsafe` byte count for the route capability token (43 URL-safe chars).
 _ROUTE_TOKEN_BYTES = 32
 
-# Crash point (``bzh:crash-point-registry``, issue #84b) — the claim-family boundary: the
-# route and its capability-token fact (``record_route``) are durable, but the plaintext
-# token has not yet reached the runner in the HTTP response. A kill here is recovered
-# generically by the runner's interrupted-claim adoption (``runner/loop/steps.py``),
-# which re-keys the route rather than re-claiming it.
+# Crash point (``bzh:crash-point-registry``, issue #84b): the route and its capability-token
+# fact are durable, but the plaintext has not reached the runner; recovered by claim adoption.
 _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE = crashpoint(
     "claim.after-persist.before-response",
     "the route + its route_token_minted fact are durable; the plaintext has not yet reached the runner",
@@ -114,17 +73,10 @@ class ClaimDeniedTerminal(Exception):
 
 @dataclass(frozen=True)
 class ClaimResult:
-    """A won claim — the route fact, its first node envelope, and the route's
-    plaintext capability token (issue #84a).
-
-    ``route_token`` is returned exactly once, here — the hub persists only its sha256
-    hash (:meth:`~blizzard.hub.domain.work.IWriteChunkRepository.record_route`'s
-    ``token_hash``); :class:`~blizzard.hub.domain.fleet.Route` itself stays
-    dependency-free and carries no secret.
-
-    ``route_id`` (issue #213) is the freshly-minted ``route_created.route_id`` —
-    ``Route`` itself carries no id (its natural key is ``chunk_id``), so this is the
-    one place a caller can read it."""
+    """A won claim — the route fact, its first node envelope, and the route's plaintext
+    capability token (issue #84a). ``route_token`` is returned exactly once, here; only
+    its sha256 hash is persisted. ``route_id`` (issue #213) is the freshly-minted route
+    id, which :class:`~blizzard.hub.domain.fleet.Route` itself does not carry."""
 
     route: Route
     envelope: NodeEnvelope
@@ -149,9 +101,8 @@ class ClaimService:
         self._graphs = graphs
         self._registry = registry
         self._clock = clock
-        # Serializes the check-live-route → record-route CAS; injected from the
-        # composition root (``bzh:dependency-injection``, issue #120) so EditService
-        # shares it — see the module docstring.
+        # Serializes the check-live-route → record-route CAS; shared with the edit path
+        # so a concurrent edit and claim resolve to exactly one winner (issue #120).
         self._claim_lock = claim_lock
 
     def claim(
@@ -165,8 +116,6 @@ class ClaimService:
     ) -> ClaimResult:
         # Checked before the lock: a paused runner is refused regardless of whether it
         # would have won the race, so there is nothing here for the CAS to serialize.
-        # An unregistered runner (`get_runner` returns None) cannot have been paused —
-        # `FleetService.set_paused` requires a known runner — so it is not denied.
         registration = self._registry.get_runner(runner_id)
         if registration is not None and registration.hub_paused:
             raise ClaimDeniedPaused(runner_id=runner_id)
@@ -188,9 +137,8 @@ class ClaimService:
         if existing is not None:
             raise ClaimConflict(held_by_runner_id=existing.runner_id)
 
-        # Re-read the chunk under the lock and always build from that fresh copy: an
-        # edit that landed first (issue #120) may have moved `graph_id` and/or `model`
-        # since the edge resolved the handed-in objects — see the module docstring.
+        # Re-read the chunk under the lock: an edit that landed first (issue #120) may have
+        # moved `graph_id`/`model` since the edge resolved the handed-in objects.
         current = self._chunks.get(chunk.chunk_id)
         if current is None:  # pragma: no cover - the chunk cannot vanish mid-claim
             raise ClaimConflict(held_by_runner_id=runner_id)
@@ -208,8 +156,8 @@ class ClaimService:
         if status in TERMINAL_STATUSES:
             raise ClaimDeniedTerminal(chunk_id=chunk.chunk_id, status=status)
 
-        # The claim carries the current epoch (0 before the first lease report) into the
-        # envelope and writes no lease fact of its own — see the module docstring.
+        # The claim carries the current epoch (0 before the first lease report) and mints
+        # no lease of its own; the fence consumes the runner's reported epoch, not this.
         epoch = latest_epoch(facts) or 0 if facts is not None else 0
         now = self._clock.now()
 
@@ -220,9 +168,8 @@ class ClaimService:
             environment_ids=list(environment_ids),
             created_at=now,
         )
-        # Minted fresh per acquisition (issue #84a): the plaintext is returned once on
-        # the result below and never stored — only its sha256 hash lands, appended as
-        # its own route_token_minted fact in the same store write as record_route.
+        # Minted fresh per acquisition (issue #84a): the plaintext is returned once and
+        # never stored — only its sha256 hash lands, in the same write as record_route.
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
         route_id = self._chunks.record_route(route, token_hash=hash_token(route_token), at=now)
         _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE.reached()
@@ -242,17 +189,10 @@ class ClaimService:
 
     def rekey(self, route: Route) -> str:
         """Rotate a live route's capability token (issue #84b) — the lost-plaintext
-        recovery: a runner that crashed between the mint and reading the claim
-        response back has no other way to learn its token.
-
-        Mints a fresh ``secrets.token_urlsafe`` and appends it as a new
-        ``route_token_minted`` fact (``bzh:facts-not-status`` — never a mutation of
-        the prior fact); the newest-fact-wins derivation
-        (:func:`~blizzard.hub.domain.work.newest_live_route_token`) supersedes the old
-        token immediately, with no separate revocation step. Idempotent by
-        construction: a re-run appends another fact. Takes the already-resolved live
-        :class:`~blizzard.hub.domain.fleet.Route` (``bzh:domain-takes-objects``); the
-        caller confirms liveness and ownership before calling this."""
+        recovery path. Appends a new ``route_token_minted`` fact rather than mutating the
+        prior one (``bzh:facts-not-status``); newest-fact-wins supersedes the old token
+        with no separate revocation step, and a re-run is idempotent by construction.
+        Takes an already-resolved live route (``bzh:domain-takes-objects``)."""
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
         self._chunks.record_route_token(route.chunk_id, token_hash=hash_token(route_token), at=self._clock.now())
         return route_token

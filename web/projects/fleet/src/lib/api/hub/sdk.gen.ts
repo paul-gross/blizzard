@@ -21,17 +21,11 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 /**
  * List Activity
  *
- * The board's Event log backfill on page load (issue #213) — the three
- * already-bounded per-source activity reads merged, sorted newest-first, and capped.
+ * The activity backfill (issue #213) — the three already-bounded per-source activity reads merged,
+ * sorted newest-first, and capped.
  *
- * A human-plane board read, gated exactly like ``GET /api/events``:
- * ``reject_runner_principal`` keeps a runner's bearer out and ``require(FLEET_VIEW)``
- * gates it like every other board read. ``since`` defaults to 24h before the injected
- * clock's own ``now()`` (never ``datetime.now()``) — the window the issue's AC calls
- * for when the board loads with no explicit cursor. A malformed ``since`` 422s via
- * FastAPI's own datetime coercion; a well-formed but tz-naive ``since`` (an
- * offset-less ISO string) is coerced to UTC (``as_utc``) so it never raises against
- * the store's aware timestamps.
+ * ``since`` defaults to 24h before the injected clock's own ``now()``, never ``datetime.now()``. A
+ * tz-naive ``since`` is coerced to UTC so it never raises against the store's aware timestamps.
  */
 export const listActivityApiActivityGet = <ThrowOnError extends boolean = false>(options?: Options<ListActivityApiActivityGetData, ThrowOnError>): RequestResult<ListActivityApiActivityGetResponses, ListActivityApiActivityGetErrors, ThrowOnError> => (options?.client ?? client).get<ListActivityApiActivityGetResponses, ListActivityApiActivityGetErrors, ThrowOnError>({ url: '/api/activity', ...options });
 
@@ -45,11 +39,8 @@ export const authorizeApiAuthAuthorizeGet = <ThrowOnError extends boolean = fals
  *
  * Redeem a ``client=cli`` authorize code for a hub session token (issue #96).
  *
- * Public plane, like ``authorize`` itself — there is no session yet at this point,
- * that is what this route mints. One undifferentiated 400 covers every failure
- * (unknown/expired/already-consumed code, a mismatched ``redirect_uri``, or a PKCE
- * verifier that does not hash to the stored challenge) — mirrors ``authorize``'s own
- * "don't tell a caller which check failed" shape.
+ * Public plane — there is no session yet; this route is what mints one. One
+ * undifferentiated 400 covers every failure, telling a caller nothing about which.
  */
 export const cliTokenApiAuthCliTokenPost = <ThrowOnError extends boolean = false>(options: Options<CliTokenApiAuthCliTokenPostData, ThrowOnError>): RequestResult<CliTokenApiAuthCliTokenPostResponses, CliTokenApiAuthCliTokenPostErrors, ThrowOnError> => (options.client ?? client).post<CliTokenApiAuthCliTokenPostResponses, CliTokenApiAuthCliTokenPostErrors, ThrowOnError>({
     url: '/api/auth/cli/token',
@@ -78,11 +69,8 @@ export const listProvidersApiAuthProvidersGet = <ThrowOnError extends boolean = 
 /**
  * Rotate Signing Key
  *
- * ``blizzard hub rotate-signing-key`` (issue #95) — mint a fresh current key,
- * demoting the old current to previous. Human-plane, gated on ``user:manage`` (the
- * same admin-tier permission the user-management API uses — no new permission is
- * minted for this one verb) and closed to a runner's own bearer token
- * (``reject_runner_principal``, mirroring every other operator router).
+ * Mint a fresh current signing key, demoting the old current to previous (issue
+ * #95). Human-plane, gated on ``user:manage`` and closed to a runner bearer token.
  */
 export const rotateSigningKeyApiAuthRotateSigningKeyPost = <ThrowOnError extends boolean = false>(options?: Options<RotateSigningKeyApiAuthRotateSigningKeyPostData, ThrowOnError>): RequestResult<RotateSigningKeyApiAuthRotateSigningKeyPostResponses, unknown, ThrowOnError> => (options?.client ?? client).post<RotateSigningKeyApiAuthRotateSigningKeyPostResponses, unknown, ThrowOnError>({ url: '/api/auth/rotate-signing-key', ...options });
 
@@ -130,25 +118,11 @@ export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false
 /**
  * Patch Chunk
  *
- * Apply any of ``graph_id``, ``default_model``, ``default_effort``,
- * ``intended_migration`` in one all-or-nothing edit (issue #124, in #104's shape;
- * the two defaults replace #27's ``model`` field per issue #144).
+ * Apply any of ``graph_id``, ``default_model``, ``default_effort``, or
+ * ``intended_migration`` in one all-or-nothing edit (issue #124).
  *
- * ``graph_id`` 404s on an unknown chunk or graph. ``default_model`` is a prioritized
- * preference list — a blank entry is 422, and an empty list is a legitimate "express no
- * preference" clear; ``default_effort`` is 422 when blank and cleared by explicit
- * ``null``. Neither value's *vocabulary* is checked here: a ``blizzard:`` tier alias and
- * a harness-native name are both opaque preference strings to the hub, resolved by the
- * runner's adapter against its own config. ``intended_migration``, present only
- * once the request body actually names it (``model_fields_set`` — see
- * ``ChunkPatchRequest``), sets or overwrites the standing intent when it carries a
- * value, or clears it on explicit ``null``; its ``to_graph`` resolves by id or name to
- * the newest enabled graph (404 unresolvable), and a blank ``to_graph``/``node`` is
- * 422. Each field's own editable-status window (409, naming the field) and the
- * intended-migration semantic refusals — a retired target, a target equal to the
- * chunk's current pin, or a ``forced`` node absent from the target (all 409) — are
- * ``EditService.edit``'s (``domain/edit.py``); a refused field means **nothing** in the
- * body is applied.
+ * 404 on an unknown chunk, graph, or migration target; 422 on a blank value; the
+ * editable-status windows and semantic refusals are ``EditService.edit``'s.
  */
 export const patchChunkApiChunksChunkIdPatch = <ThrowOnError extends boolean = false>(options: Options<PatchChunkApiChunksChunkIdPatchData, ThrowOnError>): RequestResult<PatchChunkApiChunksChunkIdPatchResponses, PatchChunkApiChunksChunkIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchChunkApiChunksChunkIdPatchResponses, PatchChunkApiChunksChunkIdPatchErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}',
@@ -169,7 +143,7 @@ export const detachChunkApiChunksChunkIdDetachPost = <ThrowOnError extends boole
 /**
  * Group Chunks
  *
- * Merge unacquired chunks into ``chunk_id`` — the board's Group control.
+ * Merge unacquired chunks into ``chunk_id``.
  *
  * Accepts ``not_ready`` and ``ready`` participants alike (issue #141); 409 names the
  * first chunk a runner holds, or one already finished.
@@ -188,13 +162,8 @@ export const groupChunksApiChunksChunkIdGroupPost = <ThrowOnError extends boolea
  *
  * The mid-run marker callback (#65) — a ``run:`` step's own dynamic-loop marker.
  *
- * Mirrors ``blizzard runner ask``'s worker-facing callback shape: a hub command
- * node's script POSTs here (via the injected
- * ``BZ_HUB_MARKER_CALLBACK_URL``, which already carries ``node_id``/``epoch``) to
- * record a marker artifact mid-run, ahead of that command's own exit — enabling a
- * dynamic loop (``merge repo -> push -> record merged/<repo> -> next``). Idempotent
- * per ``(chunk, node, name, epoch)``, exactly like the ``produces:`` marker the
- * executor records on a step's own exit.
+ * Records a marker artifact mid-run, ahead of the producing command's own exit.
+ * Idempotent per ``(chunk, node, name, epoch)``.
  */
 export const recordHubMarkerApiChunksChunkIdHubMarkersPost = <ThrowOnError extends boolean = false>(options: Options<RecordHubMarkerApiChunksChunkIdHubMarkersPostData, ThrowOnError>): RequestResult<RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses, RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors, ThrowOnError> => (options.client ?? client).post<RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses, RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/hub-markers',
@@ -265,10 +234,8 @@ export const resumeChunkApiChunksChunkIdResumePost = <ThrowOnError extends boole
  * Terminally abandon CHUNK — the operator's last-resort verb (issue #118).
  *
  * Records the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never
- * re-derives ``ready``, and releases any live route in the same operation — the
- * holding runner's own detach-discovery abandons the lease and frees the
- * environments on its next tick, no separate ``detach`` needed. 409 when the chunk
- * is already ``done`` or ``stopped`` — stopping is not retroactive un-delivery.
+ * re-derives ``ready``, and releases any live route in the same operation. 409 when
+ * the chunk is already ``done`` or ``stopped`` — stopping is not retroactive.
  */
 export const stopChunkApiChunksChunkIdStopPost = <ThrowOnError extends boolean = false>(options: Options<StopChunkApiChunksChunkIdStopPostData, ThrowOnError>): RequestResult<StopChunkApiChunksChunkIdStopPostResponses, StopChunkApiChunksChunkIdStopPostErrors, ThrowOnError> => (options.client ?? client).post<StopChunkApiChunksChunkIdStopPostResponses, StopChunkApiChunksChunkIdStopPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/stop',
@@ -284,13 +251,9 @@ export const stopChunkApiChunksChunkIdStopPost = <ThrowOnError extends boolean =
  *
  * Pass-through work items read — one entry per pointer, contents never stored.
  *
- * Each pointer is resolved to its own binding by name (``work_sources.get(pointer.source)``), then
- * fetched fresh from the forge; a per-pointer resolution or forge failure degrades to an
- * ``error`` on that entry rather than failing the whole read, so a grouped chunk
- * still surfaces the pointers it reached beside a notice for the ones it did not. A chunk
- * with no pointers is an empty list — the board's empty state — not a 404. No configured
- * work source at all is a 503 up front — the request-wide degradation preserved unchanged
- * from before per-pointer resolution existed.
+ * A per-pointer resolution or forge failure degrades to an ``error`` on that entry
+ * rather than failing the whole read. A chunk with no pointers is an empty list, not
+ * a 404; no configured work source at all is a 503 up front.
  */
 export const getWorkItemsApiChunksChunkIdWorkItemsGet = <ThrowOnError extends boolean = false>(options: Options<GetWorkItemsApiChunksChunkIdWorkItemsGetData, ThrowOnError>): RequestResult<GetWorkItemsApiChunksChunkIdWorkItemsGetResponses, GetWorkItemsApiChunksChunkIdWorkItemsGetErrors, ThrowOnError> => (options.client ?? client).get<GetWorkItemsApiChunksChunkIdWorkItemsGetResponses, GetWorkItemsApiChunksChunkIdWorkItemsGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/work-items', ...options });
 
@@ -322,17 +285,11 @@ export const resolveDecisionApiDecisionsDecisionIdResolutionsPost = <ThrowOnErro
 /**
  * List Events
  *
- * The operational event feed — the ``event_log`` unified with every currently-open
- * escalation (issue #125), newest-and-most-severe first, bounded.
+ * The ``event_log`` unified with open escalations (issue #125), most-severe-newest first, bounded.
  *
- * A human-plane board read: ``reject_runner_principal`` keeps a runner's bearer out and
- * ``require(FLEET_VIEW)`` gates it exactly like ``GET /decisions``. The ``severity`` /
- * ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half; the
- * open-escalation projection is always unioned in (a ``needs_human`` chunk is a standing
- * surface, not a filterable log row). A malformed ``since`` 422s via FastAPI's own
- * datetime coercion; a well-formed but tz-naive ``since`` (an offset-less ISO string) is
- * coerced to UTC (``as_utc``) so the projection's aware ``recorded_at`` comparison below
- * never raises against it — the store half is already protected by ``UtcDateTime``.
+ * The ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half;
+ * the open-escalation projection is always unioned in. A tz-naive ``since`` is coerced to UTC so the
+ * projection's aware ``recorded_at`` comparison below never raises against it.
  */
 export const listEventsApiEventsGet = <ThrowOnError extends boolean = false>(options?: Options<ListEventsApiEventsGetData, ThrowOnError>): RequestResult<ListEventsApiEventsGetResponses, ListEventsApiEventsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListEventsApiEventsGetResponses, ListEventsApiEventsGetErrors, ThrowOnError>({ url: '/api/events', ...options });
 
@@ -395,22 +352,11 @@ export const reportEscalationApiFleetChunksChunkIdEscalationsPost = <ThrowOnErro
 /**
  * Hub Advance
  *
- * Drive a chunk parked at a generic hub command node one step (#65).
- *
- * Runs :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` once, respecting the
- * fleet-wide serialization slot: ``ran=False`` means a different chunk holds the
- * slot right now, OR (#66) the node reported ``pending`` on a prior call and
- * ``poll_interval`` has not yet elapsed — either way not an error, the runner's
- * ADVANCE poll (``_advance_held_chunk``) simply calls this again on a later tick. A
- * no-op (``ran=False``, ``detail`` names it) when the chunk is not currently parked
- * at a generic hub command node — every hub node is this shape since #67; no other
- * delivery route remains.
- *
- * No ``runner_id`` is declared on this request (it carries only ``chunk_id``), so
- * the router-level ``require_runner_principal`` dependency is the whole check here —
- * no :func:`~blizzard.hub.api.auth.assert_owns` call, the same shape as the other
- * chunk-scoped fleet reads (``get_chunk``/``get_envelope``) that carry no runner_id
- * to confine against.
+ * Drive a chunk parked at a generic hub command node one step (#65), running
+ * :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` once under the fleet-wide serialization
+ * slot. ``ran=False`` is never an error: a different chunk holds the slot, or (#66) the node reported
+ * ``pending`` and ``poll_interval`` has not elapsed, or the chunk is not parked at a hub command node
+ * at all — ``detail`` names which. The request declares no ``runner_id`` to confine against.
  */
 export const hubAdvanceApiFleetChunksChunkIdHubAdvancePost = <ThrowOnError extends boolean = false>(options: Options<HubAdvanceApiFleetChunksChunkIdHubAdvancePostData, ThrowOnError>): RequestResult<HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses, HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors, ThrowOnError> => (options.client ?? client).post<HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses, HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/hub-advance', ...options });
 
@@ -431,10 +377,8 @@ export const reportLeaseApiFleetChunksChunkIdLeasesPost = <ThrowOnError extends 
 /**
  * Pause Chunk
  *
- * The runner machine panel's chunk-detail Pause (issue #185), forwarded here with the
- * runner's own bearer token from the runner-local pass-through
- * (:mod:`blizzard.runner.api.chunk_detail`) — the same transition the board's own Pause
- * button drives, `by` defaulting to ``operator`` exactly as the board's mutation does.
+ * Pause the chunk with a runner's own bearer token (issue #185) — the same transition as the
+ * operator route, ``by`` defaulting to ``operator``.
  */
 export const pauseChunkApiFleetChunksChunkIdPausePost = <ThrowOnError extends boolean = false>(options: Options<PauseChunkApiFleetChunksChunkIdPausePostData, ThrowOnError>): RequestResult<PauseChunkApiFleetChunksChunkIdPausePostResponses, PauseChunkApiFleetChunksChunkIdPausePostErrors, ThrowOnError> => (options.client ?? client).post<PauseChunkApiFleetChunksChunkIdPausePostResponses, PauseChunkApiFleetChunksChunkIdPausePostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/pause', ...options });
 
@@ -450,46 +394,36 @@ export const fleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGet = <Th
 /**
  * Resume Chunk
  *
- * The runner machine panel's chunk-detail Resume (issue #185) — see :func:`pause_chunk`.
+ * Resume the chunk with a runner's own bearer token (issue #185) — see :func:`pause_chunk`.
  */
 export const resumeChunkApiFleetChunksChunkIdResumePost = <ThrowOnError extends boolean = false>(options: Options<ResumeChunkApiFleetChunksChunkIdResumePostData, ThrowOnError>): RequestResult<ResumeChunkApiFleetChunksChunkIdResumePostResponses, ResumeChunkApiFleetChunksChunkIdResumePostErrors, ThrowOnError> => (options.client ?? client).post<ResumeChunkApiFleetChunksChunkIdResumePostResponses, ResumeChunkApiFleetChunksChunkIdResumePostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/resume', ...options });
 
 /**
  * Rekey Route Token
  *
- * Rotate the chunk's live route capability token (issue #84b) — the lost-plaintext
- * recovery for a runner that crashed between the mint and reading the claim response
- * back (``_adopt_interrupted_claim``, ``runner/loop/steps.py``). Confined to the
- * live route's own runner via :func:`~blizzard.hub.api.auth.assert_owns`, the same
- * ownership check every other fleet write makes — this route carries no chunk-scoped
- * ``route_token`` of its own to present (that is exactly what it is minting).
+ * Rotate the chunk's live route capability token (issue #84b) — the lost-plaintext recovery for a
+ * claim whose response was never read back. Confined to the live route's own runner via
+ * :func:`~blizzard.hub.api.auth.assert_owns`; this route presents no chunk-scoped ``route_token`` of
+ * its own, which is exactly what it is minting.
  */
 export const rekeyRouteTokenApiFleetChunksChunkIdRouteTokenPost = <ThrowOnError extends boolean = false>(options: Options<RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostData, ThrowOnError>): RequestResult<RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors, ThrowOnError> => (options.client ?? client).post<RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/route-token', ...options });
 
 /**
  * Get Work Items
  *
- * The build worker's work-items proxy target (via the runner-local pass-through,
- * ``blizzard.runner.api.work_items``), forwarded here with the runner's own bearer
- * token — the same pass-through the board reads anonymously.
+ * The chunk's work items, read with a runner's own bearer token — the same rendering as the
+ * anonymous operator route.
  */
 export const getWorkItemsApiFleetChunksChunkIdWorkItemsGet = <ThrowOnError extends boolean = false>(options: Options<GetWorkItemsApiFleetChunksChunkIdWorkItemsGetData, ThrowOnError>): RequestResult<GetWorkItemsApiFleetChunksChunkIdWorkItemsGetResponses, GetWorkItemsApiFleetChunksChunkIdWorkItemsGetErrors, ThrowOnError> => (options.client ?? client).get<GetWorkItemsApiFleetChunksChunkIdWorkItemsGetResponses, GetWorkItemsApiFleetChunksChunkIdWorkItemsGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/work-items', ...options });
 
 /**
  * Ingest Runner Facts
  *
- * Land runner-minted facts, idempotent by per-runner seq high-water.
- *
- * The store-and-forward ingest: ``lease.minted`` (the fence input), ``escalation.recorded``,
- * ``question.asked``, and ``answer.delivered`` ride the runner's outbound buffer here. A
- * pushed seq at or below the runner's high-water mark is already-applied and re-acked; a
- * fresh one is applied and advances the mark. Each freshly-applied fact re-broadcasts on
- * the SSE stream so the board refreshes — ``chunk-changed`` for every touched chunk, and
- * ``question-asked`` for a forwarded ask. ``chunk-changed`` publishes unconditionally
- * here, on the fact rather than on a status *change*, which is what carries the live
- * refresh for facts that move no status: ``answer.delivered`` (issue #165) stales the
- * chunk read through it, so the board's delivery trail updates with no event type of
- * its own.
+ * Land runner-minted facts, idempotent by per-runner seq high-water: a pushed seq at or below the
+ * high-water mark is already-applied and re-acked, a fresh one is applied and advances the mark. Each
+ * freshly-applied fact re-broadcasts on the SSE stream. ``chunk-changed`` publishes unconditionally,
+ * on the fact rather than on a status *change*, so a fact that moves no status (``answer.delivered``,
+ * issue #165) still stales the chunk read.
  */
 export const ingestRunnerFactsApiFleetEventsPost = <ThrowOnError extends boolean = false>(options: Options<IngestRunnerFactsApiFleetEventsPostData, ThrowOnError>): RequestResult<IngestRunnerFactsApiFleetEventsPostResponses, IngestRunnerFactsApiFleetEventsPostErrors, ThrowOnError> => (options.client ?? client).post<IngestRunnerFactsApiFleetEventsPostResponses, IngestRunnerFactsApiFleetEventsPostErrors, ThrowOnError>({
     url: '/api/fleet/events',
@@ -534,10 +468,8 @@ export const claimRouteApiFleetRoutesPost = <ThrowOnError extends boolean = fals
  *
  * Register a runner — runner id + workspace binding; idempotent upsert.
  *
- * Runner-auth checked (issue #86a) at the router level (``require_runner_principal``).
- * Issue #95's optional ``url``/``redirect_uris`` extension rides the same
- * authenticated write, rejected exactly like every other fleet write once #86 is
- * enforced.
+ * Runner-auth is checked at the router level (issue #86a); issue #95's optional
+ * ``url``/``redirect_uris`` extension rides the same authenticated write.
  */
 export const registerRunnerApiFleetRunnersPost = <ThrowOnError extends boolean = false>(options: Options<RegisterRunnerApiFleetRunnersPostData, ThrowOnError>): RequestResult<RegisterRunnerApiFleetRunnersPostResponses, RegisterRunnerApiFleetRunnersPostErrors, ThrowOnError> => (options.client ?? client).post<RegisterRunnerApiFleetRunnersPostResponses, RegisterRunnerApiFleetRunnersPostErrors, ThrowOnError>({
     url: '/api/fleet/runners',
@@ -565,10 +497,8 @@ export const heartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPost = <ThrowOnErro
 /**
  * Fleet Summary
  *
- * The runner machine panel's fleet-pulse counts (issue #76), forwarded here with the
- * runner's own bearer token from the runner-local pass-through
- * (:mod:`blizzard.runner.api.fleet_summary`). Fleet-router-only: unlike work-items, the
- * board has no anonymous counterpart — its card list already carries every status.
+ * The fleet-pulse counts (issue #76), read with a runner's own bearer token. Fleet-router-only:
+ * this read has no anonymous counterpart.
  */
 export const fleetSummaryApiFleetSummaryGet = <ThrowOnError extends boolean = false>(options?: Options<FleetSummaryApiFleetSummaryGetData, ThrowOnError>): RequestResult<FleetSummaryApiFleetSummaryGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<FleetSummaryApiFleetSummaryGetResponses, unknown, ThrowOnError>({ url: '/api/fleet/summary', ...options });
 
@@ -598,17 +528,9 @@ export const mintGraphApiGraphsPost = <ThrowOnError extends boolean = false>(opt
  *
  * Reconcile the packaged graph set against the store, minting only what changed.
  *
- * Safe to run unconditionally at the end of every deploy (issue #146): a wheel whose
- * packaged graphs all match the newest mint of their name mints nothing and churns no
- * lineage, so re-running it is a no-op rather than a new generation of every graph.
- *
- * Registered **above** ``/graphs/{graph_id}``'s routes so ``sync`` is not swallowed as a
- * graph id — FastAPI matches in declaration order, and the two would otherwise collide
- * only for the one literal that matters.
- *
- * Always ``200``. A graph that fails to load or validate is a ``failed`` row in the
- * report rather than a status code, because the other graphs still reconciled and the
- * caller needs to see both halves; ``ok`` carries the pass/fail the CLI exits on.
+ * Idempotent, so it is safe to run unconditionally (issue #146). Registered above
+ * ``/graphs/{graph_id}`` so ``sync`` is not matched as a graph id. Always ``200``: a
+ * graph that fails to load is a ``failed`` report row, and ``ok`` carries the verdict.
  */
 export const syncGraphsApiGraphsSyncPost = <ThrowOnError extends boolean = false>(options?: Options<SyncGraphsApiGraphsSyncPostData, ThrowOnError>): RequestResult<SyncGraphsApiGraphsSyncPostResponses, unknown, ThrowOnError> => (options?.client ?? client).post<SyncGraphsApiGraphsSyncPostResponses, unknown, ThrowOnError>({ url: '/api/graphs/sync', ...options });
 
@@ -639,15 +561,9 @@ export const enableGraphApiGraphsGraphIdEnablePost = <ThrowOnError extends boole
  *
  * Set this graph's follow-latest policy — ``true``/``false``/``null`` (issue #164).
  *
- * Appends a policy fact beside the retire/re-enable lifecycle rather than mutating the
- * immutable ``graphs`` row. ``true``/``false`` override
- * :attr:`~blizzard.hub.config.HubConfig.follow_latest` for chunks pinned to this mint;
- * explicit ``null`` reverts to inheriting it, and is itself an appended fact, so
- * clearing an override keeps the history. Idempotent, and 404 on an unknown id.
- *
- * Sets the policy on **one mint**, not on the name: a chunk consults the policy of the
- * graph it is pinned to, so arming a lineage means arming the mint its chunks sit on
- * (or the hub default, which covers every name at once).
+ * Appends a policy fact rather than mutating the immutable ``graphs`` row; explicit
+ * ``null`` reverts to inheriting the hub default and is itself an appended fact. Scoped
+ * to this one mint, not to the graph name. Idempotent, and 404 on an unknown id.
  */
 export const setGraphFollowLatestApiGraphsGraphIdFollowLatestPost = <ThrowOnError extends boolean = false>(options: Options<SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostData, ThrowOnError>): RequestResult<SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostResponses, SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostErrors, ThrowOnError> => (options.client ?? client).post<SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostResponses, SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostErrors, ThrowOnError>({
     url: '/api/graphs/{graph_id}/follow-latest',
@@ -735,14 +651,11 @@ export const getQueueApiQueueGet = <ThrowOnError extends boolean = false>(option
 /**
  * Replace Queue
  *
- * Idempotent whole-order replacement of the ready queue — the explicit operator
- * verb behind ``blizzard hub queue set``.
+ * Idempotent whole-order replacement of the ready queue.
  *
- * Resolves every named id against the current ready set here (the edge concern,
- * ``bzh:domain-takes-objects``): ``409`` names the first id that is not a ready
- * chunk, ``422`` rejects a duplicate id. A ready chunk not named keeps its current
- * relative order, appended after the named ones, so the replacement is total and
- * idempotent.
+ * Resolves every named id against the current ready set (``bzh:domain-takes-objects``):
+ * ``409`` names the first id that is not ready, ``422`` a duplicate id. An unnamed
+ * ready chunk keeps its relative order, appended after the named ones.
  */
 export const replaceQueueApiQueuePut = <ThrowOnError extends boolean = false>(options: Options<ReplaceQueueApiQueuePutData, ThrowOnError>): RequestResult<ReplaceQueueApiQueuePutResponses, ReplaceQueueApiQueuePutErrors, ThrowOnError> => (options.client ?? client).put<ReplaceQueueApiQueuePutResponses, ReplaceQueueApiQueuePutErrors, ThrowOnError>({
     url: '/api/queue',
@@ -756,14 +669,11 @@ export const replaceQueueApiQueuePut = <ThrowOnError extends boolean = false>(op
 /**
  * Reposition Queue
  *
- * Single-chunk fractional reorder — the board's drag-and-drop and
- * ``blizzard hub queue move`` (issue #137).
+ * Single-chunk fractional reorder (issue #137).
  *
- * Resolves both ``chunk_id`` and ``after_chunk_id`` (if not null) against the current
- * ready set here (the edge concern, ``bzh:domain-takes-objects``): ``409`` names
- * either one if it is not a ready chunk, ``422`` rejects ``after_chunk_id`` naming
- * ``chunk_id`` itself (self-anchor is nonsensical). ``after_chunk_id=null`` moves the
- * chunk to the very top of the queue.
+ * Resolves both ids against the current ready set (``bzh:domain-takes-objects``):
+ * ``409`` names either one if it is not ready, ``422`` rejects a self-anchor.
+ * ``after_chunk_id=null`` moves the chunk to the top of the queue.
  */
 export const repositionQueueApiQueuePositionPost = <ThrowOnError extends boolean = false>(options: Options<RepositionQueueApiQueuePositionPostData, ThrowOnError>): RequestResult<RepositionQueueApiQueuePositionPostResponses, RepositionQueueApiQueuePositionPostErrors, ThrowOnError> => (options.client ?? client).post<RepositionQueueApiQueuePositionPostResponses, RepositionQueueApiQueuePositionPostErrors, ThrowOnError>({
     url: '/api/queue/position',
@@ -800,10 +710,8 @@ export const getRunnerApiRunnersRunnerIdGet = <ThrowOnError extends boolean = fa
  * Mint (or rotate) ``runner_id``'s bearer token — the plaintext is returned once;
  * the store keeps only its sha256 hash from here on (issue #86a).
  *
- * Anonymous, like every operator verb under this epic (localhost dogfooding hub;
- * operator auth is epic:team). Requires an existing registration (404 otherwise):
- * enrollment is a deliberate operator act on a runner the fleet already knows, not a
- * trust-on-first-use grant to a name nobody has registered yet.
+ * Requires an existing registration (404 otherwise): enrollment is a deliberate act on
+ * a known runner, never a trust-on-first-use grant to an unregistered name.
  */
 export const enrollRunnerApiRunnersRunnerIdEnrollmentsPost = <ThrowOnError extends boolean = false>(options: Options<EnrollRunnerApiRunnersRunnerIdEnrollmentsPostData, ThrowOnError>): RequestResult<EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponses, EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors, ThrowOnError> => (options.client ?? client).post<EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponses, EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors, ThrowOnError>({ url: '/api/runners/{runner_id}/enrollments', ...options });
 

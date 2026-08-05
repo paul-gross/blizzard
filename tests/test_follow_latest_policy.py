@@ -65,7 +65,6 @@ nodes:
 """
 
 
-# --------------------------------------------------------------------------- #
 # The precedence rule — pure, unit tier
 # --------------------------------------------------------------------------- #
 
@@ -86,7 +85,6 @@ def test_resolve_follow_latest_precedence(graph_policy: bool | None, hub_default
     assert resolve_follow_latest(graph_policy, hub_default=hub_default) is expected
 
 
-# --------------------------------------------------------------------------- #
 # The policy at a real transition — component tier
 # --------------------------------------------------------------------------- #
 
@@ -286,7 +284,6 @@ def test_a_newer_mint_without_the_destination_node_lands_on_its_entry(tmp_path: 
     assert detail["current_node_name"] == "triage"  # the target's entry node
 
 
-# --------------------------------------------------------------------------- #
 # The policy's own surface — the stored tri-state on GraphView
 # --------------------------------------------------------------------------- #
 

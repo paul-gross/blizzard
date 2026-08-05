@@ -1,22 +1,8 @@
 """The forge-status projection — a periodic, best-effort sweep (issue #179).
 
-The hub is truth; the forge carries a coarse, one-way reflection of it as labels.
-Per annotate-capable, opted-in work source, :class:`AnnotationReconciler` derives the
-desired marker for every work ref a live chunk holds (:func:`derive_marker` over the
-chunk's own **derived** status, ``bzh:facts-not-status`` — no status column, nothing
-new is stored), discovers the forge's actual markers statelessly
-(:meth:`~blizzard.hub.work_sources.annotator.IWorkAnnotator.marked_refs`, never a
-hub-side record of a past write), and writes only the differences.
-
-Dependency-free (``bzh:domain-core``): both collaborators are injected Protocols
-(:class:`~blizzard.hub.domain.work.IReadChunkRepository`,
-:class:`~blizzard.hub.work_sources.source.IWorkSourceRegistry`), so :meth:`sweep` is
-a single, complete, directly-callable step (``bzh:steppable-loop``) — the background
-driver (``blizzard.hub.app``) is a thin sleep-and-call wrapper around it. There is no
-hub-side annotation state, which is what makes a mid-sweep crash self-healing: the
-next sweep re-diffs from scratch and re-converges
-(``blizzard-context:/architecture/crash-correctness.md``'s scope note; pinned by
-tests/test_forge_status.py::test_sweep_reconverges_after_a_simulated_mid_sweep_crash).
+The hub is truth; the forge carries a one-way reflection of it as labels: only diffs
+between a live chunk's derived status and the forge's statelessly-discovered markers are
+written. No hub-side state, so a mid-sweep crash self-heals (``tests/test_forge_status.py``).
 """
 
 from __future__ import annotations
@@ -28,10 +14,8 @@ from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _log = get_logger("blizzard.hub.forge_status")
 
-# Precedence mirrors `derive_chunk_status`'s own first-match-wins buckets, restated
-# here as a lookup exhaustive over `ChunkStatus` (`test_derive_marker_is_exhaustive`
-# fails the moment a new member goes unmapped) so a future status can't silently fall
-# through to "no marker" by omission.
+# Precedence mirrors `derive_chunk_status`'s first-match-wins buckets, restated here as a
+# lookup exhaustive over `ChunkStatus` (`test_derive_marker_is_exhaustive`).
 _MARKER_BY_STATUS: dict[ChunkStatus, WorkStatusMarker | None] = {
     ChunkStatus.NOT_READY: WorkStatusMarker.INGESTED,
     ChunkStatus.READY: WorkStatusMarker.INGESTED,
@@ -61,14 +45,9 @@ class AnnotationReconciler:
     def sweep(self) -> None:
         """One complete reconciliation pass over every opted-in source.
 
-        Desired state is computed once (``live_work_refs``), then filtered per
-        source so an annotator only ever sees its own refs; a source with no
-        live refs still gets its ``marked_refs()`` diffed against an empty
-        desired set, clearing anything stale. A per-item or per-source annotator
-        failure is caught and counted rather than raised — the adapter already
-        logged it once at its own wrap site (``bzh:structlog-logging``), so this
-        does not re-log per item; it only emits the one aggregate INFO summary
-        below, win or lose."""
+        Desired state is computed once, then filtered per source; a source with no live
+        refs still gets its ``marked_refs()`` diffed against an empty desired set,
+        clearing anything stale. A per-item or per-source failure is counted, not raised."""
         desired = self._chunks.live_work_refs()
         written = cleared = failed = 0
         considered = 0

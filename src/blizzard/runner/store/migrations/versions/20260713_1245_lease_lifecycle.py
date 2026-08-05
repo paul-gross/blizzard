@@ -1,11 +1,5 @@
-"""lease-lifecycle fact tables (runner store tree)
-
-The walking-skeleton reconciliation loop needs three facts 0002's tables do not
-carry, each append-only (``bzh:facts-not-status``): the node context of each lease
-attempt (``lease_context``), lease closures (``lease_closures`` — an active lease
-is one with no closure), and binding releases (``binding_releases`` — a held env is
-one whose binding has no release). Defined once in ``blizzard.runner.store.schema``;
-this revision creates exactly its three new tables and touches none of 0002's.
+"""lease-lifecycle fact tables (runner store tree) — three append-only facts: each attempt's node
+context, lease closures (an active lease has none), and binding releases (a held env has none).
 
 Revision ID: 20260713_1245_runner_lease_lifecycle
 Revises: 20260713_1218_runner_walking_skeleton

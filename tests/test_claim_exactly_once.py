@@ -1,12 +1,8 @@
 """Exactly-once route claim under concurrency (criterion 2, component tier).
 
-Two runners race to claim the same chunk against the **real hub app**; the hub must
-accept exactly one — one ``201`` and one ``409`` — never two live routes.
-The claim is the cross-machine exactly-once arbitration point: sqlite's atomicity buys
-self-consistency, but the read-then-write of the claim is serialized by the hub's
-single-writer discipline, so this test drives two concurrent clients through a barrier
-to expose any check-then-act gap.
-"""
+Two runners race to claim the same chunk against the real hub app; the hub must accept
+exactly one — one ``201`` and one ``409`` — never two live routes. Drives two concurrent
+clients through a barrier to expose any check-then-act gap."""
 
 from __future__ import annotations
 

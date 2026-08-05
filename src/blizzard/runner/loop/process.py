@@ -1,12 +1,8 @@
 """Process-liveness by (pid, start time) — the reap signal.
 
-A bare pid check is unsafe: the OS reuses pids, so a different process may now hold
-an old worker's pid. This probe therefore keys on **pid AND the recorded process start
-time together** — comparing the recorded start time against the live process's start
-time survives pid reuse.
-
-The probe is a seam (``bzh:pluggable-seams``) so loop tests inject a fake and never
-depend on real pids; the Linux ``/proc`` adapter is the reference binding.
+A bare pid check is unsafe: the OS reuses pids, so this probe keys on **pid AND the
+recorded process start time together**. It is a seam (``bzh:pluggable-seams``); the Linux
+``/proc`` adapter is the reference binding.
 """
 
 from __future__ import annotations
@@ -41,9 +37,8 @@ class LinuxProcessProbe:
         return read_process_start_time(pid)
 
     def is_alive(self, pid: int, process_start_time: str) -> bool:
-        # A worker the runner spawned fire-and-forget becomes a zombie the instant it
-        # exits (nothing wait()s it); its /proc entry lingers with the same start time,
-        # so it must read as dead here or ADVANCE never judges it.
+        # An unreaped child lingers in /proc with the same start time after it exits, so
+        # a zombie must read as dead here.
         if is_zombie(pid):
             return False
         current = self.start_time(pid)

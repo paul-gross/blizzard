@@ -1,13 +1,8 @@
 """The default/PR-CI land scripts' PR title and merge commit message — unit tier.
 
-Exercises :func:`~blizzard.hub.graphs.scripts.land_default.main` and
-:func:`~blizzard.hub.graphs.scripts.land_pr_ci.main` in-process against a scripted
-``forge_request`` fake (each script's own HTTP seam, ``bzh:deterministic-shell`` — no
-live forge, no subprocess): the one behavior this module owns is that the opened PR's
-``title`` is JUST the hub-resolved ``BZ_HUB_FEATURE_TITLE`` (truncated to GitHub's
-256-char cap), falling back to the bare branch name — never a ``blizzard: land``
-prefix — while the merge's ``commit_message`` prefers the title and falls back to the
-``blizzard: land ...`` string when it is absent.
+Exercises the two scripts' ``main()`` against a scripted forge fake: the opened PR's
+``title`` is JUST the resolved ``BZ_HUB_FEATURE_TITLE``, falling back to the branch; the
+merge's ``commit_message`` falls back to ``blizzard: land ...``.
 """
 
 from __future__ import annotations
@@ -156,12 +151,8 @@ def test_an_over_long_feature_title_is_truncated_for_the_pr_title(monkeypatch: p
     assert _merge_commit_message(calls) == long_title
 
 
-# -- land_pr_ci self-heal routing (component tier) --------------------------------
-#
-# The mergeable-state state machine: `land_pr_ci` opens a PR per repo and routes by its
-# live `mergeable_state` — heal `behind`, wait out transient/CI-not-green, bounce only a
-# real `dirty`. The pure decision is `classify()` (`--selftest`); these assert `main()`'s
-# actual forge calls + printed outcome against a scripted double for one existing PR.
+# land_pr_ci self-heal routing (component tier): heal `behind`, wait out transient/
+# CI-not-green, bounce only a real `dirty` — the pure decision is `classify()`.
 
 
 def _forge_with_state(
@@ -179,13 +170,9 @@ def _forge_with_state(
 ):
     """A double whose one already-open PR reads ``mergeable_state``. Records every call.
 
-    ``head_check_runs``/``base_check_runs`` (issue #232), when given, stub the
-    ``GET .../commits/{ref}/check-runs`` routes for the PR's head sha and the base
-    branch (``"main"``) respectively — a route left unstubbed (the default) raises
-    ``KeyError`` on lookup, exactly like every other unstubbed route in this double,
-    so the degradation path under test reacts to the same real failure mode
-    ``forge_request`` surfaces from a genuine outage, not a test-double artifact.
-    """
+    ``head_check_runs``/``base_check_runs`` (issue #232), when given, stub the head/base
+    check-runs routes; left unstubbed, a route raises ``KeyError``, so the degradation
+    path reacts to the same real failure mode ``forge_request`` surfaces."""
     base = f"http://forge/repos/{_REPO}"
     pull = {
         "number": 1,
@@ -292,12 +279,8 @@ def test_clean_pr_merges_the_current_head_sha(
     assert merge and merge[0]["sha"] == "headsha", "a self-heal must merge the CURRENT head, not a stale commit"
 
 
-# -- land_pr_ci terminal CI check failure + CI-watch findings (issue #232) ----------
-#
-# `classify`'s `blocked`/`unstable` wait is the CI-watch case; these assert `main()`'s
-# actual check-runs GETs, the `delivery-findings` marker write, and the graph's authored
-# `failure` edge (`advanced-development-workflow/graph.yaml`'s `deliver` node authors
-# exactly `landed`/`failure`) against a scripted double.
+# land_pr_ci terminal CI check failure + CI-watch findings (issue #232): asserts the
+# check-runs GETs, the `delivery-findings` marker write, and the authored `failure` edge.
 
 
 def _check_runs_urls(calls: list[tuple[str, str, dict[str, Any] | None]]) -> list[str]:
@@ -596,10 +579,9 @@ def test_a_fully_marked_commit_set_still_reports_landed(
 def test_a_non_code_chunk_lands_empty_because_its_graph_promised_no_commit(
     script, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """MVP criterion 10: a review or a spike produces only assets, declares no
-    `git_commit` anywhere in its graph, and still routes through `deliver` as the uniform
-    terminal. Landing nothing is its correct outcome, not a defect — emptiness alone
-    cannot tell the two apart, which is exactly why the graph's intent is injected."""
+    """MVP criterion 10: a review or a spike declares no `git_commit` anywhere in its
+    graph, yet still routes through `deliver` as the uniform terminal — landing nothing
+    is its correct outcome, not a defect."""
     monkeypatch.setenv("BZ_FORGE_URL", "http://forge")
     monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
     monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps([]))
@@ -636,11 +618,8 @@ def test_an_absent_expectation_signal_is_treated_as_expected(script, monkeypatch
     assert exc.value.code == 1
 
 
-# -- durable marker writes (issue #230) ----------------------------------------------
-#
-# `land_default` and `land_pr_ci` share the same PR-open-then-merge shape, so their
-# marker-write behavior is exercised together here via `_scripted_forge`/
-# `_forge_with_state`; `land_ff`'s own fixture shape lives in ``tests/test_land_ff.py``.
+# Durable marker writes (issue #230): `land_default`/`land_pr_ci` share the same
+# PR-open-then-merge shape, exercised together via `_scripted_forge`/`_forge_with_state`.
 
 
 def _forge_double_for(module: Any, calls: list[tuple[str, str, dict[str, Any] | None]], **kwargs: Any):
@@ -751,11 +730,8 @@ def test_an_empty_callback_url_with_a_pending_repo_fails_instead_of_landing_sile
     assert "BZ_HUB_MARKER_CALLBACK_URL" in captured.err
 
 
-# -- land_pr_ci.classify_checks + render_findings (issue #232) ----------------------
-#
-# A terminally-failed check run must never be polled out to `poll_timeout` — these are
-# the pure, network-free functions a later phase wires into `main()`'s check stage and
-# a `delivery-findings` marker artifact.
+# land_pr_ci.classify_checks + render_findings (issue #232): a terminally-failed check
+# run must never be polled out to `poll_timeout` — pure, network-free functions.
 
 
 def _check_run(status: str, conclusion: str | None = None) -> dict[str, Any]:

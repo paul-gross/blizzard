@@ -12,14 +12,8 @@ from pydantic import BaseModel
 class GitCommitDeclarationRequest(BaseModel):
     """A worker's explicit git-commit declaration for one repo it touched.
 
-    Carries no forge (issue #143): the origin a declaration is verified against is read
-    from the environment's repo manifest, not named by the worker (pinned by
-    tests/test_pin_wire.py::test_git_commit_declaration_carries_no_forge_field).
-
-    ``environment_id`` is optional while a chunk holds exactly one environment (the
-    runner infers it); it is required once a chunk holds several, because the same repo
-    has a worktree in each and ``repo`` alone no longer identifies one.
-    """
+    Carries no forge (issue #143): the origin verified against is read from the environment's
+    repo manifest. ``environment_id`` is required once a chunk holds several."""
 
     repo: str
     branch: str

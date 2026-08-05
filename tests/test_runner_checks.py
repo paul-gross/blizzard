@@ -1,10 +1,8 @@
-"""ADVANCE runs a node's ``checks:`` at worker exit and records durable facts (issue #114, Phase 2).
+"""ADVANCE runs a node's ``checks:`` at worker exit and records durable facts (issue #114).
 
-Component tier: a real ADVANCE tick (:func:`~blizzard.runner.loop.steps.advance`) against a
-real tmp store and the virtual clock, proving AC #1 (checks run at worker exit, before
-judgement, in the declared cwd) and AC #2 (each result is a durable fact surviving a runner
-kill). Plus unit coverage of the ``_run_or_read_checks`` step's idempotency against a faked
-seam, and the store's check-result read/write round trip.
+A real ADVANCE tick against a real tmp store proves checks run at worker exit, before
+judgement, in the declared cwd, and each result is a durable fact surviving a runner
+kill. Plus unit coverage of ``_run_or_read_checks``'s idempotency and the store round trip.
 """
 
 from __future__ import annotations

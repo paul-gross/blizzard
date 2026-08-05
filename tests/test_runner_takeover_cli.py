@@ -1,10 +1,8 @@
 """``blizzard runner takeover`` (issue #52).
 
-Driven against a **live** daemon on a real unix socket, mirroring
-``tests/test_runner_status_cli.py``'s ``_serve_local_api`` convention: a real server,
-a real store, and the CLI wired together. ``subprocess.call`` is monkeypatched so the
-interactive exec never actually shells out to a coding harness — the point here is the
-CLI's own protocol (open, exec, then mark ended), not a real terminal session.
+Driven against a live daemon on a real unix socket: a real server, a real store, and
+the CLI wired together. ``subprocess.call`` is monkeypatched so the interactive exec
+never shells out — the point is the CLI's own protocol (open, exec, mark ended).
 """
 
 from __future__ import annotations
@@ -77,9 +75,8 @@ def test_takeover_execs_the_command_and_marks_it_ended(tmp_path: Path, monkeypat
         result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
-    # The composed command reasserts the daemon's permission mode (issue #258) — the
-    # default config's `bypassPermissions` here — so the taken-over session does not
-    # drop to per-tool approval prompts.
+    # The composed command reasserts the daemon's permission mode (issue #258) — so
+    # the taken-over session does not drop to per-tool approval prompts.
     assert calls == [("cd /ws/e1 && claude --resume sess-a --permission-mode bypassPermissions", True, "/ws/e1")]
     assert "taking over chunk ch_1 in /ws/e1" in result.output
     # The lease's worker identity rides the exec env (issue #258), layered over the
@@ -119,9 +116,8 @@ def test_takeover_ends_the_takeover_even_when_the_child_raises_keyboard_interrup
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A ``Ctrl-C`` into the interactive session must not strand the takeover open —
-    the end-PATCH runs in a ``finally`` around the child, so it fires even though
-    ``KeyboardInterrupt`` is a ``BaseException`` the CLI's own ``httpx.HTTPError``
-    handler does not catch."""
+    the end-PATCH runs in a ``finally`` around the child, firing even for the
+    ``BaseException`` `KeyboardInterrupt`, which the CLI's `httpx.HTTPError` handler misses."""
     root = _init_runner(tmp_path)
     store = _store(root)
     _seed_parked_lease(store)
@@ -133,9 +129,7 @@ def test_takeover_ends_the_takeover_even_when_the_child_raises_keyboard_interrup
 
     with _serve_local_api(root):
         # click's own `main()` converts an uncaught KeyboardInterrupt into `Abort` —
-        # a clean exit(1) rather than a raw traceback — so the CLI-level assertion is
-        # the exit code, not the exception class; the point under test is that the
-        # end-PATCH still fired before that unwind reached click.
+        # assert the exit code, not the exception; the end-PATCH must fire before that.
         result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
 
     assert result.exit_code == 1
@@ -178,14 +172,9 @@ def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path, monkeypatc
 
 @pytest.mark.unit
 def test_takeover_cli_still_declares_the_dir_flag_and_a_chunk_id_argument() -> None:
-    """Pins the CLI-flag shape ``wrapped_takeover_command``
-    (``runner/domain/takeover.py``) hard-codes when it composes the wrapped takeover
-    command — ``blizzard runner takeover <chunk_id> --dir <runner_dir>`` — against
-    the REAL Click command object, not merely against the string that function
-    produces. Every existing composition test only checks the composed string
-    matches what it builds, so a future rename of ``--dir`` (or of the positional
-    chunk id) in this file would ship a silently-broken board command with every one
-    of those tests staying green; this one instead fails loudly right here."""
+    """Pins the CLI-flag shape ``wrapped_takeover_command`` hard-codes against the
+    REAL Click command object, not the composed string — a rename of ``--dir`` or the
+    chunk id here would silently break the board command while other tests stay green."""
     takeover_cmd = runner_group.commands["takeover"]
 
     directory_param = next(p for p in takeover_cmd.params if p.name == "directory")
@@ -197,12 +186,9 @@ def test_takeover_cli_still_declares_the_dir_flag_and_a_chunk_id_argument() -> N
 
 @pytest.mark.unit
 def test_composed_wrapped_command_parses_through_the_real_takeover_grammar() -> None:
-    """The two sides of the feature meet here: ``wrapped_takeover_command`` composes
-    the string the board renders, and this parses that exact string — shell-split,
-    ``blizzard runner`` prefix stripped — through the REAL Click command's own
-    argument parsing. A coordinated edit of the composed literal that the grammar no
-    longer accepts (or vice versa) fails this test even if every string-equality
-    composition test was edited to match."""
+    """``wrapped_takeover_command`` composes the string the board renders; this parses
+    that exact string through the REAL Click command's own argument parsing, so a
+    coordinated edit the grammar rejects fails here even if string-equality tests pass."""
     composed = wrapped_takeover_command("ch_1", "/var/lib/blizzard/runner dir")
     argv = shlex.split(composed)
     assert argv[:3] == ["blizzard", "runner", "takeover"]

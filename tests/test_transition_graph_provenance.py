@@ -1,10 +1,8 @@
 """Transition graph-provenance (issue #90, Phase 1) — the read + hydration foundation.
 
-Unit tier: :func:`blizzard.hub.api.chunks._history_views` resolves each transition's
-node names against *its own* graph (``TransitionFact.graph_id``), so a two-graph history
-never degrades an old-graph step to raw ``nd_`` ids against the new pin. Component tier:
-:meth:`ChunkStore.load_facts` resolves each transition's ``to_node_executor`` against its
-own graph — the silent ``RUNNER`` fallback the pre-#90 single-graph filter would hit.
+Unit tier: :func:`_history_views` resolves each transition's node names against *its
+own* graph, so a two-graph history never degrades an old-graph step to raw ``nd_`` ids.
+Component tier: :meth:`ChunkStore.load_facts` resolves ``to_node_executor`` the same way.
 """
 
 from __future__ import annotations
@@ -55,9 +53,7 @@ def _two_node_graph(entry: str, other: str, *, other_executor: str) -> Graph:
     return reify_graph(doc, FixedClock(_T0))
 
 
-# --------------------------------------------------------------------------- #
 # Unit — per-graph name resolution in the history view
-# --------------------------------------------------------------------------- #
 
 
 def test_history_view_resolves_each_step_name_against_its_own_graph() -> None:
@@ -100,9 +96,7 @@ def test_history_view_resolves_each_step_name_against_its_own_graph() -> None:
     assert all(v.from_node_name is not None and v.to_node_name is not None for v in views)
 
 
-# --------------------------------------------------------------------------- #
 # Component — per-graph executor hydration in load_facts
-# --------------------------------------------------------------------------- #
 
 
 def test_load_facts_resolves_each_transition_executor_against_its_own_graph(tmp_path: Path) -> None:

@@ -1,10 +1,8 @@
 """The identity domain's value objects — ``User``, ``Identity``, ``Session``,
 ``ResolvedIdentity`` (issue #91).
 
-``Role``/``Permission`` are imported from :mod:`blizzard.auth_core` (decision D3), not
-redefined here — this module's only job is the hub-local *identity* shapes those
-values attach to.
-"""
+``Role``/``Permission`` are imported from :mod:`blizzard.auth_core` (decision D3);
+this module's only job is the hub-local *identity* shapes they attach to."""
 
 from __future__ import annotations
 
@@ -52,12 +50,9 @@ class Session:
 
 @dataclass(frozen=True)
 class ProviderIdentity:
-    """What an :class:`~blizzard.hub.auth.oauth.provider.IOAuthProvider` conformer
-    resolves a code exchange to (issue #92) — the shape both the ``oidc`` and
-    ``github`` conformers normalize onto, and the domain's own
-    :meth:`~blizzard.hub.auth.service.AuthService.link_or_mint` input. Lives here (not
-    under ``hub/auth/oauth/``) so the dependency arrow points from the adapter subpackage
-    into the domain, never the reverse (``bzh:dependency-inversion``)."""
+    """What a provider conformer resolves a code exchange to (issue #92). Lives here,
+    not under ``hub/auth/oauth/``, so the dependency arrow points from the adapter
+    subpackage into the domain, never the reverse (``bzh:dependency-inversion``)."""
 
     subject: str
     handle: str
@@ -69,9 +64,8 @@ class ProviderIdentity:
 class AuthStateEntry:
     """A single-use ``state`` row (decision D5) — the anti-CSRF/replay token round-tripped
     through a provider redirect. ``provider_name`` cross-checks the callback's own
-    ``{name}`` path segment so a state minted for one provider cannot be replayed against
-    another's callback. ``code_challenge`` is unused in this phase — reserved for #96's
-    PKCE public client, which reuses this same table."""
+    ``{name}`` path segment, so a state minted for one provider cannot be replayed
+    against another's callback."""
 
     state: str
     kind: str
@@ -80,8 +74,7 @@ class AuthStateEntry:
     code_challenge: str | None
     created_at: datetime
     expires_at: datetime
-    #: The resolved user this row will mint a session for (issue #96) — set only on a
-    #: ``kind="cli_login"`` row (every earlier ``kind`` leaves it ``None``).
+    #: The user this row mints a session for (issue #96) — ``kind="cli_login"`` rows only.
     user_id: str | None = None
 
 

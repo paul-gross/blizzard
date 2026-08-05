@@ -1,22 +1,5 @@
-"""auth_state.user_id — the CLI code-exchange's owning user (issue #96, hub store tree)
-
-The CLI's PKCE authorization-code flow (`client=cli`) mints a single-use `auth_state`
-row (`kind="cli_login"`) at `authorize` time, once a hub session already resolved the
-requesting user — the exchange (`POST /api/auth/cli/token`) needs to know which user to
-mint a session for when it later consumes that row, and the table carries no such
-column yet (every existing `kind` needs none: the provider-login dance's own row is
-consumed before any user exists, and #95's runner-federation row never survives past
-one request). Nullable: every non-`cli_login` row leaves it unset.
-
-No `ForeignKey` (see `schema.py`'s own note on this column): SQLite refuses to
-`ALTER TABLE ... DROP COLUMN` a column participating in an FK baked into the table's
-original `CREATE TABLE`, which this one would be on a fresh `base -> head` build. The
-reference is enforced at the application layer only. Pinned by
-`tests/test_store_migrations.py::test_migrate_up_and_down`.
-
-Idempotent like `20260721_1400_hub_runner_redirect_uris` — `op.add_column` only where
-an older database lacks it, so a fresh `base -> head` and an in-place upgrade both land
-at exactly one added column. No table recreation, so no frozen-literal schema copy.
+"""auth_state.user_id — the CLI code-exchange's owning user, nullable and with no
+`ForeignKey` (SQLite cannot drop an FK column) (hub store tree, issue #96)
 
 Revision ID: 20260721_1500_hub_cli_auth_state_user
 Revises: 20260721_1400_hub_runner_redirect_uris

@@ -1,17 +1,5 @@
-"""users / identities / sessions — the auth identity spine (issue #91, hub store tree)
-
-The schema every other auth slice (#92-#96) builds on, independent of any login
-mechanism: ``users`` (a hub-local account, ``username`` unique, ``email`` nullable and
-unique-when-set via the partial index below, ``role`` the coarse
-``blizzard.auth_core.Role`` tag), ``identities`` (one row per linked provider identity,
-``UNIQUE(provider_name, subject)``), and ``sessions`` (a hashed-id session row with
-sliding expiry columns). Parents before children so the FKs from ``identities`` and
-``sessions`` resolve.
-
-``table.create(bind, checkfirst=True)`` also emits the ``uq_users_email`` partial
-unique index declared alongside the ``users`` table in ``schema.py`` — it is
-associated with that table's metadata, so it rides the same ``CREATE`` (mirrors
-``20260713_1947_hub_runner_registry``, which creates two brand-new tables at once).
+"""users / identities / sessions — the auth identity spine (issue #91, hub store tree).
+Parents before children so the FKs from ``identities`` and ``sessions`` resolve.
 
 Revision ID: 20260721_1100_hub_auth_identity_spine
 Revises: 20260721_1008_hub_graph_node_session_source

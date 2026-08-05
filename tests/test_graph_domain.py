@@ -1,9 +1,7 @@
 """Graph domain — ``mark_effective`` (unit tier).
 
 The newest-``created_at``-per-``name`` rule, kept as a pure domain function
-(``bzh:domain-core``) rather than re-derived at the ``GET /graphs`` edge — the
-same rule :meth:`~blizzard.hub.domain.graph.IReadGraphRepository.get_enabled_by_name`
-applies at lookup time.
+(``bzh:domain-core``) rather than re-derived at the ``GET /graphs`` edge.
 """
 
 from __future__ import annotations
@@ -18,9 +16,7 @@ from tests.support import make_graph
 pytestmark = pytest.mark.unit
 
 
-# --------------------------------------------------------------------------- #
 # classify_session (issue #115) — the pure `session:` syntax parser.
-# --------------------------------------------------------------------------- #
 
 
 def test_classify_session_bare_resume_is_resume_with_no_source() -> None:
@@ -86,9 +82,7 @@ def test_mark_effective_ties_on_created_at_break_by_graph_id_descending() -> Non
     assert result == {"gr_a": False, "gr_b": True}
 
 
-# --------------------------------------------------------------------------- #
 # retired_ids (issue #101) — a retired graph_id is never an effective candidate.
-# --------------------------------------------------------------------------- #
 
 
 def test_mark_effective_skips_a_retired_newest_and_falls_back_to_the_prior_version() -> None:
@@ -134,9 +128,7 @@ def test_mark_effective_requires_retired_ids_explicitly() -> None:
         mark_effective([only])  # type: ignore[call-arg]
 
 
-# --------------------------------------------------------------------------- #
 # is_newer_mint — the newest-wins order, named rather than open-coded (issue #164)
-# --------------------------------------------------------------------------- #
 
 _T0 = datetime(2026, 5, 1, tzinfo=UTC)
 

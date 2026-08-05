@@ -1,16 +1,8 @@
 """The runner-store repository seam (``bzh:repository-split``/``bzh:dependency-inversion``).
 
-Machine-local facts — leases, env bindings, the outbound buffer, and the P6
-lifecycle facts (lease context, closures, releases) — are reached only through these
-Protocols. Split read/write: the domain layer holds the write variant
-(``bzh:controller-read-only``), read-path edges the narrow read one. The concrete
-SQLAlchemy adapter lives under ``internal/`` and is injected at the composition root.
-
-Facts only, status derived (``bzh:facts-not-status``): an *active* lease is one
-with no closure fact; a *held* env is one whose binding has no release fact; a
-chunk's *tenure* is live while it holds any unreleased binding. Every timestamp is
-passed in by the caller from the injected clock (``bzh:injected-clock``) — the
-store never reads a wall clock.
+Facts only, status derived (``bzh:facts-not-status``): an *active* lease is one with no
+closure fact; a *held* env is one whose binding has no release fact. Every timestamp is
+passed in from the injected clock — the store never reads a wall clock.
 """
 
 from __future__ import annotations
@@ -26,9 +18,7 @@ from blizzard.runner.harness.usage import UsageSample
 class RunnerStoreError(RuntimeError):
     """A runner-store operation failed — the domain-facing error the loop sees.
 
-    Wraps the underlying driver exception at the adapter boundary, so loop code
-    depends on this type, never on the driver's exceptions.
-    """
+    Wraps the driver exception at the adapter boundary, so callers never depend on it."""
 
 
 @dataclass(frozen=True)
@@ -44,11 +34,8 @@ class NewLease:
     runner_id: str
     retries_max: int
     created_at: datetime
-    # What session this attempt runs, and under what configuration (issue #144) — the
-    # declared pool name, and the model/effort the session ACTUALLY runs under. Stamped
-    # on the one `lease_context` insert the mint already performs, so no new crash
-    # window opens. `None` means *unknown*, never a value: the bare/`resume:<node>`
-    # forms belong to no pool, and a lease minted before #144 reads NULL.
+    # What session this attempt runs and under what configuration (issue #144), stamped on
+    # the mint's own `lease_context` insert. `None` means *unknown*, never a value.
     session_name: str | None = None
     resolved_model: str | None = None
     resolved_effort: str | None = None
@@ -56,13 +43,9 @@ class NewLease:
 
 @dataclass(frozen=True)
 class PoolHead:
-    """A named session pool's current head (issue #144) — what a ``resume:<name>``
-    member continues and what a rotation check measures.
-
-    ``resolved_model``/``resolved_effort`` are the head's own **stamps** — the
-    configuration that session actually ran under, not a fresh resolution. ``None`` on
-    either means *unknown*, never a value.
-    """
+    """A named session pool's current head (issue #144). ``resolved_model``/
+    ``resolved_effort`` are the head's own **stamps**, not a fresh resolution; ``None``
+    on either means *unknown*, never a value."""
 
     session_id: str
     lease_id: str
@@ -74,9 +57,7 @@ class PoolHead:
 class LeaseRecord:
     """A lease joined with its node context — the loop's per-attempt fact.
 
-    ``pid`` / ``process_start_time`` / ``session_id`` are ``None`` until
-    spawn-return records them.
-    """
+    ``pid`` / ``process_start_time`` / ``session_id`` are ``None`` until spawn-return."""
 
     lease_id: str
     chunk_id: str
@@ -87,8 +68,8 @@ class LeaseRecord:
     runner_id: str
     retries_max: int
     created_at: datetime
-    # This attempt's session stamps, read back (issue #144) — see :class:`NewLease`, which
-    # writes them. `None` on any of the three means *unknown*, never a value.
+    # This attempt's session stamps, read back (issue #144). `None` on any of the three
+    # means *unknown*, never a value.
     session_name: str | None = None
     resolved_model: str | None = None
     resolved_effort: str | None = None
@@ -101,10 +82,8 @@ class LeaseRecord:
 class ClosedLeaseRecord:
     """A lease joined with its closure fact — the panel's recent-history read (issue #29).
 
-    ``reason`` is the closure vocabulary already written by ``record_closure``
-    (``runner/loop/steps.py``): ``transitioned`` | ``reaped`` | ``failed`` | ``escalated``
-    | ``parked`` | ``released``.
-    """
+    ``reason`` is the closure vocabulary: ``transitioned`` | ``reaped`` | ``failed`` |
+    ``escalated`` | ``parked`` | ``released``."""
 
     lease: LeaseRecord
     reason: str
@@ -135,10 +114,8 @@ class BufferedFact:
 
 @dataclass(frozen=True)
 class OutboundFactRecord:
-    """One hub-bound fact off the outbound buffer, acked or not — the local fact log's row.
-
-    The same table as :class:`BufferedFact`, read as a ledger rather than as the pending
-    tail: ``acked_at`` kept, ``payload`` dropped."""
+    """One hub-bound fact off the outbound buffer, acked or not. The same table as
+    :class:`BufferedFact`, read as a ledger: ``acked_at`` kept, ``payload`` dropped."""
 
     seq: int
     kind: str
@@ -152,9 +129,8 @@ class OutboundFactRecord:
 class AskRecord:
     """The worker's local open-ask fact.
 
-    ``question_id`` is runner-minted so the answer can be polled back by it;
-    ``session_id`` is the dormant session the resume-with-answer targets.
-    """
+    ``question_id`` is runner-minted so the answer polls back by it; ``session_id`` is
+    the dormant session the resume-with-answer targets."""
 
     lease_id: str
     chunk_id: str
@@ -167,12 +143,9 @@ class AskRecord:
 
 @dataclass(frozen=True)
 class UsageTotals:
-    """A summed window of usage facts — the runner-ceiling read
-    (:meth:`IReadRunnerStore.usage_since`, issue #58).
-
-    ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``, whose
-    canonical statement is :class:`~blizzard.hub.domain.work.UsageTotal`: a caller must
-    check ``cost_partial`` before treating ``cost_usd`` as exact."""
+    """A summed window of usage facts (issue #58). ``cost_partial`` carries the
+    lower-bound contract on ``cost_usd``: a caller must check it before treating
+    ``cost_usd`` as exact."""
 
     input_tokens: int
     output_tokens: int
@@ -196,17 +169,8 @@ class ParkRecord:
 class EscalationRecord:
     """A closed-``escalated`` lease not yet superseded — the status view's read (issue #51).
 
-    An escalation is a lease closed with ``reason="escalated"`` (``runner/loop/steps.py``).
-    It stays *open* until a later lease is minted for the same chunk (a requeue) — the
-    highest ``epoch`` for the chunk still being this one's is exactly that "no later mint"
-    fact (``bzh:facts-not-status``), so no separate resolution flag is stored.
-    ``session_id`` is the dormant session a resume command is built around; ``None`` only
-    if the escalated lease never reached spawn-return.
-
-    ``session_name``/``resolved_model``/``resolved_effort`` are the escalated lease's own
-    stamps (issue #144) — what the parked session actually ran under, not a fresh
-    resolution. ``None`` on any of them means *unknown*, or, for ``session_name``, a
-    session on the bare vocabulary that belongs to no pool."""
+    Open until a later lease is minted for the same chunk — the highest ``epoch`` still
+    being this one's *is* that fact, so no resolution flag is stored."""
 
     lease_id: str
     chunk_id: str
@@ -223,13 +187,8 @@ class EscalationRecord:
 class GitCommitDeclarationRecord:
     """A worker's explicit git-commit declaration for one repo in one environment.
 
-    Carries no forge: the origin a declaration is verified against is read from the
-    environment's repo manifest at collection time, so it is a fact about the workspace
-    rather than a claim the worker makes.
-
-    ``environment_id`` is part of the identity, not a decoration: a chunk holding several
-    environments has a worktree of the same repo in each, so ``repo`` alone names a
-    branch ambiguously."""
+    Carries no forge: the origin it is verified against is read from the environment's
+    repo manifest. ``environment_id`` is part of the identity, never a decoration."""
 
     environment_id: str
     repo: str
@@ -251,11 +210,8 @@ class CheckResultRecord:
 class TakeoverRecord:
     """An open operator takeover — the human-in-session fact (issue #52).
 
-    ``lease_id``/``session_id`` name the lease and session the interactive command
-    resumes; ``lease_id`` is ``None`` for the needs_human and gate-parked shapes, whose
-    lease already closed before the takeover was opened. ``fence_epoch`` is set only
-    when a live worker was force-killed — the epoch reported to the hub so the killed
-    worker's in-flight completion is fenced as stale."""
+    ``lease_id`` is ``None`` for the shapes whose lease already closed. ``fence_epoch``
+    is set only when a live worker was force-killed, fencing its in-flight completion."""
 
     takeover_id: str
     chunk_id: str
@@ -296,27 +252,15 @@ class IReadRunnerStore(Protocol):
     def latest_session_id(self, chunk_id: str, node_name: str | None) -> str | None:
         """The chunk's most-recent session-bearing lease's ``session_id``, or ``None``.
 
-        The newest lease (by mint order) for this chunk whose ``session_id`` is non-null,
-        optionally filtered to leases minted at ``node_name`` — any node when ``node_name``
-        is ``None`` (issue #115). ``None`` when no such lease exists is the fresh-fallback
-        signal: the caller spawns fresh rather than resuming."""
+        The newest lease for this chunk whose ``session_id`` is non-null, optionally
+        filtered to ``node_name`` (issue #115). ``None`` is the fresh-fallback signal."""
         ...
 
     def pool_head(self, chunk_id: str, session_name: str) -> PoolHead | None:
         """The named session pool's current head for this chunk, or ``None`` (issue #144).
 
-        The newest session-bearing lease for ``chunk_id`` whose ``lease_context.session_name``
-        matches. ``None`` (an empty pool) is the mint-fresh signal.
-
-        Derived, never a ``pool_head`` column (``bzh:facts-not-status``): the head is
-        whichever lease most recently stamped this name.
-
-        The pool is **runner-local**, the same limitation :meth:`latest_session_id` has: a
-        chunk reclaimed by a second runner sees an empty pool and mints fresh.
-
-        Filtered to session-bearing leases because ``leases.session_id`` is filled at
-        spawn-*return*: a crash between the mint and that return leaves a lease that never
-        ran, which must not become a head no session exists for.
+        The newest session-bearing lease whose ``lease_context.session_name`` matches;
+        derived, never a column. **Runner-local**: a chunk reclaimed elsewhere mints fresh.
         """
         ...
 
@@ -324,50 +268,29 @@ class IReadRunnerStore(Protocol):
         """The session's **latest invocation's** context size in tokens, or ``None``.
 
         The signal behind a declared ``rotate.max_context_tokens`` (issue #144):
-        ``cache_read + cache_create + input`` on the newest ``usage_facts`` row for any
-        lease that ran ``session_id`` — an approximation of how much context the next
-        resume would re-ingest.
-
-        ``usage_facts`` carries no ``session_id`` of its own, so this joins through
-        ``leases.session_id``; a session spanning several leases (``--resume`` reuses the
-        id in place) is measured across all of them, newest row wins.
-
-        **Telemetry-derived**, and ``None`` when the session has no usage fact at all —
-        an *unknown*, never a zero.
-        """
+        ``cache_read + cache_create + input`` on the newest ``usage_facts`` row for this
+        session. Telemetry-derived, so ``None`` is *unknown*."""
         ...
 
     def session_invocation_count(self, session_id: str) -> int:
         """How many harness invocations this session has recorded (issue #144).
 
-        The signal behind a declared ``rotate.max_invocations``. Counts ``usage_facts``
-        rows across every lease that ran ``session_id``.
-
-        **Harness invocations, not node-steps**: ``kind`` spans ``spawn|resume|judge|nudge``,
-        so a single node-step burns two or three rows.
-
-        Telemetry-derived like :meth:`session_context_tokens`: an invocation that recorded
-        no usage fact is not counted. Zero is a real answer here, not an unknown.
-        """
+        The signal behind a declared ``rotate.max_invocations`` — ``usage_facts`` rows
+        across every lease that ran ``session_id``. **Harness invocations, not
+        node-steps.** Zero is a real answer here, not an unknown."""
         ...
 
     def lease_for_session(self, session_id: str) -> LeaseRecord | None:
         """The newest lease that ran ``session_id``, or ``None`` (issue #144).
 
-        Keyed on the *session* rather than the lease, because a session outlives the lease
-        that minted it: `--resume` reuses the id in place, so several leases share one
-        session id and the newest is the one whose stamps describe the configuration the
-        process is running under now.
-
-        ``None`` — a session this runner never minted a lease for — means *unknown*.
-        """
+        Keyed on the *session*, which outlives the lease that minted it: several leases
+        share one session id and the newest describes the running configuration."""
         ...
 
     def lease(self, lease_id: str) -> LeaseRecord | None:
         """The lease by id, regardless of closure — the transcript read (issue #29).
 
-        Distinct from :meth:`active_lease`, which filters to unclosed leases: a
-        transcript outlives its lease, so this read must span closed ones too.
+        Distinct from :meth:`active_lease`: a transcript outlives its lease.
         """
         ...
 
@@ -375,31 +298,21 @@ class IReadRunnerStore(Protocol):
         """The most recently closed leases, newest first — the panel's recent-history
         read (issue #29).
 
-        ``limit`` is a **list-length affordance**, not a retention policy: it bounds how
-        many rows are returned, not how long a closure fact lives on disk.
+        ``limit`` bounds rows returned, never how long a closure fact lives on disk.
         """
         ...
 
     def latest_heartbeat(self, lease_id: str) -> datetime | None:
         """The lease's most recent heartbeat stamp, or ``None`` if it never beat.
 
-        REAP's stall signal; on ``None`` the caller falls back to :meth:`latest_spawn`,
-        then to the lease's own creation instant.
-        """
+        REAP's stall signal; on ``None`` the caller falls back to :meth:`latest_spawn`."""
         ...
 
     def latest_spawn(self, lease_id: str) -> datetime | None:
         """When this lease's newest process was spawned, or ``None`` if it never was.
 
         The second half of REAP's staleness baseline (issue #150). A lease outlives its
-        processes — the ask/answer, pause, restart and crash resume paths all re-spawn
-        under the same ``lease_id`` — and each ``record_spawn`` appends a
-        ``lease_spawns`` row, so the newest one is when the *currently running* worker
-        actually started.
-
-        ``None`` for a lease whose spawn-return never landed; the baseline then falls back
-        to the lease's own ``created_at``.
-        """
+        processes, so the newest ``lease_spawns`` row is when the running worker started."""
         ...
 
     def pending_submission_lease_ids(self) -> set[str]:
@@ -475,9 +388,7 @@ class IReadRunnerStore(Protocol):
         """Every ask with no answer yet — forwarded-and-parked or still unforwarded (issue #51).
 
         An ask is open while its ``question_id`` carries no :meth:`record_park_resume`,
-        whether or not it has been forwarded up via :meth:`record_park` yet —
-        :meth:`unforwarded_ask`'s and :meth:`open_park`'s per-lease reads widened to
-        every lease."""
+        whether or not it has been forwarded up yet."""
         ...
 
     def held_bindings(self) -> list[EnvBindingRecord]:
@@ -496,10 +407,8 @@ class IReadRunnerStore(Protocol):
     def open_escalation_for_chunk(self, chunk_id: str) -> EscalationRecord | None:
         """The chunk's open escalation, or ``None`` (issue #53).
 
-        The single-chunk narrowing of :meth:`open_escalations`: a closed-``escalated``
-        lease not yet superseded by a later mint. Unaffected by a takeover opening or
-        ending over the chunk in between — a takeover writes neither a closure nor a
-        lease mint."""
+        The single-chunk narrowing of :meth:`open_escalations`. Unaffected by a takeover
+        in between — a takeover writes neither a closure nor a lease mint."""
         ...
 
     def hub_contact_at(self, runner_id: str) -> datetime | None:
@@ -520,10 +429,8 @@ class IReadRunnerStore(Protocol):
     def local_paused(self, runner_id: str) -> bool:
         """This runner's own brake, derived from the newest local pause fact (issue #43).
 
-        The runner's half of the pause control (``PATCH /runner``): set locally, adhered
-        to with the hub unreachable, and distinct from ``hub_paused`` — it blocks every
-        spawn site, not claims alone (issue #45). Defaults False when the operator has
-        never set it."""
+        Distinct from ``hub_paused``: it blocks every spawn site, not claims alone (issue
+        #45). Defaults False when the operator has never set it."""
         ...
 
     def resume_intent_lease_ids(self) -> set[str]:
@@ -537,22 +444,16 @@ class IReadRunnerStore(Protocol):
     def session_ended_lease_ids(self) -> set[str]:
         """Leases whose **current spawn** recorded a session-end — it declared done.
 
-        A ``session_ends`` row means the harness's session-end hook fired on a natural
-        session exit — a dead pid *with* a session-end is a done declaration, not a crash
-        to re-attach (:func:`mark_crash_resume_intents`).
-
+        A dead pid *with* a session-end is a done declaration, not a crash to re-attach.
         Scoped to the lease's newest ``lease_spawns`` fact, because a lease outlives its
-        sessions: the ask/answer and resume paths re-spawn under the same lease and session
-        id, so an unscoped read would let one natural exit suppress the resume of every
-        later crash on that lease — the sessions most worth resuming."""
+        sessions and an unscoped read would suppress every later crash's resume."""
         ...
 
     def last_daemon_liveness(self) -> datetime | None:
         """When the runner was last known alive, or ``None`` if it never ticked (issue #13).
 
-        The crash-time reference startup recovery classifies staleness against. The tick
-        stamps it each pass, so after an involuntary stop the newest value is when the
-        daemon died, to within one tick."""
+        The crash-time reference startup recovery classifies staleness against, stamped
+        each tick, so the newest value is when the daemon died to within one tick."""
         ...
 
     def workspace_prompt_override(self, workspace_id: str) -> str | None:
@@ -602,7 +503,6 @@ class IReadRunnerStore(Protocol):
         """Every chunk id carrying a requeue mark not yet consumed by a later lease mint
         (issue #53).
 
-        FILL's own hoisted-once read (mirroring ``pause_parked_lease_ids``'s convention).
         The mark is consumed by the next lease mint for the chunk, whose ``created_at``
         lands at or after the requeue."""
         ...
@@ -630,33 +530,24 @@ class IReadRunnerStore(Protocol):
 
     def last_external_usage_attempt_at(self) -> datetime | None:
         """The derived cadence anchor for the external-subscription-usage sample step
-        (issue #218): ``max(sampled_at)`` across ``external_usage_samples``, or ``None``
-        if this runner has never attempted a sample.
+        (issue #218): ``max(sampled_at)`` across ``external_usage_samples``, or ``None``.
 
-        Derived rather than a separately-stored "last sampled" column
-        (``bzh:facts-not-status``). Counts a NULL-``payload`` attempt (the harness had
-        nothing to report) exactly like a successful one: either way, this runner *tried*
-        at that instant."""
+        Derived, never a stored column (``bzh:facts-not-status``). A NULL-``payload``
+        attempt counts exactly like a successful one — this runner *tried* then."""
         ...
 
     def attachments_for_lease(self, lease_id: str) -> dict[str, str]:
         """The lease's explicit artifact submissions, newest content per ``name``
-        (issue #113, Phase 2). Append-only, latest-wins-per-``(lease_id, name)``: a
-        worker's re-attach of the same name (a correction) reads back as the
-        replacement, never a duplicate. Empty for a lease that never attached
-        anything."""
+        (issue #113). Append-only, latest-wins-per-``(lease_id, name)``: a re-attach of
+        the same name reads back as the replacement, never a duplicate."""
         ...
 
     def git_commit_declarations_for_lease(self, lease_id: str) -> dict[tuple[str, str], GitCommitDeclarationRecord]:
         """The lease's explicit git-commit declarations, newest per ``(environment_id,
         repo)`` (issue #143, Phase 3), keyed the same way.
 
-        Append-only, latest-wins: a worker's re-declaration of the same repo in the same
-        environment (a correction) reads back as the replacement, never a duplicate.
-        Keying on the environment as well as the repo is what keeps a chunk holding
-        several environments from collapsing one env's branch onto another's.
-
-        Empty for a lease that never declared a commit."""
+        Append-only, latest-wins. Keying on the environment as well as the repo keeps
+        several environments from collapsing one env's branch onto another's."""
         ...
 
     def nudge_fired(self, lease_id: str, epoch: int) -> bool:
@@ -669,11 +560,9 @@ class IReadRunnerStore(Protocol):
 
     def checks_ran(self, lease_id: str, epoch: int) -> bool:
         """``True`` iff this attempt's ``checks:`` have already run and their results are
-        durable (issue #114) — the guard consulted before running a node's checks. Written by
-        :meth:`~IWriteRunnerStore.record_checks_ran` *after* the result rows, so this
-        reading ``True`` implies the rows exist (``runner:checks-recorded-when-marked``).
-        A crash after the rows but before the marker leaves this ``False`` on recovery,
-        which safely re-runs (latest-wins). Never set for a node with no ``checks:``."""
+        durable (issue #114). Written *after* the result rows, so ``True`` implies the
+        rows exist (``runner:checks-recorded-when-marked``); a crash between them leaves
+        this ``False``, which safely re-runs."""
         ...
 
     def check_results_for_lease(self, lease_id: str, epoch: int) -> list[CheckResultRecord]:
@@ -684,12 +573,9 @@ class IReadRunnerStore(Protocol):
     def session_preamble_fingerprint(self, session_id: str) -> PreambleFingerprint | None:
         """The standing preamble prose this session was last sent, or ``None`` (issue #149).
 
-        The newest ``session_preamble_facts`` row for the session, read only when a spawn
-        resumes one.
-
-        ``None`` means "nothing recorded for this session" and renders the full three-layer
-        preamble. That is the safe direction — a missing fingerprint costs tokens, an
-        over-eager match would cost the worker its updated instructions."""
+        The newest ``session_preamble_facts`` row for the session. ``None`` renders the
+        full preamble — the safe direction, since an over-eager match would cost the
+        worker its updated instructions."""
         ...
 
 
@@ -738,10 +624,9 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
     ) -> None:
         """Close a lease — a clean transition or a failure/escalation.
 
-        When ``event_kind``/``event_payload`` are given (issue #125), the operational
-        event they carry is enqueued to the outbound buffer **in the same transaction** as
-        the closure — the ``record_local_pause`` atomic-pairing precedent — so the event
-        and the closure it describes land together or not at all."""
+        When ``event_kind``/``event_payload`` are given (issue #125), the event is
+        enqueued to the outbound buffer **in the same transaction** as the closure, so
+        the two land together or not at all."""
         ...
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
@@ -797,14 +682,9 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
     ) -> None:
         """Append a local pause/start fact **and** its hub-bound report, atomically (issue #43).
 
-        Appends rather than upserts because this is a locally-minted fact, not a mirror of
-        someone else's value — the same shape as the hub's own pause facts.
-
-        Taking the buffer entry here rather than leaving the report to a separate call is
-        what makes the brake and its report crash-atomic (pinned by
-        tests/test_ingest_and_pause_verbs.py::test_pause_reports_itself_upward_atomically).
-        ``report_kind``/``report_payload`` stay caller-supplied so the store owns no fact
-        vocabulary (the same split as :meth:`enqueue_outbound`)."""
+        Appends rather than upserts: this is a locally-minted fact, not a mirror. Taking
+        the buffer entry here is what makes the brake and its report crash-atomic (pinned
+        by ``tests/test_ingest_and_pause_verbs.py``)."""
         ...
 
     def set_workspace_prompt(self, workspace_id: str, *, prompt: str, at: datetime) -> None:
@@ -815,19 +695,14 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Stash a won claim's plaintext route token (upsert) — issue #84a.
 
         Called on a won claim with the token the claim response returned once. A fresh
-        claim overwrites a prior row for the same chunk; a re-spawn under a route already
-        held never calls this again, so :meth:`~IReadRunnerStore.route_token` keeps
-        returning the same value across those paths."""
+        claim overwrites a prior row for the same chunk."""
         ...
 
     def record_lease_token(self, lease_id: str, token_hash: str, at: datetime) -> None:
         """Persist a lease's capability-token hash (issue #113, Phase 1).
 
-        Every ``mint_lease_token`` caller records through here — spawn, resume re-mint,
-        and takeover re-mint (issue #258) — so a lease id **is** re-minted and this write
-        is overwrite-safe: the implementation replaces any prior row, invalidating the
-        previous token. The plaintext is never persisted; only this sha256 hash lands
-        here, read back via :meth:`~IReadRunnerStore.lease_token_hash`."""
+        Overwrite-safe: the implementation replaces any prior row, invalidating the
+        previous token. The plaintext is never persisted, only this sha256 hash."""
         ...
 
     def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:
@@ -879,30 +754,21 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         sample: UsageSample,
         recorded_at: datetime,
     ) -> None:
-        """Idempotently record one usage fact **and** buffer its outbound report, atomically
-        (issue #58) — mirrors :meth:`record_local_pause`'s atomic local-write + outbound-
-        enqueue pairing: a fact the hub is never told about is never reconciled later.
+        """Idempotently record one usage fact **and** buffer its outbound report,
+        atomically (issue #58).
 
         Keyed on ``(lease_id, generation, sample.kind)``: a resume within the same lease
-        mints a new ``generation`` (:meth:`IReadRunnerStore.lease_generation`) and so is a
-        genuinely new row (append-only); a replay of the exact same invocation finds the
-        row already there and writes nothing a second time, buffering no duplicate report
-        either."""
+        is a genuinely new row; an exact replay writes nothing and buffers nothing."""
         ...
 
     def record_external_usage_attempt(
         self, *, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str
     ) -> None:
         """Append one external-subscription-usage sampling attempt **and**, only when it
-        produced a sample, buffer its outbound report — atomically (issue #218), mirroring
-        :meth:`record_local_pause`'s atomic local-write + outbound-enqueue pairing.
+        produced a sample, buffer its outbound report — atomically (issue #218).
 
-        Always appends the attempt row (the cadence anchor
-        :meth:`~IReadRunnerStore.last_external_usage_attempt_at` derives from), whether or
-        not the harness had anything to report. Enqueues the outbound fact only when
-        ``payload`` is not ``None``. ``report_kind``/``report_payload`` stay
-        caller-supplied so the store owns no fact vocabulary (the same split as
-        :meth:`record_local_pause` and :meth:`enqueue_outbound`)."""
+        The attempt row is always appended, whether or not the harness had anything to
+        report; the outbound fact is enqueued only when ``payload`` is not ``None``."""
         ...
 
     def record_attachment(
@@ -916,14 +782,10 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         content: str,
         attached_at: datetime,
     ) -> None:
-        """Append a worker's explicit artifact submission for ``name`` (issue #113,
-        Phase 2), a single committed transaction so it survives a ``kill -9`` between
-        this call and the completion submission that would otherwise read it. Called
-        from the domain layer, never directly from the API edge
-        (``bzh:controller-read-only``). Append-only: a later call for the same
-        ``(lease_id, name)`` is a correction, read back as the replacement by
-        :meth:`~IReadRunnerStore.attachments_for_lease`, never merged with the prior
-        row."""
+        """Append a worker's explicit artifact submission for ``name`` (issue #113), a
+        single committed transaction so it survives a ``kill -9`` before the completion
+        submission reads it. Append-only: a later call for the same ``(lease_id, name)``
+        is a correction, read back as the replacement, never merged."""
         ...
 
     def record_git_commit_declaration(
@@ -940,13 +802,9 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         declared_at: datetime,
     ) -> None:
         """Append a worker's explicit git-commit declaration for ``repo`` in
-        ``environment_id`` (issue #143, Phase 3), a single committed transaction so it
-        survives a ``kill -9`` between this call and the collection that would otherwise
-        read it. Called from the domain layer, never directly from the API edge
-        (``bzh:controller-read-only``). Append-only: a later call for the same
-        ``(lease_id, environment_id, repo)`` is a correction, read back as the
-        replacement by :meth:`~IReadRunnerStore.git_commit_declarations_for_lease`, never
-        merged with the prior row."""
+        ``environment_id`` (issue #143), a single committed transaction so it survives a
+        ``kill -9`` before the collection reads it. Append-only: a later call for the
+        same key is a correction, read back as the replacement, never merged."""
         ...
 
     def record_nudge_fired(self, *, lease_id: str, epoch: int, at: datetime) -> None:
@@ -985,14 +843,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
     def record_session_preamble(self, session_id: str, *, fingerprint: PreambleFingerprint, at: datetime) -> None:
         """Record what standing preamble prose this session was just sent (issue #149).
 
-        Append-only; the newest row is what
-        :meth:`~IReadRunnerStore.session_preamble_fingerprint` reads back. The fact is
-        *"this prose was sent to this session"*, not *"a spawn happened"* — hence its own
-        call rather than a widening of :meth:`record_spawn`, whose resume-with-message
-        sites send no ``prompt_prefix`` and would poison the session's newest row.
-
-        Called only from :func:`~blizzard.runner.loop.steps._spawn_attempt`, immediately
-        after ``record_spawn``, so a durable fingerprint always implies the prose reached
-        the process; a crash that loses it leaves the next resume rendering in full. See
-        the recorded exemption in ``blizzard-context:/architecture/crash-correctness.md``."""
+        Append-only; the newest row is what the fingerprint read returns. The fact is
+        *"this prose was sent to this session"*, not *"a spawn happened"*, and is written
+        after the spawn so a durable fingerprint implies the prose reached the process."""
         ...

@@ -1,13 +1,8 @@
 """Unit-tier mirror of the service guard's table-vs-protocol check (blizzard-mock#4).
 
-``tests/service/test_parity_guard.py`` enumerates :class:`IHubClient`'s protocol
-methods and compares them against its own ``_IHUBCLIENT_ENDPOINTS`` mapping table — a
-pure import + dict compare that needs no fleet and no network. That module is
-``service``-gated as a whole (its other assertion fetches a live mock hub's
-``/openapi.json``), so without this mirror an ``IHubClient`` method added without a
-matching table entry would only trip under ``BLIZZARD_SERVICE=1``, not in the fast
-gate. This re-runs just the table-vs-protocol half at the unit tier, importing the
-guard's own check function rather than duplicating ``_IHUBCLIENT_ENDPOINTS``.
+``tests/service/test_parity_guard.py``'s table-vs-protocol check is service-gated as
+a whole, so a drifted ``_IHUBCLIENT_ENDPOINTS`` entry would only trip under
+``BLIZZARD_SERVICE=1``. Re-runs just that half here, at the unit tier.
 """
 
 from __future__ import annotations

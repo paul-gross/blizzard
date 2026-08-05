@@ -179,8 +179,7 @@ def test_every_runner_changed_publish_site_names_its_kind(tmp_path: Path) -> Non
     assert hub.client.post("/api/runners/r1/pause", json={"by": "alice"}).status_code == 200
     assert hub.client.post("/api/runners/r1/resume", json={"by": "alice"}).status_code == 200
     # 4. Runner-local pause/resume facts — the runner braked itself, and says why.
-    # 5. A sampled external-subscription-usage snapshot (issue #218) — runner-scoped,
-    #    no `by`/`reason`/`key`.
+    # 5. A sampled external-subscription-usage snapshot (issue #218) — runner-scoped.
     resp = hub.client.post(
         "/api/fleet/events",
         json={

@@ -1,17 +1,5 @@
-"""escalation takeover command (hub store tree)
-
-Adds the ``escalations.takeover_command`` column (P7): the runner-composed, pasteable
-``cd <workdir> && <harness resume>`` a human runs to enter a parked ``needs_human``
-session. The escalation fact already existed
-(0002); this revision carries the resume command alongside it so the hub can surface
-an actionable takeover on the board.
-
-The hub store's Alembic tree targets one shared ``schema`` metadata whose table
-objects reflect the *current* definition, so a fresh database's 0002 already creates
-``escalations`` **with** this column. This revision is therefore written **idempotent**
-— it adds the column only where an older database created ``escalations`` without it —
-so ``base -> head`` on a fresh store and an in-place upgrade of a pre-P7 store both
-land at exactly one column.
+"""escalation takeover command (hub store tree) — adds ``escalations.takeover_command``,
+the pasteable resume a human runs to enter a parked session. Idempotent (P7).
 
 Revision ID: 20260713_1424_hub_escalation_takeover
 Revises: 20260713_1218_hub_walking_skeleton

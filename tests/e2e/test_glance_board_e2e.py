@@ -1,11 +1,8 @@
 """Mobile glance board — narrow-viewport browser e2e (blizzard#181, Phase 5).
 
 At a real ~390px phone width (`bzh:narrow-viewport-tier-rule`), `/board` routes to the
-mobile glance shell. This asserts the loading-vs-empty distinction (AC 4) holds there:
-while the chunks read is still in flight the "Needs you" panel shows loading copy, never
-its empty copy; once the read resolves on a populated fleet the loading copy is gone and
-the row is there instead. Every seam real (mock forge + hub + runner over a minted
-`blizzard-mock` fixture), no tokens, no network. Skipped unless `BLIZZARD_E2E=1`.
+glance shell. Asserts the loading-vs-empty distinction (AC 4): while the chunks read is
+in flight "Needs you" shows loading, never empty. Skipped unless `BLIZZARD_E2E=1`.
 """
 
 from __future__ import annotations
@@ -43,9 +40,8 @@ pytestmark = [
     ),
 ]
 
-# A build turn with no <Choice> in its judgement — every attempt fails the same way, so
-# the retry budget exhausts and the chunk escalates to needs_human, landing it in
-# "Needs you".
+# A build turn with no <Choice> in its judgement, so every attempt fails the same way and
+# the chunk escalates to needs_human — landing it in "Needs you".
 _VERDICTLESS = "pass\n"
 
 
@@ -83,13 +79,8 @@ def _graph_yaml() -> str:
 def test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_populated_fleet(
     tmp_path: Path, chromium_available: bool, narrow_viewport: ViewportSize
 ) -> None:
-    """At a real ~390px phone width, `/board` routes to the glance shell. With a
-    needs_human chunk already on the fleet, a held-open `GET /api/chunks` response keeps
-    the "Needs you" panel in its loading state for an observable window — so the loading
-    copy is asserted to render instead of the empty copy — before the read is released to
-    resolve to the populated row.
-
-    Release-only tier — skips cleanly without Chromium or a built bundle.
+    """A held-open `GET /api/chunks` keeps "Needs you" in loading state; asserted to
+    show loading, never empty, then land the row once released.
     """
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
@@ -144,16 +135,13 @@ def test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_populat
             browser = pw.chromium.launch(headless=True)
             page = browser.new_page(viewport=narrow_viewport)
             try:
-                # Hold the chunks read open by capturing the route and never resolving it,
-                # rather than racing a fixed delay (a timing guess) or blocking the handler
-                # itself with time.sleep() (which would wedge Playwright's single-threaded
-                # sync dispatcher for every other page call).
+                # Hold the chunks read open by capturing the route rather than racing a
+                # fixed delay or blocking with time.sleep() (would wedge Playwright's dispatcher).
                 held: list[Route] = []
                 page.route("**/api/chunks", lambda route: held.append(route))
 
-                # `commit`, not `load`: `load` does not fire until every request already
-                # in flight settles, which would wait on the very request this test is
-                # holding open — this needs the DOM queryable before that response arrives.
+                # `commit`, not `load`: `load` waits on every in-flight request, including
+                # the one this test holds open.
                 page.goto(f"http://127.0.0.1:{hub_port}/board", wait_until="commit")
 
                 # The mobile shell, not the desktop board — the guard matched.

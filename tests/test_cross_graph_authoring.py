@@ -1,13 +1,9 @@
 """Cross-graph target authoring (issue #90, Phase 2) — syntax, parse, reify, validate, mint warning.
 
-Unit tier: ``to: graph:<name>`` parses into a structured target, validates without a
-same-graph-node error, reifies onto the edge, and a malformed ``graph:`` form errors;
-the optional per-choice ``model:`` override parses and reifies. Component tier: minting
-a graph whose cross-graph target names an absent graph succeeds with a **warning** (late
-binding), the edge round-trips through the store, and — the Phase 2→4 interim — selecting
-a cross-graph choice before the apply-path lands falls through to a clean failure, never
-a crash.
-"""
+Unit tier: ``to: graph:<name>`` parses, validates, and reifies onto the edge; a malformed
+``graph:`` form errors. Component tier: minting a target naming an absent graph succeeds
+with a warning (late binding), round-trips through the store, and selecting it before the
+apply-path lands falls through to a clean failure, never a crash."""
 
 from __future__ import annotations
 
@@ -51,7 +47,6 @@ def _doc(*, to: str, model: str | None = None) -> GraphDoc:
     )
 
 
-# --------------------------------------------------------------------------- #
 # Unit — the pure syntax parser
 # --------------------------------------------------------------------------- #
 
@@ -65,7 +60,6 @@ def test_classify_choice_target_distinguishes_node_graph_and_malformed() -> None
     assert classify_choice_target("graph:a:b") == ("malformed", None)  # the deferred explicit-node form
 
 
-# --------------------------------------------------------------------------- #
 # Unit — parse / reify / validate
 # --------------------------------------------------------------------------- #
 
@@ -115,7 +109,6 @@ def test_per_choice_model_override_parses_and_reifies() -> None:
     assert edge.model == "claude-sonnet-5"
 
 
-# --------------------------------------------------------------------------- #
 # Component — mint warning, store round-trip, interim fall-through
 # --------------------------------------------------------------------------- #
 

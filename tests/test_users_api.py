@@ -1,13 +1,8 @@
 """``GET /api/users`` / ``POST /api/users/{user_id}/role`` — the admin page's user
-listing and role-assignment API (component tier, issue #94).
+listing and role-assignment API (issue #94).
 
-Driven over a real ``TestClient`` under ``auth.mode = "oauth"`` with sessions seeded
-directly (``tests/support.py``'s ``seed_user``/``seed_session``, mirroring
-``tests/test_auth_session.py``'s own shape) — the hub-side role-change rules
-(``AuthService.assign_role``) are exercised at the unit tier
-(``tests/test_auth_service.py``); this file proves the route wires them correctly:
-gating, 404/400/403 mapping, the "takes effect on next request without re-login"
-AC, and the rendered ``UserView`` shape.
+Proves the route wires the role-change rules correctly: gating, 404/400/403 mapping,
+the "takes effect on next request without re-login" AC, and the rendered ``UserView``.
 """
 
 from __future__ import annotations

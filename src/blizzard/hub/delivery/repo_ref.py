@@ -1,15 +1,9 @@
-"""Deriving a forge coordinate (``owner/name``) from a repo's own origin URL.
+"""Deriving a forge coordinate (``owner/name`` — the path a forge's REST routes resolve) from a repo's
+own origin URL.
 
-Delivery addresses a repo as ``owner/name`` — the path a forge's REST routes resolve.
-
-The coordinate is read from the origin URL when the URL encodes one, and falls back to the
-configured owner when it does not — a bare origin, a mirror, or any transport that names a
-repo without naming who owns it (see :func:`parse_repo_ref` for why that is ``None`` here
-rather than a guess).
-
-Pure and dependency-free (``bzh:deterministic-shell``): the land scripts read the result
-out of their injected env, they never parse a URL themselves.
-"""
+The coordinate is read from the origin URL when the URL encodes one; an origin naming a repo without
+naming who owns it yields ``None`` rather than a guess (:func:`parse_repo_ref`). Pure and
+dependency-free (``bzh:deterministic-shell``)."""
 
 from __future__ import annotations
 
@@ -43,16 +37,9 @@ class RepoRef:
 def parse_repo_ref(origin_url: str) -> RepoRef | None:
     """The ``owner/name`` coordinate ``origin_url`` encodes, or ``None`` if it encodes none.
 
-    ``None`` is a real answer, not a failure: a bare or file-backed origin names a repo
-    without naming an owner, and promoting a parent directory to an organization would
-    invent a coordinate that resolves to nothing — worse than the caller falling back to
-    its configured default (pinned by
-    ``tests/test_repo_ref.py::test_returns_none_when_the_origin_names_no_owner``).
-
-    Only the last two path segments matter, so nested group paths (a self-hosted forge's
-    ``group/subgroup/name``) yield the immediate parent as the owner, which is the
-    segment its REST route wants.
-    """
+    ``None`` is a real answer, not a failure (pinned by
+    ``tests/test_repo_ref.py::test_returns_none_when_the_origin_names_no_owner``). Only the last two
+    path segments matter, so a nested group path yields the immediate parent as the owner."""
     url = origin_url.strip().rstrip("/")
     if not url:
         return None

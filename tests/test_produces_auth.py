@@ -1,10 +1,8 @@
 """Produces-artifact authorization (unit tier) — ``check_produces``, node + artifacts
 only (issue #113 phase 5).
 
-A pure function of a :class:`Node` plus the submission's own
-:class:`~blizzard.wire.completion.SubmittedArtifact` list (``bzh:domain-takes-objects``):
-no store, no HTTP, no clock — the same shape ``test_route_auth.py`` holds
-``check_route_token`` to.
+A pure function of a :class:`Node` plus the submission's own artifact list
+(``bzh:domain-takes-objects``): no store, no HTTP, no clock.
 """
 
 from __future__ import annotations
@@ -97,10 +95,9 @@ def test_missing_names_are_all_named_in_the_rejection_detail() -> None:
 
 
 def test_a_git_commit_covered_produces_name_is_accepted_under_enforce() -> None:
-    """A `produces:` name legitimately covered by a pushed git commit (see
-    `runner/loop/steps.py`) carries `attached=False` on its `GIT_COMMIT`
-    `SubmittedArtifact` — this must not be rejected as an unattached name
-    (`~blizzard.wire.completion.satisfied_produces_names`)."""
+    """A `produces:` name legitimately covered by a pushed git commit carries
+    `attached=False` on its `GIT_COMMIT` `SubmittedArtifact` — must not be rejected as
+    an unattached name (`~blizzard.wire.completion.satisfied_produces_names`)."""
     node = _node(produces=["backend"])
     artifacts = [_git_commit_artifact("backend")]
 

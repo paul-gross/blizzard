@@ -1,18 +1,9 @@
 """QueueService (unit tier) — the ready-queue sort key, facts only (issue #137).
 
-:meth:`QueueService._effective_position` is a pure function over already-loaded
-dicts (``bzh:domain-takes-objects``), so it unit-tests with zero store: no fake
-repository is needed at all, only :class:`~blizzard.hub.domain.work.Chunk` values and
-hand-built position/promoted-at dicts.
-
-:meth:`QueueService.reposition` does write through the (write) chunk repository, so
-its tests use a fake standing in for the store — the same pattern
-:mod:`tests.test_promote_service` uses, including its ``__getattr__`` guard and the
-documented ``cast`` at the wide-Protocol call site (``bzh:repository-split``). Unlike
-that fake, this one's ``record_queue_position`` mutates ``positions`` in place, because
-the exhaustion→renormalize→retry path re-reads ``queue_positions()`` after
-:meth:`QueueService.replace_order` writes through the same fake mid-call.
-"""
+:meth:`QueueService._effective_position` is a pure function over already-loaded dicts
+(``bzh:domain-takes-objects``), unit-tested with zero store. :meth:`reposition` writes
+through a fake chunk repository (``bzh:repository-split``) whose ``record_queue_position``
+mutates ``positions`` in place for the retry path."""
 
 from __future__ import annotations
 
@@ -46,8 +37,7 @@ def test_never_promoted_chunk_falls_back_to_minted_at() -> None:
 
 def test_promoted_but_unmoved_chunk_falls_back_to_promoted_at_not_minted_at() -> None:
     # A chunk minted long ago but promoted late (issue #137's fix): its fallback sort
-    # key is the later promoted_at, not the older minted_at — so it lands at the tail
-    # of the ready queue rather than mid-queue by mint order.
+    # key is the later promoted_at, so it lands at the tail, not mid-queue by mint order.
     chunk = _chunk("chk_1")
     position = QueueService._effective_position(chunk, {}, {"chk_1": _PROMOTED})
     assert position == _PROMOTED.timestamp()
@@ -61,9 +51,8 @@ def test_explicit_position_wins_over_both_promoted_at_and_minted_at() -> None:
 
 
 def test_ordering_by_effective_position_places_a_late_promoted_old_mint_chunk_last() -> None:
-    # a: minted long ago, promoted late. b: minted after a, promoted right away.
-    # Without the promoted_at fallback, a would sort before b (older minted_at) despite
-    # being promoted after it.
+    # a: minted long ago, promoted late. b: minted after a, promoted right away. Without
+    # the promoted_at fallback, a would wrongly sort before b on older minted_at.
     a = _chunk("chk_a", minted_at=_MINTED)
     b = _chunk("chk_b", minted_at=datetime(2025, 1, 1, tzinfo=UTC))
     promoted_ats = {"chk_a": _PROMOTED, "chk_b": datetime(2025, 1, 1, 0, 0, 1, tzinfo=UTC)}

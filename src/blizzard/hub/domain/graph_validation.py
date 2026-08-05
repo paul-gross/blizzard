@@ -1,17 +1,9 @@
 """Mint-time graph validation.
 
-The rules ``POST /graphs`` runs before minting a graph immutable. Errors
-reject the definition; warnings mint it flagged. This is pure domain logic over an
-already-parsed :class:`GraphDoc` (``bzh:domain-core``): file-reference resolution
-and YAML parsing are edge concerns done before it runs, so the validator touches
-no filesystem and no framework.
-
-The fused choice/edge shape makes "every choice has an edge" *structurally*
-unrepresentable — a choice entry carries its own ``to``. What remains to check is
-that each ``to`` resolves, the entry node exists, judgement kind matches executor,
-and the retry escape hatch is well-formed. Reachability is a warning, not an error:
-cycles are intentional and retries escape every cycle to escalation.
-"""
+The rules ``POST /graphs`` runs before minting a graph immutable: errors reject the
+definition, warnings mint it flagged. Pure domain logic over an already-parsed
+:class:`GraphDoc` (``bzh:domain-core``) — no filesystem, no framework. Reachability is
+a warning, not an error: cycles are intentional and retries escape to escalation."""
 
 from __future__ import annotations
 
@@ -64,16 +56,10 @@ def validate_graph(doc: GraphDoc) -> ValidationResult:
 
 def _check_sessions(doc: GraphDoc, node_names: set[str], errors: list[str]) -> None:
     """The graph-level ``sessions:`` map's own rules (issue #144).
-
-    A session name and a node name share one reference namespace — ``resume:<name>``
-    resolves declared-session-first, node-second — so a collision would make a node's
-    own lineage silently unreachable. Reject it rather than pick a winner.
-
-    ``effort`` is checked as a **non-empty string only**: the vocabulary is
-    ``low|medium|high|max`` plus whatever a runner's ``[effort.aliases]`` adds, and the
-    hub cannot see runner config. Recognizing the value — and logging an unrecognized
-    one — is the adapter's job (``bzh:one-owner``).
-    """
+    A session name and a node name share one reference namespace, so a collision would
+    make a node's own lineage silently unreachable — reject it rather than pick a winner.
+    ``effort`` is checked as a **non-empty string only**: the vocabulary is the adapter's
+    to recognize, not this validator's (``bzh:one-owner``)."""
     for name, decl in doc.sessions.items():
         if name in node_names:
             errors.append(
@@ -109,15 +95,13 @@ def _check_entry(doc: GraphDoc, node_names: set[str], errors: list[str]) -> None
 def _check_node(node: NodeDoc, node_names: set[str], session_names: set[str], errors: list[str]) -> None:
     judgement = node.judgement
 
-    # `run:` is legal ONLY on a hub node — the generic hub command node (#65). Reject it
-    # on a runner (worker) node, where it is meaningless: a worker node's step is an
-    # agent turn, not a declared command list.
+    # `run:` is legal ONLY on a hub command node (#65): a worker node's step is an agent
+    # turn, not a declared command list.
     if node.run and node.executor is not Executor.HUB:
         errors.append(f"node `{node.name}`: `run:` is only legal on a hub node (`executor: hub`)")
 
-    # The pending-poll cadence (#66) is legal only on a generic hub command node — a
-    # node with no `run:` step ever reports `pending`, so the fields are meaningless
-    # anywhere else.
+    # The pending-poll cadence (#66) is legal only on a hub command node — a node with no
+    # `run:` step never reports `pending`.
     is_hub_command_node = node.executor is Executor.HUB and bool(node.run)
     if (node.poll_interval_seconds is not None or node.poll_timeout_seconds is not None) and not is_hub_command_node:
         errors.append(
@@ -144,12 +128,8 @@ def _check_node(node: NodeDoc, node_names: set[str], session_names: set[str], er
         elif judgement.by is JudgedBy.HUMAN and judgement.prompt:
             errors.append(f"node `{node.name}`: a human-judged (gate) node must not declare `judgement.prompt`")
     elif node.executor is Executor.HUB:
-        # The generic hub command node (#65, #67) — structurally agentless: no prompt,
-        # no worker judgement prose, no in-session checks. Its choices are authored like
-        # a worker node's own (a fused choice/edge per outcome its commands can emit),
-        # checked generically below like every other node's choices — no node name is
-        # privileged by the engine, and no choice is restricted from routing straight
-        # to the reserved terminal.
+        # The generic hub command node (#65, #67) — structurally agentless: no prompt, no
+        # worker judgement prose, no in-session checks. Its choices are checked generically.
         if node.prompt is not None:
             errors.append(f"hub node `{node.name}`: a hub command node must not declare `prompt`")
         if node.checks:
@@ -162,11 +142,8 @@ def _check_node(node: NodeDoc, node_names: set[str], session_names: set[str], er
                 f"(its outcome choices — at least the edges its commands route)"
             )
 
-    # Checks gating (issue #114). `checks_cwd`/`checks_timeout` configure how a node's
-    # `checks:` run, and a choice's `requires_checks` gates routing on them — all three
-    # are meaningless without a `checks:` list to run, so reject them on a node that
-    # declares none. (A hub node can never declare `checks:` — rejected just above — so
-    # this also fences `requires_checks`/`checks_cwd`/`checks_timeout` off hub nodes.)
+    # Checks gating (issue #114): `checks_cwd`, `checks_timeout`, and `requires_checks` are
+    # all meaningless without a `checks:` list to run, so reject them on a node with none.
     if not node.checks:
         if node.checks_cwd is not None:
             errors.append(f"node `{node.name}`: `checks_cwd` is only legal on a node that declares `checks:`")
@@ -183,18 +160,16 @@ def _check_node(node: NodeDoc, node_names: set[str], session_names: set[str], er
                     f"node `{node.name}` choice `{choice.name}`: `requires_checks` is only legal on a "
                     f"choice whose node declares `checks:`"
                 )
-            # A human-judged (gate) node's exit is a person's signoff, not a worker
-            # judging against mechanical checks — the runner-local checks gate never runs
-            # there, so `requires_checks` would be inert and misleading. Reject it.
+            # A gate node's exit is a person's signoff — the checks gate never runs there,
+            # so `requires_checks` would be inert and misleading.
             if judgement.by is JudgedBy.HUMAN:
                 errors.append(
                     f"node `{node.name}` choice `{choice.name}`: `requires_checks` is not legal on a "
                     f"human-judged (gate) node"
                 )
 
-    # Every choice entry has a description and a `to` that resolves. A `to` is one of:
-    # a same-graph node name, the reserved terminal, or a well-formed cross-graph
-    # `graph:<name>` target (issue #90) — a malformed `graph:` form is rejected here.
+    # Every choice needs a description and a `to` that resolves: a same-graph node name,
+    # the reserved terminal, or a well-formed `graph:<name>` target (issue #90).
     if judgement is not None:
         for choice in judgement.choices:
             if not choice.description:
@@ -214,14 +189,8 @@ def _check_node(node: NodeDoc, node_names: set[str], session_names: set[str], er
                     f"(and is not the reserved terminal `{RESERVED_TERMINAL}`)"
                 )
 
-    # A node's `session:` value (issues #115, #144) — the targeted analogue of a choice
-    # `to` above: a malformed form is rejected, and a well-formed reference must resolve.
-    #
-    # `resume:<name>` resolves declared-session-first, node-second (#144 keeps #115's
-    # `resume:<node>` working by leaving node names as the second tier). `fresh:<name>`
-    # resolves against declared sessions *only* (D1): `fresh` always mints, so a node name
-    # there would name nothing — a session minted at node Y is not in node X's implicit
-    # lineage. It is a validation error, not a silently-inert reference.
+    # A node's `session:` value (issues #115, #144): `resume:<name>` resolves
+    # declared-session-first, node-second; `fresh:<name>` resolves against sessions only (D1).
     if node.session_malformed:
         errors.append(f"node `{node.name}`: malformed session value — expected {SESSION_LEGAL_FORMS}")
     elif node.session_source is None:
@@ -261,17 +230,14 @@ def _warn_reachability(doc: GraphDoc, node_names: set[str], warnings: list[str])
 def _edges(doc: GraphDoc) -> dict[str, set[str]]:
     """Adjacency built from every node's authored choices — including hub nodes.
 
-    No node name is privileged (#67): a hub command node's choices are authored like
-    a worker node's own (a fused choice/edge per outcome its commands can emit), so
-    this reads the same ``judgement.choices`` for every node.
-    """
+    No node name is privileged (#67), so this reads the same ``judgement.choices``
+    for every node."""
     out: dict[str, set[str]] = {n.name: set() for n in doc.nodes}
     for node in doc.nodes:
         if node.judgement is not None:
             for choice in node.judgement.choices:
-                # A cross-graph target (issue #90) is an exit *out* of this graph, not an
-                # intra-graph edge — like the terminal, it never contributes adjacency to
-                # a sibling node, so reachability is computed over same-graph targets only.
+                # A cross-graph target (issue #90) is an exit *out* of this graph, so like
+                # the terminal it contributes no intra-graph adjacency.
                 if choice.to is not None and classify_choice_target(choice.to)[0] == "node":
                     out[node.name].add(choice.to)
     return out

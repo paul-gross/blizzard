@@ -1,10 +1,8 @@
 """The hub's provider-login plane behind a trusted reverse proxy (component tier, #130).
 
-Drives the wired hub over a second ``TestClient`` bound to a concrete peer IP (the
-default ``testclient`` is not an IP and so can never match a CIDR) with
-``X-Forwarded-*`` headers set, asserting the three proxy-aware decisions: the cookie
-``Secure`` flag, the throttle key, and the ``login_failed`` fact actor — each honored
-only from a listed proxy, ignored from any other peer.
+Drives the wired hub over a second ``TestClient`` bound to a concrete peer IP, asserting
+three proxy-aware decisions — cookie ``Secure``, throttle key, and the ``login_failed``
+actor — each honored only from a listed proxy.
 """
 
 from __future__ import annotations

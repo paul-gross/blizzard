@@ -1,12 +1,8 @@
 """The runner's cached view of the hub's published JWKS (issue #95).
 
-Fetched lazily from ``GET {hub_url}/api/auth/jwks.json`` and cached by ``kid`` — a
-:meth:`JwksCache.key_for` miss (an unknown ``kid``, e.g. one minted by a just-rotated
-hub key) triggers exactly one re-fetch, so a runner picks up a rotated key with no
-restart (issue #95's own key-lifecycle AC). All ``httpx``/JWK-parsing usage is confined
-here (``bzh:dependency-inversion``); ``runner/auth/validate.py`` depends only on
-:meth:`key_for`.
-"""
+Fetched lazily and cached by ``kid``; a :meth:`JwksCache.key_for` miss triggers exactly
+one re-fetch, so a rotated key is picked up with no restart. All ``httpx``/JWK-parsing
+usage is confined here (``bzh:dependency-inversion``)."""
 
 from __future__ import annotations
 

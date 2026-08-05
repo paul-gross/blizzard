@@ -1,17 +1,5 @@
-"""generic hub command nodes: graph_nodes.run + the hub_exec_slot lease (issue #65)
-
-The hub command node primitive (#65): a node whose YAML declares ``executor: hub`` plus
-a ``run:`` list of shell commands the hub executes itself, serialized fleet-wide, with
-no agent. This revision adds:
-
-* ``graph_nodes.run`` — the JSON-encoded ``list[{command, name, produces}]`` a generic
-  hub command node authors; null on every other node (including the still-special
-  deliver node, which carries no ``run:`` until #67).
-* ``hub_exec_slot`` — the fleet-wide serialization lease: a FACT (``bzh:facts-not-status``),
-  not an in-process lock, so a crash leaves a derivable, reclaimable trace and the
-  invariant checker can assert at most one live slot. Brand new as of this revision, so
-  imported directly from ``schema.py`` (the same exception ``chunk_bounces``'s own
-  migration documents).
+"""generic hub command nodes (issue #65): ``graph_nodes.run``, the JSON command list null on every other
+node, and ``hub_exec_slot``, the fleet-wide serialization lease as a FACT (``bzh:facts-not-status``).
 
 Revision ID: 20260717_2359_hub_command_nodes
 Revises: 20260717_2345_hub_chunk_bounces

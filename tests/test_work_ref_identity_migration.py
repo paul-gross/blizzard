@@ -1,26 +1,9 @@
 """The pointer-identity revision — a work ref's ``{provider, url}`` -> ``{source, ref}`` reshape.
 
-Exercises the backfill on a store migrated to the runner-local-pause revision (the
-revision immediately before the pointer reshape), seeded with rows in the
-**pre-reshape** shape: an issue-shaped GitHub URL (backfills to the
-repo tail plus the issue number) and a non-issue-shaped row (survives verbatim into
-``ref``, the lossless branch). Also exercises ``downgrade()``'s canonicalizing
-reverse.
-
-Seeded with literal SQL against the pre-reshape shape rather than
-``from blizzard.hub.store import schema as s`` (the way
-``test_chunk_promoted_migration.py`` seeds its unaffected tables) — the same reason
-the pointer-identity migration itself declares its own local ``sa.Table`` literals rather than
-importing ``schema.py`` (see that module's docstring): ``schema.py`` is head-of-tree
-and will keep moving, so a test pinned to a revision *before* a column reshape must not
-import a table shape that has since moved on.
-
-For the same reason the table is spelled ``chunk_pm_pointers`` throughout: this test is
-pinned to revisions that predate the issue-#55 rename, and at those revisions that is
-the table's real name. ``20260726_1200_hub_chunk_work_refs_rename`` renames it to
-``chunk_work_refs`` later in the chain, and ``test_work_ref_table_rename_migration.py``
-is what covers *that*.
-"""
+Exercises the backfill on a store migrated to the revision just before the reshape: an
+issue-shaped GitHub URL backfills to the repo tail plus issue number, a non-issue-shaped
+row survives verbatim; also exercises ``downgrade()``'s canonicalizing reverse. Seeded
+with literal ``sa.Table`` shapes, never head-of-tree ``schema.py``."""
 
 from __future__ import annotations
 
@@ -37,16 +20,13 @@ from blizzard.hub.runtime import migration_runner
 pytestmark = pytest.mark.component
 
 _BEFORE = "20260716_1511_hub_runner_local_pause"  # the head just before the pointer reshape
-# This test pins its upgrades to the reshape revision itself, never to ``head``: a later
-# revision (``20260726_1200_hub_chunk_work_refs_rename``, issue #55) renames the table
-# out from under the literals above, and a revision-pinned test must stop where the
-# revision it exercises does.
+# Pinned to the reshape revision itself, never ``head``: a later rename (issue #55)
+# renames the table out from under the literals above.
 _RESHAPE = "20260716_1512_hub_pm_pointer_source_ref"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 # Literal, revision-pinned table shapes — the pre-reshape ``chunk_pm_pointers`` plus the
-# untouched ``graphs``/``chunks`` tables this revision doesn't reshape, but a seeded
-# pointer row still needs a parent chunk to satisfy the foreign key.
+# untouched ``graphs``/``chunks`` tables a seeded pointer row needs for its FK.
 _GRAPHS = sa.Table(
     "graphs",
     sa.MetaData(),
@@ -145,12 +125,8 @@ def test_downgrade_reconstructs_a_structurally_canonical_url(tmp_path: Path) -> 
 
     with engine.connect() as conn:
         rows = {r.chunk_id: r for r in conn.execute(sa.select(_OLD_POINTERS))}
-    # Canonicalizing, not byte-exact, and *not resolvable*: the owner segment is
-    # unrecoverable from the repo tail alone, so the reconstructed URL carries a
-    # documented placeholder owner rather than the original ``paul-gross``. Nothing is
-    # served at that address — a downgraded hub's work-item reads 404 until re-ingested. It is
-    # issue-*shaped* so that a re-upgrade re-parses it (see the round-trip test below),
-    # which is the property the placeholder exists to hold.
+    # Canonicalizing, not byte-exact: the owner segment is unrecoverable from the repo
+    # tail alone, so the URL carries a placeholder owner, still issue-shaped for re-parse.
     assert rows["ch_issue"].provider == "github"
     assert rows["ch_issue"].url == "https://github.com/unknown/blizzard/issues/26"
     assert rows["ch_issue"].url != "https://github.com/paul-gross/blizzard/issues/26"  # the owner is gone
@@ -160,15 +136,9 @@ def test_downgrade_reconstructs_a_structurally_canonical_url(tmp_path: Path) -> 
 
 
 def test_down_then_up_returns_the_identical_source_ref_rows(tmp_path: Path) -> None:
-    """The property that makes the pointer-identity revision rehearsable despite the lossy owner.
-
-    ``downgrade()`` can't restore the original bytes, so byte-exactness is not the bar —
-    the bar is that the pointer identity, ``(source, ref)`` (uniqueness, dedup, the
-    registry lookup), survives a down-then-up cycle unchanged. It does because the forward
-    rule reads only the repo tail and the issue number, both of which the placeholder-owner
-    reconstruction preserves; without this, a rollback-and-reapply would silently re-key
-    live chunks.
-    """
+    """The property that makes the pointer-identity revision rehearsable despite the
+    lossy owner: ``(source, ref)`` identity survives a down-then-up cycle unchanged,
+    since the forward rule reads only the repo tail + issue number, which survive."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
@@ -213,17 +183,9 @@ def test_upgrade_is_idempotent_over_an_already_reshaped_store(tmp_path: Path) ->
 
 
 def test_a_fresh_store_reaches_0013_in_the_pre_reshape_shape(tmp_path: Path) -> None:
-    """The walking-skeleton revision must materialize ``{provider, url}``, not head-of-tree
-    ``schema.py``'s shape.
-
-    It declares its own frozen ``sa.Table`` literal for ``chunk_pm_pointers`` rather than
-    importing ``schema.py``'s live table object, since ``schema.py`` is head-of-tree: a
-    fresh store would otherwise materialize post-reshape columns at this pre-reshape
-    revision, silently disabling the pointer-identity revision's ``if "url" not in
-    columns: return`` backfill guard. This asserts the freeze holds from both ends: the
-    pre-reshape shape exists here, and the pointer-identity revision genuinely reshapes it
-    away.
-    """
+    """The walking-skeleton revision must materialize ``{provider, url}``, not
+    head-of-tree ``schema.py``'s shape — else a fresh store would silently disable the
+    pointer-identity revision's ``if "url" not in columns: return`` backfill guard."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     engine = create_engine_from_url(db_url)
@@ -242,12 +204,9 @@ def test_a_fresh_store_reaches_0013_in_the_pre_reshape_shape(tmp_path: Path) -> 
 
 
 def test_a_fresh_store_s_work_ref_table_keeps_the_chunk_id_foreign_key(tmp_path: Path) -> None:
-    """The walking-skeleton revision's frozen ``chunk_pm_pointers`` literal must still declare the FK to
-    ``chunks.chunk_id`` that ``schema.py`` declares (``bzh:sql-portable`` — postgres is
-    the same schema under a different URL, so a schema that only *sometimes* carries the
-    FK is two schemas). Checked via ``Inspector.get_foreign_keys``, not a sqlite
-    ``PRAGMA``, so this holds on both backends the store supports.
-    """
+    """The walking-skeleton revision's frozen ``chunk_pm_pointers`` literal must still
+    declare the FK to ``chunks.chunk_id`` that ``schema.py`` declares (``bzh:sql-portable``).
+    Checked via ``Inspector.get_foreign_keys``, so this holds on both backends."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     engine = create_engine_from_url(db_url)

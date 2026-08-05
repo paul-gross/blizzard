@@ -1,10 +1,8 @@
 """Graph mint-time validation (unit tier) — the graph validation rules.
 
-Errors reject; warnings mint flagged. The fused choice/edge shape makes "every
-choice has an edge" structurally unrepresentable, so these tests pin what remains:
-the entry node exists, each ``to`` resolves, judgement kind matches executor, the
-retry escape hatch is well-formed, and reachability warns without rejecting.
-"""
+Errors reject; warnings mint flagged. Pins the entry node exists, each ``to``
+resolves, judgement kind matches executor, the retry escape hatch is well-formed, and
+reachability warns without rejecting."""
 
 from __future__ import annotations
 
@@ -168,9 +166,8 @@ def test_targeted_resume_naming_an_absent_node_is_an_error() -> None:
     doc["nodes"]["build"]["session"] = "resume:ghost"  # type: ignore[index]
     result = validate_graph(parse_graph_doc(doc))
     assert not result.ok
-    # Since #144 `resume:<name>` resolves declared-session-first, node-second, so the
-    # dangling-reference message names both tiers. The declared-session half of this
-    # rule lives in `test_graph_sessions.py`.
+    # `resume:<name>` resolves declared-session-first, node-second (#144), so the
+    # dangling-reference message names both tiers.
     assert any("resume:ghost" in e and "names neither a declared session nor a node" in e for e in result.errors), (
         result.errors
     )

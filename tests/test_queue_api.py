@@ -1,11 +1,9 @@
-"""``GET``/``PUT /api/queue`` — the ready-queue read and whole-order replace (issue #104),
-component tier.
+"""``GET``/``PUT /api/queue`` — the ready-queue read and whole-order replace (#104).
 
 ``GET /api/queue`` is the hub-ordered ready-queue view; ``PUT /api/queue`` is the
-idempotent whole-order replacement (``bzh:domain-takes-objects`` — the controller
-resolves every named id against the ready set and validates before the domain ever sees
-a ``Chunk``). A runner bearer token must be rejected on every route in this router.
-"""
+idempotent whole-order replacement (``bzh:domain-takes-objects``): the controller
+resolves every id before the domain ever sees a ``Chunk``. A runner bearer token
+is rejected on every route."""
 
 from __future__ import annotations
 
@@ -47,10 +45,8 @@ def test_get_queue_returns_the_ordered_ready_view(tmp_path: Path) -> None:
 
 
 def test_a_chunk_minted_long_ago_but_promoted_last_still_sorts_last(tmp_path: Path) -> None:
-    # Issue #137: an un-moved chunk's fallback sort key is its promotion instant, not its
-    # mint instant — so a chunk minted first but left in the backlog while its siblings
-    # are minted and promoted sits at the *tail* of the ready queue once it finally is
-    # promoted, rather than mid-queue by its (much older) mint time.
+    # Issue #137: an un-moved chunk's fallback sort key is its promotion instant, not
+    # its mint instant, so a late-promoted chunk sits at the tail, not mid-queue.
     hub = build_hub(tmp_path)
     old_pointer = {"source": "default", "ref": "old"}
     old = hub.client.post("/api/chunks", json={"tokens": [pointer_token(old_pointer)]}).json()["chunk_id"]

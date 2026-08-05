@@ -1,24 +1,5 @@
-"""graph checks gating — checks_cwd/checks_timeout on nodes, requires_checks on choices (issue #114, hub store tree)
-
-Issue #114 makes a node's ``checks:`` list a real enforced seam: the runner executes it
-at worker exit, and a choice may gate its edge on the results. This revision adds the
-three additive columns that carry the authored fields:
-
-- ``graph_nodes.checks_cwd`` (String, null) — where the runner runs the node's checks,
-  relative to the leased env's binding workdir; null runs them at the env workdir root.
-- ``graph_nodes.checks_timeout`` (Integer, null) — the per-check timeout in seconds; null
-  accepts the check-runner's own default.
-- ``graph_choices.requires_checks`` (Boolean, null) — whether the choice is gated on green
-  checks; null/false is ungated, every pre-#114 choice's shape.
-
-Nullable, no backfill (``bzh:sql-portable``): every graph minted before these columns
-existed reads them as ``NULL``, which is semantically unchanged — no ``checks_cwd``/
-``checks_timeout`` and no gated choice. The schema change alone flips no behavior; the
-runner execution + gating land in later phases.
-
-Idempotent like ``20260721_1008_graph_node_session_source``: it adds each column only
-where an older database lacks it, so a fresh ``base -> head`` and an in-place upgrade both
-land at exactly one of each column.
+"""graph checks gating — ``graph_nodes.checks_cwd``/``checks_timeout``,
+``graph_choices.requires_checks`` (issue #114, hub store tree). Nullable, no backfill.
 
 Revision ID: 20260725_1200_hub_graph_checks_gating
 Revises: 20260722_1200_hub_artifact_forge

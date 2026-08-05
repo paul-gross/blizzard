@@ -1,11 +1,7 @@
 """Completion assembly consumes durable attachments (issue #113, Phase 3).
 
-Component tier: a real ``blizzard runner attach`` round trip — the actual FastAPI app,
-lease-token authorization, and the durable store — feeds a real ADVANCE tick
-(:func:`~blizzard.runner.loop.steps.advance`) so the assembled completion is proven
-against real internal collaborators end to end, not just the pure
-``_collect_asset_artifacts`` unit coverage in ``tests/test_runner_loop.py``.
-"""
+Component tier: a real ``blizzard runner attach`` round trip feeds a real ADVANCE tick,
+proving the assembled completion against real internal collaborators end to end."""
 
 from __future__ import annotations
 
@@ -68,9 +64,7 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
     store.record_spawn("lease_r", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
-    # The real attach round trip: the worker submits its findings through the runner's
-    # own local HTTP API, authorized by its lease token — the one name it explicitly
-    # attaches. `review-diary` is left un-attached to prove the fallback still fires.
+    # `review-diary` is left un-attached to prove the fallback still fires.
     with TestClient(app) as client:
         resp = client.post(
             "/api/leases/lease_r/attachments",

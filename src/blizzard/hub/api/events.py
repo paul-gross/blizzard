@@ -1,28 +1,9 @@
-"""The hub live-event stream — ``GET /api/events/stream`` (SSE).
+"""The hub live-event stream — ``GET /api/events/stream`` (SSE), excluded from the OpenAPI schema.
 
-The hub re-broadcasts landed facts over Server-Sent Events; the board and each runner
-subscribe outbound to keep live views streaming (live updates are hand-rolled
-``EventSource`` → RxJS → signals, *not* the generated client, so the stream
-route is excluded from the OpenAPI schema).
-
-Live fan-out (P7): a connecting subscriber registers with the
-:class:`~blizzard.hub.events.broker.EventBroker`, replays the buffered tail newer than
-its ``Last-Event-ID`` (so a reconnect resumes without a gap), then streams every fresh
-event live until it disconnects. A periodic keepalive comment keeps intermediaries from
-idling the connection out. Ids are monotonic, so the replay-then-live handoff dedupes by
-id — an event caught in both the replay and the live queue is emitted once.
-
-The runner's store-and-forward fact push (``POST /events``) lives on the
-runner-authenticated fleet router (:mod:`blizzard.hub.api.fleet`, issue #87); this
-stream is the board's own read, human-plane gated on ``fleet:view`` (issue #91): a
-``pending`` (or unauthenticated) identity is refused here exactly as on every other
-board read; a ``guest`` reaches it like any other reader. Identity is resolved
-*before* streaming starts (``require(FLEET_VIEW)``), then the generator stays
-broker-first — no ``get_services`` inside :func:`_stream` itself. Under the default
-``auth.mode = "none"`` ``require()`` never touches the store (``hub/api/auth_session.py``),
-so this route stays dependency-free in effect on the store-free export/unit app, which
-always builds with that default.
-"""
+A subscriber registers with the :class:`~blizzard.hub.events.broker.EventBroker`, replays the buffered
+tail newer than its ``Last-Event-ID``, then streams live until it disconnects. Ids are monotonic, so an
+event caught in both the replay and the live queue is emitted once. A periodic keepalive comment keeps
+intermediaries from idling the connection out."""
 
 from __future__ import annotations
 
@@ -49,8 +30,7 @@ from blizzard.wire.events import EventsResponse, EventView
 router = APIRouter(prefix="/api", tags=["meta"])
 
 _RESERVED_COMMENT = ": blizzard hub event stream\n\n"
-#: Keepalive cadence for an idle connection — a comment line intermediaries pass through
-#: without disturbing the ``EventSource``. Shorter than typical proxy idle timeouts.
+#: Keepalive cadence for an idle connection — shorter than typical proxy idle timeouts.
 _KEEPALIVE_SECONDS = 15.0
 
 
@@ -61,20 +41,11 @@ async def _stream(
     last_event_id: int,
     shutdown: asyncio.Event | None = None,
 ) -> AsyncIterator[bytes]:
-    """Yield the reserved comment, the buffered replay tail, then live events forever.
-
-    ``last_event_id`` is the reconnect cursor (``Last-Event-ID`` header). Subscribing
-    *before* reading the replay tail means an event published in the window between the
-    two is captured by the live queue and skipped in the tail (or vice-versa) — dedup by
-    monotonic id makes the seam exact. ``shutdown`` is the app-lifetime signal
-    (``app.state.shutdown``, set by ``blizzard.hub.app._lifespan`` on server shutdown);
-    each live-wait races it against the queue read instead of waiting on the queue alone, so
-    the generator returns promptly on shutdown rather than on its next keepalive wake. A
-    caller with no shutdown signal to offer (the store-free export/unit app, or a direct
-    test call) gets a private ``Event`` that is never set, so the race degrades to a plain
-    queue wait. The generator unsubscribes on any exit: client disconnect,
-    cancellation, or this shutdown signal.
-    """
+    """Yield the reserved comment, the buffered replay tail, then live events forever. Subscribing
+    *before* reading the replay tail means an event published in the window between the two is caught by
+    one side or the other; dedup by monotonic id makes the seam exact. Each live-wait races ``shutdown``
+    against the queue read, so the generator returns promptly instead of on its next keepalive wake. It
+    unsubscribes on any exit."""
     if broker is None:
         # The store-free export/unit app carries no broker: open cleanly and idle.
         yield _RESERVED_COMMENT.encode()
@@ -162,25 +133,17 @@ def list_events(
     since: Annotated[datetime | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
 ) -> EventsResponse:
-    """The operational event feed — the ``event_log`` unified with every currently-open
-    escalation (issue #125), newest-and-most-severe first, bounded.
+    """The ``event_log`` unified with open escalations (issue #125), most-severe-newest first, bounded.
 
-    A human-plane board read: ``reject_runner_principal`` keeps a runner's bearer out and
-    ``require(FLEET_VIEW)`` gates it exactly like ``GET /decisions``. The ``severity`` /
-    ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half; the
-    open-escalation projection is always unioned in (a ``needs_human`` chunk is a standing
-    surface, not a filterable log row). A malformed ``since`` 422s via FastAPI's own
-    datetime coercion; a well-formed but tz-naive ``since`` (an offset-less ISO string) is
-    coerced to UTC (``as_utc``) so the projection's aware ``recorded_at`` comparison below
-    never raises against it — the store half is already protected by ``UtcDateTime``."""
+    The ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half;
+    the open-escalation projection is always unioned in. A tz-naive ``since`` is coerced to UTC so the
+    projection's aware ``recorded_at`` comparison below never raises against it."""
     since_utc = as_utc(since) if since is not None else None
     events = services.chunks.list_events(
         severity=severity, runner_id=runner_id, chunk_id=chunk_id, since=since_utc, limit=limit
     )
-    # Filter the open-escalation projection by the SAME predicates so the unified feed is
-    # internally consistent: a projected escalation is always `critical`/`needs-human` and
-    # names no runner, so a `severity != critical` or any `runner_id` filter excludes them
-    # all; `chunk_id`/`since` narrow per row.
+    # The same predicates over the escalation projection: it is always `critical` and names no runner,
+    # so a `severity`/`runner_id` filter excludes it wholesale; `chunk_id`/`since` narrow per row.
     escalations = services.chunks.list_open_escalations()
     if severity is not None and severity != "critical":
         escalations = []
@@ -225,17 +188,11 @@ def list_activity(
     since: Annotated[datetime | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
 ) -> ActivityResponse:
-    """The board's Event log backfill on page load (issue #213) — the three
-    already-bounded per-source activity reads merged, sorted newest-first, and capped.
+    """The activity backfill (issue #213) — the three already-bounded per-source activity reads merged,
+    sorted newest-first, and capped.
 
-    A human-plane board read, gated exactly like ``GET /api/events``:
-    ``reject_runner_principal`` keeps a runner's bearer out and ``require(FLEET_VIEW)``
-    gates it like every other board read. ``since`` defaults to 24h before the injected
-    clock's own ``now()`` (never ``datetime.now()``) — the window the issue's AC calls
-    for when the board loads with no explicit cursor. A malformed ``since`` 422s via
-    FastAPI's own datetime coercion; a well-formed but tz-naive ``since`` (an
-    offset-less ISO string) is coerced to UTC (``as_utc``) so it never raises against
-    the store's aware timestamps."""
+    ``since`` defaults to 24h before the injected clock's own ``now()``, never ``datetime.now()``. A
+    tz-naive ``since`` is coerced to UTC so it never raises against the store's aware timestamps."""
     since_utc = as_utc(since) if since is not None else services.clock.now() - timedelta(hours=24)
     chunk_changed = services.chunks.activity_facts_since(since_utc, limit=limit)
     events = services.chunks.list_events(since=since_utc, limit=limit)

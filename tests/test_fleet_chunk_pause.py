@@ -1,15 +1,8 @@
 """``POST /api/fleet/chunks/{id}/pause`` and ``.../resume`` (issue #185).
 
-The runner machine panel's Pause/Resume proxy target
-(:mod:`blizzard.runner.api.chunk_detail`) delegates onto the very same
-:func:`blizzard.hub.api.chunks.pause_chunk`/``resume_chunk`` the board's own
-route calls (``canon:one-owner`` — no duplicated pause logic), the same
-delegation shape as ``get_chunk``/``get_work_items`` in
-:mod:`blizzard.hub.api.fleet`. The domain refusal itself
-(:class:`~blizzard.hub.domain.pause.ChunkNotPausable`) is exercised end to end
-by ``test_chunks_api.py``; this file proves only that the fleet route reaches
-it, with ``by`` defaulting to ``operator`` exactly as the board's own mutation
-sends it explicitly.
+Delegates onto the same ``pause_chunk``/``resume_chunk`` the board's own route calls
+(``canon:one-owner``). The domain refusal is exercised by ``test_chunks_api.py``; this
+proves only that the fleet route reaches it, ``by`` defaulting to ``operator``.
 """
 
 from __future__ import annotations

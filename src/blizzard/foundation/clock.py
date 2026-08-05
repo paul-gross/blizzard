@@ -1,10 +1,8 @@
 """The injected clock (``bzh:injected-clock``).
 
-All time in loop, store, and domain code flows through an ``IClock`` wired at the
-composition root — never a direct ``datetime.now()`` / ``time.time()``, and never
-a SQLAlchemy column default. Tests bind ``FixedClock`` so lease TTLs, reap
-thresholds, and "overnight" waits pass in milliseconds and deterministically.
-"""
+All time flows through an ``IClock`` wired at the composition root — never a direct
+``datetime.now()`` / ``time.time()``, and never a SQLAlchemy column default, so that
+a bound ``FixedClock`` makes every duration deterministic."""
 
 from __future__ import annotations
 

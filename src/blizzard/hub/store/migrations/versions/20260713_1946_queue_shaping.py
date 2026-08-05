@@ -1,15 +1,5 @@
-"""queue shaping — ready-queue ordering and grouping (hub store tree)
-
-The P7W3 queue-shaping tables:
-
-* ``queue_positions`` — the append-only ready-queue ordering fact: each
-  operator reorder appends the moved chunk's new float position, and order derives.
-* ``chunk_grouped`` — the ``chunk.grouped`` fact: a merged-away chunk
-  naming the survivor it was folded into; ephemeral, removed from every listing.
-
-The tables are defined once in ``blizzard.hub.store.schema`` (the metadata Alembic
-targets); this revision creates exactly its own subset, so a fresh ``base -> head``
-and an in-place upgrade of a pre-P7W3 store both land here.
+"""queue shaping — creates ``queue_positions`` (the append-only ready-queue ordering
+fact) and ``chunk_grouped`` (a merged-away chunk naming its survivor)
 
 Revision ID: 20260713_1946_hub_queue_shaping
 Revises: 20260713_1803_hub_gate_decisions

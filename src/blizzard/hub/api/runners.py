@@ -1,27 +1,9 @@
-"""Runner routes — the anonymous **operator** half of the fleet registry (issue #87,
-#104).
+"""Runner routes — the **operator** half of the fleet registry: list, read, pause,
+resume, and enroll (issue #87, #104). The runner-authenticated half is
+:mod:`blizzard.hub.api.fleet`, which reuses this module's :func:`runner_view`.
 
-``GET /runners`` lists the fleet with derived liveness for the board's fleet column;
-``GET /runners/{id}`` is the same derived view for one runner — the operator's detail
-read, symmetric with the list, 404 on unknown; ``POST /runners/{id}/pause`` /
-``/resume`` set the operator's pause brake — the runner reads ``paused`` back on its
-pull and adheres (no new claims; in-flight runs on). ``POST /runners/{id}/enrollments``
-(issue #86a) mints/rotates the runner's bearer token — an anonymous **operator** verb
-under this epic (localhost dogfooding hub; operator auth is epic:team), distinct from
-the runner-auth check applied to registration.
-
-Registration (``POST /runners``), the runner's own pull read
-(``GET /fleet/runners/{id}``), and the heartbeat (``POST /runners/{id}/heartbeats``)
-live on the runner-authenticated fleet router (:mod:`blizzard.hub.api.fleet`, issue
-#87). :func:`runner_view` stays here, public, so the fleet router's own ``get_runner``
-reuses this module's rendering rather than duplicating it.
-
-Controllers stay read-only over the store and delegate the writes to
-:class:`~blizzard.hub.domain.registry.FleetService` (``bzh:controller-read-only``). A
-registry state change re-broadcasts ``runner-changed`` so the board's fleet column
-live-updates. ``dependencies=[Depends(reject_runner_principal)]`` confines a runner's
-bearer token to the fleet router.
-"""
+Controllers stay read-only over the store (``bzh:controller-read-only``);
+``reject_runner_principal`` confines a runner's bearer token to the fleet router."""
 
 from __future__ import annotations
 
@@ -92,10 +74,8 @@ def enroll_runner(runner_id: str, services: Annotated[HubServices, Depends(get_s
     """Mint (or rotate) ``runner_id``'s bearer token — the plaintext is returned once;
     the store keeps only its sha256 hash from here on (issue #86a).
 
-    Anonymous, like every operator verb under this epic (localhost dogfooding hub;
-    operator auth is epic:team). Requires an existing registration (404 otherwise):
-    enrollment is a deliberate operator act on a runner the fleet already knows, not a
-    trust-on-first-use grant to a name nobody has registered yet."""
+    Requires an existing registration (404 otherwise): enrollment is a deliberate act on
+    a known runner, never a trust-on-first-use grant to an unregistered name."""
     liveness = services.fleet.get_liveness(runner_id)
     if liveness is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")

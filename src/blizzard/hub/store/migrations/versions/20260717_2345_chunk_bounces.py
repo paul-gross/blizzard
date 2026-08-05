@@ -1,19 +1,5 @@
-"""delivery kick-back bounces + per-node bounce cap (issue #64, hub store tree)
-
-A delivery kick-back (conflict / CI-red / master-moved) is contention, not failure
-(#64): it consumes no node retry and triggers no escalation by itself. This revision
-adds:
-
-* ``chunk_bounces`` — one append-only row per kick-back, stamped from the injected
-  clock and natural-keyed on ``(chunk_id, epoch)`` (the coordinator's own ``hub_epoch``)
-  so a redelivery replay after a crash never double-counts a bounce. ``bounce_count``
-  (``hub/domain/work.py``) derives purely from these rows.
-* ``graph_nodes.bounce_cap`` — a per-node override of the fleet-wide default
-  (``graph.DEFAULT_BOUNCE_CAP``); null accepts the default.
-
-Both are brand new as of this revision — no later revision reshapes either yet — so
-both are imported directly from ``schema.py`` rather than frozen locally (the exception
-``20260714_0819_hub_delivery_pr_facts`` documents for a table no later revision touches).
+"""delivery kick-back bounces + per-node bounce cap (issue #64, hub store tree). Adds
+``chunk_bounces`` (natural-keyed on ``(chunk_id, epoch)``) and ``graph_nodes.bounce_cap``.
 
 Revision ID: 20260717_2345_hub_chunk_bounces
 Revises: 20260718_0930_hub_runner_local_pause_reason

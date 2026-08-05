@@ -1,13 +1,5 @@
-"""hub control mirror — the declarative pause brake read on PULL (runner store tree)
-
-P7W3 lands the runner's local mirror of the hub's declarative pause brake:
-``hub_control`` holds the last ``paused`` value PULL read back from the hub registry, so
-FILL adheres (no new claims while paused; in-flight chunks run on) without calling the
-hub itself and keeps the last-known directive while the hub is unreachable.
-
-Each revision in this tree creates a subset of the current ``schema`` metadata's tables
-(the live-schema pattern); this one creates exactly the one new table, ``checkfirst`` so
-a fresh ``base -> head`` and an in-place upgrade both converge.
+"""hub control mirror — the last ``paused`` value PULL read back from the hub registry,
+so FILL adheres while the hub is unreachable (runner store tree)
 
 Revision ID: 20260713_1946_runner_hub_control
 Revises: 20260713_1801_runner_asks_and_parks

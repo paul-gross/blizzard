@@ -1,16 +1,9 @@
 """The hub's fleet-service composition (``bzh:dependency-injection``).
 
-One place the store-backed collaborators are constructed and injected: the chunk and
-graph stores, the domain services, the generic hub command node executor, the
-work-item read seam, and the event broker. :func:`build_services` is called by the
-``host`` composition root (:func:`blizzard.hub.app.build_hosted_app`) and by tests,
-which swap the work-source seam for fakes by type.
-
-Controllers read the stores through their **read** Protocols and mutate only through
-the services (``bzh:controller-read-only``); both variants are the one
-:class:`~blizzard.hub.store.internal.chunk_store.ChunkStore` instance, so a request
-sees a consistent view.
-"""
+One place the store-backed collaborators are constructed and injected. Controllers read
+the stores through their **read** Protocols and mutate only through the services
+(``bzh:controller-read-only``); both variants are the one
+:class:`~blizzard.hub.store.internal.chunk_store.ChunkStore` instance."""
 
 from __future__ import annotations
 
@@ -102,15 +95,11 @@ class HubServices:
     group: GroupService
     fleet: FleetService
     enrollment: RunnerEnrollmentService
-    #: The fleet registry's read-only Protocol, held directly so an edge dependency
-    #: (``hub/api/auth.py``) can resolve a presented bearer token's hash to its runner
-    #: without holding a domain service (``bzh:controller-read-only``). The same
-    #: underlying store instance as ``fleet``'s write registry.
+    #: The fleet registry's read Protocol — the same store instance as ``fleet``'s writes.
     registry: IReadRunnerRegistry
     hub_node: HubNodeExecutor
-    #: The mid-run marker-write capability authority (issue #230) — one instance shared
-    #: by the hub node executor and the ``hub-markers`` API endpoint, so both sides of
-    #: the same-process credential agree on the one live token per (chunk, node, epoch).
+    #: The mid-run marker-write capability authority (issue #230) — one shared instance,
+    #: so every reader agrees on the one live token per (chunk, node, epoch).
     marker_authority: MarkerAuthority
     events: EventBroker
     clock: IClock
@@ -118,42 +107,26 @@ class HubServices:
     default_graph_yaml: str
     work_sources: IWorkSourceRegistry
     #: The delivery closure reconciler (issue #216) — built here because it needs the
-    #: write-capable chunk repository, which only the composition root holds
-    #: (``bzh:controller-read-only`` — ``HubServices.chunks`` stays read-only). Cheap
-    #: and side-effect-free to construct regardless of whether any source opts into
-    #: closing; ``hub/app.py``'s ``_lifespan`` decides whether to run its sweep loop.
+    #: write-capable chunk repository, which only the composition root holds.
     delivery_closure: DeliveryClosureReconciler
-    #: The session read repository (issue #91), held directly so the human-plane edge
-    #: (``hub/api/auth_session.py``) can resolve a presented session id's hash without
-    #: holding a domain service (``bzh:controller-read-only``).
+    #: The session read repository (issue #91) — reads only (``bzh:controller-read-only``).
     sessions: IReadSessionRepository
-    #: The identity-link read repository (issue #92), held directly for the boot-time
-    #: provider-name-immutability check (``hub/app.py``) — a plain read, no domain
-    #: service (``bzh:controller-read-only``).
+    #: The identity-link read repository (issue #92) — a plain read, no domain service.
     identities: IReadIdentityRepository
-    #: The user read repository (issue #94) — the admin listing route and the
-    #: superuser-bootstrap boot orchestrator need only reads; every write still goes
-    #: through ``auth`` below.
+    #: The user read repository (issue #94) — every write still goes through ``auth``.
     users: IReadUserRepository
-    #: The identity domain service — mint/resolve/slide sessions, the first-login
-    #: linking rule, ``state`` issuance (``bzh:controller-read-only``: only the domain
-    #: writes).
+    #: The identity domain service — sessions, the first-login linking rule, ``state``.
     auth: AuthService
-    #: The configured OAuth provider registry (issue #92) — empty when
-    #: ``[[auth.oauth.provider]]`` carries no entries, including every
-    #: ``auth.mode = "none"`` deployment.
+    #: The configured OAuth provider registry (issue #92) — empty when none is configured.
     oauth_providers: IOAuthProviderRegistry
     #: Per-IP token-bucket throttle (issue #92) shared by the authorize/callback routes.
     auth_throttle: IpThrottle
     #: The non-chunk auth/security fact log (issue #92) — ``login_failed``/``sso_refused``.
     auth_facts: AuthFactsService
-    #: The hub's IdP signing-key lifecycle (issue #95) — ``None`` under ``auth.mode =
-    #: "none"`` (mirrors ``oauth_providers`` being empty in that case): no keypair on
-    #: disk, and nothing to hand ``hub/api/idp.py``.
+    #: The hub's IdP signing-key lifecycle (issue #95) — ``None`` when no keypair exists.
     signing: SigningKeyService | None
-    #: The reverse-proxy trust set (issue #130) — parsed once here from
-    #: ``config.trusted_proxies``. Empty by default (direct exposure), so forwarded
-    #: headers are ignored from every peer.
+    #: The reverse-proxy trust set (issue #130) — empty by default, so forwarded headers
+    #: are ignored from every peer.
     trusted_proxies: TrustedProxies
 
 
@@ -179,19 +152,9 @@ def build_services(
 ) -> HubServices:
     """Construct and wire every fleet service over a migrated store engine.
 
-    ``base_branch`` is the branch every PR/merge targets, set at the ``host``
-    composition root from ``BZ_FORGE_BASE_BRANCH``. ``hub_command_runner`` /
-    ``hub_workdir`` are the generic hub command node's mechanism seams (#65) — tests
-    inject fakes; the ``host`` composition root leaves them ``None`` for the real
-    subprocess/filesystem adapters, rooted under ``hub_workdir_root``. ``forge_owner``
-    is injected into a hub command node's env (``BZ_FORGE_OWNER``) so its ``run:``
-    script can qualify a bare (owner-less) repo. ``oauth_providers`` (issue #92) mirrors
-    ``work_sources`` above: the ``host`` composition root passes
-    ``config.auth.oauth_providers`` only under ``auth.mode = "oauth"``; tests inject
-    ``oauth_http_client`` to drive the real conformers with no network, or bypass
-    config/secret resolution entirely with an explicit ``oauth_registry``, which wins
-    over ``oauth_providers`` when both are given.
-    """
+    ``hub_command_runner`` / ``hub_workdir`` are the hub command node's mechanism seams
+    (#65), left ``None`` for the real subprocess/filesystem adapters. An explicit
+    ``oauth_registry`` wins over ``oauth_providers`` when both are given."""
     clock = clock or SystemClock()
     chunk_store = ChunkStore(engine, clock)
     graph_store = GraphStore(engine)
@@ -216,8 +179,7 @@ def build_services(
     fleet = FleetService(registry=registry_store, clock=clock)
     enrollment = RunnerEnrollmentService(registry=registry_store, clock=clock)
     # The identity spine (issue #91) — one error factory shared by the SQLAlchemy
-    # adapters, each satisfying its Write Protocol, so `AuthService` below is handed
-    # the very same instances the edge reads through.
+    # adapters, so the same instances back both the Write Protocols and the reads.
     auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
     user_store = UserRepository(engine, auth_errors)
     identity_store = IdentityRepository(engine, auth_errors)
@@ -239,17 +201,12 @@ def build_services(
     # The provider-login seam (issue #92) — one registry entry per configured
     # ``[[auth.oauth.provider]]``, empty when no providers are configured.
     oauth_registry = oauth_registry or build_oauth_registry(oauth_providers, http_client=oauth_http_client)
-    # The hub's IdP signing-key lifecycle (issue #95) — constructed only when the `host`
-    # composition root passes a directory (under `auth.mode = "oauth"`); `None` under
-    # `none`, where nothing needs a keypair.
+    # The hub's IdP signing-key lifecycle (issue #95) — constructed only when a keys
+    # directory is passed; `None` otherwise.
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     auth_throttle = IpThrottle(clock=clock)
-    # Shared between ClaimService and EditService (issue #120) — one in-process lock
-    # constructed here, at the composition root (``bzh:dependency-injection``), rather
-    # than either service owning a private lock the other cannot see, so a claim and a
-    # graph/model edit racing the same chunk can't interleave (pinned by
-    # tests/test_edit_claim_race.py::
-    # test_a_claim_blocks_while_an_edit_holds_the_shared_lock_mid_write).
+    # Shared between ClaimService and EditService (issue #120) — one in-process lock, so a
+    # claim and an edit racing the same chunk can't interleave (tests/test_edit_claim_race.py).
     claim_lock = threading.Lock()
     return HubServices(
         chunks=chunk_store,

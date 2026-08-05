@@ -1,14 +1,8 @@
 """Composition root for the reconciliation loop (``bzh:dependency-injection``).
 
 The single place the loop's collaborators are constructed from resolved config and
-injected into a :class:`LoopContext`: the runner store over the engine, the hub
-client over an ``httpx.Client``, the winter workspace provider, the Claude Code
-adapter, the process probe, the worktree-git seam, and the check-runner seam (#114).
-``run_single_tick`` is the
-one-shot pass the ``blizzard runner tick`` CLI verb and the e2e drive;
-:class:`PeriodicDriver` is the background timer the hosted daemon runs. Both open
-the seam clients here and close them on exit, so no other code touches httpx or the
-engine directly.
+injected into a :class:`LoopContext`. Both ``run_single_tick`` and
+:class:`PeriodicDriver` open the seam clients here and close them on exit.
 """
 
 from __future__ import annotations
@@ -46,15 +40,9 @@ def build_loop_context(
 ) -> LoopContext:
     """Wire a :class:`LoopContext` from resolved config and an injected hub client.
 
-    The hub client is passed in so the caller owns the ``httpx.Client`` lifecycle
-    (a tick opens and closes it; the daemon keeps one for the driver's lifetime).
-
-    ``workspace_prompt``/``runner_prompt`` are the caller's **already-resolved** values,
-    not re-derived here: both can raise ``ConfigError`` on a configured-but-missing prompt
-    file, and resolving them on the caller's own thread is what lets ``host`` turn that into
-    a startup ``ClickException`` instead of a silently-killed loop thread. Pinned by
-    ``tests/test_pin_runner_loop.py::test_build_loop_context_uses_the_injected_prompts_and_never_re_derives_them``.
-    """
+    The hub client is passed in so the caller owns the ``httpx.Client`` lifecycle. The
+    prompts are **already-resolved** values: resolving them on the caller's own thread
+    turns a missing prompt file into a startup error (``tests/test_pin_runner_loop.py``)."""
     engine = create_engine_from_url(config.db_url)
     store = SqlAlchemyRunnerStore(engine)
     provider = WinterWorkspaceProvider(
@@ -76,9 +64,8 @@ def build_loop_context(
         credentials_path=config.external_usage_credentials_path,
         transcript_source=harness_transcript_source,
     )
-    # The per-lease harness-stdout directory (issue #58) — under the runner's own data
-    # directory, created once here (never inside the adapter), so a worker's stdout
-    # redirect target always exists by the time a spawn/resume opens it.
+    # The per-lease harness-stdout directory (issue #58), created once here so a worker's
+    # stdout redirect target always exists by the time a spawn/resume opens it.
     worker_stdout_dir = config.root / "worker-stdout"
     worker_stdout_dir.mkdir(parents=True, exist_ok=True)
     loop_config = LoopConfig(
@@ -114,9 +101,8 @@ def build_loop_context(
         # The check-runner seam (issue #114) — see `runner/loop/checks.py`.
         check_runner=SubprocessCheckRunner(env_passthrough=config.worker_env_passthrough),
         config=loop_config,
-        # The same source just injected into `harness` above, declared here too so the
-        # loop's two direct readers (the usage fallback, the rotation size check) don't
-        # reach through `ctx.harness` for it.
+        # The same source injected into `harness` above, declared here too so the loop's
+        # direct readers don't reach through `ctx.harness` for it.
         transcripts=harness_transcript_source,
     )
 
@@ -150,9 +136,8 @@ def mark_crash_resume_intents_on_startup(config: RunnerConfig) -> int:
     """Detect crash-orphaned sessions at daemon startup and mark them for resume (#13).
 
     The ungraceful counterpart of :func:`mark_resume_intents_on_shutdown`: an involuntary
-    ``kill -9`` / OOM / reboot never ran the shutdown marker, so ``host`` calls this once
-    before starting the loop. Needs the runner store plus a process probe — no hub, no
-    workspace provider."""
+    kill never ran the shutdown marker, so ``host`` calls this once before starting the
+    loop. Needs the runner store plus a process probe — no hub, no workspace provider."""
     engine = create_engine_from_url(config.db_url)
     store = SqlAlchemyRunnerStore(engine)
     try:
@@ -164,19 +149,14 @@ def mark_crash_resume_intents_on_startup(config: RunnerConfig) -> int:
 class PeriodicDriver:
     """A background thread that ticks the loop on an interval (~30s).
 
-    Owns its own ``httpx.Client`` for the driver's lifetime. A tick that raises is
-    logged and swallowed so one bad pass never kills the daemon — the loop holds no
-    state, so the next tick re-reconciles from the store.
-    """
+    Owns its own ``httpx.Client`` for the driver's lifetime. A tick that raises is logged
+    and swallowed so one bad pass never kills the daemon."""
 
     def __init__(self, config: RunnerConfig, *, interval_seconds: float) -> None:
         self._config = config
         self._interval = interval_seconds
-        # Resolved eagerly here, on the constructing (``host``) thread, rather than inside
-        # `_run` on the background loop thread: a configured-but-missing prompt file must
-        # fail the daemon's startup, not silently kill the loop thread while uvicorn keeps
-        # serving. Pinned by `tests/test_runner_loop_build.py::
-        # test_periodic_driver_resolves_prompts_eagerly_at_construction`.
+        # Resolved eagerly on the constructing (``host``) thread so a missing prompt file
+        # fails startup rather than the loop thread (`tests/test_runner_loop_build.py`).
         self._workspace_prompt = config.resolved_workspace_prompt()
         self._runner_prompt = config.resolved_runner_prompt()
         self._stop = threading.Event()
@@ -189,11 +169,9 @@ class PeriodicDriver:
     def stop(self) -> None:
         """Signal the loop to stop and wait for any in-flight tick to finish before returning.
 
-        The join is **unbounded** on purpose: the graceful-shutdown resume marking runs right
-        after this returns and must not race a live tick writing the same store, which a fixed
-        timeout would allow. A tick cannot run forever — every seam it touches is
-        timeout-bounded — and systemd's ``TimeoutStopSec`` is the backstop: a wedged tick is
-        SIGKILLed, i.e. the ungraceful-crash path REAP already recovers."""
+        The join is **unbounded** on purpose: the graceful-shutdown resume marking runs
+        right after this returns and must not race a live tick writing the same store. A
+        tick cannot run forever — every seam it touches is timeout-bounded."""
         self._stop.set()
         self._thread.join()
 

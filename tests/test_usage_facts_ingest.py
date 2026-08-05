@@ -1,14 +1,8 @@
 """Usage facts land at the hub, idempotent, stale-epoch attributed (component tier).
 
-Usage rides the same store-and-forward rails as ``lease.minted`` (``POST /events``,
-per-runner seq high-water idempotency, ``tests/test_store_and_forward.py``'s
-established pattern) but is deliberately **not** epoch-fenced: a row whose epoch
-trails the chunk's latest is real spend by a fenced-out zombie attempt and must be
-recorded and attributed to its own epoch, never dropped (contrast the completion
-path's epoch fence, ``tests/test_store_and_forward.py``'s reflush test). This file
-proves: idempotent ingest (a replayed seq lands nothing twice), stale-epoch usage
-still lands, per-node-step usage + the derived chunk total on ``GET /chunks/{id}``,
-the derived total on ``GET /chunks``, and the ``chunk-changed`` SSE re-broadcast.
+Usage rides the same store-and-forward rails as ``lease.minted`` but is deliberately
+NOT epoch-fenced: a stale-epoch row is real spend by a fenced-out zombie attempt and
+must land, attributed to its own epoch. Proves idempotent ingest, totals, and SSE.
 """
 
 from __future__ import annotations

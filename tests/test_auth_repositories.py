@@ -1,10 +1,7 @@
 """The identity-spine SQLAlchemy adapters — real store, injected errors (component
-tier, issue #91).
-
-Each adapter is exercised over a migrated sqlite engine, with the injected
-:class:`~blizzard.hub.auth.errors.RepoErrorFactory` proven to wrap a raced/unexpected
-``IntegrityError`` into the domain :class:`~blizzard.hub.auth.errors.RepoError`.
-"""
+tier, issue #91). Each adapter is exercised over a migrated sqlite engine, with the
+injected ``RepoErrorFactory`` proven to wrap a raced/unexpected ``IntegrityError``
+into the domain ``RepoError``."""
 
 from __future__ import annotations
 

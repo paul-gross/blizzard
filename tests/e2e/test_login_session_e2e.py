@@ -1,45 +1,8 @@
-"""Browser login dance + mid-stream session-expiry redirect — e2e scenario 12
-(issue #93, the plan's phase-3 matrix gap; the role ladder reshaped by issue #210).
+"""Browser login dance + mid-stream session-expiry redirect (issue #93; ladder from #210).
 
-The browser tier's login coverage: a real Chromium, driven by Playwright, over the
-**served** board (``blizzard hub host`` mounts the built Angular app at ``/``,
-exactly as scenario 6, ``test_board_browser_e2e.py``), under ``auth.mode = "oauth"``
-against the real ``blizzard-mock`` stub IdP — every seam real, no tokens, no network
-beyond the two local subprocesses:
-
-1. **Unauthenticated -> login -> provider dance -> pending.** The board is hit
-   with no session; the app's own 401 gate lands it on ``/login``, rendering the
-   configured provider's button (never an auto-redirect). Clicking it drives the real
-   OAuth dance against the stub IdP and lands back on the hub authenticated — as a
-   freshly-minted ``pending`` identity (the bottom, no-access role; role assignment
-   is #94), it lands on the **pending lobby** ("signed in, awaiting access"), not a
-   broken board — itself proof the dance produced a real, working session cookie.
-2. **Promoted to `guest`, the board is reachable read-only.** With no
-   role-assignment surface yet (#94's own slice), the role is set directly in the
-   hub's sqlite store. A `guest` reads everything and mutates nothing (issue #210):
-   the browser reloads (same session cookie, no re-login) and reaches the real board
-   — the pending lobby gone — but a seeded not-ready chunk's card renders with **no
-   Promote control**.
-3. **Promoted to `contributor`, the write control appears.** The same reload, the
-   same card, now with its Promote control back — the control's presence is a
-   function of the resolved permission, not of anything else that changed.
-4. **A session expiring mid-SSE-stream surfaces as a login redirect within one
-   reconnect cycle.** The hub is stopped, the session row is deleted (an
-   unambiguous stand-in for "expired"; see :func:`_expire_session`), and restarted.
-   Killing the hub process force-drops the open stream; the client's own reconnect
-   lands on the new hub with an invalid session, receives ``401`` on that **one
-   reconnect attempt**, and the app routes to ``/login`` — a bounded auth-failure
-   channel, not an unbounded retry loop.
-
-It is the **e2e tier**: it needs the full live stack, the sibling ``blizzard-mock``
-worktree, and an installed Chromium, so it is **skipped unless ``BLIZZARD_E2E=1``**
-and those are present. Reproduce it — from the ``blizzard`` worktree in a provisioned
-feature env — with::
-
-    uv run playwright install chromium   # once, out of band
-    BLIZZARD_E2E=1 uv run pytest tests/e2e/test_login_session_e2e.py
-
-(The workspace runs it under ``mise run e2e`` with the sibling scenarios.)
+Real Chromium over the served board under oauth: login lands `pending`; `guest` reads
+read-only; `contributor` gets the write control; a session expiring mid-SSE redirects to
+login within one reconnect. Skipped unless ``BLIZZARD_E2E=1``.
 """
 
 from __future__ import annotations
@@ -156,10 +119,9 @@ def _expire_session(hub_dir: Path) -> None:
 
 
 def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> None:
-    """Scenario 12: the browser login dance lands `pending`, promoted to `guest` it
-    reaches the board read-only, promoted to `contributor` its write control appears,
-    then a session expiring mid-SSE-stream surfaces as a login redirect within one
-    reconnect cycle."""
+    """Scenario 12: login lands `pending`; `guest` reaches the board read-only;
+    `contributor` gets the write control; a session expiring mid-SSE surfaces as a
+    login redirect within one reconnect cycle."""
     from playwright.sync_api import expect, sync_playwright
 
     bin_dir = require_stub_idp()
@@ -222,8 +184,7 @@ def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> No
             expect(page.get_by_test_id("promote-chunk")).to_be_visible()
 
             # --- 4. Expire the session mid-stream; the hub restart force-drops the
-            # open SSE connection, and the client's own reconnect is the "one
-            # reconnect cycle" that discovers the now-invalid session.
+            # SSE connection and the client's reconnect discovers the invalid session.
             _terminate(proc)
             _expire_session(hub_dir)
             proc = _start_hub(hub_dir, hub_port)

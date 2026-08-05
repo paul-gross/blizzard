@@ -1,56 +1,9 @@
 """A PR-free, fast-forward `deliver` node script — no merge commit, linear history.
 
-Honors the same hub-command-node authoring contract as
-:mod:`~blizzard.hub.graphs.scripts.land_default`
-(``blizzard-context:/standards/hub-nodes.md``: ``bzh:hub-node-run-shape``,
-``bzh:hub-node-env-contract``, ``bzh:hub-node-outcome-protocol``,
-``bzh:hub-node-step-idempotence``) but a different delivery *policy*: where
-``land_default`` opens a PR per repo and merges it (producing a merge commit),
-this script advances each repo's base branch ref directly to the chunk's own commit —
-
-    PATCH /repos/{owner}/{repo}/git/refs/heads/{base_branch}   {"sha": <commit>, "force": false}
-
-No PR is ever opened, read, or merged; ``force: false`` is the safety property, not an
-incidental flag — the forge rejects any update that is not a fast-forward with a 422, and
-that rejection is exactly what must happen when the base moved out from under a chunk that
-rebased against a now-stale tip. Nothing should land in that case, and nothing does.
-
-**Chunk atomicity is this script's own property, not the engine's**, and it is *weaker*
-than ``land_default``'s: ``land_default`` checks every repo before pushing any of them, so
-its failure mode is all-or-nothing. This script has no analogous check to run — a fast-
-forward's only precondition is the live base ref, which can only be read by asking the
-forge to update it — so repos are updated ONE AT A TIME, in submission order. A rejection
-on repo N leaves repos ``1..N-1`` already advanced: a PARTIAL land. This is a KNOWN,
-ACCEPTED property (it matches ``land_default``'s own push-stage partiality), not something
-this docstring is hiding: recovery is markers plus a re-run — every repo already advanced
-records its ``merged/<repo>`` marker (via the mid-run callback) immediately after its own
-update, so a re-run (after a crash, or after the chunk re-rebases past the rejecting repo)
-skips every repo whose marker is already durable (:data:`BZ_HUB_ARTIFACT_NAMES`) and only
-retries the remainder.
-
-A pre-flight stage reads every pending repo's CURRENT base-ref sha (``GET
-/repos/{o}/{r}/git/ref/heads/{base}``) before any repo is updated, so a repo that is
-unreachable or whose base branch does not exist fails before a partial land begins, exactly
-as ``land_default``'s check stage runs before its push stage. Where a pending repo's
-current ref already reads as the chunk's own target commit — the crash-recovery case, where
-a prior run's update landed but the kill hit before its marker became durable — that repo is
-treated as an immediate, no-op SUCCESS and its marker is (re-)recorded; no PATCH is issued
-for it, sparing a redundant network call the forge would answer as a no-op anyway (pinned by
-``tests/test_land_ff.py::test_crash_recovery_treats_an_already_advanced_ref_as_success_not_conflict``).
-
-Same env contract as :mod:`~blizzard.hub.graphs.scripts.land_default`
-(``BZ_FORGE_URL``/``BZ_FORGE_TOKEN``/``BZ_FORGE_OWNER``/``BZ_HUB_BASE_BRANCH``/
-``BZ_HUB_GIT_COMMITS``/``BZ_HUB_ARTIFACT_NAMES``/``BZ_HUB_MARKER_CALLBACK_URL``) — no
-``BZ_HUB_FEATURE_TITLE``, since no PR or merge commit is ever authored here to title.
-
-The node's authored choice — ``landed`` or ``conflict`` — is the LAST line printed to
-stdout (``bzh:hub-node-outcome-protocol``); every diagnostic goes to stderr so it never
-contaminates that line. Exit code is 0 for every outcome the policy can express, except
-an EMPTY commit set from a graph that declared a ``git_commit`` somewhere, which is a
-defect upstream of delivery rather than an outcome and exits non-zero so the engine
-routes ``failure`` (:func:`~blizzard.hub.graphs.scripts.land_default.refuse_empty_delivery`).
-A graph that declared none lands empty and exits 0.
-"""
+Advances each repo's base ref directly to the chunk's own commit with ``force: false``,
+so the forge rejects a non-fast-forward with a 422 — exactly what must happen when the
+base moved under a rebased chunk. Repos update one at a time, so a rejection on repo N
+leaves ``1..N-1`` advanced: an accepted PARTIAL land, recovered by markers and a re-run."""
 
 from __future__ import annotations
 
@@ -80,14 +33,8 @@ _ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"
 _ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
 _ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"
 
-# Test-only instrumentation for the mid-script crash sweep
-# (``tests/crash/test_kill9_sweep.py::test_kill9_between_ff_graph_repo_pushes``): the
-# between-repo-updates window is a wall-clock race an external ``kill -9`` must land
-# inside, not a named in-process registry point, so a positive number of seconds here
-# widens it. Duplicates ``land_default``'s own hook
-# (:func:`~blizzard.hub.graphs.scripts.land_default._test_pause_after_first_marker`)
-# rather than sharing it, because this script's update stage has its own loop and its
-# own no-op (already-advanced) branch to pause after.
+# Test-only instrumentation for the mid-script crash sweep: the between-repo-updates
+# window is a wall-clock race a `kill -9` must land inside, so a positive value widens it.
 _ENV_TEST_PAUSE_AFTER_FIRST_MARKER = "BZ_HUB_LAND_TEST_PAUSE_SECONDS"
 
 
@@ -95,10 +42,8 @@ def _test_pause_after_first_marker(*, marker_index: int, pending_count: int) -> 
     """Widen the between-repo-updates window for the mid-script crash sweep — test-only.
 
     Inert unless :data:`_ENV_TEST_PAUSE_AFTER_FIRST_MARKER` names a positive number of
-    seconds. Fires only after the FIRST repo's marker (``marker_index == 1``) on a
-    genuinely multi-repo update (``pending_count >= 2``) — so a crash-recovery re-run, which
-    updates only the still-unmarked remainder (``pending_count == 1`` for a 2-repo chunk),
-    never pauses and the script converges immediately."""
+    seconds, and fires only after the FIRST repo's marker on a genuinely multi-repo
+    update, so a crash-recovery re-run never pauses."""
     raw = os.environ.get(_ENV_TEST_PAUSE_AFTER_FIRST_MARKER)
     if not raw or marker_index != 1 or pending_count < 2:
         return
@@ -117,11 +62,9 @@ class _Conflict(Exception):
 def main() -> int:
     """Run the land policy, aborting cleanly on an unconfirmed marker write.
 
-    A :class:`MarkerWriteError` raised anywhere inside :func:`_land` (always from the
-    update stage, after at least one repo's ref advanced) is caught HERE — a single
-    top-level catch, not inside the per-repo loop — so a marker failure aborts the rest
-    of the run instead of quietly continuing to the next repo, and ``landed`` is never
-    printed once one has fired."""
+    A :class:`MarkerWriteError` is caught HERE — a single top-level catch, not inside the
+    per-repo loop — so a marker failure aborts the rest of the run instead of continuing
+    to the next repo, and ``landed`` is never printed once one has fired."""
     try:
         return _land()
     except MarkerWriteError as exc:
@@ -171,10 +114,8 @@ def _land() -> int:
             repo = qualify_repo(bare_repo, owner)
             target = commit["commit"]
             if current_shas[bare_repo] == target:
-                # Crash recovery: a prior run already advanced this ref but the kill hit
-                # before its marker became durable. The forge's own fast-forward semantics
-                # already treat this as a no-op success (bzh:hub-node-step-idempotence) —
-                # no PATCH needed, just (re-)record the marker.
+                # Crash recovery: a prior run advanced this ref but the kill hit before its
+                # marker became durable — a no-op success (bzh:hub-node-step-idempotence).
                 record_marker(bare_repo, target)
                 _test_pause_after_first_marker(marker_index=marker_index, pending_count=pending_count)
                 continue

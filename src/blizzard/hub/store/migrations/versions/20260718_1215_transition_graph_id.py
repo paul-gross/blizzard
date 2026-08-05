@@ -1,32 +1,5 @@
-"""transition graph-provenance — add ``transitions.graph_id`` + backfill (hub store tree, issue #90)
-
-Phase 1 of the cross-graph-migration change: every transition gains the identity of
-the graph it happened in, so a chunk's history survives a later cross-graph migration
-(which re-pins ``chunks.graph_id``). Without it, hydration resolves every transition's
-node ids against the chunk's *one* current pin — correct only while a chunk has run a
-single graph. This is schema + backfill plumbing; no behaviour changes yet (every
-existing transition remains same-graph, so its ``graph_id`` is exactly the chunk's
-current pin).
-
-``transitions`` is reshaped in place — SQLite has no ``ALTER COLUMN``, so the
-nullable→backfill→NOT-NULL step uses ``op.batch_alter_table`` (the portable Alembic
-idiom, ``bzh:sql-portable``).
-
-**Local ``sa.Table`` literals, not ``import schema``:** a revision that *reshapes* a table
-is a data migration pinned to a moment in time (``canon:no-retro``) — the reason is
-recorded in ``20260716_1512_pm_pointer_source_ref``'s docstring. Held here as a
-convention rather than a pinned behaviour: this revision's backfill reads only columns
-both shapes share, so the import would not change what it does today.
-
-**Backfill rule (config-free, deterministic — rehearsable):** each transition's
-``graph_id`` is its chunk's current ``chunks.graph_id``. Reading no configuration, the
-same store's bytes migrate identically at any time, and every transition references a
-real chunk (the ``chunk_id`` foreign key), so every row resolves.
-
-**``downgrade()`` simply drops the column** — the provenance it added is fully
-recoverable on re-upgrade from ``chunks.graph_id`` (every pre-migration transition is
-same-graph), so down-then-up is stable: a re-upgrade re-derives the identical
-``graph_id`` for every existing (same-graph) transition.
+"""transition graph-provenance — adds ``transitions.graph_id``, backfilled config-free
+from each transition's own chunk pin (hub store tree, issue #90)
 
 Revision ID: 20260718_1215_hub_transition_graph_id
 Revises: 20260718_1200_hub_route_token_minted
@@ -60,9 +33,8 @@ _TRANSITIONS_ID = sa.Table(
     sa.Column("chunk_id", sa.String, nullable=False),
 )
 
-# The reshaped transition shape — the same two columns plus the added ``graph_id`` the
-# backfill writes. A second literal (like pm-pointer's ``_OLD``/``_NEW`` pair) so the
-# UPDATE names ``graph_id`` while the SELECT above runs before the column exists.
+# The reshaped transition shape — a second literal, so the UPDATE names ``graph_id``
+# while the SELECT above runs before the column exists.
 _TRANSITIONS_GRAPH = sa.Table(
     "transitions",
     sa.MetaData(),

@@ -1,33 +1,9 @@
-"""``blizzard runner artifact list|get`` — a worker's read of its own node-step
-artifacts (issue #127).
+"""A worker's read of its own node-step artifacts (issue #127) — the whole set resolved latest-by-epoch,
+or one by ``produces:`` name, whose ``:path`` converter captures a slash-containing name verbatim.
 
-Two lease-scoped read routes: ``GET /api/leases/{lease_id}/artifacts`` (the whole set,
-resolved latest-by-epoch, both kinds) and ``GET /api/leases/{lease_id}/artifacts/{name}``
-(one by ``produces:`` name). ``{name}`` uses Starlette's ``:path`` converter so it can
-capture a slash-containing name verbatim (issue #233 — blizzard itself produces
-``merged/<repo>`` markers). The write counterpart is ``POST
-/api/leases/{lease_id}/attachments`` (``attachments.py``) — the same lease-scoped,
-token-authorized shape.
-
-The read is layered exactly like the work-item proxy (``work_items.py``): the worker never
-holds hub credentials. This route authorizes the lease token minted at the worker's own
-spawn (the same ``X-Blizzard-Lease-Token`` / ``Authorization: Bearer`` the attach edge
-takes, via :func:`~blizzard.runner.api.lease_scope.authorized_lease`), resolves the lease
-to its ``chunk_id`` through the read-only store on ``app.state``, and forwards to the hub's
-runner-authenticated envelope route (``GET /api/fleet/chunks/{id}/envelope``) as the
-runner principal (``config.auth_headers()``, issue #86b — the same one-credential path
-every runner->hub call rides). The artifacts are filtered straight off the envelope; no
-new runner-store persistence, and nothing is cached — the read is live each call.
-
-Status map (attach's, plus the proxy's): ``503`` when the store or the hub wiring is
-absent (the store-free app), ``404`` for an unknown/closed lease, ``403`` for a
-missing/mismatched token, ``404`` for an unknown artifact name on ``get``, ``409`` when
-a bare NAME resolves to more than one producing node (issue #169 — pass ``?node=`` to
-disambiguate), and a ``502`` (or the hub's own status verbatim) when the envelope
-forward fails. Authorization is
-resolved before the hub is consulted, so an unauthorized caller never learns the fleet's
-hub-wiring state.
-"""
+The worker never holds hub credentials: this route authorizes the lease token minted at its own spawn,
+resolves the lease to its ``chunk_id``, and forwards to the hub as the runner principal. Nothing is
+persisted or cached, and authorization resolves before the hub is consulted."""
 
 from __future__ import annotations
 
@@ -76,13 +52,9 @@ def list_artifacts(lease_id: str, request: Request) -> list[EnvelopeArtifact]:
 
 @router.get("/leases/{lease_id}/artifacts/{name:path}", response_model=EnvelopeArtifact)
 def get_artifact(lease_id: str, name: str, request: Request, node: str | None = None) -> EnvelopeArtifact:
-    """One artifact by ``produces:`` name; ``404`` when this node-step has none by that
-    name (optionally narrowed to one from ``node``, the producing node's name).
-
-    More than one upstream node can emit the same ``produces:`` name (issue #169) — a
-    bare NAME that resolves to more than one candidate is ``409``, naming the
-    producing nodes, rather than silently returning an arbitrary one; ``?node=`` picks
-    a specific one."""
+    """One artifact by ``produces:`` name, optionally narrowed by ``node``; ``404`` when this node-step
+    has none by that name. More than one upstream node can emit the same name (issue #169), so a bare
+    name resolving to several candidates is ``409`` naming them, never an arbitrary pick."""
     lease = authorized_lease(lease_id, request)
     matches = [a for a in _envelope_artifacts(lease.chunk_id, request) if a.name == name]
     if node is not None:

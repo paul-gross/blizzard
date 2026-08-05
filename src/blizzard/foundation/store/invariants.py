@@ -1,18 +1,9 @@
 """The facts-level invariant checker (``bzh:invariant-checker``).
 
 After any crash → restart → recover cycle, the durable facts in both stores must still
-satisfy the correctness conditions the design rests on. This module is the library of
-those assertions — a violation names the exact broken invariant rather than a vague
-"corruption", so a failing kill-9 sweep points straight at the window and the rule.
-
-Because both stores are facts-only (``bzh:facts-not-status``), every check here is a
-plain query over recorded rows plus, for the derivation totality, the real
-status-derivation itself. Nothing here mutates; it opens each store read-only.
-
-The kill-9 sweep (:mod:`tests.crash`) calls :func:`check_invariants` after every armed
-crash; the hidden ``blizzard dev check-invariants`` CLI exposes the same entry to an
-operator inspecting a store by hand.
-"""
+satisfy the correctness conditions the design rests on. A violation names the exact
+broken invariant, so a failure points at the window and the rule. Because both stores
+are facts-only (``bzh:facts-not-status``), every check is a plain query; nothing mutates."""
 
 from __future__ import annotations
 
@@ -42,9 +33,7 @@ class Violation:
         return f"[{self.invariant}] {self.detail}"
 
 
-# --------------------------------------------------------------------------- #
-# Runner store invariants
-# --------------------------------------------------------------------------- #
+# --------------------------- Runner store invariants ----------------------- #
 
 
 def check_runner_store(engine: Engine) -> list[Violation]:
@@ -72,9 +61,8 @@ def check_runner_store(engine: Engine) -> list[Violation]:
                     Violation("runner:unique-env-binding", f"env {env_id} held by chunks {sorted(chunks)}")
                 )
 
-        # runner:gapless-outbound-seq — the outbound buffer's per-runner seq is strictly
-        # monotonic and gapless; one runner per store, so the seqs must be a
-        # contiguous range with no holes (a hole would break FIFO idempotent replay).
+        # runner:gapless-outbound-seq — the outbound buffer's seqs are a contiguous range;
+        # a hole would break FIFO idempotent replay.
         seqs = sorted(row[0] for row in conn.execute(select(runner.outbound_buffer.c.seq)))
         if seqs:
             expected = list(range(seqs[0], seqs[0] + len(seqs)))
@@ -85,14 +73,7 @@ def check_runner_store(engine: Engine) -> list[Violation]:
                 )
 
         # runner:one-open-pause-park-per-lease — a lease has at most one *open* pause-park
-        # (a park fact with no pause-resume at or after it) (issue #46). The park is
-        # additive and append-only, so the only thing keeping it single is the writer's
-        # guard: PULL parks a lease only when it is not already in
-        # ``pause_parked_lease_ids()``. Drop that guard and every tick appends another park
-        # for the same standing pause — unbounded growth, and an ``open_pause_park`` whose
-        # answer depends on which duplicate it reads. A re-pause (paused -> resumed ->
-        # paused again on one lease) is legitimate and does *not* breach this: the earlier
-        # park is closed by its resume, so only the newest is open.
+        # (a park fact with no pause-resume at or after it) (issue #46). A re-pause is legal.
         open_parks = Counter(lease_id for lease_id, _ in _open_pause_parks(conn))
         for lease_id, n in open_parks.items():
             if n > 1:
@@ -101,11 +82,7 @@ def check_runner_store(engine: Engine) -> list[Violation]:
                 )
 
         # runner:usage-attributed-once — a harness invocation's usage is attributed
-        # exactly once per (lease, generation, kind) (epic #57, issue #58). Append-only by
-        # design (a retry/resume within a lease mints a new generation and so a genuinely
-        # new row) and idempotent by construction (`record_usage`'s own check-then-insert,
-        # not a DB constraint — `bzh:sql-portable`) — a duplicate here means that guard was
-        # bypassed, e.g. by a second writer never routing through `record_usage`.
+        # exactly once per (lease, generation, kind) (epic #57, issue #58).
         usage_rows = select(runner.usage_facts.c.lease_id, runner.usage_facts.c.generation, runner.usage_facts.c.kind)
         usage_key = Counter((row[0], row[1], row[2]) for row in conn.execute(usage_rows))
         for (lease_id, generation, kind), n in usage_key.items():
@@ -118,11 +95,7 @@ def check_runner_store(engine: Engine) -> list[Violation]:
                 )
 
         # runner:nudge-at-most-once — a lease's `produces`-unmet nudge fires at most
-        # once per (lease, epoch) (issue #113, Phase 4). `record_nudge_fired` is an
-        # insert never an upsert, gated by `_advance_exited_worker`'s own
-        # check-then-insert (not a DB constraint — `bzh:sql-portable`), so a duplicate
-        # here means that guard was bypassed — the crash-correctness property the
-        # `nudge.*` crash points exist to prove holds across a kill -9 at either one.
+        # once per (lease, epoch) (issue #113).
         nudge_key = Counter(
             (row[0], row[1]) for row in conn.execute(select(runner.nudge_facts.c.lease_id, runner.nudge_facts.c.epoch))
         )
@@ -133,11 +106,7 @@ def check_runner_store(engine: Engine) -> list[Violation]:
                 )
 
         # runner:checks-recorded-when-marked — a `checks_ran` marker implies its check
-        # result rows exist (issue #114). The check step records the result rows BEFORE the
-        # marker and writes the marker only for a node with a non-empty `checks:`, so a
-        # marker with no rows means a kill -9 landed impossibly (marker before rows) or a
-        # recovery re-run lost the rows — the crash-correctness property the
-        # `checks.after-results.before-marker` point exists to prove holds across a kill -9.
+        # result rows exist (issue #114).
         marked = {
             (row[0], row[1]) for row in conn.execute(select(runner.checks_ran.c.lease_id, runner.checks_ran.c.epoch))
         }
@@ -153,23 +122,16 @@ def check_runner_store(engine: Engine) -> list[Violation]:
                 )
             )
 
-        # NOT checked, deliberately: "a pause-parked lease has no closure" (issue #46 plan §7).
-        # It is false on a legal history — pause a chunk, then detach it: `_reconcile_leases`
-        # abandons the lease and records no pause-park resume, leaving the park open over a
-        # closed lease — and an invariant must hold at every instant of every legal history.
-        # Pinned by
-        # tests/test_pin_foundation.py::test_an_open_pause_park_over_a_closed_lease_is_not_a_violation.
-        # The loop-behavior property it was reaching for (`_kill_and_park_paused` must not close
-        # the lease it parks) belongs to the component tier: `tests/test_chunk_pause.py`.
+        # NOT checked, deliberately: "a pause-parked lease has no closure" (issue #46) — it is
+        # false on a legal history; pinned by tests/test_pin_foundation.py.
     return violations
 
 
 def _open_pause_parks(conn) -> list[tuple[str, datetime]]:  # type: ignore[no-untyped-def]
     """(lease_id, parked_at) for every pause-park with no pause-resume at or after it.
 
-    The plain-query mirror of the store adapter's ``_pause_park_is_open`` — same
-    ``>=`` (a same-instant resume is a resume) and same per-lease correlation, so the
-    checker and the loop agree on what "parked" means."""
+    The plain-query mirror of the store adapter's ``_pause_park_is_open`` — same ``>=``
+    (a same-instant resume is a resume) and same per-lease correlation."""
     resumes: dict[str, list[datetime]] = {}
     for lease_id, resumed_at in conn.execute(
         select(runner.pause_park_resumes.c.lease_id, runner.pause_park_resumes.c.resumed_at)
@@ -195,9 +157,7 @@ def _held_bindings(conn) -> list[tuple[str, str]]:  # type: ignore[no-untyped-de
     return held
 
 
-# --------------------------------------------------------------------------- #
-# Hub store invariants
-# --------------------------------------------------------------------------- #
+# ----------------------------- Hub store invariants ------------------------ #
 
 
 def check_hub_store(engine: Engine) -> list[Violation]:
@@ -205,8 +165,7 @@ def check_hub_store(engine: Engine) -> list[Violation]:
     violations: list[Violation] = []
     with engine.connect() as conn:
         # hub:one-transition-per-node-epoch — at most one accepted transition per
-        # (chunk, from_node, epoch): the idempotency guarantee. A duplicate is a
-        # double-apply — the fence or the idempotent replay probe failed.
+        # (chunk, from_node, epoch): the idempotency guarantee. A duplicate is a double-apply.
         key = Counter(
             (row[0], row[1], row[2])
             for row in conn.execute(
@@ -222,9 +181,8 @@ def check_hub_store(engine: Engine) -> list[Violation]:
                     )
                 )
 
-        # hub:epoch-consistent-transitions — no accepted transition carries an epoch
-        # greater than the chunk's latest lease fact: a transition's fence is
-        # always a lease the hub already knows, so a higher one means a zombie landed.
+        # hub:epoch-consistent-transitions — no accepted transition carries an epoch greater
+        # than the chunk's latest lease fact; a higher one means a zombie landed.
         latest_lease = {
             row[0]: row[1]
             for row in conn.execute(
@@ -245,14 +203,8 @@ def check_hub_store(engine: Engine) -> list[Violation]:
                     )
                 )
 
-        # hub:route-seq-unique — per-chunk route ``seq`` is unique across
-        # ``route_created`` + ``route_released`` + ``route_token_minted`` combined
-        # (issue #41, joined by ``route_token_minted`` in #84a): the three tables share
-        # one counter (``ChunkStore._next_route_seq``) so a create/release/token-mint
-        # triple is totally ordered even at a same-instant timestamp tie
-        # (``work.newest_live_route``/``newest_live_route_token``). A duplicate means
-        # two route events raced past the allocator uncaught — exactly the tie #41
-        # closed, reopened.
+        # hub:route-seq-unique — per-chunk route ``seq`` is unique across ``route_created`` +
+        # ``route_released`` + ``route_token_minted`` combined (issues #41, #84a).
         route_seqs = Counter(
             (row[0], row[1]) for row in conn.execute(select(hub.route_created.c.chunk_id, hub.route_created.c.seq))
         )
@@ -282,10 +234,7 @@ def check_hub_store(engine: Engine) -> list[Violation]:
                 )
 
         # hub:per-repo-marker-idempotent — at most one `merged/<repo>` marker artifact
-        # per (chunk, node, epoch, name): #67's generic-marker counterpart to
-        # `hub:per-repo-land-idempotent` above — a re-run skips a repo whose marker
-        # already exists (`HubNodeExecutor`/the mid-run callback), so a duplicate here
-        # means that idempotent-append guard failed to hold.
+        # per (chunk, node, epoch, name) (issue #67).
         markers = Counter(
             (row[0], row[1], row[2], row[3])
             for row in conn.execute(
@@ -303,10 +252,8 @@ def check_hub_store(engine: Engine) -> list[Violation]:
                     )
                 )
 
-        # hub:pr-opened-idempotent — at most one pr.opened fact per (chunk, repo): a
-        # racing redelivery is caught by ``uq_delivery_pr_opened_chunk_repo`` at the store
-        # layer (20260716_2206_hub_pr_opened_idempotent), so a duplicate here means that guard
-        # failed to hold.
+        # hub:pr-opened-idempotent — at most one pr.opened fact per (chunk, repo), also
+        # guarded by ``uq_delivery_pr_opened_chunk_repo``.
         pr_opens = Counter(
             (row[0], row[1])
             for row in conn.execute(select(hub.delivery_pr_opened.c.chunk_id, hub.delivery_pr_opened.c.repo))
@@ -325,11 +272,8 @@ def check_hub_store(engine: Engine) -> list[Violation]:
                     Violation("hub:no-double-delivery", f"chunk {chunk_id} has {n} delivery.landed facts")
                 )
 
-        # hub:one-live-exec-slot — at most one hub_exec_slot row is live
-        # (``released_at IS NULL``) at a time (#65): the fleet-wide serialization slot is a
-        # durable FACT, not an in-process lock, precisely so this stays assertable after any
-        # crash (pinned by
-        # tests/test_pin_foundation.py::test_two_live_hub_exec_slots_are_a_violation).
+        # hub:one-live-exec-slot — at most one hub_exec_slot row is live (``released_at IS
+        # NULL``) at a time (#65; pinned by tests/test_pin_foundation.py).
         live_slots = conn.execute(
             select(func.count()).select_from(hub.hub_exec_slot).where(hub.hub_exec_slot.c.released_at.is_(None))
         ).scalar()
@@ -337,11 +281,9 @@ def check_hub_store(engine: Engine) -> list[Violation]:
             violations.append(Violation("hub:one-live-exec-slot", f"{live_slots} hub-execution slots are live at once"))
 
     # hub:one-migration-per-node-epoch + hub:migration-pin-consistent — a cross-graph
-    # migration (#90) is all-or-nothing: recorded once per (chunk, from_node, epoch), and
-    # its re-pin lands with it (never a migration fact without the graph/model pin moving).
+    # migration (#90) is all-or-nothing: the fact and its re-pin land together.
     violations.extend(_check_migrations(engine))
-    # hub:merge-queue-single-state — a delivered chunk's newest transition is the
-    # terminal, so it never reads as both landed and mid-flight (two states at once).
+    # hub:merge-queue-single-state — a delivered chunk's newest transition is the terminal.
     # hub:derived-status-total — every chunk derives exactly one status without panic.
     violations.extend(_check_derivation_and_delivery(engine))
     # hub:live-route-has-token — every chunk with a live route has a live route token
@@ -353,28 +295,9 @@ def check_hub_store(engine: Engine) -> list[Violation]:
 def _check_migrations(engine: Engine) -> list[Violation]:
     """Assert a cross-graph migration (#90) is atomic and idempotent in the durable facts.
 
-    ``hub:one-migration-per-node-epoch`` — at most one ``chunk_migrations`` row per
-    ``(chunk, from_node, epoch)``: the natural key ``record_migration`` guards, so a
-    crash-replay never lands a second migration. ``hub:migration-pin-consistent`` — a
-    migrated chunk's ``graph_id`` (and its ``model`` when the newest migration re-pinned
-    one) equals that newest migration's target: the re-pin is written in the **same
-    transaction** as the fact, so a fact without its pin — or a pin without its fact — is
-    the half-write a ``kill -9`` in the ``migrate.`` window must never leave.
-    ``hub:migration-route-released`` — a **runner-landing** migration also releases the
-    route in that same transaction (the migration ends the attempt and re-queues the chunk
-    ``ready``), so it always carries a ``route_released`` at or after its ``recorded_at``. A
-    runner-landing migration fact whose route release never landed is the other face of the
-    torn ``migrate.`` write: the chunk would re-pin yet keep its stale claim, unclaimable
-    under the new graph. A migration landing on a **hub-executed** node (issue #111) is the
-    deliberate exception: it **retains** the route so the hub keeps the chunk and drives the
-    landed hub node via the holding runner's ADVANCE poll (deriving ``delivering``, exactly
-    as a transition into a hub node does), so no ``route_released`` is expected and the
-    assertion applies to runner landings alone. (Artifact co-persistence — the third
-    limb of the atomic write — is not independently countable from the store without the
-    graph definition, so it is asserted at the component tier over a real
-    ``record_migration`` in ``test_migration_store``; here we assert the two facets a torn
-    write leaves observable in the durable facts alone.)
-    """
+    ``hub:one-migration-per-node-epoch`` — one row per ``(chunk, from_node, epoch)``;
+    ``hub:migration-pin-consistent`` — the chunk carries the newest migration's target pin;
+    ``hub:migration-route-released`` — a runner landing released the route (a hub landing, issue #111, is exempt)."""
     violations: list[Violation] = []
     with engine.connect() as conn:
         key = Counter(
@@ -402,16 +325,14 @@ def _check_migrations(engine: Engine) -> list[Violation]:
             if cur is None or (m.recorded_at, m.epoch) >= (cur.recorded_at, cur.epoch):  # type: ignore[attr-defined]
                 newest[m.chunk_id] = m
         chunks = {c.chunk_id: c for c in conn.execute(select(hub.chunks))}
-        # A migration's landed node executor (issue #111): a hub landing retains the route
-        # by design, so it is exempt from the route-released assertion below. Node ids are
-        # globally-unique, so one node_id -> executor map resolves any landing node.
+        # A migration's landed node executor (issue #111). Node ids are globally-unique, so
+        # one node_id -> executor map resolves any landing node.
         landed_executor = {
             row.node_id: row.executor
             for row in conn.execute(select(hub.graph_nodes.c.node_id, hub.graph_nodes.c.executor))
         }
-        # The latest route release per chunk — a runner-landing migration releases the route
-        # in its own transaction, so its ``recorded_at`` is never above the chunk's newest
-        # release (a hub landing retains it — checked below).
+        # The latest route release per chunk — a runner-landing migration's ``recorded_at``
+        # is never above the chunk's newest release.
         latest_release: dict[str, datetime] = {}
         for r in conn.execute(select(hub.route_released.c.chunk_id, hub.route_released.c.released_at)):
             cur = latest_release.get(r.chunk_id)
@@ -428,13 +349,8 @@ def _check_migrations(engine: Engine) -> list[Violation]:
                         f"chunk {chunk_id} pinned {chunk.graph_id} but its newest migration targets {m.to_graph_id}",  # type: ignore[attr-defined]
                     )
                 )
-            # **Membership**, not equality against `[model_after]` (issue #144): a migration
-            # re-queues the chunk to `ready`, reopening the pre-claim edit window, so an
-            # operator may legitimately extend or reorder the prioritized `default_model` list
-            # afterwards. The torn write this is for — the migration fact with the pin never
-            # applied — leaves `default_model` empty or pre-migration, failing membership just
-            # as it fails equality (pinned by tests/test_invariant_checker.py::
-            # test_a_migration_whose_repin_survives_a_later_default_model_edit_is_not_a_violation).
+            # **Membership**, not equality against `[model_after]` (issue #144) — the list may
+            # legitimately grow afterwards (pinned by tests/test_invariant_checker.py).
             elif m.model_after is not None and m.model_after not in _deserialize_default_model(chunk.default_model):  # type: ignore[attr-defined]
                 violations.append(
                     Violation(
@@ -474,21 +390,8 @@ def _check_derivation_and_delivery(engine: Engine) -> list[Violation]:
                 Violation("hub:derived-status-total", f"chunk {chunk.chunk_id} derivation raised {exc!r}")
             )
             continue
-        # Both terminal delivery facts require the terminal transition: merge-to-main's
-        # ``delivery.landed`` and open-pr's ``pr.closed``. An *open* PR
-        # (``pr_opened`` without ``pr_closed``) is deliberately parked — no terminal
-        # transition, environments held — so it is never flagged here.
-        #
-        # This is the facts-level embodiment of #63's "DONE derives from *reaching* the
-        # terminal transition, never from a landed fact alone": a whole-chunk ``delivery.landed``
-        # fact that is not paired with the terminal transition would be a chunk merged yet
-        # not-terminal — read as both landed and mid-flight (two states), the "un-merged"
-        # corruption. The complementary case #63 makes legal — a chunk merged into a
-        # post-merge node (per-repo ``delivery.repo_landed`` facts, a NON-terminal newest
-        # transition, and no whole-chunk ``delivery.landed``) — is correctly not flagged here:
-        # it carries no whole-chunk terminal fact, so it derives its live status, exactly as
-        # #63 requires. "No double delivery" is held by ``hub:no-double-delivery`` +
-        # ``hub:per-repo-land-idempotent`` above (append-only lands, never removed → never un-merged).
+        # Both terminal delivery facts require the terminal transition (issue #63):
+        # ``delivery.landed`` and ``pr.closed``. An *open* PR is parked, so it is not flagged.
         if facts.delivery_landed or facts.pr_closed:
             newest = max(facts.transitions, key=lambda t: (t.recorded_at, t.epoch), default=None)
             if newest is None or newest.to_node_id != RESERVED_TERMINAL:
@@ -506,15 +409,9 @@ def _check_derivation_and_delivery(engine: Engine) -> list[Violation]:
 def _check_route_tokens(engine: Engine) -> list[Violation]:
     """Every chunk with a live route has a live route token (issue #84b).
 
-    The derivation itself (:func:`~blizzard.hub.domain.work.newest_live_route_token`)
-    can never be *ambiguous* — it is a ``max()`` over candidates, so it always
-    resolves to at most one fact — what it *can* legitimately fail to find is a live
-    route with no qualifying token fact at all: the mint fact
-    (``ClaimService._claim_locked``) failing to land in the same store write as its
-    route (``record_route``), or a kill-9 landing between the two inserts of a
-    non-atomic adapter. Either would leave the chunk's every chunk-scoped write
-    permanently rejected under ``route_token_mode=enforce`` with no re-key possible
-    (re-key itself requires a live route, but derives no token to rotate)."""
+    A live route with no qualifying token fact means the mint never landed in the same
+    store write as its route. That leaves every chunk-scoped write for the chunk
+    permanently rejected under ``route_token_mode=enforce``, with no re-key possible."""
     violations: list[Violation] = []
     store = ChunkStore(engine, SystemClock())
     for chunk in store.list_all():
@@ -532,16 +429,14 @@ def _check_route_tokens(engine: Engine) -> list[Violation]:
     return violations
 
 
-# --------------------------------------------------------------------------- #
-# Combined entry — the sweep and the dev CLI both call this
-# --------------------------------------------------------------------------- #
+# -------------------------------- Combined entry --------------------------- #
 
 
 def check_invariants(*, runner_db_url: str | None = None, hub_db_url: str | None = None) -> list[Violation]:
     """Check both stores (whichever URLs are given) and return every violation found.
 
-    Each store is opened read-only over its own engine; an empty list is the pass
-    signal the sweep asserts after every armed crash.
+    Each store is opened read-only over its own engine; an empty list means every
+    checked invariant holds.
     """
     violations: list[Violation] = []
     if runner_db_url is not None:

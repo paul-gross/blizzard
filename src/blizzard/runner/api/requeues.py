@@ -1,13 +1,8 @@
 """``blizzard runner requeue`` — ``POST /chunks/{id}/requeues`` (issue #53).
 
-The CLI is a pure client of this one route: it appends the fact that clears a chunk's
-local needs_human hold (escalated, or held by an ended takeover — see
-``domain/requeue.py``) and returns immediately, before the next FILL tick spawns the
-fresh attempt. Read-only over its wiring (``bzh:controller-read-only``): the edge holds
-only the composition-root-wired :class:`~blizzard.runner.domain.requeue.RequeueService`.
-On the store-free app the service is unwired and the probe answers 503 rather than
-pretending.
-"""
+Appends the fact that clears a chunk's local needs_human hold and returns immediately.
+Read-only over its wiring (``bzh:controller-read-only``); with the service unwired it
+answers 503 rather than pretending."""
 
 from __future__ import annotations
 

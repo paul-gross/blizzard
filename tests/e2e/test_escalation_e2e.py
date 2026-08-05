@@ -1,20 +1,8 @@
 """Retries exhausted -> needs_human -> resumable takeover — scenario 3 of the standing
 e2e smoke — MVP criterion 6.
 
-One chunk is driven through the real forge + hub + runner + ``mock-claude-code`` façade
-where the build worker **exits without a parseable verdict twice**. With
-``retries.max = 1`` that is two failed execution attempts, so the node's budget is
-exhausted and the runner **escalates**:
-
-* the chunk derives **needs_human**;
-* the open escalation surfaces the runner-composed **takeover command** — the
-  pasteable ``cd <workdir> && <harness> --resume <session>``;
-* and that command, **executed verbatim in the env**, actually resumes the parked
-  mock session — asserted by the session's own persisted state advancing (a new turn
-  recording the human's takeover message), not merely by the string existing.
-
-Reuses the acceptance loop's live-stack scaffolding. Skipped unless ``BLIZZARD_E2E=1``
-with the sibling ``blizzard-mock`` worktree provisioned — exactly like the siblings.
+Skipped unless ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock`` worktree
+provisioned. Reuses the acceptance loop's live-stack scaffolding.
 """
 
 from __future__ import annotations
@@ -57,10 +45,8 @@ _BUILD_SCRIPT = "pass\n"
 # retry budget exhausts.
 _VERDICTLESS_JUDGEMENT = "pass\n"
 
-# The takeover message a human types into the resumed session. It arrives as code (a
-# comment is valid, no-op Python) and is recorded verbatim in the session's `resumes`
-# before it runs — so its presence there proves the verbatim command resumed THIS
-# session. Unique per run so a stale session file can never satisfy the assertion.
+# The takeover message; recorded verbatim in the session's `resumes` as proof this
+# session was resumed. Unique per run so a stale session file can't satisfy the assertion.
 _TAKEOVER_MARKER = f"human-takeover-{uuid.uuid4().hex}"
 _TAKEOVER_INPUT = f"# {_TAKEOVER_MARKER}\n"
 
@@ -168,10 +154,8 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(tmp_path: Path
         takeover = escalation["takeover_command"]
         assert takeover, "the escalation must surface a pasteable takeover command"
 
-        # The wrapped entry point (issue #251), asserted as shape only; the RAW command
-        # below stays the one actually executed. `--dir` must be the *resolved* runtime
-        # root, not the raw `tmp_path / "runner"` expression, which need not coincide
-        # with it off a plain Linux tmpdir.
+        # Wrapped entry point asserted as shape only (issue #251); `--dir` must be the
+        # resolved runtime root, which need not equal the raw `tmp_path / "runner"` expression.
         runner_dir = (tmp_path / "runner").resolve()
         wrapped_takeover = escalation["wrapped_takeover_command"]
         assert wrapped_takeover == f"blizzard runner takeover {chunk_id} --dir {shlex.quote(str(runner_dir))}"
@@ -185,9 +169,8 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(tmp_path: Path
         assert state_path.is_file(), f"the parked session state should exist on disk: {state_path}"
         turns_before = json.loads(state_path.read_text())["turns"]
 
-        # Execute the takeover command VERBATIM (a human pasting it), feeding the
-        # takeover message on stdin as the interactive resume would. The env carries the
-        # mock fence, exactly as a provisioned feature env does.
+        # Execute the takeover command VERBATIM, feeding the takeover message on stdin
+        # as the interactive resume would.
         result = subprocess.run(
             takeover,
             shell=True,

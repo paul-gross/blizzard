@@ -1,24 +1,9 @@
 """Chunk stop — the operator's terminal abandonment of a chunk (issue #118).
 
-``blizzard hub stop <chunk_id>`` appends the ``chunk_stopped`` fact the schema has
-reserved since the walking skeleton (``derive_chunk_status`` honors it first, above
-every other state — ``bzh:facts-not-status``). The fact is written and, if the chunk
-holds a live route, it is released too — so the holding runner discovers the release on
-its own next tick (``blizzard.runner.loop.steps``) and frees the environments. A chunk
-with no live route (``not_ready``, ``ready``, or already-detached) is stopped just the
-same: the route release is conditional, not required.
-
-Both facts (and a held fleet-wide hub-exec slot, if any) land in **one** store
-transaction (:meth:`~blizzard.hub.store.internal.chunk_store.ChunkStore.record_stop`)
-— a ``kill -9`` cannot leave the chunk stopped with its route still live, the
-partial-stop failure mode the verb exists to prevent (issue #118, pre-push must-fix 2).
-
-Stopping is not retroactive un-delivery: a chunk already ``done`` or ``stopped`` is
-refused. Reviving a stopped chunk is out of scope (issue #118) — there is no ``un-stop``.
-
-Holds the *write* chunk repository (``bzh:controller-read-only``); the route resolves
-the chunk and delegates here.
-"""
+Appends the ``chunk_stopped`` fact, which ``derive_chunk_status`` honors above every other
+state (``bzh:facts-not-status``), and conditionally releases a live route — both in one
+store transaction, so a ``kill -9`` cannot leave a chunk stopped with its route still
+live. Terminal and one-way: an already done or stopped chunk is refused."""
 
 from __future__ import annotations
 
@@ -48,10 +33,8 @@ class StopService:
         """Append ``chunk.stopped`` and release the chunk's live route (and any held
         hub-exec slot), atomically.
 
-        Raises :class:`ChunkNotStoppable` for a chunk already done/stopped — no fact is
-        written and no route touched. Otherwise the chunk derives ``stopped`` from here
-        on (``derive_chunk_status`` checks it first) and never re-derives ``ready``.
-        Returns the freshly-written ``chunk_stopped.id`` (issue #213's activity-feed key)."""
+        Raises :class:`ChunkNotStoppable` for a chunk already done/stopped — no fact
+        written, no route touched. Returns the ``chunk_stopped.id`` (issue #213)."""
         self._require_stoppable(chunk.chunk_id)
         return self._chunks.record_stop(chunk.chunk_id, by=by, at=self._clock.now())
 

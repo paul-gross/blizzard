@@ -1,32 +1,9 @@
-"""The runner-facing fleet router — every runner->hub call under ``/api/fleet/*``
-(issue #87).
+"""The runner-facing fleet router — every runner->hub call under ``/api/fleet/*`` (issue #87).
 
-Enforcement is structural, not per-route: ``dependencies=[Depends(require_runner_principal)]``
-on this router (attached once in :func:`~blizzard.hub.app.create_app`, not repeated per
-route) means a fleet verb is authenticated *because of where it is mounted* — the same
-rollout posture :mod:`blizzard.hub.api.auth` already defines. A route whose body/path
-declares its own ``runner_id`` additionally calls
-:func:`~blizzard.hub.api.auth.assert_owns` against the resolved
-principal, so a fleet write for another runner's chunk/registration is rejected (403
-under ``enforce``, warn-logged under ``warn``) rather than merely authenticated.
-
-Two shapes of route live here:
-
-* **Moved wholesale** — a verb only a runner ever called (claim, completion, decision,
-  lease, escalation, envelope read, event push, registration, heartbeat, the runner's own
-  pull read, the hub-command-node advance) is defined here outright.
-  ``hub-advance`` (#65/#66) postdates issue #87's own route
-  inventory — driven by the runner's ADVANCE poll (``ctx.hub.hub_advance``), never the
-  board or CLI, so it belongs here on the same "runner-only write" grounds as the rest of
-  this list.
-* **Fleet-side counterparts** — a read both the board and the runner need
-  (``GET /chunks/{id}``, ``GET /chunks/{id}/work-items``, ``GET /queue/peek``,
-  ``GET /questions/{id}``) keeps its anonymous operator route right where it was
-  (:mod:`blizzard.hub.api.chunks`, :mod:`blizzard.hub.api.queue`,
-  :mod:`blizzard.hub.api.questions`) and gains a second, fleet-mounted route here that
-  delegates to the very same rendering — never opening the operator read to a runner
-  token, and never duplicating the logic.
-"""
+Enforcement is structural, not per-route: ``dependencies=[Depends(require_runner_principal)]`` on this
+router means a fleet verb is authenticated *because of where it is mounted*. A route whose body or path
+declares its own ``runner_id`` additionally calls :func:`~blizzard.hub.api.auth.assert_owns` against the
+resolved principal, so a fleet write aimed at another runner is rejected, not merely authenticated."""
 
 from __future__ import annotations
 
@@ -91,9 +68,7 @@ from blizzard.wire.runner import RunnerRegistrationRequest, RunnerRegistrationRe
 
 router = APIRouter(prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_runner_principal)])
 
-#: ``ingest_runner_facts``' per-fact cause — the only chunk-scoped kinds the runner's
-#: outbound buffer carries (see its docstring); every other kind either has its own
-#: branch above the shared publish call or never reaches it.
+#: The ``chunk-changed`` cause for each chunk-scoped fact kind :func:`ingest_runner_facts` lands.
 _INGEST_CAUSE_BY_FACT_KIND: dict[str, ChunkChangeCause] = {
     QUESTION_ASKED: "question-asked",
     ANSWER_DELIVERED: "question-answered",
@@ -119,16 +94,10 @@ def _follow_latest_default(request: Request) -> bool:
 
 
 def _resolve_intended_migration_target(services: HubServices, chunk: Chunk) -> Graph | None:
-    """The chunk's own standing migration intent's target, resolved by id (issue #124) —
-    or ``None`` when no intent is set, the target was never minted, or it has since been
-    retired.
-
-    Resolved here, at the edge, so :class:`~blizzard.hub.domain.apply.ApplyService` stays
-    a pure taker-of-objects holding no graph repo of its own (``bzh:domain-takes-objects``).
-    The intent stores a resolved graph **id** (request-time resolution,
-    ``EditService``/``chunks.py``), so this resolves by id and folds a retired target into
-    the same ``None`` bucket — the consult (``apply.py``) then treats it as a deferred
-    no-op, leaving the intent set for the operator to see on ``GET`` (pinned by
+    """The chunk's standing migration intent's target, resolved by id (issue #124) — ``None`` when no
+    intent is set, the target was never minted, or it has since been retired. Resolved at the edge so
+    the apply service stays a pure taker-of-objects (``bzh:domain-takes-objects``); a retired target
+    folds into ``None``, leaving the intent set (pinned by
     ``tests/test_intended_migration_apply.py::test_forced_target_retired_at_consult_is_skipped``)."""
     intent = chunk.intended_migration
     if intent is None:
@@ -142,30 +111,11 @@ def _resolve_intended_migration_target(services: HubServices, chunk: Chunk) -> G
 def _resolve_follow_latest_target(
     services: HubServices, chunk: Chunk, graph: Graph, *, hub_default: bool
 ) -> Graph | None:
-    """The newer same-name mint a follow-latest chunk drifts to, or ``None`` (issue #164).
-
-    ``follow_latest`` is the standing policy that says "chunks on this graph always drift
-    to the newest enabled mint of the same name" — the counterweight to migration being
-    otherwise explicit and per-chunk, which strands the fleet on old mints until each
-    chunk is moved by hand. Resolved here, at the edge, so
-    :class:`~blizzard.hub.domain.apply.ApplyService` stays a taker-of-objects
-    (``bzh:domain-takes-objects``) like its two sibling resolvers.
-
-    ``None`` — the policy is a no-op, and the transition applies unchanged — in every one
-    of these cases:
-
-    * the chunk carries an explicit ``intended_migration``. The explicit intent wins and
-      the policy is **not consulted at all**, including when that intent is an ``auto``
-      that falls through this transition for want of a name match: an operator who aimed a
-      chunk somewhere has said where it goes (pinned by
-      ``tests/test_follow_latest_policy.py::test_an_explicit_intent_takes_precedence_over_the_policy``
-      and its ``..._auto_intent_that_falls_through_still_blocks_the_policy`` sibling).
-    * the effective policy resolves ``false`` — the graph's own tri-state, else the hub
-      default (:func:`~blizzard.hub.domain.graph.resolve_follow_latest`).
-    * the name resolves to nothing, or to a mint that is not strictly newer than the
-      chunk's own — :func:`~blizzard.hub.domain.graph.is_newer_mint`, which owns that
-      comparison (including why "not newer" is not merely "not the same one").
-    """
+    """The newer same-name mint a follow-latest chunk drifts to, or ``None`` (issue #164) — the policy
+    is a no-op when the chunk carries an explicit ``intended_migration`` (which wins outright), when the
+    effective policy resolves ``false`` (the graph's own tri-state, else ``hub_default``), or when the
+    name resolves to nothing or to a mint not strictly newer than the chunk's own. Resolved at the edge
+    so the apply service stays a taker-of-objects (``bzh:domain-takes-objects``)."""
     if chunk.intended_migration is not None:
         return None
     if not resolve_follow_latest(services.graphs.follow_latest(graph.graph_id), hub_default=hub_default):
@@ -177,19 +127,11 @@ def _resolve_follow_latest_target(
 
 
 def _resolve_cross_graph_target(services: HubServices, graph: Graph, submission: CompletionSubmission) -> Graph | None:
-    """The target graph a cross-graph migration edge (issue #90) names, resolved by name
-    via the read graph repository — or ``None`` when the chosen edge is not cross-graph
-    or its ``graph:<name>`` names no enabled graph.
-
-    Resolved at the edge so :class:`~blizzard.hub.domain.apply.ApplyService` stays a pure
-    taker-of-objects holding no graph repo (``bzh:domain-takes-objects``). Deliberately
-    **total**: a missing node/edge/choice — and, via ``get_enabled_by_name``, a **retired**
-    target (issue #101) — returns ``None`` rather than raising, so ``apply()``'s
-    ``_failure`` returns stay the one authoritative failure path instead of a second
-    validation site 500ing the controller. The cost is that a retired target is
-    indistinguishable from an unminted one in the chunk's apply-failure detail. Pinned by
-    ``tests/test_migration_apply.py::test_an_unresolvable_cross_graph_target_escalates_to_needs_human``
-    and ``::test_a_retired_cross_graph_target_escalates_to_needs_human_exactly_like_an_absent_one``."""
+    """The target graph a cross-graph migration edge (issue #90) names, resolved by name — ``None`` when
+    the edge is not cross-graph or its ``graph:<name>`` names no enabled graph. Deliberately **total**:
+    a missing node/edge/choice, or a retired target (issue #101), returns ``None`` rather than raising,
+    so the apply failure path stays the one authoritative one. Pinned by
+    ``tests/test_migration_apply.py::test_an_unresolvable_cross_graph_target_escalates_to_needs_human``."""
     from_node = graph.node_by_id(submission.from_node_id)
     if from_node is None:
         return None
@@ -199,9 +141,7 @@ def _resolve_cross_graph_target(services: HubServices, graph: Graph, submission:
     return services.graphs.get_enabled_by_name(edge.target_graph)
 
 
-# --------------------------------------------------------------------------- #
-# Fleet-side counterparts of a board-facing read — delegate, never duplicate.
-# --------------------------------------------------------------------------- #
+# Fleet-side counterparts — delegate to the shared rendering, never duplicate it.
 
 
 @router.get("/queue/peek", response_model=QueuePeekResponse)
@@ -218,16 +158,12 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
 
 @router.get("/chunks/{chunk_id}/work-items", response_model=WorkItemsView)
 def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkItemsView:
-    """The build worker's work-items proxy target (via the runner-local pass-through,
-    ``blizzard.runner.api.work_items``), forwarded here with the runner's own bearer
-    token — the same pass-through the board reads anonymously."""
+    """The chunk's work items, read with a runner's own bearer token — the same rendering as the
+    anonymous operator route."""
     return chunks_api.get_work_items(chunk_id, services)
 
 
-# The fleet-side half of the issue-#55 alias (see the operator-router registration in
-# :mod:`blizzard.hub.api.chunks` for the rationale). Runner-authenticated rather than
-# anonymous, so its external caller is narrower — tooling holding a runner's bearer
-# token — but the same reasoning applies: the path is reachable by clients we do not ship.
+# The fleet-side half of the issue-#55 alias; rationale: :mod:`blizzard.hub.api.chunks`.
 router.add_api_route(
     "/chunks/{chunk_id}/pm-items",
     get_work_items,
@@ -245,25 +181,21 @@ router.add_api_route(
 
 @router.post("/chunks/{chunk_id}/pause", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
 def pause_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
-    """The runner machine panel's chunk-detail Pause (issue #185), forwarded here with the
-    runner's own bearer token from the runner-local pass-through
-    (:mod:`blizzard.runner.api.chunk_detail`) — the same transition the board's own Pause
-    button drives, `by` defaulting to ``operator`` exactly as the board's mutation does."""
+    """Pause the chunk with a runner's own bearer token (issue #185) — the same transition as the
+    operator route, ``by`` defaulting to ``operator``."""
     return chunks_api.pause_chunk(chunk_id, ChunkPauseRequest(), services)
 
 
 @router.post("/chunks/{chunk_id}/resume", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
 def resume_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
-    """The runner machine panel's chunk-detail Resume (issue #185) — see :func:`pause_chunk`."""
+    """Resume the chunk with a runner's own bearer token (issue #185) — see :func:`pause_chunk`."""
     return chunks_api.resume_chunk(chunk_id, ChunkPauseRequest(), services)
 
 
 @router.get("/summary", response_model=FleetSummaryView)
 def fleet_summary(services: Annotated[HubServices, Depends(get_services)]) -> FleetSummaryView:
-    """The runner machine panel's fleet-pulse counts (issue #76), forwarded here with the
-    runner's own bearer token from the runner-local pass-through
-    (:mod:`blizzard.runner.api.fleet_summary`). Fleet-router-only: unlike work-items, the
-    board has no anonymous counterpart — its card list already carries every status."""
+    """The fleet-pulse counts (issue #76), read with a runner's own bearer token. Fleet-router-only:
+    this read has no anonymous counterpart."""
     return chunks_api.fleet_summary(services)
 
 
@@ -276,9 +208,7 @@ def get_question(question_id: str, services: Annotated[HubServices, Depends(get_
     return questions_api.question_view(row)
 
 
-# --------------------------------------------------------------------------- #
 # Moved wholesale — no anonymous caller ever reached these.
-# --------------------------------------------------------------------------- #
 
 
 @router.get("/chunks/{chunk_id}/envelope", response_model=NodeEnvelope)
@@ -310,23 +240,11 @@ def hub_advance(
     chunk_id: str,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> HubAdvanceResponse:
-    """Drive a chunk parked at a generic hub command node one step (#65).
-
-    Runs :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` once, respecting the
-    fleet-wide serialization slot: ``ran=False`` means a different chunk holds the
-    slot right now, OR (#66) the node reported ``pending`` on a prior call and
-    ``poll_interval`` has not yet elapsed — either way not an error, the runner's
-    ADVANCE poll (``_advance_held_chunk``) simply calls this again on a later tick. A
-    no-op (``ran=False``, ``detail`` names it) when the chunk is not currently parked
-    at a generic hub command node — every hub node is this shape since #67; no other
-    delivery route remains.
-
-    No ``runner_id`` is declared on this request (it carries only ``chunk_id``), so
-    the router-level ``require_runner_principal`` dependency is the whole check here —
-    no :func:`~blizzard.hub.api.auth.assert_owns` call, the same shape as the other
-    chunk-scoped fleet reads (``get_chunk``/``get_envelope``) that carry no runner_id
-    to confine against.
-    """
+    """Drive a chunk parked at a generic hub command node one step (#65), running
+    :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` once under the fleet-wide serialization
+    slot. ``ran=False`` is never an error: a different chunk holds the slot, or (#66) the node reported
+    ``pending`` and ``poll_interval`` has not elapsed, or the chunk is not parked at a hub command node
+    at all — ``detail`` names which. The request declares no ``runner_id`` to confine against."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -346,9 +264,8 @@ def hub_advance(
     result = services.hub_node.run(chunk, graph, node, epoch=epoch)
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     derived = derive_chunk_status(facts)
-    # `key` names the transition this call itself just recorded — absent when this poll
-    # deferred (busy slot, not yet due) or wrote a poll-attempt/bounce fact instead of a
-    # transition (issue #213): there is no fresh `transitions` row to key on either way.
+    # `key` names the transition this call recorded — absent when the poll deferred or wrote a
+    # poll-attempt fact instead, since there is no fresh `transitions` row to key on (issue #213).
     advance_key = f"transitions:{result.transition_id}" if result is not None and result.transition_id else None
     chunk_events.publish_chunk_changed(
         services, chunk_id, cause="hub-advanced", prev_status=prev_status, key=advance_key
@@ -356,10 +273,8 @@ def hub_advance(
     if result is None:
         pending = hub_node_pending(facts)
         next_poll_at = pending.polled_at + poll_interval_for(node) if pending is not None else None
-        # `next_poll_at` in the future distinguishes "not yet due to poll" (#66, gated
-        # before the slot was even attempted) from a genuinely busy slot — a pending
-        # node whose interval already elapsed but lost the slot race falls through to
-        # the busy message, same as a fresh hub node would.
+        # A future `next_poll_at` distinguishes "not yet due to poll" (#66) from a genuinely busy slot;
+        # a pending node whose interval elapsed but lost the slot race falls through to the busy branch.
         if next_poll_at is not None and next_poll_at > services.clock.now():
             detail = f"pending — next poll at {iso_utc(next_poll_at)}"
         else:
@@ -437,12 +352,10 @@ def rekey_route_token(
     http_request: Request,
     principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
 ) -> RouteTokenRekeyResponse:
-    """Rotate the chunk's live route capability token (issue #84b) — the lost-plaintext
-    recovery for a runner that crashed between the mint and reading the claim response
-    back (``_adopt_interrupted_claim``, ``runner/loop/steps.py``). Confined to the
-    live route's own runner via :func:`~blizzard.hub.api.auth.assert_owns`, the same
-    ownership check every other fleet write makes — this route carries no chunk-scoped
-    ``route_token`` of its own to present (that is exactly what it is minting)."""
+    """Rotate the chunk's live route capability token (issue #84b) — the lost-plaintext recovery for a
+    claim whose response was never read back. Confined to the live route's own runner via
+    :func:`~blizzard.hub.api.auth.assert_owns`; this route presents no chunk-scoped ``route_token`` of
+    its own, which is exactly what it is minting."""
     route = services.chunks.route_of(chunk_id)
     if route is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"chunk {chunk_id} has no live route")
@@ -491,12 +404,8 @@ def submit_completion(
     response = result.response
     fresh_migration = response.outcome is ApplyOutcome.MIGRATED and not already_migrated
     cause = "migrated" if fresh_migration else "node-completed"
-    # `key` names the fact this call itself just wrote, matching each cause's own mapped
-    # fact table (issue #213) — `result.migration_id` only when the cause is genuinely
-    # `migrated` (a hub-landing migration reports `HUB_NODE_TAKEN`, not `MIGRATED`, so it
-    # is labeled `node-completed` here and must not carry a `chunk_migrations` key), and
-    # `result.transition_id` only when a fresh `transitions` row backs `node-completed`
-    # (absent on a replay, a failure, or a migration's escalation branch).
+    # `key` names the fact this call wrote, per each cause's own mapped fact table (issue #213):
+    # `migration_id` only for a genuine `migrated`, `transition_id` only when a fresh row backs it.
     if fresh_migration and result.migration_id is not None:
         key = f"chunk_migrations:{result.migration_id}"
     elif not fresh_migration and result.transition_id is not None:
@@ -584,23 +493,14 @@ def ingest_runner_facts(
     http_request: Request,
     principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
 ) -> RunnerFactAck:
-    """Land runner-minted facts, idempotent by per-runner seq high-water.
-
-    The store-and-forward ingest: ``lease.minted`` (the fence input), ``escalation.recorded``,
-    ``question.asked``, and ``answer.delivered`` ride the runner's outbound buffer here. A
-    pushed seq at or below the runner's high-water mark is already-applied and re-acked; a
-    fresh one is applied and advances the mark. Each freshly-applied fact re-broadcasts on
-    the SSE stream so the board refreshes — ``chunk-changed`` for every touched chunk, and
-    ``question-asked`` for a forwarded ask. ``chunk-changed`` publishes unconditionally
-    here, on the fact rather than on a status *change*, which is what carries the live
-    refresh for facts that move no status: ``answer.delivered`` (issue #165) stales the
-    chunk read through it, so the board's delivery trail updates with no event type of
-    its own.
-    """
+    """Land runner-minted facts, idempotent by per-runner seq high-water: a pushed seq at or below the
+    high-water mark is already-applied and re-acked, a fresh one is applied and advances the mark. Each
+    freshly-applied fact re-broadcasts on the SSE stream. ``chunk-changed`` publishes unconditionally,
+    on the fact rather than on a status *change*, so a fact that moves no status (``answer.delivered``,
+    issue #165) still stales the chunk read."""
     assert_owns(principal, batch.runner_id, mode=_mode(http_request))
-    # One pre-mutation snapshot per distinct chunk, taken before the loop and reused —
-    # this is the hot path (issue #212's cost note): without it, a batch touching the
-    # same chunk repeatedly would double the loop's own read count.
+    # One pre-mutation snapshot per distinct chunk, taken before the loop and reused: this is the hot
+    # path (issue #212), and a batch touching one chunk repeatedly would otherwise double its reads.
     prev_statuses: dict[str, str | None] = {}
     for fact in batch.facts:
         candidate = fact.payload.get("chunk_id")
@@ -613,15 +513,11 @@ def ingest_runner_facts(
         for fact in batch.facts:
             if fact.seq not in applied:
                 continue
-            # Runner-scoped facts (issue #43) carry no chunk_id: they are about the runner,
-            # so they refresh the fleet column, not a card. Handled before the chunk branch
-            # below, which would otherwise skip them and land them invisibly — applied to
-            # the store but never pushed, so the board would keep showing a runner as
-            # claiming until something unrelated forced a refetch.
+            # Runner-scoped facts (issue #43) carry no chunk_id, so they are handled before the chunk
+            # branch below, which would otherwise skip them: applied to the store but never pushed.
             if fact.kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
-                # The frame carries the fact's own `by`/`reason` (issue #151) so the Event
-                # log can say *why* the runner braked itself, matching what `facts.py`
-                # lands in the registry — same `by` default when the fact omits it.
+                # The frame carries the fact's own `by`/`reason` (issue #151), with the same `by`
+                # default applied when the fact omits one.
                 by = fact.payload.get("by")
                 reason = fact.payload.get("reason")
                 local_pause_id = result.row_id_by_seq.get(fact.seq)
@@ -633,19 +529,13 @@ def ingest_runner_facts(
                     key=f"runner_local_pause_facts:{local_pause_id}" if local_pause_id is not None else None,
                 )
                 continue
-            # A sampled external-subscription-usage snapshot (issue #218) is runner-scoped
-            # (no chunk_id), handled here for the same reason as the local-pause pair
-            # above: falling through to the chunk_id branch below would silently swallow
-            # it (applied to the store, never pushed). No `by`/`reason`/`key` — there is
-            # no fact-table row identity worth naming, only an advisory display field.
+            # A sampled external-subscription-usage snapshot (issue #218) is runner-scoped, handled
+            # here for the same reason as the pair above. No `key`: no fact-table row identity to name.
             if fact.kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED:
                 services.events.publish_runner_changed(batch.runner_id, kind="external-usage")
                 continue
-            # An operational event (issue #125) may be runner-scoped (no chunk_id), so it is
-            # broadcast here before the chunk branch below: `event-logged` refreshes the
-            # board's Events tab, and a chunk-named event also refreshes that chunk's card.
-            # It does not change the chunk's derived status, so it does not fall through to
-            # publish_chunk_changed.
+            # An operational event (issue #125) may be runner-scoped, so it is broadcast before the
+            # chunk branch below; it moves no derived status, so it does not fall through.
             if fact.kind == EVENT_RECORDED:
                 ev_chunk = fact.payload.get("chunk_id")
                 event_id = result.row_id_by_seq.get(fact.seq)
@@ -676,13 +566,8 @@ def ingest_runner_facts(
                 if escalation_id is not None:
                     key = f"escalations:{escalation_id}"
             elif fact.kind == LEASE_MINTED:
-                # This ingest site's own write is a `lease_facts` row (an epoch-fencing
-                # fact, not a fresh route) — but its `claimed` cause is the mapped
-                # ``route_created`` (issue #213's cause -> fact-table mapping, matching
-                # `claim_route`'s own key exactly), so a lost-ack replay of this same
-                # lease-mint dedupes against that route's backfilled/live row rather than
-                # minting a key no backfilled row ever carries. Reads the chunk's
-                # currently-live route — the one this lease belongs to.
+                # This site writes a `lease_facts` row, but its `claimed` cause maps to
+                # ``route_created`` (issue #213), so a lost-ack replay dedupes against the live route.
                 route = services.chunks.route_of(chunk_id)
                 if route is not None and route.route_id is not None:
                     key = f"route_created:{route.route_id}"
@@ -705,10 +590,8 @@ def register_runner(
 ) -> RunnerRegistrationResponse:
     """Register a runner — runner id + workspace binding; idempotent upsert.
 
-    Runner-auth checked (issue #86a) at the router level (``require_runner_principal``).
-    Issue #95's optional ``url``/``redirect_uris`` extension rides the same
-    authenticated write, rejected exactly like every other fleet write once #86 is
-    enforced."""
+    Runner-auth is checked at the router level (issue #86a); issue #95's optional
+    ``url``/``redirect_uris`` extension rides the same authenticated write."""
     assert_owns(principal, request.runner_id, mode=_mode(http_request))
     first = services.fleet.register(
         request.runner_id,

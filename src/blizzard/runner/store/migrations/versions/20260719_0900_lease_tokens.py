@@ -1,16 +1,5 @@
-"""lease capability token stash — lease_tokens (runner store tree, issue #113 Phase 1)
-
-The runner's local stash of a lease's minted capability token hash: one row per
-lease (``lease_id`` PK, ``token_hash``, ``minted_at``), written once at spawn
-alongside the lease mint itself. The plaintext rides the spawn env
-(``BLIZZARD_LEASE_TOKEN``) and is never persisted — only its sha256 hash lands
-here, mirroring how the hub keeps only ``route_token_minted`` hashes. This
-revision is pure additive scaffold: no caller yet reads the hash back to
-authorize anything.
-
-Each revision in this tree creates a subset of the current ``schema`` metadata's
-tables (the live-schema pattern); this one creates exactly the one new table,
-``checkfirst`` so a fresh ``base -> head`` and an in-place upgrade both converge.
+"""lease capability token stash — ``lease_tokens`` (runner store tree, issue #113): one row per lease,
+written at spawn. The plaintext rides the spawn env and is never persisted, only its sha256.
 
 Revision ID: 20260719_0900_runner_lease_tokens
 Revises: 20260718_1200_runner_route_tokens

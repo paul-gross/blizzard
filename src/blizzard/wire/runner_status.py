@@ -1,14 +1,7 @@
-"""The runner's machine-local status view — wire bodies (issue #51).
-
-Behind ``GET /api/runner`` (identity, pause states, capacities, hub connectivity,
-last tick), ``GET /api/environments`` (the full configured pool, issue #106), ``GET
-/api/asks?open=true``
-(open questions), ``GET /api/escalations`` (parked escalations with their
-literal resume command), and ``GET /api/takeovers`` (open operator takeovers —
-the stranded-takeover recovery surface, issue #52) — ``blizzard runner status``'s
-five reads. Datetimes are ISO-8601 strings with an explicit UTC offset
-(``bzh:utc-instants``).
-"""
+"""The runner's machine-local status view — wire bodies (issue #51): identity, pause states, capacities
+and hub connectivity; the configured environment pool (issue #106); open questions; parked escalations
+with their literal resume command; and open operator takeovers (issue #52). Datetimes are ISO-8601
+strings with an explicit UTC offset (``bzh:utc-instants``)."""
 
 from __future__ import annotations
 
@@ -97,10 +90,8 @@ class EscalationView(BaseModel):
     epoch: int
     closed_at: str
     resume_command: str
-    # The parked session's own configuration (issue #144) — the declared pool it belongs
-    # to and the model/effort it actually ran under, read off the lease's stamps rather
-    # than re-resolved. All `None` for a session on the bare vocabulary or one predating
-    # the stamps (*unknown*).
+    # The parked session's own configuration (issue #144) — the pool it belongs to and the model and
+    # effort it ran under. All `None` for a bare-vocabulary session, or one predating the stamps.
     session_name: str | None = None
     model: str | None = None
     effort: str | None = None

@@ -1,20 +1,9 @@
 """Shared helpers for the land scripts (issue #230).
 
-Pure stdlib, exactly like the scripts that import from here (``bzh:deterministic-shell``):
-``forge_request`` is the one HTTP seam every land script talks to the forge (and the
-mid-run marker callback) through; ``qualify_repo``/``pr_title``/``refuse_empty_delivery``
-are the small pure helpers their policies share; ``require_env``/``require_json_env`` turn
-a missing or malformed injected env var into a named diagnostic instead of a raw traceback;
-``post_marker`` is the durable-write wrapper around the marker callback POST — a
-dropped or unconfirmed marker write must never be silently discarded, since that is
-exactly how a merge could land with no durable record of it. A confirmed write (any 2xx,
-including the idempotent ``recorded: false``
-replay) is the only success; anything else is retried a bounded number of times and, if
-still unconfirmed, raises :class:`MarkerWriteError` rather than letting the script print
-``landed`` over an unrecorded merge. ``marker_recorder`` is ``post_marker`` specialized to
-the ``merged/<repo>`` marker name (issue #230); a second marker kind — e.g. the
-``delivery-findings`` write issue #232 adds — calls ``post_marker`` directly.
-"""
+Pure stdlib, exactly like the scripts that import from here (``bzh:deterministic-shell``).
+``forge_request`` is the one HTTP seam out; the rest are small pure helpers plus the
+durable marker-write wrappers, which raise rather than let a script print ``landed`` over
+an unrecorded merge."""
 
 from __future__ import annotations
 
@@ -27,10 +16,8 @@ import urllib.request
 from collections.abc import Callable
 from typing import Any
 
-# The mid-run marker callback's token header (``X-Blizzard-Marker-Token``, issue #230) is
-# a **delivery** credential, injected by the executor alongside the callback URL itself
-# (``BZ_HUB_MARKER_TOKEN`` — see ``blizzard.hub.delivery.hub_node.ENV_MARKER_TOKEN``, not
-# imported here to keep this package's dependency surface pure stdlib).
+# The mid-run marker callback's token header (issue #230) — a **delivery** credential,
+# restated rather than imported to keep this package pure stdlib.
 _MARKER_TOKEN_HEADER = "X-Blizzard-Marker-Token"
 _MARKER_CALLBACK_ENV = "BZ_HUB_MARKER_CALLBACK_URL"
 _ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
@@ -41,17 +28,15 @@ _MARKER_PREFIX = "merged/"
 # that is truncated with an ellipsis so PR creation never fails on an over-long title.
 _PR_TITLE_MAX = 256
 
-# The marker POST is retried on a connection failure or a 5xx: three attempts total,
-# a short fixed backoff between them so a genuinely failing write does not stall the
-# node forever, and tests exercising the retry path stay fast.
+# The marker POST is retried on a connection failure or a 5xx, with a short fixed backoff
+# so a genuinely failing write does not stall the node forever.
 _MARKER_WRITE_ATTEMPTS = 3
 _MARKER_RETRY_BACKOFF_SECONDS = 0.05
 
 
 def pr_title(feature_title: str, branch: str) -> str:
-    """The opened PR's title: JUST the hub-resolved feature title, or the branch name
-    when none resolved — never a ``blizzard: land`` prefix — truncated to
-    :data:`_PR_TITLE_MAX`."""
+    """The opened PR's title: the resolved feature title, or the branch name when none
+    resolved, truncated to :data:`_PR_TITLE_MAX`."""
     title = feature_title or branch
     if len(title) > _PR_TITLE_MAX:
         title = title[: _PR_TITLE_MAX - 1].rstrip() + "…"
@@ -69,16 +54,8 @@ def refuse_empty_delivery(commits: list[dict[str, str]]) -> None:
     """Exit non-zero when a delivery node is handed nothing to deliver **and the graph
     promised something**.
 
-    Emptiness alone cannot tell a lost ``git_commit`` from a non-code chunk that promised
-    none (MVP criterion 10), so the graph's own intent decides, injected as
-    ``BZ_HUB_EXPECT_GIT_COMMITS``. Absent (an older executor) it reads as "expected":
-    failing loudly on a set the policy cannot explain is the safer default.
-
-    Pinned by ``tests/test_land_scripts.py``'s
-    ``test_an_empty_commit_set_fails_the_node_instead_of_reporting_landed``,
-    ``test_a_non_code_chunk_lands_empty_because_its_graph_promised_no_commit`` and
-    ``test_an_absent_expectation_signal_is_treated_as_expected``.
-    """
+    Emptiness alone cannot tell a lost ``git_commit`` from a chunk that promised none, so
+    ``BZ_HUB_EXPECT_GIT_COMMITS`` decides; absent, it reads as "expected"."""
     if commits:
         return
     if os.environ.get(_ENV_EXPECT_GIT_COMMITS, "1") == "0":
@@ -94,9 +71,8 @@ def refuse_empty_delivery(commits: list[dict[str, str]]) -> None:
 
 
 def require_env(name: str) -> str:
-    """Read a required, injected environment variable — a missing var exits non-zero
-    with a diagnostic naming it, instead of letting a bare ``KeyError`` propagate as a
-    traceback the hub-node run-shape never expects (``bzh:hub-node-run-shape``)."""
+    """Read a required, injected environment variable — a missing var exits non-zero with
+    a diagnostic naming it (``bzh:hub-node-run-shape``)."""
     value = os.environ.get(name)
     if value is None:
         print(f"missing required environment variable {name}", file=sys.stderr)
@@ -106,8 +82,7 @@ def require_env(name: str) -> str:
 
 def require_json_env(name: str) -> Any:
     """:func:`require_env` plus ``json.loads`` — malformed JSON exits non-zero with a
-    diagnostic naming the offending variable, not a raw ``json.JSONDecodeError``
-    traceback."""
+    diagnostic naming the offending variable."""
     raw = require_env(name)
     try:
         return json.loads(raw)
@@ -124,11 +99,10 @@ def forge_request(
     body: dict[str, Any] | None,
     headers: dict[str, str] | None = None,
 ) -> tuple[int, Any]:
-    """The one HTTP seam every land script (and the marker callback) talks through.
+    """The one HTTP seam out of this package.
 
     ``headers`` merges in on top of ``Content-Type`` and the ``Authorization`` header
-    ``token`` derives — additive, so a call site that never passes it (every existing
-    call before issue #230) is byte-for-byte the request it always sent."""
+    ``token`` derives — additive, so omitting it changes nothing about the request."""
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Content-Type", "application/json")
@@ -151,11 +125,9 @@ def forge_request(
 
 
 class MarkerWriteError(Exception):
-    """Raised when a ``merged/<repo>`` marker write is never confirmed durable — a
-    missing callback URL for a repo that needs one, a 4xx, or a 5xx/connection failure
-    that keeps failing across every retry. Never swallowed: a script that lets this
-    propagate all the way out of its land stage aborts the run instead of printing
-    ``landed`` over an unrecorded merge."""
+    """Raised when a marker write is never confirmed durable — a missing callback URL, a
+    4xx, or a 5xx/connection failure surviving every retry. Never swallow it: the run must
+    abort rather than print ``landed`` over an unrecorded merge."""
 
 
 def post_marker(
@@ -164,19 +136,11 @@ def post_marker(
     token: str,
     request: Callable[..., tuple[int, Any]],
 ) -> Callable[[str, str], None]:
-    """Build the generic ``post(name, content)`` durable-marker-write closure (issue
-    #232), so a second marker kind (``delivery-findings``) can share it without a
-    bespoke, unauthenticated, unretried ``forge_request``/``api`` call of its own.
+    """Build the generic ``post(name, content)`` durable-marker-write closure (issue #232).
 
-    A confirmed write (any 2xx, including an idempotent replay) is the only success;
-    anything else is retried a bounded number of times and, if still unconfirmed, raises
-    :class:`MarkerWriteError`. The caller supplies the full marker ``name`` — this
-    function prepends nothing.
-
-    A falsy ``callback_url`` is not fatal by itself — a caller that never invokes
-    ``post`` never notices. It is fatal only once something reaches this closure with
-    nowhere to send it.
-    """
+    A confirmed write (any 2xx, replays included) is the only success; anything else retries
+    a bounded number of times, then raises :class:`MarkerWriteError` — including a falsy
+    ``callback_url``, which is fatal only once something actually reaches the closure."""
 
     def post(name: str, content: str) -> None:
         if not callback_url:
@@ -215,18 +179,11 @@ def marker_recorder(
     token: str,
     request: Callable[..., tuple[int, Any]],
 ) -> Callable[[str, str], None]:
-    """Build the ``record(repo, commit_hash)`` closure a land script calls immediately
-    after each repo lands, mid-run (issue #65, issue #230): a write that is never
-    confirmed raises :class:`MarkerWriteError`, and every write carries the run's
-    marker capability token as :data:`_MARKER_TOKEN_HEADER`.
+    """:func:`post_marker` specialized to the ``merged/<repo>`` marker name (issues #65,
+    #230) — call it immediately after each repo lands, mid-run.
 
-    A falsy ``callback_url`` is not fatal by itself — a chunk with nothing pending never
-    calls ``record`` at all, and that stays a silent no-op. It is fatal only once a repo
-    that genuinely needs a marker recorded reaches this closure with nowhere to send it.
-
-    Delegates its retry/auth logic to :func:`post_marker`, prepending the
-    ``merged/`` marker-name prefix.
-    """
+    Every write carries the run's marker capability token as :data:`_MARKER_TOKEN_HEADER`;
+    retry and failure behavior are :func:`post_marker`'s."""
     post = post_marker(callback_url=callback_url, token=token, request=request)
 
     def record(repo: str, commit_hash: str) -> None:

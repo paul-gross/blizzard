@@ -1,20 +1,9 @@
 """``AuthService`` — mint/resolve/slide sessions, the first-login email-merge linking
 rule, and collision-free username minting (issues #91, #92).
 
-Holds the **write** repositories (``bzh:controller-read-only`` — only the domain
-writes) and takes already-loaded objects (``bzh:domain-takes-objects``): the edge
-resolves a session-id hash to a :class:`~blizzard.hub.auth.models.Session` via the read
-repo, then hands the object to :meth:`AuthService.touch_session` for the sliding-expiry
-write and role expansion — no mutation happens at the edge.
-
-Also holds :meth:`assign_role` (the admin API's hub-side role-change rules, issue #94)
-and the superuser-bootstrap primitives ``hub/auth/bootstrap.py`` orchestrates at boot,
-plus the first-login claim check :meth:`link_or_mint` runs on its newly-minted-user
-branch. Every role change, API-driven or bootstrap-driven, is recorded through the
-injected ``auth_facts`` (``bzh:controller-read-only`` extended to a second
-collaborating service) — never at the edge, since the bootstrap claim has no
-request-level caller to record it instead.
-"""
+Holds the **write** repositories (``bzh:controller-read-only``) and takes already-loaded
+objects (``bzh:domain-takes-objects``). Also holds :meth:`assign_role` (issue #94) and
+the superuser-bootstrap primitives; every role change is recorded via ``auth_facts``."""
 
 from __future__ import annotations
 
@@ -49,9 +38,8 @@ _log = get_logger("blizzard.hub.auth")
 
 class RoleAssignmentRefused(Exception):
     """A role-change request violated a hub-side rule (issue #94) — self-change,
-    ``superuser`` grant/revoke by a non-``superuser`` actor, or ``superuser`` itself (not
-    assignable through the API, bootstrap-only). The API route (``hub/api/users.py``)
-    maps this to ``403``."""
+    ``superuser`` grant/revoke by a non-``superuser`` actor, or ``superuser`` itself,
+    which is bootstrap-only and not assignable through the API."""
 
 
 #: A session slides forward on every resolve by this much (idle timeout) — chosen as a
@@ -69,25 +57,22 @@ STATE_BYTES = 24
 #: redirect, short enough that an abandoned authorize attempt cannot be replayed later.
 STATE_TTL = timedelta(minutes=10)
 
-#: The ``auth_state.kind`` this phase's provider-login dance writes (decision D5) — the
-#: same table's ``kind`` column distinguishes #95's later hub-as-IdP authorize entries.
+#: The ``auth_state.kind`` the provider-login dance writes (decision D5).
 PROVIDER_LOGIN_STATE_KIND = "provider_login"
 
 #: The registered public client id the CLI authenticates as (issue #96) — a built-in
 #: convention, not a per-user/per-runner registration.
 CLI_CLIENT_ID = "cli"
 
-#: The ``auth_state.kind`` a ``client=cli`` authorize mints (issue #96) — this table's
-#: ``state`` column holds the minted authorization *code* for this kind, not a
-#: round-tripped anti-CSRF value the way the other two kinds use it.
+#: The ``auth_state.kind`` a ``client=cli`` authorize mints (issue #96) — for this kind
+#: the ``state`` column holds the minted authorization *code*, not an anti-CSRF value.
 CLI_LOGIN_STATE_KIND = "cli_login"
 
 #: ``secrets.token_urlsafe`` byte count for a minted CLI authorization code.
 CLI_CODE_BYTES = 32
 
-#: How long a minted CLI authorization code stays redeemable — short-lived (unlike the
-#: 10-minute provider-dance ``state``): the loopback/paste exchange happens within
-#: seconds of the browser completing the hub login.
+#: How long a minted CLI authorization code stays redeemable — short-lived, since the
+#: loopback/paste exchange happens within seconds.
 CLI_CODE_TTL = timedelta(minutes=5)
 
 _SLUG_DISALLOWED = re.compile(r"[^a-z0-9-]+")
@@ -131,11 +116,8 @@ class AuthService:
         """Slide ``session``'s expiry and resolve its owning user's identity.
 
         ``None`` when the session has already idle-expired, has crossed its absolute
-        maximum age, or its user no longer exists — the edge
-        (``hub/api/auth_session.py``) treats any of these as "no session", never a
-        distinct error. Takes the already-loaded :class:`~blizzard.hub.auth.models.Session`
-        (``bzh:domain-takes-objects``): the edge resolves the hash to the row before
-        calling this."""
+        maximum age, or its user no longer exists. Takes the already-loaded
+        :class:`~blizzard.hub.auth.models.Session` (``bzh:domain-takes-objects``)."""
         now = self._clock.now()
         if session.expires_at <= now:
             return None
@@ -155,9 +137,8 @@ class AuthService:
         )
 
     def mint_session(self, user: User) -> tuple[str, Session]:
-        """Mint a fresh session for ``user``; returns ``(plaintext_id, session)`` — the
-        caller (the login callback, #92) sets the plaintext into the cookie/bearer
-        exactly once and keeps no other copy."""
+        """Mint a fresh session for ``user``; returns ``(plaintext_id, session)`` — only
+        the hash is stored, so the plaintext is handed back exactly once (#92)."""
         plaintext = secrets.token_urlsafe(SESSION_ID_BYTES)
         now = self._clock.now()
         session = Session(
@@ -172,21 +153,11 @@ class AuthService:
         return plaintext, session
 
     def link_or_mint(self, identity: ProviderIdentity, *, provider_name: str) -> User:
-        """The first-login email-merge linking rule (issue #92): resolve ``identity``
-        (already exchanged by an :class:`~blizzard.hub.auth.oauth.provider.IOAuthProvider`
-        conformer, ``bzh:domain-takes-objects``) to the :class:`User` it belongs to,
-        minting one if none exists.
+        """The first-login email-merge linking rule (issue #92): resolve ``identity`` to the
+        :class:`User` it belongs to, minting one if none exists.
 
-        Subject mapping wins on every later login: an existing ``(provider_name,
-        identity.subject)`` link always resolves to its own user, and its stored
-        ``handle`` is refreshed in place (a provider-side rename never re-mints a user).
-        A **new** link with a **verified** email matching an existing user's email
-        attaches to that user instead of minting one — an unverified email never
-        merges, and (defensively) is never itself stored on a freshly minted user's
-        ``email`` either, so a later verified login for the same address cannot merge
-        into an account an unverified claim seeded (an unverified provider-reported
-        email is not proof of ownership). Otherwise a new user is minted with
-        ``role=pending`` and a username collision-suffixed from the handle."""
+        An existing ``(provider_name, subject)`` link wins, its ``handle`` refreshed in place;
+        else a **verified** email match attaches; else a ``role=pending`` user is minted."""
         existing_link = self._identities.get(provider_name, identity.subject)
         if existing_link is not None:
             user = self._users.get(existing_link.user_id)
@@ -237,7 +208,7 @@ class AuthService:
 
     def start_state(self, *, kind: str, provider_name: str, return_to: str, ttl: timedelta = STATE_TTL) -> str:
         """Mint and persist a single-use ``state`` (decision D5); returns the plaintext
-        value ``GET /api/auth/{name}/authorize`` round-trips through the redirect."""
+        value to round-trip through the redirect."""
         state = secrets.token_urlsafe(STATE_BYTES)
         now = self._clock.now()
         self._auth_state.create(
@@ -255,9 +226,7 @@ class AuthService:
 
     def consume_state(self, state: str) -> AuthStateEntry | None:
         """Read-and-delete a presented ``state`` (single-use); ``None`` when it never
-        existed, was already consumed, or has clock-expired — the callback
-        (``hub/api/auth_login.py``) treats every one of these identically (a bad
-        ``state``, never a distinct error)."""
+        existed, was already consumed, or has clock-expired — indistinguishably."""
         entry = self._auth_state.consume(state)
         if entry is None:
             return None
@@ -268,14 +237,11 @@ class AuthService:
     # --- CLI login (issue #96) -----------------------------------------------
 
     def mint_cli_code(self, user: User, *, code_challenge: str, redirect_uri: str) -> str:
-        """Mint a single-use authorization code for the CLI's PKCE exchange, once
-        ``GET /api/auth/authorize?client=cli`` has already resolved ``user`` (an
-        existing hub session, or freshly minted by the #92 provider dance it bounced
-        through). Reuses the same ``auth_state`` table/mechanism as ``start_state``
-        (decision D5) — ``code_challenge`` and ``user_id`` are the two fields no other
-        ``kind`` populates. The returned code is opaque; the redeeming exchange
-        (:meth:`exchange_cli_code`) is the only place ``user_id`` and
-        ``code_challenge`` are read back."""
+        """Mint a single-use authorization code for the CLI's PKCE exchange, for an
+        already-resolved ``user`` (issue #96).
+
+        Reuses the ``auth_state`` table (decision D5) — ``code_challenge`` and ``user_id``
+        are the two fields no other ``kind`` populates. The returned code is opaque."""
         code = secrets.token_urlsafe(CLI_CODE_BYTES)
         now = self._clock.now()
         self._auth_state.create(
@@ -294,14 +260,10 @@ class AuthService:
 
     def exchange_cli_code(self, code: str, *, code_verifier: str, redirect_uri: str) -> str | None:
         """Redeem a code minted by :meth:`mint_cli_code` for a fresh hub session token
-        (decision D6 — a session, never a runner-style JWT), or ``None`` on any
-        failure: an unknown/already-consumed/expired code, a ``redirect_uri`` that
-        does not exact-match the one the code was minted for, or a PKCE verifier that
-        does not hash to the stored challenge. Every failure collapses to the same
-        ``None``, which the route (``hub/api/idp.py``) turns into one undifferentiated
-        400, so a caller cannot fingerprint which check failed (pinned by
-        ``tests/test_cli_login_api.py::test_cli_token_exchange_rejects_an_unknown_code``
-        and its wrong-verifier / mismatched-redirect / single-use siblings)."""
+        (decision D6 — a session, never a runner-style JWT), or ``None`` on any failure:
+        unknown/consumed/expired code, mismatched ``redirect_uri``, or a bad PKCE verifier.
+        Every failure collapses to the same ``None``, so a caller cannot fingerprint which
+        check failed (pinned by ``tests/test_cli_login_api.py``)."""
         entry = self._auth_state.consume(code)
         if entry is None or entry.kind != CLI_LOGIN_STATE_KIND:
             return None
@@ -333,20 +295,11 @@ class AuthService:
     # --- role assignment (issue #94) -----------------------------------------
 
     def assign_role(self, *, actor: ResolvedIdentity, subject: User, to_role: Role) -> User:
-        """Enforce the admin API's hub-side role-change rules, then apply the change
-        (``hub/api/users.py``'s ``POST /api/users/{id}/role``, ``require("user:manage")``
-        already gates the route). Raises :class:`RoleAssignmentRefused` (403) on a
-        violation:
+        """Enforce the hub-side role-change rules (issue #94), then apply the change.
 
-        * a user cannot change their own role;
-        * ``superuser`` is not assignable through the API in either direction
-          (granting it, or moving a stored ``superuser`` subject to anything else) — it
-          is bootstrap-only;
-        * only a ``superuser`` actor may grant or revoke ``admin`` (an ``admin`` actor
-          may freely move a subject among ``pending``/``guest``/``contributor``).
-
-        A no-op request (``subject.role == to_role``) returns ``subject`` unchanged and
-        records no fact — there was no change to record."""
+        Raises :class:`RoleAssignmentRefused` when the actor is the subject, when either
+        role is ``superuser`` (bootstrap-only), or when a non-``superuser`` actor grants or
+        revokes ``admin``. A no-op request returns ``subject`` unchanged, recording no fact."""
         if actor.user_id == subject.user_id:
             raise RoleAssignmentRefused("cannot change your own role")
         if subject.role is Role.SUPERUSER or to_role is Role.SUPERUSER:
@@ -378,9 +331,8 @@ class AuthService:
     # --- superuser bootstrap (issue #94) -------------------------------------
 
     def get_superuser_bootstrap(self) -> SuperuserBootstrap | None:
-        """The singleton bootstrap row's read passthrough — ``hub/auth/bootstrap.py``'s
-        own boot-time orchestration reads through the service rather than reaching past
-        it into the repository (``bzh:controller-read-only``)."""
+        """The singleton bootstrap row's read passthrough, so a caller never reaches past
+        the service into the repository (``bzh:controller-read-only``)."""
         return self._superuser_bootstrap.get()
 
     def record_superuser_bootstrap(self, *, email: str, claimed_user_id: str | None) -> None:
@@ -394,9 +346,8 @@ class AuthService:
         self._superuser_bootstrap.clear()
 
     def bootstrap_apply_role(self, user: User, to_role: Role) -> User:
-        """A system-driven role change outside :meth:`assign_role`'s API rule engine —
-        the superuser bootstrap's own boot-time promote/demote (``hub/auth/
-        bootstrap.py``). Recorded with ``actor="system"`` in the emitted fact."""
+        """A system-driven role change outside :meth:`assign_role`'s rule engine — the
+        superuser bootstrap's promote/demote. Recorded with ``actor="system"``."""
         return self._apply_role_change(user, to_role, actor_username="system")
 
     def report_superuser_bootstrap_unclaimed(self, *, email: str) -> None:
@@ -404,13 +355,11 @@ class AuthService:
         self._auth_facts.superuser_bootstrap_unclaimed(email=email)
 
     def _maybe_claim_superuser_bootstrap(self, user: User) -> User:
-        """Called only on :meth:`link_or_mint`'s newly-minted-user branch — the one
-        branch a *pre-provisioned, still-unclaimed* bootstrap target can first resolve
-        through (a user :meth:`link_or_mint` instead *finds* already existed at the
-        last boot, when the boot-time promotion in ``hub/auth/bootstrap.py`` would
-        already have claimed it). Promotes and marks the row claimed when ``user``'s
-        (already-verified, per :meth:`link_or_mint`'s own rule) email matches an
-        unclaimed target; otherwise returns ``user`` unchanged."""
+        """Called only on :meth:`link_or_mint`'s newly-minted-user branch — the one branch
+        a pre-provisioned, still-unclaimed bootstrap target can first resolve through.
+
+        Promotes and marks the row claimed when ``user``'s (already-verified) email matches
+        an unclaimed target; otherwise returns ``user`` unchanged."""
         if user.email is None:
             return user
         bootstrap = self._superuser_bootstrap.get()

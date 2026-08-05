@@ -1,11 +1,8 @@
 """The forge-status annotation loop against a real running hub (issue #179, Phase 5).
 
-The wire leg the lower tiers cannot prove: a real hosted hub (``blizzard hub host``),
-opted into ``annotate = true`` for its one work source, actually drives its background
-sweep against the real ``blizzard-mock`` forge — no mock runner needed here, the
-reconciler's own write path is the thing under test. A hub with no opted-in source is
-the negative control: the loop must not start at all, so no label ever appears.
-"""
+A real hosted hub, opted into ``annotate = true``, drives its background sweep against
+the real ``blizzard-mock`` forge; a hub with no opted-in source is the negative control —
+the loop must not start at all, so no label ever appears."""
 
 from __future__ import annotations
 

@@ -1,11 +1,8 @@
 """PauseService (unit tier) — the operator's per-chunk brake, facts only (issue #46).
 
 A fake stands in for the store — only ``load_facts``/``record_pause`` are meaningfully
-implemented; every other seam is unreachable from :meth:`PauseService.pause`/``resume``
-and raises loudly if a regression starts calling it (``bzh:domain-core`` — no store, no
-tokens). Copies :mod:`tests.test_detach_service`'s fake-repo pattern exactly, including
-its ``__getattr__`` guard and the documented ``cast`` at the wide-Protocol call site
-(``bzh:repository-split``).
+implemented; every other seam raises loudly if called (``bzh:domain-core`` — no store,
+no tokens).
 """
 
 from __future__ import annotations
@@ -40,9 +37,7 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 class _FakeChunkRepo:
     """Only ``load_facts``/``record_pause`` are live; anything else is a bug.
 
-    Not typed against :class:`IWriteChunkRepository` directly — pyright cannot verify
-    ``__getattr__``-backed structural conformance, so callers wrap an instance in
-    :func:`_as_write_repo` instead (see :mod:`tests.test_detach_service`)."""
+    Callers wrap an instance in :func:`_as_write_repo` for pyright's structural check."""
 
     facts: ChunkFacts | None
     recorded: list[tuple[str, bool, str, datetime]] = field(default_factory=list)
@@ -146,13 +141,9 @@ def test_pause_allows_running_ready_and_human_gated_statuses(facts_factory: obje
     ids=["done", "stopped", "delivering"],
 )
 def test_resume_is_never_refused_not_even_for_the_statuses_pause_refuses(facts_factory: object) -> None:
-    """Resume is **unconditional** — the refusal set governs `pause` only (issue #46 §4).
-
-    The asymmetry is deliberate, not an oversight: pause must not *engage* on work already
-    finished or in flight to the forge, but *disengaging* a brake is always safe, matching
-    `POST /runners/{id}/resume`. The CLI relies on this too — `resume-chunk` maps no 409 at
-    all, so a refusal would surface as a raw API error rather than a named one.
-    """
+    """Resume is unconditional — the refusal set governs `pause` only (issue #46 §4):
+    pause must not engage on finished/in-flight work, but disengaging a brake is
+    always safe."""
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
     service = PauseService(chunks=_as_write_repo(repo), clock=clock)

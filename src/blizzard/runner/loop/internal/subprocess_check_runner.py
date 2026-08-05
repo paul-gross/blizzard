@@ -1,15 +1,9 @@
-"""Subprocess adapter for the check-runner seam (package-private).
+"""Subprocess adapter for the check-runner seam (package-private) — the reference
+:class:`~blizzard.runner.loop.checks.ICheckRunner` binding, running a node's authored ``checks:``
+command in a leased worktree under a timeout and capturing a bounded output tail (issue #114).
 
-The reference :class:`~blizzard.runner.loop.checks.ICheckRunner` binding: it runs a
-node's authored ``checks:`` command in a leased worktree via the shell, under a timeout,
-and captures a bounded output tail (issue #114). All ``subprocess`` usage for checks is
-confined here.
-
-The child environment is built from the worker-env allowlist
-(:func:`~blizzard.runner.harness.env_allowlist.allowlisted_env`, ``bzh:worker-env-allowlist``)
-— a check command runs arbitrary repo tooling, so a daemon credential (``BZ_HUB_TOKEN``, a
-forge token) must be absent from it by construction, never merely filtered.
-"""
+The child environment is built from the worker-env allowlist (``bzh:worker-env-allowlist``): a check
+runs arbitrary repo tooling, so a daemon credential must be absent by construction, not filtered."""
 
 from __future__ import annotations
 
@@ -39,9 +33,8 @@ class SubprocessCheckRunner:
     """Run a node's ``checks:`` command in a leased worktree, via the shell."""
 
     def __init__(self, *, env_passthrough: Sequence[str] = ()) -> None:
-        # The operator's declared worker-env passthrough (``[worker] env_passthrough``) —
-        # the same widening the harness children get, so a check that needs an
-        # operator-declared var behaves like the worker did.
+        # The operator's declared worker-env passthrough — the same widening the harness children
+        # get, so a check needing an operator-declared var behaves like the worker did.
         self._env_passthrough = tuple(env_passthrough)
 
     def run(self, command: str, cwd: str, timeout: int) -> CheckOutcome:

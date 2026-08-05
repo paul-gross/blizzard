@@ -1,14 +1,8 @@
-"""advanced-development-workflow's findings docket agrees with the two re-entry prompts and
-the retrospective fold on what happens to a superseded round's undisposed findings, and the
-fold has a non-filing outcome for a finding whose target is an immutable artifact (unit tier,
-issue #259 AC1-AC4).
+"""adv-dwf's findings docket agrees with the re-entry prompts and retrospective fold on
+undisposed findings, plus the fold's non-filing outcome for an immutable-artifact target.
 
-``docket.md`` is not inlined into the graph — a worker reaches it only because the
-blizzard repo happens to be worktreed in the environment, and acts on what its own
-node's delivered prompt says, not on ``docket.md`` directly. This guard therefore reads
-the rule text from two places: the loaded, inlined ``GraphDoc`` for what a worker is
-actually told, and a direct read of ``docket.md`` for the shared format the delivered
-prompts all point at instead of restating.
+Reads the rule from two places: the inlined ``GraphDoc`` and a direct read of
+``docket.md`` for the shared format (unit tier, issue #259 AC1-AC4).
 """
 
 from __future__ import annotations

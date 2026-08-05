@@ -1,14 +1,8 @@
 """``external_subscription_usage.sampled`` facts land at the hub (issue #218, phase 3).
 
-Drives :class:`~blizzard.hub.domain.facts.FactIngestService` directly against the real
-store adapters (``ChunkStore``/``RunnerRegistryStore``) rather than through the raw
-``RunnerRegistryStore.record_external_usage`` write, so the per-runner seq high-water
-idempotency the wire contract promises is actually exercised — mirroring
-``tests/test_activity_feed_store.py``'s real-internal-collaborators pattern. The
-component tier (``POST /api/fleet/events`` through the real hub app) proves the
-route-level broadcast; see ``tests/test_events.py``'s
-``test_every_runner_changed_publish_site_names_its_kind`` for the frame shape.
-"""
+Drives ``FactIngestService`` directly against the real store adapters, exercising the
+per-runner seq high-water idempotency the wire contract promises. The component tier
+(``POST /api/fleet/events`` through the real hub app) proves the route-level broadcast."""
 
 from __future__ import annotations
 
@@ -225,10 +219,8 @@ def test_posted_through_the_route_publishes_runner_changed_once_and_a_replay_pub
 
 
 def test_get_runners_renders_the_landed_sample_with_exact_wire_field_names(tmp_path: Path) -> None:
-    """The read side (issue #218 phase 4): ``GET /api/runners`` off a live hub, after a
-    fact batch carrying ``external_subscription_usage.sampled`` lands, renders the exact
-    wire shape ``external_subscription_usage.{sampled_at, windows[].{window,
-    utilization_pct, resets_at, window_seconds}}``."""
+    """``GET /api/runners`` renders the landed sample's exact wire shape (issue #218
+    phase 4)."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
 

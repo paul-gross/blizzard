@@ -1,11 +1,8 @@
 """httpx adapter for the hub-client seam (package-private).
 
-The reference :class:`~blizzard.runner.loop.hub.IHubClient` binding. All httpx
-usage is confined here; a transport failure or unexpected status is wrapped once
-into :class:`~blizzard.runner.loop.hub.HubClientError` (``bzh:structlog-logging``).
-The injected ``httpx.Client`` is the seam tests substitute with an
-``httpx.MockTransport``-backed client, so the loop is exercised against a fake hub
-with no live daemon.
+The reference :class:`~blizzard.runner.loop.hub.IHubClient` binding. All httpx usage is
+confined here; a transport failure or unexpected status is wrapped once into
+:class:`~blizzard.runner.loop.hub.HubClientError` (``bzh:structlog-logging``).
 """
 
 from __future__ import annotations
@@ -55,8 +52,7 @@ class HttpHubClient:
         if resp.status_code == httpx.codes.CONFLICT:
             body = resp.json()
             # Two distinct 409 shapes share the status code (issue #118): a race loss
-            # (`held_by_runner_id`) and a terminal denial (`status`) — the hub's own
-            # response body tells them apart, so no separate status code is needed.
+            # (`held_by_runner_id`) and a terminal denial (`status`), told apart by body.
             if "status" in body:
                 return RouteClaimOutcome(denied_terminal=RouteClaimTerminalDenial.model_validate(body))
             return RouteClaimOutcome(conflict=RouteClaimConflict.model_validate(body))

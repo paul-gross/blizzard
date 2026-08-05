@@ -1,12 +1,8 @@
 """``GET /api/leases/{id}/artifacts`` and ``.../artifacts/{name}`` (issue #127).
 
-Exercised over a real store via TestClient, mirroring
-``tests/test_runner_attachments_api.py`` (the token/lease auth half) and
-``tests/test_work_items_proxy.py`` (the hub is reached through a stubbed ``httpx.get``,
-so the forward, its status pass-through, and the ``502`` on an unreachable hub are all
-asserted against the real controller). The read is layered exactly like the attach
-write: lease-scoped, token-authorized, then proxied to the hub's envelope route — the
-worker holds no hub credential.
+Exercised over a real store via TestClient, hub reached through a stubbed ``httpx.get``
+so the forward, status pass-through, and 502-on-unreachable are asserted for real.
+Layered like the attach write — lease-scoped, token-authorized, then proxied.
 """
 
 from __future__ import annotations
@@ -114,9 +110,7 @@ def _stub_hub(monkeypatch: pytest.MonkeyPatch, response: _FakeHubResponse, seen:
     monkeypatch.setattr(artifacts_route.httpx, "get", fake_get)
 
 
-# --------------------------------------------------------------------------- #
 # Auth + wiring status map (no hub reached — resolved before the forward)
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component
@@ -178,9 +172,7 @@ def test_503_when_hub_unwired_even_for_an_authorized_lease(tmp_path: Path) -> No
     assert unauthed.status_code == 403
 
 
-# --------------------------------------------------------------------------- #
 # The forward + kind-discriminated read (hub stubbed)
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component
@@ -282,8 +274,7 @@ def test_get_404_for_an_unknown_artifact_name(tmp_path: Path, monkeypatch: pytes
 
 
 # The envelope shape a chunk with several node-steps producing the same `produces:`
-# name looks like on the wire (issue #169) — two `retrospective` entries, one per
-# producing node.
+# name (issue #169) — two `retrospective` entries, one per producing node.
 _ENVELOPE_WITH_DUPLICATE_NAME: dict[str, object] = {
     **_ENVELOPE,
     "artifacts": [

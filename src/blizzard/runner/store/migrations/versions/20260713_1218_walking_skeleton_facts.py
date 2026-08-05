@@ -1,9 +1,5 @@
-"""walking-skeleton fact tables (runner store tree)
-
-The runner store's first real schema (P6): leases (with pid + process-start-time),
-chunk->env bindings, and the store-and-forward outbound buffer. Facts only, status
-derived (``bzh:facts-not-status``). Defined once in
-``blizzard.runner.store.schema``; this revision creates exactly its subset.
+"""walking-skeleton fact tables (runner store tree) — leases (with pid + start time),
+chunk->env bindings, and the outbound buffer. Facts only (``bzh:facts-not-status``).
 
 Revision ID: 20260713_1218_runner_walking_skeleton
 Revises: 20260713_1112_runner_initial

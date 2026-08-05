@@ -1,12 +1,8 @@
 """Low-level process start-time reading — the reuse-proof half of pid liveness.
 
-A pid alone is ambiguous: the OS reuses pids, so a worker's recorded pid may later
-name a different process. Pairing the pid with the process **start time** pins the
-identity — a reused pid gets a different start time. This is the one primitive both
-the runner's REAP liveness probe and the harness adapter's spawn-return stamping
-need, so it lives in the shared kernel. Linux ``/proc`` is the reference source;
-the value is an opaque stable token (clock-tick start time), compared for equality,
-never interpreted.
+The OS reuses pids, so a recorded pid may later name a different process; pairing it
+with the process **start time** pins the identity. Linux ``/proc`` is the reference
+source; the value is an opaque stable token compared for equality, never interpreted.
 """
 
 from __future__ import annotations
@@ -15,10 +11,7 @@ from __future__ import annotations
 def read_process_start_time(pid: int) -> str | None:
     """The process's stable start-time token from ``/proc/<pid>/stat``, or ``None``.
 
-    Returns ``None`` when no process with ``pid`` exists (or is unreadable). The
-    ``comm`` field (2) is paren-wrapped and may contain spaces and parens, so we
-    split after the *last* ``)``; ``starttime`` is then field 22 (the 20th field of
-    the remainder).
+    Returns ``None`` when no process with ``pid`` exists (or is unreadable).
     """
     try:
         with open(f"/proc/{pid}/stat", encoding="utf-8") as fh:
@@ -34,12 +27,8 @@ def read_process_start_time(pid: int) -> str | None:
 def is_zombie(pid: int) -> bool:
     """True iff ``pid`` names a defunct (exited-but-unreaped) process.
 
-    A fire-and-forget worker the runner never ``wait()``s becomes a **zombie** the
-    instant it exits: ``/proc/<pid>/stat`` still exists and its start time is
-    unchanged, so a bare start-time match would read it as alive forever and ADVANCE
-    would never judge the finished worker. The kernel marks such a process state
-    ``Z`` (field 3), which is the exited-but-unreaped signal the liveness probe needs
-    until P7's REAP reaps children explicitly.
+    An exited-but-unreaped process keeps its ``/proc`` entry and start time, so a bare
+    start-time match reads it as alive forever; the kernel marks state ``Z`` (field 3).
     """
     try:
         with open(f"/proc/{pid}/stat", encoding="utf-8") as fh:

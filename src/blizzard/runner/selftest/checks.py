@@ -1,11 +1,5 @@
 """The selftest's five checks — deterministic orchestration (``bzh:deterministic-shell``)
-over the harness and scratch-git seams (``bzh:pluggable-seams``), issue #54:
-
-1. spawn with a pre-assigned session id and exit-is-done detection
-2. a trivial end-to-end task — the worker must actually edit and commit
-3. verdict elicitation — a judgement resume that yields a parseable ``<Choice>``
-4. an automated follow-up resume into the same session
-5. ``resume_command`` composition (string sanity, not an interactive exec)
+over the harness and scratch-git seams (``bzh:pluggable-seams``), issue #54.
 
 Every op runs against one throwaway scratch repo the ``IScratchGit`` seam mints and
 tears down — no chunk, lease, environment binding, or hub call is ever on this path.
@@ -37,8 +31,7 @@ _EXIT_TIMEOUT_SECONDS = 30.0
 _EXIT_POLL_INTERVAL_SECONDS = 0.05
 
 # The automated-resume reap budget: bounded so a probe that never confirms the kill
-# took cannot itself wedge the canary — the check still reports its own result even
-# if reaping times out (best-effort, per the adapter contract's "kill first").
+# took cannot itself wedge the canary — a reap timeout still reports the check's result.
 _REAP_TIMEOUT_SECONDS = 5.0
 
 _TRIVIAL_TASK_PROMPT = (
@@ -54,14 +47,8 @@ _RESUME_MESSAGE = "selftest: automated follow-up resume — no action needed, ju
 
 
 class IProcessProbe(Protocol):
-    """The process-liveness + best-effort-kill reads the spawn and resume checks need
-    (``bzh:dependency-inversion``).
-
-    Narrower than the loop's full seam (``runner/loop/process.py``), so this module
-    owns its own Protocol rather than importing across the loop boundary — mirrors
-    ``runner/domain/leases.py``'s own copy of the same narrowing. The real
-    ``LinuxProcessProbe`` and any test fake satisfy it structurally.
-    """
+    """The process-liveness and best-effort-kill reads these checks need, narrowed to this
+    module so nothing here imports across a boundary (``bzh:dependency-inversion``)."""
 
     def is_alive(self, pid: int, process_start_time: str) -> bool: ...
 
@@ -173,10 +160,8 @@ def _check_resume(adapter: IHarnessAdapter, workdir: str, session_id: str, proce
         return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message raised: {exc}")
     if pid <= 0:
         return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message returned a non-positive pid ({pid})")
-    # `resume_with_message` is fire-and-forget, and the scratch repo this pid's cwd is in
-    # is torn down as soon as the check suite finishes — reap it here so no live process
-    # outlives its scratch dir. Pinned by
-    # tests/test_runner_selftest.py::test_resume_check_reaps_the_resumed_pid_before_the_scratch_repo_is_torn_down.
+    # Reaped here so no live process outlives the scratch dir it is cwd'd into
+    # (tests/test_runner_selftest.py).
     _reap(process, pid)
     return SelfTestCheck(AUTOMATED_RESUME, True, f"resumed session {session_id!r} as pid {pid}")
 

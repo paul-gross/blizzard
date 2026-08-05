@@ -1,14 +1,5 @@
-"""runner-side nudge-once fact — nudge_facts (runner store tree, issue #113 Phase 4)
-
-The durable guard ``_advance_exited_worker`` (``runner/loop/steps.py``) consults
-before ever resuming a worker session to nudge it about an unattached ``produces:``
-name: at most one row per ``(lease_id, epoch)``. Written before the resume it
-guards, so "at most one nudge per (lease, epoch)" holds structurally across a crash
-either at the write or at the resume that follows it.
-
-Each revision in this tree creates a subset of the current ``schema`` metadata's
-tables (the live-schema pattern); this one creates exactly the one new table,
-``checkfirst`` so a fresh ``base -> head`` and an in-place upgrade both converge.
+"""runner-side nudge-once fact — ``nudge_facts``, at most one row per ``(lease_id,
+epoch)``, written before the resume it guards (runner store tree, issue #113)
 
 Revision ID: 20260719_1100_runner_nudge_facts
 Revises: 20260719_1000_runner_attachments

@@ -1,16 +1,8 @@
-"""The ``PATCH /chunks/{id}`` edit route over the HTTP surface (issue #124, in #104's
-shape; issue #27's graph/model edit, admit set widened to ``ready``-unclaimed by #120,
-its ``model`` field replaced by #144's ``default_model``/``default_effort`` pair).
+"""The ``PATCH /chunks/{id}`` edit route over the HTTP surface (issues #27, #120, #124, #144).
 
-A not-ready **or** ready-and-unclaimed chunk's workflow graph, default model/effort, and
-migration intent are editable through one all-or-nothing ``PATCH``; the build fields are
-refused (409) once the chunk is actually claimed (running, delivering, waiting_on_human,
-needs_human, paused post-claim, done, stopped). The refusal itself (``EditService``) is
-unit-tested in ``test_edit_service.py``; this file proves the controller wires it
-correctly end to end — the read side (``graph_id``/``default_model``/``default_effort``
-on the list/detail views), the write, the 404s, and the ``chunk-changed`` event. The
-edit/claim race itself (issue #120's atomicity criterion) is proven at
-``tests/test_edit_claim_race.py``, not here.
+A not-ready or ready-and-unclaimed chunk's graph, default model/effort, and migration
+intent are editable through one all-or-nothing ``PATCH``, refused (409) once claimed.
+Proves the controller wires ``EditService`` end to end.
 """
 
 from __future__ import annotations
@@ -66,7 +58,6 @@ def _mint_alt_graph(hub) -> str:  # type: ignore[no-untyped-def]
 
 # --------------------------------------------------------------------------- #
 # Read — graph_id and the two defaults already ride the list/detail views.
-# --------------------------------------------------------------------------- #
 
 
 def test_a_freshly_ingested_chunk_carries_the_default_graph_and_no_model_preference(tmp_path: Path) -> None:
@@ -88,9 +79,7 @@ def test_a_freshly_ingested_chunk_carries_the_default_graph_and_no_model_prefere
 
 
 # --------------------------------------------------------------------------- #
-# Write — PATCH /chunks/{id} (issues #124, #144): graph_id, the two defaults, and
-# intended_migration applied all-or-nothing in one request, in #104's shape.
-# --------------------------------------------------------------------------- #
+# Write — PATCH /chunks/{id} (issues #124, #144): applied all-or-nothing in one request.
 
 
 def _claim(hub, chunk_id: str, *, runner_id: str = "r1") -> None:  # type: ignore[no-untyped-def]
@@ -239,11 +228,9 @@ def test_patch_refuses_a_field_not_editable_at_the_current_status_and_writes_not
 
 
 def test_patch_retired_graph_id_target_is_not_bypassed_by_a_different_valid_migration_target(tmp_path: Path) -> None:
-    """A retired `graph_id` target must 409 on its own retirement even when the same
-    request's `intended_migration.to_graph` names a different, non-retired graph — the
-    two targets are resolved and validated independently, so a retired `graph_id`
-    never slips past under cover of a valid migration target and nothing applies
-    (pre-push review, issue #124)."""
+    """A retired `graph_id` target 409s even when `intended_migration.to_graph` names a
+    different, non-retired graph — the two targets validate independently, so nothing
+    applies (issue #124)."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER])  # promote=True by default -> ready
     retired_graph_id = _mint_alt_graph(hub)
@@ -298,7 +285,6 @@ def test_patch_publishes_chunk_changed(tmp_path: Path) -> None:
 
 # --------------------------------------------------------------------------- #
 # Write — PATCH intended_migration (issue #124).
-# --------------------------------------------------------------------------- #
 
 
 def test_get_chunk_intended_migration_is_null_by_default(tmp_path: Path) -> None:

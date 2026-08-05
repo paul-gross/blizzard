@@ -191,9 +191,7 @@ def test_migrate_json_prints_the_raw_response_body(monkeypatch: pytest.MonkeyPat
     assert json.loads(result.output) == payload
 
 
-# --------------------------------------------------------------------------- #
-# `chunk set --default-model/--default-effort` (issue #144) — the CLI is the only
-# surface that writes either; there is no web editor.
+# `chunk set --default-model/--default-effort` (issue #144) — the CLI-only surface.
 # --------------------------------------------------------------------------- #
 
 

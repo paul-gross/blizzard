@@ -1,13 +1,9 @@
 """The UTC-instants fitness test (issue #28, ``bzh:utc-instants``).
 
-1. **Structural guard** — AST-walks (not grep, which can't see attribute chains reliably)
-   every module under ``src/blizzard/`` recursively for a call to ``.isoformat()``, since
-   a wire payload can be minted at any boundary crossing to the hub or a TS consumer, not
-   only inside ``api/`` routers. ``foundation/store/utc.py`` is excluded — it is
-   ``iso_utc``'s own implementation.
-2. **Schema guard** — every ``DateTime``-family column in both store ``MetaData`` objects
-   is ``UtcDateTime``-typed.
-"""
+1. **Structural guard** — AST-walks every module under ``src/blizzard/`` for a call to
+   ``.isoformat()`` (``foundation/store/utc.py`` excluded, ``iso_utc``'s own impl).
+2. **Schema guard** — every ``DateTime``-family column in both stores is
+   ``UtcDateTime``-typed."""
 
 from __future__ import annotations
 

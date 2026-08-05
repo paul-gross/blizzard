@@ -1,15 +1,9 @@
 """Graph reification and the mint service.
 
-The mint pipeline's domain half: a validated :class:`GraphDoc` is compiled into an
-immutable, id-carrying :class:`Graph` (:func:`reify_graph`) and persisted through
-the write graph repository (:class:`GraphMintService`). Parsing YAML text and
-inlining prompt *file* references are edge concerns done before this runs
-(``bzh:domain-core``): the service sees an already-parsed doc plus the raw YAML it
-stores verbatim for audit/re-export.
-
-Validation errors reject the mint (:class:`GraphValidationError`, surfaced 422 at
-the edge); warnings ride along on the minted graph.
-"""
+A validated :class:`GraphDoc` is compiled into an immutable, id-carrying
+:class:`Graph` (:func:`reify_graph`) and persisted (:class:`GraphMintService`); the
+raw YAML is stored verbatim for audit and re-export. Validation errors reject the
+mint (:class:`GraphValidationError`); warnings ride along on the minted graph."""
 
 from __future__ import annotations
 
@@ -38,15 +32,10 @@ class GraphValidationError(Exception):
 
 
 class DefaultGraphRetired(Exception):
-    """Every minted graph named ``name`` is retired — refuses to silently re-mint over
-    an operator's deliberate brake (issue #101).
+    """Every minted graph named ``name`` is retired (issue #101).
 
-    Distinct from "no graph of this name has ever been minted": that case still mints
-    the packaged default (:meth:`GraphMintService.ensure_default`'s original
-    idempotent-by-name behavior). This case means the operator has already retired
-    every version on purpose — surfacing the refusal is the whole point of the brake
-    surviving a restart.
-    """
+    Distinct from "never minted", which still mints; this refuses to silently re-mint
+    over an operator's deliberate brake."""
 
     def __init__(self, name: str) -> None:
         super().__init__(f"every graph named {name!r} is retired — re-enable one or mint a new one before ingesting")
@@ -57,12 +46,8 @@ def reify_graph(doc: GraphDoc, clock: IClock) -> Graph:
     """Compile a validated authoring doc into an immutable, id-carrying graph.
 
     Ids are minted here — one graph id, a node id per node, a choice id per choice —
-    and the fused choice/edge entries split into reified :class:`Choice` objects on
-    the node and directed :class:`Edge` objects keyed by choice id. Since #67 every
-    hub node authors its own judgement, exactly like a worker node's — no node name
-    is privileged, so there is no machinery-outcome fallback left to apply outside
-    the reified edges.
-    """
+    and the fused choice/edge entries split into reified :class:`Choice` objects on the
+    node and directed :class:`Edge` objects keyed by choice id."""
     graph_id = mint(GRAPH_PREFIX, clock)
     node_ids = {node.name: mint(NODE_PREFIX, clock) for node in doc.nodes}
     created_at = clock.now()
@@ -124,10 +109,8 @@ def reify_graph(doc: GraphDoc, clock: IClock) -> Graph:
         nodes=nodes,
         edges=edges,
         created_at=created_at,
-        # Session declarations mint no id of their own (issue #144): a declaration is
-        # identified by its authored name, which is what a node's `fresh:`/`resume:`
-        # reference and the runner's pool lookup both key on. Authored order is preserved
-        # by dict insertion order — the doc's map is the only source of ordering.
+        # A session declaration mints no id (issue #144): its authored name identifies
+        # it, and dict insertion order is the only source of authored ordering.
         sessions=list(doc.sessions.values()),
     )
 
@@ -135,11 +118,8 @@ def reify_graph(doc: GraphDoc, clock: IClock) -> Graph:
 class GraphMintService:
     """Validate, reify, and persist a graph — the ``POST /graphs`` domain rule.
 
-    Holds the *write* graph repository (``bzh:controller-read-only``); the route
-    resolves the YAML into a :class:`GraphDoc` and delegates here. Returns the minted
-    :class:`Graph` and its validation warnings; raises :class:`GraphValidationError`
-    on errors so the mint never persists an invalid definition.
-    """
+    Holds the *write* graph repository (``bzh:controller-read-only``), and raises
+    :class:`GraphValidationError` so an invalid definition never persists."""
 
     def __init__(self, *, graphs: IWriteGraphRepository, clock: IClock) -> None:
         self._graphs = graphs
@@ -156,11 +136,9 @@ class GraphMintService:
 
     def _cross_graph_warnings(self, graph: Graph) -> list[str]:
         """Late-bound resolvability of cross-graph targets (issue #90) — a **warning**,
-        never an error. A ``graph:<name>`` target is resolved by name at apply time (the
-        same late binding ingest uses), so authoring a graph whose target is not minted
-        *yet* is legal — the two may be authored in either order, or the target minted
-        later. This is the one mint-time step that touches the graph repository, keeping
-        the pure validator (:func:`validate_graph`) filesystem- and framework-free."""
+        never an error: a ``graph:<name>`` target resolves by name at apply time, so a
+        target not minted yet is legal. The one mint-time step touching the repository,
+        which keeps :func:`validate_graph` pure."""
         warnings: list[str] = []
         seen: set[str] = set()
         for edge in graph.edges:
@@ -178,28 +156,9 @@ class GraphMintService:
     def mint_if_changed(self, doc: GraphDoc, *, definition_yaml: str, minted: GraphDoc | None) -> Graph | None:
         """Mint ``doc`` only if it differs from ``minted``, the store's newest of its name.
 
-        Reconciliation's per-graph rule (issue #146). Returns the freshly minted
-        :class:`Graph`, or ``None`` when the store is already up to date. Raises
-        :class:`GraphValidationError` exactly as :meth:`mint` does — an invalid packaged
-        graph must not be silently skipped as "unchanged".
-
-        Graphs live in the store, not on disk: the hub resolves a *minted* graph per
-        chunk and never re-reads the packaged YAML, so a changed graph shipped in a new
-        wheel only reaches the fleet once this re-mints it.
-
-        ``minted`` is the newest-minted definition of this name **re-parsed back into an
-        authoring doc**, or ``None`` for a name never minted (a fresh store, or a newly
-        added graph — which mints as the first of its lineage). Resolved by the caller,
-        which is also where YAML parsing lives, keeping this a pure taker-of-objects
-        (``bzh:domain-takes-objects``); :mod:`blizzard.hub.graph_sync` is that caller.
-
-        Comparing the *parsed* docs — not the source YAML — is what makes "only if
-        changed" correct: ``mint`` inlines every ``prompt``/``prompt_addendum`` file
-        reference, so a ``prompts/*.md``-only edit is a real change (pinned by
-        tests/test_graph_sync.py::test_a_prompt_only_edit_is_detected_and_minted), while
-        :class:`GraphDoc`'s frozen-dataclass ``==`` makes a pure reformat none (pinned by
-        tests/test_graph_sync.py::test_reformatting_the_yaml_is_not_a_change).
-        """
+        Returns the freshly minted :class:`Graph`, ``None`` when already up to date, and
+        raises as :meth:`mint` does — an invalid graph is never skipped as "unchanged".
+        Comparing *parsed* docs, not source YAML, makes "only if changed" correct."""
         if minted is not None and minted == doc:
             return None
         graph, _ = self.mint(doc, definition_yaml=definition_yaml)
@@ -208,15 +167,9 @@ class GraphMintService:
     def ensure_default(self, doc: GraphDoc, *, definition_yaml: str) -> Graph:
         """Mint the configured default graph if no graph of its name has ever existed.
 
-        Idempotent by name: a fresh hub mints the packaged default on first use, and
-        re-checks are no-ops. Graphs stay immutable — this never edits an existing one.
-
-        ``get_enabled_by_name`` returning ``None`` is ambiguous — never minted, or every
-        version since retired (issue #101) — so :meth:`list_all` disambiguates: retiring
-        every version is an operator's deliberate brake and must survive a restart rather
-        than be undone by a re-mint here (pinned by
-        tests/test_graph_lifecycle_api.py::test_retiring_every_version_of_the_default_graph_survives_a_restart).
-        """
+        Idempotent by name. A ``None`` from ``get_enabled_by_name`` is ambiguous, so
+        :meth:`list_all` disambiguates (issue #101) — pinned by
+        tests/test_graph_lifecycle_api.py::test_retiring_every_version_of_the_default_graph_survives_a_restart"""
         existing = self._graphs.get_enabled_by_name(doc.name)
         if existing is not None:
             return existing

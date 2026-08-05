@@ -1,14 +1,9 @@
 """``chunk_pm_pointers`` -> ``chunk_work_refs`` — the issue-#55 store rename.
 
-A pure ``op.rename_table``: the assertion that matters is that **rows survive**, so
-these seed real work refs at the revision just before the rename (including a
-``source="blizzard"`` row, exactly what ``20260716_1512``'s backfill left in the live
-hub store) and read them back off the new table name afterwards.
-
-Like ``test_work_ref_identity_migration.py``, the table literals below are pinned by
-name rather than imported from head-of-tree ``schema.py``: one names the pre-rename
-table and one the post-rename table, and a test of a rename must hold both names still.
-"""
+A pure ``op.rename_table``: the assertion that matters is that rows survive, so these
+seed real work refs at the revision just before the rename and read them back off the
+new table name afterwards. Table literals are pinned by name, not imported from
+head-of-tree ``schema.py``, since a rename test must hold both names still."""
 
 from __future__ import annotations
 
@@ -85,14 +80,9 @@ def _seed(engine: sa.Engine) -> None:
 
 
 def _seeded_store(tmp_path: Path) -> tuple[str, MigrationRunner]:
-    """A store at ``_BEFORE`` carrying ``_SEEDED``, plus its migration runner.
-
-    Every read below opens its own short-lived engine off the returned URL rather than
-    reusing one across the upgrade: a pooled connection opened *before* a DDL rename
-    keeps serving the schema it first saw, so an inspector on it reports the renamed
-    table's foreign keys as absent. That is a stale-connection artifact, not a property
-    of the migration — the hub reaches a migrated store through a fresh engine.
-    """
+    """A store at ``_BEFORE`` carrying ``_SEEDED``, plus its migration runner. Every
+    read below opens its own short-lived engine, since a pooled connection opened
+    before a DDL rename keeps serving the schema it first saw."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
@@ -155,12 +145,8 @@ def test_downgrade_restores_the_old_name_with_its_rows(tmp_path: Path) -> None:
 
 
 def test_a_second_upgrade_pass_over_a_store_at_head_is_a_no_op(tmp_path: Path) -> None:
-    """Re-running `upgrade` on an already-migrated store neither fails nor disturbs rows.
-
-    Note what this does *not* prove: alembic sees the revision already applied and never
-    calls `upgrade()`, so the table-name guard inside it is not reached here. The
-    down-then-up test below is the one that re-enters `upgrade()`.
-    """
+    """Re-running `upgrade` on an already-migrated store neither fails nor disturbs
+    rows — alembic never re-enters `upgrade()` here; the down-then-up test below does."""
     db_url, runner = _seeded_store(tmp_path)
     runner.upgrade(_RENAME)
 

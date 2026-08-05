@@ -20,12 +20,9 @@ export type ActivityResponse = {
  * ActivityView
  *
  * One activity-feed row on the wire — present-when-meaningful: a field its source
- * doesn't fill is absent, never a placeholder ``None``-as-a-present-field.
- *
- * ``type`` is one of ``"chunk-changed"`` / ``"event-logged"`` / ``"runner-changed"``;
- * ``key`` is the identity of the underlying fact, the merge's own recency tiebreak,
- * never a stable frame id. ``status``/``prev_status``/``node``/``prev_node`` stay
- * absent for every row this phase produces — present in the shape for a later one.
+ * doesn't fill is absent, never a placeholder ``None``-as-a-present-field. ``type`` is
+ * one of ``"chunk-changed"`` / ``"event-logged"`` / ``"runner-changed"``; ``key`` is the
+ * identity of the underlying fact, never a stable frame id.
  */
 export type ActivityView = {
     /**
@@ -147,10 +144,8 @@ export type ApplyOutcome = 'next' | 'hub_node_taken' | 'parked_at_gate' | 'migra
 /**
  * ApplyResponse
  *
- * The response to a completion submission.
- *
- * Exactly one of ``next_envelope`` (when ``outcome == next``) or ``detail`` (on a
- * non-advancing outcome) is meaningful; the ``outcome`` discriminates.
+ * The response to a completion submission. Exactly one of ``next_envelope`` (when ``outcome ==
+ * next``) or ``detail`` (on a non-advancing outcome) is meaningful; ``outcome`` discriminates.
  */
 export type ApplyResponse = {
     /**
@@ -171,20 +166,10 @@ export type ArtifactKind = 'git_commit' | 'asset';
 /**
  * ArtifactView
  *
- * One entry of a chunk's inline artifact store.
- *
- * ``key`` is the store key ``{node}.{artifact-name}.{epoch}`` — append-only, so
- * every re-run's entry is retained and latest-by-epoch resolution is the reader's.
- * ``content`` carries an **asset's** text verbatim (a review's findings
- * document); the ``repo``/``branch_name``/``commit_hash`` trio carries a
- * ``git_commit`` artifact's pinned reference (the hub stores the reference, never the
- * code).
- *
- * ``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side
- * from the chunk's issue-shaped work ref; null when no forge web base is derivable.
- *
- * ``recorded_at`` is the instant the artifact was attached, decoded from its id's
- * ULID timestamp (the store keeps no separate column); null for a malformed id.
+ * One entry of a chunk's inline artifact store. ``key`` is ``{node}.{artifact-name}.{epoch}`` —
+ * append-only, so latest-by-epoch resolution is the reader's. ``content`` carries an **asset**'s text
+ * verbatim; ``repo``/``branch_name``/``commit_hash`` carry a ``git_commit``'s pinned reference, never
+ * the code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp.
  */
 export type ArtifactView = {
     /**
@@ -240,11 +225,8 @@ export type ArtifactView = {
 /**
  * BounceView
  *
- * One recorded delivery kick-back (#64) — contention, not failure.
- *
- * Surfaced on chunk detail so the bounce history is readable, without itself being (or
- * affecting) the chunk's derived status. ``envelope`` is the raw JSON kick-back payload
- * (cause detail, etc.) verbatim.
+ * One recorded delivery kick-back (#64) — contention, not failure, and never itself a status.
+ * ``envelope`` is the raw JSON kick-back payload verbatim.
  */
 export type BounceView = {
     /**
@@ -266,10 +248,8 @@ export type BounceView = {
  *
  * One deterministic check's **runner-executed** outcome (issue #114).
  *
- * Carries only ``(command, passed)`` — nothing more is needed to gate the hub's
- * ``requires_checks`` backstop. The runner's captured ``output_tail`` deliberately does
- * not ride the wire; wanting it hub-side would be a *new* wire field (re-triggering
- * ``bzh:wire-change-extends-mock``).
+ * Carries only ``(command, passed)``; the runner's captured ``output_tail``
+ * deliberately does not ride the wire.
  */
 export type CheckResult = {
     /**
@@ -285,10 +265,8 @@ export type CheckResult = {
 /**
  * ChunkDetail
  *
- * The chunk aggregate in full.
- *
- * Carries the chunk's **transition history** — every node it visited, including a
- * review that failed and looped back to build — and its inline **artifact store**.
+ * The chunk aggregate in full, carrying its **transition history** — every node it visited,
+ * including a review that failed and looped back — and its inline **artifact store**.
  */
 export type ChunkDetail = {
     /**
@@ -382,10 +360,8 @@ export type ChunkDetail = {
  *
  * Merge unacquired chunks into one.
  *
- * ``merge_chunk_ids`` are the ready chunks folded into the path's survivor chunk; the
- * survivor absorbs the union of their work refs and the merged chunks are discarded as
- * ephemeral. Self-references and duplicates are ignored; a non-ready member is
- * rejected ``409``.
+ * ``merge_chunk_ids`` fold into the path's survivor, which absorbs the union of their
+ * work refs. Self-references and duplicates are ignored; a non-ready member is ``409``.
  */
 export type ChunkGroupRequest = {
     /**
@@ -417,12 +393,9 @@ export type ChunkGroupResponse = {
 /**
  * ChunkIngestRequest
  *
- * Ingest by source-native token — specific items always, batch fine.
- *
- * Each token is resolved against the configured work sources' own grammar
- * (``IWorkSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
- * Tokens only — no pre-resolved ``{source, ref}`` shape travels alongside them, since a
- * second intake shape reintroduces the config-blind guess resolving removes (pinned by
+ * Ingest by source-native token — specific items always, batch fine. Each token is resolved against
+ * the configured work sources' own grammar: ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
+ * Tokens only; no pre-resolved ``{source, ref}`` shape travels alongside them (pinned by
  * tests/test_pin_wire.py::test_chunk_ingest_accepts_source_native_tokens_only).
  */
 export type ChunkIngestRequest = {
@@ -447,17 +420,10 @@ export type ChunkIngestResponse = {
 /**
  * ChunkPatchRequest
  *
- * The multi-field ``PATCH /chunks/{id}`` body (issue #124, in #104's shape) — every
- * field independently optional, applied all-or-nothing by ``EditService.edit``.
- *
- * ``graph_id``/``model`` mean "leave unchanged" whether omitted or sent explicit
- * ``null`` — neither is a nullable chunk property, so there is no "clear" state to
- * distinguish. ``intended_migration`` *is* nullable, so **omitted** ("leave unchanged")
- * must stay distinguishable from **explicit ``null``** ("clear it"); a plain
- * ``Optional`` default cannot, so the controller keys on
- * ``"intended_migration" in request.model_fields_set``, not this field's value (pinned
- * by tests/test_chunk_edit_api.py::test_patch_clears_an_intended_migration_via_explicit_null
- * and ::test_patch_with_intended_migration_field_absent_leaves_it_unchanged).
+ * The multi-field ``PATCH /chunks/{id}`` body (issue #124) — every field independently optional,
+ * applied all-or-nothing. ``graph_id``/``model`` mean "leave unchanged" whether omitted or explicitly
+ * ``null``. ``intended_migration`` *is* nullable, so omitted ("leave unchanged") stays distinguishable
+ * from explicit ``null`` ("clear it") via ``model_fields_set``, never this field's own value.
  */
 export type ChunkPatchRequest = {
     /**
@@ -478,9 +444,8 @@ export type ChunkPatchRequest = {
 /**
  * ChunkPatchResponse
  *
- * The result of one ``PATCH /chunks/{id}`` (issues #124, #144) — the chunk's
- * editable build properties after the edit, carried together since a PATCH can apply
- * more than one at once.
+ * The result of one ``PATCH /chunks/{id}`` (issues #124, #144) — the chunk's editable build
+ * properties after the edit, carried together since a PATCH can apply more than one at once.
  */
 export type ChunkPatchResponse = {
     /**
@@ -536,29 +501,10 @@ export type ChunkStopRequest = {
 /**
  * ChunkSummary
  *
- * One row of the fleet chunk list — derived status + current node.
- *
- * ``current_node_name`` is the node's human graph name (``build``, ``review``) beside
- * the raw ``nd_`` ULID; null when the chunk has no current node or its pinned graph
- * cannot resolve the id.
- *
- * Status-only: the summary feeds the board **card**, a passive status view (issue #42),
- * so it carries no operator *fact* — those reach the detail dock through
- * :class:`ChunkDetail`. ``runner_id`` and ``environment_count`` (issue #69) are passive
- * where-is-it facts, not action keys, and ``cost``/``completed_at`` (issues #59, #173)
- * are cheap derived instants that ride along rather than waiting for the detail fetch.
- *
- * ``runner_id``/``environment_count`` are **in-progress-only** (issue #140): a chunk at
- * a terminal status reads unrouted even while its route facts still show a route, so a
- * per-runner fold counts live occupancy with no status filter of its own (pinned by
- * tests/test_route_claim.py::test_summary_reports_a_finished_chunk_as_unrouted). The
- * unfiltered route fact lives on :class:`ChunkDetail.route`.
- *
- * ``completed_at`` (issue #173) is the terminal instant — see
- * :func:`~blizzard.hub.domain.work.derive_completed_at` — null for every non-terminal
- * status. Like every wire instant it is a ``str``, populated via
- * :func:`~blizzard.foundation.clock.iso_utc` at the serialization edge, never a bare
- * ``datetime`` (``bzh:utc-instants``).
+ * One row of the fleet chunk list — the derived status and current node. ``current_node_name`` is
+ * the node's human graph name beside the raw ``nd_`` ULID, null when unresolvable.
+ * ``runner_id``/``environment_count`` are **in-progress-only** (issue #140): a terminal chunk reads
+ * unrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null.
  */
 export type ChunkSummary = {
     /**
@@ -608,13 +554,9 @@ export type ChunkSummary = {
 /**
  * ChunkUsageTotalView
  *
- * A chunk's derived usage/cost total — summed over every recorded invocation
- * (issue #59). Never a stored column: computed at read time by
- * ``derive_chunk_usage``.
- *
- * ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` —
- * see :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical
- * statement of it, which this view's fields mirror verbatim.
+ * A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) — never a
+ * stored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``; see
+ * :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of it.
  */
 export type ChunkUsageTotalView = {
     /**
@@ -646,11 +588,9 @@ export type ChunkUsageTotalView = {
 /**
  * ChunkUsageView
  *
- * One node-step's usage/cost telemetry (issue #59) — one harness invocation's
- * tokens-by-class and cost, oldest first on :class:`ChunkDetail`.
- *
- * ``cost_usd`` is ``None`` exactly when no result envelope existed for this
- * invocation (the envelope-less transcript-summation fallback) — never fabricated.
+ * One node-step's usage/cost telemetry (issue #59) — one harness invocation's tokens-by-class and
+ * cost, oldest first on :class:`ChunkDetail`. ``cost_usd`` is ``None`` exactly when no result envelope
+ * existed for this invocation — never fabricated.
  */
 export type ChunkUsageView = {
     /**
@@ -824,9 +764,8 @@ export type DecisionResolutionResponse = {
  *
  * A runner-config gate: submit a decision in place of a transition.
  *
- * Carries the gated step's artifacts and its fencing epoch — one atomic, epoch-fenced
- * write, exactly where a worker-judged node would have submitted its transition. The
- * node's choice set is supplied by the hub from the pinned graph, not sent here.
+ * Carries the gated step's artifacts and its fencing epoch as one atomic write; the
+ * node's choice set is resolved from the pinned graph, not sent here.
  */
 export type DecisionSubmission = {
     /**
@@ -856,8 +795,8 @@ export type DecisionSubmission = {
  *
  * A gate decision in full.
  *
- * ``resolved_choice`` is set once a person has decided; ``transitioned`` is true once
- * the resolving transition has been recorded.
+ * ``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the
+ * resolving transition has been recorded.
  */
 export type DecisionView = {
     /**
@@ -968,13 +907,8 @@ export type EnvelopeChoice = {
  *
  * A runner's ``escalation.recorded`` — the runner ran out of moves on this node.
  *
- * ``takeover_command`` is not always the literal ``cd <workdir> && <harness resume>``
- * a human pastes — it can carry operator prose instead, or be empty; ``epoch`` is
- * the exhausted attempt's fence, closed by a later lease mint.
- * ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent, present
- * only when composed. Wrapped implies raw, never the reverse — see
- * https://github.com/paul-gross/blizzard-context/blob/master/domain/humans.md for
- * the full account.
+ * ``takeover_command`` may carry operator prose instead of a literal command, or be empty;
+ * ``wrapped_takeover_command`` is the wrapped equivalent and implies the raw one.
  */
 export type EscalationReport = {
     /**
@@ -998,16 +932,10 @@ export type EscalationReport = {
 /**
  * EscalationView
  *
- * An open escalation on a ``needs_human`` chunk — the takeover command(s) so a
- * human can resume the parked session. Present only while the escalation is open —
- * a later lease mint (requeue/takeover) supersedes it and this drops away.
- *
- * ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent of
- * ``takeover_command``, empty when none was composed. Wrapped implies raw, never the
- * reverse, and whether a takeover is actually possible for this escalation is a
- * separate question from whether either is populated — see
- * https://github.com/paul-gross/blizzard-context/blob/master/domain/humans.md for
- * the full account.
+ * An open escalation on a ``needs_human`` chunk — the takeover command(s) for the parked session,
+ * present only while the escalation is open; a later lease mint supersedes it.
+ * ``wrapped_takeover_command`` is the wrapped equivalent of ``takeover_command``, empty when none was
+ * composed — wrapped implies raw, never the reverse.
  */
 export type EscalationView = {
     /**
@@ -1029,9 +957,8 @@ export type EscalationView = {
  *
  * One operational event on the wire — an ``event_log`` row or a projected open
  * escalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped
- * event; ``runner_id`` is absent for a projected escalation, which names no runner
- * (issue #155 — ``null``, never ``""``); ``detail`` is the event-specific JSON payload
- * the fixed fields don't carry.
+ * event; ``runner_id`` is absent for a projected escalation (issue #155 — ``null``,
+ * never ``""``); ``detail`` is the event-specific JSON payload.
  */
 export type EventView = {
     /**
@@ -1117,10 +1044,8 @@ export type ExternalSubscriptionUsageView = {
  * ExternalSubscriptionUsageWindowView
  *
  * One rate-limit window's utilization, as the harness's own account reported it
- * (issue #218) — ``window`` is the harness-native label (``"5h"``/``"7d"`` for Claude
- * Code), ``utilization_pct`` is 0-100, ``resets_at`` the window's reset instant, and
- * ``window_seconds`` its length, carried alongside the label so a reader never has
- * to hardcode the mapping back.
+ * (issue #218) — ``window`` is the harness-native label, ``utilization_pct`` is 0-100,
+ * ``resets_at`` the reset instant, ``window_seconds`` the window's length.
  */
 export type ExternalSubscriptionUsageWindowView = {
     /**
@@ -1144,11 +1069,9 @@ export type ExternalSubscriptionUsageWindowView = {
 /**
  * FleetSpendView
  *
- * The fleet's usage/cost total since ``since`` — and, when the caller bounded the
- * window, strictly before ``until`` (issue #183; ``None`` for the original open-ended
- * tail). ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` —
- * see :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of
- * it, which this view's fields mirror verbatim.
+ * The fleet's usage/cost total since ``since`` and, when the caller bounded the
+ * window, strictly before ``until`` (``None`` for the open-ended tail). ``cost_partial``
+ * marks ``cost_usd`` as a lower bound — see :class:`~blizzard.hub.domain.work.UsageTotal`.
  */
 export type FleetSpendView = {
     /**
@@ -1188,17 +1111,9 @@ export type FleetSpendView = {
 /**
  * FleetSummaryView
  *
- * The fleet-pulse counts (issue #76) — every chunk's derived status folded to four
- * buckets:
- *
- * * ``ready`` — chunks derived ``ready``;
- * * ``running`` — ``running`` + ``delivering`` (live work, either shape);
- * * ``waiting`` — ``waiting_on_human`` + ``paused`` (human-parked);
- * * ``needs`` — ``needs_human``.
- *
- * The remaining derived statuses (``not_ready``, ``stopped``, ``done``) count toward no
- * bucket — a live-work pulse, not a total. The fold's canonical statement:
- * :func:`~blizzard.hub.domain.work.derive_fleet_summary`.
+ * The fleet-pulse counts: ``ready``; ``running`` (``running`` + ``delivering``);
+ * ``waiting`` (``waiting_on_human`` + ``paused``); ``needs`` (``needs_human``).
+ * ``not_ready``, ``stopped``, and ``done`` count toward no bucket — a pulse, not a total.
  */
 export type FleetSummaryView = {
     /**
@@ -1368,12 +1283,8 @@ export type GraphNodeView = {
  *
  * Set a graph's follow-latest policy — the tri-state (issue #164).
  *
- * ``follow_latest`` is required and all three values are meaningful: ``true``/``false``
- * override the hub-level setting for chunks pinned to this mint, and explicit ``null``
- * reverts to inheriting it. It carries no default, so clearing the override is asked
- * for by naming ``null`` rather than done by an omitted field (pinned by
- * tests/test_pin_wire.py::test_graph_policy_request_follow_latest_carries_no_default);
- * ``by`` is recorded on the appended fact, exactly as retire/re-enable do.
+ * ``follow_latest`` is required and carries no default: ``true``/``false`` override the
+ * hub-level setting for this mint's chunks, explicit ``null`` reverts to inheriting it.
  */
 export type GraphPolicyRequest = {
     /**
@@ -1391,10 +1302,8 @@ export type GraphPolicyRequest = {
  *
  * One graph-level named session declaration (issue #144).
  *
- * The wire counterpart of :class:`~blizzard.hub.domain.graph.SessionDecl`. ``model`` is
- * a prioritized preference list of opaque strings — a ``blizzard:`` tier alias or a
- * harness-native name — resolved left-to-right by the runner's adapter at session mint;
- * the hub interprets neither it nor ``effort``.
+ * ``model`` is a prioritized preference list of opaque strings, resolved left-to-right at
+ * session mint; the hub interprets neither it nor ``effort``.
  */
 export type GraphSessionView = {
     /**
@@ -1417,10 +1326,8 @@ export type GraphSessionView = {
  *
  * One graph's summary row — a name-lineage entry as served by ``GET /graphs``.
  *
- * ``effective`` is the newest **non-retired** graph of this ``name`` (issue #101);
- * ``retired`` is this graph's own lifecycle state, independent of ``effective`` — a
- * retired graph is never effective, but a non-retired, non-effective graph is merely
- * superseded by a newer version of the same name.
+ * ``effective`` marks the newest **non-retired** graph of this ``name`` (issue #101), while
+ * ``retired`` is this graph's own state: a non-retired non-effective graph is superseded.
  */
 export type GraphSummaryView = {
     /**
@@ -1454,9 +1361,8 @@ export type GraphSummaryView = {
  *
  * One packaged graph's reconciliation outcome (issue #146).
  *
- * ``status`` is ``minted``, ``up-to-date``, or ``failed``. ``graph_id`` is the freshly
- * minted graph's id, present only on ``minted``. ``detail`` says *why* a graph minted,
- * or what went wrong when it failed.
+ * ``status`` is ``minted``, ``up-to-date``, or ``failed``; ``graph_id`` is present only on
+ * ``minted``, and ``detail`` says why a graph minted or what went wrong.
  */
 export type GraphSyncEntry = {
     /**
@@ -1482,10 +1388,8 @@ export type GraphSyncEntry = {
  *
  * ``POST /graphs/sync``'s report — one entry per packaged graph (issue #146).
  *
- * ``ok`` is false iff any entry failed, so a deploy can gate on the field rather than
- * re-deriving the rule from the rows. Always ``200``: a per-graph failure is data in
- * this report, not a transport error — the other graphs still reconciled, and the
- * caller needs to see both halves.
+ * ``ok`` is false iff any entry failed, so a caller gates on the field rather than
+ * re-deriving it. Always ``200``: a per-graph failure is data, not a transport error.
  */
 export type GraphSyncResponse = {
     /**
@@ -1503,22 +1407,8 @@ export type GraphSyncResponse = {
  *
  * A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.
  *
- * ``enabled`` is ``not retired`` — the graph's own lifecycle state (issue #101),
- * independent of whether it is currently the newest of its name. ``retired`` is the
- * same fact spelled out explicitly, distinguishing "retired" from "merely superseded
- * by a newer version" (:class:`GraphSummaryView`'s ``effective``). Two wire fields for
- * one fact, not drift: the only constructor,
- * :func:`~blizzard.hub.api.graphs._graph_view`, sets both from the same ``retired``
- * bool in one call (pinned by
- * tests/test_graph_lifecycle_api.py::test_retire_returns_202_and_the_view_reports_retired
- * and ::test_a_freshly_minted_graph_reports_enabled_and_not_retired).
- *
- * ``follow_latest`` is the stored **tri-state** (issue #164), served as-is: ``true`` /
- * ``false`` override the hub-level setting for chunks pinned to this mint, and ``null``
- * — every mint's default — inherits it. Deliberately the stored value rather than the
- * resolved one, so a reader can tell "this graph says nothing" from "this graph says
- * false"; the resolution against `HubConfig.follow_latest` happens at the transition,
- * where the hub setting is in hand.
+ * ``enabled`` and ``retired`` are one lifecycle fact (issue #101), saying nothing about
+ * whether this mint is newest. ``follow_latest`` is the **stored** tri-state (#164).
  */
 export type GraphView = {
     /**
@@ -1576,13 +1466,10 @@ export type HttpValidationError = {
 /**
  * HubAdvanceResponse
  *
- * The result of one on-demand ``POST /api/fleet/chunks/{id}/hub-advance`` (#65,
- * moved under the fleet router by #87).
- *
- * A generic hub command node runs ``run:`` to completion, one call at a time,
- * behind the fleet-wide serialization slot: ``ran=False`` means the slot was held
- * by a different chunk and this call deferred without touching anything — not an
- * error, just try again on a later poll.
+ * The result of one on-demand hub-advance (#65). A generic hub command node runs ``run:`` to
+ * completion, one call at a time, behind the fleet-wide serialization slot: ``ran=False`` means the
+ * slot was held by a different chunk and this call deferred without touching anything — not an
+ * error.
  */
 export type HubAdvanceResponse = {
     /**
@@ -1611,8 +1498,7 @@ export type HubAdvanceResponse = {
 /**
  * HubMarkerRequest
  *
- * The mid-run marker callback's body (#65) — mirrors ``blizzard runner ask``'s
- * own worker-facing callback shape.
+ * The mid-run marker callback's body (#65).
  */
 export type HubMarkerRequest = {
     /**
@@ -1648,15 +1534,10 @@ export type HubMarkerResponse = {
 /**
  * IntendedMigrationPatch
  *
- * The intended-migration value a :class:`ChunkPatchRequest` carries (issue #124).
- *
- * ``to_graph`` names the migration target — a graph id, or a graph name resolved
- * server-side to the newest enabled graph of that name at request time (the resolved
- * **id** is what gets stored, so a later mint under the same name never silently
- * re-aims a pending intent). ``node`` present selects ``forced`` (the unconditional
- * landing target); absent selects ``auto`` — this shape carries no separate ``mode``
- * field, so "node supplied under auto" is unrepresentable rather than a 422 the
- * controller must catch.
+ * The intended-migration value a :class:`ChunkPatchRequest` carries (issue #124). ``to_graph`` is a
+ * graph id, or a name resolved server-side to the newest enabled graph of that name at request time —
+ * the resolved **id** is stored. ``node`` present selects ``forced``, absent selects ``auto``; there
+ * is no separate ``mode`` field, so "node supplied under auto" is unrepresentable.
  */
 export type IntendedMigrationPatch = {
     /**
@@ -1672,16 +1553,10 @@ export type IntendedMigrationPatch = {
 /**
  * IntendedMigrationView
  *
- * A chunk's standing migration intent (issue #124) — editable at any non-terminal
- * status, ``not_ready``/``ready`` included, and consulted (never applied eagerly) at
- * the chunk's next transition through the common apply path. Present on
- * :class:`ChunkDetail`; ``None`` when no intent is set.
- *
- * ``graph_name`` is resolved server-side from the stored ``graph_id`` the same way
- * :class:`MigrationView`'s ``to_graph_name`` is (null when the target graph cannot be
- * resolved). ``node_name`` is the ``forced`` mode's unconditional landing target;
- * null for ``auto`` (the landing name is derived at consult time from the
- * transition's own destination, never carried here).
+ * A chunk's standing migration intent (issue #124) — editable at any non-terminal status and
+ * consulted, never applied eagerly, at the chunk's next transition. ``graph_name`` is resolved
+ * server-side from the stored ``graph_id``, null when unresolvable. ``node_name`` is the ``forced``
+ * mode's landing target, null for ``auto``, whose landing is derived at consult time.
  */
 export type IntendedMigrationView = {
     /**
@@ -1756,30 +1631,17 @@ export type MeResponse = {
  * How a chunk's :class:`IntendedMigration` fires at its next transition (issue #124).
  *
  * ``AUTO`` fires only when the transition's own destination node name also exists on
- * the target graph (a name match); with no match the transition applies unchanged and
- * the intent stays set for the transition after. ``FORCED`` fires unconditionally,
- * landing on the intent's named ``node_name`` regardless of the transition's own
- * destination.
+ * the target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``.
  */
 export type MigrationMode = 'auto' | 'forced';
 
 /**
  * MigrationView
  *
- * One cross-graph migration step in a chunk's history (issue #90).
- *
- * A judgement choice targeting another graph ends the chunk's attempt in ``from_graph``
- * and re-queues it at ``landed_node`` in ``to_graph`` — its own step in the timeline,
- * never a transition (``bzh:migration-not-transition``). Node and
- * graph names are resolved server-side against each side's own graph (null when
- * unresolvable); ``model`` is the re-pinned model, or null when the chunk kept its own.
- *
- * ``source`` (issue #164) says **what** moved the chunk — ``authored-edge`` (a #90
- * judgement choice), ``intent`` (an operator's #124 standing intent), or
- * ``follow-latest`` (the standing policy). It is the only one of the three a human did
- * not ask for, so this is how a reader learns why a chunk sits on a graph it did not
- * start on. Null on a migration recorded before the discriminator existed — unrecorded,
- * not defaulted, since a legacy row's two operator sources are indistinguishable.
+ * One cross-graph migration step (issue #90): the chunk's attempt ended in ``from_graph`` and it
+ * re-queued at ``landed_node`` in ``to_graph`` — its own step, never a transition
+ * (``bzh:migration-not-transition``). ``model`` is the re-pinned model, null when the chunk kept its
+ * own. ``source`` says what moved it: ``authored-edge``, ``intent``, or ``follow-latest`` (#164).
  */
 export type MigrationView = {
     /**
@@ -1950,13 +1812,9 @@ export type OpenDecisionsResponse = {
 /**
  * PauseView
  *
- * An open pause on a chunk (issue #46) — who set it and when.
- *
- * Present only while ``paused=True`` is the newest pause fact; a resume clears it.
- * Carried independently of ``status``: PAUSED sits below the human-gated statuses in
- * the derivation order, so a chunk both paused and parked on a question derives
- * ``waiting_on_human`` — this field is then the only carrier of the pause fact, and it
- * also answers "who paused it".
+ * An open pause on a chunk (issue #46) — who set it and when, present only while ``paused=True``
+ * is the newest pause fact. Carried independently of ``status``: PAUSED sits below the human-gated
+ * statuses in the derivation order, so this is the only carrier of a pause on a gated chunk.
  */
 export type PauseView = {
     /**
@@ -1972,12 +1830,8 @@ export type PauseView = {
 /**
  * PendingView
  *
- * A hub node's in-progress poll (#66) — waiting on external state, honestly.
- *
- * Surfaced on chunk detail so a ``delivering`` chunk parked at a hub node reads
- * truthfully whether it is about to run its first attempt or already mid-poll, and
- * when the next attempt is due — never itself a status (the chunk still derives
- * ``delivering``, mirroring ``awaiting_external_merge``).
+ * A hub node's in-progress poll (#66) — whether a chunk parked at a hub node is about to run its
+ * first attempt or is already mid-poll, and when the next is due. Never itself a status.
  */
 export type PendingView = {
     /**
@@ -2015,10 +1869,8 @@ export type PrView = {
  *
  * One node's ``produces:`` expectation, kind-carrying (D1, issue #143).
  *
- * The wire counterpart of :class:`~blizzard.hub.domain.graph.ProducesSpec` — served
- * on :class:`GraphNodeView` and (imported) on
- * :class:`~blizzard.wire.envelope.NodeConfig`, so both the graph-read surface and the
- * runner's per-step envelope carry the same kind-carrying shape.
+ * The wire counterpart of :class:`~blizzard.hub.domain.graph.ProducesSpec`, so every
+ * surface carrying a ``produces:`` entry carries the same kind-carrying shape.
  */
 export type ProducesEntry = {
     kind?: ArtifactKind;
@@ -2053,9 +1905,8 @@ export type ProviderSummary = {
  *
  * A ``question.asked`` fact the runner forwards to the hub.
  *
- * ``question_id`` is runner-minted (``qn_<ulid>``) so the runner can poll the answer
- * back by it; ``epoch`` is the parked lease's fence, ``session_id`` the dormant
- * session to resume around the answer, and ``options`` the offered choices.
+ * ``question_id`` is runner-minted (``qn_<ulid>``); ``epoch`` is the parked lease's
+ * fence, ``session_id`` the dormant session, ``options`` the offered choices.
  */
 export type QuestionAsked = {
     /**
@@ -2099,12 +1950,10 @@ export type QuestionAsked = {
 /**
  * QuestionView
  *
- * A question row with its derived answer *and delivery* state — the surfacing shape.
+ * A question row with its derived answer *and delivery* state.
  *
- * Behind ``GET /questions`` (open only), ``GET /questions/{id}``, and the chunk
- * detail's questions list. ``answered`` and the answer fields derive from the presence
- * of the answer row; ``delivered``/``delivered_at`` derive from the
- * ``answer.delivered`` fact (issue #165).
+ * ``answered`` and the answer fields derive from the presence of the answer row;
+ * ``delivered``/``delivered_at`` derive from the ``answer.delivered`` fact (issue #165).
  */
 export type QuestionView = {
     /**
@@ -2210,10 +2059,8 @@ export type QueuePeekResponse = {
  *
  * Single-chunk fractional reposition — ``POST /api/queue/position`` (issue #137).
  *
- * ``chunk_id`` is the chunk being moved; ``after_chunk_id=null`` moves it to the very
- * top of the ready queue, otherwise it lands immediately after the named chunk. Both
- * must name currently-ready chunks (``409`` otherwise), and ``after_chunk_id`` must
- * not equal ``chunk_id`` (``422``) — a chunk cannot anchor against itself.
+ * ``after_chunk_id=null`` moves ``chunk_id`` to the top, otherwise immediately after
+ * the named chunk. Both must be ready (``409``); a self-anchor is ``422``.
  */
 export type QueuePositionRequest = {
     /**
@@ -2231,10 +2078,8 @@ export type QueuePositionRequest = {
  *
  * Idempotent whole-order replacement of the ready queue — ``PUT /api/queue``.
  *
- * ``chunk_ids`` is the desired order, front to back; every id must name a
- * currently-ready chunk (``409`` otherwise) and must not repeat (``422``
- * otherwise). A ready chunk not named here keeps its current relative order,
- * appended after the named ones.
+ * ``chunk_ids`` is the desired order, front to back; each must name a ready chunk
+ * (``409``) and not repeat (``422``). An unnamed ready chunk is appended, order kept.
  */
 export type QueueReplaceRequest = {
     /**
@@ -2341,11 +2186,8 @@ export type RouteClaimResponse = {
 /**
  * RouteTokenRekeyResponse
  *
- * ``POST /api/fleet/chunks/{id}/route-token``'s reply — a fresh plaintext route
- * capability token for the chunk's live route (issue #84b), returned exactly once
- * here, same as the claim response's own ``route_token``. Covers the
- * crash-after-mint-before-response case: the holding runner re-keys rather than
- * being permanently locked out of a token it never read back.
+ * A fresh plaintext route capability token for the chunk's live route (issue #84b),
+ * returned exactly once here — the recovery path for a token never read back.
  */
 export type RouteTokenRekeyResponse = {
     /**
@@ -2383,9 +2225,8 @@ export type RouteView = {
  *
  * A freshly minted (or rotated) bearer token — issue #86a.
  *
- * ``token`` is the plaintext; the hub keeps only its sha256 hash from here on, so
- * this response is the one and only place it is ever visible again. A re-enroll
- * call rotates: the old token stops resolving the moment this response lands.
+ * ``token`` is the plaintext, visible only here — only its sha256 hash is kept. A
+ * re-enroll rotates: the old token stops resolving the moment this response lands.
  */
 export type RunnerEnrollmentResponse = {
     /**
@@ -2403,13 +2244,8 @@ export type RunnerEnrollmentResponse = {
  *
  * One buffered runner fact: its per-runner seq, its kind, and its payload.
  *
- * ``payload`` is the kind-specific body — for ``lease.minted`` ``{chunk_id, epoch,
- * route_token}``, for ``escalation.recorded`` ``{chunk_id, epoch, takeover_command,
- * wrapped_takeover_command, route_token}``, for ``question.asked`` the ask fields
- * plus ``route_token`` — kept
- * open so a new runner fact kind bolts on without a wire change. ``route_token``
- * (issue #84a) is the chunk-scoped fact's route capability token, stamped at
- * enqueue; present-only in this phase (the hub does not yet reject on it).
+ * ``payload`` is the kind-specific body, kept open so a new fact kind needs no wire change;
+ * every chunk-scoped kind carries ``route_token`` (issue #84a), stamped at enqueue.
  */
 export type RunnerFact = {
     /**
@@ -2433,11 +2269,8 @@ export type RunnerFact = {
  *
  * The hub's per-batch acknowledgement against its high-water mark.
  *
- * ``high_water`` is the runner's new mark after this batch; ``applied`` and
- * ``already_applied`` partition the pushed seqs so the runner can ack its buffer
- * (a semantic rejection still acks — rejection is an outcome, not a delivery
- * failure). ``rejected`` names seqs the hub refused for a non-idempotency
- * reason (an unknown kind), which the runner surfaces rather than silently drops.
+ * ``high_water`` is the new mark after this batch; ``applied``/``already_applied`` partition
+ * the pushed seqs, and ``rejected`` names seqs refused for a non-idempotency reason.
  */
 export type RunnerFactAck = {
     /**
@@ -2507,10 +2340,8 @@ export type RunnerPauseRequest = {
  *
  * Register a runner into the fleet — runner id + workspace binding.
  *
- * ``env_capacity`` is the runner's configured environment-pool size (the length of its
- * ``workspace_envs``); ``None`` when the client reports none, never a guessed total.
- * Re-registration overwrites the stored value unconditionally, so a ``workspace_envs``
- * change converges on the next one.
+ * ``env_capacity`` is the runner's configured environment-pool size; ``None`` when the
+ * client reports none, never a guessed total. Re-registration overwrites it.
  */
 export type RunnerRegistrationRequest = {
     /**
@@ -2554,16 +2385,10 @@ export type RunnerRegistrationResponse = {
 /**
  * RunnerView
  *
- * One fleet-registry row — derived liveness, both brakes, and (issue #218) an
- * advisory external-usage snapshot.
+ * One fleet-registry row — derived liveness, both brakes, and an advisory snapshot.
  *
- * A runner can be paused by two different parties for two different reasons, so the two
- * are reported separately rather than collapsed into one ``paused`` (issues #43, #45).
- * A reader that wants "is it claiming?" ORs them; ``hub_paused`` is claims-only, while
- * ``locally_paused`` alone answers "is it spawning anything at all?". ``external_subscription_usage``
- * is a third, unrelated kind of thing carried on the same row: a read-only diagnostic
- * of the harness's own subscription rate-limit windows, never a brake and never
- * consulted by scheduling or claiming.
+ * The two brakes stay separate (issues #43, #45): ``hub_paused`` is claims-only, while
+ * ``locally_paused`` answers "is it spawning at all?". The usage snapshot is advisory.
  */
 export type RunnerView = {
     /**
@@ -2656,21 +2481,10 @@ export type SubmittedArtifact = {
 /**
  * TransitionView
  *
- * One accepted transition in a chunk's history.
- *
- * The edge a node-step took — its origin node, the judgement choice that routed it,
- * and its destination — oldest first on the detail. This is what makes the review-fail
- * loop legible: a ``review -> build`` entry with ``choice_name = "fail"`` is a visible
- * step in the timeline (MVP criterion 9/11).
- *
- * ``from_node_name``/``to_node_name`` are the nodes' human graph names (``build``,
- * ``review``) beside the raw ``nd_`` ULIDs; resolved here so the timeline is legible
- * without reassembly, null when the pinned graph cannot resolve the id.
- *
- * ``graph_id``/``graph_name`` identify the graph this step happened in (issue #90) —
- * resolved per-transition against its own graph, so a chunk that later migrated still
- * labels its old-graph steps with the graph they belong to rather than the current pin;
- * both null for a step predating graph-provenance (never backfilled with a name).
+ * One accepted transition in a chunk's history: the edge a node-step took — origin node, the
+ * judgement choice that routed it, destination — oldest first on the detail.
+ * ``from_node_name``/``to_node_name`` are the nodes' human graph names, null when unresolvable.
+ * ``graph_id``/``graph_name`` name the graph this step happened in (issue #90), both null on old rows.
  */
 export type TransitionView = {
     /**
@@ -2794,14 +2608,10 @@ export type ValidationError = {
 /**
  * WorkItemEntry
  *
- * One pointer's pass-through work item — title, body + comment
- * thread, vendor-native.
- *
- * ``label``/``web_url`` are the legible pointer label (``blizzard#8``) and its
- * browser address — both null when no configured source names ``source``. A
- * per-pointer forge failure degrades here rather than failing the whole read:
- * ``error`` carries the reason and ``title``/``body`` are null, so one unreachable
- * pointer never blinds the reader to the pointers it did reach.
+ * One pointer's pass-through work item — title, body, and comment thread, vendor-native.
+ * ``label``/``web_url`` are the legible pointer label and its browser address, both null when no
+ * configured source names ``source``. A per-pointer failure degrades here rather than failing the
+ * whole read: ``error`` carries the reason and ``title``/``body`` are null.
  */
 export type WorkItemEntry = {
     /**
@@ -2877,12 +2687,9 @@ export type WorkRefModel = {
 /**
  * WorkRefView
  *
- * A pointer as the views carry it — the raw pair plus its legible label and browser
- * URL, both resolved by the pointer's configured source binding.
- *
- * ``label`` is the legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``
- * is its browser-openable address. Both null when no configured source names
- * ``source``.
+ * A pointer as the views carry it — the raw pair plus its legible label and browser URL, both
+ * resolved by the pointer's configured source binding. ``label`` is the legible ``{name}#{ref}``;
+ * ``web_url`` is its browser-openable address. Both null when no configured source names ``source``.
  */
 export type WorkRefView = {
     /**
@@ -2906,11 +2713,9 @@ export type WorkRefView = {
 /**
  * RotatePolicyView
  *
- * The declared session's rotation bounds (issue #144).
- *
- * The wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`, carried on
- * :class:`NodeConfig`. ``max_invocations`` counts **harness invocations** (spawn, resume,
- * judge, nudge), not node-steps — one node-step burns two or three of them.
+ * The declared session's rotation bounds (issue #144), carried on :class:`NodeConfig`.
+ * ``max_invocations`` counts **harness invocations** — spawn, resume, judge, nudge — not node-steps,
+ * of which one burns two or three.
  */
 export type BlizzardWireEnvelopeRotatePolicyView = {
     /**
@@ -2932,10 +2737,8 @@ export type BlizzardWireEnvelopeRotatePolicyView = {
  *
  * One declared session's rotation bounds (issue #144).
  *
- * The wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`. Every
- * threshold is independently optional; ``max_invocations`` counts **harness
- * invocations** (spawn, resume, judge, nudge), not node-steps — one node-step burns two
- * or three of them.
+ * Every threshold is independently optional; ``max_invocations`` counts **harness
+ * invocations**, not node-steps, one of which burns several.
  */
 export type BlizzardWireGraphRotatePolicyView = {
     /**

@@ -1,12 +1,8 @@
-"""``client=cli``'s own authorize branch + ``POST /api/auth/cli/token`` — the CLI's
-PKCE loopback/paste-code login (component tier, issue #96).
+"""``client=cli``'s PKCE loopback/paste-code login (component tier, issue #96).
 
-Drives the hub-as-IdP surface (``hub/api/idp.py``) directly with a fake browser
-(``hub.client``, which already carries the ``bz_session`` cookie a real browser would):
-``authorize`` delivers a *code* rather than a runner-style JWT for ``client=cli``
-(decision D6), and the code is redeemed at ``POST /api/auth/cli/token`` for a hub
-session token — the exact bearer ``blizzard hub cli.py``'s ``_request`` attaches on
-every later verb (proven here against ``GET /api/me``).
+Drives the hub-as-IdP surface with a fake browser: ``authorize`` delivers a *code*
+rather than a runner-style JWT for ``client=cli`` (decision D6), redeemed at
+``POST /api/auth/cli/token`` for the session token every later verb bears.
 """
 
 from __future__ import annotations

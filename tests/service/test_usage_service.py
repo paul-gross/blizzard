@@ -1,28 +1,9 @@
 """Usage service tier — usage facts over the wire, both daemon directions (epic #57, #59).
 
-Phase 3 makes usage a fleet-visible fact that flows runner -> hub on the store-and-forward
-rails and becomes a **derived** chunk total the hub serves off its live API. The unit and
-component tiers pin the derivation and the in-process ingest; this file proves the same two
-behaviours against a **running** daemon over real HTTP with the counterpart mocked — the
-tier that alone type-checks a wire field name off a live response (``bzh:sweep-release-only-
-tiers``), which the new ``ChunkUsageView`` / ``ChunkUsageTotalView`` shapes are:
-
-* **runner -> mock hub (store-and-forward)** — a real runner drives a build against the mock
-  hub; ADVANCE records the worker's usage and buffers each fact outbound on the same rails
-  ``lease.minted`` / ``completion.submitted`` ride. Through a hub outage the usage facts stay
-  buffered (they cannot flush), and on recovery they flush and the buffer drains to zero —
-  recorded once, never re-buffered by the subsequent ticks (the seq high-water idempotency).
-* **mock runner -> live hub (derived totals)** — the mock runner claims a chunk over the wire
-  (a real lease + epoch minted on the running hub); usage facts are then pushed through the
-  hub's real ``POST /api/fleet/events`` store-and-forward endpoint, and the derived per-node-step
-  usage + chunk total (with ``cost_partial`` when a row's cost is absent) are read back off
-  the **live** ``GET /api/chunks/{id}`` and ``GET /api/chunks`` responses. A replayed seq
-  lands nothing twice.
-
-sqlite only, no tokens, no network. Reproduce — from a provisioned feature env — with::
-
-    BLIZZARD_SERVICE=1 uv run pytest tests/service/test_usage_service.py
-"""
+Proves the derivation and store-and-forward flow against a running daemon over real HTTP
+(``bzh:sweep-release-only-tiers``): a real runner buffers usage through a mock-hub outage
+and flushes once on recovery; a mock runner pushes usage facts to a live hub and the
+derived per-node-step usage + chunk total round-trip the live API, idempotent on replay."""
 
 from __future__ import annotations
 
@@ -55,7 +36,6 @@ pytestmark = [pytest.mark.service, service_gate]
 _WORK_REF_URL = f"{REPO}/issues/1"
 
 
-# --------------------------------------------------------------------------- #
 # runner -> mock hub: usage rides the store-and-forward buffer through an outage.
 # --------------------------------------------------------------------------- #
 
@@ -125,9 +105,8 @@ def test_runner_buffers_usage_facts_through_a_hub_outage_and_flushes_once(tmp_pa
         chunk_id = resp.json()["chunk_id"]
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
-        # Drive (hub up) until the mock worker has committed, exited, and ADVANCE has
-        # *buffered* its usage fact(s) — caught on the tick boundary before the next
-        # PULL would flush them (ADVANCE enqueues on the same rails as the completion).
+        # Drive until the mock worker commits and ADVANCE buffers its usage fact(s),
+        # caught before the next PULL would flush them.
         buffered = poll_until(lambda: _tick_then_usage_buffered(config, fenced), timeout=60.0)
         assert buffered, "no usage.recorded fact ever buffered (the worker did not run to completion)"
         assert _status(hub, chunk_id) != "done", "the chunk landed before the outage could be staged"
@@ -149,7 +128,6 @@ def test_runner_buffers_usage_facts_through_a_hub_outage_and_flushes_once(tmp_pa
         assert _pending_usage(config) == 0, "usage was re-buffered after the flush — not recorded exactly once"
 
 
-# --------------------------------------------------------------------------- #
 # mock runner -> live hub: derived chunk usage totals off the running HTTP API.
 # --------------------------------------------------------------------------- #
 
@@ -217,10 +195,9 @@ def _push_usage(hub: httpx.Client, *, runner_id: str, seq: int, payload: dict) -
 
 
 def test_hub_derives_chunk_usage_totals_off_a_live_api_from_pushed_facts(tmp_path: Path) -> None:
-    """The mock runner claims a chunk over the wire (a real lease + epoch on the running
-    hub); usage facts pushed through the hub's real store-and-forward endpoint become
-    per-node-step usage + a derived chunk total read back off the **live** API, with
-    ``cost_partial`` set when a row's cost is absent, and a replay lands nothing twice."""
+    """The mock runner claims a chunk over the wire; pushed usage facts derive
+    per-node-step usage + a chunk total off the live API, with ``cost_partial`` on an
+    absent-cost row and idempotent replay."""
     bin_dir = require_mock_fleet()
     _workspace, origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     forge_port, hub_port = _free_port(), _free_port()

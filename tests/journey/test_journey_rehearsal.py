@@ -1,58 +1,9 @@
 """The capstone: the MVP acceptance journey as one committed, repeatable rehearsal.
 
-This is *the* MVP acceptance journey — driven end to end over the real fleet, faithfully
-mock-bound. It is the whole story in one test, not a slice: five issues in, a night of
-autonomous work with a reboot in the middle, and the morning-after assertions taken
-verbatim from the journey prose.
-
-**The setup (journey ¶1).** Five issues are filed across the fixture workspace's two
-repos (``toy-api`` + ``toy-web``) at the mock forge and ingested *by id* — each mints a
-chunk. Two related ones are **grouped** into a single chunk through
-``POST /chunks/{id}/group``, and that grouped chunk — the riskiest, because it spans
-both repos — is **moved to the top** of the ready queue through the whole-order
-``PUT /queue``. The queue read proves both took.
-
-**The night (journey ¶1-2).** The runner is a **real** ``blizzard runner host`` daemon
-and the hub a **real** ``blizzard hub host`` daemon (the systemd units' ``ExecStart`` — see
-``packaging/systemd/``); the fleet works the four chunks autonomously. Behaviour is *the
-prompt is the program*: one shared ``build → review → deliver`` graph whose nodes read each
-chunk's own work item **through the hub pass-through** (``blizzard runner work-items`` — MVP
-criterion 1) and act on a directive in the issue body. So the fleet exhibits, unattended:
-
-* the **grouped** chunk builds a real change in *both* repos, passes review, and lands on
-  both bare mains (grouping + multi-repo serial delivery — criteria 11/13);
-* one chunk's **review fails once**, carries its findings asset + the fail-edge
-  ``prompt_addendum`` back into build's re-entry envelope, and lands on the second pass
-  (criterion 9);
-* one worker hits an **undecidable choice**, runs the real ``blizzard runner ask`` and
-  exits; its chunk parks ``waiting_on_human`` (criterion 7);
-* one chunk **genuinely fails** — every attempt exits verdict-less — exhausts its retry
-  budget and escalates to ``needs_human`` with a pasteable takeover command (criterion 6).
-
-**The reboot (journey ¶3).** Mid-run — while work is genuinely in flight — *both* daemons
-are ``SIGKILL``ed and restarted through the same migrate-then-host path the systemd units
-declare. The facts-level invariant checker is green the instant after the crash, and the
-fleet continues: every chunk resumes at exactly the node the hub last recorded (criterion
-4 is the exhaustive proof; here it is the journey's "it didn't matter" clause).
-
-**The morning after (journey ¶2, verbatim).** ``blizzard hub question answer`` resumes the parked
-chunk with no takeover, and it lands. The failed chunk's escalation command, run
-**verbatim**, drops into and resumes the stuck agent's session. Then: the succeeded chunks
-merged to bare ``main`` via the default graph; the full history + artifacts are visible at
-the hub API; the asked chunk resumed without takeover;
-nothing was worked twice (every landed file reachable from bare ``main`` exactly once); no
-environment is orphaned (``blizzard dev check-invariants`` clean); and ``blizzard hub
-status`` tells the truth about every chunk.
-
-Gated like the crash sweep — needs the sibling ``blizzard-mock`` worktree, a local winter
-source, and ``BLIZZARD_JOURNEY=1`` (see ``conftest.py``). Reproduce it with::
-
-    BLIZZARD_JOURNEY=1 uv run pytest -m journey
-
-Determinism: the fixture is re-minted from clean each run and every phase gates on a
-*derived, latched* hub state (``waiting_on_human`` / ``needs_human`` / ``done``) rather than
-on timing, so the rehearsal is repeatable — run it twice, it is green twice.
-"""
+Driven end to end over the real fleet, faithfully mock-bound: five issues in, a night of
+autonomous work (grouped multi-repo delivery, a review-fail-then-land cycle, an
+undecidable-choice ask, a genuine escalation), a mid-run ``SIGKILL`` reboot of both
+daemons, and the morning-after resolution. Reproduce with ``BLIZZARD_JOURNEY=1``."""
 
 from __future__ import annotations
 
@@ -130,11 +81,7 @@ def _work_sources(forge_port: int) -> tuple[WorkSourceConfig, ...]:
     )
 
 
-# --------------------------------------------------------------------------- #
-# The shared build -> review -> deliver graph (see module docstring). ``.behavior`` is
-# written by the build spawn into the env workdir (which persists across the chunk's
-# node-steps) so the judgement / review turns — and the review's re-entry — read the
-# same behaviour without another fetch.
+# The shared build -> review -> deliver graph; `.behavior` persists across node-steps.
 # --------------------------------------------------------------------------- #
 
 _BUILD_PROMPT = f"""\
@@ -207,9 +154,8 @@ else:  # clean / review-fail: a real change in each repo (append so a re-build c
         _push_and_declare(repo)
 """
 
-# The fail-edge addendum, inlined onto build's re-entry prompt (same namespace: ``repos`` /
-# ``_commit`` / ``pathlib`` are already bound). Its committed marker reaches bare ``main``
-# ONLY if the findings threaded back through the envelope (criterion 9).
+# The fail-edge addendum, inlined onto build's re-entry prompt. Its committed marker
+# reaches bare ``main`` only if the findings threaded back through the envelope (criterion 9).
 _REVIEW_ADDENDUM = """\
 for repo in repos:
     pathlib.Path(repo, "REVIEW_ADDRESSED.md").write_text("addressed the review findings\\n")
@@ -256,8 +202,7 @@ _ANSWER_SCRIPT = (
     '     "commit", "-m", "feat: resolve the ask and land"],\n'
     "    check=True,\n"
     ")\n"
-    # Push the branch and declare it (issue #143, Phase 4) — the runner no longer
-    # discovers or pushes the produced pointer, so the worker must, through the real
+    # Push the branch and declare it (issue #143, Phase 4) via the real
     # `blizzard runner artifact commit` verb.
     "_branch = subprocess.run(\n"
     '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
@@ -310,12 +255,8 @@ def _graph_yaml() -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            # Delivery is graph CONTENT since #67: a generic hub command node whose
-            # `run:` step is the packaged default graph's own `land_default` script —
-            # fetch, check every repo merges cleanly, then push all, recording a
-            # `merged/<repo>` marker per repo. `landed -> done` / `conflict -> build`
-            # mirror `hub/graphs/default/graph.yaml`. (Before #67 this was the coordinator's
-            # `mode: merge-to-main` special case, deleted with the retirement.)
+            # Delivery is graph content (#67): a generic hub command node running the
+            # packaged default graph's own `land_default` script; mirrors `hub/graphs/default/graph.yaml`.
             "deliver": {
                 "executor": "hub",
                 "run": [{"name": "land-every-repo", "command": "python3 -m blizzard.hub.graphs.scripts.land_default"}],
@@ -334,7 +275,6 @@ def _graph_yaml() -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-# --------------------------------------------------------------------------- #
 # The five issues (their bodies carry the per-chunk behaviour directive).
 # --------------------------------------------------------------------------- #
 
@@ -392,7 +332,6 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
     if source is None:
         pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
 
-    # ------------------------------------------------------------------ #
     # Mint a fresh, disposable fixture world (bare origins + a real winter workspace).
     # ------------------------------------------------------------------ #
     scratch = tmp_path / "scratch"
@@ -423,7 +362,6 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
             await_http(hub, "/api/health", proc=hub_proc)
             assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
 
-            # ---------------------------------------------------------- #
             # Journey ¶1 — five issues across the repos, ingested by id.
             # ---------------------------------------------------------- #
             grp_api = _ingest(
@@ -465,7 +403,6 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
 
             all_chunks = {"grouped": grp_api, "review": rev, "ask": ask, "escalate": esc}
 
-            # ---------------------------------------------------------- #
             # Journey ¶1-2 — the fleet works overnight (real host daemons).
             # ---------------------------------------------------------- #
             write_runner_config(runner_dir, workspace=workspace, bin_dir=bin_dir, hub_port=hub_port, port=runner_port)
@@ -479,12 +416,8 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
             assert wait_status(hub, ask, {"waiting_on_human"}, timeout=300.0) == "waiting_on_human"
             assert wait_status(hub, esc, {"needs_human"}, timeout=300.0) == "needs_human"
 
-            # ---------------------------------------------------------- #
-            # Journey ¶3 — mid-run reboot (see module docstring): SIGKILL both the hub and
-            # the runner, then bring them back through the systemd units' migrate-then-host
-            # path (packaging/systemd/). The exhaustive per-boundary recovery proof is the
-            # crash sweep, tests/crash/.
-            # ---------------------------------------------------------- #
+            # Journey ¶3 — mid-run reboot: SIGKILL both daemons, restart through the
+            # systemd units' migrate-then-host path (see module docstring).
             runner_proc.kill()
             runner_proc.wait(timeout=15)
             hub_proc.kill()
@@ -504,21 +437,14 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
             assert recovered[esc] == "needs_human", f"the escalation did not survive the reboot: {recovered}"
             _assert_invariants(runner_dir, hub_dir, when="right after the reboot recovery")
 
-            # ---------------------------------------------------------- #
-            # Journey ¶2 — the human loop, after the reboot.
-            # ---------------------------------------------------------- #
-            # The failed chunk's takeover command, run VERBATIM, resumes the stuck agent's
-            # session (its persisted state advances — not just that the string exists).
+            # Journey ¶2 — the human loop. The takeover command, run verbatim, resumes the
+            # stuck agent's session (its persisted state advances, not just the string).
             escalation = hub.get(f"/api/chunks/{esc}").json()["escalation"]
             assert escalation and escalation["takeover_command"], "no pasteable takeover command on the escalation"
             takeover = escalation["takeover_command"]
 
-            # The wrapped, supported entry point (issue #251) — composed by a REAL runner
-            # daemon's own runtime-dir resolution end to end, not a mocked/faked one. The
-            # RAW command above stays the one actually executed (it alone proves a
-            # resumable session exists); `--dir` names `RunnerConfig.load`'s resolved,
-            # absolute root (``root.resolve()``), not the raw `tmp_path / "runner"`
-            # expression the daemon was started against, which need not coincide with it.
+            # The wrapped, supported entry point (issue #251); `--dir` names
+            # `RunnerConfig.load`'s resolved root, not the raw expression above.
             resolved_runner_dir = runner_dir.resolve()
             wrapped_takeover = escalation["wrapped_takeover_command"]
             assert wrapped_takeover == f"blizzard runner takeover {esc} --dir {shlex.quote(str(resolved_runner_dir))}"
@@ -536,7 +462,6 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
             )  # fmt: skip
             assert answered.returncode == 0, f"hub question answer failed:\n{answered.stderr}"
 
-            # ---------------------------------------------------------- #
             # Journey ¶2 — the morning after. Every succeeded chunk lands.
             # ---------------------------------------------------------- #
             for name in ("grouped", "review", "ask"):
@@ -556,7 +481,6 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
             terminate(hub_proc)
 
 
-# --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
 
@@ -648,9 +572,8 @@ def _assert_morning_after(
     # The failed chunk never delivered — its file is on no main.
     assert "LANDED-escalate.md" not in git_bare(api_bare, "ls-tree", "-r", "--name-only", "main").split()
 
-    # Hub API — the full history + artifacts render. History records opaque node ids +
-    # the choice on each edge; the artifacts carry the node *name*. Together they show
-    # the chunk walked build -> review -> deliver -> done.
+    # History records opaque node ids + the choice on each edge; the artifacts carry
+    # the node name — together they show the chunk walked build -> review -> deliver -> done.
     grouped_detail = hub.get(f"/api/chunks/{chunks['grouped']}").json()
     choices = [t["choice_name"] for t in grouped_detail["history"]]
     assert len(grouped_detail["history"]) == 3, (

@@ -1,20 +1,9 @@
 """The GitHub-shaped work-source binding (``bzh:pluggable-seams``).
 
-Implements :class:`~blizzard.hub.work_sources.source.IWorkSource` against a GitHub REST v3
-surface — the ``blizzard-mock`` forge in tests, GitHub in production. Confined to
-``internal/`` (adapter placement, ``bzh:dependency-inversion``); ``httpx`` is used only
-here. One instance per configured ``[[work_source]]``: pinned to its own
-``repo``, its own ``web_base`` (an origin, e.g. ``https://github.com``), and carrying
-its own credentialed client — never the delivery forge's.
-
-The pointer carries its own ``source`` name and an opaque ``ref`` (this binding's
-own item token — a GitHub issue number): ``fetch``/``label``/``web_url`` trust
-``pointer.ref`` directly rather than re-deriving it from a URL.
-
-``parse``'s production caller is ``POST /chunks``, via the registry's ``resolve``,
-checked against *this binding's own configured* ``repo`` — the hub's own
-configuration, not a client-side heuristic.
-"""
+Implements :class:`~blizzard.hub.work_sources.source.IWorkSource` against a GitHub REST
+v3 surface. Confined to ``internal/`` (``bzh:dependency-inversion``); ``httpx`` is used
+only here. One instance per configured ``[[work_source]]``, pinned to its own ``repo``
+and ``web_base`` and carrying its own credentialed client."""
 
 from __future__ import annotations
 
@@ -30,15 +19,12 @@ from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceEr
 
 _log = get_logger("blizzard.hub.work_sources")
 
-# A GitHub-shaped issue reference — {owner}/{repo}/issues/{number} — with or without a
-# leading scheme://host and with or without the REST /repos/ prefix, so both the full
-# browser URL and the schemeless shorthand resolve the same way.
+# A GitHub-shaped issue reference — {owner}/{repo}/issues/{number}, with or without a
+# leading scheme://host and the REST /repos/ prefix.
 _ISSUE_URL_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/:#]+)/(?P<repo>[^/:#]+)/issues/(?P<number>\d+)/?$")
 
 
-# Blizzard cyan, hex-without-hash as GitHub's label API spells colors: at-rest ingested
-# wears the web board's light `--cyan` token (#5cd1e5), active in-progress the darker
-# `--cyan-dim` (#2b6675).
+# Blizzard cyan, hex-without-hash as GitHub's label API spells colors.
 _LABEL_COLORS = {
     WorkStatusMarker.INGESTED: "5cd1e5",
     WorkStatusMarker.IN_PROGRESS: "2b6675",
@@ -60,10 +46,7 @@ class GitHubWorkSource:
     """Vendor-native issue reader over a GitHub-shaped forge, pinned to one repo.
 
     Also implements :class:`~blizzard.hub.work_sources.annotator.IWorkAnnotator` and
-    :class:`~blizzard.hub.work_sources.closer.IWorkCloser` — one instance, one client,
-    one credential, all three Protocols — bound into the registry's annotator/closer
-    maps only for a source configured to opt in.
-    """
+    :class:`~blizzard.hub.work_sources.closer.IWorkCloser` over the same client."""
 
     def __init__(self, client: httpx.Client, *, name: str, repo: str, web_base: str) -> None:
         self._client = client
@@ -73,13 +56,9 @@ class GitHubWorkSource:
         self._labels_bootstrapped = False
 
     def parse(self, token: str) -> WorkRef | None:
-        """This source's own ingest-token forms into a pointer, or
-        ``None`` when ``token`` isn't shaped for this source: ``{name}:{number}``,
-        ``{name}#{number}``, or the item's own issue URL — full
-        (``https://github.com/{owner}/{repo}/issues/{n}``) or schemeless
-        (``{owner}/{repo}/issues/{n}``) — naming *this binding's own configured*
-        ``repo``. A URL naming a different repo is not this source's token; some other
-        configured binding may claim it instead."""
+        """This source's own ingest-token forms into a pointer, or ``None`` when ``token``
+        isn't shaped for it: ``{name}:{number}``, ``{name}#{number}``, or an issue URL
+        (full or schemeless) naming *this binding's own configured* ``repo``."""
         for sep_char in (":", "#"):
             prefix, sep, ref = token.partition(sep_char)
             if sep and prefix == self._name and ref.isdigit():

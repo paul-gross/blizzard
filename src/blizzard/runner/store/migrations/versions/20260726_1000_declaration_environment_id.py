@@ -1,23 +1,5 @@
-"""git-commit declarations keyed by environment, not by a worker-supplied forge
-
-Two coupled changes to ``git_commit_declarations``, both about what identifies a
-declaration:
-
-- **drop ``forge``** — the origin a declaration is verified against now comes from the
-  environment's repo manifest (the workspace provider owns the layout), not from the
-  worker. The column's value was derived from ``git remote get-url origin`` in the
-  worker's process cwd; workers are spawned at the workspace root, so every declaration
-  named the enclosing workspace repo rather than the repo it described, failed the
-  verify comparison, and was dropped silently.
-- **add ``environment_id``** — a chunk may hold several environments, each with its own
-  worktree of the same repo, so ``(lease_id, repo)`` named a branch ambiguously and a
-  second env's declaration read as a *correction* of the first rather than a second
-  fact. The read is now newest-per-``(lease_id, environment_id, repo)``.
-
-Existing rows carry no environment and a forge that never verified, so the table is
-dropped and recreated rather than back-filled — a back-fill would have to invent an
-``environment_id`` for rows whose env is unknowable (pinned by
-``tests/test_pin_runner_store.py::test_declaration_environment_id_migration_discards_the_pre_revision_rows``).
+"""git-commit declarations keyed by environment, not by a worker-supplied forge — drops
+``forge``, adds ``environment_id``. Existing rows are discarded, never back-filled.
 
 Revision ID: 20260726_1000_runner_declaration_environment_id
 Revises: 20260725_1200_runner_check_results

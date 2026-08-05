@@ -1,14 +1,9 @@
-"""Packaged workflow graphs — the hub-configured default graph.
+"""Packaged workflow graphs, and the loader that reads them.
 
-The hub ships a default graph every ingested chunk is pinned to. It
-lives here as packaged data — one directory per graph, each holding its own
-``graph.yaml`` plus its own ``prompts/`` (never shared across graphs, since two
-packaged graphs can name the same prompt filename with different content) — so a
-fresh hub mints the default without any authoring. This module is the *loader* — the
-edge that reads YAML and inlines prompt *file* references before the pure-domain
-parser and validator run; it is deliberately outside the domain (it touches the
-filesystem and PyYAML), which the domain must not (``bzh:domain-core``).
-"""
+Packaged data is one directory per graph, each holding its own ``graph.yaml`` plus its own ``prompts/``
+— never shared across graphs, since two can name the same prompt filename with different content. This
+module is the *loader*: the edge that reads YAML and inlines prompt *file* references before the pure
+parser and validator run, deliberately outside the domain, which touches neither (``bzh:domain-core``)."""
 
 from __future__ import annotations
 
@@ -31,25 +26,18 @@ def default_graph_yaml() -> str:
 
 
 def packaged_graph_paths() -> list[Path]:
-    """Every packaged graph's ``graph.yaml``, sorted by directory name (issue #146).
-
-    The set reconciliation walks: one directory per graph under this package, each
-    holding its own ``graph.yaml``. Sorted so a reconcile report reads the same way twice
-    and a failure in one graph lands in a predictable place. ``scripts/`` and
-    ``__pycache__`` carry no ``graph.yaml`` and so are skipped by construction — the
-    filename is the membership test, not a name blocklist that would need maintaining.
-    """
+    """Every packaged graph's ``graph.yaml``, sorted by directory name (issue #146) so a report over
+    them reads the same way twice. The filename is the membership test, not a name blocklist that would
+    need maintaining: a directory carrying no ``graph.yaml`` is skipped by construction."""
     return sorted(_GRAPHS_DIR.glob("*/graph.yaml"), key=lambda path: path.parent.name)
 
 
 def load_graph_doc(path: Path) -> GraphDoc:
     """Load a graph definition file, inline its prompt references, and parse it.
 
-    Inlining resolves every ``prompt`` / ``judgement.prompt`` / ``prompt_addendum``
-    file reference relative to ``path`` and replaces it with the file's text,
-    so the parsed :class:`GraphDoc` carries prose, never paths — exactly what a mint
-    persists. A missing referenced file raises :class:`FileNotFoundError`.
-    """
+    Inlining resolves every ``prompt`` / ``judgement.prompt`` / ``prompt_addendum`` file reference
+    relative to ``path`` and substitutes the file's text, so the parsed :class:`GraphDoc` carries prose,
+    never paths. A missing referenced file raises :class:`FileNotFoundError`."""
     return parse_graph_doc(_load_and_inline(path))
 
 
@@ -61,11 +49,9 @@ def load_default_graph_doc() -> GraphDoc:
 def inline_graph_yaml(path: Path) -> str:
     """Load a graph definition file, inline its prompt references, and re-serialize.
 
-    Same inlining as :func:`load_graph_doc`, but returns YAML **text** rather than a
-    parsed :class:`GraphDoc` — what ``POST /graphs`` (:class:`~blizzard.wire.graph.GraphMintRequest`)
-    needs, since that route parses ``definition_yaml`` raw and does not itself resolve
-    file references (``blizzard hub graph upload``, issue #123).
-    """
+    Same inlining as :func:`load_graph_doc`, but returns YAML **text** rather than a parsed
+    :class:`GraphDoc` — what a mint taking raw ``definition_yaml``, which resolves no file references
+    of its own, needs (issue #123)."""
     return yaml.safe_dump(_load_and_inline(path), sort_keys=False)
 
 

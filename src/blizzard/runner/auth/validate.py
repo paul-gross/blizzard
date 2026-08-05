@@ -1,15 +1,9 @@
 """Verify a hub-signed federation JWT (issue #95).
 
-The runner-side counterpart to ``hub/api/idp.py``'s ``authorize``: signature
-verification (``kid``-selected against the fetched+cached hub JWKS, refetch on unknown
-``kid`` — :class:`~blizzard.runner.auth.jwks_cache.JwksCache`), ``aud == this
-runner_id``, ``exp`` honored with ±30s clock-skew leeway (PyJWT's own ``leeway``
-covers this uniformly), and a replayed ``jti`` rejected via the store-backed single-use
-cache (decision D4, :class:`~blizzard.runner.auth.jti_cache.IJtiCache`). Every failure
-mode collapses to one :class:`FederationTokenError` — the callback route
-(``runner/auth/federation.py``) treats "bad signature", "wrong audience", "expired",
-and "replayed" identically (a refused bounce), never leaking which.
-"""
+``kid``-selected signature verification against the cached hub JWKS, ``aud == this
+runner_id``, ``exp`` with ±30s leeway, and a replayed ``jti`` refused via the
+store-backed single-use cache (D4). Every failure mode collapses to one
+:class:`FederationTokenError`, never leaking which."""
 
 from __future__ import annotations
 

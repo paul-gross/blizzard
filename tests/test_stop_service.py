@@ -1,18 +1,8 @@
 """StopService (unit tier) — terminal operator abandonment, facts only (issue #118).
 
 A fake stands in for the store — only ``load_facts``/``record_stop`` are meaningfully
-implemented; every other seam is unreachable from :meth:`StopService.stop` and raises
-loudly if a regression starts calling it (``bzh:domain-core`` — no store, no tokens).
-Copies :mod:`tests.test_pause_service`'s and :mod:`tests.test_detach_service`'s
-fake-repo pattern exactly, including the ``__getattr__`` guard and the documented
-``cast`` at the wide-Protocol call site (``bzh:repository-split``).
-
-The route release (and the fleet-wide hub-exec slot's) lives in
-:meth:`~blizzard.hub.store.internal.chunk_store.ChunkStore.record_stop`'s own store
-transaction, not in :class:`StopService` (issue #118 must-fix 2) — the
-``__getattr__`` guard below pins that a regression reaching for
-``route_of``/``record_route_released`` from this layer fails loudly. Proven end to
-end at the component tier in ``test_chunk_stop.py``.
+implemented; every other seam raises loudly if called. The route release lives in
+``ChunkStore.record_stop``'s own transaction, not in :class:`StopService` (must-fix 2).
 """
 
 from __future__ import annotations
@@ -46,12 +36,8 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 @dataclass
 class _FakeChunkRepo:
     """Only ``load_facts``/``record_stop`` are live; anything else is a bug — including
-    ``route_of``/``record_route_released``, owned by ``record_stop``'s own store
-    transaction (must-fix 2, see the module docstring), never this layer.
-
-    Not typed against :class:`IWriteChunkRepository` directly — pyright cannot verify
-    ``__getattr__``-backed structural conformance, so callers wrap an instance in
-    :func:`_as_write_repo` instead (see :mod:`tests.test_detach_service`)."""
+    ``route_of``/``record_route_released``, owned by ``record_stop``'s own transaction
+    (must-fix 2), never this layer."""
 
     facts: ChunkFacts | None
     stopped: list[tuple[str, str, datetime]] = field(default_factory=list)

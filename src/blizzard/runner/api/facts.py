@@ -1,14 +1,8 @@
 """The runner-local fact log — ``GET /api/facts``.
 
-The local panel's "runner store" feed: the newest hub-bound facts off the
-outbound buffer, acked or not, newest first — the same ledger DRAIN flushes,
-read as history rather than as a pending queue (``bzh:facts-not-status``).
-Payloads stay behind — the log reads the event, not the JSON body.
-
-Read-only over its wiring (``bzh:controller-read-only``): the edge holds only the
-composition-root-wired :class:`~blizzard.runner.domain.status.RunnerStatusService`.
-On the store-free app the service is unwired and the probe answers 503 rather than
-pretending.
+The newest hub-bound facts off the outbound buffer, acked or not, newest first — read as
+history, not as a pending queue (``bzh:facts-not-status``). Payloads stay behind. Read-only
+over its wiring (``bzh:controller-read-only``); unwired, the probe answers 503.
 """
 
 from __future__ import annotations

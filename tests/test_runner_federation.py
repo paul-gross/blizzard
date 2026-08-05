@@ -125,10 +125,8 @@ def test_the_web_surface_bounces_to_login_when_the_hub_runs_an_idp_surface(tmp_p
 
 
 def test_the_worker_hook_lane_stays_ungated_over_tcp_even_with_the_idp_surface_active(tmp_path: Path) -> None:
-    """The three-tenant partition (issue #95): the **worker-hook lane** stays reachable
-    with no SSO session even under an oauth-mode hub — workers call these over TCP via
-    ``BLIZZARD_RUNNER_URL`` and cannot SSO-bounce. Reaching the route (a ``2xx``/``422``/
-    ``404``/``503``, never the gate's ``401``) is the property under test."""
+    """The worker-hook lane (issue #95) stays reachable with no SSO session even under
+    an oauth-mode hub, since workers call it over TCP and cannot SSO-bounce."""
     _private_key, jwk = _keypair()
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
     assert client.post("/api/heartbeat", json={}).status_code != 401  # reaches the route, not the gate
@@ -137,11 +135,8 @@ def test_the_worker_hook_lane_stays_ungated_over_tcp_even_with_the_idp_surface_a
 
 
 def test_the_human_lane_api_is_gated_401_over_tcp_under_oauth(tmp_path: Path) -> None:
-    """The panel's own JSON reads (``runner/status`` open-asks, leases, environments, the
-    runner status view, the fact ledger) are the **human web lane**: under an oauth-mode
-    hub an unauthenticated TCP request is refused with ``401``, not served. The
-    exhaustive per-route split is ``tests/test_runner_route_gating.py``; this pins the
-    representative reads end to end through the app the bounce mints a session for."""
+    """The panel's own JSON reads are the human web lane: under an oauth-mode hub an
+    unauthenticated TCP request is refused with ``401``, not served."""
     _private_key, jwk = _keypair()
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
     for path in ("/api/facts", "/api/asks", "/api/environments", "/api/runner", "/api/leases"):
@@ -358,15 +353,8 @@ def test_callback_ignores_forwarded_proto_with_no_trusted_proxies_configured(tmp
     assert "Secure" not in resp.headers["set-cookie"]
 
 
-# --- the bounce cookies' SameSite/Secure policy (a hub off this runner's site) ------
-#
-# The hub returns the federation token by `response_mode=form_post` — a POST from the
-# HUB's origin to this runner's callback. A hub that does not share a site with the
-# runner makes that POST cross-site, where a `SameSite=Lax` cookie is not sent at all,
-# so the callback sees no state and refuses the login. These pin that the bounce
-# cookies are minted to survive it wherever a browser will accept `Secure`, and that a
-# plain-http non-loopback runner (which cannot hold a `Secure` cookie) still gets `Lax`
-# rather than a cookie the browser drops outright.
+# The bounce cookies' SameSite/Secure policy: a hub off this runner's site makes the
+# `response_mode=form_post` POST cross-site, so `SameSite=Lax` alone would be dropped.
 
 
 def _bounce_set_cookie_headers(resp) -> str:

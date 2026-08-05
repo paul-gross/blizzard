@@ -1,10 +1,8 @@
 """``blizzard runner <cmd>`` — the machine-local surface.
 
-Client verbs are pure clients of the runner's local API; ``host`` *becomes* the
-runner daemon. Worker-hook verbs (``heartbeat``, ``session-end``, ``ask``,
-``work-items``) take their identity from the spawn-injected environment and pass
-no identity arguments.
-"""
+Client verbs are pure clients of the runner's local API; ``host`` *becomes* the runner daemon.
+Worker-hook verbs take their identity from the spawn-injected environment and pass no identity
+arguments."""
 
 from __future__ import annotations
 
@@ -41,53 +39,34 @@ from blizzard.runner.runtime import ensure_current_revision, init_environment, m
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
 DEFAULT_TICK_SECONDS = 30.0
 
-# The runtime root the dir-taking verbs resolve, highest to lowest: an explicit
-# ``--dir`` (or ``init``'s DIRECTORY), then ``BZ_RUNNER_DIR``, then the cwd. The env rung
-# is what lets winter's per-env band (`[env.<name>.vars]`) aim one feature env at a
-# chosen runtime root — a store snapshot, or a shared dir during an exclusive handoff —
-# without a bespoke command line per invocation (issue #39). Selectable, not shareable:
-# the store is still single-writer, so two live daemons on one `runner.db` remains unsafe.
+# The runtime root the dir-taking verbs resolve, highest to lowest: an explicit `--dir`, then
+# `BZ_RUNNER_DIR`, then the cwd (issue #39). Selectable, not shareable — the store is single-writer.
 ENV_RUNNER_DIR = "BZ_RUNNER_DIR"
 DEFAULT_DIR = "."
 
-# Spawn-injected worker identity the heartbeat hook inherits.
-# `BLIZZARD_*` is the worker namespace — per-process-tree execution truth the runner mints
-# at spawn — and is distinct from the operator's `BZ_*` config namespace below.
+# Spawn-injected worker identity the heartbeat hook inherits. `BLIZZARD_*` is the worker namespace,
+# distinct from the operator's `BZ_*` config namespace below.
 ENV_LEASE_ID = "BLIZZARD_LEASE_ID"
 ENV_RUNNER_URL = "BLIZZARD_RUNNER_URL"
-# The lease's minted capability token (issue #113, Phase 1) — authorizes `attach`
-# against this worker's own lease, nothing else.
+# The lease's minted capability token (issue #113) — authorizes `attach` against this lease, no other.
 ENV_LEASE_TOKEN = "BLIZZARD_LEASE_TOKEN"
-# The operator's TCP door onto the local API (issue #43) — the `BZ_*` namespace, and the
-# override for when the socket is not the right address (a remote-ish Tailnet reach, or a
-# daemon whose runtime dir this shell cannot see).
+# The operator's TCP door onto the local API (issue #43) — the override for when the socket is not
+# the right address.
 ENV_LOCAL_API_URL = "BZ_RUNNER_URL"
 _HEARTBEAT_TIMEOUT = 5.0
-# A work-item read fans out runner -> hub -> vendor, so it is given a longer budget
-# than the millisecond-cheap hook posts.
+# A work-item read fans out runner -> hub -> vendor, so it gets a longer budget than a hook post.
 _WORK_ITEMS_TIMEOUT = 20.0
-# The operator's declarative pause/start verbs are pure clients of the runner's own local
-# API (issue #43) — a machine-local round trip, so they get a hook-scale budget rather
-# than the hub-client one.
+# A machine-local round trip (issue #43), so a hook-scale budget rather than the hub-client one.
 _LOCAL_CLIENT_TIMEOUT = 5.0
-# `selftest` (issue #54) polls its job resource at this cadence — each poll is a
-# machine-local read of already-computed state, so a short interval costs nothing.
+# Each `selftest` poll is a machine-local read of already-computed state, so a short interval is free.
 _SELFTEST_POLL_INTERVAL = 0.2
-# A CLI-side backstop above the server's own run budget (`SelfTestService`'s
-# `run_budget_seconds`): the server-side budget is authoritative and always resolves
-# the run, but a bounded poll here means the CLI itself never spins forever even
-# against a runner that can't reach that code (an old daemon, a stuck event loop).
+# A CLI-side backstop above the server's own authoritative run budget, so the CLI never spins forever
+# against a runner that cannot reach that code.
 _SELFTEST_POLL_TIMEOUT = 600.0
 
 
-# The local verbs address the runner's own API through one of its two doors: the
-# socket under `--dir` (the default — no port, found from the runtime dir alone) or the TCP
-# listener named by `--runner-url`. Ranked by where each value came from (`param_rank.py`),
-# because `--dir` always *has* a value: it defaults to "." and takes $BZ_RUNNER_DIR, which
-# winter's per-env band exports ambiently across a whole feature env — so "is it set?"
-# cannot mean "did the operator choose it?". An explicit flag beats an ambient variable;
-# only a genuine tie on the command line is ambiguous. Both from the environment resolves
-# to the socket, the default transport.
+# Ranked by where each value came from (`param_rank.py`) because `--dir` always *has* a value: an
+# explicit flag beats an ambient variable, and only a genuine tie on the command line is ambiguous.
 def _local_api_client(directory: str, runner_url: str | None) -> tuple[httpx.Client, str]:
     """A client of the runner's local API, over the socket or TCP — never the store, never the hub."""
     ctx = click.get_current_context()
@@ -198,19 +177,15 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         raise click.ClickException(str(exc)) from exc
     app = build_hosted_app(config)
     interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
-    # `PeriodicDriver` resolves `workspace_prompt`/`runner_prompt` in its constructor
-    # (on this thread) rather than inside its background loop thread — a configured-but-
-    # missing prompt file raises `ConfigError` here, before any socket binds, instead of
-    # silently killing the loop thread later while uvicorn keeps serving `/api/health` 200s.
+    # `PeriodicDriver` resolves its prompt files on this thread, not in the loop thread: a
+    # configured-but-missing prompt raises here, before any socket binds.
     try:
         driver = PeriodicDriver(config, interval_seconds=interval)
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    # Two doors onto the one app (issue #43): the unix socket the CLI's local verbs
-    # address, and the TCP port the browser and the worker hooks address. Bound up front so
-    # a clash fails startup loudly; served by the single `Server` below, which is what keeps
-    # the shutdown path (and its resume-intent marking) on one frame.
+    # Two doors onto the one app (issue #43), bound up front so a clash fails startup loudly and
+    # served by the single `Server` below, which keeps the shutdown path on one frame.
     try:
         sockets = bind_listeners(config)
     except ListenerError as exc:
@@ -219,16 +194,8 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         f"serving blizzard-runner on {config.host}:{config.port} and {config.socket_path} (loop tick {interval}s)"
     )
 
-    # The graceful-restart resume marker lives in this frame's `finally`, so SIGTERM must
-    # drain the server (set `should_exit`) rather than hard-exit the process, or `run()`
-    # never returns and the marking is never reached. Ours (`_drain`) is registered first;
-    # uvicorn's own installer is then suppressed only on versions that expose it, and the
-    # `hasattr` guard keeps a uvicorn upgrade from crashing startup on a missing attribute
-    # (on uvicorn ≥ 0.29 its own graceful `handle_exit` is equivalent for our purpose).
-    # A `kill -9` skips all of this — the ungraceful-crash boundary. Pinned by
-    # tests/crash/test_kill9_sweep.py::test_graceful_restart_resumes_in_flight_session.
-    # Host/port here are for uvicorn's own startup log only: `run(sockets=...)` below serves
-    # exactly the pre-bound sockets and never consults them (uvicorn Server.startup).
+    # SIGTERM must drain the server (set `should_exit`) rather than hard-exit, or `run()` never returns
+    # and the `finally` resume-marking below is never reached (tests/crash/test_kill9_sweep.py).
     server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port))
 
     def _drain(_signum: int, _frame: types.FrameType | None) -> None:
@@ -239,10 +206,8 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     if hasattr(server, "install_signal_handlers"):
         server.install_signal_handlers = lambda: None  # type: ignore[method-assign]
 
-    # Ungraceful-restart recovery (#13): a `kill -9` / OOM / reboot never ran the graceful
-    # shutdown marker below, so before the loop starts the sessions killed mid-work are
-    # marked for the same startup RESUME the first tick runs. The mark is the only
-    # ungraceful-specific step. A clean `blizzard runner init` has no leases, so this is a no-op.
+    # Ungraceful-restart recovery (#13): a `kill -9` never ran the graceful shutdown marker below, so
+    # sessions killed mid-work are marked here for the same startup RESUME the first tick runs.
     resumable = mark_crash_resume_intents_on_startup(config)
     if resumable:
         click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
@@ -251,9 +216,8 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     try:
         server.run(sockets=sockets)
     finally:
-        # Stop the loop first so no in-flight tick races the marking: `stop()` blocks on the
-        # tick thread (an unbounded join — see PeriodicDriver.stop) so the loop is quiescent
-        # before we mark every in-flight lease for the next startup's RESUME.
+        # Stop the loop first so no in-flight tick races the marking: `stop()` blocks on the tick
+        # thread, so the loop is quiescent before every in-flight lease is marked.
         driver.stop()
         marked = mark_resume_intents_on_shutdown(config)
         if marked:
@@ -274,10 +238,8 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
 def tick_cmd(directory: str) -> None:
     """Run ONE synchronous reconciliation tick (REAP → PULL → FILL → ADVANCE).
 
-    The steppable-loop driver for tests and the e2e (``bzh:steppable-loop``): a
-    single pass against the live hub and workspace, then exit. Refuses on a store
-    revision mismatch, like ``host``.
-    """
+    The steppable-loop driver for tests and the e2e (``bzh:steppable-loop``): a single pass against the
+    live hub and workspace, then exit. Refuses on a store revision mismatch, like ``host``."""
     try:
         config = RunnerConfig.load(Path(directory))
     except ConfigError as exc:
@@ -306,10 +268,8 @@ def external_usage_group() -> None:
 def external_usage_probe(directory: str) -> None:
     """Sample the harness's own subscription rate-limit usage and print it. Read-only.
 
-    Builds the same Claude Code adapter the reconciliation loop uses and samples through
-    it directly — a diagnostic seam-check (issue #218): no store write, no tick, nothing
-    enqueued or delivered anywhere.
-    """
+    Builds the same adapter the reconciliation loop uses and samples through it directly — a diagnostic
+    seam-check (issue #218): no store write, no tick, nothing enqueued or delivered."""
     try:
         config = RunnerConfig.load(Path(directory))
     except ConfigError as exc:
@@ -340,13 +300,9 @@ def external_usage_probe(directory: str) -> None:
 def heartbeat() -> None:
     """Worker hook: record a lease heartbeat (identity from the environment).
 
-    A pure client of the runner's local API: the ``PostToolUse`` hook runs
-    this on every tool call, and it posts to ``BLIZZARD_RUNNER_URL`` for the lease in
-    ``BLIZZARD_LEASE_ID`` — both inherited from the spawn environment, so no arguments.
-    It fails **soft**: a hook must never break the
-    worker's tool call, so a missing identity or an unreachable runner is reported to
-    stderr and the command still exits 0.
-    """
+    A pure client of the runner's local API, taking its lease and runner URL from the spawn
+    environment, so no arguments. Fails **soft**: a hook must never break the worker's tool call, so a
+    missing identity or an unreachable runner is reported to stderr and this still exits 0."""
     lease_id = os.environ.get(ENV_LEASE_ID)
     runner_url = os.environ.get(ENV_RUNNER_URL)
     if not lease_id or not runner_url:
@@ -367,14 +323,9 @@ def heartbeat() -> None:
 def session_end() -> None:
     """Worker hook: record the session's exit (identity from the environment).
 
-    A pure client of the runner's local API: the ``SessionEnd`` hook runs this
-    when the worker's Claude session exits, and it posts to ``BLIZZARD_RUNNER_URL`` for
-    the lease in ``BLIZZARD_LEASE_ID`` — both inherited from the spawn environment, so no
-    arguments. The recorded fact is the worker's "declared done" signal. It fails
-    **soft**, like the heartbeat: a hook must never break
-    the worker's exit, so a missing identity or an unreachable runner is reported to stderr
-    and the command still exits 0.
-    """
+    A pure client of the runner's local API, taking its identity from the spawn environment. The
+    recorded fact is the worker's "declared done" signal. Fails **soft**, like the heartbeat: a hook
+    must never break the worker's exit, so a failure is reported to stderr and this still exits 0."""
     lease_id = os.environ.get(ENV_LEASE_ID)
     runner_url = os.environ.get(ENV_RUNNER_URL)
     if not lease_id or not runner_url:
@@ -396,12 +347,8 @@ def session_end() -> None:
 def ask(prompt: str, options: str | None) -> None:
     """Worker: ask-and-exit; the ask fact is durable before the worker exits.
 
-    A pure client of the runner's local API: the worker runs this on an
-    undecidable choice, and it posts the question for the lease in ``BLIZZARD_LEASE_ID``
-    to ``BLIZZARD_RUNNER_URL`` — both inherited from the spawn environment, so no
-    identity arguments. The ask is a
-    durable runner-store fact before this returns and the worker ends its turn.
-    """
+    A pure client of the runner's local API, taking its identity from the spawn environment, so no
+    identity arguments. The ask is a durable runner-store fact before this returns."""
     lease_id = os.environ.get(ENV_LEASE_ID)
     runner_url = os.environ.get(ENV_RUNNER_URL)
     if not lease_id or not runner_url:
@@ -436,21 +383,11 @@ def _worker_lease_identity(verb: str) -> tuple[str, str, str | None]:
 
 @runner.group("artifact")
 def artifact_group() -> None:
-    """Worker: read and write this node-step's own artifacts (identity from the environment).
+    """Worker: read and write this node-step's own artifacts (issue #127).
 
-    The runner CLI's first noun group (issue #127), with worker-facing CRUD verb names — a
-    machine reading and writing its own inputs, not the hub operator CLI's human-facing
-    display verbs. Scope is ambient: every verb acts on the worker's own lease, resolved
-    from ``BLIZZARD_LEASE_ID``/``BLIZZARD_LEASE_TOKEN``/``BLIZZARD_RUNNER_URL`` (all
-    inherited at spawn) — so no verb takes a ``--lease``/``--chunk`` flag by which a worker
-    could name another chunk.
-
-    Lifecycle (issue #169): ``create`` *stages* a submission — durable immediately, but
-    visible only to this node-step, via ``staged``. It is *published* into the envelope
-    only when the node-step completes, at which point it starts showing up in ``list``/
-    ``get`` for downstream nodes. So a fresh ``create`` being absent from this node-step's
-    own ``list``/``get`` is expected, not a lost write — check ``staged`` instead.
-    """
+    Scope is ambient: every verb acts on the worker's own lease, resolved from the spawn environment,
+    so none takes a flag by which a worker could name another chunk. ``create`` *stages* a submission —
+    durable at once, visible only via ``staged``, published into the envelope on completion (#169)."""
 
 
 def _artifact_summary(artifact: dict) -> dict:
@@ -472,20 +409,11 @@ def _artifact_summary(artifact: dict) -> dict:
     help="Include each artifact's full content instead of just its byte length.",
 )
 def artifact_list(content: bool) -> None:
-    """Worker: list this node-step's artifacts as kind-discriminated JSON.
+    """Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch.
 
-    A pure client of the runner's local API: the runner resolves the lease in
-    ``BLIZZARD_LEASE_ID`` to its chunk, proxies to the hub's envelope (runner principal),
-    and returns every artifact resolved latest-by-epoch, both kinds — each entry
-    ``{name, kind, node_name, epoch, bytes, repo?, branch_name?, commit_hash?}`` by
-    default, ``content`` in place of ``bytes`` with ``--content``. The worker holds no
-    hub credential.
-
-    Content is elided by default (issue #169): a late node in a large chunk otherwise
-    gets every upstream asset's full text inlined, which has overflowed tool output.
-    Pass ``--content`` to restore it, or read one artifact's content directly via
-    ``artifact get NAME --content``.
-    """
+    A pure client of the runner's local API, which proxies to the hub as the runner principal — the
+    worker holds no hub credential. Content is elided by default (issue #169), since inlining every
+    upstream asset's full text has overflowed tool output; ``--content`` restores it."""
     lease_id, runner_url, lease_token = _worker_lease_identity("artifact list")
     try:
         resp = httpx.get(
@@ -518,20 +446,11 @@ def artifact_list(content: bool) -> None:
     help="Print the raw asset text to stdout instead of JSON (errors on a git-commit artifact).",
 )
 def artifact_get(name: str, node: str | None, content: bool) -> None:
-    """Worker: read one artifact by NAME as kind-discriminated JSON.
-
-    The same lease-scoped, hub-proxied read as ``list``, narrowed to one ``produces:``
-    name — an unknown name is a ``404``. More than one upstream node can emit the same
-    name (issue #169): a bare NAME that resolves to more than one candidate exits
-    non-zero naming the producing nodes, rather than silently returning an arbitrary
-    one — pass ``--node`` to pick one. ``--content`` prints the raw asset text to stdout
-    instead of the JSON object, and errors when NAME is the ``git_commit`` kind: a commit
-    ref carries no content to emit (drop ``--content`` to read its ref).
-
-    NAME is percent-encoded before it reaches the route (issue #233), so a slash-
-    containing name — a ``merged/<repo>`` delivery marker, for instance — round-trips
-    like any other.
-    """
+    """Worker: read one artifact by NAME — the same lease-scoped, hub-proxied read as ``list``, narrowed
+    to one ``produces:`` name; an unknown name is a ``404``, and a name several upstream nodes emit
+    (issue #169) exits non-zero naming them rather than picking arbitrarily — ``--node`` disambiguates.
+    ``--content`` prints raw asset text instead, and errors on the ``git_commit`` kind, which carries
+    none. NAME is percent-encoded (issue #233), so a slash-containing name round-trips like any other."""
     lease_id, runner_url, lease_token = _worker_lease_identity("artifact get")
     try:
         resp = httpx.get(
@@ -561,25 +480,11 @@ def artifact_get(name: str, node: str | None, content: bool) -> None:
 @artifact_group.command("create")
 @click.option("--name", required=True, help="The `produces:` name this content is submitted for.")
 def artifact_create(name: str) -> None:
-    """Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin).
-
-    A pure client of the runner's local API: the worker pipes the artifact's content
-    on stdin, and this posts it for the lease in ``BLIZZARD_LEASE_ID`` to
-    ``BLIZZARD_RUNNER_URL``, authorized by the lease token in ``BLIZZARD_LEASE_TOKEN`` —
-    all three inherited from the spawn environment, so no identity arguments. It writes the
-    ``asset`` kind only: a worker authors a git-commit artifact by committing in its
-    worktree, which the runner discovers and pushes — not through this verb. A rejection (a
-    wrong/missing token, an unknown lease, an unreachable runner) exits non-zero so the
-    worker learns it rather than silently losing the submission.
-
-    Staged, not published (issue #169): a successful submission durably *stages* this
-    content under NAME for this node-step, printing a ``recorded ... bytes`` confirmation
-    — but it is only *published* into the envelope when the node-step completes, so it
-    stays absent from this node-step's own ``artifact list``/``get`` until then. Read a
-    just-staged submission back with ``artifact staged``. Empty stdin is refused
-    (exits non-zero, nothing sent) rather than staging an empty artifact and silently
-    replacing whatever was staged before.
-    """
+    """Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), authorized
+    by the lease token in the spawn environment. Writes the ``asset`` kind only. A submission *stages*
+    the content for this node-step, published into the envelope only on completion (issue #169) — read
+    it back with ``artifact staged``. Empty stdin and any rejection exit non-zero rather than silently
+    losing the submission."""
     lease_id, runner_url, lease_token = _worker_lease_identity("artifact create")
     content = click.get_text_stream("stdin").read()
     if not content:
@@ -612,13 +517,9 @@ def artifact_create(name: str) -> None:
 def artifact_staged(content: bool) -> None:
     """Worker: list this node-step's own staged (not-yet-published) submissions.
 
-    A pure client of the runner's local API, reading straight off the runner's
-    ``attachments`` record rather than the hub envelope (issue #169) — so a submission
-    made via ``artifact create`` shows up here immediately, before the node-step
-    completes and publishes it (at which point it starts showing up in ``list``/``get``
-    instead). Content is elided by default, same as ``list``; pass ``--content`` for
-    the full text.
-    """
+    Read straight off the runner's own ``attachments`` record rather than the hub envelope (issue
+    #169), so a fresh ``artifact create`` shows up here immediately. Content is elided by default,
+    same as ``list``; ``--content`` gives the full text."""
     lease_id, runner_url, lease_token = _worker_lease_identity("artifact staged")
     try:
         resp = httpx.get(
@@ -639,10 +540,8 @@ def artifact_staged(content: bool) -> None:
 def _session_label(escalation: dict) -> str:
     """The parked session's identity, as a trailing clause — ``"  session=code (opus, high)"``.
 
-    Empty when the escalation carries none of the three (issue #144): a session on the
-    bare vocabulary belongs to no pool, and one predating the stamps is *unknown*. Neither
-    case invents a value — a bare line reads as "not recorded", which is the truth.
-    """
+    Empty when the escalation carries none of the three (issue #144): neither a bare-vocabulary session
+    nor one predating the stamps invents a value — a bare line reads as "not recorded"."""
     pool = escalation.get("session_name")
     config = ", ".join(str(v) for v in (escalation.get("model"), escalation.get("effort")) if v)
     if not pool and not config:
@@ -692,24 +591,11 @@ def _problem_detail(response: httpx.Response) -> str:
     "compares it byte-exact against the forge's full sha.",
 )
 def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_sha: str) -> None:
-    """Worker: durably declare a git-commit artifact for REPO (issue #143, Phase 3).
-
-    A pure client of the runner's local API: the worker pushes its branch first, then
-    posts this declaration for the lease in ``BLIZZARD_LEASE_ID`` to
-    ``BLIZZARD_RUNNER_URL``, authorized by the lease token in ``BLIZZARD_LEASE_TOKEN`` —
-    all three inherited from the spawn environment, so no identity arguments. Carries the
-    ``git_commit`` kind only: an asset artifact is declared through ``artifact create``
-    instead.
-
-    There is deliberately no ``--forge``: the origin a declaration is verified against
-    comes from the environment's repo manifest, which the workspace provider owns, so a
-    worker cannot supply the wrong one. Pinned by
-    tests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag.
-
-    A rejection (a wrong/missing token, an unknown lease, a repo the env's manifest does
-    not list, an unreachable runner) exits non-zero so the worker learns it rather than
-    silently losing the declaration.
-    """
+    """Worker: durably declare a git-commit artifact for REPO (issue #143), authorized by the lease
+    token in the spawn environment. Carries the ``git_commit`` kind only — an asset is declared through
+    ``artifact create``. There is deliberately no ``--forge``: the origin a declaration is verified
+    against comes from the environment's repo manifest, so a worker cannot supply the wrong one (pinned
+    by tests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag)."""
     lease_id, runner_url, lease_token = _worker_lease_identity("artifact commit")
     body: dict[str, str] = {"repo": repo, "branch": branch, "commit": commit_sha}
     if environment_id is not None:
@@ -731,33 +617,20 @@ def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_s
 
 @runner.group("chunk")
 def chunk_group() -> None:
-    """Worker: read facts about the chunk this node-step belongs to (identity from the
-    environment).
+    """Worker: read facts about the chunk this node-step belongs to.
 
-    Scope is ambient, like ``artifact`` — every verb in **this group** acts on the
-    worker's own lease, resolved from
-    ``BLIZZARD_LEASE_ID``/``BLIZZARD_LEASE_TOKEN``/``BLIZZARD_RUNNER_URL`` (all
-    inherited at spawn), so no verb here takes a ``--lease``/``--chunk`` flag by which a
-    worker could name another chunk.
-    """
+    Scope is ambient, like ``artifact``: every verb in this group acts on the worker's own lease,
+    resolved from the spawn environment, so none takes a flag by which a worker could name another
+    chunk."""
 
 
 @chunk_group.command("history")
 def chunk_history() -> None:
-    """Worker: read this chunk's own transition history as kind-discriminated JSON
-    (issue #237).
-
-    A pure client of the runner's local API: the runner resolves the lease in
-    ``BLIZZARD_LEASE_ID`` to its chunk, proxies to the hub's chunk-detail read (runner
-    principal), and prints the merged, oldest-first timeline — one row per accepted
-    transition, cross-graph migration, or delivery bounce, each carrying its own
-    ``kind`` (``transition``/``migration``/``bounce``). A bounced attempt that produced
-    no artifact still appears as a row. The worker holds no hub credential.
-
-    Does **not** include the in-flight node-step this call is itself part of — a
-    transition is recorded only once an attempt completes, so this call's own step is
-    not a gap in the history, just not there yet.
-    """
+    """Worker: read this chunk's own transition history as kind-discriminated JSON (issue #237) — the
+    merged, oldest-first timeline, one row per accepted transition, cross-graph migration, or delivery
+    bounce, each carrying its own ``kind``. A pure client of the runner's local API, which proxies to
+    the hub as the runner principal. The in-flight node-step this call is part of is not there yet: a
+    transition is recorded only once an attempt completes."""
     lease_id, runner_url, lease_token = _worker_lease_identity("chunk history")
     try:
         resp = httpx.get(
@@ -780,10 +653,7 @@ def chunk_history() -> None:
 def attach(ctx: click.Context, name: str) -> None:
     """Deprecated alias for ``blizzard runner artifact create`` (issue #127).
 
-    Kept working, hidden from ``--help``: it warns on stderr and delegates to
-    ``artifact create`` with identical behavior (same route, same stdin content, same
-    token authorization).
-    """
+    Kept working, hidden from ``--help``: it warns on stderr and delegates with identical behavior."""
     click.echo(
         "warning: `blizzard runner attach` is deprecated — use `blizzard runner artifact create`",
         err=True,
@@ -796,14 +666,9 @@ def attach(ctx: click.Context, name: str) -> None:
 def work_items(chunk_id: str) -> None:
     """Worker: pass-through read of a chunk's work items (runner -> hub -> vendor).
 
-    A pure client of the runner's local API: the build node reads its
-    chunk's issue body + comment thread through the runner's proxy route
-    (``graphs/default/prompts/build.md``), which forwards to the hub — the worker never talks
-    to the hub or the work source directly. The runner URL is inherited from the spawn
-    environment (``BLIZZARD_RUNNER_URL``), so no identity argument; the items print as
-    JSON (``{items: [{source, ref, label, web_url, fetched_at, body, comments, error}, ...]}``)
-    — one entry per pointer — for the worker to consume.
-    """
+    A pure client of the runner's local API, whose proxy route forwards to the hub — the worker never
+    talks to the hub or the work source directly. The runner URL is inherited from the spawn
+    environment, so no identity argument; the items print as JSON, one entry per pointer."""
     runner_url = os.environ.get(ENV_RUNNER_URL)
     if not runner_url:
         raise click.ClickException(f"work-items: no {ENV_RUNNER_URL} in the environment")
@@ -824,12 +689,9 @@ def work_items(chunk_id: str) -> None:
 def pm_items(ctx: click.Context, chunk_id: str) -> None:
     """Deprecated alias for ``blizzard runner work-items`` (issue #55).
 
-    Kept working, hidden from ``--help``: a node's prompt is **inlined into the store at
-    mint and immutable thereafter** (``graph_nodes.prompt``), so every graph already
-    minted in a live hub names this verb forever, and dropping the alias would fail those
-    workers mid-node with "no such command". Pinned by
-    tests/test_pin_runner_misc.py::test_the_deprecated_pm_items_cli_alias_still_reads_the_work_item.
-    """
+    Kept working, hidden from ``--help``: a node's prompt is inlined into the store at mint and
+    immutable thereafter, so every already-minted graph names this verb forever (pinned by
+    tests/test_pin_runner_misc.py::test_the_deprecated_pm_items_cli_alias_still_reads_the_work_item)."""
     click.echo(
         "warning: `blizzard runner pm-items` is deprecated — use `blizzard runner work-items`",
         err=True,
@@ -853,17 +715,10 @@ def pm_items(ctx: click.Context, chunk_id: str) -> None:
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
 def status(directory: str, runner_url: str | None) -> None:
-    """The machine-local view: capacities, held environments, open asks, escalations,
-    open takeovers (issue #51).
-
-    A pure client of the runner's local API — socket or ``--runner-url``, the same
-    door ``pause``/``start`` use — so every section here is this runner's own local
-    read and the view renders fully with the hub unreachable; hub reachability itself
-    is reported, not assumed. ``GET /runner`` + ``GET /leases`` + ``GET /environments``
-    + ``GET /asks?open=true`` + ``GET /escalations`` + ``GET /takeovers`` — no store
-    access, no hub call. The open-takeovers section is the recovery surface for a
-    takeover left open by a stranded CLI (issue #52).
-    """
+    """The machine-local view: capacities, held environments, open asks, escalations, open takeovers
+    (issue #51). A pure client of the runner's local API — the same door ``pause``/``start`` use — so
+    every section is this runner's own local read and the view renders fully with the hub unreachable;
+    hub reachability is itself reported, not assumed. No store access, no hub call."""
     client, where = _local_api_client(directory, runner_url)
     try:
         with client:
@@ -943,16 +798,11 @@ def status(directory: str, runner_url: str | None) -> None:
 )
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
 def pause(directory: str, runner_url: str | None, by: str) -> None:
-    """Declarative control: pause this runner — it starts no new workers (issue #45).
-
-    This runner's **own** brake — "it says it won't try" — and a pure client of its local
-    API (``PATCH /runner``), so it works with the hub unreachable. It blocks every spawn
-    site and defers both the kill of a stalled worker and escalation to a human at an
-    exhausted retry budget. No retry is consumed anywhere; a live worker already running
-    is left alone (this is not a drain, and it does not kill). A worker that *exits* while
-    paused simply waits unjudged — judging it is itself a spawn — until the brake clears.
-    It is distinct from the hub's brake (``blizzard hub pause <runner_id>``), and each is
-    cleared where it was set. Clear this one with ``blizzard runner start``."""
+    """Declarative control: pause this runner — it starts no new workers (issue #45). This runner's
+    **own** brake, a pure client of its local API, so it works with the hub unreachable: it blocks
+    every spawn site and defers both the kill of a stalled worker and escalation at an exhausted retry
+    budget. No retry is consumed, and a live worker is left alone — this is not a drain. Distinct from
+    the hub's brake, and each is cleared where it was set."""
     _set_local_paused(paused=True, by=by, directory=directory, runner_url=runner_url)
 
 
@@ -999,21 +849,11 @@ def start(directory: str, runner_url: str | None, by: str) -> None:
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
 def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None) -> None:
-    """Take over a parked chunk: exec the interactive resume command in this terminal (issue #52).
-
-    A pure client of the runner's local API — the same door ``status``/``pause`` use.
-    ``POST /chunks/{id}/takeovers`` records the takeover fact before anything else runs
-    (so no loop step can respawn or judge the session while it is open) and returns the
-    adapter-composed interactive command plus the lease's identity env (issue #258);
-    this verb then execs that command as its own child, inheriting this terminal with
-    the identity env layered on top — the daemon itself never touches a TTY, and the
-    lease token travels only in the response body and the exec, never printed. ``--force``
-    supersedes a live worker attempt instead of refusing (``409``): the runner kills it
-    itself, after the fact lands, consuming no retry and recording no escalation. Once
-    the child exits — or this terminal is interrupted (``Ctrl-C``) — ``PATCH
-    .../takeovers/{tid}`` marks the takeover ended, whatever the child's exit status: the
-    end-PATCH runs in a ``finally`` around the child so a stranded open takeover (which
-    REAP/ADVANCE would otherwise skip forever) cannot outlive an interrupted session."""
+    """Take over a parked chunk: exec the interactive resume command in this terminal (issue #52). The
+    takeover fact is recorded before anything else runs, so no loop step can respawn or judge the
+    session while it is open; the lease token travels only in the response body and the exec, never
+    printed. ``--force`` supersedes a live worker attempt instead of refusing. The end-PATCH runs in a
+    ``finally`` around the child, so a stranded open takeover cannot outlive an interrupted session."""
     client, where = _local_api_client(directory, runner_url)
     try:
         with client:
@@ -1024,14 +864,8 @@ def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None)
             view = resp.json()
             click.echo(f"taking over chunk {chunk_id} in {view['workdir']}")
             try:
-                # The takeover env (issue #258), layered over the terminal env. The
-                # daemon forwards a bounded set — the ``BLIZZARD_*`` identity plus
-                # ``PATH``/``HOME`` — and those forwarded vars deliberately WIN over the
-                # terminal's (PATH so bare ``blizzard`` resolves to the deployment venv;
-                # HOME so ``--resume`` finds the daemon's session store). Everything
-                # else — TERM, locale, the rest of the operator's shell — stays the
-                # terminal's own, because it was never forwarded. The lease token
-                # arrives only here, never in the printable command.
+                # The takeover env (issue #258), layered over the terminal env: the forwarded
+                # vars deliberately WIN over the terminal's own, and carry the lease token.
                 child_env = {**os.environ, **view.get("env", {})}
                 exit_code = subprocess.call(view["command"], shell=True, cwd=view["workdir"], env=child_env)
             finally:
@@ -1061,16 +895,10 @@ def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None)
 )
 def requeue(chunk_id: str, directory: str, runner_url: str | None) -> None:
     """Hand a needs_human chunk back to the fleet: a fresh attempt at its current node (issue #53).
-
-    A pure client of the runner's local API — the same door ``status``/``pause``/``takeover``
-    use. ``POST /chunks/{id}/requeues`` appends the fact that clears the chunk's local
-    needs_human hold (escalated, or held by an ended takeover — the pasted-command flow
-    works too, with no recorded takeover at all); the next FILL spawns a fresh attempt —
-    new session, new lease, fresh epoch — at the chunk's current node. The chunk's route
-    is never released and it never re-enters the hub's queue; it resumes exactly where it
-    stood. Refused with ``409`` while the chunk's takeover is still open (end the
-    interactive session first — one process per session) or while the chunk is not
-    parked needs_human."""
+    Appends the fact that clears the chunk's local needs_human hold; the next FILL spawns a fresh
+    attempt — new session, new lease, fresh epoch — at the current node. The route is never released
+    and the chunk never re-enters the hub's queue. Refused ``409`` while its takeover is still open,
+    or while it is not parked needs_human."""
     client, where = _local_api_client(directory, runner_url)
     try:
         with client:
@@ -1100,16 +928,10 @@ def requeue(chunk_id: str, directory: str, runner_url: str | None) -> None:
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
 def selftest(coding_harness: str, directory: str, runner_url: str | None) -> None:
-    """Adapter-drift canary before an unattended period (issue #54).
-
-    Exercises CODING_HARNESS against a throwaway scratch repo — spawn with a
-    pre-assigned session id and exit-is-done detection, a trivial end-to-end
-    edit+commit, verdict elicitation, an automated follow-up resume, and
-    resume-command composition — touching no chunk, lease, environment, or hub. A
-    pure client of the runner's local API (``POST``/``GET /selftests``): it posts the
-    run, polls it to completion, prints each check's pass/fail, and exits non-zero on
-    any failure.
-    """
+    """Adapter-drift canary before an unattended period (issue #54): exercises CODING_HARNESS against a
+    throwaway scratch repo — spawn with a pre-assigned session id, a trivial edit+commit, verdict
+    elicitation, an automated follow-up resume, and resume-command composition — touching no chunk,
+    lease, environment, or hub. Posts the run, polls it, prints each check, exits non-zero on failure."""
     client, where = _local_api_client(directory, runner_url)
     try:
         with client:

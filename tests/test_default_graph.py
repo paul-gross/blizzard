@@ -1,12 +1,9 @@
 """The packaged default graph (unit tier).
 
-The hub ships a default graph every chunk pins at ingest. This proves it
-loads, inlines its prompt file references, and passes mint-time validation
-clean — so a fresh hub's ``POST /graphs`` of it can never be rejected. The graph is
-the fleet's front door (issue #229): a single ``triage`` node that routes every
-default-pinned chunk out — a cross-graph migration to ``bas-dwf`` or ``adv-dwf``, or
-straight to ``done`` when the work items are already satisfied.
-"""
+The hub ships a default graph every chunk pins at ingest (issue #229). Proves it
+loads, inlines its prompt file references, and passes mint-time validation clean, and
+that its single ``triage`` node routes every chunk out via a cross-graph migration or
+straight to ``done``."""
 
 from __future__ import annotations
 
@@ -76,9 +73,8 @@ def test_default_graph_lane_targets_are_packaged_and_land_at_their_entries() -> 
 
 
 def test_default_graph_reconciles_after_its_lane_targets() -> None:
-    # `packaged_graph_paths` walks in directory order, so on a fresh store every lane
-    # target is minted before the graph whose choices name them — the late-binding
-    # mint warning never fires from a deploy's own reconcile.
+    # `packaged_graph_paths` walks in directory order, so every lane target is minted
+    # before the graph whose choices name them.
     order = [p.parent.name for p in packaged_graph_paths()]
     assert order.index("default") > order.index("basic-development-workflow")
     assert order.index("default") > order.index("advanced-development-workflow")

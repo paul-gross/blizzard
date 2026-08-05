@@ -1,16 +1,5 @@
-"""session-end signal fact table (runner store tree)
-
-The ungraceful-restart counterpart to ``resume_intents`` (issue #13):
-``session_ends`` records the durable "the worker declared done" fact the Claude Code
-``SessionEnd`` hook posts on a natural session exit. A ``kill -9`` / OOM / reboot never
-runs that hook, so a killed-mid-work lease has no row — and startup crash-recovery reads
-that *absence* (paired with a dead pid) to tell a crash it must resume from a clean exit
-ADVANCE should judge. Before this the runner had no home for the signal, so an involuntary
-restart discarded every in-flight session's context.
-
-Each revision in this tree creates a subset of the current ``schema`` metadata's tables
-(the live-schema pattern); this one creates exactly the one new table, ``checkfirst`` so
-a fresh ``base -> head`` and an in-place upgrade both converge.
+"""session-end signal fact table (runner store tree) — ``session_ends`` records the
+durable "the worker declared done" fact whose *absence* marks a crash (issue #13).
 
 Revision ID: 20260715_1641_runner_session_ends
 Revises: 20260715_1633_runner_workspace_prompt

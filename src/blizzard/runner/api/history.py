@@ -1,27 +1,9 @@
 """``blizzard runner chunk history`` — a worker's read of its own chunk's transition
 history (issue #237).
 
-A retrospective node closing out a chunk cannot see the chunk's own journey today:
-which nodes bounced, how many rounds a loop took, what choice routed each transition.
-The hub already derives this timeline for the board (``hub.api.chunks._history_views``,
-served on ``ChunkDetail``); what was missing is the worker-facing read path — a worker
-holds no hub credential, and nothing proxied this view to it the way the envelope's
-artifacts are proxied (``artifacts.py``).
-
-Layered exactly like the artifacts proxy: lease-scoped and token-authorized via
-:func:`~blizzard.runner.api.lease_scope.authorized_lease`, then forwarded to the hub's
-runner-authenticated chunk-detail route (``GET /api/fleet/chunks/{id}``, the same one
-:mod:`blizzard.runner.api.chunk_detail` reads) as the runner principal
-(``config.auth_headers()``). The full ``ChunkDetail`` payload is validated down to the
-internal :class:`~blizzard.wire.history.ChunkHistoryView` projection and flattened by
-:func:`~blizzard.wire.history.history_rows` — no new hub-side model or route, and no
-runner-store persistence; the read is live each call.
-
-Status map mirrors the artifacts proxy: ``503`` when the store or the hub wiring is
-absent, ``404`` for an unknown/closed lease, ``403`` for a missing/mismatched token, and
-a ``502`` (or the hub's own status verbatim) when the forward fails. Authorization is
-resolved before the hub is consulted.
-"""
+Lease-scoped and token-authorized, then forwarded to the hub as the runner principal.
+``503`` unwired, ``404`` unknown/closed lease, ``403`` bad token, ``502`` on a failed
+forward; authorization resolves before the hub is consulted."""
 
 from __future__ import annotations
 

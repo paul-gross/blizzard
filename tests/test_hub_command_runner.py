@@ -1,12 +1,8 @@
 """The subprocess-backed hub command runner adapter — component tier.
 
-The one direct test of the real
-:class:`~blizzard.hub.delivery.internal.hub_command_runner.SubprocessHubCommandRunner`
-mechanism (everywhere else the executor is wired with a fake). The load-bearing
-guarantee: a bare ``python3`` in a hub command node's ``run:`` step resolves to the
-hub daemon's own interpreter — the one that can import ``blizzard`` — even when the
-daemon's inherited ``PATH`` does not carry it, the shape a wheel-installed daemon
-launched by absolute path under systemd actually has.
+The one direct test of :class:`SubprocessHubCommandRunner`. The load-bearing guarantee:
+a bare ``python3`` in a hub command node's ``run:`` step resolves to the hub daemon's own
+interpreter, even when the daemon's inherited ``PATH`` does not carry it.
 """
 
 from __future__ import annotations

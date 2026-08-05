@@ -1,9 +1,7 @@
 """The reference compose deployment (``packaging/docker/``) — the static packaging
-contract (issue #191), the same docker-free-guard shape as
-``tests/test_container_image.py`` / ``tests/test_systemd_units.py``. No docker
-required. The stack actually standing up, serving through the proxy, and
-surviving a restart is ``blizzard:compose-smoke`` (``mise run compose-smoke``),
-local-only.
+contract (issue #191). No docker required — the stack actually standing up, serving
+through the proxy, and surviving a restart is ``blizzard:compose-smoke``
+(``mise run compose-smoke``), local-only.
 """
 
 from __future__ import annotations
@@ -39,11 +37,9 @@ def test_three_services_declared() -> None:
 
 
 def test_every_durable_path_is_a_named_volume() -> None:
-    """A named volume, never a host bind-mount, for every path holding state that
-    must survive `docker compose down` (no `-v`) + `up` — a host bind silently
-    drops on a different host/CI runner, and #188's non-root image can't even
-    write to a freshly-created host directory (a real failure this test's Dockerfile
-    sibling smoke hit during development)."""
+    """A named volume, never a host bind-mount, for every path holding state that must
+    survive `docker compose down` (no `-v`) + `up` — a host bind drops on a different
+    host/CI runner, and #188's non-root image can't write to a fresh host directory."""
     compose = _compose()
     top_level_volumes = set(compose.get("volumes") or {})
     assert {"postgres-data", "hub-data", "caddy-data", "caddy-config"} <= top_level_volumes

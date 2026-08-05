@@ -1,13 +1,9 @@
 """Zombie fencing — a reaped lease cannot deliver (criterion 3, component tier).
 
-A worker whose lease was reaped may still be alive and may still submit — the epoch
-fence, not the kill, is what guarantees it cannot deliver. When a reap requeues the
-chunk, the successor mints a **fresh epoch** and
-reports it up. This test proves at the hub that the zombie's late (or
-buffered-then-flushed) completion, carrying the old epoch, is rejected before any
-write: it neither records a transition (the chunk does not advance) nor reaches the
-deliver hub node — and the legitimate successor still lands.
-"""
+A worker whose lease was reaped may still submit — the epoch fence, not the kill, is
+what guarantees it cannot deliver. Proves at the hub that the zombie's late completion,
+carrying the old epoch, is rejected before any write, and the legitimate successor
+still lands."""
 
 from __future__ import annotations
 
@@ -21,9 +17,8 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "3"}
 
-# A build -> deliver graph named `default-delivery`, reused by name on ingest,
-# so the fence reaches the deliver hub node in one build pass — decoupled from the
-# packaged default graph's build -> review -> deliver shape.
+# A build -> deliver graph named `default-delivery`, reused by name on ingest, so the
+# fence reaches the deliver hub node in one build pass.
 _BUILD_DELIVER_YAML = """
 name: default-delivery
 entry: build

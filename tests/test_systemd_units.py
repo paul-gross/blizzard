@@ -1,17 +1,8 @@
 """The colocated systemd units (``packaging/systemd/``) — the boot-recovery contract.
 
-The MVP journey has the machine reboot and "the supervisor and the colocated hub
-[come] back under systemd". Two mechanisms deliver that: the units
-enable at boot (``WantedBy=multi-user.target``) and restart on a crash (``Restart=``);
-the daemons' own startup pass (runner REAP, hub idempotent re-flush) does the rest,
-proven by the whole-process crash-sweep cases (docs/deployment.md).
-
-This unit test holds the *packaging* half of that contract so it cannot silently rot:
-each shipped ``.service`` file must launch a real, packaged entry point via ``host``,
-reconcile the schema before it, and carry the restart + boot-enable directives
-the recovery contract depends on. The *behavior* is the crash sweep's job; this is the
-static-asset guard, so it needs no systemd installed and runs in the default tier.
-"""
+Each shipped ``.service`` file must launch a real, packaged entry point via ``host``,
+reconcile the schema before it, and carry the restart + boot-enable directives the
+recovery contract depends on — the *behavior* is the crash sweep's job."""
 
 from __future__ import annotations
 

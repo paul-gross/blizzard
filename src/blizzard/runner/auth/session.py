@@ -1,14 +1,8 @@
 """The runner's own local session — a signed, stateless ``HttpOnly`` cookie (issue #95).
 
-Stateless rather than store-backed: a small JSON payload (``username``, ``role``,
-``issued_at``, ``expires_at``) HMAC-signed with a per-process secret minted at daemon
-startup (``bzh:injected-clock`` for the timestamps), so it costs no new store schema and
-a restart invalidates every live session. That trade is acceptable because
-re-authentication is a *silent* bounce back through the hub, and these sessions are
-short-lived (hours) with silent renewal anyway.
-
-Pinned by tests/test_pin_runner_misc.py::test_a_session_minted_before_a_restart_is_refused_after_it.
-"""
+A small JSON payload HMAC-signed with a per-process secret minted at daemon startup
+(``bzh:injected-clock`` for the timestamps), so it costs no store schema and a restart
+invalidates every live session (pinned by ``tests/test_pin_runner_misc.py``)."""
 
 from __future__ import annotations
 
@@ -23,9 +17,8 @@ from blizzard.auth_core import Role
 from blizzard.foundation.store.utc import iso_utc
 
 SESSION_COOKIE_NAME = "bz_runner_session"
-#: Runner sessions are short (issue #95's own text): hours, not days — renewal is a
-#: silent bounce through the hub, so a short TTL costs nothing but an invisible round
-#: trip.
+#: Runner sessions are short (issue #95): hours, not days — renewal is a silent bounce
+#: through the hub, so a short TTL costs nothing but an invisible round trip.
 SESSION_TTL = timedelta(hours=8)
 
 

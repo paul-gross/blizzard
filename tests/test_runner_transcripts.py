@@ -1,17 +1,8 @@
-"""``transcripts/internal/projected_transcript_repository.py`` — the panel's read
-model, end to end through the full stack.
+"""``transcripts/internal/projected_transcript_repository.py`` — the panel's read model.
 
-Component tier — a domain slice wired with real internal collaborators (a real
-:class:`ClaudeCodeTranscriptSource`, the real normalizer, the real projection, a
-real file under ``tmp_path``), hermetic via ``bzh:dependency-injection`` rather than
-``HOME`` monkey-patching. The two scripted-batch truncation-flag tests at the bottom
-double the source at its seam and stay unit tier. The golden claim
-is that a given set of fixture lines produces a given ``Turn`` list, so a projection
-regression reads as a diff in expectations here, not silence.
-
-File-location mechanics (session-id glob, multi-match disambiguation, the tail cap,
-forward reads, sidecar discovery) are pinned once, at their own layer, in
-``tests/test_runner_harness_claude_code_transcript.py`` — not duplicated here.
+A domain slice wired with real internal collaborators, hermetic via
+``bzh:dependency-injection``. The golden claim: a given set of fixture lines produces a
+given ``Turn`` list, so a projection regression reads as a diff in expectations here.
 """
 
 from __future__ import annotations
@@ -49,7 +40,6 @@ def _read(tmp_path: Path) -> Transcript:
 
 # --------------------------------------------------------------------------- #
 # The turn shape
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component
@@ -125,12 +115,9 @@ def test_is_sidechain_record_is_filtered(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_a_thinking_turn_produces_zero_panel_turns_not_an_empty_asst_turn(tmp_path: Path) -> None:
-    """The thinking half of the narrowing contract, pinned at this layer like the two
-    sidechain halves around it: a thinking block (redacted in the corpus-normal case,
-    so its text is empty) contributes no panel turn at all. Without the projection's
-    own `kind != "thinking"` filter it would fall through `_project_turn`'s
-    env-or-asst default and render as an empty `asst` turn — a visible regression on
-    the panel contract this projection exists to hold constant."""
+    """A thinking block contributes no panel turn at all: without the projection's own
+    `kind != "thinking"` filter it would fall through to an empty `asst` turn — a
+    visible regression on the panel contract this projection holds constant."""
     _write(tmp_path, [fx.user_env("hello"), fx.thinking_block()])
     transcript = _read(tmp_path)
 
@@ -210,10 +197,8 @@ def test_truncated_final_line_is_dropped_silently(tmp_path: Path) -> None:
     assert transcript.turns[0].text == "build the thing"
 
 
-# --------------------------------------------------------------------------- #
 # Caps — MAX_TURNS moved here; MAX_BLOCK_CHARS (text) stays in the normalizer;
 # MAX_BLOCK_CHARS (tool input) is this module's own, re-materialization-time cap.
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component
@@ -247,10 +232,8 @@ def test_max_block_chars_caps_assistant_text_without_flagging_file_level_truncat
 def test_max_block_chars_caps_a_serialized_tool_input_and_flags_truncated(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Load-bearing: the assistant-*text* ``MAX_BLOCK_CHARS`` case doesn't cover a
-    re-materialized tool-input string — this is that missing case, at the layer that
-    owns the cap.
-    """
+    """Load-bearing: the assistant-text ``MAX_BLOCK_CHARS`` case doesn't cover a
+    re-materialized tool-input string — this is that missing case."""
     monkeypatch.setattr(projection_module, "MAX_BLOCK_CHARS", 10)
     _write(tmp_path, [fx.assistant_tool_use("t1", "Bash", {"command": "x" * 50})])
     transcript = _read(tmp_path)
@@ -264,8 +247,7 @@ def test_max_block_chars_caps_a_serialized_tool_input_and_flags_truncated(
 @pytest.mark.component
 def test_absent_tool_input_serializes_to_empty_string_not_json_null(tmp_path: Path) -> None:
     """The wire contract renders a missing/``null`` ``input`` as ``""`` — never
-    ``json.dumps({})`` (``"{}"``), which is what re-materializing off the normalizer's
-    own ``input={}`` fallback alone (with no discriminator) would produce."""
+    ``json.dumps({})``, which the normalizer's own fallback alone would produce."""
     content = [{"type": "tool_use", "id": "t1", "name": "Bash"}]  # no `input` key at all
     line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
     _write(tmp_path, [line])
@@ -277,10 +259,8 @@ def test_absent_tool_input_serializes_to_empty_string_not_json_null(tmp_path: Pa
 
 @pytest.mark.component
 def test_bare_string_tool_input_that_parses_as_json_is_still_requoted(tmp_path: Path) -> None:
-    """A bare string ``input`` (malformed relative to the tool_use schema, but seen in
-    the wild) is re-quoted on the way back out, matching the wire contract's blanket
-    ``json.dumps(raw_input)`` — even when the string itself happens to parse as JSON
-    (``"123"``), which a re-parse-to-tell-apart heuristic gets wrong."""
+    """A bare string ``input`` is re-quoted on the way back out, matching the wire
+    contract's blanket ``json.dumps(raw_input)``, even when it parses as JSON itself."""
     content = [{"type": "tool_use", "id": "t1", "name": "Weird", "input": "123"}]
     line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
     _write(tmp_path, [line])
@@ -293,9 +273,7 @@ def test_bare_string_tool_input_that_parses_as_json_is_still_requoted(tmp_path: 
 @pytest.mark.component
 def test_list_valued_tool_input_round_trips_byte_identical_with_the_wire_contract(tmp_path: Path) -> None:
     """The fourth `ToolInputShape` (`"other"`: a list, number, or bool `input`) —
-    re-materialized byte-identical with the wire contract's blanket
-    `json.dumps(raw_input)`, which is the claim the projection's docstring makes
-    "for every input shape"."""
+    re-materialized byte-identical with the wire contract's blanket `json.dumps(raw_input)`."""
     content = [{"type": "tool_use", "id": "t1", "name": "Weird", "input": [1, "two", True]}]
     line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
     _write(tmp_path, [line])
@@ -307,7 +285,6 @@ def test_list_valued_tool_input_round_trips_byte_identical_with_the_wire_contrac
 
 # --------------------------------------------------------------------------- #
 # Which of the batch's two truncation flags reaches the panel
-# --------------------------------------------------------------------------- #
 
 
 def _scripted_batch(*, truncated: bool, sidechain_truncated: bool) -> TranscriptBatch:
@@ -328,13 +305,9 @@ def _scripted_batch(*, truncated: bool, sidechain_truncated: bool) -> Transcript
 
 @pytest.mark.unit
 def test_a_sidechain_only_truncation_never_reaches_the_panels_truncated_flag() -> None:
-    """The whole reason ``sidechain_truncated`` is a field of its own: this projection
-    discards every sidechain, so a sidecar's own tail cap or the fan-out budget running
-    out cut nothing the panel renders, and must not raise its TRUNCATED banner. Pinned
-    at *this* layer rather than only at the source's — the source-side tests assert the
-    source sets the right flag, which stays true even if this projection starts reading
-    the wrong one.
-    """
+    """The whole reason ``sidechain_truncated`` is a field of its own: since this
+    projection discards every sidechain, a sidecar-only truncation cuts nothing the
+    panel renders and must not raise its TRUNCATED banner."""
     source = FakeTranscriptSource({"sess-1": _scripted_batch(truncated=False, sidechain_truncated=True)})
 
     transcript = ProjectedTranscriptRepository(source).read_turns("sess-1", spawn_cwd=None)

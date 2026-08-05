@@ -1,15 +1,9 @@
-"""The selftest job resource — ``POST /api/selftests``, ``GET /api/selftests/{id}``
-(issue #54).
+"""The selftest job resource — ``POST``/``GET /api/selftests`` (issue #54).
 
-The adapter-drift canary as a resource with a result, not an RPC verb: POST mints a
-run against a chosen coding harness and returns immediately (the checks run off the
-request thread, ``runner/selftest/service.py``); GET re-reads it. Confined to the
-in-memory :class:`~blizzard.runner.selftest.service.SelfTestService` the composition
-root wires unconditionally on ``app.state`` — no store is needed on this path, so
-even the store-free app (OpenAPI export, unit tests) answers both routes, its empty
-harness registry making ``POST`` answer 422 naming no configured harnesses, exactly
-like a real misconfiguration would.
-"""
+The adapter-drift canary as a resource with a result, not an RPC verb: POST mints a run
+and returns immediately, with the checks off the request thread; GET re-reads it. No
+store is needed on this path, so an empty harness registry answers 422 naming no
+configured harnesses, exactly as a real misconfiguration would."""
 
 from __future__ import annotations
 

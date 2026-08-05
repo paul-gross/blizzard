@@ -1,11 +1,8 @@
 """Shared FastAPI dependency for the fleet routers (``bzh:dependency-injection``).
 
-The ``host`` composition root stashes the wired :class:`~blizzard.hub.composition.HubServices`
-on ``app.state.services``; routers reach it through this dependency rather than
-constructing collaborators themselves. The store-free export/unit app wires no
-services, so a fleet route hit there reports the store is unwired (503) instead of
-serving on a missing database.
-"""
+The composition root stashes the wired :class:`~blizzard.hub.composition.HubServices`
+on ``app.state.services``; routers reach it through this dependency. With no services
+wired, a route reports the store is unwired (503) rather than serving on none."""
 
 from __future__ import annotations
 

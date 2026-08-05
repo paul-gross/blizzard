@@ -1,10 +1,8 @@
 """Builds the hub's work source registry from configuration.
 
 One credentialed ``httpx.Client`` per configured ``[[work_source]]`` — never a shared
-client, never a shared token: the delivery forge keeps its own client
-(``hub/app.py``); this is the work-source seam's own composition. A ``provider -> builder`` map
-selects the adapter; confined to ``internal/`` (``bzh:dependency-inversion``), so
-``httpx`` construction for a work source stays out of the composition root.
+client, never a shared token. A ``provider -> builder`` map selects the adapter; confined
+to ``internal/`` (``bzh:dependency-inversion``), keeping ``httpx`` out of the root.
 """
 
 from __future__ import annotations
@@ -37,11 +35,8 @@ _BUILDERS: dict[str, Callable[[WorkSourceConfig, httpx.Client, str], IWorkSource
 def _derive_web_base(api_base: str) -> str:
     """The provider's web origin from its API base — GitHub-adapter knowledge.
 
-    Public GitHub splits ``api.github.com`` from ``github.com`` by stripping the
-    ``api.`` host prefix; a GitHub Enterprise install splits
-    ``git.corp.internal/api/v3`` from ``git.corp.internal`` by stripping the
-    ``/api/v3`` path suffix — same vendor, two unrelated derivations, so neither can be
-    inferred generically for a provider that follows neither rule."""
+    Two unrelated derivations for one vendor — an ``api.`` host prefix for public GitHub,
+    an ``/api/v3`` path suffix for Enterprise — so neither generalizes."""
     stripped = api_base.rstrip("/")
     if stripped.endswith("/api/v3"):
         return stripped[: -len("/api/v3")]
@@ -53,16 +48,9 @@ def _derive_web_base(api_base: str) -> str:
 def build_work_source_registry(sources: Sequence[WorkSourceConfig]) -> WorkSourceRegistry:
     """One credentialed client + binding per configured source.
 
-    A source whose ``token_env`` names an unset variable fails here, at boot, naming
-    the variable — not at first fetch. An empty ``sources`` is a legal, work-source-free
-    hub. Only a source with ``annotate = true``/``close = true`` gets an entry in the
-    registry's annotator/closer map — every binding this factory builds today (the only
-    provider, ``github``) implements :class:`~blizzard.hub.work_sources.annotator.IWorkAnnotator`
-    and :class:`~blizzard.hub.work_sources.closer.IWorkCloser` on the same instance, so
-    opting in is a matter of *exposing* the capability, not building a second object.
-    This is what makes a non-opted source structurally never written to / never closed
-    (``registry.annotator(name) is None`` / ``registry.closer(name) is None``) rather
-    than a runtime branch someone has to remember."""
+    A source whose ``token_env`` names an unset variable fails here, at boot, not at first
+    fetch. Only an opted-in source gets an annotator/closer entry, so a non-opted one is
+    structurally never written to rather than guarded by a runtime branch."""
     built: dict[str, IWorkSource] = {}
     annotators: dict[str, IWorkAnnotator] = {}
     closers: dict[str, IWorkCloser] = {}

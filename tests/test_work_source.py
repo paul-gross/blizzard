@@ -1,11 +1,8 @@
 """The GitHub-shaped work source adapter (component tier).
 
-Exercises :class:`~blizzard.hub.work_sources.internal.github_work_source.GitHubWorkSource`'s
-``{source, ref}`` pointer handling and vendor-native read against the GitHub-REST
-double — the same choice of a local double over a ``blizzard-mock`` dev dependency
-recorded in ``tests.support`` — plus the factory that builds one credentialed
-client per configured source, the label/web-base rendering the binding owns, and
-the ``parse``/registry ``resolve`` that give it its production caller.
+Exercises :class:`GitHubWorkSource`'s ``{source, ref}`` pointer handling and
+vendor-native read against the GitHub-REST double, plus the factory, the label/web-base
+rendering, and the ``parse``/registry ``resolve`` that give it its production caller.
 """
 
 from __future__ import annotations
@@ -125,7 +122,6 @@ def test_parse_rejects_an_unshaped_token() -> None:
 
 # --------------------------------------------------------------------------- #
 # The factory — one credentialed client per configured source.
-# --------------------------------------------------------------------------- #
 
 
 def test_factory_derives_web_base_by_stripping_the_api_host_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -214,9 +210,7 @@ def test_registry_get_picks_the_named_binding_over_real_adapters() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# The registry's intake-side resolver — tries every configured binding's
-# own `parse` in turn, first claim wins.
-# --------------------------------------------------------------------------- #
+# The registry's intake-side resolver — tries every binding's `parse`, first claim wins.
 
 
 def test_resolve_tries_every_binding_and_returns_the_first_claim() -> None:
@@ -257,7 +251,6 @@ def test_registry_get_over_an_empty_registry_is_none() -> None:
 
 # --------------------------------------------------------------------------- #
 # IWorkAnnotator — the write half (forge-status projection, issue #177)
-# --------------------------------------------------------------------------- #
 
 
 def test_set_status_adds_the_desired_label_and_removes_the_other() -> None:
@@ -403,14 +396,9 @@ def test_set_status_scope_failure_degrades_to_work_annotate_error() -> None:
 
 
 def test_set_status_add_label_failure_degrades_to_work_annotate_error() -> None:
-    """A failing *add* must surface, not be swallowed.
-
-    The sibling test above arms the broad ``forbidden`` lever, which trips the
-    repo-label bootstrap first — so it never reaches the add call and cannot fence
-    it. This one fails only the add: the paired remove that follows 404s (the other
-    marker is not present), which the adapter deliberately tolerates, so nothing
-    else in the call raises on the add's behalf.
-    """
+    """A failing *add* must surface, not be swallowed — the sibling test above arms
+    the broad ``forbidden`` lever, which trips the label bootstrap first and never
+    reaches the add call, so this one fails only the add."""
     double = github_double()
     source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
     forge_state(double)["label_add_forbidden"] = True
@@ -439,10 +427,8 @@ def test_registry_annotator_returns_the_bound_annotator() -> None:
     assert registry.annotating_names() == ["widget"]
 
 
-# --------------------------------------------------------------------------- #
-# The factory's opt-in wiring (issue #179 Phase 3) — an annotator is built
-# only for a source configured with annotate=True.
-# --------------------------------------------------------------------------- #
+# The factory's opt-in wiring (issue #179 Phase 3): an annotator is built only for a
+# source configured with annotate=True.
 
 
 def test_factory_builds_no_annotator_for_a_non_opted_in_source(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -474,7 +460,6 @@ def test_factory_builds_an_annotator_for_an_opted_in_source(monkeypatch: pytest.
 
 # --------------------------------------------------------------------------- #
 # IWorkCloser — the close half (delivery-time closure, issue #216)
-# --------------------------------------------------------------------------- #
 
 
 def test_close_issues_the_documented_patch() -> None:
@@ -538,10 +523,8 @@ def test_registry_closer_returns_the_bound_closer() -> None:
     assert registry.closing_names() == ["widget"]
 
 
-# --------------------------------------------------------------------------- #
-# The factory's opt-in wiring (issue #216) — a closer is built only for a
-# source configured with close=True.
-# --------------------------------------------------------------------------- #
+# The factory's opt-in wiring (issue #216): a closer is built only for a source
+# configured with close=True.
 
 
 def test_factory_builds_no_closer_for_a_non_opted_in_source(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,20 +1,8 @@
 """The runner-local session-end endpoint — ``POST /api/leases/{lease_id}/session-end``.
 
-A worker's Claude Code ``SessionEnd`` hook runs ``blizzard runner session-end`` when its
-session exits naturally, which posts here with the lease id it inherited from the spawn
-environment (``BLIZZARD_LEASE_ID``). The daemon appends a durable session-end fact — the
-"declared done" signal (exit-is-done) — that startup crash-recovery reads to tell a
-worker killed mid-work (no fact, resume) from one that cleanly exited (fact, judge) after an
-involuntary restart. The CLI is a pure
-client; it never opens the store itself.
-
-Recorded unconditionally, like the heartbeat — a fact, not a status: the lease may already
-be closed (the runner advanced before the hook landed) or the write may replay, and either
-is harmless because crash-recovery only reads a session-end against a still-active lease. The
-edge is read-only over its wiring (``bzh:controller-read-only``): it records through the store
-the ``host`` composition root wired on ``app.state``. On the store-free app (OpenAPI export /
-unit tests) the store is unwired and the probe answers 503 rather than pretending.
-"""
+Appends a durable session-end fact — the "declared done" signal crash-recovery reads to
+tell a worker killed mid-work from one that cleanly exited. Recorded unconditionally, a
+fact and not a status, so a replay or an already-closed lease is harmless. Unwired: 503."""
 
 from __future__ import annotations
 

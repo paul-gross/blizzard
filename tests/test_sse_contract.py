@@ -1,15 +1,9 @@
 """The SSE frame shape contract — golden corpus equality (component tier, issue #235).
 
 ``contracts/sse/`` is the single description of every SSE frame kind's wire shape; this
-suite and the TypeScript spec at ``web/projects/fleet/src/lib/sse/sse-contract.spec.ts``
-read the same physical files — no per-side copy. Moving a golden reddens whichever side
-has not caught up to the change; changing a side's shape without moving the golden
-reddens that side.
-
-Phase 2 (issue #235 plan) adds the parse half: every golden validates against its
-:mod:`blizzard.wire.sse` model — ``extra="forbid"`` turns an unrecognized field red —
-and round-trips back to a dict equal to the golden.
-"""
+suite and its TypeScript counterpart read the same physical files — no per-side copy.
+Every golden also validates against its :mod:`blizzard.wire.sse` model and round-trips
+back to a dict equal to the golden."""
 
 from __future__ import annotations
 

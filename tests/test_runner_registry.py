@@ -1,11 +1,8 @@
 """The fleet registry — register, heartbeat, liveness, and the pause brake (component tier).
 
-Drives the real hub over a tmp store: ``POST /runners`` registers,
-``POST /runners/{id}/heartbeats`` refreshes liveness, ``GET /runners`` lists the fleet
-with **derived** online/offline and paused, and ``POST /runners/{id}/pause`` / ``/resume``
-set the operator's brake. Liveness and paused are never stored columns, so the
-assertions drive the clock and read the derived surface.
-"""
+Drives the real hub over a tmp store: register, heartbeat, list with derived
+online/offline and paused, and the operator's pause/resume brake. Liveness and paused
+are never stored columns, so assertions drive the clock and read the derived surface."""
 
 from __future__ import annotations
 
@@ -110,14 +107,8 @@ def test_registry_changes_emit_runner_changed_events(tmp_path: Path) -> None:
     assert all("runner-a" in e["data"] for e in events)
 
 
-# --------------------------------------------------------------------------- #
-# Environment-pool capacity, reported on registration (issue #69)
-# --------------------------------------------------------------------------- #
-#
-# The runner reports its configured `len(workspace_envs)` as `env_capacity` on `POST
-# /runners`; the hub stores it and returns it on every `RunnerView`. Re-registration is
-# the runner's heartbeat, so a changed pool converges on the next pull. A client that
-# predates the field omits it, and the hub reports null.
+# --- Environment-pool capacity, reported on registration (issue #69) ---
+# Re-registration is the heartbeat: a changed pool converges, an absent one nulls.
 
 
 def test_env_capacity_reported_on_register_lands_on_the_view(tmp_path: Path) -> None:
@@ -159,13 +150,8 @@ def test_env_capacity_resets_to_null_when_a_newer_reregister_omits_it(tmp_path: 
     assert hub.client.get("/api/fleet/runners/runner-a").json()["env_capacity"] is None
 
 
-# --------------------------------------------------------------------------- #
-# The runner's own brake, reported up (issue #43)
-# --------------------------------------------------------------------------- #
-#
-# The hub never sets this one — it arrives as a fact through the runner's outbound buffer
-# and the hub only reads it. These assert it lands and that it is genuinely separate
-# from the fleet's brake.
+# --- The runner's own brake, reported up (issue #43) ---
+# The hub never sets this one — it arrives as a fact through the outbound buffer.
 
 
 def _report_local_pause(

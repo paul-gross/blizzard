@@ -1,35 +1,8 @@
 """Cross-graph migration (issue #90) — scenario 10 of the standing e2e smoke.
 
-A worker at the source graph's `build` node selects a cross-graph judgement choice
-(`to: graph:triage-delivery`). Taking it ends the attempt, re-pins the chunk to the
-target graph, releases the route, and re-queues it at the target's own `build` node
-(name-match-else-entry). A claim under the new graph runs it to `done` — landing the
-change on bare `main` exactly once.
-
-Asserted at both ends over the full live stack (mock forge + mock harness + fixture
-workspace + real hub/runner, driven one synchronous tick at a time, every seam real, no
-tokens/network):
-
-* **git truth** — the change is reachable from the bare origin's `main` (the merge
-  happened under the TARGET graph, the only branch that lands it);
-* **fleet truth** — the hub recorded a migration (never a transition spanning graphs),
-  the chunk's `graph_id` is re-pinned to the target, its history spans two graphs (a
-  migration step from the source's `build` plus the target graph's own
-  `build -> deliver -> done`), and it derives `done`.
-
-Then — when a launchable Chromium is present — a **real browser** drives the served board
-over *this scenario's own* two-graph history (MUST-FIX-3): the migrated chunk's detail
-dock renders the graph-to-graph migration step with a per-graph label on every row, and
-the standalone `/graphs` explorer still lists both graphs. Gated like its
-siblings — skipped unless `BLIZZARD_E2E=1` and the sibling `blizzard-mock` worktree + a
-local winter source are discoverable; the browser half additionally needs the served
-bundle (`mise run e2e` builds it) and an installed Chromium, and is skipped in place —
-the git + fleet truth above still run — when that Chromium is absent.
-
-Reproduce it — from the `blizzard` worktree in a provisioned feature env — with::
-
-    uv run playwright install chromium   # once, out of band (for the browser half)
-    BLIZZARD_E2E=1 uv run pytest tests/e2e/test_migration_e2e.py
+A worker's cross-graph judgement choice ends the source attempt, re-pins the chunk to
+the target graph, and re-queues it at the target's own `build` node; a claim under the
+new graph lands the change on bare `main` exactly once.
 """
 
 from __future__ import annotations
@@ -64,9 +37,8 @@ pytestmark = [
     ),
 ]
 
-# The source build makes no commit — it hands the chunk off. The target graph's own build
-# node (below) does the real work, so the only branch that lands the change is the
-# target's, keeping the exactly-once-on-main assertion honest.
+# The source build makes no commit — it hands off; the target's own build node does the
+# real work, keeping the exactly-once-on-main assertion honest.
 _SOURCE_BUILD_SCRIPT = "pass\n"
 _SOURCE_JUDGEMENT = "verdict('migrate', 'hand the chunk to the triage-delivery graph')\n"
 
@@ -219,10 +191,8 @@ def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
 
-        # --- The two-graph history renders on the served board (MUST-FIX-3) ------------
-        # This scenario has produced a *real* two-graph history above; when a Chromium is
-        # present, drive the served board over it. When Chromium is absent the git + fleet
-        # truth below still run.
+        # The two-graph history renders on the served board (MUST-FIX-3), when a Chromium
+        # is present; when absent the git + fleet truth below still run.
         if chromium_available:
             from playwright.sync_api import expect, sync_playwright
 
@@ -240,9 +210,8 @@ def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
                     expect(page.get_by_test_id("chunk-detail")).to_be_visible()
                     expect(page.get_by_test_id("detail-id")).to_have_text(chunk_id)
 
-                    # The timeline weaves in the graph-to-graph migration step and, because
-                    # the history spans two graphs, labels each row with the graph it
-                    # happened in (no raw-id degradation).
+                    # The timeline weaves in the migration step and labels each row with
+                    # the graph it happened in (no raw-id degradation).
                     expect(page.get_by_test_id("history-migration-step")).to_have_count(1)
                     assert page.get_by_test_id("history-graph").count() >= 1, (
                         "the two-graph timeline rendered no per-graph label — MigrationView hydration regressed"

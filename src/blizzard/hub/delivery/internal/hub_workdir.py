@@ -1,15 +1,8 @@
 """The filesystem-backed per-chunk hub workdir (``bzh:pluggable-seams``).
 
-Confined to ``internal/`` (adapter placement, ``bzh:dependency-inversion``): all
-``pathlib``/``shutil`` usage for the hub workdir lives here; the domain sees only
-:class:`~blizzard.hub.delivery.workdir.IHubWorkdir`.
-
-This adapter owns the **folder**, not its contents: it creates and reclaims a bare
-directory per chunk under the hub runtime dir. Whether that directory is empty (a
-first visit) or holds one or more warm git clones (a later visit) is up to the
-declared ``run:`` commands themselves — see
-:class:`~blizzard.hub.delivery.workdir.IHubWorkdir` for the folder's crash/correctness
-contract.
+Confined to ``internal/`` (``bzh:dependency-inversion``): all ``pathlib``/``shutil``
+usage for the hub workdir lives here. This adapter owns the **folder**, not its
+contents — it creates and reclaims a bare directory per chunk under the runtime dir.
 """
 
 from __future__ import annotations

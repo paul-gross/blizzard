@@ -1,29 +1,8 @@
-"""Chunk routes — ingest, list, detail, work-item pass-through — the anonymous **operator**
-surface (issue #87).
+"""Chunk routes — the anonymous **operator** surface (issue #87).
 
-The chunk-facing surface of the hub API. Controllers stay read-only
-over the store (``bzh:controller-read-only``): ingest delegates to
-domain services that hold the write repository; the list/detail reads
-derive status and current node from facts (``bzh:facts-not-status``), never a stored
-column. The work-item read is a vendor-native pass-through whose contents are never stored.
-``PATCH /chunks/{id}`` (issue #104) repins a not-ready or ready-and-unclaimed chunk's
-workflow graph, default model/effort, or migration intent (issue #27, widened by #120,
-retargeted by #144) in one all-or-nothing edit — read is already carried on the
-list/detail views' ``graph_id``/``default_model``/``default_effort`` fields; write is
-refused (409) once the chunk has left the ``{not_ready, ready}`` admit set.
-
-The transition verbs (``promote``/``detach``/``pause``/``resume``/``stop``/``requeues``,
-issue #104) return the transitioned chunk's :class:`~blizzard.wire.chunk.ChunkSummary`
-rather than a bare ``{"chunk_id": ...}`` — the same derived row :func:`list_chunks`
-builds per chunk, shared through :func:`_summary_view` (``canon:one-owner``). Status
-codes are unchanged; only the body is enriched.
-
-The envelope read, the completion/decision/lease/escalation writes, and ``hub-advance``
-(#65/#66, driven by the runner's own ADVANCE poll) live on the runner-authenticated
-fleet router (:mod:`blizzard.hub.api.fleet`, issue #87). ``get_chunk`` and
-``get_work_items`` stay here (the board's own reads) *and* gain fleet-side counterparts,
-since the runner reads both too; ``dependencies=[Depends(reject_runner_principal)]`` on
-this router confines a runner's bearer token to the fleet router.
+Controllers stay read-only over the store (``bzh:controller-read-only``); list/detail
+reads derive status and current node from facts (``bzh:facts-not-status``), never a
+stored column. The work-item read is a pass-through whose contents are never stored.
 """
 
 from __future__ import annotations
@@ -136,12 +115,7 @@ def _pointer_views(chunk: Chunk, work_sources: IWorkSourceRegistry) -> list[Work
 
 
 def publish_open_decision(services: HubServices, chunk_id: str) -> None:
-    """Emit ``decision-opened`` if the chunk now carries a live, unresolved gate.
-
-    Public (issue #87): the fleet router's completion/decision writes
-    (:mod:`blizzard.hub.api.fleet`) call this the same way this module's own
-    ``get_chunk``/``to_decision_view`` reuse crosses the chunks/decisions/questions
-    module boundary."""
+    """Emit ``decision-opened`` if the chunk now carries a live, unresolved gate (issue #87)."""
     decision = services.chunks.decision_for_chunk(chunk_id)
     if decision is not None and not decision.resolved and not decision.transitioned:
         services.events.publish_decision_opened(chunk_id, decision.decision_id, key=f"decisions:{decision.decision_id}")
@@ -160,15 +134,11 @@ def _graph_name(graph: Graph | None) -> str | None:
 
 
 def _history_views(facts: ChunkFacts, graphs: dict[str | None, Graph | None]) -> list[TransitionView]:
-    """The chunk's transitions oldest-first — the board's node-history timeline.
+    """The chunk's transitions oldest-first.
 
-    Each edge's node ids are resolved to their human graph names against *the graph the
-    transition happened in* (issue #90), keyed by ``TransitionFact.graph_id`` — not the
-    chunk's current pin — so a migrated chunk's old-graph steps keep their names instead of
-    degrading to raw ``nd_`` ids (pinned by
-    ``tests/test_transition_graph_provenance.py::test_history_view_resolves_each_step_name_against_its_own_graph``).
-    The step's own ``graph_id``/``graph_name`` ride along so the board can label which
-    graph it belongs to."""
+    Each edge's node ids resolve against *the graph the transition happened in* (issue
+    #90), keyed by ``TransitionFact.graph_id`` — not the chunk's current pin (pinned by
+    ``tests/test_transition_graph_provenance.py``)."""
     views: list[TransitionView] = []
     for t in transition_history(facts):
         graph = graphs.get(t.graph_id)
@@ -191,10 +161,9 @@ def _history_views(facts: ChunkFacts, graphs: dict[str | None, Graph | None]) ->
 def _migration_views(facts: ChunkFacts, graphs: dict[str | None, Graph | None]) -> list[MigrationView]:
     """The chunk's cross-graph migration steps oldest-first (issue #90).
 
-    Each step names the graph it left and the graph it re-pinned to: the ``from_node`` is
-    resolved against the ``from_graph``, the ``landed_node`` against the ``to_graph`` — each
-    side's own graph, so neither degrades to a raw id when the two differ. The board weaves
-    these into the timeline alongside :func:`_history_views` by ``recorded_at``."""
+    Each step names the graph it left and the graph it re-pinned to: ``from_node``
+    resolves against the ``from_graph``, ``landed_node`` against the ``to_graph`` — each
+    side's own graph, so neither degrades to a raw id when the two differ."""
     views: list[MigrationView] = []
     for m in sorted(facts.migrations, key=lambda m: (m.recorded_at, m.epoch)):
         from_graph = graphs.get(m.from_graph_id)
@@ -250,10 +219,8 @@ def _resolve_graph_by_id_or_name(services: HubServices, ref: str) -> Graph | Non
 def _history_graphs(services: HubServices, chunk: Chunk, facts: ChunkFacts) -> dict[str | None, Graph | None]:
     """The graphs a chunk's history spans, by id (issue #90).
 
-    The chunk's current pin plus every distinct graph its transitions were recorded in and
-    every graph its migrations left or entered (only ever the one, until a cross-graph
-    migration lands) — each resolved once so :func:`_history_views` /
-    :func:`_migration_views` can name nodes against their own graph."""
+    The chunk's current pin plus every distinct graph its transitions were recorded in
+    and every graph its migrations left or entered — each resolved once."""
     graphs: dict[str | None, Graph | None] = {chunk.graph_id: services.graphs.get(chunk.graph_id)}
 
     def ensure(graph_id: str | None) -> None:
@@ -303,11 +270,9 @@ def _usage_history_views(facts: ChunkFacts) -> list[ChunkUsageView]:
 def _branch_url_source(chunk: Chunk, work_sources: IWorkSourceRegistry) -> IWorkSource | None:
     """The binding a chunk's artifact branch links resolve through.
 
-    The one-forge-per-chunk assumption is no longer *inferred* by sniffing
-    whichever pointer URL happened to parse first — it is *declared*: the chunk's
-    first pointer whose ``source`` names a configured binding lends its
-    :meth:`~blizzard.hub.work_sources.source.IWorkSource.branch_url`. ``None`` when no pointer's
-    source is configured — the degradation ``_artifact_views`` already preserves."""
+    One forge per chunk, *declared*: the chunk's first pointer whose ``source`` names a
+    configured binding lends its ``branch_url``. ``None`` when no pointer's source is
+    configured."""
     for p in chunk.work_refs:
         source = work_sources.get(p.source)
         if source is not None:
@@ -380,9 +345,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
     if not request.tokens:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="at least one token required")
     # Resolution before minting, and before the live-holder check: an unresolvable
-    # token should not consult the store, and the whole request rejects together
-    # rather than partially ingesting. The route resolves; the domain stays
-    # registry-free (bzh:domain-takes-objects) — it never sees the registry at all.
+    # token should not consult the store, and the request rejects as a whole.
     pointers: list[WorkRef] = []
     for token in request.tokens:
         pointer = services.work_sources.resolve(token)
@@ -423,9 +386,8 @@ def _summary_view(
     facts = services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
     node_id, node_name = _current_node(services, chunk, facts, graph_cache if graph_cache is not None else {})
     status = derive_chunk_status(facts)
-    # A finished chunk holds no claim (issue #140) — the rule and its whole rationale are
-    # `holds_claim`'s, in the domain. Asked before the read, not after, so a terminal
-    # chunk costs no `route_of` query at all; on a long-lived board they are most of the list.
+    # A finished chunk holds no claim (issue #140) — the rule is `holds_claim`'s. Asked
+    # before the read so a terminal chunk costs no `route_of` query at all.
     route = services.chunks.route_of(chunk.chunk_id) if holds_claim(status) else None
     completed_at = derive_completed_at(facts)
     return ChunkSummary(
@@ -452,15 +414,11 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
 
 
 def fleet_summary(services: HubServices) -> FleetSummaryView:
-    """Fold every chunk's derived status into the runner panel's four counts (issue #76).
+    """Fold every chunk's derived status into the four fleet-summary counts (issue #76).
 
-    Not a route of its own here — the runner reaches it via the fleet router's
-    ``GET /api/fleet/summary`` (:func:`blizzard.hub.api.fleet.fleet_summary`), which
-    forwards from the runner-local pass-through (:mod:`blizzard.runner.api.fleet_summary`).
-    The board has no need for it — its own card list already carries every status — so it
-    stays off the anonymous ``/api`` router. Derives each chunk's status the same way
-    :func:`list_chunks` does, but returns only the four bucket integers, so the payload is
-    a fixed four numbers regardless of fleet size."""
+    Not a route of its own here. Derives each chunk's status the same way
+    :func:`list_chunks` does, but returns only the four bucket integers, so the payload
+    is a fixed four numbers regardless of fleet size."""
     summary = derive_fleet_summary(
         derive_chunk_status(services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True))
         for chunk in services.chunks.list_all()
@@ -557,13 +515,8 @@ def record_hub_marker(
 ) -> HubMarkerResponse:
     """The mid-run marker callback (#65) — a ``run:`` step's own dynamic-loop marker.
 
-    Mirrors ``blizzard runner ask``'s worker-facing callback shape: a hub command
-    node's script POSTs here (via the injected
-    ``BZ_HUB_MARKER_CALLBACK_URL``, which already carries ``node_id``/``epoch``) to
-    record a marker artifact mid-run, ahead of that command's own exit — enabling a
-    dynamic loop (``merge repo -> push -> record merged/<repo> -> next``). Idempotent
-    per ``(chunk, node, name, epoch)``, exactly like the ``produces:`` marker the
-    executor records on a step's own exit.
+    Records a marker artifact mid-run, ahead of the producing command's own exit.
+    Idempotent per ``(chunk, node, name, epoch)``.
     """
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
@@ -687,10 +640,8 @@ def stop_chunk(
     """Terminally abandon CHUNK — the operator's last-resort verb (issue #118).
 
     Records the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never
-    re-derives ``ready``, and releases any live route in the same operation — the
-    holding runner's own detach-discovery abandons the lease and frees the
-    environments on its next tick, no separate ``detach`` needed. 409 when the chunk
-    is already ``done`` or ``stopped`` — stopping is not retroactive un-delivery."""
+    re-derives ``ready``, and releases any live route in the same operation. 409 when
+    the chunk is already ``done`` or ``stopped`` — stopping is not retroactive."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -737,26 +688,11 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
 def patch_chunk(
     chunk_id: str, request: ChunkPatchRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkPatchResponse:
-    """Apply any of ``graph_id``, ``default_model``, ``default_effort``,
-    ``intended_migration`` in one all-or-nothing edit (issue #124, in #104's shape;
-    the two defaults replace #27's ``model`` field per issue #144).
+    """Apply any of ``graph_id``, ``default_model``, ``default_effort``, or
+    ``intended_migration`` in one all-or-nothing edit (issue #124).
 
-    ``graph_id`` 404s on an unknown chunk or graph. ``default_model`` is a prioritized
-    preference list — a blank entry is 422, and an empty list is a legitimate "express no
-    preference" clear; ``default_effort`` is 422 when blank and cleared by explicit
-    ``null``. Neither value's *vocabulary* is checked here: a ``blizzard:`` tier alias and
-    a harness-native name are both opaque preference strings to the hub, resolved by the
-    runner's adapter against its own config. ``intended_migration``, present only
-    once the request body actually names it (``model_fields_set`` — see
-    ``ChunkPatchRequest``), sets or overwrites the standing intent when it carries a
-    value, or clears it on explicit ``null``; its ``to_graph`` resolves by id or name to
-    the newest enabled graph (404 unresolvable), and a blank ``to_graph``/``node`` is
-    422. Each field's own editable-status window (409, naming the field) and the
-    intended-migration semantic refusals — a retired target, a target equal to the
-    chunk's current pin, or a ``forced`` node absent from the target (all 409) — are
-    ``EditService.edit``'s (``domain/edit.py``); a refused field means **nothing** in the
-    body is applied.
-    """
+    404 on an unknown chunk, graph, or migration target; 422 on a blank value; the
+    editable-status windows and semantic refusals are ``EditService.edit``'s."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -779,9 +715,8 @@ def patch_chunk(
             )
         default_model = entries
 
-    # `default_effort` is nullable-with-meaning, exactly like `intended_migration` below:
-    # explicit `null` clears the preference and an omitted field leaves it unchanged, and
-    # a plain `Optional` default cannot tell those apart on this model.
+    # `default_effort` is nullable-with-meaning: explicit `null` clears the preference and
+    # an omitted field leaves it unchanged, which a plain `Optional` cannot tell apart.
     default_effort = UNSET
     if "default_effort" in request.model_fields_set:
         if request.default_effort is None:
@@ -848,13 +783,9 @@ def patch_chunk(
 def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkItemsView:
     """Pass-through work items read — one entry per pointer, contents never stored.
 
-    Each pointer is resolved to its own binding by name (``work_sources.get(pointer.source)``), then
-    fetched fresh from the forge; a per-pointer resolution or forge failure degrades to an
-    ``error`` on that entry rather than failing the whole read, so a grouped chunk
-    still surfaces the pointers it reached beside a notice for the ones it did not. A chunk
-    with no pointers is an empty list — the board's empty state — not a 404. No configured
-    work source at all is a 503 up front — the request-wide degradation preserved unchanged
-    from before per-pointer resolution existed."""
+    A per-pointer resolution or forge failure degrades to an ``error`` on that entry
+    rather than failing the whole read. A chunk with no pointers is an empty list, not
+    a 404; no configured work source at all is a 503 up front."""
     if not services.work_sources.names():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="no work source is configured")
     chunk = services.chunks.get(chunk_id)
@@ -907,22 +838,8 @@ def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_s
     return WorkItemsView(items=entries)
 
 
-# `/pm-items` was this route's name before the work-source rename (issue #55). Unlike the
-# `[[pm_source]]` config key — operator-owned, versionless, and so renamed fail-fast — an
-# HTTP path is reachable by clients we do not ship and cannot redeploy, so the old path
-# stays as a deprecated alias onto the *same handler*: one implementation, two routes, no
-# second view to drift.
-#
-# The client this serves is **out-of-tree tooling** — a script, a dashboard, someone's
-# curl. It is deliberately *not* justified by hub/runner version skew: `docs/deployment.md`
-# has both daemons as two personalities of one wheel on one machine, so within a
-# deployment they cannot skew, and the response body's own renamed fields
-# (`work_refs`) carry no alias for exactly that reason. The intra-fleet exposure the
-# rename really does have is a *stored graph prompt* naming the old CLI verb, and that is
-# covered where it lives: `blizzard runner pm-items` (`runner/cli.py`).
-#
-# Every first-party caller (the web SDK, the board, both CLIs, the runner proxy) is on
-# `/work-items`.
+# `/pm-items` is a deprecated alias onto the *same handler* as `/work-items` (issue #55):
+# an HTTP path is reachable by out-of-tree clients we do not ship and cannot redeploy.
 router.add_api_route(
     "/chunks/{chunk_id}/pm-items",
     get_work_items,

@@ -1,17 +1,8 @@
 """Fleet-wide reads spanning every chunk — currently just spend-since (issue #60).
 
-``GET /api/spend?since=<iso8601>`` sums every usage fact with ``recorded_at >=
-since`` into one fleet-wide total; derived at read time (``bzh:facts-not-status``),
-never a stored column. The caller picks the window — the board's "spend today" figure
-passes local start-of-day, but the read itself stays general. An optional
-``until=<iso8601>`` (issue #183) bounds the window's other edge — ``since`` inclusive,
-``until`` exclusive — so a caller can express a closed window (e.g. "yesterday") without
-double-counting or dropping the fact at either boundary; omitting it is the original
-open-ended tail.
-
-An anonymous **operator** verb, like every other read on this router
-(``dependencies=[Depends(reject_runner_principal)]`` — issue #87).
-"""
+``GET /api/spend`` sums every usage fact in the requested window into one fleet-wide
+total, derived at read time (``bzh:facts-not-status``), never a stored column. The window
+is half-open — ``since`` inclusive, optional ``until`` exclusive (issue #183)."""
 
 from __future__ import annotations
 

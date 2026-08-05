@@ -1,12 +1,9 @@
 """SQLAlchemy adapter for the runner-store repository (package-private).
 
-The one place the reconciliation loop's facts touch the engine (``bzh:pluggable-seams``).
-All library usage is confined here; a driver failure is wrapped once into
-:class:`~blizzard.runner.store.repository.RunnerStoreError` (logged at the wrap
-site, ``bzh:structlog-logging``) so loop code never depends on SQLAlchemy's
-exceptions. Every derived query realizes the facts-only invariant in SQL:
-active = no closure, held = no release (``bzh:facts-not-status``).
-"""
+The one place the runner's facts touch the engine (``bzh:pluggable-seams``). All library usage
+is confined here, and a driver failure is wrapped once into
+:class:`~blizzard.runner.store.repository.RunnerStoreError` (``bzh:structlog-logging``). Every
+derived query realizes the facts-only invariant in SQL (``bzh:facts-not-status``)."""
 
 from __future__ import annotations
 
@@ -76,9 +73,8 @@ from blizzard.wire.facts import USAGE_RECORDED
 
 _log = get_logger("blizzard.runner.store")
 
-# The closure reason the loop's escalate path (`runner/loop/steps.py`) records — the
-# vocabulary is caller-owned, and this is the one place the store reads it back to derive
-# "open escalation" (issue #51).
+# The caller-owned closure reason this store reads back to derive "open escalation"
+# (issue #51).
 _ESCALATED_REASON = "escalated"
 
 
@@ -118,10 +114,8 @@ def _intent_is_open():  # type: ignore[no-untyped-def]
 def _pause_park_is_open():  # type: ignore[no-untyped-def]
     """A pause-park is open iff no resume for its lease is at or after the park instant.
 
-    Timestamp-correlated exactly like :func:`_intent_is_open`, so a second pause under one
-    lease is not masked by the first pause's resume (pinned by
-    tests/test_pause_park_store.py::test_repark_after_resume_on_the_same_lease_reads_as_parked).
-    """
+    Timestamp-correlated, so a second pause under one lease is not masked by the first
+    pause's resume (tests/test_pause_park_store.py)."""
     return ~(
         select(pause_park_resumes.c.id)
         .where(
@@ -352,9 +346,8 @@ class SqlAlchemyRunnerStore:
 
     def latest_epoch(self, chunk_id: str) -> int:
         lease_stmt = select(func.max(leases.c.epoch)).where(leases.c.chunk_id == chunk_id)
-        # A forced takeover's fence bump (issue #52) reports a new epoch to the hub
-        # without minting a local lease, so a later real spawn must still see it —
-        # folded in here alongside the lease-minted epochs, the fence source's one home.
+        # A forced takeover's fence bump (issue #52) mints no local lease, so it is folded
+        # in here alongside the lease-minted epochs.
         fence_stmt = select(func.max(takeovers.c.fence_epoch)).where(takeovers.c.chunk_id == chunk_id)
         with self._connect() as conn:
             lease_max = conn.execute(lease_stmt).scalar_one_or_none()
@@ -429,9 +422,8 @@ class SqlAlchemyRunnerStore:
         )
 
     def open_asks(self) -> list[AskRecord]:
-        # An ask whose lease has closed is never open — a backstop independent of whichever
-        # loop path writes the retiring `park_resumes` row (blizzard#202; pinned by
-        # tests/test_runner_status_api.py::test_an_ask_whose_lease_closed_without_a_park_resume_does_not_appear).
+        # An ask whose lease has closed is never open — a backstop independent of which
+        # path writes the retiring `park_resumes` row (blizzard#202).
         stmt = (
             select(asks)
             .where(asks.c.question_id.not_in(select(park_resumes.c.question_id)))
@@ -580,8 +572,7 @@ class SqlAlchemyRunnerStore:
 
     def session_preamble_fingerprint(self, session_id: str) -> PreambleFingerprint | None:
         # Ordered on the autoincrement pk, not on `recorded_at` or implicit insert order
-        # (`bzh:sql-portable`; pinned by
-        # tests/test_runner_store.py::test_session_preamble_newest_row_wins_at_an_identical_stamp).
+        # (`bzh:sql-portable`).
         rows = self._all(
             select(session_preamble_facts.c.blizzard_digest, session_preamble_facts.c.workspace_digest)
             .where(session_preamble_facts.c.session_id == session_id)
@@ -734,10 +725,8 @@ class SqlAlchemyRunnerStore:
         event_kind: str | None = None,
         event_payload: str | None = None,
     ) -> None:
-        # The closure and (when given) its operational event land in ONE transaction —
-        # the same atomic local+outbound pairing `record_local_pause` uses (issue #125),
-        # so a `kill -9` between them can never surface an event for a closure that never
-        # happened, nor drop the event for one that did.
+        # The closure and its operational event land in ONE transaction, so a `kill -9`
+        # can neither surface an event for a closure that never happened nor drop one (#125).
         with self._begin() as conn:
             conn.execute(
                 lease_closures.insert().values(
@@ -850,8 +839,7 @@ class SqlAlchemyRunnerStore:
         self, runner_id: str, *, paused: bool, at: datetime, by: str, report_kind: str, report_payload: str
     ) -> None:
         # Both inserts, one transaction: two would leave a `kill -9` window where the runner
-        # has stopped claiming and the hub is never told (issue #43; pinned by
-        # tests/test_ingest_and_pause_verbs.py::test_pause_reports_itself_upward_atomically).
+        # has stopped claiming and the hub is never told (issue #43).
         with self._begin() as conn:
             conn.execute(local_pause_facts.insert().values(runner_id=runner_id, paused=paused, set_at=at, set_by=by))
             conn.execute(
@@ -891,8 +879,7 @@ class SqlAlchemyRunnerStore:
 
     def record_lease_token(self, lease_id: str, token_hash: str, at: datetime) -> None:
         # Delete-then-insert: a re-mint replaces the prior row under the `lease_id` PK, so
-        # the old token is invalidated by construction (pinned by
-        # tests/test_runner_store.py::test_record_lease_token_overwrites_on_re_mint).
+        # the old token is invalidated by construction.
         with self._begin() as conn:
             conn.execute(lease_tokens.delete().where(lease_tokens.c.lease_id == lease_id))
             conn.execute(lease_tokens.insert().values(lease_id=lease_id, token_hash=token_hash, minted_at=at))
@@ -938,9 +925,8 @@ class SqlAlchemyRunnerStore:
         commit: str,
         declared_at: datetime,
     ) -> None:
-        # A single committed transaction — durable the instant this returns, so it
-        # survives a `kill -9` right after (issue #143 Phase 3, mirroring
-        # `record_attachment`).
+        # A single committed transaction — durable the instant this returns, so it survives
+        # a `kill -9` right after (issue #143).
         with self._begin() as conn:
             conn.execute(
                 git_commit_declarations.insert().values(
@@ -979,11 +965,8 @@ class SqlAlchemyRunnerStore:
         results: list[CheckResultRecord],
         at: datetime,
     ) -> None:
-        # Delete-then-insert in one transaction: a crash-recovery re-run for the same
-        # `(lease, epoch)` is latest-wins rather than accumulating duplicate rows (pinned by
-        # tests/test_runner_checks.py::test_record_check_results_round_trips_and_is_latest_wins_on_a_rerun).
-        # Written BEFORE `record_checks_ran` so the marker never precedes its rows
-        # (`runner:checks-recorded-when-marked`).
+        # Delete-then-insert in one transaction, so a re-run for the same `(lease, epoch)`
+        # is latest-wins. Written BEFORE `runner:checks-recorded-when-marked`'s marker.
         with self._begin() as conn:
             conn.execute(
                 check_results.delete().where(and_(check_results.c.lease_id == lease_id, check_results.c.epoch == epoch))
@@ -1004,10 +987,8 @@ class SqlAlchemyRunnerStore:
         _log.info("check results recorded", lease_id=lease_id, epoch=epoch, count=len(results))
 
     def record_checks_ran(self, *, lease_id: str, epoch: int, at: datetime) -> None:
-        # Check-then-insert in one transaction, mirroring `record_nudge_fired` — idempotent
-        # by construction, not a DB constraint (`bzh:sql-portable`). Written AFTER
-        # `record_check_results`, so the marker implies its result rows exist
-        # (`runner:checks-recorded-when-marked`).
+        # Check-then-insert in one transaction — idempotent by construction, not by a DB
+        # constraint (`bzh:sql-portable`). Written AFTER `runner:checks-recorded-when-marked`.
         with self._begin() as conn:
             existing = conn.execute(
                 select(checks_ran.c.id).where(and_(checks_ran.c.lease_id == lease_id, checks_ran.c.epoch == epoch))
@@ -1018,9 +999,8 @@ class SqlAlchemyRunnerStore:
         _log.info("checks marked ran", lease_id=lease_id, epoch=epoch)
 
     def record_session_preamble(self, session_id: str, *, fingerprint: PreambleFingerprint, at: datetime) -> None:
-        # A plain append, no check-then-insert: this is a per-spawn fact whose newest row is
-        # the answer, not a once-per-key guard (pinned by
-        # tests/test_runner_store.py::test_session_preamble_fingerprint_is_newest_row_wins).
+        # A plain append, no check-then-insert: a per-spawn fact whose newest row is the
+        # answer, not a once-per-key guard.
         with self._begin() as conn:
             conn.execute(
                 session_preamble_facts.insert().values(
@@ -1093,8 +1073,7 @@ class SqlAlchemyRunnerStore:
         sample: UsageSample,
         recorded_at: datetime,
     ) -> None:
-        # Both writes, one transaction — the same atomic local+outbound pairing
-        # `record_local_pause` uses: a usage fact the hub is never told about is never
+        # Both writes, one transaction: a usage fact the hub is never told about is never
         # reconciled later.
         with self._begin() as conn:
             existing = conn.execute(
@@ -1162,10 +1141,8 @@ class SqlAlchemyRunnerStore:
     def record_external_usage_attempt(
         self, *, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str
     ) -> None:
-        # The attempt row and (when there is a sample) its outbound report land in ONE
-        # transaction — the same atomic local+outbound pairing `record_local_pause` and
-        # `record_usage` use. Runner-scoped (`chunk_id=None, lease_id=None`): this is a
-        # fact about the runner's own account, not about any chunk or lease.
+        # The attempt row and its outbound report land in ONE transaction. Runner-scoped
+        # (`chunk_id=None, lease_id=None`): a fact about the account, not a chunk or lease.
         with self._begin() as conn:
             conn.execute(external_usage_samples.insert().values(sampled_at=sampled_at, payload=payload))
             if payload is not None:

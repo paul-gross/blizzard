@@ -1,19 +1,8 @@
 """The Claude Code adapter — verdict parsing (unit) and a real subprocess (component).
 
-``parse_verdict`` is exercised in isolation over the harness-native JSON envelope and
-its failure modes (``bzh:`` unit tier). The component test drives the adapter against
-a real fake-harness binary that mimics ``mock-claude-code``'s CLI surface — spawn
-launches a real process (its pid + start time stamped) in the acquired
-workdir, and the judgement resume's output is parsed into a choice. The real
-``mock-claude-code`` façade is bound in the e2e (``blizzard:e2e``).
-
-The bottom section (epic #57 phase 1) covers ``parse_usage``/``sum_transcript_usage``
-in isolation (unit) and the injected per-lease stdout-file redirect on ``spawn``/
-``resume_with_message`` against the same real fake-harness binary (component).
-
-The node-entry-resume section (issue #115) covers ``spawn(resume_from=...)``'s
-flag branch and echoed continuation id in isolation (unit), with ``subprocess.Popen``
-faked so no real process is launched.
+``parse_verdict`` is exercised over the harness-native JSON envelope and its failure
+modes; the component test drives spawn/resume against a real fake-harness binary. Also
+covers usage parsing, the per-lease stdout redirect, and node-entry resume (issue #115).
 """
 
 from __future__ import annotations
@@ -78,8 +67,7 @@ def test_resume_command_is_the_literal_takeover() -> None:
 @pytest.mark.unit
 def test_attended_resume_command_reasserts_the_permission_mode() -> None:
     # The flag is per-invocation, not session-sticky (issue #258): the takeover door's
-    # exec'd command reasserts it so a bypassPermissions worker is not demoted to
-    # per-tool approval prompts mid-task.
+    # exec'd command reasserts it so a bypassPermissions worker is not demoted mid-task.
     adapter = ClaudeCodeAdapter(binary="claude", permission_mode="bypassPermissions")
 
     cmd = adapter.resume_command("/ws/e1", "sess-x", model="opus", attended=True)
@@ -90,8 +78,7 @@ def test_attended_resume_command_reasserts_the_permission_mode() -> None:
 @pytest.mark.unit
 def test_the_advertised_paste_string_never_carries_the_permission_mode() -> None:
     # The default composition is the escalation record / `runner status` paste string:
-    # a human runs it in a bare terminal with none of the identity env, so it stays at
-    # the interactive permission default even on a bypassPermissions deployment.
+    # a human runs it in a bare terminal, so it stays at the interactive default.
     adapter = ClaudeCodeAdapter(binary="claude", permission_mode="bypassPermissions")
 
     assert adapter.resume_command("/ws/e1", "sess-x") == "cd /ws/e1 && claude --resume sess-x"
@@ -106,19 +93,14 @@ def test_resume_command_without_a_permission_mode_stays_bare() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Node-entry resume (issue #115): spawn(resume_from=...) branches the CLI flag
-# and echoes the authoritative continuation id, with no real subprocess launched
-# (``subprocess.Popen`` is faked so this stays a pure unit test of argv construction).
-# --------------------------------------------------------------------------- #
+# Node-entry resume (issue #115): the CLI flag branch, with ``subprocess.Popen`` faked.
 
 
 class _FakeSpawnedProcess:
     """A stand-in for the ``Popen`` handle ``spawn`` reads ``.pid`` off of.
 
-    An implausibly large pid so ``read_process_start_time`` (a real ``/proc`` read)
-    finds nothing and returns ``None`` gracefully, exactly as it does for any
-    already-exited/foreign pid — no real process is ever launched.
-    """
+    An implausibly large pid so ``read_process_start_time`` finds nothing and returns
+    ``None`` gracefully, as it does for any already-exited/foreign pid."""
 
     pid = 9_999_999
 
@@ -177,7 +159,6 @@ def test_spawn_without_resume_from_is_unchanged(monkeypatch: pytest.MonkeyPatch)
 
 # --------------------------------------------------------------------------- #
 # Spawn-environment allowlist (issue #88): no call path copies `os.environ` wholesale
-# --------------------------------------------------------------------------- #
 
 _SENTINEL_UNLISTED_VAR = "MY_UNLISTED_SENTINEL_VAR"
 
@@ -224,9 +205,8 @@ def test_judge_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(
 
 @pytest.mark.component
 def test_judge_injects_the_lease_identity_when_given_a_preamble(tmp_path: Path) -> None:
-    # The judgement turn runs its own `blizzard runner attach` (the `retrospective` a
-    # node's judgement prompt elicits), and `--resume` inherits none of the spawn env —
-    # so a judge given a preamble must carry the same per-lease identity a resume does.
+    # `--resume` inherits none of the spawn env, so a judge given a preamble must carry
+    # the same per-lease identity a resume does.
     dump_script = tmp_path / "dump-env"
     dump_script.write_text(_ENV_DUMP_HARNESS)
     dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
@@ -273,8 +253,7 @@ def test_resume_with_message_child_env_excludes_the_hub_token_and_an_unlisted_se
 @pytest.mark.component
 def test_resume_with_message_injects_the_lease_identity_when_given_a_preamble(tmp_path: Path) -> None:
     # A resumed worker needs the same per-lease identity a fresh spawn gets, since
-    # `--resume` inherits none of the spawn env. The caller passes a preamble with a
-    # freshly re-minted token; the resume child env must carry it, mirroring spawn.
+    # `--resume` inherits none of the spawn env — the resume child env must carry it too.
     dump_script = tmp_path / "dump-env"
     dump_script.write_text(_ENV_DUMP_HARNESS)
     dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
@@ -336,9 +315,8 @@ def test_spawn_env_forwards_lc_prefixed_locale_vars(monkeypatch: pytest.MonkeyPa
 def test_spawn_env_still_carries_the_base_allowlist_and_deliberate_blizzard_vars(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # The allowlist is not a denylist rewrite in disguise: PATH/HOME (needed to locate
-    # and run the binary) and the adapter's own BLIZZARD_* additions still ride the
-    # child env.
+    # The allowlist is not a denylist rewrite in disguise: PATH/HOME and the adapter's
+    # own BLIZZARD_* additions still ride the child env.
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
     monkeypatch.setenv("HOME", "/home/worker")
     adapter = ClaudeCodeAdapter(binary="claude")
@@ -377,16 +355,9 @@ def test_spawn_env_carries_the_lease_capability_token(monkeypatch: pytest.Monkey
 
 @pytest.mark.unit
 def test_the_suites_worker_identity_strip_list_covers_every_var_spawn_env_injects() -> None:
-    """The conftest strip-list and ``_spawn_env`` agree on the worker identity set.
-
-    Blizzard develops itself, so its suite routinely runs *inside* a blizzard worker and
-    inherits this identity. ``tests/conftest.py``'s autouse ``_strip_worker_identity_env``
-    unsets it so a test asserting a var's *absence* reads the absence rather than the
-    ambient value. That fixture is invisible in CI — CI has no ambient identity, so
-    dropping a var from the strip-list breaks nothing there and the suite only fails for
-    fleet workers, the one place nobody is watching a red suite. This is the guard: add a
-    ``BLIZZARD_*`` var to ``_spawn_env`` without adding it to the strip-list and fail here.
-    """
+    """The conftest strip-list and ``_spawn_env`` agree on the worker identity set — add
+    a ``BLIZZARD_*`` var to ``_spawn_env`` without adding it to the strip-list and fail
+    here, rather than only in a fleet worker where nobody is watching a red suite."""
     adapter = ClaudeCodeAdapter(binary="claude")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
@@ -521,11 +492,8 @@ def test_judge_resume_output_parses_to_choice(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_judge_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -> None:
-    # The judgement resume is a headless turn with no one to approve tool use, and a
-    # node's ``judgement_prompt`` can elicit its own ``blizzard runner attach`` (the
-    # ``retrospective``). ``--permission-mode`` is per-invocation, not session-sticky,
-    # so ``judge`` must reassert it exactly as ``spawn``/``resume_with_message`` do —
-    # else the resume drops to the settings default and denies that attach.
+    # ``--permission-mode`` is per-invocation, not session-sticky, so ``judge`` must
+    # reassert it exactly as ``spawn``/``resume_with_message`` do.
     binary = _fake_binary(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
@@ -538,9 +506,8 @@ def test_judge_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -
 
 @pytest.mark.component
 def test_resume_with_message_carries_the_worker_settings_hooks(tmp_path: Path) -> None:
-    # ``--resume`` does not inherit the original spawn's ``--settings``, so a resumed
-    # session would lose its ``PostToolUse`` heartbeat and ``SessionEnd`` hook unless
-    # ``resume_with_message`` re-attaches the worker hook file exactly as ``spawn`` does.
+    # ``--resume`` does not inherit the spawn's ``--settings``, so a resumed session
+    # would lose its heartbeat/session-end hooks unless this re-attaches the file.
     binary = _fake_binary(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
@@ -555,10 +522,8 @@ def test_resume_with_message_carries_the_worker_settings_hooks(tmp_path: Path) -
 
 @pytest.mark.component
 def test_judge_omits_the_worker_settings_hooks(tmp_path: Path) -> None:
-    # ``judge`` is a synchronous verdict elicitation the runner reads directly; its exit is
-    # not the worker declaring done. Attaching the ``SessionEnd`` hook here would record a
-    # spurious session-end for the still-live lease, so ``judge`` deliberately omits
-    # ``--settings`` even when the adapter is configured with a worker hook file.
+    # ``judge``'s exit is not the worker declaring done; attaching ``SessionEnd`` here
+    # would record a spurious session-end for the still-live lease.
     binary = _fake_binary(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
@@ -622,7 +587,6 @@ def test_spawn_falls_back_to_env_workdir_without_a_workspace_root(tmp_path: Path
 
 # --------------------------------------------------------------------------- #
 # Usage extraction (epic #57, phase 1 of #58): parse_usage, sum_transcript_usage
-# --------------------------------------------------------------------------- #
 
 _USAGE_ENVELOPE = json.dumps(
     {
@@ -779,7 +743,6 @@ def test_sum_transcript_usage_of_empty_transcript_is_zeroed() -> None:
 
 # --------------------------------------------------------------------------- #
 # Injected per-lease stdout redirect (epic #57): spawn / resume_with_message
-# --------------------------------------------------------------------------- #
 
 _FAKE_HARNESS_WITH_USAGE = """#!/usr/bin/env python3
 import sys, json
@@ -892,11 +855,8 @@ def test_resume_with_message_redirects_stdout_to_the_injected_path(tmp_path: Pat
 
 @pytest.mark.component
 def test_resume_with_message_passes_output_format_json_so_cost_is_real(tmp_path: Path) -> None:
-    """Regression pin: ``resume_with_message`` must pass ``--output-format json``
-    (mirroring ``spawn``/``judge``) so its stdout is a JSON result envelope and
-    ``parse_usage`` reads the *real* ``total_cost_usd`` — not just token counts.
-    Without the flag the fake (like the real ``claude``/``mock-claude-code``
-    binaries) falls back to plain text and `parse_usage` returns `None`."""
+    """Regression pin: ``resume_with_message`` must pass ``--output-format json`` so its
+    stdout is a JSON envelope and ``parse_usage`` reads the real ``total_cost_usd``."""
     binary = _fake_binary_with_usage(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
@@ -913,10 +873,8 @@ def test_resume_with_message_passes_output_format_json_so_cost_is_real(tmp_path:
 
 @pytest.mark.component
 def test_resume_without_output_format_json_yields_no_envelope(tmp_path: Path) -> None:
-    """The other side of the regression: a resume invocation that omits
-    ``--output-format json`` emits plain text, not an envelope — so ``parse_usage``
-    returns ``None`` and the caller's transcript-summation fallback (cost absent) is
-    what sets the cost."""
+    """The other side: a resume invocation that omits ``--output-format json`` emits
+    plain text, not an envelope, so ``parse_usage`` returns ``None``."""
     binary = _fake_binary_with_usage(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
@@ -933,13 +891,7 @@ def test_resume_without_output_format_json_yields_no_envelope(tmp_path: Path) ->
 
 
 # --------------------------------------------------------------------------- #
-# Model / effort resolution behind the adapter seam (issue #144).
-#
-# The seam that keeps the hub and graph YAML harness-agnostic: the loop hands an
-# ordered list of opaque preference strings and receives one name THIS harness
-# understands. Left-to-right, first that resolves wins, unresolvable entries
-# skipped — never a spawn failure.
-# --------------------------------------------------------------------------- #
+# Model / effort resolution (issue #144): left-to-right, first entry that resolves wins.
 
 
 @pytest.mark.unit
@@ -959,9 +911,8 @@ def test_resolve_model_takes_the_first_entry_that_resolves() -> None:
 
 @pytest.mark.unit
 def test_resolve_model_skips_a_native_name_belonging_to_another_harness() -> None:
-    # The whole point of recognizing native names: an author's mixed list must fall past
-    # the codex entry rather than hand `claude` a name it would reject, turning a stated
-    # preference into a spawn failure.
+    # A mixed list must fall past a name belonging to another harness rather than hand
+    # `claude` a name it would reject, turning a preference into a spawn failure.
     adapter = ClaudeCodeAdapter(binary="claude")
     assert adapter.resolve_model(["gpt-5.3-codex", "blizzard:basic"]) == "sonnet"
 
@@ -1026,9 +977,8 @@ def test_resolve_effort_of_no_preference_is_none() -> None:
 
 @pytest.mark.unit
 def test_an_unrecognized_effort_logs_once_and_is_ignored() -> None:
-    # Claude Code HAS an effort knob, so an unrecognized value is an authoring mistake,
-    # not a missing capability — dropped rather than failing a spawn, and noted once
-    # rather than on every spawn of a long-lived runner.
+    # An unrecognized effort is an authoring mistake — dropped rather than failing a
+    # spawn, and noted once rather than on every spawn of a long-lived runner.
     adapter = ClaudeCodeAdapter(binary="claude")
 
     with capture_logs() as logs:
@@ -1038,18 +988,8 @@ def test_an_unrecognized_effort_logs_once_and_is_ignored() -> None:
     assert len([entry for entry in logs if "unrecognized effort" in entry["event"]]) == 1
 
 
-# --------------------------------------------------------------------------- #
-# The application contract (issue #144), asserted as argv on EVERY invocation
-# path — not just the node-entry spawn.
-#
-#   `--model`  at MINT ONLY. Claude Code restores a session's model on `--resume`
-#              (verified, CLI 2.1.220), and a cross-model resume forces a
-#              full-history cache rewrite.
-#   `--effort` on EVERY invocation. The D5 probe found effort is NOT sticky: a
-#              session spawned `--effort low` against a `high` settings default ran
-#              `high` on a bare resume, while its model stayed put. Mint-only would
-#              silently drop a declared effort on every member of a resuming pool.
-# --------------------------------------------------------------------------- #
+# The application contract (issue #144): `--model` at mint only (restored on `--resume`);
+# `--effort` on every invocation (D5: effort is not sticky).
 
 
 @pytest.mark.unit
@@ -1120,10 +1060,8 @@ def test_resume_with_message_carries_the_effort_but_never_the_model(monkeypatch:
     assert cmd[cmd.index("--effort") + 1] == "high"
 
 
-# --------------------------------------------------------------------------- #
-# Usage attribution (issue #144): the caller supplies the model it resolved for an
+# Usage attribution (issue #144): the caller supplies the model resolved for an
 # invocation the harness itself reports none for.
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -1172,11 +1110,9 @@ def test_sum_transcript_usage_attributes_to_the_supplied_model_when_no_line_name
 
 @pytest.mark.unit
 def test_the_base_allowlist_carries_no_anthropic_model_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Issue #144's one deployment requirement, pinned. `ANTHROPIC_MODEL` and its family
-    override the model Claude Code restores for a resumed session — the stickiness the
-    mint-only `--model` contract rests on. A deployment that leaked one would run every
-    resuming pool member on the wrong model with every other tier still green, which is
-    exactly the failure no test can otherwise see."""
+    """Issue #144's one deployment requirement, pinned: `ANTHROPIC_MODEL` and its family
+    override the restored-session stickiness the mint-only `--model` contract rests on,
+    and a leaked one would run every resuming pool member on the wrong model."""
     monkeypatch.setenv("ANTHROPIC_MODEL", "claude-haiku-4-5")
     monkeypatch.setenv("ANTHROPIC_DEFAULT_SONNET_MODEL", "claude-haiku-4-5")
 
@@ -1185,11 +1121,8 @@ def test_the_base_allowlist_carries_no_anthropic_model_override(monkeypatch: pyt
     assert not [name for name in env if name.startswith("ANTHROPIC_")]
 
 
-# --------------------------------------------------------------------------- #
-# resume_command (D4, issue #144). The one deliberate exception to mint-only:
-# mint-only exists for prompt-cache efficiency on RUNNER-driven resumes, and an
+# resume_command (D4, issue #144): the one deliberate exception to mint-only — an
 # operator's interactive takeover is neither cache-sensitive nor implicit.
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit

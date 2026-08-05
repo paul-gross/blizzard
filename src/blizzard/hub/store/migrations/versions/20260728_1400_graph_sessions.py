@@ -1,22 +1,5 @@
-"""graph sessions — the graph-level named-session declarations (hub store tree)
-
-Issue #144 gives a graph a top-level ``sessions:`` map: named declarations carrying a
-prioritized ``model`` preference list, an ``effort`` value, and ``rotate:`` thresholds,
-which nodes reference by name (``fresh:<name>`` / ``resume:<name>``). ``graph_sessions``
-holds one row per declaration, immutable with the graph that owns it — ``graphs`` and
-everything under it stays insert-only.
-
-A declaration mints no id: ``(graph_id, name)`` is the primary key, because ``name`` is
-what a node's reference and the runner's pool lookup both key on.
-
-No backfill and none possible — a graph minted before this revision declared no sessions,
-so it reads zero rows, which is exactly what it meant. Every pre-#144 graph keeps today's
-behavior: its nodes carry only the bare ``fresh``/``resume``/``resume:<node>`` forms,
-none of which consult this table.
-
-Each revision in this tree creates a subset of the current ``schema`` metadata's tables
-(the live-schema pattern); this one creates exactly the one new table, ``checkfirst`` so
-a fresh ``base -> head`` and an in-place upgrade both converge.
+"""graph sessions — one row per graph-level ``sessions:`` declaration, keyed
+``(graph_id, name)`` and immutable with the graph that owns it (hub store tree, #144)
 
 Revision ID: 20260728_1400_hub_graph_sessions
 Revises: 20260728_1230_hub_chunk_migration_source

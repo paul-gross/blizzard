@@ -1,25 +1,8 @@
-"""The runner-local chunk-detail pass-through proxy — ``GET /api/chunks/{id}``, ``POST
-.../pause``, ``POST .../resume`` (issue #185).
-
-The machine panel's chunk-detail dock reads the
-:class:`~blizzard.wire.chunk.ChunkDetail` aggregate the board renders, projected down to
-:class:`~blizzard.wire.chunk.ChunkHeaderView` (see that class for why), forwarded here
-exactly as ``blizzard.runner.api.work_items`` forwards the work-items read: the runner
-forwards to the hub's fleet-side counterpart, and the hub calls out with its own
-credentials. ``pause`` is the *only* way the panel learns a chunk is paused — that fact
-sits independently of ``status`` (a chunk both paused and parked on a question still
-derives ``waiting_on_human``), so there is no cheaper local substitute for it.
-
-Pause/Resume are the two board actions this proxy carries — the mutation half of the same
-dock. Both forward to new fleet-mounted routes (:mod:`blizzard.hub.api.fleet`) rather than
-the board's own anonymous ``/api/chunks/{id}/pause`` — a runner's bearer token is confined
-to the fleet router, so forwarding it to the operator path would be rejected outright.
+"""The runner-local chunk-detail pass-through proxy — read, pause, resume (issue #185).
 
 Read-only over its wiring (``bzh:controller-read-only``): all three routes forward to the
-hub URL the ``host`` composition root resolved onto ``app.state.config``, carrying the same
-``Authorization: Bearer`` credential as every other runner->hub call
-(``config.hub_token``). A transport failure to the hub is a ``502``; the hub's own status
-(``404`` unknown chunk, ``409`` refused pause/resume) passes through verbatim.
+hub URL the composition root resolved onto ``app.state.config``, under the fleet-scoped
+bearer credential. A transport failure is a ``502``; the upstream status passes verbatim.
 """
 
 from __future__ import annotations
@@ -63,13 +46,8 @@ def _forward(request: Request, method: str, path: str) -> httpx.Response:
 def get_chunk(chunk_id: str, request: Request) -> ChunkHeaderView:
     """Forward a chunk's detail read to the hub — the chunk-detail dock's header subject.
 
-    Forwards to the same fleet-mounted ``ChunkDetail`` read the build worker's own
-    envelope poll uses, but validates the response down to :class:`ChunkHeaderView`:
-    the header needs only the identity, work-item links, state, and pause fact, and
-    projecting here (rather than carrying the full aggregate over this proxy too)
-    keeps the transition/artifact history — and the schema collision its
-    ``EscalationView`` field would otherwise cause in the runner's own OpenAPI spec —
-    out of this route entirely."""
+    The upstream aggregate is validated down to :class:`ChunkHeaderView`, keeping the
+    transition/artifact history out of this route's own schema entirely."""
     upstream = _forward(request, "GET", f"/api/fleet/chunks/{chunk_id}")
     if upstream.status_code != status.HTTP_200_OK:
         raise HTTPException(status_code=upstream.status_code, detail=upstream_detail(upstream))

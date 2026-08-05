@@ -1,26 +1,5 @@
-"""route-event monotonic tiebreak (hub store tree, issue #41)
-
-A plain-timestamp fact model cannot tell "created after released" from "released after
-created" when the instants coincide. This revision adds ``seq`` to ``route_created`` and
-``route_released`` — a per-chunk counter shared across the two, assigned in real write
-order (:meth:`ChunkStore._next_route_seq`) — so both liveness oracles order by
-``(timestamp, seq)`` through one comparison
-(:func:`blizzard.hub.domain.work.newest_live_route`) and a tie resolves to whichever
-event was actually recorded later. Pinned by
-``tests/test_gates.py::test_reclaim_at_a_same_instant_tie_still_derives_running``.
-
-**Backfill (existing rows predate ``seq``):** for each chunk, its ``route_created``/
-``route_released`` rows are ordered chronologically by timestamp, with a same-instant
-tie broken *created-before-released* (an arbitrary but consistent default — the issue
-that motivates this revision established the tie is unreachable under
-:class:`~blizzard.foundation.clock.SystemClock`'s microsecond resolution, so no real
-historical row is expected to hit this branch), and ``seq`` is assigned ``1..n`` in that
-order. This is the same "release wins the historical tie" bias :meth:`route_of` used to
-hard-code, kept only as the backfill default — new writes are ordered by real insertion
-order regardless.
-
-Local ``sa.Table`` literals for ``route_created``/``route_released``, not a ``schema.py``
-import — the reason is recorded in ``0013_pm_pointer_source_ref``'s docstring.
+"""route-event monotonic tiebreak — ``seq`` on ``route_created``/``route_released``, with
+a backfill assigning 1..n in timestamp order, ties created-before-released (issue #41)
 
 Revision ID: 20260716_2207_hub_route_seq_tiebreak
 Revises: 20260716_2206_hub_pr_opened_idempotent

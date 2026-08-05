@@ -1,12 +1,9 @@
 """The route-seq-tiebreak revision's route-event ``seq`` backfill (issue #41).
 
-Exercises the backfill on a store migrated to the work-ref-source-ref revision (the
-revision immediately before route-seq-tiebreak), seeded with pre-existing
-``route_created``/``route_released`` rows in the pre-``seq``
-shape. Seeded with a local frozen literal rather than ``from blizzard.hub.store import
-schema as s`` (the same reason ``test_work_ref_migration.py`` does: a revision pinned
-in time must not read a moving shape — see the walking-skeleton and route-seq-tiebreak revisions' module docstrings).
-"""
+Exercises the backfill on a store migrated to the revision immediately before it,
+seeded with pre-existing ``route_created``/``route_released`` rows in the pre-``seq``
+shape, via a local frozen literal rather than the live schema module (a revision
+pinned in time must not read a moving shape)."""
 
 from __future__ import annotations
 
@@ -94,10 +91,8 @@ def test_chronologically_ordered_rows_backfill_seq_in_order(tmp_path: Path) -> N
 
 
 def test_same_instant_rows_backfill_created_before_released(tmp_path: Path) -> None:
-    """The documented backfill default for a historical tie (see the route-seq-tiebreak revision's docstring):
-    created sorts first, so a pre-existing same-instant pair backfills as though the
-    release outranked the create — kept only here since a real historical tie is not
-    expected to exist."""
+    """The documented backfill default for a historical tie: created sorts first, so a
+    same-instant pair backfills as though the release outranked the create."""
     runner, engine = _migrate_to_before(tmp_path)
     with engine.begin() as conn:
         _seed_chunk(conn, "ch_tied")

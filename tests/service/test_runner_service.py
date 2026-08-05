@@ -1,32 +1,8 @@
 """Runner service tier — the real runner against the mock hub (verification/blizzard.md).
 
-The **runner** daemon's reconciliation loop is exercised from outside, driven one real
-``run_single_tick`` at a time (the steppable driver, ``bzh:steppable-loop``) against a
-**mock hub** run as its own subprocess — the counterpart mocked
-("the runner → run it against the mock hub"). The mock hub's levers
-manufacture the rare states a real hub could only be contrived into, so the tick's
-resilience logic is asserted directly:
-
-* **unreachable hub → buffered completion** — the completion is store-and-forward durable
-  : while the hub is down the chunk never advances and the runner's outbound buffer
-  holds the fact; when the hub heals the buffered completion flushes and the chunk lands.
-* **dropped ack → idempotent re-apply** — the hub applies the transition but drops the ack
-  (503); the runner re-flushes the same completion and the hub's epoch-idempotent apply
-   advances the chunk exactly once — no double transition — through to done.
-* **stale envelope tolerated** — the hub serves a stale-epoch envelope; the runner fences
-  its completion on its own lease epoch (not the envelope's), so the chunk still lands.
-
-A fourth scenario proves a different seam: **the transcript read at fleet tier**
-(issue #29's provenance gap). A real ``mock-claude-code`` mints a genuine Claude-shaped
-JSONL transcript as it drives the build node, and the test reads it back through the
-**runner's own local HTTP API** (``GET /api/leases`` then
-``GET /api/leases/{lease_id}/transcript``) — not by importing the parser, which would
-re-close the loop the mock's transcript writer exists to open.
-
-Every seam is real (fixture workspace, mock-claude-code, git), no tokens, no network.
-Reproduce — from a provisioned feature env — with::
-
-    BLIZZARD_SERVICE=1 uv run pytest tests/service/test_runner_service.py
+The runner's loop is driven one tick at a time against a mock hub whose levers
+manufacture rare states: unreachable hub, dropped ack, stale envelope — plus a fourth
+scenario reading a real transcript back through the runner's own local HTTP API (#29).
 """
 
 from __future__ import annotations
@@ -110,15 +86,13 @@ def test_unreachable_hub_buffers_the_completion_then_lands_on_recovery(tmp_path:
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         # Drive (hub up) until the mock worker has committed, exited, and ADVANCE has
-        # *buffered* the completion — the tick boundary just before PULL would flush it
-        # (ADVANCE enqueues; the flush is the next tick's PULL, so we can wedge in here).
+        # *buffered* the completion — the tick boundary just before PULL would flush it.
         buffered = poll_until(lambda: _tick_then(config, fenced, lambda: _pending_outbound(config) >= 1), timeout=60.0)
         assert buffered, "the completion never buffered (the worker did not run to completion)"
         assert _status(hub, chunk_id) != "done", "the chunk landed before the outage could be staged"
 
         # Now the hub goes unreachable: every flush attempt fails, so the completion stays
-        # store-and-forward buffered. The chunk's status is unreadable *because* the
-        # hub is down — which is the point — so the buffer depth is the proof it did not flush.
+        # store-and-forward buffered — the buffer depth is the proof it did not flush.
         assert hub.post("/_levers/unreachable", json={"remaining": 10_000}).status_code == 200
         _drive(config, fenced, ticks=4)
         assert _pending_outbound(config) >= 1, "the completion did not stay buffered during the outage"
@@ -129,9 +103,8 @@ def test_unreachable_hub_buffers_the_completion_then_lands_on_recovery(tmp_path:
         assert landed, f"chunk did not land after recovery (status {_status(hub, chunk_id)!r})"
         assert _pending_outbound(config) == 0, "the outbound buffer did not drain after recovery"
 
-    # The runner pushed the mock harness's commit to the bare origin (the artifact-push half
-    # of ADVANCE) — on the work branch. Unlike e2e, the mock hub fakes the deliver
-    # node, so the commit is not merged to main; it is reachable across the origin's refs.
+    # The runner pushed the mock harness's commit to the bare origin, on the work branch —
+    # the mock hub fakes deliver, so it is reachable across the origin's refs, not merged.
     reachable = _git_bare(origin_bare, "log", "--all", "--name-only", "--format=")
     assert "LANDED.md" in reachable.split(), "the mock harness's commit never reached the bare origin"
 
@@ -147,8 +120,7 @@ def test_dropped_ack_reapplies_idempotently_through_to_done(tmp_path: Path) -> N
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         # Drop the very first completion ack: the hub advances build -> deliver but answers
-        # 503, so the runner keeps the completion buffered and re-flushes it. The hub's
-        # epoch-idempotent apply must advance the chunk exactly once.
+        # 503, so the runner re-flushes; the hub's epoch-idempotent apply advances it once.
         assert hub.post("/_levers/drop_ack", json={"chunk_id": chunk_id, "remaining": 1}).status_code == 200
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
         assert landed, f"chunk did not land after the dropped ack (status {_status(hub, chunk_id)!r})"
@@ -167,20 +139,16 @@ def test_stale_envelope_is_tolerated_and_the_chunk_still_lands(tmp_path: Path) -
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         # Serve a stale-epoch envelope on the re-read: the runner fences its completion on
-        # its own lease epoch, not the envelope's, so a stale envelope is benign — the chunk
-        # still lands. (The lever is single-shot; it perturbs one envelope read.)
+        # its own lease epoch, not the envelope's, so a stale envelope is benign.
         assert hub.post("/_levers/stale_envelope", json={"chunk_id": chunk_id, "remaining": 1}).status_code == 200
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
         assert landed, f"chunk did not land despite a stale envelope (status {_status(hub, chunk_id)!r})"
 
 
-# --------------------------------------------------------------------------- #
 # Transcript provenance — the panel's read proven at fleet tier (issue #29).
-# --------------------------------------------------------------------------- #
 
-#: A real unified diff, applied for real by the mock's own ``git apply`` plumbing
-#: (the exact shape proven in ``blizzard-mock`` ``test_harness_smoke.py``'s
-#: ``test_script_applies_diff_and_makes_real_commit``).
+#: A real unified diff, applied for real by the mock's own ``git apply`` plumbing (see
+#: ``blizzard-mock``'s ``test_script_applies_diff_and_makes_real_commit``).
 _TRANSCRIPT_DIFF = (
     "diff --git a/transcript-proof.txt b/transcript-proof.txt\n"
     "new file mode 100644\n"
@@ -193,12 +161,8 @@ _TRANSCRIPT_DIFF = (
 
 _TRANSCRIPT_COMMIT_MESSAGE = "feat: mint a transcript-provable commit"
 
-#: Unlike ``BUILD_SCRIPT`` above (raw ``subprocess`` git calls), this script calls the
-#: mock's own ``apply_diff``/``commit`` helpers so the run mints matched
-#: ``tool_use``/``tool_result`` turns (``Edit``/``Bash``). Those helpers apply against
-#: ``current_context().cwd``, which the runner sets to the *environment* directory
-#: rather than the one repo the fixture uses — so the script first repoints the
-#: ambient context's ``cwd`` at the repo child directory before calling them.
+#: Calls the mock's own ``apply_diff``/``commit`` helpers (not raw subprocess) so the run
+#: mints matched ``Edit``/``Bash`` tool turns; repoints ``cwd`` to the repo child dir first.
 _TRANSCRIPT_BUILD_SCRIPT = (
     "import pathlib, subprocess\n"
     "from blizzard_mock.harness.engine import current_context\n"
@@ -206,9 +170,8 @@ _TRANSCRIPT_BUILD_SCRIPT = (
     f"ctx.cwd = pathlib.Path(ctx.cwd) / {REPO_NAME!r}\n"
     f"apply_diff({_TRANSCRIPT_DIFF!r})\n"
     f"commit({_TRANSCRIPT_COMMIT_MESSAGE!r})\n"
-    # Push the branch and declare it (issue #143, Phase 4) — the runner no longer
-    # discovers or pushes the produced pointer, so the worker must, through the
-    # real `blizzard runner artifact commit` verb.
+    # Push the branch and declare it (issue #143) — the worker does this itself,
+    # through the real `blizzard runner artifact commit` verb.
     "_repo_dir = str(ctx.cwd)\n"
     "_branch = subprocess.run(\n"
     '    ["git", "-C", _repo_dir, "rev-parse", "--abbrev-ref", "HEAD"],\n'
@@ -258,19 +221,9 @@ def _transcript_chunk_spec(work_ref_url: str) -> dict:
 
 
 def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> None:
-    """The panel's transcript read, proven at the tier that can reach it.
-
-    This drives a chunk through the **real** fleet — a real ``mock-claude-code``
-    subprocess mints a genuine Claude-shaped JSONL as it runs ``apply_diff``/``commit``
-    — then reads the result back through the **runner's own local HTTP API**, never by
-    importing the parser (that stays the unit tier's job).
-
-    The provenance assertion: the ``Bash`` (commit) turn's ``tool_output`` carries a
-    short commit sha the transcript writer minted *from the real ``git commit`` this
-    run made* — cross-checked here against the actual commit reachable on the bare
-    origin. No fixture or stub can satisfy this: the sha does not exist until the
-    real commit runs.
-    """
+    """A real mock-claude-code subprocess mints a genuine transcript; read back through
+    the runner's own local HTTP API. Pins provenance: the Bash turn's tool_output carries
+    the real commit sha, cross-checked against the bare origin."""
     bin_dir = require_mock_fleet()
     workspace, _origins, origin_bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
@@ -322,9 +275,8 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
     assert edit_turn["tool_output"], "the Edit turn's tool_output was never filled in"
     assert bash_turn["tool_output"], "the Bash turn's tool_output was never filled in"
 
-    # Provenance: the real commit sha, independently read off the bare origin (the
-    # runner's own artifact push), must appear in the transcript's own
-    # tool_output — content that only exists once the real `git commit` ran.
+    # Provenance: the real commit sha, independently read off the bare origin, must
+    # appear in the transcript's tool_output — content only the real commit created.
     real_sha = _git_bare(origin_bare, "log", "--all", "--format=%H", "-1", "--", "transcript-proof.txt").strip()
     assert real_sha, "the mock harness's commit never reached the bare origin"
     assert real_sha[:7] in bash_turn["tool_output"], (

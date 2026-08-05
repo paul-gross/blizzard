@@ -1,15 +1,9 @@
 """The runner spawn-preamble renderer (issues #17, #103, #149, unit tier).
 
-The pure composition the core hands the adapter as ``prompt_prefix``: the baked-in
-blizzard preamble (or its ``runner_prompt`` override) above the operator's workspace
-prompt above a machine-local info table naming the runner/chunk/lease identity and —
-always the full held set — one name/workdir row-pair per held environment.
-
-Issue #149 splits that into two shapes. A fresh render (``prior=None``) is the full
-three-layer composition, unchanged. A resumed one compares the two standing layers against
-the fingerprint the session was last sent, collapses what it still holds, and announces
-what moved — with layer 3 unconditional on every path.
-"""
+The pure three-layer composition the core hands the adapter as ``prompt_prefix``: the
+blizzard preamble, the operator's workspace prompt, and a machine-local info table. A
+fresh render (``prior=None``) emits all three unchanged; a resumed one (#149) compares
+the standing layers against the last-sent fingerprint and announces what moved."""
 
 from __future__ import annotations
 
@@ -137,9 +131,7 @@ def test_baked_default_used_when_runner_prompt_unset() -> None:
     assert "blizzard runner chunk history" in out
     assert "blizzard runner heartbeat" in out
     assert "blizzard runner session-end" in out
-    # Names the worker verbs explicitly rather than pointing at the operator's
-    # `--help` menu, which also lists mutating verbs (`requeue`, `takeover`, ...)
-    # a worker should never run.
+    # Names verbs explicitly rather than `--help`, which also lists mutating ones.
     assert "blizzard runner --help" not in out
 
 
@@ -232,11 +224,9 @@ def test_resume_with_a_changed_runner_prompt_announces_and_sends_layer_one() -> 
 
 @pytest.mark.unit
 def test_resume_across_a_packaged_default_upgrade_re_sends_layer_one() -> None:
-    """Layer 1's *other* door, and the likelier one: ``runner_prompt`` unset, so an upgrade
-    that edits the packaged ``blizzard_preamble.md`` is what moved the prose. Digesting the
-    resolved layer text (not the raw knob) is what makes this land — a digest taken over
-    the empty ``runner_prompt`` would be unmoved, and a session surviving the restart would
-    silently elide genuinely-changed standing prose."""
+    """Layer 1's other door: ``runner_prompt`` unset, so a packaged preamble upgrade
+    moves the prose — the digest must cover the resolved layer text, not the raw
+    (empty) knob, or a genuinely-changed preamble would go unnoticed."""
     prior = PreambleFingerprint(blizzard=_sha("the preamble as an older release shipped it"), workspace=_sha("prose"))
 
     out = _render("prose", _ENVS, runner_prompt="", prior=prior)
@@ -350,10 +340,8 @@ def test_fingerprint_digests_the_resolved_layers_not_the_raw_inputs() -> None:
 
 @pytest.mark.unit
 def test_fingerprint_is_the_same_whether_the_render_elided_or_not() -> None:
-    """The elided path must record the digest of the prose the session *holds*, not of the
-    banner it just emitted. Digesting the output instead poisons the next comparison: it
-    would find a mismatch and announce an update ahead of prose that never changed — on
-    ``advanced-development-workflow``, from the second resume onward."""
+    """The elided path must record the digest of the prose the session *holds*, not of
+    the banner it just emitted, or the next comparison would find a false mismatch."""
     fresh = render_worker_preamble(
         runner_prompt="Blizzard prose.",
         workspace_prompt="prose",

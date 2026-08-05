@@ -1,20 +1,9 @@
 """A migrated chunk reclaimed by a fresh runner mints above the hub epoch floor (issue #112).
 
-A cross-graph migration (#90) re-pins a chunk and re-queues it ``ready`` for a **fresh
-claim**, possibly by a runner that never drove it. That runner's runner-local epoch floor
-(``store.latest_epoch``) is 0, while the chunk's hub-side history — append-only ``lease.minted``
-facts spanning the *source* graph — carries epochs > 0. The mint floor is seeded from
-``max(local, envelope.epoch)``, where ``envelope.epoch`` is the hub's own
-``latest_epoch(facts)`` carried on the claim response (``bzh:epoch-fencing``), so a
-freshly-claimed migrated chunk always mints strictly-higher epochs.
-
-Driven end to end at the component tier over the **real** hub app and the **real** FILL step:
-``HttpHubClient`` (the production ``IHubClient`` adapter the daemon runs) wraps the hub's own
-``TestClient`` (itself an ``httpx.Client``) — the same real-seam shape ``test_hub_runner_seam.py``
-and ``test_detach_late_write_fence.py`` use, no fake hub. Asserts the hub-supplied floor on the
-wire (AC #1), the strictly-higher mint from a fresh runner store (AC #2/#3), and the preserved
-late-write fence (AC #4).
-"""
+A fresh runner's local epoch floor is 0, while the chunk's hub-side history carries
+epochs > 0 from the source graph; the mint floor seeds from ``max(local,
+envelope.epoch)`` so a freshly-claimed migrated chunk always mints strictly higher.
+Driven at the component tier over the real hub app and the real FILL step, no fake hub."""
 
 from __future__ import annotations
 
@@ -34,9 +23,8 @@ pytestmark = pytest.mark.component
 _POINTER = {"source": "default", "ref": "112"}
 _HANDLE = WorkerHandle(session_id="sess-fresh", pid=200, process_start_time="start-200")
 
-# The SOURCE graph ingest pins — named after the packaged default (`default-delivery`) so
-# `ensure_default` resolves the ingested chunk to *this* graph — whose single `build` node
-# migrates the chunk to `triage-delivery` rather than transitioning in place.
+# The source graph, named `default-delivery` so `ensure_default` resolves the ingested
+# chunk here; its single `build` node migrates to `triage-delivery` rather than in place.
 _SOURCE_YAML = """
 name: default-delivery
 entry: build
@@ -138,10 +126,8 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
     # learns the raised floor (N+1) the fence below consumes.
     flush_outbound(ctx)
 
-    # AC #4: the late-write fence is preserved across the migration-reclaim path. A completion
-    # at the OLD epoch (N) — now below the fresh lease's floor — is rejected. It rides the
-    # target `build` node the fresh runner is on, so it reaches the epoch fence itself (a
-    # source-graph node id would fail the target-graph membership check first).
+    # AC #4: a completion at the old epoch (N), now below the fresh lease's floor, is
+    # rejected. It rides the target `build` node so it reaches the epoch fence itself.
     late = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={"choice": "pass", "epoch": n, "runner_id": "r2", "from_node_id": lease.node_id, "artifacts": []},

@@ -1,30 +1,8 @@
-"""Resume-time spawn-preamble elision end to end — scenario 15 of the standing e2e smoke — issue #149.
+"""Resume-time spawn-preamble elision end to end — scenario 15 of the e2e smoke — #149.
 
-The full-stack proof that a **resumed** node-entry spawn is actually handed less than a
-fresh one, and is told when its standing instructions moved — over the real forge + hub +
-runner + ``mock-claude-code`` rails, rather than against a fake adapter.
-
-**What makes it observable.** The mock harness records each turn's *user* text into a
-Claude-Code-shaped transcript (``<BZ_TRANSCRIPTS_ROOT>/mock-claude-code/<session_id>.jsonl``),
-appended across spawn and every later ``--resume``. For an untagged prompt that user text
-is the runner's preamble verbatim, so one session's transcript is the ordered record of
-what each of its turns was actually sent — read through the seam, not around it.
-
-The graph is the sibling ``test_session_modes_e2e`` shape — ``build`` is
-``session: resume:build``, ``review`` is ``session: fresh``, and a scripted review fails
-once then passes — because that is exactly what enters ``build`` twice on **one** session.
-Build's transcript therefore carries a fresh spawn, a judgement resume, and then a
-*resumed node-entry spawn*: the turn this issue changes.
-
-Two scenarios, one per half of the issue:
-
-* **the efficiency half** — nothing changed between the two entries, so the second spawn
-  collapses both standing layers to one line and re-sends neither;
-* **the correctness half** — an operator replaces the workspace prompt through the real
-  ``PUT /api/workspace-prompt`` door *between* the two entries, and the second spawn
-  carries the new prose behind an explicit updated-since-your-previous-turn announcement.
-
-Skipped unless ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock`` worktree provisioned.
+Full-stack proof a resumed node-entry spawn is handed less than a fresh one, and told
+when its standing instructions moved — both the nothing-changed collapse and a mid-chunk
+workspace-prompt swap. Skipped unless ``BLIZZARD_E2E=1`` (sibling ``blizzard-mock`` worktree).
 """
 
 from __future__ import annotations
@@ -70,11 +48,8 @@ pytestmark = [
     ),
 ]
 
-#: The two standing layers. Each carries a distinctive sentinel so its presence or absence
-#: in a transcript turn is unambiguous, and each is padded to a **realistic** size — real
-#: deployments run a packaged preamble (~2.5 KB) and a workspace policy document, and the
-#: elision replaces both with one ~450-char banner, so against one-line sentinels the
-#: "saving" the test asserts would be negative and untrue of any real deployment.
+#: Each standing layer carries a distinctive sentinel and is padded to a realistic size —
+#: real deployments run ~2.5 KB of preamble, and the asserted "saving" must hold against that.
 _RUNNER_PROMPT = (
     "LAYER-ONE-BLIZZARD-FRAMING-SENTINEL\n\n"
     "You are a worker in a blizzard fleet: an autonomous fleet-management system that claims\n"
@@ -103,9 +78,8 @@ _REPLACEMENT_PROMPT = (
 def _user_turns(transcripts_root: Path, session_id: str) -> list[str]:
     """Every ``user`` record's text for one session, in turn order.
 
-    The mock appends one per turn; for an untagged prompt a *spawn* turn's text is the
-    runner's preamble verbatim, and a resume-with-message turn's is the resume message (or
-    the mock's synthetic placeholder when the message carries no prose).
+    A *spawn* turn's text is the runner's preamble verbatim; a resume-with-message turn's
+    is the resume message (or the mock's synthetic placeholder when it carries no prose).
     """
     path = transcripts_root / "mock-claude-code" / f"{session_id}.jsonl"
     assert path.is_file(), f"no mock transcript at {path}"
@@ -125,9 +99,8 @@ def _user_turns(transcripts_root: Path, session_id: str) -> list[str]:
 def _spawn_turns(turns: list[str]) -> list[str]:
     """The turns that are *spawn* preambles — the ones carrying the facts table.
 
-    Layer 3 is unconditional on every spawn path, so its header is the discriminator that
-    separates a spawn turn from a resume-with-message turn (a judgement elicitation or a
-    nudge), which carries no preamble at all.
+    Layer 3's header is unconditional on every spawn path, so it discriminates a spawn
+    turn from a resume-with-message turn, which carries no preamble at all.
     """
     return [turn for turn in turns if "| Field | Value |" in turn]
 
@@ -145,8 +118,7 @@ def _live_stack(tmp_path: Path):  # type: ignore[no-untyped-def]
     """The shared scaffolding both scenarios below stand on.
 
     Yields ``(hub, chunk_id, config, workspace, origin_bare, fenced_env)`` with the graph
-    published, an issue ingested and promoted, and a runner configured with both standing
-    preamble layers set to their sentinels.
+    published, an issue promoted, and both standing preamble layers set to their sentinels.
     """
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
@@ -203,10 +175,8 @@ def _live_stack(tmp_path: Path):  # type: ignore[no-untyped-def]
 def _drive(config, hub, chunk_id, fenced_env, *, on_tick=None, timeout: float = 180.0) -> str:  # type: ignore[no-untyped-def]
     """Tick until terminal, calling ``on_tick(runner_client)`` after each pass.
 
-    A local variant of :func:`~tests.e2e.test_acceptance_loop._drive_until_done` that hands
-    the caller the runner's own local-API client between ticks — the seam an operator
-    action (here ``PUT /api/workspace-prompt``) has to arrive through to be a real test of
-    the live door rather than a store poke behind it.
+    Hands the caller the runner's own local-API client between ticks — the seam an
+    operator action has to arrive through to be a real test of the live door.
     """
     prior = dict(os.environ)
     os.environ.update(fenced_env)
@@ -296,8 +266,7 @@ def test_resumed_node_entry_elides_unchanged_standing_layers(tmp_path: Path) -> 
     assert build_leases[0].lease_id not in second, "the resumed spawn carried the PREVIOUS attempt's lease id"
 
     # The elision is a real saving against realistically-sized standing prose (see the
-    # sentinel constants: the banner is real prose, so this only holds once what it
-    # replaces is real too).
+    # sentinel constants above).
     assert len(second) < len(first), f"resumed prefix ({len(second)}) was not shorter than fresh ({len(first)})"
 
 
@@ -311,9 +280,8 @@ def test_resumed_node_entry_announces_a_replaced_workspace_prompt(tmp_path: Path
         db_url = config.db_url
 
         def replace_once(runner: httpx.Client) -> None:
-            # Fire as soon as build has exited and review holds the chunk — that is
-            # strictly between build's first and second entries, which is the window this
-            # issue exists to make safe. Idempotent: only the first crossing writes.
+            # Fire once build has exited and review holds the chunk — strictly between
+            # build's two entries. Idempotent: only the first crossing writes.
             if replaced:
                 return
             store = SqlAlchemyRunnerStore(create_engine_from_url(db_url))

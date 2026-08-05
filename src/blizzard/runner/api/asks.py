@@ -1,20 +1,9 @@
 """The runner-local ask endpoints — ``POST /api/leases/{lease_id}/asks`` (record) and
 ``GET /api/asks?open=true`` (list, issue #51).
 
-A worker facing an undecidable choice runs ``blizzard runner ask`` and ends its turn
-(ask-and-exit). That verb is a pure client of the POST endpoint: it
-posts the question with the lease id it inherited from the spawn environment
-(``BLIZZARD_LEASE_ID``), and the daemon records the ask fact **before** the worker
-exits — which is how ADVANCE later tells "parked on a question" from "died without a
-verdict". The runner mints the ``question_id`` here so it can poll the hub for
-the answer by it, and forwards the question up on its next tick. The GET endpoint is
-``blizzard runner status``'s open-asks section — every ask not yet answered, derived
-from the same facts, hub-free.
-
-Read-only over its wiring (``bzh:controller-read-only``): it records through the store
-the ``host`` composition root wired on ``app.state``. On the store-free app the store
-is unwired and the probe answers 503 rather than pretending.
-"""
+The POST records the ask fact **before** the asking worker exits, which is what lets a later read
+tell "parked on a question" from "died without a verdict"; the ``question_id`` is minted here so
+the answer can be polled for by it. The GET derives open asks from the same facts, hub-free."""
 
 from __future__ import annotations
 
@@ -89,16 +78,9 @@ def _ask_view(ask: AskRecord) -> AskView:
 def list_asks(request: Request, open_only: bool = Query(True, alias="open")) -> AskListResponse:
     """Every ask still awaiting an answer — ``GET /api/asks?open=true`` (issue #51).
 
-    The one **human-web-lane** route on this otherwise worker-hook router: it is the
-    panel's / ``blizzard runner status``'s open-asks read, so it carries
-    ``require_human_api`` (issue #95) while the worker-hook POST above stays ungated. Over
-    the socket and under a ``none``-mode hub the gate resolves to the implicit identity.
-
-    Derived, hub-free: an ask reads open while its ``question_id`` carries no answer
-    fact (:meth:`~blizzard.runner.store.repository.IReadRunnerStore.open_asks`), whether
-    or not it has been forwarded to the hub yet. There is no closed-ask history to serve,
-    so ``open=false`` is refused rather than silently answered as if it were true.
-    """
+    The one **human-web-lane** route on this otherwise worker-hook router, so it carries
+    ``require_human_api`` (issue #95). An ask reads open while its ``question_id`` carries
+    no answer fact. No closed-ask history is kept, so ``open=false`` is refused."""
     if not open_only:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

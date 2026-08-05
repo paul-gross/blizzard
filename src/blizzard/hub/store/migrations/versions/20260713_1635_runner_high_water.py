@@ -1,11 +1,5 @@
-"""store-and-forward high-water mark (hub store tree)
-
-P7 store-and-forward gives the runner→hub fact push (POST /events) its
-per-runner idempotency memory: ``runner_high_water`` records the greatest per-runner
-sequence number the hub has already applied, so a replayed fact (lost ack, outage
-backlog) is re-acked without re-applying. Defined once in
-``blizzard.hub.store.schema``; this revision creates exactly that one table and
-touches none of the earlier revisions'.
+"""store-and-forward high-water mark (hub store tree) — the greatest per-runner sequence already
+applied, so a replayed fact is re-acked rather than re-applied. Creates exactly that one table.
 
 Revision ID: 20260713_1635_hub_runner_high_water
 Revises: 20260713_1424_hub_escalation_takeover

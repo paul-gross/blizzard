@@ -1,18 +1,9 @@
 """Runner enrollment + the registration auth check (component tier, issue #86a).
 
-Drives the real hub over a tmp store: ``POST /runners/{id}/enrollments`` mints/rotates
-a bearer token (plaintext returned once, only its sha256 hash stored), and
-``POST /runners`` applies ``require_runner_principal``/``assert_owns`` in ``warn`` (the
-default — logs and proceeds) or ``enforce`` (rejects) mode, selected by
-``runner_auth_mode`` at hub build time.
-
-Registration itself is auth-checked, so seeding a runner to enroll (and to present its
-token back to a **second**, ``enforce``-mode registration call) has to happen under
-``warn`` first — an ``enforce`` hub would reject the very bootstrap registration a test
-needs before it has a token to present. ``build_hub`` is called twice per such test,
-both pointed at the same ``tmp_path`` (the same on-disk sqlite file, migrated
-idempotently): once under ``warn`` to seed, once under ``enforce`` to drive the check.
-"""
+Drives the real hub over a tmp store: enrollment mints/rotates a bearer token
+(plaintext returned once, only its sha256 hash stored); registration applies the auth
+check in ``warn`` (default) or ``enforce`` mode. ``build_hub`` runs twice per enforce
+test — once under ``warn`` to seed a token, once under ``enforce`` to check it."""
 
 from __future__ import annotations
 
@@ -59,9 +50,7 @@ def _seed_enrolled(tmp_path: Path, runner_id: str = "runner-a", workspace_id: st
     return str(resp.json()["token"])
 
 
-# --------------------------------------------------------------------------- #
 # Enrollment itself
-# --------------------------------------------------------------------------- #
 
 
 def test_enroll_unknown_runner_is_404(tmp_path: Path) -> None:
@@ -103,9 +92,7 @@ def test_re_enroll_rotates_the_old_token_dead(tmp_path: Path) -> None:
     assert fresh.status_code == 201
 
 
-# --------------------------------------------------------------------------- #
 # `POST /runners` under `warn` (the default)
-# --------------------------------------------------------------------------- #
 
 
 def test_registration_under_warn_with_no_token_proceeds(tmp_path: Path) -> None:
@@ -129,9 +116,7 @@ def test_registration_under_warn_with_a_mismatched_token_proceeds(tmp_path: Path
     assert resp.status_code == 201
 
 
-# --------------------------------------------------------------------------- #
 # `POST /runners` under `enforce`
-# --------------------------------------------------------------------------- #
 
 
 def test_registration_under_enforce_with_no_token_is_rejected(tmp_path: Path) -> None:
@@ -161,9 +146,7 @@ def test_registration_under_enforce_with_a_mismatched_token_is_rejected(tmp_path
     assert resp.status_code == 403
 
 
-# --------------------------------------------------------------------------- #
 # `registration_for_token_hash` resolves the right row among several
-# --------------------------------------------------------------------------- #
 
 
 def test_each_runners_token_resolves_only_its_own_registration(tmp_path: Path) -> None:

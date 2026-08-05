@@ -1,13 +1,9 @@
 """``GET /api/activity`` — the board's Event log backfill on page load (issue #213,
 Phase 3, component tier).
 
-Off a real, migrated hub app this proves the route's own contract: the default
-24h/200 window (the issue's AC), an explicit ``since`` narrowing correctly, ``limit``
-bounds enforcement, a tz-naive ``since`` not raising, newest-first ordering, and the
-same auth gating ``GET /api/events`` carries. This file adds the one case
-``tests/test_route_permission_matrix.py`` doesn't cover — a runner's bearer token,
-rejected exactly as it is everywhere else.
-"""
+Proves the route's own contract off a real, migrated hub app: the default 24h/200
+window, ``since``/``limit`` handling, newest-first ordering, and the same auth gating
+``GET /api/events`` carries, including a runner's bearer token rejection."""
 
 from __future__ import annotations
 

@@ -1,12 +1,9 @@
 """``blizzard runner status`` — the machine-local view (issue #51).
 
-Driven against a **live** daemon on a real unix socket (mirroring
-``tests/test_ingest_and_pause_verbs.py``'s ``_serve_local_api`` convention): a real
-server, a real store, and the CLI wired together, doubled only at the hub seam
-(``_no_hub``) — because the whole point is that this verb is a pure client of the
-local API and renders fully with the hub unreachable, which a stubbed transport
-would assert nothing about.
-"""
+Driven against a live daemon on a real unix socket: a real server, a real store, and
+the CLI wired together, doubled only at the hub seam — the verb is a pure client of
+the local API and renders fully with the hub unreachable, which a stubbed transport
+would assert nothing about."""
 
 from __future__ import annotations
 
@@ -146,9 +143,8 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
         closed_at=_NOW + timedelta(minutes=1),
     )
 
-    # A third chunk, currently under an open operator takeover — the stranded-takeover
-    # recovery surface (issue #52) status renders regardless of how the takeover got left
-    # open.
+    # A third chunk under an open operator takeover — status renders regardless of
+    # how the takeover (issue #52) got left open.
     store.record_binding(chunk_id="ch_3", environment_id="e3", workdir="/ws/e3", bound_at=_NOW)
     store.record_takeover(
         takeover_id="tko_1",
@@ -202,10 +198,8 @@ def test_status_renders_empty_sections_on_a_fresh_runner(tmp_path: Path, monkeyp
 def test_status_omits_an_unheld_pool_slot_from_held_environments(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``GET /api/environments`` now carries the whole configured pool (issue #106):
-    an unheld slot must not leak into the CLI's *held*-environments section — this
-    pins the filter at ``cli.py``'s held-only comment rather than passing by
-    coincidence of a fixture where every configured env happens to be held."""
+    """``GET /api/environments`` carries the whole configured pool (issue #106); an
+    unheld slot must not leak into the CLI's held-environments section."""
     root = _init_runner(tmp_path)
     config_path = root / "blizzard-runner.toml"
     config_path.write_text(config_path.read_text().replace('workspace_envs = ["e1"]', 'workspace_envs = ["e1", "e2"]'))

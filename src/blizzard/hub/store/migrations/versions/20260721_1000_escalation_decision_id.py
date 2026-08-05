@@ -1,19 +1,5 @@
-"""escalations.decision_id — close a gate decision an unresolvable migration escalated
-
-Issue #110 completes the issue-#90 fix: a **human gate's** resolved choice that migrates
-cross-graph to a target that resolves to ``None`` (unminted or retired) records an
-escalation and writes neither a ``transitions`` nor a ``chunk_migrations`` row — so the
-gate's decision stayed ``transitioned=False`` forever (a phantom live decision that
-wedges REAP recovery and drives a per-tick runner re-submit). This revision adds the
-column the escalation stamps that decision id into, so the decision derives closed here
-too, exactly as ``chunk_migrations.decision_id`` closes it on the resolvable branch.
-
-Nullable: the ordinary retries-exhausted escalation resolves no decision and reads back
-as ``None``, and any escalation row written before this column existed predates it —
-the same tolerance ``20260719_2000_hub_chunk_stopped_by`` gives ``stopped_by``.
-
-Idempotent like that revision: the column is added only where an older database lacks
-it, so a fresh ``base -> head`` and an in-place upgrade both land at exactly one column.
+"""escalations.decision_id — nullable, so an escalation resolving no decision reads back
+as ``None`` (issue #110)
 
 Revision ID: 20260721_1000_hub_escalation_decision_id
 Revises: 20260720_1000_hub_chunk_intended_migration

@@ -1,43 +1,9 @@
 """The PR + CI-watch delivery policy's `deliver` node script — self-healing.
 
-This alternative delivery policy backs the `advanced-development-workflow` graph's
-`deliver` node (`hub/graphs/advanced-development-workflow/graph.yaml`), proving delivery
-policy lives in YAML. It honors the same hub-command-node authoring contract as the default land script
-(``blizzard-context:/standards/hub-nodes.md``): pure stdlib against the forge, env
-injected by the executor, the authored choice (``landed``/``conflict``) or the reserved
-``pending`` printed as the LAST stdout line, diagnostics to stderr, exit 0 for every
-outcome the policy can express — an EMPTY commit set from a graph that declared a
-``git_commit`` somewhere being the one exception, a defect upstream of delivery that
-exits non-zero so the engine routes ``failure``
-(:func:`~blizzard.hub.graphs.scripts.land_default.refuse_empty_delivery`).
-
-Unlike the default graph's strict one-shot (:mod:`blizzard.hub.graphs.scripts.land_default`),
-this opens a PR per repo and routes by the PR's live ``mergeable_state`` — resolving what
-is mechanical or transient without ever waking the LLM:
-
-    clean               -> merge it
-    unknown             -> "pending"  (GitHub still computing mergeability — re-poll)
-    behind              -> PUT .../update-branch, then "pending"  (base moved, no conflict — self-heal)
-    blocked/unstable    -> "pending"  (required CI/reviews not green yet — WAIT, the CI-watch case)
-    blocked/unstable, a check run completed terminally -> "failure"  (never going green — issue #232)
-    dirty               -> "conflict"  (a real merge conflict — the ONE true LLM bounce)
-
-``behind`` already implies ``mergeable: true`` (a *conflicting* stale branch is ``dirty``,
-never ``behind``), so ``update-branch`` is conflict-free at compute time; a losing race
-(base moves with a conflict between our read and the update) surfaces on the NEXT poll as
-``dirty`` -> ``conflict``, so conflicts can never slip through and clean-but-stale PRs land
-themselves. Every ``pending`` frees the fleet-wide hub-execution slot between polls so
-other chunks' hub nodes run in the gap. ``poll_timeout`` is the executor's job
-(``bzh:hub-node-outcome-protocol``): its expiry fires the engine's ``failure`` kick-back —
-so the graph MUST author a ``failure`` edge, and (for the ``dirty`` fast-bounce) a
-``conflict`` edge.
-
-Same env contract as :mod:`~blizzard.hub.graphs.scripts.land_default`
-(``BZ_FORGE_URL``/``BZ_FORGE_TOKEN``/``BZ_FORGE_OWNER``/``BZ_HUB_BASE_BRANCH``/
-``BZ_HUB_GIT_COMMITS``/``BZ_HUB_ARTIFACT_NAMES``/``BZ_HUB_MARKER_CALLBACK_URL``/
-``BZ_HUB_FEATURE_TITLE``, optional). Run ``python3 -m blizzard.hub.graphs.scripts.land_pr_ci
---selftest`` to exercise the pure routing table with no network.
-"""
+Opens a PR per repo and routes by the PR's live ``mergeable_state``, resolving what is
+mechanical or transient without waking the LLM: ``clean`` merges, ``behind`` self-heals via
+``update-branch``, ``dirty`` is the one true LLM kick-back, everything else waits. Honors the
+hub-command-node authoring contract (``blizzard-context:/standards/hub-nodes.md``)."""
 
 from __future__ import annotations
 
@@ -75,14 +41,11 @@ _HUB_USER = "blizzard-hub"
 _LANDED = "landed"
 _CONFLICT = "conflict"
 _PENDING = "pending"
-# The graph's authored `failure` choice on the `deliver` node (issue #232) —
-# advanced-development-workflow/graph.yaml's `deliver.judgement.choices` names exactly
-# `landed`/`failure`, so a terminal CI check failure must print THIS literal string, not
-# `_FAILED` (below), which is an internal per-repo decision spelled differently ("failed").
+# The graph's authored `failure` choice (issue #232) — printed as an outcome, unlike
+# `_FAILED` below, which is an internal per-repo decision.
 _CI_FAILURE = "failure"
 
-# The marker name a terminal-CI-failure or a substantive wait writes its findings under —
-# a resolve worker reads this artifact directly (issue #232).
+# The marker name a terminal-CI-failure or a substantive wait writes its findings under.
 _FINDINGS_NAME = "delivery-findings"
 
 # Pure routing decisions (what to do with one repo after reading its live PR).
@@ -92,24 +55,16 @@ _UPDATE = "update"  # behind — fire update-branch, then re-poll
 _BOUNCE = "bounce"  # dirty — a real content conflict, kick back to build
 _FAILED = "failed"  # a check run completed with a terminal conclusion — never re-poll
 
-# `classify_checks`' terminal conclusions (issue #232): a completed check run in any of
-# these is never going to turn green on its own — polling `mergeable_state` out to
-# `poll_timeout` just burns the slot instead of surfacing the failure.
+# A completed check run in any of these is never going to turn green on its own, so
+# polling on out to `poll_timeout` only burns the slot (issue #232).
 _TERMINAL_CONCLUSIONS = {"failure", "timed_out", "cancelled", "action_required"}
 
 
 def classify(mergeable_state: str | None, *, merged: bool) -> str:
     """Map a PR's live ``(merged, mergeable_state)`` to one routing decision — pure.
 
-    The whole risk of this script lives here, so it is a network-free function the
-    ``--selftest`` mode asserts against. ``clean``/already-merged -> push; ``dirty`` ->
-    bounce (the only true LLM kick-back); ``behind`` -> update-branch then wait;
-    everything else (``unknown``, ``blocked``, ``unstable``, ``has_hooks``, ``draft``,
-    missing) -> wait, because none is a content conflict — the CI-watch case (``blocked``/
-    ``unstable``) is exactly a wait *within this function*; the caller layers a further
-    :func:`classify_checks` read on top of a ``blocked``/``unstable`` wait to catch a check
-    run that has already failed terminally (issue #232) — and the node's ``poll_timeout``
-    is the backstop for whatever still isn't resolved."""
+    ``clean``/already-merged -> push; ``dirty`` -> bounce; ``behind`` -> update-branch then
+    wait; every other state -> wait, since none is a content conflict."""
     if merged:
         return _PUSH
     if mergeable_state == "clean":
@@ -124,19 +79,9 @@ def classify(mergeable_state: str | None, *, merged: bool) -> str:
 def classify_checks(check_runs: list[dict[str, Any]]) -> str:
     """Map a commit's live check-run list to a terminal-vs-wait decision — pure.
 
-    Mirrors :func:`classify`'s role for ``mergeable_state``, one level lower: given the
-    ``check_runs`` array from ``GET /repos/{owner}/{repo}/commits/{ref}/check-runs`` (each a
-    dict carrying at least ``status`` and ``conclusion``), ``_FAILED`` fires when ANY run has
-    completed with a terminal ``conclusion`` (``failure``/``timed_out``/``cancelled``/
-    ``action_required``) — a check that will never turn green on its own, so burning the rest
-    of ``poll_timeout`` on it is pure waste. Every other shape — runs still ``queued``/
-    ``in_progress``/``waiting``/``requested``, an empty list, or a malformed payload (missing
-    keys, wrong types) — degrades to ``_WAIT``; this function never raises.
-
-    Design decision D1 (issue #232): terminal regardless of whether GitHub would call the
-    check "required" — that distinction needs a branch-protection read this script doesn't
-    do, and ``clean`` is its only merge gate anyway (pinned by ``tests/test_land_scripts.py``'s
-    ``test_classify_checks_is_failed_for_every_terminal_conclusion``)."""
+    ``_FAILED`` fires when ANY run has completed with a terminal ``conclusion``, whether or
+    not the forge would call that check required (issue #232). Every other shape — still
+    running, empty, or malformed — degrades to ``_WAIT``; this never raises."""
     if not isinstance(check_runs, list):
         return _WAIT
     for run in check_runs:
@@ -150,36 +95,9 @@ def classify_checks(check_runs: list[dict[str, Any]]) -> str:
 def render_findings(records: list[dict[str, Any]]) -> str:
     """Render a ``delivery-findings`` marker artifact body from per-repo poll records — pure.
 
-    Plain text/markdown (not JSON) meant for a resolve worker to read directly. Each element
-    of ``records`` describes one repo's PR at poll time::
-
-        {
-            "repo": str,                  # qualified repo, e.g. "acme/widget"
-            "number": int,                # PR number
-            "url": str,                   # PR's html_url
-            "decision": _FAILED | _WAIT,  # which case this repo is reported in
-            "checks": [...],              # see below — shape depends on `decision`
-        }
-
-    When ``decision == _FAILED``, each element of ``checks`` is::
-
-        {
-            "name": str,
-            "conclusion": str,           # the terminal conclusion classify_checks matched
-            "details_url": str,
-            "base_red": bool | None,     # whether the base branch's own latest check run of
-                                          # the SAME name also fails — "the base's gate was
-                                          # already red" (True) vs "this change broke CI"
-                                          # (False); None when that lookup wasn't done.
-        }
-
-    When ``decision == _WAIT``, each element of ``checks`` is::
-
-        {"name": str, "status": str}     # still queued/in_progress/waiting/requested
-
-    Pure text formatting — no I/O — and independent of `main`'s own dict shapes beyond what's
-    documented here, so a later wiring phase is free to build these records however is
-    convenient there."""
+    Each record carries ``repo``/``number``/``url``/``decision``/``checks``; a ``_FAILED``
+    record's checks carry ``name``/``conclusion``/``details_url``/``base_red``, a ``_WAIT``
+    record's ``name``/``status``. Plain markdown for a resolve worker to read, not JSON."""
     return "\n\n".join(_render_repo_findings(record) for record in records)
 
 
@@ -232,11 +150,8 @@ class _Conflict(Exception):
 def main() -> int:
     """Run the land policy, aborting cleanly on an unconfirmed marker write.
 
-    A :class:`MarkerWriteError` raised anywhere inside :func:`_land` (always from the
-    merge stage, after at least one repo's merge) is caught HERE — a single top-level
-    catch, not inside the per-repo loop — so a marker failure aborts the rest of the run
-    instead of quietly continuing to the next repo, and ``landed`` is never printed once
-    one has fired."""
+    A :class:`MarkerWriteError` is caught HERE, not inside the per-repo loop, so a marker
+    failure aborts the run instead of continuing to the next repo."""
     try:
         return _land()
     except MarkerWriteError as exc:
@@ -280,12 +195,8 @@ def _land() -> int:
         print(_LANDED)
         return 0
 
-    # --- check stage: read every pending repo's live PR state; decide per repo. No repo
-    #     is merged unless ALL check `clean` (chunk atomicity). A `dirty` short-circuits
-    #     to `conflict`; a `behind` self-heals via update-branch; unknown/CI-not-green wait.
-    #     `failures`/`wait_records` (issue #232) accumulate `render_findings` records for a
-    #     terminally-failed check run and a substantive wait, respectively — the loop never
-    #     short-circuits on a failure, so every pending repo's findings are named together.
+    # --- check stage: no repo is merged unless ALL check `clean` (chunk atomicity), and
+    #     the loop never short-circuits on a failure, so findings accumulate together.
     to_merge: list[tuple[str, str, int, str]] = []  # (bare repo, qualified repo, pr number, head sha)
     failures: list[dict[str, Any]] = []
     wait_records: list[dict[str, Any]] = []
@@ -309,9 +220,7 @@ def _land() -> int:
                     },
                 )
                 if status != 201:
-                    # A freshly opened PR often reads `unknown` before GitHub computes
-                    # mergeability; a create hiccup is likewise worth another poll, not a
-                    # bounce. Wait and re-poll rather than treating it as a conflict.
+                    # A create hiccup is worth another poll, not a bounce.
                     print(f"could not open a PR for {repo}:{branch}: {created}", file=sys.stderr)
                     wait = True
                     continue
@@ -324,11 +233,8 @@ def _land() -> int:
             if decision == _BOUNCE:
                 raise _Conflict(f"{repo}#{number} is dirty (a real merge conflict)")
             if decision == _UPDATE:
-                # base advanced with no conflict — ask GitHub to merge base into head
-                # (async, 202 Accepted), guarded on the head we just read so we never
-                # stack updates. A 422 naming a conflict is a fast-path bounce; any other
-                # non-202 just waits — the NEXT poll's mergeable_state is the source of
-                # truth (a genuine race surfaces there as `dirty`).
+                # Guarded on the head just read, so updates never stack. Any non-202 other
+                # than a named conflict waits — the NEXT poll's state is authoritative.
                 ustatus, ubody = api(
                     "PUT",
                     f"/repos/{repo}/pulls/{number}/update-branch",
@@ -342,10 +248,8 @@ def _land() -> int:
                 continue
             if decision == _WAIT:
                 if state in {"blocked", "unstable"}:
-                    # The CI-watch case: read the head's own check runs and see whether
-                    # any has already completed terminally — never re-poll one out to
-                    # `poll_timeout` (issue #232). A degraded read (`None`) falls straight
-                    # through to the plain wait below, unchanged from today's behavior.
+                    # The CI-watch case (issue #232): a degraded read (`None`) falls
+                    # through to the plain wait below.
                     check_runs = fetch_check_runs(repo, head_sha)
                     if check_runs is not None and classify_checks(check_runs) == _FAILED:
                         base_checks = fetch_check_runs(repo, base_branch)
@@ -370,10 +274,8 @@ def _land() -> int:
                         print(f"{repo}#{number} has a terminal CI check failure — will not re-poll", file=sys.stderr)
                         continue
                     if check_runs:
-                        # D2 (issue #232): only a NON-empty check-runs read makes this poll
-                        # "substantive" — a fresh PR's first poll often reads zero check
-                        # runs, and findings written then say nothing (pinned by
-                        # tests/test_land_scripts.py::test_an_empty_check_runs_list_is_not_a_substantive_wait).
+                        # Only a NON-empty read makes this poll "substantive": findings
+                        # from a zero-check read say nothing (issue #232).
                         wait_records.append(
                             {
                                 "repo": repo,
@@ -398,31 +300,15 @@ def _land() -> int:
         return 0
 
     if failures:
-        # At least one repo's check run completed terminally — never worth re-polling
-        # out to `poll_timeout`. Nothing merges (chunk atomicity, same as `wait` below);
-        # write the findings so the resolve worker can read exactly what failed.
-        #
-        # Deliberately left unguarded, unlike the wait-path write below: an unwritten set
-        # of findings is the only signal `resolve` has nothing to read, and this branch
-        # routes to `failure` either way (issue #243; pinned by tests/test_pin_hub_delivery.py::
-        # test_a_terminal_failure_findings_write_failure_exits_non_zero_instead_of_routing_failure).
+        # Nothing merges (chunk atomicity). The write is deliberately unguarded, unlike
+        # the wait path below: unwritten findings leave `resolve` nothing to read (#243).
         write_findings(_FINDINGS_NAME, render_findings(failures))
         print(_CI_FAILURE)
         return 0
 
     if wait:
-        # At least one repo is not cleanly mergeable yet (unknown/behind/CI-not-green) —
-        # release the hub slot and re-poll; merge NOTHING (chunk atomicity). A
-        # substantive wait (D2) writes its in-flight findings on EVERY poll — the
-        # callback's own (chunk, node, name, epoch) idempotence makes a repeat write
-        # within one visit a no-op, so this is not gated on `already`/artifact names,
-        # which is scoped by node, not epoch, and would wrongly suppress every visit
-        # after the first.
-        #
-        # Unlike the terminal-failure write above, a failure HERE degrades to `pending`:
-        # the next poll re-writes the same findings, so it costs only diagnosability and
-        # must not bounce a healthy chunk (issue #243; pinned by
-        # tests/test_land_scripts.py::test_a_wait_path_findings_write_failure_degrades_to_a_plain_pending_not_a_bounce).
+        # Merge NOTHING (chunk atomicity). Findings are re-written every poll, and a write
+        # failure here degrades to `pending` since the next poll re-writes them (#243).
         if wait_records:
             try:
                 write_findings(_FINDINGS_NAME, render_findings(wait_records))
@@ -431,9 +317,8 @@ def _land() -> int:
         print(_PENDING)
         return 0
 
-    # --- merge stage: every repo checked clean — merge each, marking as we go. Merge the
-    #     CURRENT head sha (which a self-heal update-branch may have advanced past the
-    #     originally-recorded commit), not the stale artifact commit.
+    # --- merge stage: merge the CURRENT head sha, which a self-heal update-branch may
+    #     have advanced past the originally-recorded artifact commit.
     for bare_repo, repo, number, head_sha in to_merge:
         status, result = api(
             "PUT",
@@ -447,10 +332,8 @@ def _land() -> int:
         )
         landed_sha = (result or {}).get("sha")
         if status != 200 or not (result or {}).get("merged"):
-            # A kill between a prior run's merge and its marker leaves the PR already
-            # merged — re-merging is a no-op (bzh:hub-node-step-idempotence). Otherwise a
-            # transient merge race (head moved, mergeability recomputing) is worth another
-            # poll rather than a bounce — the next poll re-derives the state cleanly.
+            # An already-merged PR is a prior run's un-marked merge, a no-op to redo
+            # (bzh:hub-node-step-idempotence); anything else is a race worth re-polling.
             _, pull = api("GET", f"/repos/{repo}/pulls/{number}")
             if not (pull or {}).get("merged"):
                 print(f"merge of {repo}#{number} did not land ({result}); will re-poll", file=sys.stderr)

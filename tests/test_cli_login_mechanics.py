@@ -1,10 +1,8 @@
-"""``blizzard.hub.cli_login`` — the loopback listener + paste-code mechanics (unit
-tier, issue #96).
+"""``blizzard.hub.cli_login`` — the loopback listener + paste-code mechanics (#96).
 
 No real hub: ``webbrowser.open``/``httpx.post`` are stubbed. The loopback case drives a
-*real* HTTP GET at the ephemeral port ``loopback_login`` binds (from a background
-thread, simulating "the browser completed the hub login and was redirected here") —
-proving the listener itself, not just the seam around it.
+real HTTP GET at the ephemeral port ``loopback_login`` binds, proving the listener
+itself, not just the seam around it.
 """
 
 from __future__ import annotations

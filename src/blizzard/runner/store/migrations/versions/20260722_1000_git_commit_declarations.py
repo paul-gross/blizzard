@@ -1,16 +1,5 @@
-"""worker git-commit declaration channel — git_commit_declarations (runner store tree, issue #143 Phase 3)
-
-The runner's local stash of a worker's explicit git-commit declarations
-(``blizzard runner artifact commit --forge <f> --repo <r> --branch <b> --commit <sha>``):
-one append-only row per declare call (``id`` PK), latest-wins per ``(lease_id, repo)``.
-Authorized by the lease's own capability token (``lease_tokens``) — a structural sibling
-of ``20260719_1000_runner_attachments`` for the ``git_commit`` artifact kind. This
-revision adds only the storage; no caller yet reads it back (that is Phase 4's ADVANCE
-rewrite).
-
-Each revision in this tree creates a subset of the current ``schema`` metadata's tables
-(the live-schema pattern); this one creates exactly the one new table, ``checkfirst`` so
-a fresh ``base -> head`` and an in-place upgrade both converge.
+"""worker git-commit declaration channel — one append-only row per declare call,
+latest-wins per ``(lease_id, repo)`` (runner store tree, issue #143)
 
 Revision ID: 20260722_1000_runner_git_commit_declarations
 Revises: 20260721_1500_runner_jwt_jti_seen

@@ -1,9 +1,8 @@
-"""The provider-login migration — ``auth_state``/``auth_facts`` (component tier,
-issue #92).
+"""The provider-login migration — ``auth_state``/``auth_facts`` (component tier, #92).
 
-Mirrors ``test_auth_identity_migration.py``'s own shape: a fresh ``base -> head`` store
-is covered generically by ``test_store_migrations.py``'s whole-ladder test; this covers
-the "existing store, upgraded onward" half plus the downgrade.
+Mirrors ``test_auth_identity_migration.py``: a fresh ``base -> head`` store is covered
+generically by ``test_store_migrations.py``; this covers "existing store, upgraded
+onward" plus the downgrade.
 """
 
 from __future__ import annotations

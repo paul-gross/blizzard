@@ -1,14 +1,5 @@
-"""auth_state / auth_facts — the provider-login seam (issue #92, hub store tree)
-
-The login mechanism's own tables, on top of #91's identity spine: ``auth_state`` (a
-single-use ``state`` row round-tripped through a provider redirect, decision D5 — also
-reused unmodified by #95's hub-as-IdP authorize) and ``auth_facts`` (the append-only,
-non-chunk auth/security event log, ``bzh:facts-not-status`` — ``login_failed``/
-``sso_refused`` land here in this phase). Neither table carries a foreign key, so
-either order is safe; declared in the same order as ``schema.py``.
-
-``table.create(bind, checkfirst=True)`` mirrors ``20260721_1100_hub_auth_identity_spine``'s
-own idempotent multi-table create.
+"""auth_state / auth_facts — the provider-login seam (issue #92, hub store tree). Neither table carries
+a foreign key, so either order is safe; created ``checkfirst``, in ``schema.py``'s own order.
 
 Revision ID: 20260721_1200_hub_auth_oauth
 Revises: 20260721_1100_hub_auth_identity_spine

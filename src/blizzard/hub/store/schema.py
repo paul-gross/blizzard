@@ -1,17 +1,9 @@
 """The hub store's SQLAlchemy metadata — the target for its Alembic tree.
 
-Facts only, status derived (``bzh:facts-not-status``): every table here records a
-thing that definitely happened at a definite time; no ``status`` column exists,
-and the derivations over these rows live in :mod:`blizzard.hub.domain.work`.
-Timestamps are stamped by application code from the injected clock, never a
-``server_default=func.now()`` (``bzh:injected-clock``). Portable-SQL surface only
-(``bzh:sql-portable``): the same DDL runs on sqlite and postgres.
-
-``transitions.decision_id`` is what a gate's resolving transition points back at — as is
-``chunk_migrations.decision_id`` when a gate's resolved choice migrates cross-graph
-(issue #90), so that decision derives closed even though a migration writes no
-transitions row.
-"""
+Facts only, status derived (``bzh:facts-not-status``): every table records a thing that
+definitely happened at a definite time, and no ``status`` column exists. Timestamps are
+stamped by application code from the injected clock (``bzh:injected-clock``), never a
+``server_default``. Portable-SQL surface only (``bzh:sql-portable``)."""
 
 from __future__ import annotations
 
@@ -71,8 +63,7 @@ graph_nodes = Table(
     # The kick-back cap (#64) — null accepts the fleet default (``graph.DEFAULT_BOUNCE_CAP``).
     Column("bounce_cap", Integer, nullable=True),
     # The generic hub command node's declared commands (#65) — JSON list of
-    # ``{command, name, produces}``; null/empty on every node but a generic hub
-    # command node (the still-special deliver node included).
+    # ``{command, name, produces}``; null/empty on every other node.
     Column("run", Text, nullable=True),
     # The pending-poll cadence (#66) — null accepts the executor's own default
     # (``hub_node.DEFAULT_POLL_INTERVAL`` / ``DEFAULT_POLL_TIMEOUT``).
@@ -101,31 +92,20 @@ graph_edges = Table(
     Column("to_node_name", String, nullable=False),  # a node name, the reserved 'done', or 'graph:<name>' (#90)
     Column("prompt_addendum", Text, nullable=True),  # inlined arrival context
     # The optional per-choice model override applied when a cross-graph migration edge
-    # (#90) re-pins the chunk — null keeps the chunk's current model. The cross-graph
-    # *target* itself needs no column: it rides in ``to_node_name`` as ``graph:<name>``
-    # and is re-derived on load (``graph.target_graph_of``); the model, not being encoded
-    # there, is the one authored value a migration edge must persist separately.
+    # (#90) re-pins the chunk — null keeps the chunk's current model.
     Column("to_graph_model", String, nullable=True),
 )
 
 # The graph-level named-session declarations (issue #144) — one row per `sessions:` entry,
-# immutable with the graph that owns it. A declaration has no id of its own: (graph_id, name)
-# is the key, because `name` is what a node's `fresh:<name>`/`resume:<name>` reference and
-# the runner's pool lookup both key on.
+# keyed `(graph_id, name)`, since `name` is what every reference resolves by.
 graph_sessions = Table(
     "graph_sessions",
     metadata,
     Column("graph_id", String, ForeignKey("graphs.graph_id"), primary_key=True),
     Column("name", String, primary_key=True),
-    # The declaration's 0-based position in the authored `sessions:` map. Order carries no
-    # semantics — every lookup is by name — but it is what the graph explorer renders, and
-    # the composite primary key above makes an index scan (name order) the natural plan for
-    # the by-graph read, so authored order has to be a persisted fact rather than an
-    # insertion-order accident to survive the round trip.
-    Column("ordinal", Integer, nullable=False),
-    # The prioritized model preference list — JSON `list[str]` of opaque preference strings
-    # (a `blizzard:` tier alias or a harness-native name). The hub never interprets an entry;
-    # left-to-right resolution is the runner adapter's (``bzh:pluggable-seams``).
+    Column("ordinal", Integer, nullable=False),  # authored `sessions:` position, display-only
+    # The prioritized model preference list — JSON `list[str]` of opaque preference strings.
+    # The hub never interprets an entry (``bzh:pluggable-seams``).
     Column("model", Text, nullable=True),
     Column("effort", String, nullable=True),  # a single aliased value; null declares none
     # The rotation bounds — all nullable and independently declared; a declaration with no
@@ -136,11 +116,7 @@ graph_sessions = Table(
 )
 
 # --- Graph lifecycle facts (graph.retired / graph.enabled — issue #101) -------
-#
-# The reversible retire/re-enable brake over one specific graph_id, keyed the same way
-# chunk_pause_facts mirrors runner_pause_facts: append-only, newest-fact-wins. The
-# graphs table itself stays insert-only and immutable — retiring never touches it, it
-# only excludes the graph_id from name resolution (get_enabled_by_name/mark_effective).
+# The reversible retire/re-enable brake over one graph_id: append-only, newest-fact-wins.
 
 graph_lifecycle_facts = Table(
     "graph_lifecycle_facts",
@@ -152,16 +128,8 @@ graph_lifecycle_facts = Table(
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
 )
 
-# The per-graph follow-latest policy (issue #164) — append-only, newest-fact-wins, in the
-# shape `graph_lifecycle_facts` established. Its own table rather than a nullable column
-# there because the two are independent: a graph can be retired and re-enabled any number
-# of times without saying anything about whether its chunks follow the newest mint, and
-# folding them together would make every retire also assert a policy (or leave a null that
-# cannot be told from "unset").
-#
-# `follow_latest` is **tri-state** and so nullable: NULL inherits `HubConfig.follow_latest`
-# (every mint's default), True/False override it for chunks pinned to this mint. A graph
-# with no row at all reads NULL — inherit — so a freshly minted graph needs no seed row.
+# The per-graph follow-latest policy (issue #164) — append-only, newest-fact-wins.
+# `follow_latest` is **tri-state**: NULL (or no row at all) inherits the hub setting.
 graph_policy_facts = Table(
     "graph_policy_facts",
     metadata,
@@ -180,26 +148,15 @@ chunks = Table(
     Column("chunk_id", String, primary_key=True),  # ch_<ulid>
     Column("graph_id", String, ForeignKey("graphs.graph_id"), nullable=False),  # pinned at mint
     Column("minted_at", UtcDateTime, nullable=False),
-    # RETAINED AND UNREAD (issue #144 superseded it with the `default_model` /
-    # `default_effort` pair below): nothing reads or writes it, so a new row carries the
-    # migration's `server_default` regardless of what its sessions ran under. Do not read
-    # it as a current fact, and do not trust it on a new row.
+    # RETAINED AND UNREAD (superseded by `default_model`/`default_effort`, issue #144):
+    # a new row carries the migration's `server_default`. Never read it as a current fact.
     Column("model", String, nullable=False),
-    # The chunk's **default** model preference and effort (issue #144) — what a surface
-    # declaring neither inherits, sitting between a graph's `sessions:` declaration and the
-    # runner's own default. `default_model` is a JSON `list[str]` of opaque preference
-    # strings (a `blizzard:` tier alias or a harness-native name), `default_effort` a single
-    # aliased value. Both nullable and both minted empty: an empty preference means
-    # *express none*, which is what lets a runner's own `[models.aliases]` default apply.
-    # Plain mutable columns editable pre-claim, the same shape `graph_id` carries.
+    # The chunk's **default** model preference (JSON `list[str]`) and effort (issue #144).
+    # Both nullable and minted empty: an empty preference means *express none*.
     Column("default_model", Text, nullable=True),
     Column("default_effort", String, nullable=True),
-    # The chunk's standing intent to migrate onto another graph at its next transition
-    # (issue #124) — nullable, NULL while no intent is set. A single JSON `Text` column
-    # (`{"mode", "graph_id", "node_name"}`) rather than a fact table: it is a plain
-    # mutable property read whole at consult time, the same `bzh:facts-not-status` shape
-    # `graph_id`/`default_model` already carry, and nothing filters on its contents
-    # (`bzh:sql-portable`).
+    # The chunk's standing intent to migrate at its next transition (issue #124) — a JSON
+    # `{"mode", "graph_id", "node_name"}` blob, read whole; NULL while no intent is set.
     Column("intended_migration", Text, nullable=True),
 )
 
@@ -219,13 +176,8 @@ transitions = Table(
     metadata,
     Column("transition_id", String, primary_key=True),  # tr_<ulid>
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    # The graph this transition happened in (issue #90 — graph-provenance). A movement
-    # fact carries the identity of the graph it moved within, so a later cross-graph
-    # migration (which re-pins ``chunks.graph_id``) never strands an old-graph transition's
-    # node ids against the new pin: hydration resolves each transition's executor/name
-    # against *its own* graph, not the chunk's current one. No ForeignKey — the sibling
-    # ``from_node_id``/``to_node_id`` columns carry none either (``to_node_id`` may be the
-    # reserved terminal), and the invariant-checker seeds transitions with a bare graph id.
+    # The graph this transition happened in (issue #90) — so a later cross-graph migration
+    # never strands its node ids against the new pin. No ForeignKey, like its siblings.
     Column("graph_id", String, nullable=False),
     Column("from_node_id", String, nullable=True),  # null on the first transition out of entry
     Column("to_node_id", String, nullable=False),  # a node_id, or 'done' terminal
@@ -237,30 +189,11 @@ transitions = Table(
 )
 
 # The activity feed's bounded read (issue #213) — indexed because ``transitions`` is the
-# one high-volume fact table (every chunk's every node-step) among the feed's sources
-# with no timestamp index otherwise; the low-volume sources (``escalations``,
-# ``requeues``, ...) are fine unindexed. Mirrors ``ix_event_log_recorded_at`` below.
+# one high-volume source among the feed's.
 Index("ix_transitions_recorded_at", transitions.c.recorded_at)
 
 # --- Cross-graph migration record (chunk_migrations — issue #90) ---------------
-#
-# A judgement choice targeting another graph (``to: graph:<name>``) re-pins the chunk
-# and re-queues it — its **own recorded fact**, never a ``transitions`` row
-# (``bzh:migration-not-transition``: a transitions row whose two nodes span graphs is
-# exactly the violation this table avoids). ``record_migration`` writes this fact, the
-# ``chunks.graph_id`` (+ ``chunks.model`` when re-pinned) update, the ``route_released``,
-# and the submitting node-step's artifacts in **one transaction**, idempotent-guarded by
-# ``(chunk_id, from_node_id, epoch)`` — a crash-replay re-enters harmlessly. ``epoch`` is
-# the submitting attempt's fence (the next claim mints a fresh higher one above it);
-# ``landed_node_id`` is the concrete name-match-else-entry landing node in the target
-# graph (nullable only as the schema allowance for "the target's entry"); ``model_after``
-# is the re-pinned model, or null when the migration kept the chunk's current model;
-# ``choice_name`` is the triggering choice (paralleling ``transitions.choice_name``).
-# ``decision_id`` is set only when a **human gate's** resolved choice is itself the
-# cross-graph migration (issue #90): a migration writes no ``transitions`` row, so
-# without pointing back at the decision here it would stay ``transitioned=False`` forever
-# (a phantom live decision that mis-renders the board and wedges REAP recovery). It is
-# null for the ordinary worker-judged migration, which resolves no decision.
+# Its own fact, never a ``transitions`` row (``bzh:migration-not-transition``).
 
 chunk_migrations = Table(
     "chunk_migrations",
@@ -276,10 +209,8 @@ chunk_migrations = Table(
     Column("model_after", String, nullable=True),  # the re-pinned model, or null (kept current)
     Column("epoch", Integer, nullable=False),  # the submitting fence; the natural-key third part
     Column("recorded_at", UtcDateTime, nullable=False),
-    # What moved the chunk (issue #164): authored-edge | intent | follow-latest. Nullable
-    # because rows predating the discriminator cannot be attributed — a legacy row's two
-    # possible operator sources are indistinguishable, so it stays honestly unrecorded
-    # rather than back-filled to a guess.
+    # What moved the chunk (issue #164): authored-edge | intent | follow-latest. Nullable —
+    # a row predating the discriminator stays honestly unattributed.
     Column("source", String, nullable=True),
 )
 
@@ -348,17 +279,7 @@ route_released = Table(
 )
 
 # --- Route capability tokens (route_token_minted — issue #84a) ----------------
-#
-# An unguessable per-acquisition secret minted alongside a claim's ``route_created``
-# fact — an **append-only fact table**, deliberately not a ``token_hash`` column on
-# ``route_created`` (``bzh:facts-not-status``): the route fact is immutable, so a
-# re-key (Phase 6) must append a new token fact, never rewrite the route row, the same
-# reason ``route_released`` is its own table rather than a status flip. Only the
-# sha256 hex digest is ever persisted; the plaintext is returned once in the claim
-# response and never stored. ``seq`` shares :func:`ChunkStore._next_route_seq`'s
-# per-chunk counter with ``route_created``/``route_released`` (not a private one) so a
-# token fact totally orders against a create/release even on a timestamp tie — the
-# live-token derivation depends on that shared ordering (``hub/domain/work.py``).
+# Only the sha256 digest is persisted; ``seq`` shares the per-chunk route counter.
 route_token_minted = Table(
     "route_token_minted",
     metadata,
@@ -390,15 +311,7 @@ delivery_landed = Table(
 )
 
 # --- Delivery closure facts (work_item_closures — issue #216) -----------------
-#
-# One row per close ATTEMPT outcome against a delivered chunk's work item —
-# `DeliveryClosureReconciler`'s durable record, keyed `(chunk_id, source, ref,
-# outcome)` so a repeated attempt at the same outcome is a clean no-op
-# (`record_work_item_closure`'s own idempotent-bool contract, mirroring
-# `record_hub_artifact`). `closed`/`gone` are terminal — `closable_work_refs` never
-# returns a ref once either lands; `failed` is not, and is retried on every later
-# sweep, so a permanently-failing ref costs one row here (plus one warning event),
-# not one per sweep. `reason` carries the failure/gone detail; null for `closed`.
+# One row per close-attempt outcome; `closed`/`gone` are terminal, `failed` is retried.
 
 work_item_closures = Table(
     "work_item_closures",
@@ -414,17 +327,7 @@ work_item_closures = Table(
 )
 
 # --- Delivery kick-backs (chunk_bounces — #64) --------------------------------
-#
-# A delivery kick-back (conflict / CI-red / master-moved) is contention, not
-# failure: it consumes no node retry and triggers no escalation by itself. Every
-# kick-back appends one row here, independent of the transition that routes the
-# chunk back to a worker node (or, once the chunk's ``bounce_count`` crosses its
-# node's ``bounce_cap``, the escalation that replaces that routing) — so the count is
-# derived purely from these rows (``bzh:facts-not-status``) and a redelivery replay
-# after a crash is guarded by the natural key ``(chunk_id, epoch)`` (the coordinator's
-# own ``hub_epoch``), never double-counted. ``envelope`` is the opaque JSON kick-back
-# payload (cause, per-repo detail) carried into the fix node's arriving artifacts so it
-# never rediscovers what bounced it.
+# Contention, not failure: consumes no node retry, natural-keyed ``(chunk_id, epoch)``.
 
 chunk_bounces = Table(
     "chunk_bounces",
@@ -438,11 +341,7 @@ chunk_bounces = Table(
 )
 
 # --- Open-PR delivery facts (pr.opened / pr.closed) ---------------------------
-#
-# Read-only history (#67): a chunk delivered under the old ``open-pr`` deliver mode
-# recorded ``pr.opened``/``pr.closed`` here. No engine path writes either table any more;
-# open-PR delivery policy is a hub command node's ``run:`` script
-# (``hub/graphs/scripts/land_pr_ci.py``).
+# Read-only history (#67): no engine path writes either table any more.
 
 delivery_pr_opened = Table(
     "delivery_pr_opened",
@@ -454,9 +353,8 @@ delivery_pr_opened = Table(
     Column("pr_url", String, nullable=False),  # the PR's html url — surfaced on the board
     Column("commit_hash", String, nullable=False),  # the authoritative head the PR carries
     Column("opened_at", UtcDateTime, nullable=False),
-    # One ``pr.opened`` per (chunk, repo) — the constraint that closed a replay race
-    # (20260716_2206_hub_pr_opened_idempotent). Retained as the shape of the historical
-    # rows this table still reads back; no engine path writes it any more.
+    # One ``pr.opened`` per (chunk, repo) — the constraint that closed a replay race,
+    # retained as the shape of the historical rows this table still reads back.
     UniqueConstraint("chunk_id", "repo", name="uq_delivery_pr_opened_chunk_repo"),
 )
 
@@ -473,16 +371,7 @@ delivery_pr_closed = Table(
 )
 
 # --- The fleet-wide hub-execution serialization slot (#65) -------------------
-#
-# A generic hub command node's ``run:`` list executes serialized fleet-wide — one
-# chunk's hub node running at a time is what makes merging safe. The slot is a FACT
-# (``bzh:facts-not-status``), not an in-process lock: acquire-if-none-live under
-# SQLite's single-writer transaction, released at end-of-run. A live slot is a row
-# with ``released_at IS NULL``; at most one may exist at a time (the invariant checker
-# asserts this after any crash). A slot older than its holder's staleness TTL
-# (measured against the injected clock, never wall time) is reclaimable — a kill -9
-# mid-run leaves a slot no later run will ever release, so a stale live slot is treated
-# as free rather than wedging the fleet forever.
+# A live slot has ``released_at IS NULL``; one at a time, reclaimable past its TTL.
 
 hub_exec_slot = Table(
     "hub_exec_slot",
@@ -495,17 +384,7 @@ hub_exec_slot = Table(
 )
 
 # --- The generic hub command node's pending-poll attempts (#66) --------------
-#
-# A hub command node whose ``run:`` step reports the reserved ``pending`` outcome
-# records no transition — it appends one row here instead, releases the fleet-wide
-# ``hub_exec_slot`` immediately, and is re-run once ``poll_interval`` has elapsed. Every
-# row is one poll attempt, append-only, stamped from the injected clock
-# (``bzh:injected-clock``): pending-ness is DERIVED (``hub_node_pending`` in
-# ``hub/domain/work.py``) from "the newest transition still enters this hub node AND a
-# poll fact exists for its (node_id, epoch)" — nothing in-memory, so a ``kill -9``
-# between polls resumes polling straight from these rows. ``epoch`` is the arrival
-# epoch of the current visit (the same value the node's own marker/log artifacts are
-# recorded under, ``hub_node.HubNodeExecutor``), not a fresh one minted per poll.
+# One append-only row per poll attempt; pending-ness derives from them, never memory.
 
 hub_node_poll = Table(
     "hub_node_poll",
@@ -518,13 +397,7 @@ hub_node_poll = Table(
 )
 
 # --- Readiness: the not-ready resting state and its promotion --------
-#
-# Ingest mints a chunk in a NOT-READY resting state: visible on the board but
-# never claimed by a runner. A ``chunk.promoted`` fact — appended by ``POST
-# /chunks/{id}/promote`` — flips it to ``ready`` (facts append, status derives). An
-# un-promoted chunk with no ``chunk_promoted`` row derives ``not_ready`` and so is
-# excluded from ``list_ready``/``GET /api/queue``; existing chunks predating this table
-# have no row and are back-filled by the migration so they stay claimable.
+# A chunk with no ``chunk_promoted`` row derives ``not_ready`` and is never claimed.
 
 chunk_promoted = Table(
     "chunk_promoted",
@@ -542,9 +415,7 @@ chunk_stopped = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("stopped_at", UtcDateTime, nullable=False),  # terminal operator abandonment
-    # Who stopped it (issue #118) — nullable: rows written before this column existed
-    # (including a hand-written `INSERT` against a live store) predate it and read back
-    # as `None`, mirroring `runner_local_pause_facts.reason` (issue #61).
+    # Who stopped it (issue #118) — nullable: a row predating the column reads back `None`.
     Column("stopped_by", String, nullable=True),
 )
 
@@ -555,42 +426,17 @@ escalations = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("epoch", Integer, nullable=False),  # closed by a later lease mint, not a resolution
     Column("takeover_command", Text, nullable=False, server_default=""),  # the pasteable resume command
-    # The runner-composed ``blizzard runner takeover`` invocation — sits beside
-    # ``takeover_command`` rather than replacing it: that column stays the raw
-    # harness-resume string for back-compat/audit, while this one is what the board
-    # renders so a human's takeover actually routes through the runner instead of
-    # bypassing it with a pasted harness command. Written through the runner-reported
-    # ``record_escalation`` route whenever composing one is possible — hub-authored
-    # escalations (``record_bounce_escalation``) never carry it; see
-    # ``blizzard-context:/domain/humans.md`` §Escalation. A row from before this column
-    # existed reads back its ``server_default`` empty string.
-    #
-    # Deliberate trade-off: this string is *stored pre-composed* at escalation time
-    # rather than derived at read time, so a runner whose ``--dir`` moves leaves
-    # already-open escalations showing the old path until a fresh one is recorded
-    # (pinned by tests/test_escalation.py::
-    # test_escalation_without_wrapped_takeover_reads_back_empty).
+    # The runner-composed ``blizzard runner takeover`` invocation, beside the raw
+    # harness-resume ``takeover_command``. Stored pre-composed; empty when none was.
     Column("wrapped_takeover_command", Text, nullable=False, server_default=""),
-    # ``decision_id`` is set only when a **human gate's** resolved choice migrated
-    # cross-graph to an unresolvable target (issue #110): the escalation stands in for the
-    # migration fact the resolvable branch writes (issue #90), so the gate's decision
-    # derives ``transitioned`` (closed) here too — neither a migration nor a transition row
-    # exists to close it, and an unclosed gate decision wedges REAP recovery and drives a
-    # per-tick runner re-submit. Null for the ordinary retries-exhausted escalation.
+    # Set only when a gate's resolved choice migrated to an unresolvable target (issue
+    # #110), so the gate's decision derives closed here too. Null otherwise.
     Column("decision_id", String, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
 # --- Usage facts (usage.recorded — issue #59) --------------------------------
-#
-# One append-only row per harness invocation's usage/cost telemetry the runner
-# reported up, ridden on the same store-and-forward rails as ``lease_facts``. Never
-# aggregated here: a chunk's total is derived at read time by summing these
-# (``derive_chunk_usage``, ``bzh:facts-not-status``). Deliberately **not** epoch-fenced —
-# unlike ``lease_facts``/``escalations``, a stale-epoch row still lands: it is real spend
-# by a fenced-out zombie attempt, not a rejected transition. No dedup column: the runner's
-# per-runner outbound-buffer seq high-water mark already makes a replayed batch land
-# each fact exactly once, so a second idempotency key here would be redundant.
+# One row per harness invocation. **Not** epoch-fenced: a zombie's spend is real spend.
 
 usage_facts = Table(
     "usage_facts",
@@ -611,13 +457,7 @@ usage_facts = Table(
 )
 
 # --- Questions and answers (the ask/answer rendezvous) ----------------------
-#
-# A worker's question, forwarded by its runner, becomes a durable row here
-# (question.asked).
-# Open/answered is derived: a question is open exactly while no answer row
-# exists. The answer is first-write-wins CAS — the ``question_answers`` primary key
-# IS the question id, so the second concurrent writer's insert fails and the loser is
-# told the winning answer.
+# Open exactly while no answer row exists; the answer is first-write-wins CAS on the PK.
 
 questions = Table(
     "questions",
@@ -656,14 +496,7 @@ answer_deliveries = Table(
 )
 
 # --- Human gates: decisions and their resolutions -------------
-#
-# A gate parks a chunk on an open Decision — a durable multiple-choice row a person
-# resolves. The decision is written either by the hub when a
-# transition lands on a human-judged node (a *graph* gate) or by the runner in place
-# of a transition for a node it was configured to gate (a *runner-config* gate).
-# Resolved-ness is DERIVED (bzh:facts-not-status): a decision with a row in
-# ``decision_resolutions`` is resolved; the resolving Transition the holding runner
-# records later carries the same ``decision_id`` (transitions.decision_id).
+# Resolved-ness derives: a decision with a resolution row is resolved.
 
 decisions = Table(
     "decisions",
@@ -689,12 +522,7 @@ decision_resolutions = Table(
 )
 
 # --- Requeue facts (close needs_human by supersession) ------------------------
-#
-# ``blizzard hub requeue <chunk>`` appends this fact to close an open escalation by
-# supersession (never a resolution fact): an escalation stays open only while no later
-# lease mint AND no later requeue supersedes it. The
-# requeue also releases the route so the chunk re-derives ``ready`` and re-enters FILL
-# at its current node — a fresh attempt.
+# An escalation is closed by supersession — a later lease mint or requeue — never resolved.
 
 requeues = Table(
     "requeues",
@@ -705,10 +533,7 @@ requeues = Table(
 )
 
 # --- Chunk pause facts (chunk.paused / chunk.resumed — issue #46) -----------
-#
-# An operator-level brake over one specific chunk, orthogonal to the runner's own brake
-# (``runner_pause_facts`` above) and to detach (which gives up the claim). Append-only,
-# newest-fact-wins, mirroring ``runner_pause_facts`` exactly.
+# An operator-level brake over one chunk: append-only, newest-fact-wins.
 
 chunk_pause_facts = Table(
     "chunk_pause_facts",
@@ -721,11 +546,7 @@ chunk_pause_facts = Table(
 )
 
 # --- Store-and-forward high-water mark (per-runner idempotency) ---------------
-#
-# The hub's dedup memory for the runner→hub fact push (POST /events): the greatest
-# per-runner sequence number it has already applied. A pushed fact with seq ≤ mark
-# is already-applied and re-acked without re-applying — the idempotent replay after
-# a lost ack or an outage backlog drain. One row per runner, advanced monotonically.
+# The greatest per-runner seq already applied; a fact at or below it is re-acked, not applied.
 
 runner_high_water = Table(
     "runner_high_water",
@@ -736,14 +557,7 @@ runner_high_water = Table(
 )
 
 # --- Queue shaping: ready-queue ordering ----------------------
-#
-# Ready-queue ordering is an explicit hub-side property: the operator moves a ready
-# chunk to a position, and GET /api/queue honours it.
-# Facts append, order derives: each reorder appends ONE row —
-# the moved chunk's new float ``position``, computed between its target neighbours —
-# and a chunk's effective position is its newest such fact, or its ``minted_at``
-# instant (as a unix timestamp) before it was ever moved. Ready chunks sort ascending
-# by effective position, so "move to top" is simply a position below the current least.
+# A chunk's effective position is its newest fact, else its ``minted_at`` as a unix stamp.
 
 queue_positions = Table(
     "queue_positions",
@@ -755,13 +569,7 @@ queue_positions = Table(
 )
 
 # --- Queue shaping: grouping (chunk.grouped) -----------------------------------
-#
-# Group N unacquired (ready) chunks into one surviving chunk: the survivor absorbs the
-# union of their work refs (pointers become plural, appended to chunk_work_refs),
-# and each merged-away chunk records a ``chunk.grouped`` fact naming the survivor. A
-# grouped chunk is EPHEMERAL: it is removed from every listing rather than
-# deriving a status, exactly like a discard — the work item lives on
-# as a pointer on the survivor.
+# A grouped chunk is EPHEMERAL: removed from every listing, deriving no status at all.
 
 chunk_grouped = Table(
     "chunk_grouped",
@@ -773,13 +581,7 @@ chunk_grouped = Table(
 )
 
 # --- The fleet registry (runner.registered / paused / resumed) ----------------
-#
-# Runners register on startup (runner_id + workspace_id) and appear on the board. The
-# registration row is an upsert: ``last_seen_at`` is a refreshed timestamp (not a fact),
-# bumped by the register call and the dedicated heartbeat; liveness derives from
-# it against a staleness threshold (never a stored column). Operational state is
-# declarative and append-only: pause/resume facts land in ``runner_pause_facts`` and
-# ``paused`` derives from the newest one.
+# The registration row is an upsert; liveness derives from ``last_seen_at``.
 
 runner_registrations = Table(
     "runner_registrations",
@@ -788,35 +590,17 @@ runner_registrations = Table(
     Column("workspace_id", String, nullable=False),  # the per-runner workspace binding
     Column("registered_at", UtcDateTime, nullable=False),
     Column("last_seen_at", UtcDateTime, nullable=False),  # liveness derives from this
-    # The hub-minted bearer token's sha256 hex digest (issue #86a) — nullable because an
-    # unenrolled runner (every runner before an operator's `enroll` call, and every
-    # pre-#86a row) has none. Indexed because `registration_for_token_hash` selects on
-    # it — the reverse lookup `require_runner_principal` resolves a presented token
-    # through, the mirror image of every other registry read (which key on
-    # `runner_id`, already primary-keyed). A rotating column, not an append-only fact
-    # (`bzh:facts-not-status`'s one deliberate exception — see this table's module
-    # docstring): the registration row is already a mutable upsert, so re-enrollment
-    # overwriting the hash in place is consistent with the rest of the row, unlike the
-    # route capability token (#84's append-only fact table).
+    # The hub-minted bearer token's sha256 hex digest (issue #86a) — nullable (an
+    # unenrolled runner has none), indexed for the reverse token lookup.
     Column("token_hash", Text, nullable=True, index=True),
-    # The runner's configured environment-pool size (issue #69) — the `total` the board's
-    # slot bar renders `used/total` against. Nullable: a runner registered by a client that
-    # predates this field reports none, and the board omits the bar rather than guess a
-    # total. A reported fact refreshed in place on each re-registration (like `last_seen_at`
-    # / `token_hash` above), so a `workspace_envs` change converges on the next pull.
+    # The runner's configured environment-pool size (issue #69) — nullable when the runner
+    # reports none. Refreshed in place on each re-registration.
     Column("env_capacity", Integer, nullable=True),
     # The runner's own browser-reachable base URL (issue #95) — nullable: a runner that
-    # never registers one cannot be a federation target (its human web surface has no
-    # bounce endpoint the hub can validate a redirect against). Reported on every
-    # (re-)registration, refreshed in place like `env_capacity`/`token_hash` above.
+    # registers none cannot be a federation target. Refreshed in place.
     Column("public_url", Text, nullable=True),
-    # The runner's allowed redirect URIs (issue #95), JSON-encoded (`json.dumps` of a
-    # `list[str]`) — the hub's IdP authorize endpoint exact-matches a presented
-    # `redirect_uri` against this set before ever minting a JWT (the open-redirect
-    # guard). `NULL`/empty means the runner has registered no callback and cannot be
-    # bounced to. A plain `Text` column (not a child table): the set is small,
-    # runner-owned, and rewritten wholesale on every registration — never queried by
-    # its members, only read back whole and matched in Python.
+    # The runner's allowed redirect URIs (issue #95), JSON `list[str]` — exact-matched
+    # against a presented `redirect_uri` before a JWT is minted (the open-redirect guard).
     Column("redirect_uris", Text, nullable=True),
 )
 
@@ -830,17 +614,8 @@ runner_pause_facts = Table(
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
 )
 
-# The runner's *own* brake, as reported to us (issue #43). A separate table from
-# ``runner_pause_facts`` above because they are separate concepts with separate authors:
-# that one is the fleet's brake, authored here and pulled down by the runner; this one is
-# authored on the runner machine and arrives through its outbound buffer, so the
-# hub is a reader of it and never sets it. Keeping them apart is what lets the board say
-# *which* brake is on — the runner declining, the fleet coercing, or both.
-#
-# No ForeignKey to ``runner_registrations``: a fact can arrive from a runner the registry
-# has not seen yet (the buffer replays an outage in FIFO order, and its pause may precede
-# its registration). ``_apply`` decides what to do with an unknown runner; the schema does
-# not make the arrival unrepresentable.
+# The runner's *own* brake, as reported to us (issue #43) — a separate table because the
+# hub only ever reads it. No ForeignKey: a fact can arrive before its registration does.
 
 runner_local_pause_facts = Table(
     "runner_local_pause_facts",
@@ -850,46 +625,26 @@ runner_local_pause_facts = Table(
     Column("paused", Boolean, nullable=False),  # locally_paused derives from the newest fact
     Column("set_at", UtcDateTime, nullable=False),  # the runner's clock, off the fact's payload
     Column("set_by", String, nullable=False),
-    # The composed cause string off the fact's payload (issue #61's spend-ceiling escalation
-    # names the ceiling + spend here) — nullable because a manual `blizzard runner pause`
-    # carries none, and every pre-#61 row predates the column.
+    # The composed cause string off the fact's payload (issue #61) — nullable, since a
+    # manual pause carries none.
     Column("reason", Text, nullable=True),
 )
 
-# The runner's latest sampled external-subscription-usage snapshot (issue #218, phase 3)
-# — an advisory display fact for the board, refreshed in place on every sample rather
-# than appended: only the newest reading is ever of interest, and there is no history to
-# derive from stale ones. This is a deliberate `bzh:facts-not-status` refresh-in-place
-# exception, the same one `runner_registrations`'s own module docstring already
-# documents (its `token_hash`/`env_capacity`/`public_url`/`redirect_uris` columns) — see
-# that table's comments above rather than re-arguing it here.
-#
-# No ForeignKey to ``runner_registrations.runner_id``, deliberately: a fact for a runner
-# the hub has no registration row for would raise on insert, making `_apply` return
-# `False`, which makes the ingest batch `rejected`, which means the seq's high-water
-# mark never advances — a permanent stall of that runner's entire fact rail over an
-# advisory display field. An orphan row here is simply never read.
+# The runner's latest sampled external-usage snapshot (issue #218) — advisory, refreshed
+# in place. No ForeignKey: an orphan row is never read, but a raise would stall the rail.
 runner_external_usage = Table(
     "runner_external_usage",
     metadata,
     Column("runner_id", String, primary_key=True),
     Column("sampled_at", UtcDateTime, nullable=False),
     # JSON array of {window, utilization_pct, resets_at, window_seconds} — rewritten
-    # wholesale on every sample, never queried by its members (the `redirect_uris`
-    # JSON-blob-as-Text precedent above).
+    # wholesale on every sample, never queried by its members.
     Column("windows", Text, nullable=False),
     Column("updated_at", UtcDateTime, nullable=False),
 )
 
 # --- The identity spine: users, provider identities, sessions (issue #91) -----
-#
-# Independent of any login mechanism (that is #92) — the schema every other auth slice
-# builds on. ``users`` is the hub-local account row: ``username`` is unique, ``role`` is the coarse
-# ``blizzard.auth_core.Role`` tag a session's ``ResolvedIdentity`` expands via the
-# static ``ROLE_PERMISSIONS`` map (never a stored permission list — `bzh:domain-core`).
-# ``email`` is nullable (a provider need not disclose one) and, when present, unique —
-# enforced by the partial index below rather than a plain column-level UNIQUE, since a
-# plain UNIQUE treats every NULL as equal-and-conflicting on some backends.
+# ``role`` is a coarse tag expanded through a static map, never a stored permission list.
 
 users = Table(
     "users",
@@ -902,11 +657,8 @@ users = Table(
     Column("created_at", UtcDateTime, nullable=False),
 )
 
-# A partial unique index (D2): ``WHERE email IS NOT NULL`` via SQLAlchemy's
-# dialect-keyed ``sqlite_where``/``postgresql_where`` on one ``Index`` — both backends
-# honor a partial index, and setting both keeps this inside SQLAlchemy's portable DDL
-# surface (``bzh:sql-portable``), no raw ``text()``. A plain ``unique=True`` column
-# constraint cannot express "unique only when set" portably.
+# A partial unique index (D2) — dialect-keyed rather than raw ``text()``, staying inside
+# SQLAlchemy's portable DDL surface (``bzh:sql-portable``).
 Index(
     "uq_users_email",
     users.c.email,
@@ -915,10 +667,8 @@ Index(
     postgresql_where=users.c.email.isnot(None),
 )
 
-# One row per (provider, subject) a user has linked — the first-login email-merge rule
-# (#92) attaches a second identity to an existing user. ``handle`` is the provider's own
-# display/login name at last link, refreshed on a later login rather than re-derived
-# here.
+# One row per (provider, subject) a user has linked (#92). ``handle`` is the provider's
+# own display name at last link, refreshed on a later login.
 identities = Table(
     "identities",
     metadata,
@@ -931,12 +681,8 @@ identities = Table(
     UniqueConstraint("provider_name", "subject", name="uq_identities_provider_subject"),
 )
 
-# A hub session — the browser cookie / CLI bearer resolves to one of these by its
-# **hashed** id (sha256, `hub/auth/hashing.py`); the plaintext is minted once and never
-# stored (mirrors `runner_registrations.token_hash`, issue #86a). Sliding expiry:
-# `last_seen_at`/`expires_at` are refreshed in place on each resolve
-# (`AuthService.touch_session`), under an absolute-max cap enforced by the domain, not
-# a second column.
+# A hub session, resolved by its **hashed** id; the plaintext is minted once and never
+# stored. Sliding expiry: `last_seen_at`/`expires_at` are refreshed in place on resolve.
 sessions = Table(
     "sessions",
     metadata,
@@ -949,24 +695,8 @@ sessions = Table(
 
 # --- The provider-login seam: single-use state, non-chunk auth facts (issue #92) ----
 
-# A single-use ``state`` round-tripped through a provider redirect (decision D5).
-# ``authorize`` writes one; ``callback`` reads-and-deletes it in one call
-# (``AuthStateRepository.consume``), so a replayed ``state`` query parameter can never
-# resolve twice. ``kind`` distinguishes this table's callers (``"provider_login"``
-# here; the same table is reused, unmodified, by #95's hub-as-IdP authorize).
-# ``provider_name`` cross-checks the callback's own ``{name}`` path segment. No
-# separate cleanup job removes expired rows — a stale row simply never resolves
-# (``expires_at`` is checked at read, not swept). ``user_id`` (issue #96) is set only on
-# a ``kind="cli_login"`` row, whose ``state`` column holds the minted authorization
-# `code`: the user to mint a session for once the CLI presents the PKCE verifier at
-# ``POST /api/auth/cli/token`` — every other ``kind`` leaves it null. Deliberately no
-# ``ForeignKey`` (unlike ``sessions.user_id``/``identities.user_id``): the column is
-# added to an already-existing table via a later migration's ``ALTER TABLE ADD
-# COLUMN``, and SQLite refuses to ever ``DROP COLUMN`` an FK-participating column
-# baked into a table's original ``CREATE TABLE`` (which this one would be on a fresh
-# ``base -> head`` build, since this ``Table`` object — not a frozen literal copy — is
-# what the *creating* migration's own ``table.create()`` uses) short of a full
-# batch-mode table rebuild; the reference is enforced at the application layer only.
+# A single-use ``state`` (decision D5), read-and-deleted in one call, so a replayed value
+# can never resolve twice. Expiry is checked at read, never swept.
 auth_state = Table(
     "auth_state",
     metadata,
@@ -980,9 +710,8 @@ auth_state = Table(
     Column("user_id", String, nullable=True),  # issue #96, cli_login rows only — see note above
 )
 
-# The append-only, non-chunk auth/security event log (``bzh:facts-not-status``) —
-# `login_failed`/`sso_refused`/`user_role_changed` land here. Distinct from the
-# chunk-scoped fact tables: these events concern no single chunk.
+# The append-only, non-chunk auth/security event log (``bzh:facts-not-status``) — these
+# events concern no single chunk.
 auth_facts = Table(
     "auth_facts",
     metadata,
@@ -995,16 +724,7 @@ auth_facts = Table(
 )
 
 # --- The superuser bootstrap lifecycle (issue #94) ---------------------------------
-#
-# A **singleton** row tracking the currently configured ``auth.superuser`` (a nullable
-# email in ``[auth]``, ``hub/config.py``): ``AuthService``'s bootstrap methods always
-# operate on the one live row (delete-then-insert on every write, never more than one
-# row at rest) so a later boot — or a config change naming a *different* email — can
-# find the *previous* bootstrap target to demote. ``claimed_user_id`` is null while the
-# named email matches no verified user yet (a pre-provisioned, unclaimed intent,
-# surfaced at every boot per issue #94's own "never a silent dead end"); it is set the
-# moment a user holding that verified email is confirmed — either found directly at
-# boot, or claimed by the first matching verified login (``AuthService.link_or_mint``).
+# A **singleton** row, so a config change naming a different email can still demote.
 superuser_bootstrap = Table(
     "superuser_bootstrap",
     metadata,
@@ -1015,19 +735,7 @@ superuser_bootstrap = Table(
 )
 
 # --- Operational event log (event_log — issue #125) ---------------------------
-#
-# A durable, append-only, typed and severity-ranked **operational** event feed
-# (``bzh:facts-not-status``) — the hub's own "what just happened" record, read back
-# unified with open escalations at ``GET /api/events``. Distinct from every
-# chunk-scoped fact table above it: ``chunk_id`` is nullable because some events are
-# **runner-scoped** (no single chunk to name), and — like every table here — there is
-# no ``status`` column; an event, once recorded, never changes. Clock-stamped from the
-# injected clock (``bzh:injected-clock``) at ``recorded_at``, never a
-# ``server_default``. ``severity`` is one of ``info`` | ``warning`` | ``critical``,
-# checked at the domain rather than a DB ``CHECK`` constraint (``bzh:sql-portable``);
-# ``kind`` is the event's ``noun.verb`` name. ``detail`` is an opaque JSON-encoded
-# ``dict`` for event-specific payload the fixed columns don't carry — round-tripped
-# only, never queried.
+# ``chunk_id`` is nullable — some events are runner-scoped. ``detail`` is opaque JSON.
 
 event_log = Table(
     "event_log",
@@ -1044,6 +752,5 @@ event_log = Table(
     Column("detail", Text, nullable=True),
 )
 
-# The read's own sort key (newest-first) — indexed so ``GET /api/events`` doesn't scan
-# the whole append-only table to order it.
+# The read's own sort key (newest-first) — indexed so ordering never scans the table.
 Index("ix_event_log_recorded_at", event_log.c.recorded_at)

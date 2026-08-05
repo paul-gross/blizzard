@@ -1,20 +1,9 @@
 """Produces-artifact authorization — the hub-side backstop on a node's ``produces:``
 declaration (issue #113 phase 5).
 
-This check is the **hub's** backstop against a submission that still carries no
-explicit attachment, and no covering git commit, for one or more declared names — a
-worker that ignored the runner's own nudge (``runner/loop/steps.py``), or a graph the
-nudge never reached. It shares its coverage predicate with the runner's own nudge
-check via :func:`~blizzard.wire.completion.produces_coverage`, so the two models
-cannot drift apart.
-
-The check is a plain function, not a service — it takes already-loaded values
-(``bzh:domain-takes-objects``): the caller resolves the ``Node`` from the pinned graph and
-the submission's own artifacts, so this stays a pure function callable from
-:mod:`~blizzard.hub.domain.apply` alone, mirroring
-:func:`~blizzard.hub.domain.route_auth.check_route_token`'s shape (and its
-``produces_mode`` rollout brake, ``hub/config.py``).
-"""
+The backstop against a submission carrying no explicit attachment and no covering git
+commit for a declared name. Its coverage predicate is shared via
+:func:`~blizzard.wire.completion.produces_coverage`, so the two models cannot drift."""
 
 from __future__ import annotations
 
@@ -27,23 +16,11 @@ _log = get_logger("blizzard.hub.produces_auth")
 
 
 def check_produces(node: Node, submission_artifacts: list[SubmittedArtifact], *, mode: str) -> str | None:
-    """Check that every ``node.produces`` spec is covered, per its declared kind, by the
-    submission (issue #143, D2) — evaluated by
-    :func:`~blizzard.wire.completion.produces_coverage`, the one shared predicate the
-    runner's own nudge check also calls, so the two coverage models cannot drift apart.
-    An ``asset`` spec needs an explicit ``attached=True`` artifact (or a ``GIT_COMMIT``
-    artifact) of its own name; a ``git_commit`` spec needs **any** ``GIT_COMMIT``-kind
-    artifact present — a kind match, not a name match, since a declared git-commit is
-    named per-repo, never the produces name itself.
+    """Check that every ``node.produces`` spec is covered by the submission, per its
+    declared kind (issue #143, D2).
 
-    The hub holds no worktree (``bzh:git-write-in-worker-seam``), so a ``git_commit`` spec is
-    checked by presence-by-kind only here — forge verification against the declared
-    branch/commit is the runner's job (a later phase), not this backstop's.
-
-    Returns a failure detail to reject with under ``enforce``, naming every uncovered
-    spec, or ``None`` to proceed (every ``produces:`` spec is covered, or ``mode`` is
-    ``warn`` and the gap was only logged).
-    """
+    Returns a failure detail to reject with under ``enforce``, naming every uncovered spec,
+    or ``None`` to proceed — under ``warn`` a gap is logged and proceeds."""
     if not node.produces:
         return None
     missing = [spec.name for spec in produces_coverage(node.produces, submission_artifacts)]

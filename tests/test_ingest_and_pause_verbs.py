@@ -1,20 +1,8 @@
-"""The client verbs that wrap the hub's ingest + the runner's own declarative pause
-(mixed tier — marked per test, not file-wide; see below).
+"""The client verbs that wrap the hub's ingest + the runner's own declarative pause.
 
-``blizzard hub chunk ingest`` (wraps ``POST /api/chunks``) is a pure client of the hub's
-API, driven here with ``httpx.post`` stubbed: the request it builds, the success line, the
-mapped error statuses — no live hub. These (plus ``chunk promote``/``chunk detach``/``chunk
-stop``, the same shape) are **unit** tier: one verb driven in isolation with its only
-collaborator stubbed.
-
-``blizzard runner pause`` / ``start`` are pure clients of the *runner's own* local API
-(``PATCH /runner``, issue #43) — a different surface and a different concept from the hub's
-pause brake. The tests that drive them against a **live** daemon on a **real unix socket**
-(``_serve_local_api``) are **component** tier — a real server, a real store, and the CLI
-wired together, doubled only at the hub seam (``_no_hub``) — because the socket transport
-and its hub-independence are exactly what is under test; a
-stubbed transport would assert nothing about either. The two tests that never bring up a
-live daemon (no daemon serving; the flag-conflict validation) stay **unit**.
+Hub verbs (``ingest``/``promote``/``detach``/``stop``) are unit tier: pure clients driven
+with ``httpx.post`` stubbed. ``runner pause``/``start`` are the runner's own local API
+(issue #43); tests driving them against a live daemon on a real socket are component tier.
 """
 
 from __future__ import annotations
@@ -62,7 +50,6 @@ class _FakeResponse:
 
 # --------------------------------------------------------------------------- #
 # `blizzard hub chunk ingest`
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -108,10 +95,8 @@ def test_ingest_passes_a_source_hash_ref_token_through(monkeypatch: pytest.Monke
 
 @pytest.mark.unit
 def test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A pasted work item URL travels through byte-for-byte — the ergonomic path,
-    copied straight from the browser — with no local resolution or repo-tail guess.
-    Only the hub, which holds the source configuration, can say which source it
-    names."""
+    """A pasted work item URL travels through byte-for-byte, with no local resolution
+    or repo-tail guess — only the hub can say which source it names."""
     calls: list[object] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -207,7 +192,6 @@ def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject(monkeypatch
 
 # --------------------------------------------------------------------------- #
 # `blizzard hub chunk promote`
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -243,7 +227,6 @@ def test_promote_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
 
 # --------------------------------------------------------------------------- #
 # `blizzard hub chunk detach`
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -293,7 +276,6 @@ def test_detach_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
 
 # --------------------------------------------------------------------------- #
 # `blizzard hub chunk stop` (issue #118)
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -363,7 +345,6 @@ def test_stop_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
 
 # --------------------------------------------------------------------------- #
 # `blizzard hub chunk pause` / `chunk resume` (issue #46)
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
@@ -452,7 +433,6 @@ def test_resume_chunk_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> 
 
 # --------------------------------------------------------------------------- #
 # `blizzard runner pause`
-# --------------------------------------------------------------------------- #
 
 
 def _store(root: Path) -> SqlAlchemyRunnerStore:
@@ -471,19 +451,12 @@ def _init_runner(tmp_path: Path) -> Path:
 def _serve_local_api(root: Path) -> Iterator[tuple[Path, str]]:
     """A live runner daemon's local API on its real socket — yields (socket path, TCP url).
 
-    The verbs under test are pure clients of this API, so they are driven against a real
-    server over a real unix socket rather than a stubbed transport: the socket *is* the
-    thing that has to work. TCP binds on an ephemeral port so a test never collides with a
-    daemon on the box.
+    Driven against a real server, since the socket itself is what has to work; TCP binds
+    on an ephemeral port so a test never collides with a daemon on the box.
     """
     config = RunnerConfig.load(root, port=0)
-    # Pin the runner's SSO auth-mode probe (issue #95) to a none-mode (unreachable) hub so
-    # the human-lane gating resolves deterministically to the authless path these hub-free
-    # local-verb tests assume — never flipping *on* because a real oauth hub happens to be
-    # listening on the default port (a dogfooded local instance commonly is). The
-    # `--runner-url` **TCP** CLI-admin lane is legitimately session-gated under an *oauth*
-    # hub (a 401; CLI session auth is issue #96); the socket door and a none-mode hub keep
-    # it open, which is exactly the surface this suite exercises.
+    # Pin the SSO auth-mode probe (issue #95) to a none-mode (unreachable) hub so the
+    # human-lane gating resolves to the authless path these hub-free tests assume.
     config = dataclasses.replace(config, hub_url="http://127.0.0.1:1")
     app = build_hosted_app(config)
     sockets = bind_listeners(config)
@@ -540,11 +513,8 @@ def test_pause_patches_the_runners_own_local_api(tmp_path: Path, monkeypatch: py
 
 @pytest.mark.component
 def test_pause_succeeds_with_the_hub_unreachable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The whole point: the local brake does not depend on the hub.
-
-    `_no_hub` makes any hub call an error, so this passing *is* the assertion — there is no
-    hub in this test at all, and the verb still works.
-    """
+    """The whole point: the local brake does not depend on the hub. `_no_hub` makes any
+    hub call an error, so this passing is the assertion itself."""
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)
     with _serve_local_api(root):
@@ -570,11 +540,8 @@ def test_start_clears_the_local_brake(tmp_path: Path, monkeypatch: pytest.Monkey
 
 @pytest.mark.component
 def test_pause_reports_itself_upward_atomically(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The brake and the fact reporting it upward are one write (issue #43).
-
-    Asserting the buffered fact — not just the flag — is the point: a brake set
-    locally but never reported would leave nothing to repair it.
-    """
+    """The brake and the fact reporting it upward are one write (issue #43); asserting
+    the buffered fact, not just the flag, is the point."""
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)
     with _serve_local_api(root):
@@ -626,11 +593,8 @@ def test_pause_over_tcp_when_runner_url_is_given(tmp_path: Path, monkeypatch: py
 
 @pytest.mark.unit
 def test_dir_and_runner_url_conflict_only_on_the_command_line(tmp_path: Path) -> None:
-    """A genuine tie is ambiguous; an ambient $BZ_RUNNER_DIR beside an explicit flag is not.
-
-    winter's per-env band exports BZ_RUNNER_DIR across a whole feature env, so erroring on
-    the ambient combination would break --runner-url everywhere inside one (issue #39).
-    """
+    """A genuine tie is ambiguous; an ambient $BZ_RUNNER_DIR beside an explicit flag is
+    not — erroring on the ambient combination would break --runner-url fleet-wide (issue #39)."""
     root = _init_runner(tmp_path)
     both = CliRunner().invoke(
         runner_group, ["pause", "--dir", str(root), "--runner-url", "http://127.0.0.1:9"], env={"BZ_RUNNER_DIR": None}

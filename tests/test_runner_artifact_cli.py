@@ -1,11 +1,7 @@
 """``blizzard runner artifact list|get|create|staged`` + the deprecated ``attach`` alias
-(unit tier, issues #127, #169), mirroring ``tests/test_runner_attach_cli.py`` and
-``tests/test_work_items_proxy.py``'s CLI halves: ``httpx`` stubbed, no live socket. The
-routes themselves (store round-trip, hub forward, 403/404/503/409) are the component
-tier's ``tests/test_runner_artifacts_api.py`` and ``tests/test_runner_attachments_api.py``.
-
-The verbs do not soft-fail: a rejected read/write must reach the worker as a non-zero
-exit, unlike the heartbeat/session-end hooks.
+(unit tier, issues #127, #169): ``httpx`` stubbed, no live socket. The routes
+themselves are the component tier's ``test_runner_artifacts_api.py``. The verbs do not
+soft-fail: a rejected read/write must reach the worker as a non-zero exit.
 """
 
 from __future__ import annotations
@@ -48,9 +44,7 @@ class _RejectingResponse:
         return self._detail
 
 
-# --------------------------------------------------------------------------- #
 # list
-# --------------------------------------------------------------------------- #
 
 _ARTIFACTS_PAYLOAD = [
     {"name": "plan", "kind": "asset", "node_name": "plan", "epoch": 1, "content": "the plan text"},
@@ -142,9 +136,7 @@ def test_list_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     assert attempted is False
 
 
-# --------------------------------------------------------------------------- #
 # get
-# --------------------------------------------------------------------------- #
 
 
 def test_get_gets_the_named_route_and_prints_json(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -252,9 +244,7 @@ def test_get_surfaces_an_ambiguous_name_rejection_naming_the_candidate_nodes(
     assert "build, plan, review" in result.output
 
 
-# --------------------------------------------------------------------------- #
 # create — write parity with attach
-# --------------------------------------------------------------------------- #
 
 
 def test_create_posts_inherited_identity_stdin_content_and_token_header(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -317,9 +307,7 @@ def test_create_surfaces_a_rejection_as_a_nonzero_exit(monkeypatch: pytest.Monke
     assert "could not record" in result.output
 
 
-# --------------------------------------------------------------------------- #
 # staged — a worker's read-back of its own not-yet-published submissions
-# --------------------------------------------------------------------------- #
 
 
 def test_staged_gets_the_lease_scoped_attachments_route(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -357,9 +345,7 @@ def test_staged_surfaces_a_rejection_as_a_nonzero_exit(monkeypatch: pytest.Monke
     assert "could not read" in result.output
 
 
-# --------------------------------------------------------------------------- #
 # the deprecated `attach` alias — warns on stderr, delegates to `artifact create`
-# --------------------------------------------------------------------------- #
 
 
 def test_attach_alias_warns_on_stderr_and_delegates_to_artifact_create(monkeypatch: pytest.MonkeyPatch) -> None:

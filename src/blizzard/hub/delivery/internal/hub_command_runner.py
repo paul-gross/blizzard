@@ -21,15 +21,8 @@ class SubprocessHubCommandRunner:
         self._timeout = timeout
 
     def run(self, *, command: str, cwd: str, env: dict[str, str]) -> CommandResult:
-        # Merge onto the hub daemon's own environment — never a bare replacement — with the
-        # node-specific ``BZ_*`` keys on top, so a `run:` script resolves its tools the way
-        # the hub process itself does. Inheriting ``PATH`` alone is not enough: a
-        # wheel-installed daemon launched by absolute path (systemd) inherits a PATH with no
-        # venv on it, so prepend the hub interpreter's own bin dir and a bare ``python3``
-        # always resolves to an interpreter that can import ``blizzard``
-        # (``bzh:hub-node-env-contract``; pinned by ``tests/test_hub_command_runner.py``'s
-        # ``test_bare_python3_resolves_to_the_hubs_own_interpreter`` and
-        # ``test_an_injected_path_is_still_prepended_not_replaced``).
+        # Merged onto this process's environment, never a bare replacement, and the
+        # interpreter's bin dir is prepended (``bzh:hub-node-env-contract``).
         full_env = {**os.environ, **env}
         interpreter_bin = os.path.dirname(sys.executable)
         path = full_env.get("PATH", "")

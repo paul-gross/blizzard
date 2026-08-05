@@ -1,15 +1,8 @@
 """The spawn-cwd rule — one owner (issue #29).
 
-Both the live spawn path
-(:mod:`blizzard.runner.harness.internal.claude_code_adapter`) and the transcript
-source's own disambiguation hint
-(:class:`~blizzard.runner.harness.internal.claude_code_transcript.ClaudeCodeTranscriptSource`,
-issue #29, blizzard#245) need the same answer to "what was this worker's cwd" — the
-adapter to *set* it, the transcript reader to *guess* it back. This module is that
-predicate's one owner. The transcript source legitimately gets ``None`` back for a
-closed lease (see :class:`~blizzard.runner.domain.leases.LeaseActivity`).
-Stdlib-only (``bzh:domain-core``).
-"""
+The one owner of "what was this worker's cwd" — one caller *sets* it, another *guesses*
+it back, and two copies would disagree. ``None`` is a legitimate answer for a closed
+lease. Stdlib-only (``bzh:domain-core``)."""
 
 from __future__ import annotations
 

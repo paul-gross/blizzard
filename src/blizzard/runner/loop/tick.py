@@ -1,22 +1,9 @@
 """The tick driver — one pass of CEILING → REAP → RESUME → PULL → FILL → ADVANCE → SAMPLE.
 
-``tick`` composes the step functions in order; it is the single synchronous pass the
-``blizzard runner tick`` CLI verb and the periodic daemon driver both call. The spend
-ceiling check (issue #61b) runs first: a crossing it detects engages the local pause
-brake before any later step in the *same* tick can spawn a worker or decide whether to
-kill a stalled one. Because startup recovery *is* REAP running first (right after that
-check), a fresh daemon simply runs a tick — no special recovery path. RESUME sits third,
-before ADVANCE could mistake a killed-mid-work worker for a done declaration: on the
-first tick after a restart it re-attaches each in-flight session marked for same-lease
-resume — by the graceful shutdown hook (#12) or, when a ``kill -9`` / reboot skipped that
-hook, by ``host``'s startup crash-recovery scan (#13); on every other tick it is a no-op.
-The external-subscription-usage sample (issue #218) runs last, the mirror image of the
-ceiling check: it gates nothing any step reads, so its network call must never sit ahead
-of REAP's reap or FILL's spawn and delay either on a diagnostic read (pinned by
-``tests/test_pin_runner_loop.py::test_the_external_usage_sample_runs_after_fill_has_claimed``).
-The tick holds no state: every step reads and writes the runner store through the
-context's seams.
-"""
+``tick`` composes the step functions in order — the single synchronous pass both the CLI
+verb and the periodic daemon driver call. The order is load-bearing: the spend ceiling
+brakes the same tick it fires in; startup recovery *is* REAP running early; RESUME
+precedes ADVANCE, which would otherwise read a killed-mid-work worker as done."""
 
 from __future__ import annotations
 
@@ -38,10 +25,8 @@ _log = get_logger("blizzard.runner.loop")
 def tick(ctx: LoopContext) -> None:
     """Run one reconciliation pass. Idempotent; safe to call on startup and per-timer."""
     _log.debug("tick start", runner_id=ctx.config.runner_id)
-    # Stamp liveness first, so the newest stamp is when the daemon was last known alive —
-    # the crash-time reference the next startup's recovery scan classifies staleness against
-    # (issue #13). Recorded before the steps, not after, so a pass that dies mid-step still
-    # leaves the beat that proves the daemon reached it.
+    # Stamp liveness first (issue #13), so a pass that dies mid-step still leaves the beat
+    # proving the daemon reached it — the reference the next startup's scan ages against.
     ctx.store.record_daemon_liveness(runner_id=ctx.config.runner_id, alive_at=ctx.clock.now())
     # The spend-ceiling kill-switch (issue #61b) — first; see the module docstring.
     check_spend_ceiling(ctx)

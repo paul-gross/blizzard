@@ -1,33 +1,9 @@
-"""Chunk build-property edits — graph, default model/effort, and intended migration
-(issues #27, #120, #124, #144).
+"""Chunk build-property edits — graph, defaults, intended migration (issues #27, #124).
 
-Ingest pins a chunk's workflow graph at mint (``ingest.py``); this service changes it
-afterward. ``graph_id`` and the ``default_model``/``default_effort`` pair are editable
-**pre-claim** — while the chunk rests ``not_ready``, or sits ``ready`` with no live
-route, since the wrong graph is often noticed only after promote and with no runner
-anywhere near the chunk yet. ``intended_migration`` (issue #124) is editable at any
-non-terminal status instead: it is *consulted* only when a transition applies — which
-implies a claimed, progressing chunk — so it complements rather than replaces the
-pre-claim ``graph_id`` repin. Because the fields do not share one admit set,
-editability is validated **per field** rather than once for the whole request — see
-:data:`_FIELD_WINDOW` and :meth:`EditService.edit`.
-
-Every edit here is a plain column overwrite, not an append-only fact —
-``bzh:facts-not-status`` governs *status derivation*, not every mutable field.
-
-An edit and a claim are both check-then-act sequences over "does this chunk have a live
-route", so this service is handed the **same** in-process lock
-:class:`~blizzard.hub.domain.claim.ClaimService` serializes its own CAS with (one lock
-per hub, injected at the composition root — ``bzh:dependency-injection``, issue #120);
-see that module's docstring for the race it closes. ``intended_migration``'s own window
-never hinges on the live-route check, so it never races a claim the same way, but it
-shares the lock anyway — one edit-time invariant, one lock.
-
-Holds the *write* chunk repository (``bzh:controller-read-only``); the route resolves the
-chunk (and, for a graph or intended-migration edit, the target
-:class:`~blizzard.hub.domain.graph.Graph` — ``bzh:domain-takes-objects``) and delegates
-here.
-"""
+The fields do not share one admit set, so editability is validated **per field** — see
+:data:`_FIELD_WINDOW`. An edit is a plain column overwrite: ``bzh:facts-not-status``
+governs *status derivation*, not every mutable field. An edit and a claim are both
+check-then-act over "does this chunk have a live route", so they share one lock (#120)."""
 
 from __future__ import annotations
 
@@ -57,22 +33,14 @@ class _UnsetType(Enum):
     TOKEN = 0
 
 
-#: Sentinel marking a :class:`ChunkEdit` field as *absent* from the request — "leave
-#: this field unchanged" — distinct from ``None``, which for ``intended_migration``
-#: means "clear the intent". A field carrying its type's own falsy value (``""``,
-#: ``0``) must still be distinguishable from "not supplied", so ``UNSET`` is its own
-#: singleton rather than reusing ``None``.
+#: "Field absent from the request, leave it unchanged" — distinct from ``None``, which
+#: means "clear it", and from a field's own falsy value.
 UNSET: Final = _UnsetType.TOKEN
 
-#: The pre-claim admit set (issues #27, #120) — editable while resting ``not_ready``
-#: or ``ready`` with no live route; every other status means a runner has (or had) the
-#: chunk and the pin is sealed.
+#: The pre-claim admit set: every other status means a runner has (or had) the chunk.
 _PRE_CLAIM_WINDOW = frozenset({ChunkStatus.NOT_READY, ChunkStatus.READY})
 
-#: ``intended_migration``'s window (issue #124) — editable at any non-terminal status,
-#: ``not_ready``/``ready`` included: setting it pre-claim is legitimate (an operator
-#: queuing a migration before a runner ever picks the chunk up). Closed at
-#: ``done``/``stopped`` — there is no future transition left to consult it.
+#: Closed at ``done``/``stopped`` — no future transition is left to consult the intent.
 _INTENDED_MIGRATION_WINDOW = frozenset(ChunkStatus) - frozenset({ChunkStatus.DONE, ChunkStatus.STOPPED})
 
 #: Per-field editable-status sets (issue #124), keyed by the same field names
@@ -88,9 +56,7 @@ _FIELD_WINDOW: Final[dict[str, frozenset[ChunkStatus]]] = {
 class ChunkNotEditable(Exception):
     """An edit supplied a field outside *that field's* editable window (issue #124).
 
-    Carries the offending ``field`` alongside the chunk's current ``status`` — a
-    mixed-field request can be refused on any one of its fields, so the caller needs
-    to know which."""
+    Carries the offending ``field``: a mixed request is refused on any one of them."""
 
     def __init__(self, chunk_id: str, status: ChunkStatus, field_name: str) -> None:
         super().__init__(f"chunk {chunk_id} is {status.value}, {field_name} is not editable at this status")
@@ -110,9 +76,7 @@ class TargetGraphRetired(Exception):
 class MigrationTargetIsCurrentPin(Exception):
     """An intended migration's target graph is the chunk's own current pin (issue #124).
 
-    Migrating a chunk onto the graph it is already pinned to is a no-op the operator
-    almost certainly didn't mean — refused at request time rather than silently
-    accepted and never firing anything different at consult time."""
+    A no-op intent, refused at request time rather than silently accepted."""
 
     def __init__(self, graph_id: str) -> None:
         super().__init__(f"graph {graph_id} is the chunk's current graph pin, not a migration target")
@@ -133,13 +97,10 @@ class ForcedNodeUnknown(Exception):
 
 @dataclass(frozen=True)
 class ChunkEdit:
-    """The fields a single edit request supplies (issue #124).
+    """The fields a single all-or-nothing edit request supplies (issue #124).
 
-    Each field defaults to :data:`UNSET` — "not supplied, leave unchanged" — so a
-    caller can request one field or every one of them in a single all-or-nothing
-    :meth:`EditService.edit` call. ``intended_migration`` and ``default_effort``
-    additionally accept ``None`` (distinct from ``UNSET``) to mean "clear it"; an empty
-    ``default_model`` list is the same "express no preference" clear."""
+    ``intended_migration`` and ``default_effort`` accept ``None`` to mean "clear it";
+    an empty ``default_model`` list is the same clear."""
 
     graph_id: str | _UnsetType = field(default=UNSET)
     default_model: list[str] | _UnsetType = field(default=UNSET)
@@ -182,22 +143,9 @@ class EditService:
     ) -> None:
         """Apply every field ``edit`` supplies, all-or-nothing (issue #124).
 
-        Under the shared claim lock: every supplied field is validated first — its
-        own editable-status window (:data:`_FIELD_WINDOW`), and, for a supplied
-        non-``None`` ``intended_migration``, the semantic checks against
-        ``migration_target`` and the chunk's current pin. If any field is refused, this
-        raises and writes **nothing** — a mixed body is never partially applied.
-        Only once every supplied field has passed does it write them.
-
-        ``graph_target``/``migration_target`` are the resolved
-        :class:`~blizzard.hub.domain.graph.Graph` a supplied ``graph_id`` /
-        non-``None`` ``intended_migration`` targets, respectively — **separately**
-        resolved and separately checked, one per field, so one field's retirement check
-        can never validate the *other* field's target — pinned by
-        tests/test_edit_service.py::test_edit_graph_id_retirement_check_is_not_bypassed_by_a_different_migration_target
-        The controller resolves each independently (``bzh:domain-takes-objects``); this
-        service takes no graph repository beyond the retirement check it already held.
-        """
+        Under the shared claim lock, every supplied field is validated before anything is
+        written, so a refusal writes nothing; each target graph is checked separately —
+        tests/test_edit_service.py::test_edit_graph_id_retirement_check_is_not_bypassed_by_a_different_migration_target"""
         graph_id = edit.graph_id
         default_model = edit.default_model
         default_effort = edit.default_effort
@@ -226,10 +174,8 @@ class EditService:
             if graph_id is not UNSET:
                 self._chunks.set_graph(chunk.chunk_id, graph_id=graph_id)
             if default_model is not UNSET or default_effort is not UNSET:
-                # One write for the pair (``set_defaults`` takes both), so an edit naming
-                # only one of them carries the chunk's *current* value for the other
-                # rather than clearing it — "not supplied" stays "leave unchanged" even
-                # though the two share a write.
+                # One write for the pair, so an edit naming only one of them must carry
+                # the chunk's current value for the other rather than clearing it.
                 self._chunks.set_defaults(
                     chunk.chunk_id,
                     default_model=list(chunk.default_model) if default_model is UNSET else default_model,

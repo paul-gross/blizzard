@@ -1,11 +1,8 @@
 """The runner store's SQLAlchemy metadata — the target for its Alembic tree.
 
-Facts only, status derived (``bzh:facts-not-status``): the machine-local fast path
- — leases with their pid + process-start-time, chunk->env bindings,
-and the store-and-forward outbound buffer. Timestamps come from the injected clock,
-never a ``server_default`` (``bzh:injected-clock``); portable-SQL surface only
-(``bzh:sql-portable``).
-"""
+Facts only, status derived (``bzh:facts-not-status``). Timestamps come from the injected
+clock, never a ``server_default`` (``bzh:injected-clock``); portable-SQL surface only
+(``bzh:sql-portable``)."""
 
 from __future__ import annotations
 
@@ -25,9 +22,7 @@ from blizzard.foundation.store.utc import UtcDateTime
 metadata = MetaData()
 
 # --- Leases (the machine's execution right now) -----------------------------
-#
-# The lease carries the pid + process start time: pid alone is ambiguous across reuse,
-# so the liveness check keys on (pid, process_start_time).
+# Pid alone is ambiguous across reuse, so liveness keys on (pid, process_start_time).
 
 leases = Table(
     "leases",
@@ -55,13 +50,7 @@ env_bindings = Table(
 )
 
 # --- Outbound buffer (store-and-forward, per-runner monotonic seq) ----------
-#
-# Every hub-bound fact is written here at mint, stamped with a monotonic sequence,
-# even when the hub is reachable: one flusher drains it in FIFO order, so a lease
-# fact always precedes the completion minted under it — a structural guarantee of
-# the FIFO drain, not a runtime check. A semantic rejection still advances the ack —
-# rejection is an outcome, not a delivery failure. ``acked_at`` NULL means still
-# pending. ``lease_id`` correlates a buffered fact back to its attempt.
+# One FIFO drain, so a lease fact always precedes the completion minted under it.
 
 outbound_buffer = Table(
     "outbound_buffer",
@@ -76,10 +65,7 @@ outbound_buffer = Table(
 )
 
 # --- Heartbeats (progress detection, machine-local — never leaves the box) ----
-#
-# A worker heartbeats as a side effect of working — one row per tool call.
-# Append-only (``bzh:facts-not-status``): the *last* heartbeat for a lease is
-# ``max(beat_at)``. Never travels to the hub: ``stalled`` is a runner-local derivation.
+# Append-only: a lease's last heartbeat is ``max(beat_at)`` (``bzh:facts-not-status``).
 
 heartbeats = Table(
     "heartbeats",
@@ -89,10 +75,8 @@ heartbeats = Table(
     Column("beat_at", UtcDateTime, nullable=False),  # injected-clock stamp of the tool call
 )
 
-# --- Lease node context (the node identity of each attempt — the walking-skeleton revision's leases lacks it) -
-#
-# The node a lease attempts, and the retry budget that node carries. Written once per
-# lease at mint. Append-only, one row per lease — a lease is one node-step attempt.
+# --- Lease node context (the node identity of each attempt) ------------------
+# One row per lease, written at mint — a lease is one node-step attempt.
 
 lease_context = Table(
     "lease_context",
@@ -103,11 +87,8 @@ lease_context = Table(
     Column("node_id", String, nullable=False),  # which node this attempt is at
     Column("node_name", String, nullable=False),
     Column("retries_max", Integer, nullable=False),  # the node's retry budget, from the envelope
-    # What session this attempt ran, and under what configuration (issue #144). The
-    # declared pool name (null for the bare/`resume:<node>` forms, which belong to no
-    # pool), and the model/effort the session ACTUALLY ran under — never the freshly
-    # resolved preference, which on a resume would describe a configuration the running
-    # process never saw. NULL means *unknown*, never a value.
+    # The model/effort the session ACTUALLY ran under, never a freshly resolved
+    # preference (issue #144). NULL means *unknown*, never a value.
     Column("session_name", String, nullable=True),
     Column("resolved_model", String, nullable=True),
     Column("resolved_effort", String, nullable=True),
@@ -115,14 +96,7 @@ lease_context = Table(
 )
 
 # --- Lease spawns (the spawn generation of each attempt — issue #13) ----------
-#
-# `record_spawn` rewrites the lease's pid/session in place, so the lease alone cannot say
-# *when* its current process was spawned. A lease outlives its sessions — the ask/answer
-# and resume paths re-spawn under the same lease_id and session_id — so a per-lease fact
-# that is true "forever after" cannot be read as true "of the process running now".
-#
-# Append-only, one row per spawn: the newest `spawned_at` for a lease is its current
-# spawn generation, and what the session-end check is scoped to.
+# A lease outlives its sessions, so its newest `spawned_at` is the current generation.
 
 lease_spawns = Table(
     "lease_spawns",
@@ -132,12 +106,8 @@ lease_spawns = Table(
     Column("spawned_at", UtcDateTime, nullable=False),  # injected-clock stamp of the spawn-return
 )
 
-# --- Lease closures (a lease is closed iff a closure fact exists — facts-not-status) -
-#
-# Append-only: an active lease is one with no closure. `reason` distinguishes a
-# clean node transition (`transitioned`) from an execution-attempt failure that
-# counts against the node's retries (`reaped`, `failed`) and a retries-exhausted
-# escalation (`escalated`).
+# --- Lease closures (closed iff a closure fact exists — facts-not-status) -----
+# `reason` separates a clean transition from a retry-consuming failure.
 
 lease_closures = Table(
     "lease_closures",
@@ -150,11 +120,8 @@ lease_closures = Table(
     Column("closed_at", UtcDateTime, nullable=False),
 )
 
-# --- Binding releases (a binding is released iff a release fact exists) --
-#
-# An env binding rides the chunk's tenure; it is freed only when the chunk leaves
-# the runner (terminal, stop, detach). The release truth lives here as a runner-store
-# fact. Held env ids are `env_bindings` minus `binding_releases`.
+# --- Binding releases (released iff a release fact exists) -------------------
+# Held env ids are `env_bindings` minus `binding_releases`.
 
 binding_releases = Table(
     "binding_releases",
@@ -166,11 +133,7 @@ binding_releases = Table(
 )
 
 # --- Asks (the worker's local open-ask fact) ---------------------------------
-#
-# The ask is recorded before the worker exits, so it is durable by the time the process
-# ends. The runner mints the ``question_id`` here so it can poll the hub for the answer
-# by it. An ask is *unforwarded* (awaiting park) until a park_fact references its
-# question_id.
+# Recorded before the worker exits, so it is durable by the time the process ends.
 
 asks = Table(
     "asks",
@@ -186,11 +149,7 @@ asks = Table(
 )
 
 # --- Park / resume (the chunk's dormancy on a question) ----------------------
-#
-# A lease is *parked* while a park_fact references it with no later park_resume: the
-# worker asked and exited (ask-and-exit), so there is no live worker. The answer's
-# arrival records a park_resume, the dormant session is resumed, and the lease is live
-# again (a fresh pid recorded via record_spawn).
+# Parked while a park_fact references a lease with no later park_resume.
 
 park_facts = Table(
     "park_facts",
@@ -211,13 +170,8 @@ park_resumes = Table(
     Column("resumed_at", UtcDateTime, nullable=False),
 )
 
-# --- Pause park / resume (the chunk's dormancy on an operator pause — issue #46) --
-#
-# A SEPARATE table pair from park_facts/park_resumes above, not a nullable
-# ``question_id`` on that table: ``unforwarded_ask`` reads ``asks.question_id NOT IN
-# (select question_id from park_facts)``, and one NULL in that subquery makes the
-# predicate NULL for *every* row. Pinned by
-# tests/test_pin_runner_store.py::test_pause_parks_are_their_own_table_and_park_facts_keeps_a_non_null_question_id.
+# --- Pause park / resume (dormancy on an operator pause — issue #46) ---------
+# A separate table pair: one NULL ``question_id`` would poison a NOT IN subquery.
 
 pause_parks = Table(
     "pause_parks",
@@ -237,18 +191,7 @@ pause_park_resumes = Table(
 )
 
 # --- Resume intent (the restart resume marker) -------------------------------
-#
-# A restart marks every active, non-parked, session-bearing lease with a resume-intent, so
-# the startup RESUME step can resume the session in place under the **unchanged**
-# ``lease_id``/``epoch``/``session_id``. Not a retry, so it consumes no retry budget.
-#
-# Two paths write the intent: a graceful shutdown, before the daemon exits (#12), and
-# ``host``'s startup crash-recovery scan, for an ungraceful stop that never ran shutdown
-# code (#13). The RESUME step is indifferent to which path marked it.
-#
-# Facts-only (``bzh:facts-not-status``), mirroring park/park_resume: an intent is *open*
-# while a ``resume_intents`` row has no ``resume_clears`` for the same lease at or after
-# it, so a later restart of a still-in-flight lease marks it afresh above that clear.
+# Resumes in place under the unchanged lease/epoch/session, consuming no retry budget.
 
 resume_intents = Table(
     "resume_intents",
@@ -267,13 +210,7 @@ resume_clears = Table(
 )
 
 # --- Session-end signal (the durable "declared done" fact) -------------------
-#
-# A row here means the worker **declared done** (exit-is-done): the harness's session-end
-# hook fires only on a natural session exit. A worker killed mid-work never runs the hook,
-# so it has no row — and that *absence*, paired with a dead pid, is how startup tells a
-# crash to resume (:func:`mark_crash_resume_intents`) from a clean exit. Append-only,
-# machine-local (never travels to the hub), mirroring ``heartbeats``
-# (``bzh:facts-not-status``): a lease "ended" iff a row exists.
+# Absence, paired with a dead pid, is how startup tells a crash from a clean exit.
 
 session_ends = Table(
     "session_ends",
@@ -284,11 +221,7 @@ session_ends = Table(
 )
 
 # --- Hub control mirror (the declarative pause brake read on PULL) -----------
-#
-# The hub-owned pause brake, mirrored here on PULL. Mirroring it in the store keeps the
-# read a machine-local, crash-safe fact: the last-known directive holds while the hub is
-# unreachable. One upserted row per runner; ``paused`` is the value, ``updated_at`` when
-# PULL last refreshed it.
+# Mirrored so the last-known directive holds while the hub is unreachable.
 
 hub_control = Table(
     "hub_control",
@@ -299,12 +232,7 @@ hub_control = Table(
 )
 
 # --- Local pause facts (the runner's own brake — issue #43) -------------------
-#
-# The runner's own half of the pause control (``PATCH /runner``): adhered to without the
-# hub knowing or being reachable. Distinct from ``hub_control`` above in both concept and
-# shape: that mirrors a hub-owned value, so it upserts; this is a locally-minted fact, so
-# pause/start facts **append** and the flag derives from the newest. Effective paused is
-# the OR of the two. ``set_by`` records who flipped it, on the fact.
+# Appends rather than upserts; effective paused is the OR with ``hub_control``.
 
 local_pause_facts = Table(
     "local_pause_facts",
@@ -316,14 +244,8 @@ local_pause_facts = Table(
     Column("set_by", String, nullable=False),
 )
 
-# --- Workspace prompt override (the runtime-settable spawn preamble — issue #17) --
-#
-# The standing workspace prompt's *runtime* override, written by the local API
-# (``PUT /api/workspace-prompt``), so a replacement takes effect on subsequent spawns with
-# no restart; its static source is config. One upserted row per workspace (the runner is
-# single-workspace), mirroring ``hub_control``'s shape. A present row (including an empty
-# ``prompt``) is a deliberate override that wins over the static config; no row means
-# "never overridden — fall back to config".
+# --- Workspace prompt override (runtime-settable spawn preamble — issue #17) --
+# A present row, empty ``prompt`` included, wins over config; no row falls back to it.
 
 workspace_prompt = Table(
     "workspace_prompt",
@@ -334,15 +256,7 @@ workspace_prompt = Table(
 )
 
 # --- Daemon liveness (when the runner was last known alive — issue #13) -------
-#
-# The crash-time reference startup recovery measures staleness against, rather than
-# `now - last_heartbeat` — which would read every in-flight lease as stalled after an
-# outage longer than the staleness threshold. Pinned by
-# tests/test_runner_crash_resume.py::test_marks_worker_killed_before_a_long_outage.
-#
-# The tick stamps this each pass (~30s), one upserted row per runner. No row means
-# "never ticked": recovery falls back to the wall clock, only reachable on a store with
-# no in-flight leases to misjudge.
+# The crash-time reference recovery measures staleness against, not `now - heartbeat`.
 
 daemon_liveness = Table(
     "daemon_liveness",
@@ -351,23 +265,8 @@ daemon_liveness = Table(
     Column("alive_at", UtcDateTime, nullable=False),  # injected-clock stamp of the newest tick
 )
 
-# --- Takeovers (the operator's interactive session over a parked chunk — issue #52) --
-#
-# Recorded **before** any kill and before the interactive command is returned, so no later
-# tick can race the human for the chunk (facts-not-status). ``lease_id`` is the lease taken
-# over, when one exists (a live worker, force-killed, or a dormant ask-parked lease);
-# ``None`` for the needs_human and gate-parked shapes, whose lease already closed before the
-# takeover. Mirrors ``asks``' natural-key openness (a fresh ``takeover_id`` per open, unlike
-# a pause's key-less fact pair): a plain ``takeover_id NOT IN (select takeover_id from
-# takeover_ends)`` is safe here, since a chunk cannot carry two simultaneously-open
-# takeovers (the open check refuses a second one).
-#
-# ``fence_epoch`` is set only on a **forced** takeover of a live worker: the epoch reported
-# to the hub via a ``lease.minted``-kind outbound fact, fencing the killed worker's in-flight
-# completion without minting a ``lease_context`` row — so ``attempt_count`` (the retry
-# budget) never sees it, while ``latest_epoch`` still folds it in. ``None`` on a non-forced
-# takeover of an already-dormant lease, which needs no fence. Pinned by
-# tests/test_runner_takeover.py::test_forced_takeover_orders_fact_before_kill_fences_the_epoch_and_consumes_no_retry.
+# --- Takeovers (the operator's session over a parked chunk — issue #52) -------
+# Recorded **before** any kill, so no later tick can race the human for the chunk.
 
 takeovers = Table(
     "takeovers",
@@ -389,15 +288,8 @@ takeover_ends = Table(
     Column("ended_at", UtcDateTime, nullable=False),
 )
 
-# --- Requeues (the operator's explicit hand-back after a human hold — issue #53) ----
-#
-# The fact appended to clear a chunk's local needs_human hold — whether the chunk is
-# escalated outright or was escalated and is now held by an *ended* takeover; either way
-# the underlying shape is the same closed-``escalated`` lease with no later mint
-# (``domain/requeue.py``), so one fact and one openness predicate cover both. Facts-only
-# (``bzh:facts-not-status``): a requeue mark is *pending* while no later lease was minted
-# for the chunk, so the next fresh spawn consumes it. Distinct from the hub's own
-# ``requeues`` table: this mark never leaves the runner and never touches the route.
+# --- Requeues (the explicit hand-back after a human hold — issue #53) --------
+# Pending while no later lease was minted, so the next fresh spawn consumes it.
 
 requeues = Table(
     "requeues",
@@ -407,16 +299,8 @@ requeues = Table(
     Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
 )
 
-# --- Usage facts (harness cost/token telemetry per invocation — epic #57 / issue #58) --
-#
-# One append-only row per harness invocation (spawn / resume / judge) whose usage was
-# extracted — never fabricated (``bzh:facts-not-status``). Keyed on
-# ``(lease_id, generation, kind)``: ``generation`` is this lease's spawn ordinal
-# (``lease_spawns``' own counting, issue #13) — a resume within the same lease mints a new
-# generation and so a genuinely new row, while a replay of the exact same invocation finds
-# the row already there and writes nothing twice (``record_usage``'s own check, not a DB
-# constraint — the store stays portable-SQL, ``bzh:sql-portable``). ``cost_usd`` NULL is an
-# honest "unknown", read by a summing caller as a lower bound, never as zero.
+# --- Usage facts (cost/token telemetry per invocation — issue #58) -----------
+# Keyed ``(lease_id, generation, kind)``, so a replay writes nothing twice.
 
 usage_facts = Table(
     "usage_facts",
@@ -437,17 +321,8 @@ usage_facts = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
-# --- Route capability tokens (the runner's stash — issue #84a) ----------------
-#
-# The plaintext of a won claim's route token (`wire.route.RouteClaimResponse.route_token`),
-# stashed here on a won claim (FILL and the interrupted-claim reclaim path) and stamped
-# onto every chunk-scoped outbound payload at enqueue — completion, decision, lease.minted,
-# escalation.recorded, question.asked. One upserted row per chunk, mirroring `hub_control`'s
-# shape: a fresh claim (a re-claim after release) overwrites the prior token; a same-runner
-# requeue/takeover/retry re-reads the same row, since it re-spawns under the route already
-# held rather than re-claiming. Only the *current* plaintext is kept — no rotation history,
-# because the runner only ever presents its current token. Pinned by
-# tests/test_pin_runner_store.py::test_set_route_token_keeps_one_current_row_per_chunk.
+# --- Route capability tokens (the runner's stash — issue #84a) ---------------
+# Only the *current* plaintext, one row per chunk: a fresh claim overwrites the prior.
 
 route_tokens = Table(
     "route_tokens",
@@ -458,11 +333,7 @@ route_tokens = Table(
 )
 
 # --- Lease capability tokens (issue #113, Phase 1) ---------------------------
-#
-# A per-lease capability token minted alongside the lease itself, authorizing a later
-# attach call to prove it is the worker holding this lease. One row per lease
-# (``lease_id`` PK), storing only the sha256 hash; the plaintext rides the spawn env
-# (``BLIZZARD_LEASE_TOKEN``) and is never persisted.
+# Only the sha256 hash is stored; the plaintext rides the spawn env, never persisted.
 
 lease_tokens = Table(
     "lease_tokens",
@@ -472,15 +343,8 @@ lease_tokens = Table(
     Column("minted_at", UtcDateTime, nullable=False),
 )
 
-# --- Attachments (a worker's explicit artifact submission — issue #113, Phase 2) ---
-#
-# A worker's explicit artifact submission, authorized by the lease's own capability token
-# (``lease_tokens`` above). Append-only, latest-wins-per-``(lease_id, name)``
-# (``bzh:facts-not-status``): a worker may re-submit the same name (a correction) and the
-# newest row for that pair is the one a reader sees — no update-in-place, mirroring the
-# append-and-read-newest convention the rest of this store follows. ``chunk_id`` /
-# ``node_id`` / ``epoch`` are carried off the lease at attach time (denormalized, not
-# joined back) so a later read needs no join to ``lease_context``.
+# --- Attachments (a worker's explicit artifact submission — issue #113) ------
+# Append-only, latest-wins-per-``(lease_id, name)``, so a re-submit is a correction.
 
 attachments = Table(
     "attachments",
@@ -495,17 +359,8 @@ attachments = Table(
     Column("attached_at", UtcDateTime, nullable=False),
 )
 
-# --- Nudge-fired facts (issue #113, Phase 4) ----------------------------------
-#
-# At most one row per ``(lease_id, epoch)`` — the durable guard
-# ``_advance_exited_worker`` (``runner/loop/steps.py``) consults before ever resuming
-# a worker session to nudge it about a ``produces:`` name no git commit or attachment
-# covers (``bzh:invariant-checker`` — "at most one nudge per (lease, epoch)"),
-# idempotent by ``record_nudge_fired``'s own check-then-insert, not a DB constraint
-# (``bzh:sql-portable``), mirroring ``usage_facts``. Written BEFORE the resume it
-# guards, inverting this store's usual resume-then-record pairing (``lease_spawns``), so
-# "at most one nudge" holds across a crash at either point — the crash-sweep window
-# ``nudge.after-fired-fact.before-resume`` is what exercises it.
+# --- Nudge-fired facts (issue #113, Phase 4) ---------------------------------
+# Written BEFORE the resume it guards, so "at most one nudge" survives a crash.
 
 nudge_facts = Table(
     "nudge_facts",
@@ -516,32 +371,8 @@ nudge_facts = Table(
     Column("nudged_at", UtcDateTime, nullable=False),
 )
 
-# --- Check results + the checks-ran guard (issue #114) -------------------------
-#
-# The runner runs a node's ``checks:`` at worker exit, before the judgement is elicited,
-# and records each command's outcome here as a durable fact (``bzh:facts-not-status``) so
-# a runner kill between check-run and judgement resumes at the right point without
-# re-running or losing results — modeled on ``nudge_facts``/``attachments``.
-#
-# ``check_results`` holds one row per check command per ``(lease_id, epoch)``, append-only.
-# ``chunk_id``/``node_id`` are carried off the lease at run time (denormalized, not joined
-# back). ``output_tail`` is the bounded evidence — deliberately runner-local, and it never
-# rides the wire (issue #114 [MF3]).
-#
-# ``checks_ran`` is the guard marker: at most one row per ``(lease_id, epoch)``, written
-# AFTER the result rows (so ``check_results`` rows are durable before the marker is), and
-# ONLY when the node declares a non-empty ``checks:`` (a node with no checks writes neither
-# rows nor marker). On recovery the marker gates re-run: unset ⇒ re-run all (latest-wins,
-# safe); set ⇒ read the recorded results back and judge. This makes execution at-least-once
-# and the recorded results exactly-once — the shape ``nudge_facts`` guarantees. The
-# invariant ``runner:checks-recorded-when-marked`` holds precisely because the marker is
-# written last and only for non-empty checks: a marker implies its result rows exist.
-#
-# The re-run key is ``(lease_id, epoch)`` and never anything stable across a node re-entry:
-# keying on ``(chunk, node)`` would wedge every retry on a stale red result. A verdict-less
-# retry, a ``requires_checks`` gate-fire, and a node re-entry each mint a new
-# ``(lease, epoch)`` and re-run; the only same-key re-drives are the hub-unreachable re-tick
-# and the produces-nudge, neither of which authors new tree content.
+# --- Check results + the checks-ran guard (issue #114) -----------------------
+# ``checks_ran`` is written last: a marker implies its result rows exist.
 
 check_results = Table(
     "check_results",
@@ -566,14 +397,8 @@ checks_ran = Table(
     Column("ran_at", UtcDateTime, nullable=False),
 )
 
-# --- SSO federation jti replay cache (issue #95, decision D4) ---------------
-#
-# The single-use guard a hub-signed JWT's `jti` claim is checked against
-# (`runner/auth/federation.py`): store-backed rather than in-memory so the guarantee
-# survives a runner restart within the JWT's own short lifetime. The `jti` primary key
-# alone is the single-use guarantee, enforced by the store — crash-correctness position:
-# `runner/auth/jti_cache.py`. `expires_at` mirrors the claim's own `exp`, so a prune can
-# drop rows safely past it.
+# --- SSO federation jti replay cache (issue #95, decision D4) ----------------
+# The `jti` primary key alone is the single-use guarantee, enforced by the store.
 
 jwt_jti_seen = Table(
     "jwt_jti_seen",
@@ -583,14 +408,8 @@ jwt_jti_seen = Table(
     Column("expires_at", UtcDateTime, nullable=False),
 )
 
-# --- Git-commit declarations (a worker's explicit git-commit artifact — issue #143, Phase 3) -
-#
-# A worker's explicit git-commit declaration, authorized by the lease's own capability
-# token (``lease_tokens``) — a structural sibling of ``attachments`` above for the
-# ``git_commit`` artifact kind: append-only, latest-wins-per-``(lease_id, repo)``
-# (``bzh:facts-not-status`` — a chunk may span multiple repos, so the natural key is per
-# repo, not per lease). ``chunk_id``/``node_id``/``epoch`` are denormalized off the lease
-# at declare time, mirroring ``attachments``.
+# --- Git-commit declarations (issue #143, Phase 3) ---------------------------
+# Latest-wins-per-``(lease_id, repo)``: a chunk may span multiple repos.
 
 git_commit_declarations = Table(
     "git_commit_declarations",
@@ -607,28 +426,8 @@ git_commit_declarations = Table(
     Column("declared_at", UtcDateTime, nullable=False),
 )
 
-# --- Session preamble facts (what standing prose a session was last sent — issue #149) --
-#
-# A resumed spawn re-sends the whole three-layer preamble today, including the two
-# *standing* layers the session already holds. This table is the comparison key that lets
-# the renderer skip the unchanged ones and announce the changed ones: one row per spawn
-# recording the sha256 of layer 1 (the blizzard preamble) and layer 2 (the operator's
-# workspace prompt) as that spawn resolved them.
-#
-# Digests, not the prose (``canon:one-owner``): the operator's text lives in
-# ``workspace_prompt`` above and in config, and this table is never a second copy of it.
-#
-# Append-only (``bzh:facts-not-status``): the newest row for a session is the answer, so
-# the read carries an explicit total ``order_by(id.desc())`` — a newest-row read with no
-# ordering happens to work on sqlite and is undefined on postgres (``bzh:sql-portable``).
-# No index: no runner facts table declares one, and a session's row count is its spawn
-# count.
-#
-# Keyed on the SESSION, not the lease: the harness session is what already holds the
-# earlier prose, and it outlives the per-attempt lease (pinned by
-# tests/test_runner_store.py::test_session_preamble_fingerprint_is_scoped_per_session).
-# A session with no row reads back ``None`` and renders in full — the safe direction, and
-# why no data migration is owed.
+# --- Session preamble facts (the standing prose last sent — issue #149) ------
+# Digests, not the prose (``canon:one-owner``); keyed on the SESSION, not the lease.
 
 session_preamble_facts = Table(
     "session_preamble_facts",
@@ -640,18 +439,8 @@ session_preamble_facts = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
-# --- External subscription usage samples (the harness's own rate-limit windows — issue #218) -
-#
-# One append-only row per tick's sampling *attempt*, never an upserted "last sampled"
-# column: the cadence anchor (:meth:`IReadRunnerStore.last_external_usage_attempt_at`) is
-# derived as ``max(sampled_at)`` over this table, following the facts-only pattern every
-# other table in this module uses (``bzh:facts-not-status``). ``payload`` is the JSON-serialized
-# :class:`~blizzard.runner.harness.external_usage.ExternalSubscriptionUsageSnapshot` the
-# adapter returned, or NULL when that attempt produced nothing (no subscription concept, an
-# unreachable/expired credential, anything — see
-# :meth:`~blizzard.runner.harness.adapter.IHarnessAdapter.sample_external_subscription_usage`).
-# A NULL-payload row still counts as an attempt for cadence purposes: the tick does not retry
-# early just because the harness had nothing to report last time.
+# --- External subscription usage samples (issue #218) ------------------------
+# One row per sampling *attempt*: a NULL payload still counts toward the cadence.
 
 external_usage_samples = Table(
     "external_usage_samples",

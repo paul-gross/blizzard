@@ -58,11 +58,8 @@ def test_every_role_is_declared_in_the_map() -> None:
 
 def test_roles_are_cumulative_superuser_admin_contributor_guest_pending() -> None:
     """The role order (superuser > admin > contributor > guest > pending) holds as a
-    permission-bundle superset chain — reshaping one role's bundle can never remove a
-    lower role's permission without this test naming it. The chain is strict up through
-    ``admin``; ``superuser`` equals ``admin`` in #91 because its only extra authority —
-    granting the ``admin`` role — is a per-action rule inside the #94 role-assignment
-    route, not a distinct permission bit (see ``_SUPERUSER_PERMISSIONS``)."""
+    permission-bundle superset chain; ``superuser`` equals ``admin`` in #91 since its
+    only extra authority is a per-action rule in #94, not a distinct permission bit."""
     pending = expand(Role.PENDING)
     guest = expand(Role.GUEST)
     contributor = expand(Role.CONTRIBUTOR)
@@ -74,10 +71,9 @@ def test_roles_are_cumulative_superuser_admin_contributor_guest_pending() -> Non
 
 
 def test_user_manage_is_admin_and_above() -> None:
-    """The admin page is gated on ``user:manage`` and an ``admin`` uses it, so
-    ``user:manage`` is held by ``admin``+ — the epic's "only ``superuser`` grants
-    ``admin``" is a per-action rule inside user management (#94), not this permission's
-    tier."""
+    """``user:manage`` is held by ``admin``+, since the admin page is gated on it; the
+    "only ``superuser`` grants ``admin``" rule lives in user management (#94), not
+    this permission's tier."""
     for role in (Role.ADMIN, Role.SUPERUSER):
         assert USER_MANAGE in expand(role)
     for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):

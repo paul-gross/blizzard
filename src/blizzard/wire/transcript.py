@@ -1,11 +1,7 @@
 """Transcript wire bodies — ``GET /api/leases/{lease_id}/transcript`` (issue #29).
 
 A turn's ``timestamp`` is an ISO-8601 string with an explicit UTC offset, never naive
-(``bzh:utc-instants``).
-
-``available=False`` carries ``reason`` and an empty ``turns`` — a normal 200, not an
-error shape.
-"""
+(``bzh:utc-instants``). ``available=False`` carries ``reason`` and an empty ``turns``."""
 
 from __future__ import annotations
 

@@ -1,10 +1,8 @@
 """SQLAlchemy adapter for the store-status seam (package-private).
 
-The one place a readiness read touches the engine (``bzh:pluggable-seams``). It
-opens a connection, reads the store's current Alembic revision, and reports a
-:class:`StoreStatus`. A connection failure is caught and reported as
-``reachable=False`` — readiness asks "can I reach my store", so an unreachable
-store is a value the caller acts on, not an exception it must handle.
+The one place a readiness read touches the engine (``bzh:pluggable-seams``). A
+connection failure is reported as ``reachable=False`` rather than raised: an
+unreachable store is a value, not an exception.
 """
 
 from __future__ import annotations

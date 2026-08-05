@@ -1,10 +1,7 @@
 """The check-runner seam — the runner executes a node's ``checks:`` at worker exit (issue #114).
 
-A node may declare ``checks:`` — deterministic commands (lint, tests). Running one is
-deterministic-shell work (``bzh:deterministic-shell`` — no model call), reached only
-through this injected seam (``bzh:pluggable-seams``): the reference binding is the
-subprocess adapter under ``internal/``, and loop tests inject a fake.
-"""
+Running a declared check is deterministic-shell work (``bzh:deterministic-shell`` — no
+model call), reached only through this injected seam (``bzh:pluggable-seams``)."""
 
 from __future__ import annotations
 
@@ -20,10 +17,8 @@ DEFAULT_CHECK_TIMEOUT: int = 600
 class CheckOutcome:
     """One check command's runner-executed outcome.
 
-    ``passed`` is the pass/fail signal (exit 0 ⇒ passed; non-zero **and a timeout** ⇒
-    failed). ``output_tail`` is a bounded tail of the command's combined output, kept
-    runner-local (the store's ``check_results`` table); only ``passed`` and ``command``
-    ride the wire to the hub (issue #114 [MF3])."""
+    Exit 0 ⇒ passed; non-zero **and a timeout** ⇒ failed. ``output_tail`` is a bounded
+    tail of the combined output, kept runner-local (issue #114)."""
 
     passed: bool
     output_tail: str

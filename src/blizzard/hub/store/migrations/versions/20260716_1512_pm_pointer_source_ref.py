@@ -1,52 +1,6 @@
 """pointer identity ``{provider, url}`` -> ``{source, ref}`` (hub store tree)
 
-A PM pointer stops carrying a raw ``{provider, url}`` pair and instead names a
-configured ``[[pm_source]]`` plus that source's own item reference: ``{source, ref}``.
-``chunk_pm_pointers`` is reshaped in place (SQLite has no ``ALTER COLUMN``, so this uses
-``op.batch_alter_table`` — the portable Alembic idiom, ``bzh:sql-portable``).
-
-**Local ``sa.Table`` literals for both the old and new column shapes, not a
-:mod:`blizzard.hub.store.schema` import:** a revision that *reshapes* a column is a data
-migration pinned to a moment in time, and head-of-tree ``schema.py`` keeps moving
-(``canon:no-retro``). Pinned by
-``tests/test_pin_hub_api.py::test_pm_pointer_reshape_backfills_and_survives_a_down_then_up_cycle``.
-
-**Backfill rule (config-free, deterministic — rehearsable):** this revision
-reads no configuration file, so re-running it on the same bytes at two times gives the
-same rows.
-
-- ``provider == "github"`` and ``url`` is issue-shaped (``.../{owner}/{repo}/issues/{n}``)
-  -> ``source = repo`` (the repo **tail**, not ``owner/repo`` — e.g. ``blizzard`` for
-  ``paul-gross/blizzard``; source names are conventionally the repo tail), and
-  ``ref = str(n)``. This is what lands the live rows on the configured name ``blizzard``
-  rendering ``blizzard#26``.
-- anything else -> ``source = provider``, ``ref = url`` verbatim — lossless; nothing
-  destroyed, and (see ``downgrade`` below) exact for these rows on the way back.
-
-A row whose backfilled ``source`` matches no ``[[pm_source]]`` the operator later
-configures is not this migration's concern and must not fail it — refusing to boot
-because a chunk that went ``done`` months ago names a retired source would be wrong. The
-hub's pass-through routes already degrade a pointer with no matching configured source
-to a null label; the composition root is where an operator would be warned of a
-still-unresolved name, not a hard migration failure or a startup refusal.
-
-**``downgrade()`` is canonicalizing, not byte-exact:** the *owner* segment was never
-retained forward, so a numeric ``ref`` is reconstructed under the documented constant
-placeholder ``_UNKNOWN_OWNER`` — structurally canonical, not resolvable. The constant is
-what keeps **down-then-up stable** (re-upgrading returns the identical ``(source, ref)``),
-and its accepted cost is that a downgraded hub running pre-0013 code 404s on every PM
-read of a backfilled pointer until the chunk is re-ingested. Pinned by
-``tests/test_pin_hub_api.py::test_pm_pointer_reshape_backfills_and_survives_a_down_then_up_cycle``.
-
-A non-numeric ``ref`` was never GitHub-issue-shaped in the first place (the
-verbatim-copy branch above): its downgrade is the exact inverse, ``provider=source``,
-``url=ref``, with no loss at all. The ``ref.isdigit()`` discriminator is a heuristic —
-the forward rule does not record which branch it took — so a hypothetical
-*non-GitHub* row whose ``url`` was itself purely numeric (``provider="jira"``,
-``url="123"``) reverses to a GitHub-shaped URL rather than its own bytes. No such row
-exists in any live store (a bare number is not a URL), and down-then-up remains stable
-for it regardless; it is recorded here rather than guarded against.
-
+Reshapes ``chunk_pm_pointers`` in place; the backfill reads no configuration, so it is rehearsable.
 Revision ID: 20260716_1512_hub_pm_pointer_source_ref
 Revises: 20260716_1511_hub_runner_local_pause
 """
@@ -64,15 +18,12 @@ down_revision: str | None = "20260716_1511_hub_runner_local_pause"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# The GitHub-shaped issue reference this backfill recognizes — an
-# {owner}/{repo}/issues/{number} triple, with or without the REST /repos/ prefix. A
-# local copy, not an import (see the module docstring): this revision must not move
-# when the live GitHub adapter's own grammar does.
+# A local copy rather than an import: this revision must not move when the live adapter's
+# own grammar does.
 _ISSUE_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/]+)/(?P<repo>[^/]+)/issues/(?P<number>\d+)")
 
-# The documented, constant placeholder owner downgrade() reconstructs a GitHub issue
-# URL under — the repo tail alone (this revision's forward output) cannot recover the
-# real owner, and this is the deliberate, recorded cost of that.
+# downgrade() reconstructs an issue URL under this constant placeholder: the real owner
+# is not retained forward, and a constant is what keeps down-then-up stable.
 _UNKNOWN_OWNER = "unknown"
 
 _OLD_POINTERS = sa.Table(

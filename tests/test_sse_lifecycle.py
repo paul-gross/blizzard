@@ -1,11 +1,8 @@
 """SSE emission across the fact lifecycle — asserted via TestClient stream reads.
 
-Every hub fact that changes a chunk's derived state re-broadcasts a typed event on the
-live stream: a forwarded ask emits ``question-asked``, an
-answer ``question-answered``; a graph gate opening emits ``decision-opened`` and its
-resolution ``decision-resolved``. Each test drives the wired hub, then reads the replayed
-buffer off ``GET /api/events/stream`` — a real stream read, deterministic because the
-replay tail is buffered before the read.
+Every hub fact that changes a chunk's derived state re-broadcasts a typed event: ask
+→``question-asked``, gate open→``decision-opened``, and so on. Each test drives the
+hub, then reads the replayed buffer off ``GET /api/events/stream`` (deterministic).
 """
 
 from __future__ import annotations

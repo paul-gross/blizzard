@@ -16,9 +16,7 @@ _P1 = {"source": "default", "ref": "1"}
 _P2 = {"source": "default", "ref": "2"}
 
 # A build -> review -> deliver graph mirroring the packaged default's shape, but with a
-# trivial `run: [{command: "true"}]` deliver node instead of the packaged script that
-# talks to a real forge over HTTP — this test drives re-ingest-after-terminal, not
-# delivery mechanics, so it stays hermetic (no live forge needed).
+# trivial deliver node — hermetic, since this drives re-ingest, not delivery mechanics.
 _BUILD_REVIEW_DELIVER_YAML = """
 name: default-delivery
 entry: build
@@ -95,9 +93,7 @@ def test_ingest_batches_multiple_pointers_into_one_chunk(tmp_path: Path) -> None
 
 def test_list_row_is_board_legible(tmp_path: Path) -> None:
     # Each pointer's `{source}#{ref}` label is resolved server-side. A pointer naming no
-    # configured source degrades to a null label/web_url rather than erroring — minted
-    # straight through the domain service, since ingest's 422 already rejects an
-    # unconfigured source at the front door.
+    # configured source degrades to a null label/web_url, minted straight through the domain.
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     graph = hub.services.graph_mint.ensure_default(
@@ -155,12 +151,9 @@ def test_live_pointer_reingest_is_409(tmp_path: Path) -> None:
 
 
 def test_a_paused_chunk_still_holds_its_pointer_live(tmp_path: Path) -> None:
-    """Pausing must not read as terminal (issue #46): ``_TERMINAL`` stays ``{stopped, done}``.
-
-    The live-pointer conflict is keyed on the holder being non-terminal, so admitting
-    ``paused`` to ``_TERMINAL`` would let this re-ingest mint a **second** chunk for the
-    same issue.
-    """
+    """Pausing must not read as terminal (issue #46): ``_TERMINAL`` stays ``{stopped, done}``,
+    since the live-pointer conflict is keyed on non-terminal — admitting ``paused`` would
+    let a re-ingest mint a **second** chunk for the same issue."""
     hub = build_hub(tmp_path)
     first = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     write_chunk_pause_facts(tmp_path, first, (True, hub.clock.now()))
@@ -171,10 +164,7 @@ def test_a_paused_chunk_still_holds_its_pointer_live(tmp_path: Path) -> None:
     assert conflict.json()["existing_chunk_id"] == first
 
 
-# --------------------------------------------------------------------------- #
-# Ingest-time source resolution — the 422 rejection and the name-keyed
-# lookup two configured sources need.
-# --------------------------------------------------------------------------- #
+# Ingest-time source resolution: the 422 rejection and the name-keyed lookup.
 
 
 def test_ingest_rejects_a_token_no_configured_source_claims(tmp_path: Path) -> None:
@@ -230,9 +220,8 @@ def test_work_items_503s_when_no_work_source_is_configured_at_all(tmp_path: Path
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]})
     assert resp.status_code == 422, resp.text  # no source at all also can't claim it
 
-    # Mint the degenerate chunk straight through the domain service (bypassing the route's
-    # 422) to exercise the work-items 503 the same way test_work_items_with_no_pointers_is_an_
-    # empty_list mints its own degenerate fixture.
+    # Mint the degenerate chunk straight through the domain service (bypassing the
+    # route's 422) to exercise the work-items 503 directly.
     graph = hub.services.graph_mint.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
@@ -257,10 +246,8 @@ def _pass(hub, chunk_id: str, node_id: str, epoch: int, *, artifacts: list[dict]
 
 def test_terminal_pointer_reingest_mints_a_fresh_chunk(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    # A build -> review -> deliver graph pre-minted under the packaged default's own
-    # name, so `ensure_default` (POST /chunks) reuses it by name (D-081) instead of
-    # minting the packaged prose graph — this test drives its own terminal chunk, not
-    # the packaged default's real forge-talking delivery script.
+    # Pre-minted under the packaged default's own name, so `ensure_default` reuses it
+    # (D-081) instead of the packaged prose graph — hermetic, no real forge script.
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_REVIEW_DELIVER_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     # Drive the chunk terminal through the default build -> review -> deliver graph.

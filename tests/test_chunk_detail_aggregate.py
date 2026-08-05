@@ -1,12 +1,8 @@
 """The chunk detail carries the whole aggregate the board renders — component tier.
 
-``GET /chunks/{id}`` is the board's chunk view and the envelope feed: it must carry the
-derived status, the route, the work refs, the full transition history (with the
-judgement choice on each edge), the inline artifact store (git-commit refs and asset
-content), the open gate decision, and any escalation. This test drives a build→gate
-scenario and asserts every piece is present — the additive completeness deliverable 4
-guards.
-"""
+``GET /chunks/{id}`` must carry the derived status, route, work refs, full transition
+history, inline artifact store, open gate decision, and any escalation. Drives a
+build->gate scenario and asserts every piece is present."""
 
 from __future__ import annotations
 

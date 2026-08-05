@@ -1,11 +1,9 @@
 """Runner restart-resume — the graceful-restart re-attach (issue #12, unit tier).
 
-A graceful ``blizzard-runner`` shutdown marks every in-flight lease for restart-resume, and
-the startup RESUME step re-attaches each marked session **in place** — same lease/epoch/
-session, only the pid rewritten, no retry consumed — or **abandons** a chunk the hub
-reassigned/detached while the runner was down. These drive the marking hook and the
-RESUME step directly against a real tmp store with fakes at the seams (``bzh:steppable-loop``).
-"""
+A graceful shutdown marks every in-flight lease for restart-resume, and the startup
+RESUME step re-attaches each marked session in place — or abandons a chunk the hub
+reassigned/detached while the runner was down. Drives the marking hook and RESUME
+directly against a real tmp store with fakes at the seams."""
 
 from __future__ import annotations
 
@@ -68,9 +66,7 @@ def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-
     )
 
 
-# --------------------------------------------------------------------------- #
-# Marking — the graceful-shutdown hook
-# --------------------------------------------------------------------------- #
+# --- Marking — the graceful-shutdown hook ---
 
 
 @pytest.mark.unit
@@ -138,9 +134,7 @@ def test_remark_across_two_restarts_reopens_the_intent(tmp_path):  # type: ignor
     assert store.resume_intent_lease_ids() == {"lease_1"}
 
 
-# --------------------------------------------------------------------------- #
-# RESUME — resume in place
-# --------------------------------------------------------------------------- #
+# --- RESUME — resume in place ---
 
 
 @pytest.mark.unit
@@ -197,9 +191,7 @@ def test_resumed_lease_is_not_judged_by_advance(tmp_path):  # type: ignore[no-un
     assert lease is not None and lease.pid == 4321
 
 
-# --------------------------------------------------------------------------- #
-# RESUME — abandon a reassigned / detached chunk (no epoch bump)
-# --------------------------------------------------------------------------- #
+# --- RESUME — abandon a reassigned / detached chunk (no epoch bump) ---
 
 
 @pytest.mark.unit
@@ -257,10 +249,9 @@ def test_resume_abandons_detached_chunk(tmp_path):  # type: ignore[no-untyped-de
 
 @pytest.mark.unit
 def test_resume_abandons_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
-    """The explicit companion to the two cases above: a 404 (``ChunkNotFoundError``) is
-    terminal, not the generic ``HubClientError`` the deferral branch below waits out —
-    ``_resume_marked_lease`` abandons on it directly rather than leaving the intent open
-    for PULL's ``_reconcile_leases`` to find on some later tick (blizzard#9)."""
+    """A 404 (``ChunkNotFoundError``) is terminal, not deferred like the generic
+    ``HubClientError`` below — ``_resume_marked_lease`` abandons on it directly
+    (blizzard#9)."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     mark_resume_intents(store, now=_NOW)
@@ -279,9 +270,7 @@ def test_resume_abandons_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-
     assert store.resume_intent_lease_ids() == set()
 
 
-# --------------------------------------------------------------------------- #
-# RESUME — resilience
-# --------------------------------------------------------------------------- #
+# --- RESUME — resilience ---
 
 
 @pytest.mark.unit

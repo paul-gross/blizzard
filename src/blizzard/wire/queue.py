@@ -30,11 +30,8 @@ class QueuePeekResponse(BaseModel):
 class QueueReplaceRequest(BaseModel):
     """Idempotent whole-order replacement of the ready queue — ``PUT /api/queue``.
 
-    ``chunk_ids`` is the desired order, front to back; every id must name a
-    currently-ready chunk (``409`` otherwise) and must not repeat (``422``
-    otherwise). A ready chunk not named here keeps its current relative order,
-    appended after the named ones.
-    """
+    ``chunk_ids`` is the desired order, front to back; each must name a ready chunk
+    (``409``) and not repeat (``422``). An unnamed ready chunk is appended, order kept."""
 
     chunk_ids: list[str]
 
@@ -42,11 +39,8 @@ class QueueReplaceRequest(BaseModel):
 class QueuePositionRequest(BaseModel):
     """Single-chunk fractional reposition — ``POST /api/queue/position`` (issue #137).
 
-    ``chunk_id`` is the chunk being moved; ``after_chunk_id=null`` moves it to the very
-    top of the ready queue, otherwise it lands immediately after the named chunk. Both
-    must name currently-ready chunks (``409`` otherwise), and ``after_chunk_id`` must
-    not equal ``chunk_id`` (``422``) — a chunk cannot anchor against itself.
-    """
+    ``after_chunk_id=null`` moves ``chunk_id`` to the top, otherwise immediately after
+    the named chunk. Both must be ready (``409``); a self-anchor is ``422``."""
 
     chunk_id: str
     after_chunk_id: str | None
@@ -55,11 +49,8 @@ class QueuePositionRequest(BaseModel):
 class ChunkGroupRequest(BaseModel):
     """Merge unacquired chunks into one.
 
-    ``merge_chunk_ids`` are the ready chunks folded into the path's survivor chunk; the
-    survivor absorbs the union of their work refs and the merged chunks are discarded as
-    ephemeral. Self-references and duplicates are ignored; a non-ready member is
-    rejected ``409``.
-    """
+    ``merge_chunk_ids`` fold into the path's survivor, which absorbs the union of their
+    work refs. Self-references and duplicates are ignored; a non-ready member is ``409``."""
 
     merge_chunk_ids: list[str]
 

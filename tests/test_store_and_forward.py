@@ -1,12 +1,8 @@
 """Store-and-forward idempotency at the hub (component tier).
 
-The runner→hub push is store-and-forward always: every fact rides the outbound buffer
-with a per-runner monotonic seq, and a replay — after a lost ack or an outage backlog
-drain — must apply **exactly once**. The runner-side buffering-through-an-outage is
-covered at the unit tier (``tests/test_runner_loop.py``); this file proves the hub's
-half against the real app: ``POST /events`` re-acks an already-applied seq without
-re-applying it (the per-runner high-water mark), and a re-submitted completion returns
-its original outcome without a second transition or a second land.
+Every fact rides the outbound buffer with a per-runner monotonic seq, and a replay must
+apply exactly once: ``POST /events`` re-acks an already-applied seq without re-applying
+it, and a re-submitted completion returns its original outcome without a second land.
 """
 
 from __future__ import annotations
@@ -21,9 +17,8 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "7"}
 
-# A build -> deliver graph named `default-delivery`, reused by name on ingest,
-# so a build completion reaches the deliver hub node in one pass — decoupled from the
-# packaged default graph's build -> review -> deliver shape.
+# A build -> deliver graph named `default-delivery`, reused by name on ingest, so a
+# build completion reaches the deliver hub node in one pass.
 _BUILD_DELIVER_YAML = """
 name: default-delivery
 entry: build
@@ -124,10 +119,8 @@ def test_reflushed_completion_applies_exactly_once(tmp_path: Path) -> None:
     assert detail["status"] == "done"
     assert len([t for t in detail["history"] if t["from_node_name"] == "build"]) == 1
 
-    # The runner's flush ack was lost, so it re-submits the very same completion. The
-    # hub returns the original outcome from the idempotency probe — no second
-    # transition, and the hub node does not re-run (the deliver->done transition never
-    # double-records).
+    # The runner's flush ack was lost, so it re-submits the same completion. The hub
+    # returns the original outcome — no second transition, no re-run.
     replay = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
     assert replay.json()["outcome"] == "hub_node_taken"
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
@@ -136,20 +129,15 @@ def test_reflushed_completion_applies_exactly_once(tmp_path: Path) -> None:
 
 
 def test_escalation_fact_rides_events_and_derives_needs_human(tmp_path: Path) -> None:
-    """The other buffered hub fact: escalation.recorded lands via /events, dedup and all.
-
-    This is the path production actually exercises for escalations, as opposed to the
-    direct ``POST .../escalations`` route nothing in ``src/`` calls. It also carries
-    ``wrapped_takeover_command`` (issue #251) through the same round trip.
-    """
+    """The other buffered hub fact: escalation.recorded lands via /events, dedup and
+    all, carrying ``wrapped_takeover_command`` (issue #251) through the round trip."""
     hub = build_hub(tmp_path)
     chunk_id, _ = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
     takeover = "cd /ws/e1 && mock-claude-code --resume sess-abc"
     # `--dir` names the runner's own runtime root — one flat path shared across every
-    # chunk it escalates (`LoopConfig.runner_dir`), not a per-chunk path — and the
-    # embedded chunk id is the escalation's own, not an unrelated literal.
+    # chunk it escalates, not a per-chunk path.
     wrapped = f"blizzard runner takeover {chunk_id} --dir /runner/data/runtime"
     push = hub.client.post(
         "/api/fleet/events",
@@ -188,9 +176,7 @@ def test_escalation_fact_rides_events_and_derives_needs_human(tmp_path: Path) ->
 
 def test_escalation_fact_without_wrapped_takeover_reads_back_empty(tmp_path: Path) -> None:
     """An older runner that never learned to compose ``wrapped_takeover_command``
-    (issue #251) omits it from the buffered payload entirely; the field reads back
-    empty on the buffered path exactly as it does on the direct route, while the raw
-    ``takeover_command`` still lands."""
+    (issue #251) omits it; the field reads back empty while ``takeover_command`` lands."""
     hub = build_hub(tmp_path)
     chunk_id, _ = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)

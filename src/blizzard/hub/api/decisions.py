@@ -1,16 +1,9 @@
-"""Decision routes — gate surfacing and resolution — the anonymous **operator**
-surface (issue #87, #104).
+"""Decision routes — the anonymous **operator** surface (issue #87, #104).
 
-The human-gate half a person drives: ``GET /decisions`` lists the open decisions the
-board and ``blizzard hub decisions`` render, and ``POST /decisions/{id}/resolutions``
-records a person's choice first-write-wins — the same route the board's buttons and
-``blizzard hub decision resolve`` hit. The controller stays read-only over the
-store (``bzh:controller-read-only``): resolution delegates to
-:class:`~blizzard.hub.domain.decisions.DecisionService`.
-``dependencies=[Depends(reject_runner_principal)]`` rejects a runner's bearer token
-here rather than treating it as anonymous-plus-credential — a runner's token is
-confined to the fleet router.
-"""
+``GET /decisions`` lists the open decisions; ``POST /decisions/{id}/resolutions``
+records a person's choice first-write-wins. The controller stays read-only over the
+store (``bzh:controller-read-only``), and a runner's bearer token is rejected here
+rather than read as anonymous-plus-credential."""
 
 from __future__ import annotations
 

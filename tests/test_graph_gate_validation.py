@@ -1,10 +1,8 @@
 """Human-gate mint validation (unit tier).
 
-A ``judged_by: human`` node validates at mint with **no judgement prompt** — the person
-judges, so there is no verdict to elicit. Its choices are
-the ordinary fused entries. These pin that a gate graph mints, and that a gate carrying
-a judgement prompt is rejected.
-"""
+A ``judged_by: human`` node validates at mint with no judgement prompt — the person
+judges, so there is no verdict to elicit. Pins that a gate graph mints, and that a
+gate carrying a judgement prompt is rejected."""
 
 from __future__ import annotations
 

@@ -1,9 +1,8 @@
-"""Retrospective's authored ``delivery-incomplete`` choice actually routes to ``resolve``,
-carrying the ``resolve.from-retrospective.md`` addendum (component tier, issue #238 AC4).
+"""Retrospective's authored ``delivery-incomplete`` choice routes to ``resolve``, carrying
+the ``resolve.from-retrospective.md`` addendum (issue #238 AC4).
 
-Mints the real, packaged advanced-development-workflow graph, seeding the chunk directly
-at ``retrospective``'s minted node id via a direct transition-fact insert (see
-``tests/test_transition_graph_provenance.py`` for the same technique).
+Mints the packaged advanced-development-workflow graph, seeding the chunk directly at
+``retrospective``'s minted node id via a direct transition-fact insert.
 """
 
 from __future__ import annotations
@@ -45,11 +44,8 @@ def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
 
 def _seed_at_retrospective(hub: HubHarness, chunk_id: str, graph_id: str, node_id: str) -> None:
     """Place the chunk's current node directly at ``retrospective`` via a synthetic
-    transition fact, standing in for the six node-steps a real chunk would have taken to
-    arrive here. Recorded at epoch 1, under retrospective's real attempt at epoch 2
-    (below), to avoid two ambiguous same-epoch transitions — the same reason
-    ``test_poll_timeout_escalates_once_the_bounce_cap_is_crossed`` gives its own re-entry
-    a fresh epoch."""
+    transition fact. Recorded at epoch 1, under retrospective's real attempt at epoch 2
+    (below), to avoid two ambiguous same-epoch transitions."""
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.transitions).values(
@@ -86,8 +82,7 @@ def test_delivery_incomplete_routes_to_resolve_with_its_addendum(tmp_path: Path)
     assert body["outcome"] == "next", body
 
     # The accepted transition's target node is `resolve` — the named assertion a
-    # mutation proof (deleting the choice from graph.yaml) must break, not merely the
-    # suite's aggregate exit status.
+    # mutation proof must break, not merely the suite's aggregate exit status.
     assert body["next_envelope"]["node"]["node_id"] == nodes["resolve"]
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
@@ -96,9 +91,8 @@ def test_delivery_incomplete_routes_to_resolve_with_its_addendum(tmp_path: Path)
     assert transition["to_node_id"] == nodes["resolve"]
     assert transition["choice_name"] == "delivery-incomplete"
 
-    # The re-entry envelope carries the resolve.from-retrospective.md addendum, appended
-    # to resolve.md's base prompt — content unique to the addendum, not just "resolve"
-    # (which the base prompt also says).
+    # The re-entry envelope carries the resolve.from-retrospective.md addendum — content
+    # unique to the addendum, not just "resolve" (which the base prompt also says).
     prompt = body["next_envelope"]["prompt"]
     assert "re-entering the **resolve** node" in prompt
     assert "partial" in prompt

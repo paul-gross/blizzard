@@ -1,13 +1,9 @@
 """``GET /api/leases/{id}/history`` and its pure projection ``history_rows`` (issue #237).
 
-Unit tier: :func:`blizzard.wire.history.history_rows` over a fixture
-:class:`~blizzard.wire.history.ChunkHistoryView` — a bounced attempt that produced no
-artifact still becomes a row, a migration becomes its own row, and everything merges
-oldest-first. Component tier: exercised over a real store via ``TestClient``, mirroring
-``tests/test_runner_artifacts_api.py`` (the hub is reached through a stubbed
-``httpx.get``, so the forward, its status pass-through, and the ``502`` on an
-unreachable hub are all asserted against the real controller).
-"""
+Unit tier: ``history_rows`` over a fixture ``ChunkHistoryView`` — a bounced attempt
+that produced no artifact still becomes a row, a migration becomes its own row, and
+everything merges oldest-first. Component tier: exercised over a real store via
+``TestClient``, the hub reached through a stubbed ``httpx.get``."""
 
 from __future__ import annotations
 
@@ -32,10 +28,8 @@ _TOKEN = "the-lease-token"
 _HUB_URL = "http://hub.local:8421"
 _CHUNK = "ch_1"
 
-# The hub's ``ChunkDetail`` payload the proxy forwards to — a chunk that bounced once
-# (no artifact for the bounced attempt) and migrated once, so all three row kinds are
-# proven at once. Deliberately out of oldest-first order in the source lists — the
-# assertions prove the merge, not an already-sorted input.
+# The hub's ``ChunkDetail`` payload: a chunk that bounced once and migrated once, so all
+# three row kinds are proven at once, deliberately out of oldest-first source order.
 _DETAIL: dict[str, object] = {
     "chunk_id": _CHUNK,
     "graph_id": "gr_1",
@@ -91,7 +85,6 @@ _DETAIL: dict[str, object] = {
 }
 
 
-# --------------------------------------------------------------------------- #
 # Unit — the pure projection
 # --------------------------------------------------------------------------- #
 
@@ -184,7 +177,6 @@ def test_a_transition_row_carries_epoch_and_choice() -> None:
     assert row.graph_name == "adv-dwf"
 
 
-# --------------------------------------------------------------------------- #
 # Component — the lease-scoped, hub-proxying route
 # --------------------------------------------------------------------------- #
 
@@ -357,7 +349,6 @@ def test_hub_status_passes_through_verbatim(tmp_path: Path, monkeypatch: pytest.
     assert resp.json()["detail"] == "no such chunk"
 
 
-# --------------------------------------------------------------------------- #
 # The full round trip — a real hub, a real bounce loop, matched row-for-row
 # --------------------------------------------------------------------------- #
 
@@ -404,12 +395,9 @@ def _step(node_id: str, *, epoch: int, choice: str) -> dict:
 def test_a_workers_history_read_matches_the_transitions_the_hub_recorded(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """#237 AC5: drive a chunk through a bounce loop (build -> review -> build -> review
-    -> done) against a **real** hub app, then read that same chunk's history through the
-    runner's lease-scoped proxy — dispatched into the hub's own ``TestClient`` rather than
-    a canned payload — and assert row-for-row equality with the hub's own recorded
-    ``ChunkDetail.history``, including the review-fail attempt that produced no artifact
-    anywhere in the aggregate (#237 AC3)."""
+    """#237 AC5: drive a chunk through a bounce loop against a real hub app, then read
+    its history through the runner's proxy and assert row-for-row equality with the
+    hub's own recorded ``ChunkDetail.history``."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _SCENARIO_YAML}).status_code == 201
     chunk_id = hub.client.post(

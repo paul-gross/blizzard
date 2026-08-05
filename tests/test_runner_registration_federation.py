@@ -1,11 +1,8 @@
 """Runner registration's optional ``url``/``redirect_uris`` extension (issue #95).
 
 Federation identity rides the same authenticated write as every other registration
-field (``tests/test_fleet_auth.py`` covers the general enforce-mode partition; this
-file adds the persistence + open-redirect-relevant-precondition coverage specific to
-this extension) — an unauthenticated attempt to set or change it is rejected exactly
-like an unauthenticated re-registration is, once #86 is enforced.
-"""
+field: an unauthenticated attempt to set or change it is rejected exactly like an
+unauthenticated re-registration is, once #86 is enforced."""
 
 from __future__ import annotations
 

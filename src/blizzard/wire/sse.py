@@ -1,17 +1,9 @@
-"""Per-kind SSE frame wire models (issue #235) — the producer's own description of each
-frame kind's payload — the one description the wire has, mirrored by the golden corpus
-at ``contracts/sse/``.
+"""Per-kind SSE frame wire models (issue #235) — the one description each frame kind's
+payload has, mirrored by the golden corpus at ``contracts/sse/``.
 
-Every model is ``extra="forbid"``: a golden case carrying a field the model does not
-declare fails to parse, which is the contract test's parse half.
-
-Presence-vs-null is load-bearing and not uniform across this wire, so each model owns
-its own serialization (:meth:`SseFramePayload.to_payload`) rather than a blanket
-``model_dump(exclude_none=True)``: every optional field is omitted when unset except
-:attr:`EventLoggedPayload.chunk_id`, which stays a present ``null`` for a runner-scoped
-event (``broker.py``'s ``publish_event_logged``, issue #213) — named in
-:attr:`SseFramePayload._null_when_absent`.
-"""
+Every model is ``extra="forbid"``. Presence-vs-null is load-bearing and not uniform, so each
+model owns its serialization (:meth:`SseFramePayload.to_payload`): an optional field is
+omitted when unset unless named in :attr:`SseFramePayload._null_when_absent`."""
 
 from __future__ import annotations
 
@@ -126,10 +118,8 @@ class EventLoggedPayload(SseFramePayload):
     _null_when_absent: ClassVar[frozenset[str]] = frozenset({"chunk_id"})
 
 
-#: Keyed by the broker's own SSE event-type constants (``blizzard.hub.events.broker``) —
-#: duplicated here as literals rather than imported, since the broker imports this
-#: module and importing back would cycle. The contract test's corpus-closure assertion
-#: proves the two stay in lockstep.
+#: Keyed by the broker's own event-type constants, duplicated here as literals rather than
+#: imported, since importing back would cycle.
 SSE_FRAME_MODELS: dict[str, type[SseFramePayload]] = {
     "chunk-changed": ChunkChangedPayload,
     "question-asked": QuestionAskedPayload,

@@ -1,21 +1,9 @@
-"""The runner SSO federation JWT/JWKS wire leg — real hub + real runner subprocesses,
-no browser (service tier, issue #95).
+"""The runner SSO federation JWT/JWKS wire leg — real hub + runner subprocesses, no
+browser (service tier, issue #95).
 
-The plan's own matrix-gap note: the full browser-driven multi-daemon bounce is a
-``blizzard:e2e`` scenario; **this** is the lighter service-tier companion that proves
-the JWT/JWKS wire leg alone — a real hub (``auth.mode = "oauth"``) delivers a
-hub-signed token via ``response_mode=form_post`` to a real runner's
-``POST /api/auth/callback``, ending in a runner-domain session and an unlocked
-human-lane route, entirely over real localhost HTTP with no in-process fakes. A hub
-session is established through the real ``blizzard-mock`` stub IdP (mirrors
-``tests/service/test_auth_login_service.py``'s own dance) rather than seeded directly,
-so the whole chain — provider dance -> hub session -> IdP authorize -> runner
-callback — is real.
-
-Reproduce — from a provisioned feature env::
-
-    BLIZZARD_SERVICE=1 uv run pytest tests/service/test_idp_federation_service.py
-"""
+A real hub delivers a hub-signed token via ``response_mode=form_post`` to a real
+runner's callback, ending in a runner-domain session, over real localhost HTTP with no
+in-process fakes. Run with ``BLIZZARD_SERVICE=1``."""
 
 from __future__ import annotations
 
@@ -49,16 +37,8 @@ _BOUNCE_COOKIES = ("bz_runner_bounce_state", "bz_runner_bounce_return")
 
 def _replay_bounce_cookies(runner: httpx.Client, login_resp: httpx.Response) -> None:
     """Re-set the bounce cookies on ``runner`` so the callback POST carries them, as a
-    browser's would.
-
-    ``http.cookiejar`` implements the bare RFC 6265 rule and withholds any ``Secure`` cookie
-    from an ``http`` request, so the jar alone never returns them here — replayed as plain
-    (non-``Secure``) headers instead. Installing a jar policy instead fails *silently*:
-    ``httpx``'s ``_merge_cookies`` rebuilds a default-policy ``CookieJar`` on every request,
-    discarding any client-level policy before the header is built. The browser's own cookie
-    handling is pinned separately by ``tests/test_runner_federation.py`` and the real-browser
-    e2e bounce scenario.
-    """
+    browser's would — ``http.cookiejar`` withholds any ``Secure`` cookie from an ``http``
+    request, so the jar alone never returns them here."""
     for name in _BOUNCE_COOKIES:
         runner.cookies.set(name, login_resp.cookies[name])
 
@@ -112,16 +92,14 @@ def _federated_runner(
         config,
         runner_id=runner_id,
         public_url=public_url,
-        # A path that is never created — the external-usage sampler's first soft-failure
-        # check (a missing credentials file) trips before any request is built, keeping
-        # this real daemon's no-network-access guarantee real for that step too (issue #218).
+        # A path that is never created — the sampler's missing-credentials soft failure
+        # trips before any request is built (issue #218).
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
     )
     config.config_path.write_text(config.to_toml())
 
-    # Registration (issue #95) — an authenticated-by-default-warn-mode fleet write,
-    # exactly like every other runner registration; carries this runner's own
-    # federation identity so the hub's authorize endpoint will accept a bounce to it.
+    # Registration (issue #95) carries this runner's own federation identity so the
+    # hub's authorize endpoint will accept a bounce to it.
     reg_client = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=15.0)
     try:
         reg_resp = reg_client.post(
@@ -245,19 +223,14 @@ def test_key_rotation_is_picked_up_by_a_live_runner_with_no_restart(tmp_path: Pa
                 assert rotate_resp.status_code == 204, rotate_resp.text
 
                 # A fresh bounce, minted under the just-rotated key: the runner's JWKS
-                # cache has never seen this `kid` before — its own cache-miss refetch
-                # (`JwksCache.key_for`) must pick it up with no restart of the process
-                # already running above.
+                # cache-miss refetch must pick it up with no restart.
                 _bounce_once(hub, runner)
 
 
 def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path) -> None:
-    """Issue #128 — a hub with *two* configured providers: an unauthenticated runner
-    bounce cannot auto-run a single dance, so authorize hands the browser to the board's
-    ``/login`` chooser carrying the pending authorize request. Completing *either*
-    provider's dance resumes that exact request — original ``client``, ``redirect_uri``,
-    and bounce ``state`` intact — and ends in a runner-domain session, no manual re-visit
-    of the runner. The service-tier companion to the single-provider wire leg above."""
+    """Issue #128 — a hub with two configured providers hands an unauthenticated bounce
+    to the ``/login`` chooser; completing either provider's dance resumes the pending
+    authorize request and ends in a runner-domain session."""
     bin_dir = require_stub_idp()
     idp_a_port = _free_port()
     idp_b_port = _free_port()
@@ -300,10 +273,8 @@ def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path)
             authorize_url = login_resp.headers["location"]
             bounce_state = login_resp.cookies["bz_runner_bounce_state"]
 
-            # 2. A fresh (session-less) browser hits authorize. Two providers → no single
-            #    dance to auto-run, so it is handed to the /login chooser carrying the
-            #    pending authorize request (with the original state) as return_to — never
-            #    a bare 501.
+            # 2. A fresh browser hits authorize. Two providers means no single dance to
+            #    auto-run, so it is handed to the /login chooser as return_to.
             browser = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=15.0)
             try:
                 chooser = browser.get(authorize_url, follow_redirects=False)
@@ -315,10 +286,8 @@ def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path)
                 assert f"state={bounce_state}" in pending
                 assert "client=" in pending
 
-                # 3. The user picks provider B on the chooser: its button threads the
-                #    pending authorize request back through as return_to. Completing the
-                #    dance mints a hub session and lands the browser on the resumed
-                #    authorize, which now delivers the runner token with the original state.
+                # 3. Completing provider B's dance mints a hub session and lands the
+                #    browser back on the resumed authorize with the original state.
                 resumed = browser.get(
                     f"/api/auth/oidc-b/authorize?return_to={quote(pending, safe='')}",
                     follow_redirects=True,

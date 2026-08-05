@@ -1,13 +1,9 @@
 """``blizzard runner takeover`` — the domain service + loop-guard (component tier, issue #52).
 
-Drives :class:`TakeoverService` directly against a real tmp store with fakes at the
-seams (``bzh:steppable-loop`` convention, mirroring ``tests/test_runner_loop.py``): the
-three parked shapes (needs_human, ask-parked, gate-parked) each open cleanly with no
-force; a live worker attempt refuses without ``--force`` and is superseded — fact
-first, then killed, then fenced, no retry, no escalation — with it. A second slice
-drives REAP/ADVANCE against a chunk under an open takeover to pin the "no loop step
-touches the session" guarantee.
-"""
+Drives ``TakeoverService`` against a real tmp store with fakes at the seams: the three
+parked shapes each open cleanly with no force; a live worker attempt refuses without
+``--force`` and is superseded (fact, kill, fence, no retry/escalation) with it. A
+second slice drives REAP/ADVANCE against an open takeover."""
 
 from __future__ import annotations
 
@@ -91,7 +87,6 @@ def _seed_lease(
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-# --------------------------------------------------------------------------- #
 # The three parked shapes — happy path, no force
 # --------------------------------------------------------------------------- #
 
@@ -159,7 +154,6 @@ def test_takeover_refuses_a_second_open_takeover(tmp_path) -> None:  # type: ign
         service.open("ch_1", force=False)
 
 
-# --------------------------------------------------------------------------- #
 # A live worker attempt — 409 without force, superseded with it
 # --------------------------------------------------------------------------- #
 
@@ -206,9 +200,8 @@ def test_forced_takeover_orders_fact_before_kill_fences_the_epoch_and_consumes_n
     assert record is not None
     assert record.fence_epoch == 2  # latest_epoch (1) + 1 — the fence bump
 
-    # The fence rides the outbound buffer as an ordinary lease.minted fact — the same
-    # kind a real requeue's mint would use — so a late completion from the killed
-    # worker's session lands on a stale epoch.
+    # The fence rides the outbound buffer as an ordinary lease.minted fact, so a late
+    # completion from the killed worker's session lands on a stale epoch.
     pending = store.pending_outbound()
     assert len(pending) == 1
     assert pending[0].kind == LEASE_MINTED
@@ -222,20 +215,16 @@ def test_forced_takeover_orders_fact_before_kill_fences_the_epoch_and_consumes_n
     # and the takeover writes none.
     assert store.attempt_count("ch_1", "nd_build") == 1
 
-    # No escalation recorded: the original lease's closure reason (if any) does not
-    # read "escalated" — indeed it is not closed at all, since a live worker attempt
-    # under takeover is superseded, not failed.
+    # No escalation recorded: a live worker attempt under takeover is superseded, not
+    # failed, so the lease is not closed at all.
     assert store.open_escalations() == []
     assert store.lease("lease_1") is not None
 
 
 def test_forced_takeover_refuses_a_lease_with_a_pending_submission(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The out-of-sequence window: the worker exited with its completion already
-    buffered (unacked) but the lease is still active-and-unclosed — ``live`` is still
-    True, but a fence minted now would buffer *behind* the already-queued completion,
-    so PULL's strict FIFO would flush the completion (and advance the node) before the
-    fence took effect. ``--force`` must refuse rather than mint a fence that arrives
-    too late to matter."""
+    """The worker exited with its completion already buffered but the lease still
+    ``live``; a fence minted now would arrive behind PULL's strict FIFO, too late to
+    matter, so ``--force`` must refuse instead."""
     store = _store(tmp_path)
     _seed_lease(store, pid=100)
     store.enqueue_outbound(
@@ -277,7 +266,6 @@ def test_takeover_close_on_an_unknown_id_raises(tmp_path) -> None:  # type: igno
         service.close("ch_1", "tko_bogus")
 
 
-# --------------------------------------------------------------------------- #
 # The loop guard — REAP/ADVANCE skip a chunk under an open takeover
 # --------------------------------------------------------------------------- #
 
@@ -376,7 +364,6 @@ def test_advance_skips_the_held_chunk_gate_hub_node_poll_under_an_open_takeover(
     assert store.held_environment_ids() == ["e1"]
 
 
-# --------------------------------------------------------------------------- #
 # The takeover reads the session's stamps (D4, issue #144).
 # --------------------------------------------------------------------------- #
 
@@ -433,10 +420,8 @@ def test_takeover_carries_the_lease_identity_env_and_reminting_its_token(tmp_pat
 
 
 def test_takeover_env_is_bounded_to_identity_plus_path_and_home(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """What leaves the daemon is a bounded set (issue #258 review): the BLIZZARD_*
-    identity plus PATH/HOME. The adapter's full child env carries the daemon's TERM
-    and any ``env_passthrough`` secret — neither may cross the local API, and the
-    daemon's TERM must not clobber the operator's terminal on exec."""
+    """What leaves the daemon is a bounded set (issue #258 review): BLIZZARD_* identity
+    plus PATH/HOME — never the daemon's TERM or an ``env_passthrough`` secret."""
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)

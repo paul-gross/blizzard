@@ -1,13 +1,8 @@
-"""The hub backstop and the runner nudge agree on produces-coverage (unit tier, issues #113, #143).
+"""The hub backstop and the runner nudge agree on produces-coverage (issues #113, #143).
 
-Both must call the one shared :func:`~blizzard.wire.completion.produces_coverage` rather than
-each re-derive "covered" inline, else a worker could satisfy the runner's nudge and still be
-fenced out by the hub under ``produces_mode=enforce`` — a re-fork would restore that drift
-silently, since each side's own tests would still pass. That shared function also carries the
-kind-aware split (issue #143, D2): a ``git_commit`` spec is met by any ``GIT_COMMIT``-kind
-artifact present, by kind, not by name. This module drives both predicates over one scenario
-matrix and asserts they agree on the expected verdict, distinct from ``test_produces_auth.py``
-and ``test_runner_nudge.py``, which each see only one side and so cannot observe a disagreement.
+Both must call the one shared :func:`~blizzard.wire.completion.produces_coverage` rather
+than each re-derive "covered" inline. Drives both predicates over one scenario matrix and
+asserts they agree on the expected verdict.
 """
 
 from __future__ import annotations
@@ -61,12 +56,8 @@ def _asset(name: str, *, attached: bool) -> SubmittedArtifact:
     return SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content="stuff", attached=attached)
 
 
-#: (id, produces, submission artifacts, expected "is every name covered?").
-#: ``attachments`` is left empty throughout so both sides read the *same* evidence: a
-#: runner-local attachment reaches the hub as an ``attached=True`` artifact in the very
-#: submission below, which the matrix models directly. A ``produces`` entry is either a
-#: bare asset name (``str``) or a :func:`_git_commit_spec` — the kind-carrying mapping
-#: form (issue #143, D2).
+#: (id, produces, submission artifacts, expected "is every name covered?"). A ``produces``
+#: entry is either a bare asset name (``str``) or a :func:`_git_commit_spec` (issue #143, D2).
 _SCENARIOS = [
     ("no-produces", [], [], True),
     ("git-commit-covers-the-name", ["backend"], [_git_commit("backend")], True),
@@ -135,11 +126,8 @@ def _envelope_produces(produces: list[str | ProducesSpec]) -> list[str | Produce
 def test_hub_and_runner_agree_on_coverage(
     produces: list[str | ProducesSpec], artifacts: list[SubmittedArtifact], all_covered: bool
 ) -> None:
-    """One scenario, both predicates, same verdict — and the verdict is the expected one.
-
-    Asserting against ``all_covered`` as well as against each other matters: two sides that
-    re-forked into the *same* wrong answer would agree with each other and still be broken.
-    """
+    """One scenario, both predicates, same verdict — and the verdict is the expected one:
+    two sides re-forked into the same wrong answer would still agree with each other."""
     hub_rejects = check_produces(_node(produces=produces), artifacts, mode=PRODUCES_ENFORCE) is not None
     envelope = make_envelope(
         "ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], produces=_envelope_produces(produces)
@@ -157,36 +145,24 @@ def test_hub_and_runner_agree_on_coverage(
 
 
 def test_a_git_commit_covered_name_never_nudges_the_worker() -> None:
-    """The runner half of the regression, pinned on its own.
-
-    ``_verify_and_collect_git_commits`` (issue #143, Phase 4) only ever builds
-    ``GIT_COMMIT`` artifacts, so this is the shape a committed-and-declared ``produces:``
-    name actually arrives in. It must not provoke a nudge — the worker already produced
-    the thing the graph asked for.
-    """
+    """The runner half of the regression, pinned on its own (issue #143): a committed
+    and declared ``produces:`` name must not provoke a nudge."""
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], produces=["backend"])
 
     assert _missing_produces(envelope, [_git_commit("backend")], {}) == []
 
 
 def test_a_runner_local_attachment_covers_the_name_without_any_artifact() -> None:
-    """The runner also honours its own local attachment store, which the hub never sees
-    directly — it reaches the hub as the ``attached=True`` artifact assembly builds from it.
-    Pinned so the attachment path is not mistaken for part of the shared predicate.
-    """
+    """The runner also honours its own local attachment store, pinned so the attachment
+    path is not mistaken for part of the shared predicate."""
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], produces=["findings"])
 
     assert _missing_produces(envelope, [], {"findings": "the findings"}) == []
 
 
 def test_a_git_commit_kind_expectation_is_covered_by_kind_not_by_name() -> None:
-    """The runner half of the D2 kind-match rule, pinned on its own (issue #143).
-
-    The declared spec's name is ``commit`` (the packaged graphs' own convention), but the
-    artifact the transitional push path actually produces is named after its repo
-    (``toy-api``) — never ``commit``. Coverage must still hold: a ``git_commit`` spec is
-    met by kind, not by a name that no real artifact ever carries.
-    """
+    """The runner half of the D2 kind-match rule, pinned on its own (issue #143): a
+    ``git_commit`` spec is met by kind, not by a name no real artifact ever carries."""
     envelope = make_envelope(
         "ch_1",
         "build",

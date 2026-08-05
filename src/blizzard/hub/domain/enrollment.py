@@ -1,18 +1,8 @@
 """Runner enrollment — hub-minted per-runner bearer tokens (issue #86a).
 
-An operator enrolls a runner into an identity the hub trusts: ``enroll`` mints
-``secrets.token_urlsafe(32)``, hashes it (sha256 hex), persists only the hash via the
-write registry, and returns the plaintext — the caller (the enroll endpoint) prints or
-returns it exactly once and keeps no other copy. Re-enrolling an already-enrolled
-runner rotates: the new hash overwrites the old one in place (the registration row is
-a mutable upsert, not an append-only fact — see ``hub/domain/registry.py``'s module
-docstring), so the prior token stops resolving via ``registration_for_token_hash``
-immediately. There is no separate revoke: rotating *is* revoking the old token.
-
-Its own service rather than part of :class:`~blizzard.hub.domain.registry.FleetService`:
-enrollment acts on a runner's *identity*, not on the fleet-registration state that
-service owns, so it holds just the write registry and the injected clock
-(``bzh:injected-clock``).
+``enroll`` mints a token, persists only its sha256 hex hash, and returns the plaintext
+exactly once. Re-enrolling rotates in place, so the prior token stops resolving
+immediately; there is no separate revoke — rotating *is* revoking.
 """
 
 from __future__ import annotations

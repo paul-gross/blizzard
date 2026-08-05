@@ -1,17 +1,9 @@
 """Hub runtime configuration — resolved from a runtime directory.
 
-``blizzard hub init <dir>`` scaffolds a config file and a data directory under a
-runtime root; the daemon and the offline ``migrate`` verb read it back. The store
-URL is the single portability knob (``bzh:sql-portable``): the sqlite default
-lives under the data dir, and postgres is the same config with a different URL.
-The bind port falls back to the winter service band's ``BZ_HUB_PORT`` (band +2).
-
-``[[work_source]]`` is the zero-or-more configured work sources: each a named,
-credentialed forge binding (``hub/work_sources/internal/factory.py``). ``tomllib``
-parses the array of tables for free; there is no stdlib TOML writer, so
-:meth:`HubConfig.to_toml` hand-rolls the emit in the same string-concat style as the
-rest of this file.
-"""
+The store URL is the single portability knob (``bzh:sql-portable``): the sqlite
+default lives under the data dir, and postgres is the same config with a different
+URL. The bind port falls back to ``BZ_HUB_PORT``. There is no stdlib TOML writer, so
+:meth:`HubConfig.to_toml` hand-rolls the emit."""
 
 from __future__ import annotations
 
@@ -32,36 +24,24 @@ DEFAULT_PORT = 8421
 
 ENV_HOST = "BZ_HUB_HOST"
 ENV_PORT = "BZ_HUB_PORT"
-# The container image (`bzh:manual-migrations`'s entrypoint) is the first consumer:
-# a deployment varies the store URL by environment rather than baking one per image.
-# Honored at load time identically by `hub host` and `hub migrate` — both resolve
-# through `HubConfig.load`, so there is no per-verb wiring (`bzh:sql-portable`).
+# Varies the store URL by environment rather than baking one per image; honored
+# identically by every verb, which all resolve through `load` (`bzh:sql-portable`).
 ENV_DB_URL = "BZ_HUB_DB_URL"
 
-# The runner-authentication rollout brake (issue #86a) — `warn` logs a missing/invalid/
-# mismatched bearer token and lets the request proceed; `enforce` rejects it. Defaults to
-# `warn` so a fleet can enroll tokens before enforcing. Scoped to *runner identity*
-# specifically: `route_token_mode` below is a separate brake, so the two enforce
-# independently.
+# The runner-identity rollout brake (issue #86a) — `warn` logs a missing/invalid bearer
+# token and proceeds; `enforce` rejects. Defaults to `warn` so tokens can enroll first.
 RUNNER_AUTH_WARN = "warn"
 RUNNER_AUTH_ENFORCE = "enforce"
 _KNOWN_RUNNER_AUTH_MODES = {RUNNER_AUTH_WARN, RUNNER_AUTH_ENFORCE}
 
-# The route-capability-token rollout brake (issue #84b) — a **separate** flag from
-# `runner_auth_mode` above, so route-token authorization enforces independently of
-# runner identity (a fleet can flip one on before the other). `warn` logs a
-# missing/mismatched route token and lets the chunk-scoped write/fact proceed;
-# `enforce` rejects it as a semantic failure, before the epoch fence. Defaults to
-# `warn`, which covers the window while token-less facts drain.
+# The route-capability-token rollout brake (issue #84b), separate from `runner_auth_mode`
+# so the two enforce independently — `warn` proceeds; `enforce` rejects before the fence.
 ROUTE_TOKEN_WARN = "warn"
 ROUTE_TOKEN_ENFORCE = "enforce"
 _KNOWN_ROUTE_TOKEN_MODES = {ROUTE_TOKEN_WARN, ROUTE_TOKEN_ENFORCE}
 
-# The produces-artifact rollout brake (issue #113) — a **separate** flag from
-# ``route_token_mode``/``runner_auth_mode`` above, gating the hub-side backstop for a
-# `produces:` name lacking an explicit attachment at submission time. `warn` logs the
-# missing names and lets the completion proceed; `enforce` rejects it as a semantic
-# failure, before the transition is recorded. Defaults to `warn`.
+# The produces-artifact rollout brake (issue #113), separate from the two above — `warn`
+# logs a `produces:` name with no attachment and proceeds; `enforce` rejects it.
 PRODUCES_WARN = "warn"
 PRODUCES_ENFORCE = "enforce"
 _KNOWN_PRODUCES_MODES = {PRODUCES_WARN, PRODUCES_ENFORCE}
@@ -71,15 +51,12 @@ _KNOWN_PRODUCES_MODES = {PRODUCES_WARN, PRODUCES_ENFORCE}
 _KNOWN_WORK_SOURCE_PROVIDERS = {"github"}
 _REQUIRED_WORK_SOURCE_KEYS = ("name", "provider", "repo", "token_env")
 
-# `[[work_source]]`'s pre-rename name (issue #55). Deliberately *not* aliased: the key
-# would parse as zero configured sources, a legal-looking hub that serves nothing, so
-# the load fails fast naming the new key (pinned by
-# `tests/test_config.py::test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key`).
+# `[[work_source]]`'s pre-rename name (issue #55) — deliberately *not* aliased; pinned by
+# `test_config.py::test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key`.
 RENAMED_WORK_SOURCE_KEY = "pm_source"
 
 # The human-auth rollout knob (issue #91) — `none` (the default) resolves every request
-# to the implicit `operator`/`superuser` identity with no store read; `oauth` activates
-# the session/permission seam. Validated exactly like `runner_auth_mode`.
+# to an implicit identity with no store read; `oauth` activates the session seam.
 AUTH_MODE_NONE = "none"
 AUTH_MODE_OAUTH = "oauth"
 _KNOWN_AUTH_MODES = {AUTH_MODE_NONE, AUTH_MODE_OAUTH}
@@ -111,8 +88,7 @@ _WORK_SOURCE_EXAMPLE_COMMENT = """
 """
 
 # Mirrors `_WORK_SOURCE_EXAMPLE_COMMENT` — emitted when `[auth]` carries no configured
-# login provider, so the block stays discoverable even though `mode = "none"` needs
-# none to function (issue #91).
+# login provider, so the block stays discoverable under `mode = "none"` (issue #91).
 _AUTH_OAUTH_PROVIDER_EXAMPLE_COMMENT = """
 # Uncomment and edit to declare an OAuth login provider — consumed once `mode =
 # "oauth"` and a login mechanism exist (issue #92); parsed-and-carried here so the
@@ -138,29 +114,17 @@ class ConfigError(RuntimeError):
 @dataclass(frozen=True)
 class WorkSourceConfig:
     """One configured work source — a named, credentialed forge binding.
-
-    ``name`` is the operator-chosen identity ingest tokens and board labels key on
-    (conventionally the repo tail, e.g. ``blizzard`` for ``paul-gross/blizzard``);
-    ``provider`` selects the adapter grammar (only ``github`` exists); ``repo`` is the
-    ``owner/name`` coordinate the binding is pinned to; ``token_env`` names the
-    environment variable carrying the credential — never the secret itself.
-    ``api_base``/``web_base`` override the provider's default API/web origins (required
-    to reach a self-hosted forge, e.g. GHE); ``web_base`` derives from ``api_base`` when
-    omitted.
-    """
+    ``token_env`` names the environment variable carrying the credential, never the
+    secret itself; ``api_base``/``web_base`` override the provider's default origins,
+    and ``web_base`` derives from ``api_base`` when omitted."""
 
     name: str
     provider: str
     repo: str
     token_env: str
-    #: Opt this source into the forge-status label sweep (issue #179) — default off,
-    #: because dev/snapshot hubs in this workspace run against real forges and two
-    #: writers must never fight over the same issues. Only the canonical instance for
-    #: a repo should ever set this.
+    #: Opt into the forge-status label sweep (issue #179) — canonical instance only; two writers fight.
     annotate: bool = False
-    #: Opt this source into the delivery closure sweep (issue #216) — default off,
-    #: mirroring ``annotate``'s own two-writers-must-never-fight rationale. Only the
-    #: canonical instance for a repo should ever set this.
+    #: Opt into the delivery closure sweep (issue #216) — canonical instance only; two writers fight.
     close: bool = False
     api_base: str | None = None
     web_base: str | None = None
@@ -169,11 +133,9 @@ class WorkSourceConfig:
 @dataclass(frozen=True)
 class OAuthProviderConfig:
     """One configured OAuth login provider (issues #91, #92). ``client_secret_env``
-    names the environment variable carrying the secret — never the secret itself,
-    mirroring :class:`WorkSourceConfig`'s ``token_env``. ``api_base`` overrides the
-    provider's default host — unused by the ``oidc`` conformer (whose ``issuer`` already
-    names its own host), and how the ``github`` conformer is pointed at a
-    self-hosted/stub origin instead of real GitHub."""
+    names the environment variable carrying the secret, never the secret itself.
+    ``api_base`` overrides the provider's default host — ``github`` type only, an
+    ``oidc`` provider's ``issuer`` already naming its own."""
 
     name: str
     type: str
@@ -188,9 +150,7 @@ class OAuthProviderConfig:
 class AuthConfig:
     """Resolved ``[auth]`` config (issue #91) — the human-auth rollout knob.
 
-    ``mode`` defaults to :data:`AUTH_MODE_NONE`. ``superuser`` is a nullable email,
-    consumed by the bootstrap lifecycle (#94); ``oauth_providers`` is consumed by the
-    provider-login seam (#92)."""
+    ``mode`` defaults to :data:`AUTH_MODE_NONE`; ``superuser`` is a nullable email."""
 
     mode: str = AUTH_MODE_NONE
     superuser: str | None = None
@@ -209,24 +169,12 @@ class HubConfig:
     runner_auth_mode: str = RUNNER_AUTH_WARN
     route_token_mode: str = ROUTE_TOKEN_WARN
     produces_mode: str = PRODUCES_WARN
-    #: The fleet-wide **follow-latest** default (issue #164): whether a chunk drifts to
-    #: the newest enabled mint of its own graph's name at its next transition. ``False``
-    #: is the default, so adopting the policy is a deliberate act. A graph's own
-    #: ``follow_latest`` tri-state overrides this for chunks pinned to that mint. A plain
-    #: on/off rather than a `*_mode` ramp: there is no intermediate state to warn about.
+    #: Fleet-wide default for re-pinning a chunk to its graph name's newest mint (issue #164).
     follow_latest: bool = False
-    #: The forge-status reconciler's sweep cadence, in seconds (issue #179) — a flat
-    #: scalar following ``follow_latest``'s own precedent rather than a dedicated
-    #: table. Only consulted when at least one ``[[work_source]]`` opts into
-    #: ``annotate``; a hub with none starts no sweep loop regardless of this value.
+    #: Forge-status sweep cadence in seconds (issue #179); consulted only when a source annotates.
     annotation_interval_seconds: int = 120
     auth: AuthConfig = field(default_factory=AuthConfig)
-    #: The reverse-proxy trust set (issue #130) — proxy addresses or CIDRs whose
-    #: ``X-Forwarded-Proto``/``X-Forwarded-For`` headers are honored (cookie ``Secure``
-    #: flag, login-throttle key, auth-fact actor IP). Empty (the default) ignores those
-    #: headers from every peer — behavior byte-identical to a direct-exposure deployment.
-    #: Stored as raw strings that round-trip to toml; parsed into
-    #: :class:`~blizzard.foundation.forwarded.TrustedProxies` at the composition root.
+    #: Reverse-proxy trust set (issue #130) — addresses or CIDRs whose forwarded headers are honored.
     trusted_proxies: tuple[str, ...] = ()
 
     @property
@@ -254,11 +202,8 @@ class HubConfig:
     def to_toml(self) -> str:
         lines = ["# blizzard-hub runtime configuration (blizzard hub init)\n"]
         if self.db_url != self.default_db_url(self.root):
-            # The default is omitted rather than serialized absolute (issue #234): a fresh
-            # scaffold's db_url is always `default_db_url(root)`, and writing that out bakes
-            # an absolute pointer to *this* root into the file — `load` re-derives the same
-            # default from wherever the directory ends up, so a `cp -r`'d copy stays
-            # self-contained instead of carrying a live pointer back to the original.
+            # The default is omitted rather than serialized absolute (issue #234): `load`
+            # re-derives it, so a copied runtime root stays self-contained.
             lines.append(f'db_url = "{self.db_url}"\n')
         lines += [
             f'host = "{self.host}"\n',
@@ -325,20 +270,8 @@ class HubConfig:
         """Read a runtime root's config file; overlay CLI host/port when given.
 
         ``db_url``/``host``/``port`` each resolve **CLI flag > environment > toml >
-        default** (no CLI flag exists for ``db_url``) — see :data:`ENV_DB_URL`,
-        :data:`ENV_HOST`, :data:`ENV_PORT`. Every variable unset leaves the resolved
-        config byte-identical to a toml-only load. A toml with no ``db_url`` key falls
-        back to :meth:`default_db_url` for ``root`` — the pair with :meth:`to_toml`
-        omitting the key when it is exactly that default (issue #234), so a `cp -r`'d
-        runtime directory re-derives its store path from wherever it lands rather than
-        carrying an absolute pointer back to the directory it was copied from.
-
-        The resolved ``db_url``, once known — CLI/env overrides included — is guarded
-        against naming a sqlite path outside ``root`` (issue #234): copying a store
-        directory whose config still carries an absolute path from elsewhere would
-        otherwise silently operate on the original database. ``allow_external_db`` is
-        the operator's explicit opt-out.
-        """
+        default** (no CLI flag exists for ``db_url``). The resolved ``db_url`` is guarded
+        against naming a sqlite path outside ``root``; ``allow_external_db`` opts out."""
         root = root.resolve()
         path = root / CONFIG_FILENAME
         if not path.exists():
@@ -401,12 +334,9 @@ def _sqlite_db_path(db_url: str) -> Path | None:
 def _guard_db_url_within_root(root: Path, db_url: str, *, allow_external_db: bool) -> None:
     """Refuse a ``db_url`` whose sqlite path resolves outside ``root`` (issue #234).
 
-    A config carrying an absolute store path from another runtime root would silently
-    operate on that original database when the directory is copied elsewhere (a
-    snapshot, a safe-inspection copy) — the trap this guard closes.
-    A relative sqlite path is left alone: it resolves against the process's cwd at open
-    time, not against ``root``, so there is nothing here to compare it to.
-    """
+    A config carrying an absolute store path from another runtime root would otherwise
+    silently operate on that original database once copied. A relative sqlite path is
+    left alone: it resolves against the process's cwd, not against ``root``."""
     if allow_external_db:
         return
     path = _sqlite_db_path(db_url)
@@ -454,17 +384,15 @@ def _parse_work_sources(raw_sources: object) -> tuple[WorkSourceConfig, ...]:
         repo = str(entry["repo"])
         token_env = str(entry["token_env"])
         if ":" in name:
-            # hub/cli.py's ingest-token grammar partitions on the first colon —
-            # a colon in a source name breaks that split.
+            # A colon in a source name breaks the ingest-token grammar's first-colon split.
             raise ConfigError(f"[[work_source]] name {name!r} must not contain ':'")
         if name in seen_names:
             raise ConfigError(f"duplicate [[work_source]] name {name!r}")
         seen_names.add(name)
         provider_repo = (provider, repo)
         if provider_repo in seen_provider_repo:
-            # Two names for one (provider, repo) would let the same item be ingested
-            # twice under two identities — this is what holds pointer identity uniqueness
-            # up, not a nicety.
+            # Two names for one (provider, repo) would let the same item be ingested twice
+            # under two identities — this is what holds pointer identity uniqueness up.
             raise ConfigError(f"duplicate [[work_source]] (provider, repo) {provider_repo!r} across two names")
         seen_provider_repo.add(provider_repo)
         if provider not in _KNOWN_WORK_SOURCE_PROVIDERS:

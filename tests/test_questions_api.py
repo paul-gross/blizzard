@@ -1,13 +1,9 @@
 """``POST /api/questions/{id}/answers`` and the deprecated singular ``.../answer``
 alias (issue #104), component tier.
 
-``tests/test_ask_answer.py`` covers the ask/answer rendezvous end to end against the
-pre-#104 singular path. This file pins the pluralized successor's identical
-first-write-wins CAS behavior (201 winner / 409 loser) and proves the singular alias
-still answers byte-identically while carrying the ``Deprecation``/``Link`` headers and
-``deprecated: true`` in the OpenAPI operation; a runner bearer token is still rejected
-on both. ``POST /questions`` (worker-raised) is untouched — out of scope.
-"""
+Pins the pluralized successor's first-write-wins CAS behavior (201 winner / 409 loser)
+and proves the singular alias answers byte-identically, carrying ``Deprecation``/``Link``
+and ``deprecated: true`` in the OpenAPI operation."""
 
 from __future__ import annotations
 

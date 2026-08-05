@@ -1,24 +1,9 @@
 """Board cost/usage live-over-SSE e2e — scenario 7 of the standing e2e smoke (issue #60).
 
-The browser half of the cost/usage feature: a **real Chromium**, driven by Playwright,
-over the **served mission-control board** wired to a live hub over a minted
-``blizzard-mock`` fixture. It asserts the **cost/usage figures** are (a) rendered end to
-end off the live hub, and (b) **updated live with no reload** when a fresh
-``usage.recorded`` fact lands — the card's cost badge, the header's spend-today figure,
-and the open detail dock's total all moving in place.
-
-No runner is driven: the chunk is claimed straight through ``POST /api/fleet/routes`` and
-usage facts pushed straight through ``POST /api/fleet/events``, keeping the scenario about
-the render + SSE surface rather than re-proving the reconciliation loop scenario 6 carries.
-
-It is the **e2e tier**: it needs the full live stack, the sibling ``blizzard-mock``
-worktree, a local winter source, and an installed Chromium, so it is **skipped unless
-``BLIZZARD_E2E=1``** and those are present. Reproduce it — from the ``blizzard``
-worktree in a provisioned feature env — with::
-
-    uv run playwright install chromium   # once, out of band
-    BLIZZARD_E2E=1 uv run pytest tests/e2e/test_board_cost_live_e2e.py
-"""
+A real Chromium (Playwright) over the served board wired to a live hub, asserting
+cost/usage figures render end to end and update live with no reload when a
+``usage.recorded`` fact lands. No runner is driven; skipped unless ``BLIZZARD_E2E=1``
+and Chromium is installed (``uv run playwright install chromium``)."""
 
 from __future__ import annotations
 
@@ -153,15 +138,13 @@ def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_a
                 card = running_col.get_by_test_id("chunk-card")
                 expect(card).to_have_count(1)  # the claimed chunk derives running
 
-                # Before any usage: the fleet spend read resolves to zero (not partial), and
-                # the card carries no cost badge (costUsd 0, not partial). This is the
-                # baseline the live SSE update must visibly move off.
+                # Before any usage: spend reads zero (not partial) and the card carries no
+                # cost badge — the baseline the live SSE update below must move off.
                 expect(page.get_by_test_id("spend-today-value")).to_have_text("$0.00")
                 expect(card.get_by_test_id("card-cost")).to_have_count(0)
 
-                # --- A usage fact lands at the hub → the board re-derives with NO reload.
-                #     Playwright's assertions poll, so these succeed only once the live
-                #     update has landed. ------------------------------------------------
+                # A usage fact lands at the hub; the board re-derives with no reload
+                # (Playwright's assertions poll until the live update lands).
                 _push_usage(
                     hub,
                     chunk_id=chunk_id,
@@ -195,9 +178,8 @@ def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_a
                 expect(page.get_by_test_id("tokens-cache-read")).to_contain_text("300")
                 expect(page.get_by_test_id("tokens-cache-create")).to_contain_text("100")
 
-                # --- A cost-absent (crash/reap-path) usage fact makes the total a LOWER
-                #     BOUND — the partial marker must appear live everywhere it renders,
-                #     never a silently-understated exact figure. ---------------------------
+                # A cost-absent (crash/reap-path) fact makes the total a lower bound; the
+                # partial marker must appear live everywhere it renders.
                 _push_usage(hub, chunk_id=chunk_id, node_id=node_id, seq=2, cost_usd=None)
 
                 # Marked live, no reload: the detail total, the card badge, and the header

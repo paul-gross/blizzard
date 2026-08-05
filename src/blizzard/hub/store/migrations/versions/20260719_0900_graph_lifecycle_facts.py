@@ -1,16 +1,6 @@
-"""graph lifecycle facts — a reversible retire/re-enable brake over one specific
-graph_id (hub store tree)
+"""graph lifecycle facts — a reversible retire/re-enable brake over one graph_id
 
-Issue #101 gives an operator a retire/re-enable lever over a minted graph, keyed on
-its ``graph_id``. ``graph_lifecycle_facts`` mirrors ``chunk_pause_facts`` exactly:
-append-only, newest-fact-wins. The ``graphs`` table itself is untouched — it stays
-insert-only and immutable; only name resolution (``get_enabled_by_name``/
-``mark_effective``) excludes a retired ``graph_id`` from its candidate set.
-
-Each revision in this tree creates a subset of the current ``schema`` metadata's tables
-(the live-schema pattern); this one creates exactly the one new table, ``checkfirst`` so
-a fresh ``base -> head`` and an in-place upgrade both converge.
-
+Append-only, newest-fact-wins, created ``checkfirst``; the ``graphs`` table itself stays immutable.
 Revision ID: 20260719_0900_hub_graph_lifecycle_facts
 Revises: 20260718_1300_hub_runner_env_capacity
 """

@@ -1,10 +1,8 @@
 """The worker heartbeat path — local-API endpoint + ``blizzard runner heartbeat`` verb.
 
-Two tiers, no live socket:
-
-* **component** — the endpoint over a real store (TestClient), the API + store half;
-* **unit** — the verb's identity handling and soft-fail (``httpx.post`` stubbed), the
-  CLI half.
+Two tiers, no live socket: **component** drives the endpoint over a real store
+(TestClient); **unit** covers the verb's identity handling and soft-fail
+(``httpx.post`` stubbed).
 """
 
 from __future__ import annotations
@@ -29,9 +27,7 @@ def _runner_app_with_store(tmp_path: Path):  # type: ignore[no-untyped-def]
     return create_app(config, runner_store=store), store
 
 
-# --------------------------------------------------------------------------- #
 # The local-API endpoint (component tier)
-# --------------------------------------------------------------------------- #
 
 
 @pytest.mark.component
@@ -56,9 +52,7 @@ def test_heartbeat_endpoint_503_when_store_unwired(tmp_path: Path) -> None:
     assert resp.status_code == 503
 
 
-# --------------------------------------------------------------------------- #
 # The `blizzard runner heartbeat` verb (unit tier)
-# --------------------------------------------------------------------------- #
 
 
 class _FakeResponse:

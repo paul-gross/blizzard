@@ -1,39 +1,9 @@
 """The Claude Code JSONL → :class:`NormalizedTurn` normalizer (blizzard#245).
 
-Pure and stdlib-only (``bzh:domain-core``): :func:`normalize_lines` takes an
-**iterable of strings** — already-read lines, never a path — which is what makes it
-unit-testable with no filesystem; the file locate/read step lives in the sibling
-``claude_code_transcript.py``.
-
-Skips ``isMeta``/control/system records, strips ANSI escapes, and collapses
-``env``/``asst``/``tool`` records (an ``isSidechain`` record is routed to
-inline-sidechain assembly, never dropped) — plus a ``thinking`` turn kind and
-structured (never ``json.dumps``'d) tool-call input. No recency cap lives here: a
-forward incremental read must never silently drop turns. :data:`MAX_BLOCK_CHARS` does
-— it caps every **string** block (assistant text, thinking, tool output); a tool
-call's *input* is a mapping at this layer, so there is no string here to cap.
-
-Records are read in **file order**, not DAG-traversed via ``uuid``/``parentUuid`` for
-the *main* conversation — a fleet worker is ``claude -p`` (headless, ``--resume``
-appends), so no rewind/branch is ever created there. The ``uuid``/``parentUuid`` chain
-*is* consulted, but only for the narrower job of threading an inline sidechain run
-together and resolving its root to a spawning tool call (route 2 below).
-
-**Sidechain linking, in the order attempted, each recorded on the turn as
-:data:`~blizzard.runner.harness.transcript.SidechainLink`:**
-
-1. ``agent-id`` — resolved by ``claude_code_transcript.py``, not here; this module
-   only surfaces the *candidates*, :attr:`NormalizedFile.agent_id_by_tool_turn` and
-   the wider :attr:`NormalizedFile.discovered_agent_ids`.
-2. ``uuid-chain`` — an inline ``isSidechain`` run's root record's ``parentUuid``
-   resolves to exactly one tool-call turn from the assistant record that ``uuid``
-   names; an ambiguous match (that record emitted more than one tool call) falls
-   through to route 3 rather than guess.
-3. ``prompt-timestamp`` — the run's first user-role text matched against a
-   candidate tool call's ``prompt``/``description`` input, nearest **preceding** call
-   by timestamp winning among ties.
-4. ``unlinked`` — carried on :class:`NormalizedFile`'s own unlinked list.
-"""
+Pure and stdlib-only (``bzh:domain-core``): :func:`normalize_lines` takes already-read
+lines, never a path. Records are read in **file order** for the main conversation; the
+``uuid``/``parentUuid`` chain is consulted only to thread an inline sidechain together.
+Sidechain linking is tried ``agent-id``, ``uuid-chain``, ``prompt-timestamp``, unlinked."""
 
 from __future__ import annotations
 
@@ -54,19 +24,13 @@ from blizzard.runner.harness.transcript import (
     ToolInputShape,
 )
 
-#: The normalizer code version stamped onto every batch this module produces
-#: (:attr:`~blizzard.runner.harness.transcript.TranscriptBatch.normalizer_version`).
-#: Bumped when this module's output shape or semantics change, so a future better
-#: normalizer's rows are told apart from this one's.
+#: The normalizer version stamped onto every batch; bumped when this module's output changes.
 NORMALIZER_VERSION = "claude-code-jsonl/1"
 
 #: Cap each text / thinking / tool-output string block at this many characters.
 MAX_BLOCK_CHARS = 1024 * 1024
 
-#: Control records: plumbing, never conversation. ``file-history-snapshot``/
-#: ``file-history-delta``/``pr-link`` are already inert (they match neither the
-#: ``assistant`` nor ``user`` branch below), but named here so their drop is
-#: explicit rather than incidental.
+#: Control records: plumbing, never conversation — named so each drop is explicit.
 _CONTROL_TYPES = frozenset(
     {
         "mode",
@@ -82,34 +46,16 @@ _CONTROL_TYPES = frozenset(
     }
 )
 
-#: Raw CSI ANSI escape sequences (e.g. `\x1b[31m`), including the private-mode `?`
-#: prefix (`\x1b[?25l`) — a fleet worker shells out to interactive TUI tools that
-#: emit these into its own transcript.
+#: Raw CSI ANSI escape sequences, including the private-mode `?` prefix (`\x1b[?25l`).
 _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 @dataclass(frozen=True)
 class NormalizedFile:
     """:func:`normalize_lines`'s return — one JSONL file's records, normalized.
-
-    Internal to the Claude Code adapter (``bzh:dependency-inversion`` — not part of
-    the harness-agnostic seam in ``harness/transcript.py``): ``agent_id_by_tool_turn``
-    and ``discovered_agent_ids`` are Claude-Code-specific plumbing; nothing outside
-    ``internal/`` needs to see either.
-
-    ``agent_id_by_tool_turn`` is *attachment*: an agent id resolved onto a specific
-    tool turn this call's own lines contain, unambiguously. ``discovered_agent_ids``
-    is strictly wider — every agent id this call's lines named at all, whether or not
-    it could be attached — because discovery must not depend on the spawning
-    ``tool_use`` being co-resident in the same call. Either way the id itself is still
-    a legitimate read candidate; only attachment needs the stronger guarantee.
-
-    ``frozen=True`` guards against rebinding a field on this instance — it does not
-    make ``turns``/``unlinked_sidechains`` themselves immutable. The sibling source
-    module treats both lists as an assembly buffer it finishes filling (completing
-    the agent-id join by list-mutating ``turns[i]`` and appending late-resolved
-    entries to ``unlinked_sidechains``) after :func:`normalize_lines` returns.
-    """
+    ``agent_id_by_tool_turn`` is *attachment* — an id resolved onto a specific tool turn;
+    ``discovered_agent_ids`` is wider, every id these lines named at all. ``frozen=True``
+    guards rebinding only: both lists stay mutable assembly buffers."""
 
     turns: list[NormalizedTurn]
     unlinked_sidechains: list[SidechainConversation]
@@ -121,17 +67,9 @@ class NormalizedFile:
 def normalize_lines(lines: list[str], *, is_sidechain_file: bool = False) -> NormalizedFile:
     """Collapse one JSONL file's raw lines into :class:`NormalizedFile`.
 
-    ``is_sidechain_file`` is set by a caller that already knows every record in
-    ``lines`` belongs to one subagent's own conversation — a sidecar file
-    (``<session-id>/subagents/agent-<id>.jsonl``), where every record carries
-    ``isSidechain: true`` on itself but that flag no longer means "splice this
-    elsewhere": it is simply what the whole file is. Left ``False`` (a top-level
-    session file), an ``isSidechain`` record is routed to inline-sidechain assembly
-    instead of the main turn stream — see the module docstring's route 2/3/4.
-
-    An unrecognized or malformed record is skipped silently rather than raising — a
-    third-party format change degrades to "fewer turns", never a crash.
-    """
+    ``is_sidechain_file`` marks a sidecar file whose every record is one subagent's own
+    conversation, so ``isSidechain`` no longer means "splice this elsewhere". An
+    unrecognized or malformed record is skipped silently — degrade, never crash."""
     records: list[dict[str, Any]] = []
     for raw_line in lines:
         line = raw_line.strip()
@@ -278,17 +216,11 @@ def _collapse_user(
         raw_agent_id = tool_use_result.get("agentId") if isinstance(tool_use_result, dict) else None
         agent_id = raw_agent_id if isinstance(raw_agent_id, str) and raw_agent_id else None
         if agent_id is not None:
-            # A discovered agent id is always a read *candidate*, independent of
-            # whether it can be attached to a specific turn below: a straddled read
-            # boundary or an ambiguous record must still surface this id, or its
-            # sidecar conversation is never opened at all. Attachment stays
-            # best-effort; discovery does not.
+            # A discovered agent id is always a read *candidate*, whether or not it can
+            # be attached below — attachment stays best-effort, discovery does not.
             discovered_agent_ids.add(agent_id)
-        # `toolUseResult.agentId` is one field on the record, not one per block — only
-        # attributable to a specific tool turn when this record resolves exactly one
-        # `tool_result`. A record carrying more than one would otherwise stamp every
-        # one of those tool turns as the sidecar's spawning call, misattributing all
-        # but (at most) the one that's actually true.
+        # `toolUseResult.agentId` is one field on the record, not one per block, so it is
+        # attributable only when this record resolves exactly one `tool_result`.
         agent_id_unambiguous = len(tool_result_blocks) == 1
         for block in tool_result_blocks:
             tool_use_id = block.get("tool_use_id")
@@ -372,21 +304,15 @@ def _assemble_inline_sidechains(
         return []
 
     unlinked: list[SidechainConversation] = []
-    # Every tool turn index a run has already claimed as its spawning call — checked
-    # by every later run so two independent sidechains matching the same prompt (or,
-    # in principle, colliding uuid-chain resolutions) never silently collapse to
-    # whichever is processed last; the loser falls through to its own next route
-    # instead, recorded nowhere is exactly the outcome this guards against.
+    # Every tool turn index a run has already claimed, so two sidechains resolving to the
+    # same call never collapse — the loser falls through to its own next route.
     claimed: set[int] = set()
-    # Built once, not per run: route 3 otherwise rescans every turn for every
-    # sidechain run (O(runs x turns)), which compounds with a large main
-    # conversation exactly when a large sidechain volume already makes the grouping
-    # step expensive.
+    # Built once, not per run: route 3 otherwise rescans every turn for every sidechain
+    # run (O(runs x turns)).
     tool_turn_indices_by_prompt = _index_tool_turns_by_prompt(turns)
     for run in _group_sidechain_runs(sidechain_records):
-        # `run`'s records all carry `isSidechain: true` themselves (that's how they
-        # were bucketed) — normalize them as their own main conversation, not fork
-        # them into a further level of sidechain routing.
+        # `run`'s records all carry `isSidechain: true`, so normalize them as their own
+        # main conversation rather than forking a further level of sidechain routing.
         conv_turns = _normalize_records(run, is_sidechain_file=True).turns
         agent_id = _first_str(run, "agentId")
 
@@ -415,24 +341,12 @@ def _assemble_inline_sidechains(
 def _group_sidechain_runs(records: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
     """Thread inline ``isSidechain`` records into conversations by ``parentUuid``.
 
-    A fleet worker's own conversation never forks (headless ``--resume`` only
-    appends), and a subagent's is the same shape, so each run is a linear chain: a
-    root (a record whose ``parentUuid`` does not name another sidechain record in
-    this set) followed by the records that chain onto it, one link at a time. A
-    record lacking usable ``uuid``/``parentUuid`` fields at all falls back to one
-    shared run in file order rather than being silently dropped.
-
-    Linear in ``len(records)`` regardless of well-formedness: a ``parentUuid`` index is
-    built once up front as a queue per key, so each link's successor is an O(1) dequeue
-    rather than a scan. The naive per-link rescan is quadratic when many links share one
-    lookup key — duplicate ``uuid`` values, a shape an in-spec transcript can plausibly
-    contain (pinned by ``tests/test_runner_harness_claude_code_normalizer.py::
-    test_group_sidechain_runs_stays_fast_and_correct_under_duplicate_uuid_values``).
-    """
+    Each run is a linear chain from a root; a record lacking usable ``uuid``/``parentUuid``
+    falls back to one shared run in file order rather than being dropped. Linear in
+    ``len(records)`` (pinned by ``test_group_sidechain_runs_stays_fast_and_correct_under_duplicate_uuid_values``)."""
     by_uuid = {r["uuid"]: r for r in records if isinstance(r.get("uuid"), str)}
-    # Every record indexed by its own `parentUuid` as a queue, so walking a chain forward
-    # from a root dequeues each candidate exactly once. Several children sharing a
-    # `parentUuid` resolve in file order, first-unused-wins.
+    # Indexed by `parentUuid` as a queue, so walking a chain forward dequeues each
+    # candidate exactly once; shared parents resolve in file order, first-unused-wins.
     children_by_parent_uuid: dict[str, deque[dict[str, Any]]] = {}
     for record in records:
         parent_uuid = record.get("parentUuid")
@@ -459,9 +373,8 @@ def _group_sidechain_runs(records: list[dict[str, Any]]) -> list[list[dict[str, 
             if isinstance(current_uuid, str):
                 queue = children_by_parent_uuid.get(current_uuid)
                 if queue is not None:
-                    # Drain front entries already consumed elsewhere (possible only under
-                    # a duplicate `uuid`). Each entry drains at most once across the whole
-                    # function, so this stays amortized O(1) per link rather than a rescan.
+                    # Drain entries already consumed elsewhere (only under a duplicate
+                    # `uuid`); each drains at most once, so this stays amortized O(1).
                     while queue and id(queue[0]) in used:
                         queue.popleft()
                     if queue:
@@ -493,11 +406,8 @@ def _resolve_uuid_chain(run: list[dict[str, Any]], tool_turns_by_record_uuid: di
 
 def _index_tool_turns_by_prompt(turns: list[NormalizedTurn]) -> dict[str, list[int]]:
     """Every tool-call turn index, keyed by its own ``prompt``/``description`` input
-    text (route 3's match key) — built once so :func:`_resolve_prompt_timestamp`
-    never rescans every turn per sidechain run. Only a timestamped turn is indexed:
-    an un-timestamped one can never win "nearest preceding" (see that function), so
-    indexing it would only cost memory for a candidate that can never be returned.
-    """
+    text — built once so :func:`_resolve_prompt_timestamp` never rescans per run. Only a
+    timestamped turn is indexed: an un-timestamped one can never win "nearest preceding"."""
     index: dict[str, list[int]] = {}
     for i, turn in enumerate(turns):
         if turn.kind != "tool" or turn.tool is None or turn.timestamp is None:

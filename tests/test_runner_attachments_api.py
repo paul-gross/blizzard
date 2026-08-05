@@ -1,12 +1,8 @@
 """``POST /api/leases/{id}/attachments`` (issue #113, Phase 2) and its read-back
 counterpart ``GET /api/leases/{id}/attachments`` (issue #169).
 
-Exercised over a real store via TestClient, mirroring
-``tests/test_runner_takeover_api.py``'s convention: the route's shape, its
-403/404/503 forms, and the round-trip it delegates to
-(:class:`~blizzard.runner.domain.attachments.AttachmentService`, pinned at the unit
-level by ``tests/test_lease_auth.py`` and the store level by
-``tests/test_runner_store.py``) are the point here.
+Exercised over a real store via TestClient: the route's shape, its 403/404/503 forms,
+and the round-trip it delegates to :class:`~blizzard.runner.domain.attachments.AttachmentService`.
 """
 
 from __future__ import annotations
@@ -176,9 +172,7 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# GET /api/leases/{id}/attachments — a worker's read-back of its own staged
-# (not-yet-published) submissions (issue #169)
-# --------------------------------------------------------------------------- #
+# GET /api/leases/{id}/attachments — a worker's read-back of its own staged submissions (issue #169)
 
 
 @pytest.mark.component
