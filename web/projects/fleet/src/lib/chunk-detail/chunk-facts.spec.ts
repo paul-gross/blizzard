@@ -155,6 +155,19 @@ describe('ChunkFacts', () => {
     expect(el.querySelector('[data-testid="graph-submit"]')).not.toBeNull();
   });
 
+  it('withholds the graph edit input for a ready chunk that has already moved (issue #271)', async () => {
+    // A chunk detached mid-graph derives `ready` again while standing on a node of its
+    // old graph: `EditService` refuses that re-pin, so the row must not be offered.
+    const fixture = TestBed.createComponent(ChunkFacts);
+    fixture.componentRef.setInput('detail', { ...NOT_READY_DETAIL, status: 'ready', current_node_id: 'nd_build' });
+    fixture.componentRef.setInput('canControl', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="graph-input"]')).toBeNull();
+    expect(el.querySelector('[data-testid="graph-submit"]')).toBeNull();
+  });
+
   it('withholds the graph edit input without chunk:control, even while editable', async () => {
     const fixture = TestBed.createComponent(ChunkFacts);
     fixture.componentRef.setInput('detail', NOT_READY_DETAIL);

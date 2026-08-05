@@ -202,6 +202,29 @@ def test_derive_event_feed_sorts_severity_then_recency() -> None:
     assert projected.runner_id is None
 
 
+def test_a_severity_outside_the_vocabulary_sinks_below_info() -> None:
+    """Why `info | warning | critical` is closed (`blizzard-context:/domain/operations.md`):
+    the rank falls back to *last* for anything else, so an emitter inventing a severity
+    buries its own event under every info row — and no severity filter reaches it."""
+    rows = [
+        EventRow(
+            id=index,
+            recorded_at=_at(index),
+            severity=severity,
+            kind="k",
+            runner_id="r",
+            chunk_id=None,
+            lease_id=None,
+            node_name=None,
+            message=severity,
+            detail=None,
+        )
+        for index, severity in enumerate(("info", "error"), start=1)
+    ]
+
+    assert [e.severity for e in derive_event_feed(rows, [])] == ["info", "error"]
+
+
 def test_derive_event_feed_escalation_message_does_not_overclaim_resume() -> None:
     """The feed message points at the escalation without reproducing what it carries —
     neither a runner-composed resume command nor a hub-authored prose field may leak

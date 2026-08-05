@@ -177,7 +177,10 @@ describe('ChunkDetailPanel', () => {
   });
 
   it('emits editGraph from the facts column', async () => {
-    const notReady: ChunkDetail = { ...ROUTED_DETAIL, status: 'not_ready', route: null };
+    // `current_node_id: null` is what makes the fixture coherent: a chunk only moves
+    // once claimed, so a `not_ready` one stands on no node — and the edit row is gated
+    // on both halves of `EditService`'s window, unclaimed and unmoved (issue #271).
+    const notReady: ChunkDetail = { ...ROUTED_DETAIL, status: 'not_ready', route: null, current_node_id: null };
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', notReady);
     fixture.componentRef.setInput('canControl', true);

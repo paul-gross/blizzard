@@ -750,7 +750,7 @@
   "blizzard/hub/api/chunks.py": {
    "comments": 16,
    "docstrings": 96,
-   "total": 856
+   "total": 859
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
@@ -980,7 +980,7 @@
   "blizzard/hub/cli.py": {
    "comments": 24,
    "docstrings": 178,
-   "total": 1286
+   "total": 1291
   },
   "blizzard/hub/cli_login.py": {
    "comments": 6,
@@ -1008,9 +1008,9 @@
    "total": 28
   },
   "blizzard/hub/delivery/hub_node.py": {
-   "comments": 43,
+   "comments": 44,
    "docstrings": 62,
-   "total": 629
+   "total": 630
   },
   "blizzard/hub/delivery/internal/__init__.py": {
    "comments": 0,
@@ -1074,8 +1074,8 @@
   },
   "blizzard/hub/domain/edit.py": {
    "comments": 9,
-   "docstrings": 40,
-   "total": 205
+   "docstrings": 41,
+   "total": 216
   },
   "blizzard/hub/domain/enrollment.py": {
    "comments": 2,
@@ -2856,8 +2856,8 @@
   },
   "test_edit_service.py": {
    "comments": 12,
-   "docstrings": 31,
-   "total": 502
+   "docstrings": 36,
+   "total": 541
   },
   "test_envelope.py": {
    "comments": 19,
@@ -2876,8 +2876,8 @@
   },
   "test_event_log.py": {
    "comments": 18,
-   "docstrings": 9,
-   "total": 257
+   "docstrings": 12,
+   "total": 280
   },
   "test_events.py": {
    "comments": 16,
@@ -3075,9 +3075,9 @@
    "total": 153
   },
   "test_hub_command_node.py": {
-   "comments": 54,
+   "comments": 55,
    "docstrings": 82,
-   "total": 1388
+   "total": 1392
   },
   "test_hub_command_runner.py": {
    "comments": 0,

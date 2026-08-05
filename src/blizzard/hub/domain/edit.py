@@ -20,6 +20,7 @@ from blizzard.hub.domain.work import (
     IntendedMigration,
     IWriteChunkRepository,
     MigrationMode,
+    current_node_id,
     derive_chunk_status,
 )
 
@@ -37,7 +38,7 @@ class _UnsetType(Enum):
 #: means "clear it", and from a field's own falsy value.
 UNSET: Final = _UnsetType.TOKEN
 
-#: The pre-claim admit set: every other status means a runner has (or had) the chunk.
+#: The unclaimed admit set — not "never claimed": see :class:`ChunkAlreadyMoved`.
 _PRE_CLAIM_WINDOW = frozenset({ChunkStatus.NOT_READY, ChunkStatus.READY})
 
 #: Closed at ``done``/``stopped`` — no future transition is left to consult the intent.
@@ -63,6 +64,14 @@ class ChunkNotEditable(Exception):
         self.chunk_id = chunk_id
         self.status = status
         self.field = field_name
+
+
+class ChunkAlreadyMoved(Exception):
+    """A graph re-pin named a chunk that has already moved (``bzh:migration-not-transition``)."""
+
+    def __init__(self, chunk_id: str) -> None:
+        super().__init__(f"chunk {chunk_id} has already moved — re-pin it with a migration, not an edit")
+        self.chunk_id = chunk_id
 
 
 class TargetGraphRetired(Exception):
@@ -157,6 +166,8 @@ class EditService:
 
             if graph_id is not UNSET:
                 self._require_editable(chunk.chunk_id, status, "graph_id")
+                if current_node_id(facts) is not None:
+                    raise ChunkAlreadyMoved(chunk.chunk_id)
                 if graph_target is not None and self._graphs.is_retired(graph_target.graph_id):
                     raise TargetGraphRetired(graph_target.graph_id)
 

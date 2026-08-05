@@ -764,7 +764,11 @@ def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path) -> No
     artifacts, events = _announcements()
     assert len(artifacts) == 1, "the gap must surface in chunk detail"
     assert len(events) == 1, "and once in the operational event feed"
-    assert events[0].severity == "error"
+    # In-vocabulary, so the severity filter reaches it (test_event_log.py::…_sinks_below_info).
+    assert events[0].severity == "critical"
+    assert [e.kind for e in hub.services.chunks.list_events(chunk_id=chunk_id, severity="critical")] == [
+        "hub-node-unroutable-outcome"
+    ]
     assert "no authored edge for choice `failure`" in events[0].message
     assert events[0].detail["authored_choices"] == ["success"]
 

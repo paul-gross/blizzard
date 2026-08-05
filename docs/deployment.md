@@ -980,16 +980,27 @@ While a chunk sits **unclaimed** — resting `not_ready` (minted but not yet pro
 or promoted to `ready` with no runner holding it yet — its pinned **graph** and its
 **default model/effort** are editable via `PATCH /api/chunks/{id}` (below). Issue #120
 widened this past its original `not_ready`-only window (issue #27): the wrong graph is
-often noticed only after promote, with no runner anywhere near the chunk yet, so a
-promoted-but-unclaimed chunk stays repinnable. Once the chunk is **claimed or later** —
-`running`, `delivering`, `waiting_on_human`, `needs_human`, `paused` (post-claim),
-`done`, or `stopped` — these edits are refused with `409`.
+often noticed only after promote, with no runner anywhere near the chunk yet. Once the
+chunk is **claimed or later** — `running`, `delivering`, `waiting_on_human`,
+`needs_human`, `paused` (post-claim), `done`, or `stopped` — these edits are refused
+with `409`.
+
+The **graph** carries one further condition the defaults do not (issue #271): the chunk
+must also **never have moved**. Unclaimed and never-moved are not the same test. A chunk
+that was claimed, ran a node, and was then detached (see "Detaching a chunk" above)
+derives `ready` again while still standing on a node of the graph it is pinned to, and
+re-pinning it in place would leave its current node absent from the new graph — so that
+edit is refused `409` even though the chunk is unclaimed. Moving a chunk that has run is
+a **migration**'s job, not an edit's: use `chunk migrate` below. The defaults name no
+node to be stranded on, so they stay editable for as long as the chunk is unclaimed.
 
 `PATCH /api/chunks/{id}` (issue #124) applies any of `graph_id`, `default_model`,
 `default_effort`, and `intended_migration` in one request, all-or-nothing: if any
 supplied field is outside *its own* editable window, the whole request is refused
-(`409`, naming the field) and nothing in the body is applied. `graph_id` and the two
-defaults share the unclaimed-only window above; `intended_migration` — see "Migrating a
+(`409` — naming the field, except the already-moved refusal, which names the chunk and
+points at migration) and nothing in the body is applied. The two defaults take the
+unclaimed window above and `graph_id` that window plus never-moved;
+`intended_migration` — see "Migrating a
 claimed chunk to another graph" below — is different: it is editable at **any
 non-terminal status**, claimed or not, so a `PATCH` naming it alongside a claimed
 chunk's now-sealed `graph_id` still refuses the whole request on `graph_id`.
@@ -1016,9 +1027,12 @@ There is deliberately **no web editing surface** for either — the chunk detail
 model editor was removed with `Chunk.model`, and is not replaced. `chunk show` (or the
 detail payload's `default_model`/`default_effort` fields) is the read-back.
 
-A graph edit has a second, distinct `409`: targeting a graph that has been
-**retired** (see "Graph lifecycle — retire and re-enable" below) is refused even on an
-otherwise-editable chunk, naming the retired graph id rather than the chunk's status.
+A graph edit has two further distinct `409`s beyond the status window. Targeting a graph
+that has been **retired** (see "Graph lifecycle — retire and re-enable" below) is refused
+even on an otherwise-editable chunk, naming the retired graph id rather than the chunk's
+status. Editing a chunk that has **already moved** is refused as above. The already-moved
+check runs **first**, so a moved-but-unclaimed chunk aimed at a retired graph reports the
+move, not the retirement.
 
 ### Migrating a claimed chunk to another graph
 
@@ -1043,7 +1057,7 @@ Editable at **any non-terminal status** — `not_ready` and `ready` too, not jus
 claimed — since the intent is a plain mutable chunk property, not a transition itself;
 it is only ever *consulted* at a transition, which is why in practice it matters once
 a chunk is claimed and progressing, and why it complements rather than replaces the
-pre-claim graph repin above. When the intent fires, the chunk's movement is recorded
+never-moved graph repin above — it is the only way to move a chunk that has run. When the intent fires, the chunk's movement is recorded
 as a migration exactly like an authored cross-graph judgement choice (see "Graph
 lifecycle" below): it re-pins the chunk's graph, lands it on the resolved node, and
 clears the intent in the same write. Landing governs by the landed node's own
@@ -1215,9 +1229,16 @@ command that failed on a missing environment var, a stall past the liveness wind
 - **The runner reports failure events.** When a worker exits non-clean, when a captured
   spawn/push/environment-prep command fails, or when an attempt is reaped/abandoned/escalated, the
   runner emits an operational event on the same durable store-and-forward path completions ride.
-  The hub folds each into the log. Severities are `info` (an attempt given up because the chunk
-  moved on), `warning` (an attempt failed and will retry, or a command failed), and `critical` (a
-  worker lost to a human, retries exhausted).
+  The hub folds each into the log. Severities are `info`, `warning`, and `critical` — a **closed**
+  set, because the feed ranks by it and orders anything else below every other row. Runner-emitted
+  examples: `info` (an attempt given up because the chunk moved on), `warning` (an attempt failed
+  and will retry, or a command failed), `critical` (a worker lost to a human, retries exhausted).
+- **The hub emits its own events too**, for the failures only it sees. Chief among them,
+  `hub-node-unroutable-outcome` (`critical`): a hub command node produced an outcome its graph
+  authors no edge for, so nothing routes and the chunk re-polls that same outcome **forever**. It
+  is announced once per node visit, not once per poll. The remedy is not a retry — author the
+  missing edge on the graph, then requeue. The work-item closure events (`work-item-closed`,
+  `work-item-close-failed`) are the hub's too — see "Closing delivered work items" above.
 - **`GET /api/events`** returns the log newest-and-most-severe first, filterable by
   `severity` / `runner_id` / `chunk_id` / `since`, with a bounded default page. Existing
   escalations appear in the *same* feed as a `needs-human` event kind — `needs_human` is one row in

@@ -516,7 +516,12 @@ def chunk_ingest(pointers: tuple[str, ...], as_json: bool, hub_url: str | None) 
 
 @chunk_group.command("set")
 @click.argument("chunk_id")
-@click.option("--graph", "graph_id", default=None, help="Repin CHUNK's workflow graph to this graph id.")
+@click.option(
+    "--graph",
+    "graph_id",
+    default=None,
+    help="Repin CHUNK's workflow graph to this graph id. Legal only while CHUNK has never moved.",
+)
 @click.option(
     "--default-model",
     "default_model",
@@ -541,8 +546,8 @@ def chunk_set(
     """Repin CHUNK's graph and/or default model/effort in one call (issues #104, #144).
 
     A pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given and
-    applied all-or-nothing. At least one option is required; 409 once CHUNK has left
-    ``not_ready``/unclaimed-``ready``."""
+    applied all-or-nothing. At least one option is required; 409 for the defaults once
+    CHUNK is claimed, and for ``--graph`` once it is claimed or has moved (#271)."""
     if graph_id is None and not default_model and default_effort is None:
         raise click.UsageError("at least one of --graph/--default-model/--default-effort is required")
     base = hub_url

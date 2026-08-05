@@ -16,6 +16,7 @@ import pytest
 
 from blizzard.hub.domain.edit import (
     UNSET,
+    ChunkAlreadyMoved,
     ChunkEdit,
     ChunkNotEditable,
     EditService,
@@ -34,6 +35,7 @@ from blizzard.hub.domain.work import (
     MigrationMode,
     QuestionFact,
     RouteCreatedFact,
+    RouteReleasedFact,
     TransitionFact,
 )
 from tests.support import make_graph
@@ -304,6 +306,43 @@ def test_set_graph_refuses_a_retired_target_on_an_editable_chunk() -> None:
 
     assert excinfo.value.graph_id == "gr_2"
     assert repo.graphs_set == []
+
+
+def _detached_after_running_facts() -> ChunkFacts:
+    """Detached back to ``ready`` mid-graph — route released, still standing on ``nd_9``."""
+    return ChunkFacts(
+        minted=True,
+        promoted=True,
+        routes_created=[RouteCreatedFact(created_at=_T0)],
+        routes_released=[RouteReleasedFact(released_at=_T0, seq=1)],
+        transitions=[
+            TransitionFact(to_node_id="nd_9", to_node_executor=Executor.RUNNER, epoch=1, recorded_at=_T0),
+        ],
+    )
+
+
+def test_set_graph_refuses_a_ready_chunk_that_has_already_moved() -> None:
+    """`bzh:migration-not-transition` — a chunk that has run re-pins only by migration.
+    Detaching it returns it to ``ready``, so the status window alone would admit the edit
+    and strand the chunk on a node its new pin does not contain."""
+    repo = _FakeChunkRepo(facts=_detached_after_running_facts())
+    service = _service(repo)
+
+    with pytest.raises(ChunkAlreadyMoved) as excinfo:
+        service.set_graph(_CHUNK, graph=_TARGET_GRAPH)
+
+    assert excinfo.value.chunk_id == "chk_1"
+    assert repo.graphs_set == []
+
+
+def test_defaults_stay_editable_on_a_ready_chunk_that_has_already_moved() -> None:
+    """The unmoved requirement is the graph pin's alone — a default names no node."""
+    repo = _FakeChunkRepo(facts=_detached_after_running_facts())
+    service = _service(repo)
+
+    service.set_defaults(_CHUNK, default_model=["blizzard:basic"], default_effort="medium")
+
+    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium")]
 
 
 def test_set_graph_reports_chunk_not_editable_before_checking_a_retired_target() -> None:

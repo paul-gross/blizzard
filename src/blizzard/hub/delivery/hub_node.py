@@ -515,7 +515,8 @@ class HubNodeExecutor:
             )
             if announced:
                 self._chunks.record_event(
-                    severity="error",
+                    # Never a fourth severity — the feed ranks only these three (#125).
+                    severity="critical",
                     kind=_EVENT_UNROUTABLE_OUTCOME,
                     runner_id=_HUB_RUNNER_ID,
                     chunk_id=chunk.chunk_id,

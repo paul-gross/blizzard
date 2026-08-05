@@ -14,11 +14,10 @@ export interface EditGraphEvent {
 /**
  * The chunk's own facts (issue #79) — the fixed-height glance a long issue
  * body must not scroll away: status, node, runner, attempts, and its pinned
- * **graph**, editable inline (text-input-and-Set) while the chunk sits
- * `not_ready` or `ready` with no runner holding it yet (issue #27, widened by
- * #120). The edit row is gated on {@link editable} — the fact, not a confirm —
- * so the control simply disappears once the chunk is actually claimed rather
- * than staying up to fail a 409.
+ * **graph**, editable inline (text-input-and-Set) while the chunk is unclaimed and has
+ * not yet moved (issue #27, widened by #120, narrowed by #271). The edit row is gated
+ * on {@link editable} — the fact, not a confirm — so the control simply disappears once
+ * the pin is the engine's rather than staying up to fail a 409.
  *
  * A **Model** row stood beside Graph with the same inline editor until issue #144
  * retired `Chunk.model` — a knob that never reached the envelope, so the board offered
@@ -163,14 +162,16 @@ export class ChunkFacts {
     return `${ref}#${detail.graph_name}-${ymd}`;
   });
 
-  /** Whether the chunk's graph may be edited — `not_ready` or `ready` with no runner
-   * holding it yet (issue #27, widened by #120): `EditService` refuses the
-   * edit 409 the moment a chunk is actually claimed (`running`, `delivering`,
-   * `waiting_on_human`, `needs_human`, `paused` post-claim, `done`, `stopped`), so the
-   * facts column withholds the edit row rather than let an operator hit that refusal. */
+  /** Whether the chunk's graph may be edited — mirrors `EditService.edit`'s own two
+   * conditions (issue #27, widened by #120, narrowed by #271) rather than the status
+   * half alone: unclaimed **and** never moved. A chunk detached mid-graph derives
+   * `ready` again while standing on a node of its old graph, and re-pinning it there is
+   * a migration's job, so the facts column withholds the row rather than offer an edit
+   * that always 409s (`blizzard-context:/domain/work.md` `bzh:migration-not-transition`). */
   protected readonly editable = computed<boolean>(() => {
-    const status = this.detail().status;
-    return status === 'not_ready' || status === 'ready';
+    const detail = this.detail();
+    const unclaimed = detail.status === 'not_ready' || detail.status === 'ready';
+    return unclaimed && !detail.current_node_id;
   });
 
   /** Emit a graph repin — no-op on a blank id (issue #27). */

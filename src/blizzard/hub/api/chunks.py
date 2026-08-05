@@ -29,6 +29,7 @@ from blizzard.hub.domain.decisions import NotEscalated
 from blizzard.hub.domain.detach import NotRouted
 from blizzard.hub.domain.edit import (
     UNSET,
+    ChunkAlreadyMoved,
     ChunkEdit,
     ChunkNotEditable,
     ForcedNodeUnknown,
@@ -759,6 +760,8 @@ def patch_chunk(
     try:
         services.edit.edit(chunk, edit, graph_target=graph_target, migration_target=migration_target)
     except ChunkNotEditable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ChunkAlreadyMoved as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except TargetGraphRetired as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
