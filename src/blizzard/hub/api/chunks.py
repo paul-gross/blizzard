@@ -18,6 +18,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.chunk_edit import ChunkPatchBody
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.marker_auth import require_marker_authority
@@ -28,9 +29,7 @@ from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact, from_r
 from blizzard.hub.domain.decisions import NotEscalated
 from blizzard.hub.domain.detach import NotRouted
 from blizzard.hub.domain.edit import (
-    UNSET,
     ChunkAlreadyMoved,
-    ChunkEdit,
     ChunkNotEditable,
     ForcedNodeUnknown,
     MigrationTargetIsCurrentPin,
@@ -44,8 +43,6 @@ from blizzard.hub.domain.stop import ChunkNotStoppable
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
-    IntendedMigration,
-    MigrationMode,
     WorkRef,
     derive_fleet_summary,
     holds_claim,
@@ -192,18 +189,6 @@ def _intended_migration_view(services: HubServices, chunk: Chunk) -> IntendedMig
         graph_name=_graph_name(target_graph),
         node_name=intent.node_name,
     )
-
-
-def _resolve_graph_by_id_or_name(services: HubServices, ref: str) -> Graph | None:
-    """Resolve a PATCH ``to_graph`` reference (issue #124) — a graph id, tried first, or
-    a graph name resolved to the newest enabled graph of that name. Mirrors #90's
-    ``_resolve_cross_graph_target`` (``hub/api/fleet.py``) id/name duality, but also
-    admits an id — the PATCH caller may already hold one (e.g. round-tripping a value
-    read off ``GET``), where a #90 migration edge only ever names a graph."""
-    graph = services.graphs.get(ref)
-    if graph is not None:
-        return graph
-    return services.graphs.get_enabled_by_name(ref)
 
 
 def _history_graphs(services: HubServices, chunk: Chunk, facts: ChunkFacts) -> dict[str | None, Graph | None]:
@@ -678,85 +663,23 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
 def patch_chunk(
     chunk_id: str, request: ChunkPatchRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkPatchResponse:
-    """Apply any of ``graph_id``, ``default_model``, ``default_effort``, or
-    ``intended_migration`` in one all-or-nothing edit (issue #124).
+    """Apply the body's fields in one all-or-nothing edit (issue #124).
 
-    404 on an unknown chunk, graph, or migration target; 422 on a blank value; the
-    editable-status windows and semantic refusals are ``EditService.edit``'s."""
+    404 only when the chunk is unknown; :class:`ChunkPatchBody` and ``EditService.edit``
+    own every other refusal."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
-
-    graph_id = UNSET
-    graph_target: Graph | None = None
-    if request.graph_id is not None:
-        graph_target = services.graphs.get(request.graph_id)
-        if graph_target is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {request.graph_id}")
-        graph_id = graph_target.graph_id
-
-    default_model = UNSET
-    if request.default_model is not None:
-        entries = [entry.strip() for entry in request.default_model]
-        if any(not entry for entry in entries):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="default_model entries must not be blank"
-            )
-        default_model = entries
-
-    # `default_effort` is nullable-with-meaning: explicit `null` clears the preference and
-    # an omitted field leaves it unchanged, which a plain `Optional` cannot tell apart.
-    default_effort = UNSET
-    if "default_effort" in request.model_fields_set:
-        if request.default_effort is None:
-            default_effort = None
-        else:
-            effort_value = request.default_effort.strip()
-            if not effort_value:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="default_effort must not be blank"
-                )
-            default_effort = effort_value
-
-    intended_migration = UNSET
-    migration_target: Graph | None = None
-    if "intended_migration" in request.model_fields_set:
-        patch = request.intended_migration
-        if patch is None:
-            intended_migration = None
-        else:
-            to_graph = patch.to_graph.strip()
-            if not to_graph:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="to_graph must not be blank"
-                )
-            node_name = patch.node.strip() if patch.node is not None else None
-            if patch.node is not None and not node_name:
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="node must not be blank")
-            migration_target = _resolve_graph_by_id_or_name(services, to_graph)
-            if migration_target is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {to_graph}")
-            mode = MigrationMode.FORCED if node_name is not None else MigrationMode.AUTO
-            intended_migration = IntendedMigration(mode=mode, graph_id=migration_target.graph_id, node_name=node_name)
-
-    edit = ChunkEdit(
-        graph_id=graph_id,
-        default_model=default_model,
-        default_effort=default_effort,
-        intended_migration=intended_migration,
-    )
     try:
-        services.edit.edit(chunk, edit, graph_target=graph_target, migration_target=migration_target)
-    except ChunkNotEditable as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except ChunkAlreadyMoved as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except TargetGraphRetired as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except MigrationTargetIsCurrentPin as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except ForcedNodeUnknown as exc:
+        ChunkPatchBody(request, services).apply(chunk)
+    except (
+        ChunkNotEditable,
+        ChunkAlreadyMoved,
+        TargetGraphRetired,
+        MigrationTargetIsCurrentPin,
+        ForcedNodeUnknown,
+    ) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     updated = services.chunks.get(chunk_id)

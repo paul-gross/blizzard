@@ -23,9 +23,9 @@ from blizzard.hub.domain.work import (
 )
 
 
-class _UnsetType(Enum):
+class UnsetType(Enum):
     """The type of :data:`UNSET` — a single-member enum, not a plain class, so
-    ``is``/``is not`` comparisons against it narrow a ``T | _UnsetType`` union for
+    ``is``/``is not`` comparisons against it narrow a ``T | UnsetType`` union for
     pyright (identity narrowing on a bare class instance is not reliably supported;
     on an enum literal it is)."""
 
@@ -34,7 +34,7 @@ class _UnsetType(Enum):
 
 #: "Field absent from the request, leave it unchanged" — distinct from ``None``, which
 #: means "clear it", and from a field's own falsy value.
-UNSET: Final = _UnsetType.TOKEN
+UNSET: Final = UnsetType.TOKEN
 
 #: The unclaimed admit set — not "never claimed": see :class:`ChunkAlreadyMoved`.
 _PRE_CLAIM_WINDOW = frozenset({ChunkStatus.NOT_READY, ChunkStatus.READY})
@@ -109,10 +109,10 @@ class ChunkEdit:
     ``intended_migration`` and ``default_effort`` accept ``None`` to mean "clear it";
     an empty ``default_model`` list is the same clear."""
 
-    graph_id: str | _UnsetType = field(default=UNSET)
-    default_model: list[str] | _UnsetType = field(default=UNSET)
-    default_effort: str | None | _UnsetType = field(default=UNSET)
-    intended_migration: IntendedMigration | None | _UnsetType = field(default=UNSET)
+    graph_id: str | UnsetType = field(default=UNSET)
+    default_model: list[str] | UnsetType = field(default=UNSET)
+    default_effort: str | None | UnsetType = field(default=UNSET)
+    intended_migration: IntendedMigration | None | UnsetType = field(default=UNSET)
 
 
 class EditService:
