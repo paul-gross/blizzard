@@ -22,35 +22,26 @@ from blizzard.runner.environments.provider import (
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
 from blizzard.runner.loop.attempt import (
-    FAILED,
-    PARKED,
     REAPED,
-    TRANSITIONED,
     Attempt,
 )
 from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop.drain import OutboundDrain
+from blizzard.runner.loop.held_chunk import HeldChunk
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.judgement import Judgement
-from blizzard.runner.loop.outbound import COMPLETION_KIND, DECISION_KIND, OutboundFacts
+from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.spawn import Spawner, environments_for
 from blizzard.runner.store.repository import (
     AskRecord,
-    BufferedFact,
     EnvBindingRecord,
     IWriteRunnerStore,
     LeaseRecord,
 )
-from blizzard.wire.completion import (
-    CompletionSubmission,
-)
-from blizzard.wire.decision import DecisionSubmission, DecisionView
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import (
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     RUNNER_LOCALLY_PAUSED,
-    RunnerFact,
-    RunnerFactBatch,
 )
 from blizzard.wire.queue import QueuePeekEntry
 from blizzard.wire.route import RouteClaim
@@ -105,19 +96,6 @@ _CP_FILL_BEFORE_ACQUIRE = crashpoint("fill.before-env-acquire", "peeked a ready 
 _CP_FILL_AFTER_ACQUIRE = crashpoint("fill.after-env-acquire.before-bind", "envs acquired; binding not recorded")
 _CP_FILL_AFTER_BIND = crashpoint("fill.after-bind.before-claim", "binding recorded; route not claimed at the hub")
 _CP_FILL_AFTER_CLAIM = crashpoint("fill.after-claim.before-spawn", "hub holds the route; lease not minted")
-
-# The between-attempts boundary the per-chunk spend cap checks at (issue #61a): a crash
-# here leaves no active lease and no escalation, recovered by `_reconcile_interrupted_claims`.
-_CP_ADV_AFTER_CLOSURE = crashpoint(
-    "advance.after-closure.before-cost-cap-check", "attempt closed; cap check and next-step decision not yet made"
-)
-
-# FLUSH (of the buffered completion, inside PULL) — submit -> ack -> apply-response. The
-# after-submit.before-ack window is the lost-ack replay the hub's idempotency must absorb.
-_CP_FLUSH_BEFORE_SUBMIT = crashpoint("flush.before-submit", "completion at head of buffer; not submitted")
-_CP_FLUSH_AFTER_SUBMIT = crashpoint("flush.after-submit.before-ack", "hub applied the completion; ack not recorded")
-_CP_FLUSH_AFTER_ACK = crashpoint("flush.after-ack.before-apply-response", "ack recorded; apply-response not consumed")
-_CP_FLUSH_AFTER_APPLY = crashpoint("flush.after-apply-response", "apply-response consumed; chunk continued in place")
 
 
 # Usage telemetry (issue #58) — the per-lease stdout redirect and its readback.
@@ -362,11 +340,7 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
 
 
 def pull(ctx: LoopContext) -> None:
-    """Exchange facts with the hub: sync the registry, reconcile ownership, drain the buffer.
-
-    Store-and-forward always: this is the single flusher, draining FIFO so a fact never
-    overtakes a stuck earlier one. A transport failure stops the drain until the next tick.
-    """
+    """Exchange facts with the hub: sync the registry, reconcile ownership, drain the buffer."""
     _sync_registry(ctx)
     _reconcile_leases(ctx)
     _CP_PULL_BEFORE.reached()
@@ -423,147 +397,7 @@ def _reconcile_leases(ctx: LoopContext) -> None:
 
 def flush_outbound(ctx: LoopContext) -> None:
     """Drain the outbound buffer in FIFO order until a fact fails to deliver."""
-    for fact in ctx.store.pending_outbound():
-        if not _flush_one(ctx, fact):
-            break  # transport failure — stop; strict FIFO, retry the backlog next tick
-
-
-def _flush_one(ctx: LoopContext, fact: BufferedFact) -> bool:
-    """Deliver one buffered fact. Return False on a transport failure (stop the drain)."""
-    if fact.kind == COMPLETION_KIND:
-        return _flush_completion(ctx, fact)
-    if fact.kind == DECISION_KIND:
-        return _flush_decision(ctx, fact)
-    return _flush_hub_fact(ctx, fact)
-
-
-def _flush_hub_fact(ctx: LoopContext, fact: BufferedFact) -> bool:
-    """Push one buffered fact to POST /events — the generic default arm for every kind
-    but completion and decision."""
-    payload = json.loads(fact.payload)
-    batch = RunnerFactBatch(
-        runner_id=ctx.config.runner_id,
-        facts=[RunnerFact(seq=fact.seq, kind=fact.kind, payload=payload)],
-    )
-    try:
-        ack = ctx.hub.push_facts(batch)
-    except HubClientError:
-        return False  # hub unreachable — the fact stays buffered, retried next tick
-    if fact.seq in ack.rejected:
-        # A contract rejection is not idempotency — surface it, but do not wedge the FIFO
-        # drain on a fact the hub will never accept: ack and move on.
-        _log.error("hub rejected buffered fact", seq=fact.seq, kind=fact.kind)
-    ctx.store.ack_outbound(fact.seq, acked_at=ctx.clock.now())
-    return True
-
-
-def _flush_completion(ctx: LoopContext, fact: BufferedFact) -> bool:
-    """Submit a buffered completion and drive its apply-response.
-
-    Idempotent by construction: the apply is epoch-idempotent, and the response is acted on
-    only while the lease is still active, so a re-flush past a lost ack just clears the buffer.
-    """
-    payload = json.loads(fact.payload)
-    submission = CompletionSubmission.model_validate(payload["submission"])
-    _CP_FLUSH_BEFORE_SUBMIT.reached()
-    try:
-        response = ctx.hub.submit_completion(fact.chunk_id or "", submission)
-    except HubClientError:
-        return False  # completion stays durable in the buffer; the mid-node worker is unaffected
-
-    _CP_FLUSH_AFTER_SUBMIT.reached()  # hub applied it; a crash here is the lost-ack replay
-    ctx.store.ack_outbound(fact.seq, acked_at=ctx.clock.now())
-    _CP_FLUSH_AFTER_ACK.reached()
-    lease = ctx.store.active_lease(fact.lease_id or "")
-    if lease is None:
-        # Already advanced on an earlier flush whose ack was lost — nothing to do.
-        return True
-    _consume_apply_response(ctx, lease, response)
-    _CP_FLUSH_AFTER_APPLY.reached()
-    return True
-
-
-def _flush_decision(ctx: LoopContext, fact: BufferedFact) -> bool:
-    """Submit a buffered runner-config gate decision and park the chunk.
-
-    There is no next envelope to continue into, so the flush closes the lease and holds the
-    environments. The apply is natural-key idempotent, so a re-flush just clears the buffer.
-    """
-    payload = json.loads(fact.payload)
-    submission = DecisionSubmission.model_validate(payload["submission"])
-    try:
-        response = ctx.hub.submit_decision(fact.chunk_id or "", submission)
-    except HubClientError:
-        return False  # decision stays durable in the buffer; retried next tick
-
-    ctx.store.ack_outbound(fact.seq, acked_at=ctx.clock.now())
-    lease = ctx.store.active_lease(fact.lease_id or "")
-    if lease is None:
-        return True  # already parked on an earlier flush whose ack was lost
-    if response.outcome == ApplyOutcome.FAILURE:
-        _log.warning("decision rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
-        Attempt(ctx, lease).fail(reason=FAILED, via="pull")
-        return True
-    ctx.store.record_closure(
-        lease_id=lease.lease_id,
-        chunk_id=lease.chunk_id,
-        node_id=lease.node_id,
-        reason=PARKED,
-        closed_at=ctx.clock.now(),
-    )
-    _log.info("chunk parked at runner-config gate", chunk_id=lease.chunk_id, node=lease.node_name)
-    return True
-
-
-def _consume_apply_response(ctx: LoopContext, lease: LeaseRecord, response: ApplyResponse) -> None:
-    """Record the closure and continue in place per the hub's apply-response.
-
-    Between the closure below and any next-attempt spawn sits the boundary the per-chunk spend
-    cap checks at: the attempt just closed is genuinely done, so parking here kills nothing live.
-    """
-    if response.outcome == ApplyOutcome.FAILURE:
-        # A semantic rejection — a stale-epoch or terminal completion. The attempt failed;
-        # requeue or escalate. The chunk never advanced.
-        _log.warning("completion rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
-        Attempt(ctx, lease).fail(reason=FAILED, via="pull")
-        return
-    now = ctx.clock.now()
-    ctx.store.record_closure(
-        lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=TRANSITIONED, closed_at=now
-    )
-    _CP_ADV_AFTER_CLOSURE.reached()
-    if response.outcome == ApplyOutcome.NEXT and _park_on_cost_cap(ctx, lease):
-        return  # capped — needs_human; the next attempt is not spawned
-    bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
-    _apply_response(ctx, lease.chunk_id, response.outcome, response.next_envelope, bindings)
-
-
-def _park_on_cost_cap(ctx: LoopContext, lease: LeaseRecord) -> bool:
-    """True — chunk parked ``needs_human`` — iff its spend has reached ``cost.chunk_cap_usd``.
-
-    Reads the hub-derived total (``bzh:facts-not-status``), never a local sum. That total is a
-    LOWER BOUND — a cost-absent row contributes $0 — so the cap trips conservatively.
-    """
-    cap = ctx.config.chunk_cap_usd
-    if cap is None:
-        return False
-    try:
-        detail = ctx.hub.get_chunk(lease.chunk_id)
-    except HubClientError:
-        return False  # hub unreachable — re-checked at the next step boundary
-    cost = detail.cost
-    if cost.cost_usd < cap:
-        return False
-    partial_note = " (PARTIAL — true spend may be higher)" if cost.cost_partial else ""
-    _log.warning(
-        f"chunk parked — spend cap exceeded{partial_note}",
-        chunk_id=lease.chunk_id,
-        cap_usd=cap,
-        spend_usd=cost.cost_usd,
-        cost_partial=cost.cost_partial,
-    )
-    Attempt(ctx, lease).escalate(reason=f"spend cap ${cap:.2f} reached (spend ${cost.cost_usd:.2f}{partial_note})")
-    return True
+    OutboundDrain(ctx).run()
 
 
 # FILL
@@ -788,7 +622,7 @@ def advance(ctx: LoopContext) -> None:
         if chunk_id in taken_over:
             continue  # the human holds this chunk — no gate/hub-node poll while they do
         if ctx.store.active_lease_for_chunk(chunk_id) is None:
-            _advance_held_chunk(ctx, chunk_id)
+            HeldChunk(ctx, chunk_id).drive()
 
 
 def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
@@ -805,133 +639,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     if judgement is not None:
         judgement.run()
 
-
-def _apply_response(
-    ctx: LoopContext,
-    chunk_id: str,
-    outcome: ApplyOutcome,
-    next_envelope: NodeEnvelope | None,
-    bindings: list[EnvBindingRecord],
-) -> None:
-    """Act on the apply-response: continue in place, hold at a hub node, or finish."""
-    if outcome == ApplyOutcome.NEXT and next_envelope is not None:
-        envs = environments_for(bindings)
-        resume_from = ctx.sessions.resume_target(
-            chunk_id,
-            next_envelope.node,
-            resolve_spawn_cwd(ctx.config.workspace_root, envs[0].workdir if envs else None),
-        )
-        Spawner(ctx).spawn(chunk_id, next_envelope, envs, via="apply-response", resume_from=resume_from)
-    elif outcome == ApplyOutcome.HUB_NODE_TAKEN:
-        _log.info("hub node took over — holding envs until terminal", chunk_id=chunk_id)
-    elif outcome == ApplyOutcome.MIGRATED:
-        # A cross-graph migration already released the route (#90) — tear the attempt down;
-        # the chunk is claimed afresh under the new graph rather than continued in place.
-        _log.info("chunk migrated to another graph — releasing envs", chunk_id=chunk_id)
-        ctx.env_release.release_chunk(chunk_id)
-    elif outcome == ApplyOutcome.DONE:
-        ctx.env_release.release_chunk(chunk_id)
-    elif outcome == ApplyOutcome.PARKED_AT_GATE:
-        _log.info("chunk parked at human gate", chunk_id=chunk_id)  # waiting_on_human
-
-
-def _advance_held_chunk(ctx: LoopContext, chunk_id: str) -> None:
-    """Drive a chunk the runner holds with no active lease.
-
-    Four shapes share this poll, all holding environments: a hub node polled toward its terminal
-    outcome, a resolved gate, a chunk moved to a higher epoch, and an unknown chunk (blizzard#9).
-    """
-    try:
-        detail = ctx.hub.get_chunk(chunk_id)
-    except ChunkNotFoundError:
-        _log.warning("hub reports held chunk unknown — releasing envs", chunk_id=chunk_id)
-        ctx.env_release.release_chunk(chunk_id)
-        return
-    except HubClientError:
-        return
-    if detail.status == ChunkStatus.DONE:
-        _log.info("delivery landed — releasing envs", chunk_id=chunk_id)
-        ctx.env_release.release_chunk(chunk_id)
-        return
-    decision = detail.decision
-    if decision is not None and decision.resolved_choice is not None and not decision.transitioned:
-        _resolve_gate(ctx, chunk_id, decision)
-        return
-    hub_epoch = detail.latest_epoch
-    if detail.status == ChunkStatus.RUNNING and hub_epoch is not None and hub_epoch > ctx.store.latest_epoch(chunk_id):
-        # The strictly-higher epoch is load-bearing: a just-escalated chunk still derives
-        # `running` at the SAME epoch until its fact flushes, and would re-spawn forever (#63).
-        _spawn_into_held_node(ctx, chunk_id)
-    elif detail.status == ChunkStatus.DELIVERING:
-        # A chunk parked at a hub node — drive it one step; a no-op leaves this binding
-        # held and polled again next tick (#65/#66).
-        _poll_hub_node(ctx, chunk_id)
     # Every other shape keeps its binding and is polled again next tick.
-
-
-def _poll_hub_node(ctx: LoopContext, chunk_id: str) -> None:
-    """Drive a chunk parked at a hub node one step via ``POST /chunks/{id}/hub-advance``
-    (#65/#66) — the re-drive path a hub node otherwise has no liveness poll for.
-
-    A no-op upstream is expected and silent; a transport failure is likewise swallowed.
-    """
-    try:
-        ctx.hub.hub_advance(chunk_id)
-    except HubClientError:
-        return  # hub unreachable — retried next tick
-
-
-def _spawn_into_held_node(ctx: LoopContext, chunk_id: str) -> None:
-    """Spawn the held chunk's current node into its already-bound, warm environment.
-
-    The chunk advanced while this runner retained the route, so no active lease was minted
-    for it and nothing else will spawn it (#63)."""
-    bindings = ctx.store.bindings_for_chunk(chunk_id)
-    if not bindings:
-        _log.warning("held chunk advanced with no bound env — cannot spawn", chunk_id=chunk_id)
-        return
-    try:
-        envelope = ctx.hub.get_envelope(chunk_id)
-    except ChunkNotFoundError:
-        _log.warning("hub reports advanced chunk unknown — releasing envs", chunk_id=chunk_id)
-        ctx.env_release.release_chunk(chunk_id)
-        return
-    except HubClientError:
-        return  # hub unreachable — the transition is durable at the hub; retry next tick
-    _log.info("hub advanced held chunk into a fresh node — spawning", chunk_id=chunk_id)
-    held = environments_for(bindings)
-    resume_from = ctx.sessions.resume_target(
-        chunk_id,
-        envelope.node,
-        resolve_spawn_cwd(ctx.config.workspace_root, held[0].workdir if held else None),
-    )
-    Spawner(ctx).spawn(chunk_id, envelope, held, via="advance", resume_from=resume_from)
-
-
-def _resolve_gate(ctx: LoopContext, chunk_id: str, decision: DecisionView) -> None:
-    """Record the resolving transition for a decided gate and continue in place.
-
-    Reuses the parked step's epoch — no new lease was minted while parked — and references
-    the decision id, which is what makes a transition out of a human-judged node legal."""
-    submission = CompletionSubmission(
-        choice=decision.resolved_choice or "",
-        epoch=decision.epoch,
-        runner_id=ctx.config.runner_id,
-        from_node_id=decision.node_id,
-        artifacts=[],  # the decision's artifacts already landed
-        decision_id=decision.decision_id,
-        # Not buffered, so stamped directly at submit (issue #84a).
-        route_token=ctx.store.route_token(chunk_id),
-    )
-    try:
-        response = ctx.hub.submit_completion(chunk_id, submission)
-    except HubClientError:
-        return  # the resolution is durable at the hub; retry next tick
-    if response.outcome == ApplyOutcome.FAILURE:
-        _log.warning("resolving transition rejected", chunk_id=chunk_id, detail=response.detail or "")
-        return
-    _log.info("gate resolved — advancing chunk", chunk_id=chunk_id, choice=decision.resolved_choice)
-    _apply_response(ctx, chunk_id, response.outcome, response.next_envelope, ctx.store.bindings_for_chunk(chunk_id))
 
 
 # Shared helpers

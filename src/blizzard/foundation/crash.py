@@ -59,6 +59,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.runner.loop.spawn",
     "blizzard.runner.loop.attempt",
     "blizzard.runner.loop.judgement",
+    "blizzard.runner.loop.drain",
     "blizzard.runner.domain.attachments",
     "blizzard.runner.domain.git_commit_declaration",
     "blizzard.hub.delivery.hub_node",

@@ -13,6 +13,7 @@ from blizzard.runner.domain.lease_auth import mint_lease_token
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
 from blizzard.runner.harness.preamble import RenderedPreamble, render_worker_preamble
+from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.store.repository import EnvBindingRecord, LeaseRecord, NewLease
@@ -118,6 +119,17 @@ class Spawner:
         # Written after the spawn, so a durable fingerprint always implies the prose was sent.
         self.ctx.store.record_session_preamble(handle.session_id, fingerprint=rendered.fingerprint, at=now)
         _CP_AFTER_SPAWN.reached()
+
+    def enter_node(
+        self, chunk_id: str, envelope: NodeEnvelope, environments: list[AcquiredEnvironment], *, via: str
+    ) -> None:
+        """Spawn into this node, continuing whatever session its pool resolves to (issue #115)."""
+        resume_from = self.ctx.sessions.resume_target(
+            chunk_id,
+            envelope.node,
+            resolve_spawn_cwd(self.ctx.config.workspace_root, environments[0].workdir if environments else None),
+        )
+        self.spawn(chunk_id, envelope, environments, via=via, resume_from=resume_from)
 
     def generation(self, lease_id: str) -> int:
         """The spawn generation this lease's next start is about to mint — one past the
