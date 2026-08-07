@@ -15,16 +15,12 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import as_utc, is_heartbeat_stale
-from blizzard.runner.environments.provider import (
-    EnvironmentPreparationError,
-    WorkspaceAcquisitionError,
-)
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
-from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
 from blizzard.runner.loop.attempt import (
     REAPED,
     Attempt,
 )
+from blizzard.runner.loop.claim import InterruptedClaims, ReadyQueue
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.drain import OutboundDrain
 from blizzard.runner.loop.held_chunk import HeldChunk
@@ -32,10 +28,9 @@ from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.process import IProcessProbe
-from blizzard.runner.loop.spawn import Spawner, environments_for
+from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.store.repository import (
     AskRecord,
-    EnvBindingRecord,
     IWriteRunnerStore,
     LeaseRecord,
 )
@@ -43,8 +38,6 @@ from blizzard.wire.facts import (
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     RUNNER_LOCALLY_PAUSED,
 )
-from blizzard.wire.queue import QueuePeekEntry
-from blizzard.wire.route import RouteClaim
 
 #: This module's public API — the loop steps it owns.
 __all__ = [
@@ -89,13 +82,6 @@ _CP_RESUME_AFTER = crashpoint("resume.after-reattach", "session re-attached unde
 # PULL — the single outbound flusher (store-and-forward drain).
 _CP_PULL_BEFORE = crashpoint("pull.before-flush", "entered PULL; registry synced, buffer not drained")
 _CP_PULL_AFTER = crashpoint("pull.after-flush", "PULL done; buffer drained as far as it could")
-
-# FILL — peek -> acquire -> BIND -> claim -> spawn. The local binding is written *before*
-# the hub claim, so a crash in that window is reconciled next tick — never a strand.
-_CP_FILL_BEFORE_ACQUIRE = crashpoint("fill.before-env-acquire", "peeked a ready chunk; envs not acquired")
-_CP_FILL_AFTER_ACQUIRE = crashpoint("fill.after-env-acquire.before-bind", "envs acquired; binding not recorded")
-_CP_FILL_AFTER_BIND = crashpoint("fill.after-bind.before-claim", "binding recorded; route not claimed at the hub")
-_CP_FILL_AFTER_CLAIM = crashpoint("fill.after-claim.before-spawn", "hub holds the route; lease not minted")
 
 
 # Usage telemetry (issue #58) — the per-lease stdout redirect and its readback.
@@ -409,7 +395,7 @@ def fill(ctx: LoopContext) -> None:
     Open slots are ``MAX_AGENTS - active_leases``; for each, peek the ready queue, acquire the
     chunk's environments all-or-nothing, and claim the route. Either brake stops *new* claims.
     """
-    _reconcile_interrupted_claims(ctx)
+    InterruptedClaims(ctx).reconcile()
     hub_paused = ctx.store.hub_paused(ctx.config.runner_id)
     local_paused = ctx.store.local_paused(ctx.config.runner_id)
     if hub_paused or local_paused:
@@ -421,168 +407,10 @@ def fill(ctx: LoopContext) -> None:
         )
         return
     slots = ctx.config.max_agents - len(ctx.store.list_active_leases())
+    queue = ReadyQueue(ctx)
     for _ in range(max(slots, 0)):
-        if not _fill_one(ctx):
+        if not queue.claim_one():
             break
-
-
-def _reconcile_interrupted_claims(ctx: LoopContext) -> None:
-    """Reconcile bindings left by a crash in FILL's bind→claim→spawn window.
-
-    The binding is written locally *before* the hub claim, so a crash in that window leaves a
-    binding for a chunk with no active lease. Runs before FILL peeks new work: adopt a route
-    still ours, else release the orphaned binding."""
-    requeue_pending = ctx.store.pending_requeue_chunk_ids()  # hoisted: one read per FILL, not per chunk
-    for chunk_id in ctx.store.live_tenure_chunk_ids():
-        if ctx.store.active_lease_for_chunk(chunk_id) is not None:
-            continue  # a live worker holds it — REAP/ADVANCE own it
-        try:
-            detail = ctx.hub.get_chunk(chunk_id)
-        except ChunkNotFoundError:
-            _log.warning("hub reports interrupted-claim chunk unknown — releasing envs", chunk_id=chunk_id)
-            ctx.env_release.release_chunk(chunk_id)
-            continue
-        except HubClientError:
-            continue  # hub unreachable — the binding is durable; retry next tick
-        if chunk_id in requeue_pending:
-            # An explicit human decision (issue #53) outranks every other branch below —
-            # nothing here should second-guess it.
-            ours = detail.route is not None and detail.route.runner_id == ctx.config.runner_id
-            if not ours:
-                _log.info("releasing binding — chunk requeued locally but no longer routed here", chunk_id=chunk_id)
-                ctx.env_release.release_chunk(chunk_id)
-                continue
-            _resume_requeued_chunk(ctx, chunk_id)
-            continue
-        if detail.decision is not None:
-            # A resolved gate keeps its route live, so it looks exactly like an interrupted
-            # claim; without this guard the adopt branch would bump the epoch under the human.
-            continue
-        bindings = ctx.store.bindings_for_chunk(chunk_id)
-        if not bindings:
-            continue
-        ours = detail.route is not None and detail.route.runner_id == ctx.config.runner_id
-        if detail.status == ChunkStatus.RUNNING and ours:
-            _adopt_interrupted_claim(ctx, chunk_id)  # route ours — just spawn the current node
-        elif detail.status == ChunkStatus.READY:
-            _reclaim_interrupted(ctx, chunk_id, bindings)  # claim never landed — claim now, reuse the binding
-        elif detail.route is not None and not ours:
-            _log.info("releasing binding — another runner won the chunk", chunk_id=chunk_id)
-            ctx.env_release.release_chunk(chunk_id)
-        elif detail.route is None:
-            # No live route, and neither claimable nor ours to adopt (blizzard#202). Release
-            # explicitly instead of matching no branch and leaking the binding forever.
-            _log.info(
-                "releasing binding — hub reports no live route in a non-ready, non-running state",
-                chunk_id=chunk_id,
-                hub_status=str(detail.status),
-            )
-            ctx.env_release.release_chunk(chunk_id)
-
-
-def _environments_wanted(entry: QueuePeekEntry) -> int:
-    """How many environments this queue entry's chunk should be acquired.
-
-    The single place the count is decided, so raising it above one is a change here rather
-    than an audit of everything that assumed a lone binding."""
-    del entry  # no per-chunk demand signal exists yet
-    return _DEFAULT_ENV_COUNT
-
-
-def _fill_one(ctx: LoopContext) -> bool:
-    """Claim and start one chunk. Returns False when nothing more can be filled."""
-    try:
-        peek = ctx.hub.peek_queue()
-    except HubClientError:
-        return False  # hub unreachable — try next tick
-    if not peek.entries:
-        return False
-
-    entry = peek.entries[0]
-    held = ctx.store.held_environment_ids()
-    _CP_FILL_BEFORE_ACQUIRE.reached()
-    try:
-        acquired = ctx.provider.acquire(entry.chunk_id, _environments_wanted(entry), held)
-    except EnvironmentPreparationError as exc:
-        # Not capacity — a reset-on-acquire step failed. The provider aborted rather than
-        # hand over a half-reset env, so the chunk waits for a fixed workspace.
-        _log.error(
-            "environment preparation failed at FILL",
-            chunk_id=entry.chunk_id,
-            environment_id=exc.environment_id,
-            step=exc.step,
-            detail=str(exc),
-        )
-        # No lease exists yet (the chunk is not claimed), so this is a chunk-scoped
-        # `command-failed` (issue #125).
-        OutboundFacts(ctx).command_failed(
-            chunk_id=entry.chunk_id,
-            lease_id=None,
-            node_name=None,
-            command=f"winter env-prep step: {exc.step}",
-            stderr_tail=str(exc),
-        )
-        return False
-    except WorkspaceAcquisitionError:
-        _log.info("acquire refused — env-bound this tick", chunk_id=entry.chunk_id)
-        return False  # env capacity exhausted; the chunk waits
-
-    # Bind locally BEFORE claiming at the hub: without a local trace, a crash after a won
-    # claim would strand the chunk with nothing on this side to drive or reap.
-    _CP_FILL_AFTER_ACQUIRE.reached()
-    now = ctx.clock.now()
-    for a in acquired:
-        ctx.store.record_binding(
-            chunk_id=entry.chunk_id, environment_id=a.environment_id, workdir=a.workdir, bound_at=now
-        )
-    _CP_FILL_AFTER_BIND.reached()
-
-    claim = RouteClaim(
-        chunk_id=entry.chunk_id,
-        runner_id=ctx.config.runner_id,
-        workspace_id=ctx.config.workspace_id,
-        environment_ids=[a.environment_id for a in acquired],
-    )
-    try:
-        outcome = ctx.hub.claim_route(claim)
-    except HubClientError:
-        # Ambiguous — the claim may or may not have committed. Releasing the binding here
-        # could strand the chunk, so leave it; the next tick resolves it authoritatively.
-        return False
-    if outcome.denied_paused is not None:
-        # Refused outright, not beaten in the race (issue #44) — stop filling this tick
-        # rather than burn the remaining slots on claims that will be refused the same way.
-        _log.info(
-            "route claim denied — runner paused at the hub", chunk_id=entry.chunk_id, runner_id=ctx.config.runner_id
-        )
-        ctx.env_release.release_binding(entry.chunk_id, acquired)
-        return False
-    if outcome.denied_terminal is not None:
-        # The chunk reached a terminal state between this peek and this claim (issue #118)
-        # — not a race loss. Undo the binding and move on; it cannot be peeked again.
-        _log.info(
-            "route claim denied — chunk is terminal",
-            chunk_id=entry.chunk_id,
-            status=outcome.denied_terminal.status,
-        )
-        ctx.env_release.release_binding(entry.chunk_id, acquired)
-        return True  # peek fresh next iteration
-    if outcome.conflict is not None or outcome.claimed is None:
-        _log.info("route claim lost the race", chunk_id=entry.chunk_id)
-        ctx.env_release.release_binding(entry.chunk_id, acquired)  # someone else won — undo our binding
-        return True  # peek fresh next iteration
-
-    _CP_FILL_AFTER_CLAIM.reached()
-    # Stash the won claim's plaintext route token (issue #84a) before spawning: every later
-    # reader takes it out of the store, never off `outcome.claimed` directly.
-    ctx.store.set_route_token(entry.chunk_id, token=outcome.claimed.route_token, at=ctx.clock.now())
-    resume_from = ctx.sessions.resume_target(
-        entry.chunk_id,
-        outcome.claimed.envelope.node,
-        resolve_spawn_cwd(ctx.config.workspace_root, acquired[0].workdir if acquired else None),
-    )
-    Spawner(ctx).spawn(entry.chunk_id, outcome.claimed.envelope, acquired, via="fill", resume_from=resume_from)
-    return True
 
 
 # ADVANCE
@@ -643,94 +471,6 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
 
 
 # Shared helpers
-
-
-def _adopt_interrupted_claim(ctx: LoopContext, chunk_id: str) -> None:
-    """Spawn the current node for a claimed chunk whose FILL crashed before the lease minted.
-
-    The route is confirmed and the binding held, but no lease was ever minted, so recovery is a
-    spawn of the current node from its idempotent envelope. Also the route-token recovery path:
-    the adopted window spans the claim response, so a missing token re-keys here (issue #84b)."""
-    bindings = ctx.store.bindings_for_chunk(chunk_id)
-    if not bindings:
-        _log.warning("adopt with no bound env — cannot spawn", chunk_id=chunk_id)
-        return
-    if ctx.store.route_token(chunk_id) is None:
-        try:
-            rekeyed = ctx.hub.rekey_route_token(chunk_id)
-        except ChunkNotFoundError:
-            _log.warning("hub reports adopted chunk unknown — releasing envs", chunk_id=chunk_id)
-            ctx.env_release.release_chunk(chunk_id)
-            return
-        except HubClientError:
-            return  # hub unreachable — the binding is durable; retry next tick
-        ctx.store.set_route_token(chunk_id, token=rekeyed.route_token, at=ctx.clock.now())
-    try:
-        envelope = ctx.hub.get_envelope(chunk_id)
-    except ChunkNotFoundError:
-        _log.warning("hub reports adopted chunk unknown — releasing envs", chunk_id=chunk_id)
-        ctx.env_release.release_chunk(chunk_id)
-        return
-    except HubClientError:
-        return  # hub unreachable — the binding is durable; retry next tick
-    _log.info("adopting interrupted claim — spawning current node", chunk_id=chunk_id)
-    Spawner(ctx).spawn(chunk_id, envelope, environments_for(bindings), via="adopt")
-
-
-def _resume_requeued_chunk(ctx: LoopContext, chunk_id: str) -> None:
-    """Spawn a fresh attempt at the chunk's current node — its local hold is cleared (issue #53).
-
-    The hold-clearing fact is already durable when this runs (``bzh:crash-correctness``). The
-    retry budget is **carried, not reset** — an ordinary mint against the node's existing
-    ``retries_max``, so a requeue buys exactly one more try."""
-    bindings = ctx.store.bindings_for_chunk(chunk_id)
-    if not bindings:
-        _log.warning("requeue-resume with no bound env — cannot spawn", chunk_id=chunk_id)
-        return
-    try:
-        envelope = ctx.hub.get_envelope(chunk_id)
-    except ChunkNotFoundError:
-        _log.warning("hub reports requeued chunk unknown — releasing envs", chunk_id=chunk_id)
-        ctx.env_release.release_chunk(chunk_id)
-        return
-    except HubClientError:
-        return  # hub unreachable — the requeue fact is durable; retry next tick
-    _log.info("resuming requeued chunk — spawning current node", chunk_id=chunk_id)
-    Spawner(ctx).spawn(chunk_id, envelope, environments_for(bindings), via="requeue-resume")
-
-
-def _reclaim_interrupted(ctx: LoopContext, chunk_id: str, bindings: list[EnvBindingRecord]) -> None:
-    """Complete a claim whose hub POST never landed — claim now, reusing the held binding.
-
-    The environment was bound but the claim never landed, so the chunk still reads ``ready``.
-    The route is claimed with the environment already held rather than re-acquired; a lost race
-    releases the binding."""
-    envs = environments_for(bindings)
-    claim = RouteClaim(
-        chunk_id=chunk_id,
-        runner_id=ctx.config.runner_id,
-        workspace_id=ctx.config.workspace_id,
-        environment_ids=[b.environment_id for b in bindings],
-    )
-    try:
-        outcome = ctx.hub.claim_route(claim)
-    except HubClientError:
-        return  # hub unreachable — the binding is durable; retry next tick
-    if outcome.denied_paused is not None:
-        # Refused outright because this runner is paused upstream, not lost to another
-        # runner (issue #44).
-        _log.info("interrupted claim denied — runner paused at the hub", chunk_id=chunk_id)
-        ctx.env_release.release_chunk(chunk_id)
-        return
-    if outcome.conflict is not None or outcome.claimed is None:
-        _log.info("interrupted claim lost the race — releasing binding", chunk_id=chunk_id)
-        ctx.env_release.release_chunk(chunk_id)
-        return
-    _log.info("re-claimed interrupted chunk — spawning current node", chunk_id=chunk_id)
-    # A reclaim is a fresh claim, so its token overwrites whatever this chunk's row held
-    # before — a fresh claim always wins (issue #84a).
-    ctx.store.set_route_token(chunk_id, token=outcome.claimed.route_token, at=ctx.clock.now())
-    Spawner(ctx).spawn(chunk_id, outcome.claimed.envelope, envs, via="reclaim")
 
 
 def _park_on_ask(ctx: LoopContext, lease: LeaseRecord, ask: AskRecord) -> None:
