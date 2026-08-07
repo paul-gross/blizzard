@@ -13,21 +13,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import CHUNK_CONTROL, CHUNK_INGEST, FLEET_VIEW
-from blizzard.foundation.ids import minted_at
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
 from blizzard.hub.api.chunk_views import ChunkView
-from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.api.marker_auth import require_marker_authority
-from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
-from blizzard.hub.delivery.hub_node import poll_interval_for
-from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact, from_row, store_key
 from blizzard.hub.domain.decisions import NotEscalated
 from blizzard.hub.domain.detach import NotRouted
 from blizzard.hub.domain.edit import (
@@ -47,10 +42,8 @@ from blizzard.hub.domain.work import (
     WorkRef,
     derive_fleet_summary,
 )
-from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry, WorkSourceError
+from blizzard.hub.work_sources.source import WorkSourceError
 from blizzard.wire.chunk import (
-    ArtifactView,
-    BounceView,
     ChunkDetail,
     ChunkIngestConflict,
     ChunkIngestRequest,
@@ -60,17 +53,8 @@ from blizzard.wire.chunk import (
     ChunkPauseRequest,
     ChunkStopRequest,
     ChunkSummary,
-    ChunkUsageView,
-    EscalationView,
     HubMarkerRequest,
     HubMarkerResponse,
-    IntendedMigrationView,
-    MigrationView,
-    PauseView,
-    PendingView,
-    PrView,
-    RouteView,
-    TransitionView,
     WorkItemEntry,
     WorkItemsView,
 )
@@ -84,136 +68,6 @@ def publish_open_decision(services: HubServices, chunk_id: str) -> None:
     decision = services.chunks.decision_for_chunk(chunk_id)
     if decision is not None and not decision.resolved and not decision.transitioned:
         services.events.publish_decision_opened(chunk_id, decision.decision_id, key=f"decisions:{decision.decision_id}")
-
-
-def _history_views(facts: ChunkFacts, names: GraphNames) -> list[TransitionView]:
-    """The chunk's transitions oldest-first.
-
-    Each edge's node ids resolve against *the graph the transition happened in* (issue
-    #90), keyed by ``TransitionFact.graph_id`` — not the chunk's current pin (pinned by
-    ``tests/test_transition_graph_provenance.py``)."""
-    views: list[TransitionView] = []
-    for t in facts.transition_history():
-        views.append(
-            TransitionView(
-                from_node_id=t.from_node_id,
-                from_node_name=names.node_name(t.graph_id, t.from_node_id),
-                to_node_id=t.to_node_id,
-                to_node_name=names.node_name(t.graph_id, t.to_node_id),
-                choice_name=t.choice_name,
-                epoch=t.epoch,
-                recorded_at=iso_utc(t.recorded_at),
-                graph_id=t.graph_id,
-                graph_name=names.graph_name(t.graph_id),
-            )
-        )
-    return views
-
-
-def _migration_views(facts: ChunkFacts, names: GraphNames) -> list[MigrationView]:
-    """The chunk's cross-graph migration steps oldest-first (issue #90).
-
-    Each step names the graph it left and the graph it re-pinned to: ``from_node``
-    resolves against the ``from_graph``, ``landed_node`` against the ``to_graph`` — each
-    side's own graph, so neither degrades to a raw id when the two differ."""
-    views: list[MigrationView] = []
-    for m in sorted(facts.migrations, key=lambda m: (m.recorded_at, m.epoch)):
-        views.append(
-            MigrationView(
-                from_node_id=m.from_node_id,
-                from_node_name=names.node_name(m.from_graph_id, m.from_node_id),
-                from_graph_id=m.from_graph_id,
-                from_graph_name=names.graph_name(m.from_graph_id),
-                to_graph_id=m.to_graph_id,
-                to_graph_name=names.graph_name(m.to_graph_id),
-                landed_node_id=m.landed_node_id,
-                landed_node_name=names.node_name(m.to_graph_id, m.landed_node_id),
-                choice_name=m.choice_name,
-                model=m.model,
-                source=m.source.value if m.source is not None else None,
-                recorded_at=iso_utc(m.recorded_at),
-            )
-        )
-    return views
-
-
-def _intended_migration_view(chunk: Chunk, names: GraphNames) -> IntendedMigrationView | None:
-    """The chunk's standing migration intent as a view (issue #124), or ``None`` when no
-    intent is set."""
-    intent = chunk.intended_migration
-    if intent is None:
-        return None
-    return IntendedMigrationView(
-        mode=intent.mode,
-        graph_id=intent.graph_id,
-        graph_name=names.graph_name(intent.graph_id),
-        node_name=intent.node_name,
-    )
-
-
-def _usage_history_views(facts: ChunkFacts) -> list[ChunkUsageView]:
-    """The chunk's per-node-step usage facts, oldest first — the detail's future
-    cost timeline (issue #59)."""
-    return [
-        ChunkUsageView(
-            node_id=u.node_id,
-            epoch=u.epoch,
-            kind=u.kind,
-            model=u.model,
-            input_tokens=u.input_tokens,
-            output_tokens=u.output_tokens,
-            cache_read_tokens=u.cache_read_tokens,
-            cache_create_tokens=u.cache_create_tokens,
-            cost_usd=u.cost_usd,
-        )
-        for u in sorted(facts.usage, key=lambda u: u.recorded_at)
-    ]
-
-
-def _branch_url_source(chunk: Chunk, work_sources: IWorkSourceRegistry) -> IWorkSource | None:
-    """The binding a chunk's artifact branch links resolve through.
-
-    One forge per chunk, *declared*: the chunk's first pointer whose ``source`` names a
-    configured binding lends its ``branch_url``. ``None`` when no pointer's source is
-    configured."""
-    for p in chunk.work_refs:
-        source = work_sources.get(p.source)
-        if source is not None:
-            return source
-    return None
-
-
-def _artifact_views(rows: list[ArtifactRow], web_base: IWorkSource | None) -> list[ArtifactView]:
-    """The chunk's inline artifact store — every entry, with an asset's content and a
-    git-commit's pinned reference surfaced; ordered by ``{node}.{name}.{epoch}``
-    so a re-run's later-epoch entry follows its predecessors (append-only history)."""
-    views: list[ArtifactView] = []
-    for row in sorted(rows, key=lambda r: (r.node_name, r.name, r.epoch)):
-        artifact = from_row(row)
-        attached = minted_at(row.artifact_id)
-        common = {
-            "key": store_key(row),
-            "kind": row.kind.value,
-            "name": row.name,
-            "node_id": row.node_id,
-            "node_name": row.node_name,
-            "epoch": row.epoch,
-            "recorded_at": iso_utc(attached) if attached is not None else None,
-        }
-        if isinstance(artifact, GitCommitArtifact):
-            branch_url = web_base.branch_url(artifact.repo, artifact.branch_name) if web_base is not None else None
-            views.append(
-                ArtifactView(
-                    **common,
-                    repo=artifact.repo,
-                    branch_name=artifact.branch_name,
-                    commit_hash=artifact.commit_hash,
-                    branch_url=branch_url,
-                )
-            )
-        else:
-            views.append(ArtifactView(**common, content=artifact.content))
-    return views
 
 
 @router.post(
@@ -295,67 +149,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    view = ChunkView.of(services, chunk)
-    facts, names = view.facts, view.names
-    route = services.chunks.route_of(chunk_id)
-    escalation = facts.open_escalation()
-    pause = facts.open_pause()
-    decision = services.chunks.decision_for_chunk(chunk_id)
-    graph = names.graph(chunk.graph_id)
-    node_id, node_name = view.current_node()
-    web_base = _branch_url_source(chunk, services.work_sources)
-    artifacts = services.chunks.load_artifacts(chunk_id)
-    pending = facts.hub_node_pending()
-    pending_view = None
-    if pending is not None:
-        pending_node = graph.node_by_id(pending.node_id) if graph is not None else None
-        if pending_node is not None:
-            next_poll_at = pending.polled_at + poll_interval_for(pending_node)
-            pending_view = PendingView(node_name=pending_node.name, next_poll_at=iso_utc(next_poll_at))
-    return ChunkDetail(
-        chunk_id=chunk.chunk_id,
-        graph_id=chunk.graph_id,
-        graph_name=names.graph_name(chunk.graph_id),
-        graph_created_at=iso_utc(graph.created_at) if graph is not None else None,
-        status=facts.status(),
-        current_node_id=node_id,
-        current_node_name=node_name,
-        latest_epoch=facts.latest_epoch(),
-        work_refs=view.pointer_views(),
-        default_model=list(chunk.default_model),
-        default_effort=chunk.default_effort,
-        intended_migration=_intended_migration_view(chunk, names),
-        route=RouteView(
-            runner_id=route.runner_id,
-            workspace_id=route.workspace_id,
-            environment_ids=route.environment_ids,
-        )
-        if route is not None
-        else None,
-        escalation=EscalationView(
-            epoch=escalation.epoch,
-            takeover_command=escalation.takeover_command,
-            wrapped_takeover_command=escalation.wrapped_takeover_command,
-        )
-        if escalation is not None
-        else None,
-        pause=PauseView(by=pause.set_by, set_at=iso_utc(pause.set_at)) if pause is not None else None,
-        decision=to_decision_view(decision) if decision is not None else None,
-        history=_history_views(facts, names),
-        migrations=_migration_views(facts, names),
-        artifacts=_artifact_views(artifacts, web_base),
-        questions=[question_view(q) for q in services.chunks.load_questions(chunk_id)],
-        awaiting_external_merge=facts.awaiting_external_merge(),
-        open_prs=[PrView(repo=pr.repo, number=pr.number, url=pr.url) for pr in facts.pr_opened],
-        cost=view.usage_total(),
-        usage=_usage_history_views(facts),
-        pending=pending_view,
-        landed=facts.has_landed_repos(artifacts),
-        bounces=[
-            BounceView(cause=b.cause, envelope=b.envelope, recorded_at=iso_utc(b.recorded_at))
-            for b in sorted(facts.bounces, key=lambda b: b.recorded_at)
-        ],
-    )
+    return ChunkView.of(services, chunk).detail()
 
 
 @router.post(
@@ -572,7 +366,7 @@ def patch_chunk(
         graph_id=updated.graph_id,
         default_model=list(updated.default_model),
         default_effort=updated.default_effort,
-        intended_migration=_intended_migration_view(updated, GraphNames(services.graphs.get)),
+        intended_migration=ChunkView.of(services, updated).intended_migration(),
     )
 
 

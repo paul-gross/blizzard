@@ -1,7 +1,7 @@
 """Transition graph-provenance (issue #90, Phase 1) — the read + hydration foundation.
 
-Unit tier: :func:`_history_views` resolves each transition's node names against *its
-own* graph, so a two-graph history never degrades an old-graph step to raw ``nd_`` ids.
+Unit tier: :meth:`ChunkHistoryView.transitions` resolves each transition's node names
+against *its own* graph, so a two-graph history never degrades an old-graph step to raw ``nd_`` ids.
 Component tier: :meth:`ChunkStore.load_facts` resolves ``to_node_executor`` the same way.
 """
 
@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy import insert
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.api.chunks import _history_views
+from blizzard.hub.api.chunk_views import ChunkHistoryView
 from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.domain.graph import Executor, Graph, parse_graph_doc
 from blizzard.hub.domain.graph_authoring import reify_graph
@@ -91,7 +91,7 @@ def test_history_view_resolves_each_step_name_against_its_own_graph() -> None:
     )
 
     by_id = {graph_a.graph_id: graph_a, graph_b.graph_id: graph_b}
-    views = _history_views(facts, GraphNames(by_id.get))
+    views = ChunkHistoryView(facts, GraphNames(by_id.get)).transitions()
 
     assert [(v.from_node_name, v.to_node_name) for v in views] == [("build", "review"), ("triage", "fix")]
     # No raw-id degradation: every name resolved against its own graph.
