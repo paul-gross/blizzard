@@ -35,6 +35,7 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
 from blizzard.runner.loop.judgement_prompt import JudgementPrompt
+from blizzard.runner.loop.outbound import COMPLETION_KIND, DECISION_KIND, OutboundFacts
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.store.repository import (
@@ -56,12 +57,8 @@ from blizzard.wire.completion import (
 from blizzard.wire.decision import DecisionSubmission, DecisionView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import (
-    ANSWER_DELIVERED,
-    ESCALATION_RECORDED,
     EVENT_RECORDED,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-    LEASE_MINTED,
-    QUESTION_ASKED,
     RUNNER_LOCALLY_PAUSED,
     RunnerFact,
     RunnerFactBatch,
@@ -99,11 +96,6 @@ _RESTART_RESUME_MESSAGE = "# The supervisor restarted; continue your task where 
 #: The message ADVANCE delivers into a session the operator paused and resumed (issue #46).
 #: Same inert ``#``-prefixed framing; the exact prose is unpinned.
 _PAUSE_RESUME_MESSAGE = "# The operator resumed this chunk; continue your task where you left off."
-
-# The two outbound-buffer fact kinds the flusher handles specially (every other kind
-# flushes generically to POST /events).
-_COMPLETION_KIND = "completion.submitted"
-_DECISION_KIND = "decision.submitted"
 
 # The env count a chunk gets when nothing says otherwise — a default, not a structural
 # assumption; a chunk holding several is representable.
@@ -587,9 +579,9 @@ def flush_outbound(ctx: LoopContext) -> None:
 
 def _flush_one(ctx: LoopContext, fact: BufferedFact) -> bool:
     """Deliver one buffered fact. Return False on a transport failure (stop the drain)."""
-    if fact.kind == _COMPLETION_KIND:
+    if fact.kind == COMPLETION_KIND:
         return _flush_completion(ctx, fact)
-    if fact.kind == _DECISION_KIND:
+    if fact.kind == DECISION_KIND:
         return _flush_decision(ctx, fact)
     return _flush_hub_fact(ctx, fact)
 
@@ -838,8 +830,7 @@ def _fill_one(ctx: LoopContext) -> bool:
         )
         # No lease exists yet (the chunk is not claimed), so this is a chunk-scoped
         # `command-failed` (issue #125).
-        _emit_command_failed(
-            ctx,
+        OutboundFacts(ctx).command_failed(
             chunk_id=entry.chunk_id,
             lease_id=None,
             node_name=None,
@@ -1146,14 +1137,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         artifacts=artifacts,
         route_token=ctx.store.route_token(lease.chunk_id),  # issue #84a — stamped at enqueue
     )
-    payload = json.dumps({"submission": submission.model_dump(mode="json")})
-    ctx.store.enqueue_outbound(
-        kind=_COMPLETION_KIND,
-        chunk_id=lease.chunk_id,
-        lease_id=lease.lease_id,
-        payload=payload,
-        created_at=ctx.clock.now(),
-    )
+    OutboundFacts(ctx).completion(lease, submission, at=ctx.clock.now())
     _CP_ADV_AFTER_BUFFER.reached()
     _log.info("completion buffered", chunk_id=lease.chunk_id, lease_id=lease.lease_id, choice=choice)
 
@@ -1171,14 +1155,7 @@ def _buffer_decision(ctx: LoopContext, lease: LeaseRecord, artifacts: list[Submi
         artifacts=artifacts,
         route_token=ctx.store.route_token(lease.chunk_id),  # issue #84a — stamped at enqueue
     )
-    payload = json.dumps({"submission": submission.model_dump(mode="json")})
-    ctx.store.enqueue_outbound(
-        kind=_DECISION_KIND,
-        chunk_id=lease.chunk_id,
-        lease_id=lease.lease_id,
-        payload=payload,
-        created_at=ctx.clock.now(),
-    )
+    OutboundFacts(ctx).decision(lease, submission, at=ctx.clock.now())
     _log.info("runner-config gate: decision buffered", chunk_id=lease.chunk_id, node=lease.node_name)
 
 
@@ -1375,15 +1352,7 @@ def _spawn_attempt(
     # plaintext carried forward to the spawn preamble alone and never persisted.
     lease_token, token_hash = mint_lease_token()
     ctx.store.record_lease_token(lease_id, token_hash, now)
-    # The lease is a hub-bound fact and the fence input the completion check consumes, so it
-    # is buffered ahead of any completion minted under it (FIFO), stamped with the route token.
-    ctx.store.enqueue_outbound(
-        kind=LEASE_MINTED,
-        chunk_id=chunk_id,
-        lease_id=lease_id,
-        payload=json.dumps({"chunk_id": chunk_id, "epoch": epoch, "route_token": ctx.store.route_token(chunk_id)}),
-        created_at=now,
-    )
+    OutboundFacts(ctx).lease_minted(chunk_id, lease_id, epoch=epoch, at=now)
     _CP_SPAWN_AFTER_MINT.reached()  # lease minted, worker not spawned — the orphan-lease window REAP absorbs
     # The effective workspace prompt is the store's runtime override when set, else the static
     # config prompt — read here so a replace applies to the next spawn with no restart.
@@ -1425,8 +1394,7 @@ def _spawn_attempt(
     except HarnessSpawnError as exc:
         # Surface the launch-time spawn failure (issue #125) then RE-RAISE: no worker started,
         # so the attempt was never recorded and the chunk simply retries next tick.
-        _emit_command_failed(
-            ctx,
+        OutboundFacts(ctx).command_failed(
             chunk_id=chunk_id,
             lease_id=lease_id,
             node_name=envelope.node.node_name,
@@ -1454,57 +1422,23 @@ _WORKER_LOST = ("critical", "worker-lost")
 _ATTEMPT_ABANDONED = ("info", "attempt-abandoned")
 
 
-def _failure_event_payload(
+def _failure_event(
     lease: LeaseRecord, *, severity: str, kind: str, message: str, reason: str, via: str, stderr_tail: str = ""
-) -> str:
-    """The ``event.recorded`` payload one `_fail_attempt` branch surfaces (issue #125).
-
-    ``detail`` carries the ``(reason, via)`` that classified it and the node it happened at,
-    plus any captured stderr tail. A plain JSON string, so it rides the outbound buffer."""
+) -> dict[str, object]:
+    """The ``event.recorded`` payload one `_fail_attempt` branch surfaces (issue #125), whose
+    ``detail`` carries the ``(reason, via)`` that classified it and any captured stderr tail."""
     detail: dict[str, object] = {"via": via, "reason": reason, "node": lease.node_name}
     if stderr_tail:
         detail["stderr_tail"] = stderr_tail
-    return json.dumps(
-        {
-            "severity": severity,
-            "kind": kind,
-            "chunk_id": lease.chunk_id,
-            "lease_id": lease.lease_id,
-            "node_name": lease.node_name,
-            "message": message,
-            "detail": detail,
-        }
-    )
-
-
-def _emit_command_failed(
-    ctx: LoopContext,
-    *,
-    chunk_id: str | None,
-    lease_id: str | None,
-    node_name: str | None,
-    command: str,
-    stderr_tail: str,
-) -> None:
-    """Surface a captured spawn/verify/env-prep command failure as a ``warning``
-    ``command-failed`` operational event (issue #125, change L).
-
-    Enqueued straight to the outbound buffer — it rides no closure and never alters the
-    caller's control flow. The failing command and its stderr tail go in ``detail``."""
-    payload = json.dumps(
-        {
-            "severity": "warning",
-            "kind": "command-failed",
-            "chunk_id": chunk_id,
-            "lease_id": lease_id,
-            "node_name": node_name,
-            "message": f"command failed: {command}",
-            "detail": {"command": command, "stderr_tail": stderr_tail[-2000:] if stderr_tail else ""},
-        }
-    )
-    ctx.store.enqueue_outbound(
-        kind=EVENT_RECORDED, chunk_id=chunk_id, lease_id=lease_id, payload=payload, created_at=ctx.clock.now()
-    )
+    return {
+        "severity": severity,
+        "kind": kind,
+        "chunk_id": lease.chunk_id,
+        "lease_id": lease.lease_id,
+        "node_name": lease.node_name,
+        "message": message,
+        "detail": detail,
+    }
 
 
 def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str, via: str) -> None:
@@ -1533,14 +1467,16 @@ def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str, via: str
             reason=reason,
             closed_at=now,
             event_kind=EVENT_RECORDED,
-            event_payload=_failure_event_payload(
-                lease,
-                severity=severity,
-                kind=kind,
-                message=f"attempt failed, retrying — {reason} (via {via})",
-                reason=reason,
-                via=via,
-                stderr_tail=stderr_tail,
+            event_payload=json.dumps(
+                _failure_event(
+                    lease,
+                    severity=severity,
+                    kind=kind,
+                    message=f"attempt failed, retrying — {reason} (via {via})",
+                    reason=reason,
+                    via=via,
+                    stderr_tail=stderr_tail,
+                )
             ),
         )
         _requeue(ctx, lease)
@@ -1549,11 +1485,11 @@ def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str, via: str
         # Emitted HERE rather than in the shared abandon helper, which the ordinary detach
         # sweep also reaches and which must stay silent.
         severity, kind = _ATTEMPT_ABANDONED
-        ctx.store.enqueue_outbound(
-            kind=EVENT_RECORDED,
+        OutboundFacts(ctx).event(
             chunk_id=lease.chunk_id,
             lease_id=lease.lease_id,
-            payload=_failure_event_payload(
+            at=now,
+            payload=_failure_event(
                 lease,
                 severity=severity,
                 kind=kind,
@@ -1562,7 +1498,6 @@ def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str, via: str
                 via=via,
                 stderr_tail=stderr_tail,
             ),
-            created_at=now,
         )
         _abandon_reassigned(ctx, lease, killed=True, via=via)
         return
@@ -1585,14 +1520,16 @@ def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str, via: str
         reason=_ESCALATED,
         closed_at=now,
         event_kind=EVENT_RECORDED,
-        event_payload=_failure_event_payload(
-            lease,
-            severity=severity,
-            kind=kind,
-            message=f"worker lost — retries exhausted ({reason}, via {via})",
-            reason=reason,
-            via=via,
-            stderr_tail=stderr_tail,
+        event_payload=json.dumps(
+            _failure_event(
+                lease,
+                severity=severity,
+                kind=kind,
+                message=f"worker lost — retries exhausted ({reason}, via {via})",
+                reason=reason,
+                via=via,
+                stderr_tail=stderr_tail,
+            )
         ),
     )
     _escalate(ctx, lease)
@@ -1709,11 +1646,7 @@ def _requeue(ctx: LoopContext, lease: LeaseRecord) -> None:
 
 
 def _escalate(ctx: LoopContext, lease: LeaseRecord, *, reason: str = "retries exhausted") -> None:
-    """Park the chunk needs-human at the hub, envs held for takeover.
-
-    The escalation rides the outbound buffer as an ``escalation.recorded`` fact carrying two
-    takeover strings — the wrapped entry point and the raw pasteable fallback.
-    """
+    """Park the chunk needs-human at the hub, envs held for takeover."""
     now = ctx.clock.now()
     bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
     takeover = ""
@@ -1731,18 +1664,7 @@ def _escalate(ctx: LoopContext, lease: LeaseRecord, *, reason: str = "retries ex
         # `bindings` is checked explicitly above — an empty one is not provably unreachable.
         if ctx.config.runner_dir:
             wrapped_takeover = wrapped_takeover_command(lease.chunk_id, ctx.config.runner_dir)
-    payload = json.dumps(
-        {
-            "chunk_id": lease.chunk_id,
-            "epoch": lease.epoch,
-            "takeover_command": takeover,
-            "wrapped_takeover_command": wrapped_takeover,
-            "route_token": ctx.store.route_token(lease.chunk_id),  # issue #84a
-        }
-    )
-    ctx.store.enqueue_outbound(
-        kind=ESCALATION_RECORDED, chunk_id=lease.chunk_id, lease_id=lease.lease_id, payload=payload, created_at=now
-    )
+    OutboundFacts(ctx).escalation(lease, takeover=takeover, wrapped_takeover=wrapped_takeover, at=now)
     _log.info(
         f"escalated to needs-human — {reason}", chunk_id=lease.chunk_id, takeover=takeover, wrapped=wrapped_takeover
     )
@@ -1756,22 +1678,7 @@ def _park_on_ask(ctx: LoopContext, lease: LeaseRecord, ask: AskRecord) -> None:
     """
     now = ctx.clock.now()
     ctx.usage.record_worker(lease, ctx.store.bindings_for_chunk(lease.chunk_id))
-    payload = json.dumps(
-        {
-            "question_id": ask.question_id,
-            "chunk_id": lease.chunk_id,
-            "node_id": lease.node_id,
-            "session_id": ask.session_id or lease.session_id,
-            "epoch": lease.epoch,
-            "question": ask.question,
-            "options": ask.options,
-            "asked_at": iso_utc(ask.asked_at),
-            "route_token": ctx.store.route_token(lease.chunk_id),  # issue #84a
-        }
-    )
-    ctx.store.enqueue_outbound(
-        kind=QUESTION_ASKED, chunk_id=lease.chunk_id, lease_id=lease.lease_id, payload=payload, created_at=now
-    )
+    OutboundFacts(ctx).question_asked(lease, ask, at=now)
     ctx.store.record_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, question_id=ask.question_id, parked_at=now)
     _log.info("chunk parked on question", chunk_id=lease.chunk_id, question_id=ask.question_id)
 
@@ -1822,13 +1729,7 @@ def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
         spawned_at=now,
     )
     ctx.store.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)
-    ctx.store.enqueue_outbound(
-        kind=ANSWER_DELIVERED,
-        chunk_id=lease.chunk_id,
-        lease_id=lease.lease_id,
-        payload=json.dumps({"chunk_id": lease.chunk_id, "question_id": park.question_id}),
-        created_at=now,
-    )
+    OutboundFacts(ctx).answer_delivered(lease, park.question_id, at=now)
     _log.info("resumed dormant session with answer", chunk_id=lease.chunk_id, question_id=park.question_id, pid=pid)
 
 
@@ -1916,8 +1817,7 @@ def _verify_and_collect_git_commits(
         if origin_url is None:
             # Reaching here means the manifest changed under the lease, not a worker typo.
             # An unresolvable origin means this commit cannot be delivered — say so.
-            _emit_command_failed(
-                ctx,
+            OutboundFacts(ctx).command_failed(
                 chunk_id=lease.chunk_id,
                 lease_id=lease.lease_id,
                 node_name=lease.node_name,
@@ -1931,8 +1831,7 @@ def _verify_and_collect_git_commits(
         try:
             verified = ctx.worktree_git.verify(origin_url, declared.branch, declared.commit)
         except WorktreeGitError as exc:
-            _emit_command_failed(
-                ctx,
+            OutboundFacts(ctx).command_failed(
                 chunk_id=lease.chunk_id,
                 lease_id=lease.lease_id,
                 node_name=lease.node_name,
@@ -1941,8 +1840,7 @@ def _verify_and_collect_git_commits(
             )
             continue
         if not verified:
-            _emit_command_failed(
-                ctx,
+            OutboundFacts(ctx).command_failed(
                 chunk_id=lease.chunk_id,
                 lease_id=lease.lease_id,
                 node_name=lease.node_name,
