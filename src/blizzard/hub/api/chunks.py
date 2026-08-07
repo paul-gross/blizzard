@@ -19,6 +19,7 @@ from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
+from blizzard.hub.api.chunk_views import ChunkView
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.graph_names import GraphNames
@@ -45,7 +46,6 @@ from blizzard.hub.domain.work import (
     ChunkFacts,
     WorkRef,
     derive_fleet_summary,
-    holds_claim,
 )
 from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry, WorkSourceError
 from blizzard.wire.chunk import (
@@ -60,7 +60,6 @@ from blizzard.wire.chunk import (
     ChunkPauseRequest,
     ChunkStopRequest,
     ChunkSummary,
-    ChunkUsageTotalView,
     ChunkUsageView,
     EscalationView,
     HubMarkerRequest,
@@ -74,31 +73,10 @@ from blizzard.wire.chunk import (
     TransitionView,
     WorkItemEntry,
     WorkItemsView,
-    WorkRefView,
 )
 from blizzard.wire.fleet import FleetSummaryView
 
 router = APIRouter(prefix="/api", tags=["chunks"], dependencies=[Depends(reject_runner_principal)])
-
-
-def _pointer_views(chunk: Chunk, work_sources: IWorkSourceRegistry) -> list[WorkRefView]:
-    """Each pointer with its board-legible label and browser URL —
-    both null when no configured source names ``pointer.source``.
-
-    Each pointer is resolved to its own binding by name (``work_sources.get(p.source)``) — a
-    chunk's pointers need not all share one source."""
-    views: list[WorkRefView] = []
-    for p in chunk.work_refs:
-        source = work_sources.get(p.source)
-        views.append(
-            WorkRefView(
-                source=p.source,
-                ref=p.ref,
-                label=source.label(p) if source is not None else None,
-                web_url=source.web_url(p) if source is not None else None,
-            )
-        )
-    return views
 
 
 def publish_open_decision(services: HubServices, chunk_id: str) -> None:
@@ -173,19 +151,6 @@ def _intended_migration_view(chunk: Chunk, names: GraphNames) -> IntendedMigrati
     )
 
 
-def _usage_total_view(facts: ChunkFacts) -> ChunkUsageTotalView:
-    """A chunk's derived usage/cost total, wired onto both the summary and detail views."""
-    usage = facts.usage_total()
-    return ChunkUsageTotalView(
-        input_tokens=usage.input_tokens,
-        output_tokens=usage.output_tokens,
-        cache_read_tokens=usage.cache_read_tokens,
-        cache_create_tokens=usage.cache_create_tokens,
-        cost_usd=usage.cost_usd,
-        cost_partial=usage.cost_partial,
-    )
-
-
 def _usage_history_views(facts: ChunkFacts) -> list[ChunkUsageView]:
     """The chunk's per-node-step usage facts, oldest first — the detail's future
     cost timeline (issue #59)."""
@@ -251,15 +216,6 @@ def _artifact_views(rows: list[ArtifactRow], web_base: IWorkSource | None) -> li
     return views
 
 
-def _current_node(chunk: Chunk, facts: ChunkFacts, names: GraphNames) -> tuple[str | None, str | None]:
-    """The chunk's current node as ``(id, name)`` — the newest transition's target, or the
-    pinned graph's entry node before the first transition (a nicer board value than ``None``).
-    The name rides along so the board is legible without reassembly."""
-    graph = names.graph(chunk.graph_id)
-    node_id = facts.current_node_id() or (graph.entry_node_id if graph is not None else None)
-    return node_id, names.node_name(chunk.graph_id, node_id)
-
-
 @router.post(
     "/chunks",
     response_model=ChunkIngestResponse,
@@ -305,31 +261,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
 
 
 def _summary_view(services: HubServices, chunk: Chunk, *, names: GraphNames | None = None) -> ChunkSummary:
-    """One chunk's derived fleet-list row (issue #104) — shared by :func:`list_chunks`
-    and every transition verb (``promote``/``detach``/``pause``/``resume``/``stop``/
-    ``requeues``), so both derive the same row from the same facts (``canon:one-owner``).
-    A full-list caller passes its own :class:`GraphNames` to share resolution across chunks."""
-    facts = services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
-    node_id, node_name = _current_node(chunk, facts, names or GraphNames(services.graphs.get))
-    status = facts.status()
-    # A finished chunk holds no claim (issue #140) — the rule is `holds_claim`'s. Asked
-    # before the read so a terminal chunk costs no `route_of` query at all.
-    route = services.chunks.route_of(chunk.chunk_id) if holds_claim(status) else None
-    completed_at = facts.completed_at()
-    return ChunkSummary(
-        chunk_id=chunk.chunk_id,
-        graph_id=chunk.graph_id,
-        status=status,
-        current_node_id=node_id,
-        current_node_name=node_name,
-        work_refs=_pointer_views(chunk, services.work_sources),
-        default_model=list(chunk.default_model),
-        default_effort=chunk.default_effort,
-        runner_id=route.runner_id if route is not None else None,
-        environment_count=len(route.environment_ids) if route is not None else 0,
-        cost=_usage_total_view(facts),
-        completed_at=iso_utc(completed_at) if completed_at is not None else None,
-    )
+    return ChunkView.of(services, chunk, names).summary()
 
 
 @router.get("/chunks", response_model=list[ChunkSummary], dependencies=[Depends(require(FLEET_VIEW))])
@@ -363,14 +295,14 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    view = ChunkView.of(services, chunk)
+    facts, names = view.facts, view.names
     route = services.chunks.route_of(chunk_id)
     escalation = facts.open_escalation()
     pause = facts.open_pause()
     decision = services.chunks.decision_for_chunk(chunk_id)
-    names = GraphNames(services.graphs.get)
     graph = names.graph(chunk.graph_id)
-    node_id, node_name = _current_node(chunk, facts, names)
+    node_id, node_name = view.current_node()
     web_base = _branch_url_source(chunk, services.work_sources)
     artifacts = services.chunks.load_artifacts(chunk_id)
     pending = facts.hub_node_pending()
@@ -389,7 +321,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         current_node_id=node_id,
         current_node_name=node_name,
         latest_epoch=facts.latest_epoch(),
-        work_refs=_pointer_views(chunk, services.work_sources),
+        work_refs=view.pointer_views(),
         default_model=list(chunk.default_model),
         default_effort=chunk.default_effort,
         intended_migration=_intended_migration_view(chunk, names),
@@ -415,7 +347,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         questions=[question_view(q) for q in services.chunks.load_questions(chunk_id)],
         awaiting_external_merge=facts.awaiting_external_merge(),
         open_prs=[PrView(repo=pr.repo, number=pr.number, url=pr.url) for pr in facts.pr_opened],
-        cost=_usage_total_view(facts),
+        cost=view.usage_total(),
         usage=_usage_history_views(facts),
         pending=pending_view,
         landed=facts.has_landed_repos(artifacts),
