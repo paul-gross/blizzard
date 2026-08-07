@@ -13,7 +13,7 @@ from blizzard.hub.config import PRODUCES_ENFORCE
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.graph import Executor, JudgedBy, Node, ProducesSpec, SessionMode
 from blizzard.hub.domain.produces_auth import check_produces
-from blizzard.runner.loop.steps import _missing_produces
+from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.wire.completion import SubmittedArtifact
 from blizzard.wire.graph import ProducesEntry
 
@@ -132,7 +132,7 @@ def test_hub_and_runner_agree_on_coverage(
     envelope = make_envelope(
         "ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], produces=_envelope_produces(produces)
     )
-    runner_nudges = bool(_missing_produces(envelope, artifacts, {}))
+    runner_nudges = bool(ProducesReconciler(envelope).missing(artifacts, {}))
 
     assert hub_rejects == runner_nudges, (
         f"produces-coverage drift: the hub backstop {'rejects' if hub_rejects else 'accepts'} this "
@@ -149,7 +149,7 @@ def test_a_git_commit_covered_name_never_nudges_the_worker() -> None:
     and declared ``produces:`` name must not provoke a nudge."""
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], produces=["backend"])
 
-    assert _missing_produces(envelope, [_git_commit("backend")], {}) == []
+    assert ProducesReconciler(envelope).missing([_git_commit("backend")], {}) == []
 
 
 def test_a_runner_local_attachment_covers_the_name_without_any_artifact() -> None:
@@ -157,7 +157,7 @@ def test_a_runner_local_attachment_covers_the_name_without_any_artifact() -> Non
     path is not mistaken for part of the shared predicate."""
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], produces=["findings"])
 
-    assert _missing_produces(envelope, [], {"findings": "the findings"}) == []
+    assert ProducesReconciler(envelope).missing([], {"findings": "the findings"}) == []
 
 
 def test_a_git_commit_kind_expectation_is_covered_by_kind_not_by_name() -> None:
@@ -171,7 +171,7 @@ def test_a_git_commit_kind_expectation_is_covered_by_kind_not_by_name() -> None:
         produces=[ProducesEntry(name="commit", kind=ArtifactKind.GIT_COMMIT)],
     )
 
-    assert _missing_produces(envelope, [_git_commit("toy-api")], {}) == []
+    assert ProducesReconciler(envelope).missing([_git_commit("toy-api")], {}) == []
 
 
 def test_a_git_commit_kind_expectation_with_zero_commits_nudges_the_worker() -> None:
@@ -185,6 +185,6 @@ def test_a_git_commit_kind_expectation_with_zero_commits_nudges_the_worker() -> 
         produces=[ProducesEntry(name="commit", kind=ArtifactKind.GIT_COMMIT)],
     )
 
-    missing = _missing_produces(envelope, [], {})
+    missing = ProducesReconciler(envelope).missing([], {})
     assert [spec.name for spec in missing] == ["commit"]
     assert missing[0].kind is ArtifactKind.GIT_COMMIT

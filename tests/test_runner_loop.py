@@ -33,8 +33,8 @@ from blizzard.runner.harness.preamble import (
     PreambleFingerprint,
 )
 from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.steps import (
-    _collect_asset_artifacts,
     _escalate,
     _spawn_attempt,
     advance,
@@ -1184,7 +1184,9 @@ def test_collect_asset_artifacts_prefers_an_attachment_over_the_assessment():  #
     """A `produces` name with a durable attachment wins over the assessment (issue #113)."""
     envelope = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"])
 
-    submitted = _collect_asset_artifacts(envelope, [], "the assessment", {"review-findings": "attached content"})
+    submitted = ProducesReconciler(envelope).collect_assets(
+        [], "the assessment", {"review-findings": "attached content"}
+    )
 
     assert len(submitted) == 1
     assert submitted[0].name == "review-findings"
@@ -1198,7 +1200,7 @@ def test_collect_asset_artifacts_falls_back_to_the_assessment_when_unattached():
     """A `produces` name with no attachment still emits the assessment, unattached."""
     envelope = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"])
 
-    submitted = _collect_asset_artifacts(envelope, [], "the assessment", {})
+    submitted = ProducesReconciler(envelope).collect_assets([], "the assessment", {})
 
     assert len(submitted) == 1
     assert submitted[0].content == "the assessment"
@@ -1212,8 +1214,8 @@ def test_collect_asset_artifacts_multi_asset_node_does_not_alias_attached_and_un
         "ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings", "review-diary"]
     )
 
-    submitted = _collect_asset_artifacts(
-        envelope, [], "the shared assessment", {"review-findings": "the real findings"}
+    submitted = ProducesReconciler(envelope).collect_assets(
+        [], "the shared assessment", {"review-findings": "the real findings"}
     )
 
     by_name = {a.name: a for a in submitted}
@@ -1236,7 +1238,9 @@ def test_collect_asset_artifacts_git_commit_precedence_over_an_attachment():  # 
         )
     ]
 
-    submitted = _collect_asset_artifacts(envelope, git_artifacts, "assessment", {"toy-api": "should be ignored"})
+    submitted = ProducesReconciler(envelope).collect_assets(
+        git_artifacts, "assessment", {"toy-api": "should be ignored"}
+    )
 
     assert submitted == []
 
@@ -1254,7 +1258,7 @@ def test_collect_asset_artifacts_git_commit_spec_never_yields_a_phantom_asset():
         produces=[ProducesEntry(name="commit", kind=ArtifactKind.GIT_COMMIT)],
     )
 
-    submitted = _collect_asset_artifacts(envelope, [], "assessment", {})
+    submitted = ProducesReconciler(envelope).collect_assets([], "assessment", {})
 
     assert submitted == []
 

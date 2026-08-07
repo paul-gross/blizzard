@@ -35,7 +35,6 @@ _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
 def _prompt(results: list[CheckResultRecord]) -> JudgementPrompt:
-    """A judgement prompt over a minimal build node, for the rendering assertions below."""
     return JudgementPrompt(make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES), results)
 
 

@@ -16,7 +16,8 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.usage import UsageSample
-from blizzard.runner.loop.steps import _advance_exited_worker, _nudge_message, advance, pull
+from blizzard.runner.loop.produces import ProducesReconciler
+from blizzard.runner.loop.steps import _advance_exited_worker, advance, pull
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.graph import ProducesEntry
@@ -429,7 +430,7 @@ def test_fully_attached_node_does_not_nudge(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_nudge_message_branches_on_kind_and_stays_harness_inert() -> None:
-    """`_nudge_message` (issue #143, Phase 5) names the kind-appropriate declaration verb
+    """`ProducesReconciler.nudge_message` (issue #143) names the kind-appropriate declaration verb
     per unmet spec, never the deprecated `attach` alias, and every rendered line is
     `#`-prefixed so the mock harness's prompt-is-program `exec` still sees a legal no-op."""
     missing = [
@@ -437,7 +438,9 @@ def test_nudge_message_branches_on_kind_and_stays_harness_inert() -> None:
         ProducesEntry(name="commit", kind=ArtifactKind.GIT_COMMIT),
     ]
 
-    message = _nudge_message(missing)
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+
+    message = ProducesReconciler(envelope).nudge_message(missing)
 
     for line in message.splitlines():
         assert line.startswith("#"), f"non-inert line in the nudge message: {line!r}"

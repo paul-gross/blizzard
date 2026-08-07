@@ -39,6 +39,7 @@ from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
 from blizzard.runner.loop.judgement_prompt import JudgementPrompt
 from blizzard.runner.loop.process import IProcessProbe
+from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.store.repository import (
     AskRecord,
     BufferedFact,
@@ -55,7 +56,6 @@ from blizzard.wire.completion import (
     CompletionSubmission,
     SubmittedArtifact,
     checks_gate_violated,
-    produces_coverage,
 )
 from blizzard.wire.decision import DecisionSubmission, DecisionView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope
@@ -70,7 +70,6 @@ from blizzard.wire.facts import (
     RunnerFact,
     RunnerFactBatch,
 )
-from blizzard.wire.graph import ProducesEntry
 from blizzard.wire.queue import QueuePeekEntry
 from blizzard.wire.route import RouteClaim
 
@@ -1205,7 +1204,8 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     #      makes "at most one nudge per (lease, epoch)" hold across a kill -9 at either point.
     assessment = ctx.harness.parse_assessment(output)
     attachments = ctx.store.attachments_for_lease(lease.lease_id)
-    missing = _missing_produces(envelope, artifacts, attachments)
+    produces = ProducesReconciler(envelope)
+    missing = produces.missing(artifacts, attachments)
     if missing and not ctx.store.nudge_fired(lease.lease_id, lease.epoch):
         _log.warning(
             "nudging worker for unattached produces names",
@@ -1221,7 +1221,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         nudge_output = ctx.harness.judge(
             bindings[0].workdir,
             lease.session_id,
-            _nudge_message(missing),
+            produces.nudge_message(missing),
             preamble=_resume_preamble(ctx, lease, bindings),
             chunk_id=lease.chunk_id,
             effort=lease.resolved_effort,
@@ -1248,7 +1248,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
 
     # 2b. Harvest asset artifacts for any `produces` name no git commit covers, read from
     #      the durable store so a restart between attach and completion still sees it.
-    artifacts += _collect_asset_artifacts(envelope, artifacts, assessment, attachments)
+    artifacts += produces.collect_assets(artifacts, assessment, attachments)
 
     # 3. Buffer the completion — one atomic, epoch-fenced write. The entry names the lease,
     #    so ADVANCE skips it until the flush closes it.
@@ -2093,75 +2093,6 @@ def _resume_if_unpaused(ctx: LoopContext, lease: LeaseRecord) -> None:
         epoch=lease.epoch,
         pid=pid,
     )
-
-
-def _missing_produces(
-    envelope: NodeEnvelope, git_artifacts: list[SubmittedArtifact], attachments: dict[str, str]
-) -> list[ProducesEntry]:
-    """Every `produces:` spec this attempt does not yet cover (issue #143) — the nudge-worthy
-    set, in the envelope's own declaration order rather than attachment order. Returns the
-    unmet specs themselves, not just their names, since each spec's `kind` names a different
-    declaration verb. Evaluated by the shared ``produces_coverage`` predicate, so this and the
-    upstream backstop cannot drift apart."""
-
-    attached = [
-        SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content=content, attached=True)
-        for name, content in attachments.items()
-    ]
-    return produces_coverage(envelope.node.produces, git_artifacts + attached)
-
-
-def _nudge_message(missing: list[ProducesEntry]) -> str:
-    """The nudge resume's message (issues #113, #143): one `#`-prefixed comment line per unmet
-    `produces:` spec, naming the kind-appropriate declaration verb and its positionals. Same
-    inert `#` framing as the other resume messages."""
-
-    lines = ["# This node's `produces:` still needs an explicit submission:"]
-    for spec in missing:
-        if spec.kind is ArtifactKind.GIT_COMMIT:
-            lines.append(
-                f"#   - {spec.name} (git_commit): push your branch, then run "
-                f"`blizzard runner artifact commit --repo <repo> --branch <branch> "
-                f"--commit <sha>` for each repo you touched (`<repo>` is its name in "
-                f"the environment's manifest; add `--env <id>` when the chunk holds "
-                f"more than one environment)."
-            )
-        else:
-            lines.append(
-                f"#   - {spec.name} (asset): run `blizzard runner artifact create "
-                f"--name {spec.name}` with the content on stdin."
-            )
-    lines.append("# Do this before this attempt is judged done.")
-    return "\n".join(lines)
-
-
-def _collect_asset_artifacts(
-    envelope: NodeEnvelope,
-    git_artifacts: list[SubmittedArtifact],
-    assessment: str,
-    attachments: dict[str, str],
-) -> list[SubmittedArtifact]:
-    """Emit an asset artifact per produced name no git commit covers.
-
-    An explicit attachment wins over the worker's judgement assessment and is marked
-    ``attached=True`` — the provenance a multi-asset node needs to tell its artifacts apart
-    rather than aliasing them all to one assessment (#90)."""
-
-    covered = {a.name for a in git_artifacts}
-    submitted: list[SubmittedArtifact] = []
-    for spec in envelope.node.produces:
-        if spec.kind is ArtifactKind.GIT_COMMIT:
-            continue
-        name = spec.name
-        if name in covered:
-            continue
-        if name in attachments:
-            submitted.append(
-                SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content=attachments[name], attached=True)
-            )
-        else:
-            submitted.append(SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content=assessment))
-    return submitted
 
 
 def _verify_and_collect_git_commits(
