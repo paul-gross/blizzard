@@ -34,9 +34,9 @@ from blizzard.runner.harness.preamble import (
 )
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.produces import ProducesReconciler
+from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.loop.steps import (
     _escalate,
-    _spawn_attempt,
     advance,
     fill,
     mark_resume_intents,
@@ -1008,7 +1008,7 @@ def test_resume_after_a_runner_prompt_change_announces_and_re_sends_layer_one(tm
 def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerprint(tmp_path):  # type: ignore[no-untyped-def]
     """Scenario 5: a restart-resume re-records the SAME session id via `record_spawn`
     sending no `prompt_prefix`. The fingerprint write is reachable only from
-    `_spawn_attempt`, so that path can't touch it and the next entry still elides."""
+    `Spawner.spawn`, so that path can't touch it and the next entry still elides."""
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -1788,7 +1788,7 @@ def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  # type: ig
     advance(ctx)  # the attempt finishes and its completion is buffered — not yet applied
     pull(ctx)  # the flush applies it (NEXT); the cap check runs at that boundary and parks
 
-    # No next attempt spawned — the cap parked before `_spawn_attempt`, not by killing anyone.
+    # No next attempt spawned — the cap parked before `Spawner.spawn`, not by killing anyone.
     assert harness.spawns == []
     assert store.active_lease_for_chunk("ch_1") is None
     escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
@@ -2227,7 +2227,7 @@ def test_an_empty_resume_from_is_not_treated_as_a_resume(tmp_path):  # type: ign
         clock=FixedClock(_NOW),
     )
 
-    _spawn_attempt(ctx, "ch_1", envelope, [AcquiredEnvironment("e1", "/ws/e1")], via="test", resume_from="")
+    Spawner(ctx).spawn("ch_1", envelope, [AcquiredEnvironment("e1", "/ws/e1")], via="test", resume_from="")
 
     assert store.fingerprint_reads == [], "an empty resume_from was treated as a resume"
     # And the prefix is a full fresh render, not a collapse banner.

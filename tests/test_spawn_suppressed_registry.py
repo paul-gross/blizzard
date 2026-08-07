@@ -1,8 +1,8 @@
-"""The ``_spawn_suppressed`` call-site registry fitness test (issue #49).
+"""The spawn-gate call-site registry fitness test (issue #49).
 
 A Python test, not a docstring enumeration to recount by hand: a new spawn primitive
-landing without the gate fails this test by name. AST-walks every function in
-``runner/loop/steps.py`` for a gated-shaped call also calling ``_spawn_suppressed``.
+landing without the gate fails this test by name. AST-walks every function in the loop
+modules that start workers for a gated-shaped call also calling the gate.
 """
 
 from __future__ import annotations
@@ -15,13 +15,14 @@ import pytest
 pytestmark = pytest.mark.unit
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_STEPS_PATH = _REPO_ROOT / "src" / "blizzard" / "runner" / "loop" / "steps.py"
+_LOOP = _REPO_ROOT / "src" / "blizzard" / "runner" / "loop"
+_SCANNED = (_LOOP / "steps.py", _LOOP / "spawn.py")
 
 #: Function names deliberately exempt from the gate, each with a reason. Empty today —
 #: an addition here must be a considered exemption, not a patch over a real gap.
 _ALLOWED_UNGATED: frozenset[str] = frozenset()
 
-_GATE_NAME = "_spawn_suppressed"
+_GATE_NAME = "suppressed"
 _GATED_METHODS = frozenset({"spawn", "resume_with_message", "judge"})
 
 
@@ -38,8 +39,8 @@ def _is_harness_spawn_call(node: ast.AST) -> bool:
 
 
 def _is_gate_call(node: ast.AST) -> bool:
-    """True for a call to ``_spawn_suppressed(...)``."""
-    return isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == _GATE_NAME
+    """True for a call to the gate — always an attribute of a `Spawner`, never a bare name."""
+    return isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == _GATE_NAME
 
 
 def _calls_in_own_scope(func: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.Call]:
@@ -59,14 +60,16 @@ def _calls_in_own_scope(func: ast.FunctionDef | ast.AsyncFunctionDef) -> list[as
     return calls
 
 
+def _functions(path: Path) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+    tree = ast.parse(path.read_text(), filename=str(path))
+    return [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+
+
 def _ungated_spawn_functions(path: Path) -> list[str]:
     """Every function name in ``path`` whose own body calls a gated harness primitive
-    but never calls ``_spawn_suppressed``, minus the explicit allowlist."""
-    tree = ast.parse(path.read_text(), filename=str(path))
+    but never calls the gate, minus the explicit allowlist."""
     violations: list[str] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
+    for node in _functions(path):
         own_calls = _calls_in_own_scope(node)
         if not any(_is_harness_spawn_call(call) for call in own_calls):
             continue
@@ -79,35 +82,33 @@ def _ungated_spawn_functions(path: Path) -> list[str]:
 
 
 def test_every_harness_spawn_call_site_is_gated() -> None:
-    violations = _ungated_spawn_functions(_STEPS_PATH)
+    violations = [name for path in _SCANNED for name in _ungated_spawn_functions(path)]
     assert not violations, (
         "function(s) call `ctx.harness.spawn`/`ctx.harness.resume_with_message` without also "
-        "calling `_spawn_suppressed` — a runner told to spawn no workers would spawn one "
+        f"calling `Spawner.{_GATE_NAME}` — a runner told to spawn no workers would spawn one "
         f"(issue #45/#46): {violations}"
     )
 
 
-def test_resume_from_rides_the_gated_spawn_attempt_funnel() -> None:
-    """Node-entry resume (issue #115) threads ``resume_from`` into ``_spawn_attempt``'s
+def test_resume_from_rides_the_gated_spawn_funnel() -> None:
+    """Node-entry resume (issue #115) threads ``resume_from`` into ``Spawner.spawn``'s
     existing, already-gated spawn call — never a new, separately-gated harness-spawn
     call site of its own (AC5)."""
-    tree = ast.parse(_STEPS_PATH.read_text(), filename=str(_STEPS_PATH))
     carriers: list[str] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        for call in _calls_in_own_scope(node):
-            if _is_harness_spawn_call(call) and any(kw.arg == "resume_from" for kw in call.keywords):
-                carriers.append(node.name)
-    assert carriers == ["_spawn_attempt"], (
+    for path in _SCANNED:
+        for node in _functions(path):
+            for call in _calls_in_own_scope(node):
+                if _is_harness_spawn_call(call) and any(kw.arg == "resume_from" for kw in call.keywords):
+                    carriers.append(node.name)
+    assert carriers == ["spawn"], (
         "expected `resume_from` threaded into `ctx.harness.spawn` only from within "
-        f"`_spawn_attempt` (the sole gated funnel); found: {carriers}"
+        f"`Spawner.spawn` (the sole gated funnel); found: {carriers}"
     )
 
 
 def test_scan_is_not_vacuous() -> None:
-    """Guard against the scan silently matching nothing (e.g. a renamed method/gate drifting
-    the AST shape out from under it) and the test above passing for the wrong reason."""
-    tree = ast.parse(_STEPS_PATH.read_text(), filename=str(_STEPS_PATH))
-    spawn_call_sites = [node for node in ast.walk(tree) if _is_harness_spawn_call(node)]
-    assert len(spawn_call_sites) >= 1, "expected at least one ctx.harness.spawn/resume_with_message call site"
+    """Guard against either half of the scan silently matching nothing (e.g. a renamed method
+    or gate drifting the AST shape out from under it) and the test above passing vacuously."""
+    nodes = [n for path in _SCANNED for n in ast.walk(ast.parse(path.read_text(), filename=str(path)))]
+    assert any(_is_harness_spawn_call(n) for n in nodes), "no ctx.harness.spawn/resume_with_message call site matched"
+    assert any(_is_gate_call(n) for n in nodes), f"no `Spawner.{_GATE_NAME}` call site matched"

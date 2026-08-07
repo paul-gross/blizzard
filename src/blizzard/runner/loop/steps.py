@@ -9,16 +9,13 @@ from __future__ import annotations
 
 import json
 import os
-import uuid
 from datetime import datetime, timedelta
 
 from blizzard.foundation.crash import crashpoint
-from blizzard.foundation.ids import LEASE_PREFIX, mint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.work import ChunkStatus
-from blizzard.runner.domain.lease_auth import mint_lease_token
 from blizzard.runner.domain.leases import as_utc, is_heartbeat_stale
 from blizzard.runner.domain.takeover import wrapped_takeover_command
 from blizzard.runner.environments.provider import (
@@ -26,9 +23,7 @@ from blizzard.runner.environments.provider import (
     EnvironmentPreparationError,
     WorkspaceAcquisitionError,
 )
-from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
-from blizzard.runner.harness.preamble import render_worker_preamble
 from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT
 from blizzard.runner.loop.context import LoopContext
@@ -38,6 +33,7 @@ from blizzard.runner.loop.judgement_prompt import JudgementPrompt
 from blizzard.runner.loop.outbound import COMPLETION_KIND, DECISION_KIND, OutboundFacts
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.produces import ProducesReconciler
+from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.store.repository import (
     AskRecord,
     BufferedFact,
@@ -46,7 +42,6 @@ from blizzard.runner.store.repository import (
     GitCommitDeclarationRecord,
     IWriteRunnerStore,
     LeaseRecord,
-    NewLease,
 )
 from blizzard.wire.completion import (
     CheckResult,
@@ -137,11 +132,6 @@ _CP_FILL_AFTER_ACQUIRE = crashpoint("fill.after-env-acquire.before-bind", "envs 
 _CP_FILL_AFTER_BIND = crashpoint("fill.after-bind.before-claim", "binding recorded; route not claimed at the hub")
 _CP_FILL_AFTER_CLAIM = crashpoint("fill.after-claim.before-spawn", "hub holds the route; lease not minted")
 
-# SPAWN (shared by FILL's first spawn, ADVANCE's continue-in-place, and requeue): the
-# lease-mint -> spawn -> record window is the orphan-lease window REAP must absorb.
-_CP_SPAWN_AFTER_MINT = crashpoint("spawn.after-lease-mint.before-spawn", "lease minted; worker not spawned")
-_CP_SPAWN_AFTER_SPAWN = crashpoint("spawn.after-spawn", "worker spawned; pid recorded")
-
 # ADVANCE — judge an exited worker: verify -> elicit verdict -> buffer completion. Verify
 # is read-only, so it needs no crash point of its own (`bzh:crash-correctness` exemption).
 _CP_ADV_AFTER_JUDGE = crashpoint("advance.after-judgement.before-buffer", "verdict parsed; completion not buffered")
@@ -188,15 +178,6 @@ _CP_FLUSH_AFTER_APPLY = crashpoint("flush.after-apply-response", "apply-response
 
 
 # Usage telemetry (issue #58) — the per-lease stdout redirect and its readback.
-
-
-def _pending_generation(ctx: LoopContext, lease_id: str) -> int:
-    """The spawn generation this lease's next spawn/resume is about to mint — one past
-    :meth:`~blizzard.runner.store.repository.IReadRunnerStore.lease_generation`'s
-    durably-recorded count, read *before* this attempt's own ``record_spawn`` call
-    lands. Every write call site (:func:`_spawn_attempt`, and each resume family
-    member) reads this to name its own stdout path ahead of that call."""
-    return ctx.store.lease_generation(lease_id) + 1
 
 
 # Runner spend ceiling (issue #61b) — the tick-level kill-switch, first in the tick.
@@ -385,29 +366,13 @@ def _resume_marked_lease(ctx: LoopContext, lease: LeaseRecord) -> None:
         _abandon_reassigned(ctx, lease, via="resume")
 
 
-def _resume_preamble(ctx: LoopContext, lease: LeaseRecord, bindings: list[EnvBindingRecord]) -> WorkerPreamble:
-    """The per-lease identity a resumed worker needs to reach the runner for its lease.
-
-    A resume inherits none of the spawn env, so the identity is re-supplied. Only the token's
-    hash is ever persisted, so the token itself is **re-minted** here, invalidating the prior one.
-    """
-    lease_token, token_hash = mint_lease_token()
-    ctx.store.record_lease_token(lease.lease_id, token_hash, ctx.clock.now())
-    return WorkerPreamble(
-        environments=[AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in bindings],
-        lease_id=lease.lease_id,
-        local_api_url=ctx.config.local_api_url,
-        lease_token=lease_token,
-    )
-
-
 def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
     """Kill any survivor, then resume the session under the same lease/epoch/session.
 
     Kill-first is what prevents two processes on one session — the epoch is not. Only
     ``pid``/``process_start_time`` are rewritten, so no retry is consumed. The brake is checked
     **before the kill**: gating after would kill the survivor and leave it un-re-attached."""
-    if _spawn_suppressed(ctx, via="resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
+    if Spawner(ctx).suppressed(via="resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
         return
     now = ctx.clock.now()
     if lease.pid is not None:
@@ -426,8 +391,8 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
         bindings[0].workdir,
         lease.session_id,
         _RESTART_RESUME_MESSAGE,
-        stdout_path=ctx.worker_files.stdout_path(lease.lease_id, _pending_generation(ctx, lease.lease_id)),
-        preamble=_resume_preamble(ctx, lease, bindings),
+        stdout_path=Spawner(ctx).stdout_path(lease.lease_id),
+        preamble=Spawner(ctx).preamble(lease, bindings),
         chunk_id=lease.chunk_id,
         # Reasserted, not sticky (issue #144) — see the judge call site's note.
         effort=lease.resolved_effort,
@@ -896,7 +861,7 @@ def _fill_one(ctx: LoopContext) -> bool:
         outcome.claimed.envelope.node,
         resolve_spawn_cwd(ctx.config.workspace_root, acquired[0].workdir if acquired else None),
     )
-    _spawn_attempt(ctx, entry.chunk_id, outcome.claimed.envelope, acquired, via="fill", resume_from=resume_from)
+    Spawner(ctx).spawn(entry.chunk_id, outcome.claimed.envelope, acquired, via="fill", resume_from=resume_from)
     return True
 
 
@@ -1028,7 +993,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
 
     # 2. Elicit the verdict via the judgement resume — a spawn primitive, gated here rather
     #    than at the top so the non-spawn work above still happens while paused (issue #45).
-    if _spawn_suppressed(ctx, via="advance", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
+    if Spawner(ctx).suppressed(via="advance", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
         return
 
     # 1c. Run the node's `checks:` before the judgement (issue #114), against the tree the
@@ -1042,7 +1007,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         bindings[0].workdir,
         lease.session_id,
         prompt,
-        preamble=_resume_preamble(ctx, lease, bindings),
+        preamble=Spawner(ctx).preamble(lease, bindings),
         chunk_id=lease.chunk_id,
         # Reassert the stamped effort (issue #144): effort is NOT session-sticky, so a
         # resume that omits it drops the declared value back to the ambient default.
@@ -1097,7 +1062,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
             bindings[0].workdir,
             lease.session_id,
             produces.nudge_message(missing),
-            preamble=_resume_preamble(ctx, lease, bindings),
+            preamble=Spawner(ctx).preamble(lease, bindings),
             chunk_id=lease.chunk_id,
             effort=lease.resolved_effort,
             model=lease.resolved_model,
@@ -1174,7 +1139,7 @@ def _apply_response(
             next_envelope.node,
             resolve_spawn_cwd(ctx.config.workspace_root, envs[0].workdir if envs else None),
         )
-        _spawn_attempt(ctx, chunk_id, next_envelope, envs, via="apply-response", resume_from=resume_from)
+        Spawner(ctx).spawn(chunk_id, next_envelope, envs, via="apply-response", resume_from=resume_from)
     elif outcome == ApplyOutcome.HUB_NODE_TAKEN:
         _log.info("hub node took over — holding envs until terminal", chunk_id=chunk_id)
     elif outcome == ApplyOutcome.MIGRATED:
@@ -1258,7 +1223,7 @@ def _spawn_into_held_node(ctx: LoopContext, chunk_id: str) -> None:
         envelope.node,
         resolve_spawn_cwd(ctx.config.workspace_root, held[0].workdir if held else None),
     )
-    _spawn_attempt(ctx, chunk_id, envelope, held, via="advance", resume_from=resume_from)
+    Spawner(ctx).spawn(chunk_id, envelope, held, via="advance", resume_from=resume_from)
 
 
 def _resolve_gate(ctx: LoopContext, chunk_id: str, decision: DecisionView) -> None:
@@ -1288,131 +1253,6 @@ def _resolve_gate(ctx: LoopContext, chunk_id: str, decision: DecisionView) -> No
 
 
 # Shared helpers
-
-
-def _spawn_suppressed(ctx: LoopContext, *, via: str, chunk_id: str, lease_id: str | None = None) -> bool:
-    """True — and logged once — when the runner's own brake blocks this spawn (issue #45).
-
-    Reads ``local_paused`` only, and is called before every spawn primitive's first mutation, so
-    a suppressed spawn writes no fact, kills no pid and mints no lease. Which primitives it must
-    cover is held mechanically by ``tests/test_spawn_suppressed_registry.py``."""
-    if not ctx.store.local_paused(ctx.config.runner_id):
-        return False
-    _log.info(
-        "spawn suppressed — locally paused",
-        runner_id=ctx.config.runner_id,
-        via=via,
-        chunk_id=chunk_id,
-        lease_id=lease_id,
-    )
-    return True
-
-
-def _spawn_attempt(
-    ctx: LoopContext,
-    chunk_id: str,
-    envelope: NodeEnvelope,
-    environments: list[AcquiredEnvironment],
-    *,
-    via: str,
-    resume_from: str | None = None,
-) -> None:
-    """Mint a fresh-epoch lease and spawn a headless worker for a node-step.
-
-    Always its caller's final statement, with no post-spawn logic after it — that is what lets
-    the local-pause gate stay a silent ``None`` return no caller can misread as "spawn failed"
-    (issue #45). The sole funnel into ``ctx.harness.spawn``, so a re-spawn joins its pool."""
-    if _spawn_suppressed(ctx, via=via, chunk_id=chunk_id):
-        return
-    now = ctx.clock.now()
-    # Mint above the max of both floors (bzh:epoch-fencing, #112): the local fence alone is 0
-    # for a chunk this runner never drove, so a migrated chunk would mint below hub truth.
-    epoch = max(ctx.store.latest_epoch(chunk_id), envelope.epoch) + 1
-    lease_id = mint(LEASE_PREFIX, ctx.clock)
-    node = envelope.node
-    retries_max = node.retries_max if node.retries_max is not None else ctx.config.default_retries_max
-    resolved_model, resolved_effort = ctx.sessions.model_and_effort(node, resume_from)
-    ctx.store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id=chunk_id,
-            graph_id=envelope.graph_id,
-            node_id=node.node_id,
-            node_name=node.node_name,
-            epoch=epoch,
-            runner_id=ctx.config.runner_id,
-            retries_max=retries_max,
-            session_name=node.session_name,
-            resolved_model=resolved_model,
-            resolved_effort=resolved_effort,
-            created_at=now,
-        )
-    )
-    # A per-lease capability token (issue #113): only its hash is stashed durably, the
-    # plaintext carried forward to the spawn preamble alone and never persisted.
-    lease_token, token_hash = mint_lease_token()
-    ctx.store.record_lease_token(lease_id, token_hash, now)
-    OutboundFacts(ctx).lease_minted(chunk_id, lease_id, epoch=epoch, at=now)
-    _CP_SPAWN_AFTER_MINT.reached()  # lease minted, worker not spawned — the orphan-lease window REAP absorbs
-    # The effective workspace prompt is the store's runtime override when set, else the static
-    # config prompt — read here so a replace applies to the next spawn with no restart.
-    override = ctx.store.workspace_prompt_override(ctx.config.workspace_id)
-    workspace_prompt = override if override is not None else ctx.config.workspace_prompt
-    # Read ONLY when this spawn resumes a session (issue #149), so a fresh one can never
-    # elide prose it has never seen; nothing recorded reads `None` and renders in full.
-    prior_preamble = ctx.store.session_preamble_fingerprint(resume_from) if resume_from else None
-    rendered = render_worker_preamble(
-        runner_prompt=ctx.config.runner_prompt,
-        workspace_prompt=workspace_prompt,
-        environments=environments,
-        lease_id=lease_id,
-        runner_id=ctx.config.runner_id,
-        chunk_id=chunk_id,
-        prior=prior_preamble,
-    )
-    prompt_prefix = rendered.text
-    generation = _pending_generation(ctx, lease_id)
-    preamble = WorkerPreamble(
-        environments=environments,
-        lease_id=lease_id,
-        local_api_url=ctx.config.local_api_url,
-        workspace_root=ctx.config.workspace_root,
-        prompt_prefix=prompt_prefix,
-        stdout_path=ctx.worker_files.stdout_path(lease_id, generation),
-        stderr_path=ctx.worker_files.stderr_path(lease_id, generation),
-        lease_token=lease_token,
-    )
-    try:
-        handle = ctx.harness.spawn(
-            envelope,
-            preamble,
-            session_hint=str(uuid.uuid4()),
-            resume_from=resume_from,
-            model=resolved_model,
-            effort=resolved_effort,
-        )
-    except HarnessSpawnError as exc:
-        # Surface the launch-time spawn failure (issue #125) then RE-RAISE: no worker started,
-        # so the attempt was never recorded and the chunk simply retries next tick.
-        OutboundFacts(ctx).command_failed(
-            chunk_id=chunk_id,
-            lease_id=lease_id,
-            node_name=envelope.node.node_name,
-            command="spawn harness worker",
-            stderr_tail=str(exc),
-        )
-        raise
-    ctx.store.record_spawn(
-        lease_id,
-        pid=handle.pid,
-        process_start_time=handle.process_start_time,
-        session_id=handle.session_id,
-        spawned_at=now,
-    )
-    # Keyed on the HANDLE's session id — the authoritative continuation id (issue #149).
-    # Written after the spawn, so a durable fingerprint always implies the prose was sent.
-    ctx.store.record_session_preamble(handle.session_id, fingerprint=rendered.fingerprint, at=now)
-    _CP_SPAWN_AFTER_SPAWN.reached()
 
 
 #: The classification each `_fail_attempt` branch surfaces (issue #125). The
@@ -1564,7 +1404,7 @@ def _adopt_interrupted_claim(ctx: LoopContext, chunk_id: str) -> None:
     except HubClientError:
         return  # hub unreachable — the binding is durable; retry next tick
     _log.info("adopting interrupted claim — spawning current node", chunk_id=chunk_id)
-    _spawn_attempt(ctx, chunk_id, envelope, _bindings_as_environments(bindings), via="adopt")
+    Spawner(ctx).spawn(chunk_id, envelope, _bindings_as_environments(bindings), via="adopt")
 
 
 def _resume_requeued_chunk(ctx: LoopContext, chunk_id: str) -> None:
@@ -1586,7 +1426,7 @@ def _resume_requeued_chunk(ctx: LoopContext, chunk_id: str) -> None:
     except HubClientError:
         return  # hub unreachable — the requeue fact is durable; retry next tick
     _log.info("resuming requeued chunk — spawning current node", chunk_id=chunk_id)
-    _spawn_attempt(ctx, chunk_id, envelope, _bindings_as_environments(bindings), via="requeue-resume")
+    Spawner(ctx).spawn(chunk_id, envelope, _bindings_as_environments(bindings), via="requeue-resume")
 
 
 def _reclaim_interrupted(ctx: LoopContext, chunk_id: str, bindings: list[EnvBindingRecord]) -> None:
@@ -1620,7 +1460,7 @@ def _reclaim_interrupted(ctx: LoopContext, chunk_id: str, bindings: list[EnvBind
     # A reclaim is a fresh claim, so its token overwrites whatever this chunk's row held
     # before — a fresh claim always wins (issue #84a).
     ctx.store.set_route_token(chunk_id, token=outcome.claimed.route_token, at=ctx.clock.now())
-    _spawn_attempt(ctx, chunk_id, outcome.claimed.envelope, envs, via="reclaim")
+    Spawner(ctx).spawn(chunk_id, outcome.claimed.envelope, envs, via="reclaim")
 
 
 def _requeue(ctx: LoopContext, lease: LeaseRecord) -> None:
@@ -1642,7 +1482,7 @@ def _requeue(ctx: LoopContext, lease: LeaseRecord) -> None:
     except HubClientError:
         return  # the closed attempt is durable; FILL/ADVANCE re-drives next tick
     _log.info("requeuing at node", chunk_id=lease.chunk_id, node=lease.node_name)
-    _spawn_attempt(ctx, lease.chunk_id, envelope, _bindings_as_environments(bindings), via="requeue")
+    Spawner(ctx).spawn(lease.chunk_id, envelope, _bindings_as_environments(bindings), via="requeue")
 
 
 def _escalate(ctx: LoopContext, lease: LeaseRecord, *, reason: str = "retries exhausted") -> None:
@@ -1689,7 +1529,7 @@ def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
     Crash-safe and re-runnable: an unanswered question polls as a no-op and the reap clock stays
     stopped. Once answered the agent is reconstituted under the same session, lease and step.
     """
-    if _spawn_suppressed(ctx, via="answer-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
+    if Spawner(ctx).suppressed(via="answer-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
         return
     park = ctx.store.open_park(lease.lease_id)
     if park is None:
@@ -1713,8 +1553,8 @@ def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
         bindings[0].workdir,
         lease.session_id or "",
         message,
-        stdout_path=ctx.worker_files.stdout_path(lease.lease_id, _pending_generation(ctx, lease.lease_id)),
-        preamble=_resume_preamble(ctx, lease, bindings),
+        stdout_path=Spawner(ctx).stdout_path(lease.lease_id),
+        preamble=Spawner(ctx).preamble(lease, bindings),
         chunk_id=lease.chunk_id,
         # Reasserted, not sticky (issue #144) — see the judge call site's note.
         effort=lease.resolved_effort,
@@ -1739,7 +1579,7 @@ def _resume_if_unpaused(ctx: LoopContext, lease: LeaseRecord) -> None:
     Same lease, epoch and session; only ``pid``/``process_start_time`` are rewritten, so **no
     retry is consumed** — the pause cost the chunk a process, not an attempt. An **ask-parked**
     lease returns early even once unpaused, so a lift never conjures an absent answer."""
-    if _spawn_suppressed(ctx, via="pause-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
+    if Spawner(ctx).suppressed(via="pause-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
         return
     try:
         detail = ctx.hub.get_chunk(lease.chunk_id)
@@ -1770,8 +1610,8 @@ def _resume_if_unpaused(ctx: LoopContext, lease: LeaseRecord) -> None:
         bindings[0].workdir,
         lease.session_id,
         _PAUSE_RESUME_MESSAGE,
-        stdout_path=ctx.worker_files.stdout_path(lease.lease_id, _pending_generation(ctx, lease.lease_id)),
-        preamble=_resume_preamble(ctx, lease, bindings),
+        stdout_path=Spawner(ctx).stdout_path(lease.lease_id),
+        preamble=Spawner(ctx).preamble(lease, bindings),
         chunk_id=lease.chunk_id,
         # Reasserted, not sticky (issue #144) — see the judge call site's note.
         effort=lease.resolved_effort,

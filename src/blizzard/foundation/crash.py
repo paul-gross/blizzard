@@ -56,6 +56,7 @@ def all_points() -> list[CrashPoint]:
 #: The modules that declare crash points; importing them populates the registry.
 _INSTRUMENTED_MODULES = (
     "blizzard.runner.loop.steps",
+    "blizzard.runner.loop.spawn",
     "blizzard.runner.domain.attachments",
     "blizzard.runner.domain.git_commit_declaration",
     "blizzard.hub.delivery.hub_node",
