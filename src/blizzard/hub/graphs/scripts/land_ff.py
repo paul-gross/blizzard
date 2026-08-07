@@ -19,11 +19,7 @@ class _Conflict(Exception):
 
 
 def main() -> int:
-    """Run the land policy, aborting cleanly on an unconfirmed marker write.
-
-    A :class:`MarkerWriteError` is caught HERE — a single top-level catch, not inside the
-    per-repo loop — so a marker failure aborts the rest of the run instead of continuing
-    to the next repo, and ``landed`` is never printed once one has fired."""
+    """Run the land policy, aborting cleanly on an unconfirmed marker write."""
     try:
         return _land()
     except MarkerWriteError as exc:

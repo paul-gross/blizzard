@@ -10,9 +10,13 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from blizzard.hub.graphs.scripts.land_common import LandRun, MarkerWriteError, pr_title
-
-_HUB_USER = "blizzard-hub"
+from blizzard.hub.graphs.scripts.land_common import (
+    LandRun,
+    MarkerWriteError,
+    MergeDidNotLand,
+    PullRequest,
+    PullRequestOpenError,
+)
 
 # The reserved + authored outcomes this script prints as its last stdout line.
 _LANDED = "landed"
@@ -125,10 +129,7 @@ class _Conflict(Exception):
 
 
 def main() -> int:
-    """Run the land policy, aborting cleanly on an unconfirmed marker write.
-
-    A :class:`MarkerWriteError` is caught HERE, not inside the per-repo loop, so a marker
-    failure aborts the run instead of continuing to the next repo."""
+    """Run the land policy, aborting cleanly on an unconfirmed marker write."""
     try:
         return _land()
     except MarkerWriteError as exc:
@@ -159,103 +160,81 @@ def _land() -> int:
 
     # --- check stage: no repo is merged unless ALL check `clean` (chunk atomicity), and
     #     the loop never short-circuits on a failure, so findings accumulate together.
-    to_merge: list[tuple[str, str, int, str]] = []  # (bare repo, qualified repo, pr number, head sha)
+    to_merge: list[tuple[PullRequest, str]] = []
     failures: list[dict[str, Any]] = []
     wait_records: list[dict[str, Any]] = []
     wait = False
     try:
         for commit in pending:
-            bare_repo = commit["repo"]
-            repo = run.repo(bare_repo)
-            branch = commit["branch"]
-            status, listed = run.api("GET", f"/repos/{repo}/pulls?state=open")
-            existing = next((p for p in (listed or []) if p.get("head", {}).get("ref") == branch), None)
-            if existing is None:
-                status, created = run.api(
-                    "POST",
-                    f"/repos/{repo}/pulls",
-                    {
-                        "title": pr_title(run.feature_title, branch),
-                        "head": branch,
-                        "base": run.base_branch,
-                        "user": _HUB_USER,
-                    },
-                )
-                if status != 201:
-                    # A create hiccup is worth another poll, not a bounce.
-                    print(f"could not open a PR for {repo}:{branch}: {created}", file=sys.stderr)
-                    wait = True
-                    continue
-                existing = created
-            number = int(existing["number"])
-            status, pull = run.api("GET", f"/repos/{repo}/pulls/{number}")
-            head_sha = (pull.get("head") or {}).get("sha") or commit["commit"]
-            state = pull.get("mergeable_state")
-            decision = classify(state, merged=bool(pull.get("merged")))
+            try:
+                pull = PullRequest.of(run, commit)
+            except PullRequestOpenError as exc:
+                # A create hiccup is worth another poll, not a bounce.
+                print(str(exc), file=sys.stderr)
+                wait = True
+                continue
+            head_sha = pull.head_sha or commit["commit"]
+            state = pull.mergeable_state
+            decision = classify(state, merged=pull.merged)
             if decision == _BOUNCE:
-                raise _Conflict(f"{repo}#{number} is dirty (a real merge conflict)")
+                raise _Conflict(f"{pull} is dirty (a real merge conflict)")
             if decision == _UPDATE:
-                # Guarded on the head just read, so updates never stack. Any non-202 other
-                # than a named conflict waits — the NEXT poll's state is authoritative.
-                ustatus, ubody = run.api(
-                    "PUT",
-                    f"/repos/{repo}/pulls/{number}/update-branch",
-                    {"expected_head_sha": head_sha},
-                )
-                message = (ubody or {}).get("message", "") if isinstance(ubody, dict) else ""
+                # Any non-202 other than a named conflict waits — the NEXT poll's state
+                # is the authoritative one.
+                ustatus, message = pull.update_branch(head_sha)
                 if ustatus == 422 and "conflict" in message.lower():
-                    raise _Conflict(f"{repo}#{number} update-branch reported a conflict: {message}")
-                print(f"{repo}#{number} behind — update-branch requested (HTTP {ustatus}); re-polling", file=sys.stderr)
+                    raise _Conflict(f"{pull} update-branch reported a conflict: {message}")
+                print(f"{pull} behind — update-branch requested (HTTP {ustatus}); re-polling", file=sys.stderr)
                 wait = True
                 continue
             if decision == _WAIT:
                 if state in {"blocked", "unstable"}:
                     # The CI-watch case (issue #232): a degraded read (`None`) falls
                     # through to the plain wait below.
-                    check_runs = fetch_check_runs(repo, head_sha)
+                    check_runs = fetch_check_runs(pull.repo, head_sha)
                     if check_runs is not None and classify_checks(check_runs) == _FAILED:
-                        base_checks = fetch_check_runs(repo, run.base_branch)
+                        base_checks = fetch_check_runs(pull.repo, run.base_branch)
                         checks = [
                             {
-                                "name": run.get("name"),
-                                "conclusion": run.get("conclusion"),
-                                "details_url": run.get("details_url"),
-                                "base_red": _base_check_failed(base_checks, run.get("name", "")),
+                                "name": check.get("name"),
+                                "conclusion": check.get("conclusion"),
+                                "details_url": check.get("details_url"),
+                                "base_red": _base_check_failed(base_checks, check.get("name", "")),
                             }
-                            for run in _failing_checks(check_runs)
+                            for check in _failing_checks(check_runs)
                         ]
                         failures.append(
                             {
-                                "repo": repo,
-                                "number": number,
-                                "url": pull.get("html_url") or "",
+                                "repo": pull.repo,
+                                "number": pull.number,
+                                "url": pull.url,
                                 "decision": _FAILED,
                                 "checks": checks,
                             }
                         )
-                        print(f"{repo}#{number} has a terminal CI check failure — will not re-poll", file=sys.stderr)
+                        print(f"{pull} has a terminal CI check failure — will not re-poll", file=sys.stderr)
                         continue
                     if check_runs:
                         # Only a NON-empty read makes this poll "substantive": findings
                         # from a zero-check read say nothing (issue #232).
                         wait_records.append(
                             {
-                                "repo": repo,
-                                "number": number,
-                                "url": pull.get("html_url") or "",
+                                "repo": pull.repo,
+                                "number": pull.number,
+                                "url": pull.url,
                                 "decision": _WAIT,
                                 "checks": [
-                                    {"name": run.get("name"), "status": run.get("status")}
-                                    for run in check_runs
-                                    if isinstance(run, dict)
+                                    {"name": check.get("name"), "status": check.get("status")}
+                                    for check in check_runs
+                                    if isinstance(check, dict)
                                 ],
                             }
                         )
-                print(f"{repo}#{number} is {state} — not cleanly mergeable yet; re-polling", file=sys.stderr)
+                print(f"{pull} is {state} — not cleanly mergeable yet; re-polling", file=sys.stderr)
                 wait = True
                 continue
             # decision == _PUSH: clean (or already merged) — eligible.
-            to_merge.append((bare_repo, repo, number, head_sha))
+            to_merge.append((pull, head_sha))
     except _Conflict as exc:
         print(f"conflict: {exc}", file=sys.stderr)
         print(_CONFLICT)
@@ -281,28 +260,15 @@ def _land() -> int:
 
     # --- merge stage: merge the CURRENT head sha, which a self-heal update-branch may
     #     have advanced past the originally-recorded artifact commit.
-    for bare_repo, repo, number, head_sha in to_merge:
-        status, result = run.api(
-            "PUT",
-            f"/repos/{repo}/pulls/{number}/merge",
-            {
-                "commit_message": run.feature_title or f"blizzard: land {bare_repo}",
-                "sha": head_sha,
-                "merge_method": "merge",
-                "user": _HUB_USER,
-            },
-        )
-        landed_sha = (result or {}).get("sha")
-        if status != 200 or not (result or {}).get("merged"):
-            # An already-merged PR is a prior run's un-marked merge, a no-op to redo
-            # (bzh:hub-node-step-idempotence); anything else is a race worth re-polling.
-            _, pull = run.api("GET", f"/repos/{repo}/pulls/{number}")
-            if not (pull or {}).get("merged"):
-                print(f"merge of {repo}#{number} did not land ({result}); will re-poll", file=sys.stderr)
-                print(_PENDING)
-                return 0
-            landed_sha = pull.get("merge_commit_sha") or head_sha
-        run.markers.record(bare_repo, landed_sha or head_sha)
+    for pull, head_sha in to_merge:
+        try:
+            landed_sha = pull.merge(head_sha)
+        except MergeDidNotLand as exc:
+            # Not an already-merged prior run (`merge` absorbs that) — a race worth re-polling.
+            print(f"merge of {pull} did not land ({exc.result}); will re-poll", file=sys.stderr)
+            print(_PENDING)
+            return 0
+        run.markers.record(pull.bare_repo, landed_sha)
 
     print(_LANDED)
     return 0

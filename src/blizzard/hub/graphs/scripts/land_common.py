@@ -1,8 +1,9 @@
 """What every land script is built from (issue #230).
 
 Pure stdlib, exactly like the scripts that import from here (``bzh:deterministic-shell``).
-:class:`LandRun` is one node visit — its injected env, the forge, and the durable marker
-channel, which raises rather than let a script print ``landed`` over an unrecorded merge."""
+:class:`LandRun` is one node visit — its injected env and its marker channel, which raises
+rather than let a script print ``landed`` over an unrecorded merge; :class:`PullRequest` is
+one repo's PR within that visit, and the sole owner of the forge's ``pulls`` routes."""
 
 from __future__ import annotations
 
@@ -13,8 +14,10 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
+
+_HUB_USER = "blizzard-hub"
 
 # The mid-run marker callback's token header (issue #230) — a **delivery** credential,
 # restated rather than imported to keep this package pure stdlib.
@@ -140,8 +143,9 @@ def forge_request(
 
 class MarkerWriteError(Exception):
     """Raised when a marker write is never confirmed durable — a missing callback URL, a
-    4xx, or a 5xx/connection failure surviving every retry. Never swallow it: the run must
-    abort rather than print ``landed`` over an unrecorded merge."""
+    4xx, or a 5xx/connection failure surviving every retry. Catch it at a script's top
+    level, never in its per-repo loop: the run must abort rather than print ``landed``
+    over an unrecorded merge, and must not carry on to the next repo."""
 
 
 @dataclass(frozen=True)
@@ -257,3 +261,112 @@ class LandRun:
         if seconds > 0:
             print(f"[test] pausing {seconds}s after the first marker to widen the crash window", file=sys.stderr)
             time.sleep(seconds)
+
+
+class PullRequestOpenError(Exception):
+    """Raised when the forge refused to open the chunk's PR — whether that is a conflict
+    or merely worth another poll is the script's call."""
+
+
+class MergeDidNotLand(Exception):
+    """Raised when a merge did not land and a re-read confirms the PR is still open —
+    :attr:`result` is the forge's refusal, for the script's own diagnostic."""
+
+    def __init__(self, result: Any) -> None:
+        super().__init__(str(result))
+        self.result = result
+
+
+@dataclass(frozen=True)
+class PullRequest:
+    """One repo's PR for a chunk's branch, and the sole owner of the forge's ``pulls``
+    routes. :attr:`body` is the PR as of the last read — :meth:`of` and :meth:`reread`
+    are the only two things that refresh it."""
+
+    run: LandRun
+    bare_repo: str
+    number: int
+    body: dict[str, Any]
+
+    @classmethod
+    def of(cls, run: LandRun, commit: dict[str, str]) -> PullRequest:
+        """The open PR for ``commit``'s branch — opening one first when none exists — then
+        read live. Raises :class:`PullRequestOpenError` when the forge refuses to open."""
+        repo = run.repo(commit["repo"])
+        branch = commit["branch"]
+        _, listed = run.api("GET", f"/repos/{repo}/pulls?state=open")
+        existing = next((p for p in (listed or []) if p.get("head", {}).get("ref") == branch), None)
+        if existing is None:
+            status, created = run.api(
+                "POST",
+                f"/repos/{repo}/pulls",
+                {
+                    "title": pr_title(run.feature_title, branch),
+                    "head": branch,
+                    "base": run.base_branch,
+                    "user": _HUB_USER,
+                },
+            )
+            if status != 201:
+                raise PullRequestOpenError(f"could not open a PR for {repo}:{branch}: {created}")
+            existing = created
+        return cls(run, commit["repo"], int(existing["number"]), {}).reread()
+
+    def __str__(self) -> str:
+        return f"{self.repo}#{self.number}"
+
+    @property
+    def repo(self) -> str:
+        return self.run.repo(self.bare_repo)
+
+    @property
+    def merged(self) -> bool:
+        return bool(self.body.get("merged"))
+
+    @property
+    def mergeable_state(self) -> str | None:
+        return self.body.get("mergeable_state")
+
+    @property
+    def head_sha(self) -> str | None:
+        return (self.body.get("head") or {}).get("sha")
+
+    @property
+    def url(self) -> str:
+        return self.body.get("html_url") or ""
+
+    def reread(self) -> PullRequest:
+        _, pull = self.run.api("GET", f"/repos/{self.repo}/pulls/{self.number}")
+        return replace(self, body=pull or {})
+
+    def update_branch(self, expected_head_sha: str) -> tuple[int, str]:
+        """Ask the forge to merge the base branch in — guarded on ``expected_head_sha``,
+        so updates never stack."""
+        status, body = self.run.api(
+            "PUT",
+            f"/repos/{self.repo}/pulls/{self.number}/update-branch",
+            {"expected_head_sha": expected_head_sha},
+        )
+        return status, ((body or {}).get("message", "") if isinstance(body, dict) else "")
+
+    def merge(self, sha: str) -> str:
+        """Merge at ``sha`` and return the landed commit.
+
+        An already-merged PR is a prior run's un-marked merge, a no-op to redo
+        (``bzh:hub-node-step-idempotence``); anything else raises :class:`MergeDidNotLand`."""
+        status, result = self.run.api(
+            "PUT",
+            f"/repos/{self.repo}/pulls/{self.number}/merge",
+            {
+                "commit_message": self.run.feature_title or f"blizzard: land {self.bare_repo}",
+                "sha": sha,
+                "merge_method": "merge",
+                "user": _HUB_USER,
+            },
+        )
+        if status == 200 and (result or {}).get("merged"):
+            return (result or {}).get("sha") or sha
+        landed = self.reread()
+        if not landed.merged:
+            raise MergeDidNotLand(result)
+        return landed.body.get("merge_commit_sha") or sha
