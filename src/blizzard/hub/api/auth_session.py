@@ -12,6 +12,7 @@ from collections.abc import Callable
 from fastapi import HTTPException, Request, status
 
 from blizzard.auth_core import Permission, Role, expand
+from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.hashing import hash_session_id
 from blizzard.hub.auth.models import ResolvedIdentity
@@ -19,7 +20,6 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE
 
 _SESSION_COOKIE_NAME = "bz_session"
-_BEARER_PREFIX = "Bearer "
 
 #: The implicit identity every request resolves to under ``auth.mode = "none"`` — the
 #: unauthenticated ``"operator"`` singleton, carrying every permission (``superuser``).
@@ -36,12 +36,7 @@ def _presented_session_id(request: Request) -> str | None:
     """The session id from the ``HttpOnly`` cookie or an ``Authorization: Bearer``
     header (the CLI path, #96) — the cookie wins when both are present."""
     cookie = request.cookies.get(_SESSION_COOKIE_NAME)
-    if cookie:
-        return cookie
-    header = request.headers.get("authorization", "")
-    if header.startswith(_BEARER_PREFIX):
-        return header[len(_BEARER_PREFIX) :]
-    return None
+    return cookie or presented_bearer(request)
 
 
 def resolve_identity(request: Request, services: HubServices | None) -> ResolvedIdentity | None:

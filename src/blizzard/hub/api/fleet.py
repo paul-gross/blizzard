@@ -1,12 +1,12 @@
 """The runner-facing fleet router — every runner->hub call under ``/api/fleet/*`` (issue #87).
 
-Enforcement is structural, not per-route: ``dependencies=[Depends(require_runner_principal)]`` on this
-router means a fleet verb is authenticated *because of where it is mounted*. A route whose body or path
-declares its own ``runner_id`` additionally calls :func:`~blizzard.hub.api.auth.assert_owns` against the
-resolved principal, so a fleet write aimed at another runner is rejected, not merely authenticated."""
+Enforcement is structural, not per-route: the router's own ``dependencies`` mean a fleet verb is
+authenticated *because of where it is mounted*, and a route declaring its own ``runner_id`` confines
+it further through :meth:`FleetRequest.assert_owns`."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -18,10 +18,11 @@ from blizzard.hub.api import chunks as chunks_api
 from blizzard.hub.api import questions as questions_api
 from blizzard.hub.api import queue as queue_api
 from blizzard.hub.api import runners as runners_api
-from blizzard.hub.api.auth import RunnerPrincipal, assert_owns, require_runner_principal
+from blizzard.hub.api.auth import AuthMode, RunnerPrincipal, require_runner_principal
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast
 from blizzard.hub.composition import HubServices
+from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.hub_node import poll_interval_for
 from blizzard.hub.domain.claim import ClaimConflict, ClaimDeniedPaused, ClaimDeniedTerminal
 from blizzard.hub.domain.envelope import addendum_for_transition, build_node_envelope
@@ -56,20 +57,49 @@ from blizzard.wire.runner import RunnerRegistrationRequest, RunnerRegistrationRe
 router = APIRouter(prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_runner_principal)])
 
 
-def _mode(request: Request) -> str:
-    return request.app.state.config.runner_auth_mode
+@dataclass(frozen=True)
+class FleetRequest:
+    """One fleet-router call: who it resolved to, and the hub policy it is judged under.
 
+    Ownership is asked of this object rather than of :attr:`principal`, which is ``None``
+    under ``warn`` — absent, not mismatched."""
 
-def _route_token_mode(request: Request) -> str:
-    return request.app.state.config.route_token_mode
+    principal: RunnerPrincipal | None
+    mode: AuthMode
+    config: HubConfig
 
+    @classmethod
+    def of(
+        cls,
+        request: Request,
+        principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+    ) -> FleetRequest:
+        return cls(principal, AuthMode.of(request), request.app.state.config)
 
-def _produces_mode(request: Request) -> str:
-    return request.app.state.config.produces_mode
+    @property
+    def route_token_mode(self) -> str:
+        return self.config.route_token_mode
 
+    @property
+    def produces_mode(self) -> str:
+        return self.config.produces_mode
 
-def _follow_latest_default(request: Request) -> bool:
-    return bool(request.app.state.config.follow_latest)
+    @property
+    def follow_latest(self) -> bool:
+        return bool(self.config.follow_latest)
+
+    def assert_owns(self, runner_id: str) -> None:
+        """Reject a call whose declared ``runner_id`` differs from the resolved principal's
+        — only ever fires once a token *did* resolve, to some other runner (issue #86a)."""
+        if self.principal is None or self.principal.runner_id == runner_id:
+            return
+        self.mode.refuse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"token belongs to runner {self.principal.runner_id!r}, not the declared {runner_id!r}",
+            event="runner_id mismatch",
+            declared_runner_id=runner_id,
+            token_runner_id=self.principal.runner_id,
+        )
 
 
 def _resolve_intended_migration_target(services: HubServices, chunk: Chunk) -> Graph | None:
@@ -273,12 +303,11 @@ def hub_advance(
 def claim_route(
     claim: RouteClaim,
     services: Annotated[HubServices, Depends(get_services)],
-    http_request: Request,
-    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> object:
     """Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed
     or already terminal ({done, stopped}, issue #118), else the first node envelope."""
-    assert_owns(principal, claim.runner_id, mode=_mode(http_request))
+    fleet.assert_owns(claim.runner_id)
     chunk = services.chunks.get(claim.chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {claim.chunk_id}")
@@ -328,8 +357,7 @@ def claim_route(
 def rekey_route_token(
     chunk_id: str,
     services: Annotated[HubServices, Depends(get_services)],
-    http_request: Request,
-    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RouteTokenRekeyResponse:
     """Rotate the chunk's live route capability token (issue #84b) — the lost-plaintext recovery for a
     claim whose response was never read back. Confined to the live route's own runner via
@@ -338,7 +366,7 @@ def rekey_route_token(
     route = services.chunks.route_of(chunk_id)
     if route is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"chunk {chunk_id} has no live route")
-    assert_owns(principal, route.runner_id, mode=_mode(http_request))
+    fleet.assert_owns(route.runner_id)
     route_token = services.claim.rekey(route)
     return RouteTokenRekeyResponse(chunk_id=chunk_id, route_token=route_token)
 
@@ -348,11 +376,10 @@ def submit_completion(
     chunk_id: str,
     submission: CompletionSubmission,
     services: Annotated[HubServices, Depends(get_services)],
-    http_request: Request,
-    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> ApplyResponse:
     """Apply a node-step's completion atomically; reply carries the next envelope."""
-    assert_owns(principal, submission.runner_id, mode=_mode(http_request))
+    fleet.assert_owns(submission.runner_id)
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -366,16 +393,14 @@ def submit_completion(
         chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
     )
     intended_target_graph = _resolve_intended_migration_target(services, chunk)
-    follow_latest_graph = _resolve_follow_latest_target(
-        services, chunk, graph, hub_default=_follow_latest_default(http_request)
-    )
+    follow_latest_graph = _resolve_follow_latest_target(services, chunk, graph, hub_default=fleet.follow_latest)
     prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
     result = services.apply.apply(
         chunk,
         graph,
         submission,
-        route_token_mode=_route_token_mode(http_request),
-        produces_mode=_produces_mode(http_request),
+        route_token_mode=fleet.route_token_mode,
+        produces_mode=fleet.produces_mode,
         target_graph=target_graph,
         intended_target_graph=intended_target_graph,
         follow_latest_graph=follow_latest_graph,
@@ -404,11 +429,10 @@ def submit_decision(
     chunk_id: str,
     submission: DecisionSubmission,
     services: Annotated[HubServices, Depends(get_services)],
-    http_request: Request,
-    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> ApplyResponse:
     """Runner-config gate: park the chunk on a decision in place of a transition."""
-    assert_owns(principal, submission.runner_id, mode=_mode(http_request))
+    fleet.assert_owns(submission.runner_id)
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -416,7 +440,7 @@ def submit_decision(
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
     prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
-    result = services.decisions.submit(chunk, graph, submission, route_token_mode=_route_token_mode(http_request))
+    result = services.decisions.submit(chunk, graph, submission, route_token_mode=fleet.route_token_mode)
     key = f"decisions:{result.decision_id}" if result.decision_id is not None else None
     chunk_events.publish_chunk_changed(services, chunk_id, cause="decision-submitted", prev_status=prev_status, key=key)
     # The runner-config gate parked the chunk on an open decision: surface it.
@@ -429,11 +453,10 @@ def report_lease(
     chunk_id: str,
     report: LeaseMintReport,
     services: Annotated[HubServices, Depends(get_services)],
-    http_request: Request,
-    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> dict[str, str]:
     """Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep."""
-    assert_owns(principal, report.runner_id, mode=_mode(http_request))
+    fleet.assert_owns(report.runner_id)
     if services.chunks.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     services.runner_facts.record_lease_minted(chunk_id, epoch=report.epoch, runner_id=report.runner_id)
@@ -445,11 +468,10 @@ def report_escalation(
     chunk_id: str,
     report: EscalationReport,
     services: Annotated[HubServices, Depends(get_services)],
-    http_request: Request,
-    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> dict[str, str]:
     """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``."""
-    assert_owns(principal, report.runner_id, mode=_mode(http_request))
+    fleet.assert_owns(report.runner_id)
     if services.chunks.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
@@ -469,14 +491,13 @@ def report_escalation(
 def ingest_runner_facts(
     batch: RunnerFactBatch,
     services: Annotated[HubServices, Depends(get_services)],
-    http_request: Request,
-    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RunnerFactAck:
     """Land runner-minted facts — ``FactIngestService.ingest`` owns the seq high-water idempotence,
     :class:`IngestBroadcast` what each freshly-applied fact re-broadcasts on the SSE stream."""
-    assert_owns(principal, batch.runner_id, mode=_mode(http_request))
+    fleet.assert_owns(batch.runner_id)
     broadcast = IngestBroadcast.before_ingest(services, batch)
-    result = services.facts.ingest(batch, route_token_mode=_route_token_mode(http_request))
+    result = services.facts.ingest(batch, route_token_mode=fleet.route_token_mode)
     broadcast.publish(result)
     return result.ack
 
@@ -484,15 +505,14 @@ def ingest_runner_facts(
 @router.post("/runners", response_model=RunnerRegistrationResponse, status_code=status.HTTP_201_CREATED)
 def register_runner(
     request: RunnerRegistrationRequest,
-    http_request: Request,
     services: Annotated[HubServices, Depends(get_services)],
-    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RunnerRegistrationResponse:
     """Register a runner — runner id + workspace binding; idempotent upsert.
 
     Runner-auth is checked at the router level (issue #86a); issue #95's optional
     ``url``/``redirect_uris`` extension rides the same authenticated write."""
-    assert_owns(principal, request.runner_id, mode=_mode(http_request))
+    fleet.assert_owns(request.runner_id)
     first = services.fleet.register(
         request.runner_id,
         request.workspace_id,
@@ -508,11 +528,10 @@ def register_runner(
 def heartbeat_runner(
     runner_id: str,
     services: Annotated[HubServices, Depends(get_services)],
-    http_request: Request,
-    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> Response:
     """Refresh a runner's liveness — the slow runner-level heartbeat. Returns 204."""
-    assert_owns(principal, runner_id, mode=_mode(http_request))
+    fleet.assert_owns(runner_id)
     if not services.fleet.heartbeat(runner_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
     services.events.publish_runner_changed(runner_id, kind="heartbeat")
@@ -523,11 +542,10 @@ def heartbeat_runner(
 def get_runner(
     runner_id: str,
     services: Annotated[HubServices, Depends(get_services)],
-    http_request: Request,
-    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RunnerView:
     """One runner's declarative state — the runner's own pull read."""
-    assert_owns(principal, runner_id, mode=_mode(http_request))
+    fleet.assert_owns(runner_id)
     liveness = services.fleet.get_liveness(runner_id)
     if liveness is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
