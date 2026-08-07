@@ -118,11 +118,10 @@ export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false
 /**
  * Patch Chunk
  *
- * Apply any of ``graph_id``, ``default_model``, ``default_effort``, or
- * ``intended_migration`` in one all-or-nothing edit (issue #124).
+ * Apply the body's fields in one all-or-nothing edit (issue #124).
  *
- * 404 on an unknown chunk, graph, or migration target; 422 on a blank value; the
- * editable-status windows and semantic refusals are ``EditService.edit``'s.
+ * 404 only when the chunk is unknown; :class:`ChunkPatchBody` and ``EditService.edit``
+ * own every other refusal.
  */
 export const patchChunkApiChunksChunkIdPatch = <ThrowOnError extends boolean = false>(options: Options<PatchChunkApiChunksChunkIdPatchData, ThrowOnError>): RequestResult<PatchChunkApiChunksChunkIdPatchResponses, PatchChunkApiChunksChunkIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchChunkApiChunksChunkIdPatchResponses, PatchChunkApiChunksChunkIdPatchErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}',
@@ -419,11 +418,8 @@ export const getWorkItemsApiFleetChunksChunkIdWorkItemsGet = <ThrowOnError exten
 /**
  * Ingest Runner Facts
  *
- * Land runner-minted facts, idempotent by per-runner seq high-water: a pushed seq at or below the
- * high-water mark is already-applied and re-acked, a fresh one is applied and advances the mark. Each
- * freshly-applied fact re-broadcasts on the SSE stream. ``chunk-changed`` publishes unconditionally,
- * on the fact rather than on a status *change*, so a fact that moves no status (``answer.delivered``,
- * issue #165) still stales the chunk read.
+ * Land runner-minted facts — ``FactIngestService.ingest`` owns the seq high-water idempotence,
+ * :class:`IngestBroadcast` what each freshly-applied fact re-broadcasts on the SSE stream.
  */
 export const ingestRunnerFactsApiFleetEventsPost = <ThrowOnError extends boolean = false>(options: Options<IngestRunnerFactsApiFleetEventsPostData, ThrowOnError>): RequestResult<IngestRunnerFactsApiFleetEventsPostResponses, IngestRunnerFactsApiFleetEventsPostErrors, ThrowOnError> => (options.client ?? client).post<IngestRunnerFactsApiFleetEventsPostResponses, IngestRunnerFactsApiFleetEventsPostErrors, ThrowOnError>({
     url: '/api/fleet/events',

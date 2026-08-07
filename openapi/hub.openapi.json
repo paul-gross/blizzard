@@ -4793,7 +4793,7 @@
         ]
       },
       "patch": {
-        "description": "Apply any of ``graph_id``, ``default_model``, ``default_effort``, or\n``intended_migration`` in one all-or-nothing edit (issue #124).\n\n404 on an unknown chunk, graph, or migration target; 422 on a blank value; the\neditable-status windows and semantic refusals are ``EditService.edit``'s.",
+        "description": "Apply the body's fields in one all-or-nothing edit (issue #124).\n\n404 only when the chunk is unknown; :class:`ChunkPatchBody` and ``EditService.edit``\nown every other refusal.",
         "operationId": "patch_chunk_api_chunks__chunk_id__patch",
         "parameters": [
           {
@@ -6096,7 +6096,7 @@
     },
     "/api/fleet/events": {
       "post": {
-        "description": "Land runner-minted facts, idempotent by per-runner seq high-water: a pushed seq at or below the\nhigh-water mark is already-applied and re-acked, a fresh one is applied and advances the mark. Each\nfreshly-applied fact re-broadcasts on the SSE stream. ``chunk-changed`` publishes unconditionally,\non the fact rather than on a status *change*, so a fact that moves no status (``answer.delivered``,\nissue #165) still stales the chunk read.",
+        "description": "Land runner-minted facts \u2014 ``FactIngestService.ingest`` owns the seq high-water idempotence,\n:class:`IngestBroadcast` what each freshly-applied fact re-broadcasts on the SSE stream.",
         "operationId": "ingest_runner_facts_api_fleet_events_post",
         "requestBody": {
           "content": {
