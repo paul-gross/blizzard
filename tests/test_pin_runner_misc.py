@@ -161,7 +161,7 @@ def test_the_deprecated_pm_items_cli_alias_still_reads_the_work_item(monkeypatch
     "no such command"."""
     calls: list[str] = []
 
-    def fake_get(url: str, *, timeout: float) -> _FakeLocalResponse:
+    def fake_get(url: str, *, timeout: float, **_: object) -> _FakeLocalResponse:
         calls.append(url)
         return _FakeLocalResponse('{"items": []}')
 

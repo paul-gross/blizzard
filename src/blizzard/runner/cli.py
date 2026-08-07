@@ -25,6 +25,7 @@ from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.runner.app import build_hosted_app
+from blizzard.runner.cli_worker import WorkerCall
 from blizzard.runner.config import ConfigError, RunnerConfig, socket_path_for
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.listeners import ListenerError, bind_listeners, unlink_socket
@@ -44,18 +45,10 @@ DEFAULT_TICK_SECONDS = 30.0
 ENV_RUNNER_DIR = "BZ_RUNNER_DIR"
 DEFAULT_DIR = "."
 
-# Spawn-injected worker identity the heartbeat hook inherits. `BLIZZARD_*` is the worker namespace,
-# distinct from the operator's `BZ_*` config namespace below.
-ENV_LEASE_ID = "BLIZZARD_LEASE_ID"
-ENV_RUNNER_URL = "BLIZZARD_RUNNER_URL"
-# The lease's minted capability token (issue #113) — authorizes `attach` against this lease, no other.
-ENV_LEASE_TOKEN = "BLIZZARD_LEASE_TOKEN"
 # The operator's TCP door onto the local API (issue #43) — the override for when the socket is not
-# the right address.
+# the right address. `BZ_*` is the operator's config namespace, distinct from the worker's
+# spawn-injected `BLIZZARD_*` one, which `cli_worker` owns.
 ENV_LOCAL_API_URL = "BZ_RUNNER_URL"
-_HEARTBEAT_TIMEOUT = 5.0
-# A work-item read fans out runner -> hub -> vendor, so it gets a longer budget than a hook post.
-_WORK_ITEMS_TIMEOUT = 20.0
 # A machine-local round trip (issue #43), so a hook-scale budget rather than the hub-client one.
 _LOCAL_CLIENT_TIMEOUT = 5.0
 # Each `selftest` poll is a machine-local read of already-computed state, so a short interval is free.
@@ -303,20 +296,11 @@ def heartbeat() -> None:
     A pure client of the runner's local API, taking its lease and runner URL from the spawn
     environment, so no arguments. Fails **soft**: a hook must never break the worker's tool call, so a
     missing identity or an unreachable runner is reported to stderr and this still exits 0."""
-    lease_id = os.environ.get(ENV_LEASE_ID)
-    runner_url = os.environ.get(ENV_RUNNER_URL)
-    if not lease_id or not runner_url:
-        click.echo(f"heartbeat: no {ENV_LEASE_ID}/{ENV_RUNNER_URL} in the environment; skipping", err=True)
-        return
-    try:
-        resp = httpx.post(
-            f"{runner_url.rstrip('/')}/api/heartbeat",
-            json={"lease_id": lease_id},
-            timeout=_HEARTBEAT_TIMEOUT,
+    worker = WorkerCall.hook("heartbeat")
+    if worker is not None:
+        worker.soft_post(
+            "/api/heartbeat", failure="could not reach the runner", json_body={"lease_id": worker.lease_id}
         )
-        resp.raise_for_status()
-    except httpx.HTTPError as exc:  # soft-fail — never break the worker's tool call
-        click.echo(f"heartbeat: could not reach the runner ({exc}); skipping", err=True)
 
 
 @runner.command("session-end")
@@ -326,19 +310,9 @@ def session_end() -> None:
     A pure client of the runner's local API, taking its identity from the spawn environment. The
     recorded fact is the worker's "declared done" signal. Fails **soft**, like the heartbeat: a hook
     must never break the worker's exit, so a failure is reported to stderr and this still exits 0."""
-    lease_id = os.environ.get(ENV_LEASE_ID)
-    runner_url = os.environ.get(ENV_RUNNER_URL)
-    if not lease_id or not runner_url:
-        click.echo(f"session-end: no {ENV_LEASE_ID}/{ENV_RUNNER_URL} in the environment; skipping", err=True)
-        return
-    try:
-        resp = httpx.post(
-            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/session-end",
-            timeout=_HEARTBEAT_TIMEOUT,
-        )
-        resp.raise_for_status()
-    except httpx.HTTPError as exc:  # soft-fail — never break the worker's exit
-        click.echo(f"session-end: could not reach the runner ({exc}); skipping", err=True)
+    worker = WorkerCall.hook("session-end")
+    if worker is not None:
+        worker.soft_post(worker.leased("session-end"), failure="could not reach the runner")
 
 
 @runner.command()
@@ -349,36 +323,12 @@ def ask(prompt: str, options: str | None) -> None:
 
     A pure client of the runner's local API, taking its identity from the spawn environment, so no
     identity arguments. The ask is a durable runner-store fact before this returns."""
-    lease_id = os.environ.get(ENV_LEASE_ID)
-    runner_url = os.environ.get(ENV_RUNNER_URL)
-    if not lease_id or not runner_url:
-        raise click.ClickException(f"ask: no {ENV_LEASE_ID}/{ENV_RUNNER_URL} in the environment")
+    worker = WorkerCall.of("ask")
     body: dict[str, object] = {"question": prompt}
     if options:
         body["options"] = [o for o in options.split("|") if o]
-    try:
-        resp = httpx.post(
-            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/asks",
-            json=body,
-            timeout=_HEARTBEAT_TIMEOUT,
-        )
-        resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise click.ClickException(f"ask: could not record the question ({exc})") from exc
+    resp = worker.post(worker.leased("asks"), failure="could not record the question", json_body=body)
     click.echo(resp.json().get("question_id", ""))
-
-
-def _worker_lease_identity(verb: str) -> tuple[str, str, str | None]:
-    """The worker's ambient lease identity for an ``artifact`` or ``chunk`` verb —
-    ``(lease_id, runner_url, lease_token)`` from the spawn environment. Raises (a hard error, not a
-    hook-style soft-fail) when the lease id or runner URL is absent, so a lost read or
-    write reaches the worker rather than passing silently. The token may be absent — the
-    runner then rejects the call with ``403``."""
-    lease_id = os.environ.get(ENV_LEASE_ID)
-    runner_url = os.environ.get(ENV_RUNNER_URL)
-    if not lease_id or not runner_url:
-        raise click.ClickException(f"{verb}: no {ENV_LEASE_ID}/{ENV_RUNNER_URL} in the environment")
-    return lease_id, runner_url, os.environ.get(ENV_LEASE_TOKEN)
 
 
 @runner.group("artifact")
@@ -414,16 +364,8 @@ def artifact_list(content: bool) -> None:
     A pure client of the runner's local API, which proxies to the hub as the runner principal — the
     worker holds no hub credential. Content is elided by default (issue #169), since inlining every
     upstream asset's full text has overflowed tool output; ``--content`` restores it."""
-    lease_id, runner_url, lease_token = _worker_lease_identity("artifact list")
-    try:
-        resp = httpx.get(
-            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/artifacts",
-            headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
-            timeout=_WORK_ITEMS_TIMEOUT,
-        )
-        resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise click.ClickException(f"artifact list: could not read the artifacts ({exc})") from exc
+    worker = WorkerCall.of("artifact list")
+    resp = worker.get(worker.leased("artifacts"), failure="could not read the artifacts")
     if content:
         click.echo(resp.text)
         return
@@ -451,20 +393,12 @@ def artifact_get(name: str, node: str | None, content: bool) -> None:
     (issue #169) exits non-zero naming them rather than picking arbitrarily — ``--node`` disambiguates.
     ``--content`` prints raw asset text instead, and errors on the ``git_commit`` kind, which carries
     none. NAME is percent-encoded (issue #233), so a slash-containing name round-trips like any other."""
-    lease_id, runner_url, lease_token = _worker_lease_identity("artifact get")
-    try:
-        resp = httpx.get(
-            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/artifacts/{quote(name, safe='/')}",
-            headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
-            params={"node": node} if node else None,
-            timeout=_WORK_ITEMS_TIMEOUT,
-        )
-        resp.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        detail = _problem_detail(exc.response) or str(exc)
-        raise click.ClickException(f"artifact get: could not read {name!r} ({detail})") from exc
-    except httpx.HTTPError as exc:
-        raise click.ClickException(f"artifact get: could not read {name!r} ({exc})") from exc
+    worker = WorkerCall.of("artifact get")
+    resp = worker.get(
+        worker.leased(f"artifacts/{quote(name, safe='/')}"),
+        failure=f"could not read {name!r}",
+        params={"node": node} if node else None,
+    )
     if not content:
         click.echo(resp.text)
         return
@@ -485,23 +419,18 @@ def artifact_create(name: str) -> None:
     the content for this node-step, published into the envelope only on completion (issue #169) — read
     it back with ``artifact staged``. Empty stdin and any rejection exit non-zero rather than silently
     losing the submission."""
-    lease_id, runner_url, lease_token = _worker_lease_identity("artifact create")
+    worker = WorkerCall.of("artifact create")
     content = click.get_text_stream("stdin").read()
     if not content:
         raise click.ClickException(
             "artifact create: empty stdin — refusing to submit an empty artifact "
             "(any previously staged submission for this name is untouched)"
         )
-    try:
-        resp = httpx.post(
-            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/attachments",
-            json={"name": name, "content": content},
-            headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
-            timeout=_HEARTBEAT_TIMEOUT,
-        )
-        resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise click.ClickException(f"artifact create: could not record {name!r} ({exc})") from exc
+    resp = worker.post(
+        worker.leased("attachments"),
+        failure=f"could not record {name!r}",
+        json_body={"name": name, "content": content},
+    )
     body = resp.json()
     click.echo(f"recorded {body.get('name', name)!r} ({body.get('bytes', len(content.encode('utf-8')))} bytes)")
 
@@ -520,16 +449,8 @@ def artifact_staged(content: bool) -> None:
     Read straight off the runner's own ``attachments`` record rather than the hub envelope (issue
     #169), so a fresh ``artifact create`` shows up here immediately. Content is elided by default,
     same as ``list``; ``--content`` gives the full text."""
-    lease_id, runner_url, lease_token = _worker_lease_identity("artifact staged")
-    try:
-        resp = httpx.get(
-            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/attachments",
-            headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
-            timeout=_WORK_ITEMS_TIMEOUT,
-        )
-        resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise click.ClickException(f"artifact staged: could not read the staged artifacts ({exc})") from exc
+    worker = WorkerCall.of("artifact staged")
+    resp = worker.get(worker.leased("attachments"), failure="could not read the staged artifacts")
     if content:
         click.echo(resp.text)
         return
@@ -549,20 +470,6 @@ def _session_label(escalation: dict) -> str:
     if not pool:
         return f"  session=({config})"
     return f"  session={pool}" + (f" ({config})" if config else "")
-
-
-def _problem_detail(response: httpx.Response) -> str:
-    """The ``detail`` string from a rejected call's JSON body, or ``""``.
-
-    A rejection the worker can act on (an unknown ``--repo``, naming the repos the env
-    does list) carries its guidance in the body; surfacing it beats echoing a bare
-    status line the worker cannot correct from."""
-    try:
-        body = response.json()
-    except ValueError:
-        return ""
-    detail = body.get("detail") if isinstance(body, dict) else None
-    return str(detail) if detail else ""
 
 
 @artifact_group.command("commit")
@@ -596,23 +503,16 @@ def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_s
     ``artifact create``. There is deliberately no ``--forge``: the origin a declaration is verified
     against comes from the environment's repo manifest, so a worker cannot supply the wrong one (pinned
     by tests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag)."""
-    lease_id, runner_url, lease_token = _worker_lease_identity("artifact commit")
+    worker = WorkerCall.of("artifact commit")
     body: dict[str, str] = {"repo": repo, "branch": branch, "commit": commit_sha}
     if environment_id is not None:
         body["environment_id"] = environment_id
-    try:
-        resp = httpx.post(
-            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/git-commits",
-            json=body,
-            headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
-            timeout=_HEARTBEAT_TIMEOUT,
-        )
-        resp.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        detail = _problem_detail(exc.response) or str(exc)
-        raise click.ClickException(f"artifact commit: {repo!r} rejected ({detail})") from exc
-    except httpx.HTTPError as exc:
-        raise click.ClickException(f"artifact commit: could not record {repo!r} ({exc})") from exc
+    worker.post(
+        worker.leased("git-commits"),
+        failure=f"could not record {repo!r}",
+        rejected=f"{repo!r} rejected",
+        json_body=body,
+    )
 
 
 @runner.group("chunk")
@@ -631,19 +531,8 @@ def chunk_history() -> None:
     bounce, each carrying its own ``kind``. A pure client of the runner's local API, which proxies to
     the hub as the runner principal. The in-flight node-step this call is part of is not there yet: a
     transition is recorded only once an attempt completes."""
-    lease_id, runner_url, lease_token = _worker_lease_identity("chunk history")
-    try:
-        resp = httpx.get(
-            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/history",
-            headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
-            timeout=_WORK_ITEMS_TIMEOUT,
-        )
-        resp.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        detail = _problem_detail(exc.response) or str(exc)
-        raise click.ClickException(f"chunk history: could not read the history ({detail})") from exc
-    except httpx.HTTPError as exc:
-        raise click.ClickException(f"chunk history: could not read the history ({exc})") from exc
+    worker = WorkerCall.of("chunk history")
+    resp = worker.get(worker.leased("history"), failure="could not read the history")
     click.echo(resp.text)
 
 
@@ -669,17 +558,8 @@ def work_items(chunk_id: str) -> None:
     A pure client of the runner's local API, whose proxy route forwards to the hub — the worker never
     talks to the hub or the work source directly. The runner URL is inherited from the spawn
     environment, so no identity argument; the items print as JSON, one entry per pointer."""
-    runner_url = os.environ.get(ENV_RUNNER_URL)
-    if not runner_url:
-        raise click.ClickException(f"work-items: no {ENV_RUNNER_URL} in the environment")
-    try:
-        resp = httpx.get(
-            f"{runner_url.rstrip('/')}/api/chunks/{chunk_id}/work-items",
-            timeout=_WORK_ITEMS_TIMEOUT,
-        )
-        resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise click.ClickException(f"work-items: could not read the work item ({exc})") from exc
+    worker = WorkerCall.of("work-items", lease=False)
+    resp = worker.get(f"/api/chunks/{chunk_id}/work-items", failure="could not read the work item")
     click.echo(resp.text)
 
 

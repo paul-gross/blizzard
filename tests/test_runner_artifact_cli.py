@@ -66,7 +66,7 @@ def test_list_gets_the_lease_scoped_route_with_inherited_identity_and_token(
 ) -> None:
     calls: list[tuple[str, dict]] = []
 
-    def fake_get(url: str, *, headers: dict, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, headers: dict, timeout: float, **_: object) -> _FakeResponse:
         calls.append((url, headers))
         return _FakeResponse(payload=_ARTIFACTS_PAYLOAD)
 
@@ -106,7 +106,7 @@ def test_list_content_flag_restores_the_full_raw_payload(monkeypatch: pytest.Mon
 def test_list_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
-    def fake_get(url: str, *, headers: dict, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, headers: dict, timeout: float, **_: object) -> _FakeResponse:
         calls.append(headers)
         return _FakeResponse(payload=[])
 
@@ -142,7 +142,7 @@ def test_list_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_get_gets_the_named_route_and_prints_json(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, dict | None]] = []
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
         calls.append((url, params))
         return _FakeResponse(text='{"name": "plan", "kind": "asset", "content": "hi"}')
 
@@ -159,7 +159,7 @@ def test_get_percent_encodes_a_slash_containing_name(monkeypatch: pytest.MonkeyP
     slash preserved in the URL rather than treated as a second path segment."""
     calls: list[str] = []
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
         calls.append(url)
         return _FakeResponse(text='{"name": "merged/blizzard", "kind": "asset", "content": "hi"}')
 
@@ -173,7 +173,7 @@ def test_get_percent_encodes_a_slash_containing_name(monkeypatch: pytest.MonkeyP
 def test_get_percent_encodes_other_reserved_characters(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
         calls.append(url)
         return _FakeResponse(text='{"name": "a b%c?d", "kind": "asset", "content": "hi"}')
 
@@ -187,7 +187,7 @@ def test_get_percent_encodes_other_reserved_characters(monkeypatch: pytest.Monke
 def test_get_node_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict | None] = []
 
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(text='{"name": "retrospective", "kind": "asset", "content": "hi"}')
 
@@ -199,7 +199,7 @@ def test_get_node_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatc
 
 
 def test_get_content_prints_raw_asset_text_without_added_newline(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
         return _FakeResponse(payload={"name": "plan", "kind": "asset", "content": "the plan text"})
 
     monkeypatch.setattr(httpx, "get", fake_get)
@@ -210,7 +210,7 @@ def test_get_content_prints_raw_asset_text_without_added_newline(monkeypatch: py
 
 
 def test_get_content_errors_on_a_git_commit_artifact(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
         return _FakeResponse(
             payload={"name": "build-branch", "kind": "git_commit", "commit_hash": "abc123", "content": None}
         )
@@ -250,7 +250,7 @@ def test_get_surfaces_an_ambiguous_name_rejection_naming_the_candidate_nodes(
 def test_create_posts_inherited_identity_stdin_content_and_token_header(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, dict, dict]] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
         calls.append((url, json, headers))
         return _FakeResponse(payload={"recorded": True, "lease_id": "lease_9", "name": "review-findings", "bytes": 10})
 
@@ -313,7 +313,7 @@ def test_create_surfaces_a_rejection_as_a_nonzero_exit(monkeypatch: pytest.Monke
 def test_staged_gets_the_lease_scoped_attachments_route(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, dict]] = []
 
-    def fake_get(url: str, *, headers: dict, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, headers: dict, timeout: float, **_: object) -> _FakeResponse:
         calls.append((url, headers))
         return _FakeResponse(payload=[{"name": "review-findings", "content": "looks good"}])
 
@@ -351,7 +351,7 @@ def test_staged_surfaces_a_rejection_as_a_nonzero_exit(monkeypatch: pytest.Monke
 def test_attach_alias_warns_on_stderr_and_delegates_to_artifact_create(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, dict, dict]] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
         calls.append((url, json, headers))
         return _FakeResponse(payload={"recorded": True, "lease_id": "lease_9", "name": "review-findings", "bytes": 10})
 

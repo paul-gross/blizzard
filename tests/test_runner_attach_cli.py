@@ -32,7 +32,7 @@ def test_attach_verb_posts_inherited_identity_stdin_content_and_token_header(
 ) -> None:
     calls: list[tuple[str, dict, dict]] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
         calls.append((url, json, headers))
         return _FakeResponse()
 
@@ -52,7 +52,7 @@ def test_attach_verb_posts_inherited_identity_stdin_content_and_token_header(
 def test_attach_verb_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
         calls.append(headers)
         return _FakeResponse()
 
@@ -85,7 +85,11 @@ def test_attach_verb_surfaces_a_rejection_as_a_nonzero_exit(monkeypatch: pytest.
 
     class _RejectingResponse:
         def raise_for_status(self) -> None:
-            raise httpx.HTTPStatusError("403 forbidden", request=object(), response=object())  # type: ignore[arg-type]
+            raise httpx.HTTPStatusError(
+                "403 forbidden",
+                request=httpx.Request("POST", "http://runner/"),
+                response=httpx.Response(403, json={"detail": "could not record"}),
+            )
 
     def fake_post(*args: object, **kwargs: object) -> _RejectingResponse:
         return _RejectingResponse()

@@ -27,7 +27,7 @@ class _FakeResponse:
 def test_commit_verb_posts_inherited_identity_and_declaration_body(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, dict, dict]] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
         calls.append((url, json, headers))
         return _FakeResponse()
 
@@ -52,7 +52,7 @@ def test_commit_verb_omits_the_environment_key_when_not_named(monkeypatch: pytes
     """No ``--env`` sends no ``environment_id`` key at all, rather than an explicit null."""
     calls: list[dict] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
         calls.append(json)
         return _FakeResponse()
 
@@ -69,7 +69,7 @@ def test_commit_verb_omits_the_environment_key_when_not_named(monkeypatch: pytes
 def test_commit_verb_forwards_the_named_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
         calls.append(json)
         return _FakeResponse()
 
@@ -87,7 +87,7 @@ def test_commit_verb_forwards_the_named_environment(monkeypatch: pytest.MonkeyPa
 def test_commit_verb_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
         calls.append(headers)
         return _FakeResponse()
 

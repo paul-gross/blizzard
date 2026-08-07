@@ -55,7 +55,7 @@ def test_history_gets_the_lease_scoped_route_with_inherited_identity_and_token(
 ) -> None:
     calls: list[tuple[str, dict]] = []
 
-    def fake_get(url: str, *, headers: dict, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, headers: dict, timeout: float, **_: object) -> _FakeResponse:
         calls.append((url, headers))
         return _FakeResponse(text=_HISTORY_TEXT)
 
@@ -72,7 +72,7 @@ def test_history_gets_the_lease_scoped_route_with_inherited_identity_and_token(
 def test_history_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
-    def fake_get(url: str, *, headers: dict, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, headers: dict, timeout: float, **_: object) -> _FakeResponse:
         calls.append(headers)
         return _FakeResponse(text="[]")
 

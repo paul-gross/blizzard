@@ -67,7 +67,7 @@ def test_session_end_verb_posts_inherited_identity(monkeypatch: pytest.MonkeyPat
     """The verb reads the spawn-injected identity and posts to the lease-scoped route — no args."""
     calls: list[str] = []
 
-    def fake_post(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_post(url: str, *, timeout: float, **_: object) -> _FakeResponse:
         calls.append(url)
         return _FakeResponse()
 
