@@ -16,12 +16,12 @@ pytestmark = pytest.mark.unit
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _LOOP = _REPO_ROOT / "src" / "blizzard" / "runner" / "loop"
-_SCANNED = (_LOOP / "steps.py", _LOOP / "spawn.py", _LOOP / "judgement.py")
+_SCANNED = (_LOOP / "steps.py", _LOOP / "spawn.py", _LOOP / "judgement.py", _LOOP / "dormant.py")
 
 #: Helpers exempt from calling the gate themselves, because every call site is inside a
 #: function that does — re-derived by `test_exempt_helpers_are_reached_only_from_gated_scopes`
 #: rather than taken on trust.
-_ALLOWED_UNGATED = frozenset({"_elicit"})
+_ALLOWED_UNGATED = frozenset({"_elicit", "_wake"})
 
 _GATE_NAME = "suppressed"
 _GATED_METHODS = frozenset({"spawn", "resume_with_message", "judge"})

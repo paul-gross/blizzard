@@ -61,6 +61,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.runner.loop.judgement",
     "blizzard.runner.loop.drain",
     "blizzard.runner.loop.claim",
+    "blizzard.runner.loop.dormant",
     "blizzard.runner.domain.attachments",
     "blizzard.runner.domain.git_commit_declaration",
     "blizzard.hub.delivery.hub_node",

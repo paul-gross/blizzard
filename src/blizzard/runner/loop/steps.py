@@ -22,15 +22,13 @@ from blizzard.runner.loop.attempt import (
 )
 from blizzard.runner.loop.claim import InterruptedClaims, ReadyQueue
 from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.drain import OutboundDrain
 from blizzard.runner.loop.held_chunk import HeldChunk
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.judgement import Judgement
-from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.process import IProcessProbe
-from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.store.repository import (
-    AskRecord,
     IWriteRunnerStore,
     LeaseRecord,
 )
@@ -54,14 +52,6 @@ __all__ = [
 
 _log = get_logger("blizzard.runner.loop")
 
-#: The message RESUME delivers into a marked session on a restart — ``#``-prefixed so it
-#: is inert in prose and in a behavior script alike. The exact prose is unpinned.
-_RESTART_RESUME_MESSAGE = "# The supervisor restarted; continue your task where you left off."
-
-#: The message ADVANCE delivers into a session the operator paused and resumed (issue #46).
-#: Same inert ``#``-prefixed framing; the exact prose is unpinned.
-_PAUSE_RESUME_MESSAGE = "# The operator resumed this chunk; continue your task where you left off."
-
 # The env count a chunk gets when nothing says otherwise — a default, not a structural
 # assumption; a chunk holding several is representable.
 _DEFAULT_ENV_COUNT = 1
@@ -76,8 +66,6 @@ _CP_REAP_AFTER = crashpoint("reap.after-expire", "REAP done; stale leases expire
 # RESUME — the restart re-attach. Its un-recordable middle (a resume whose pid is not yet
 # durable) is SPAWN's same by-construction gap; recovery re-runs RESUME idempotently.
 _CP_RESUME_BEFORE = crashpoint("resume.before-reattach", "entered RESUME with marked intents; none re-attached yet")
-_CP_RESUME_AFTER_KILL = crashpoint("resume.after-kill.before-reattach", "survivor killed; session not yet re-attached")
-_CP_RESUME_AFTER = crashpoint("resume.after-reattach", "session re-attached under the same lease; intent cleared")
 
 # PULL — the single outbound flusher (store-and-forward drain).
 _CP_PULL_BEFORE = crashpoint("pull.before-flush", "entered PULL; registry synced, buffer not drained")
@@ -244,82 +232,7 @@ def resume(ctx: LoopContext) -> None:
         if lease is None:
             ctx.store.record_resume_clear(lease_id=lease_id, cleared_at=ctx.clock.now())
             continue
-        _resume_marked_lease(ctx, lease)
-
-
-def _resume_marked_lease(ctx: LoopContext, lease: LeaseRecord) -> None:
-    """Park a paused chunk, else resume in place, else abandon it if the hub reassigned its chunk
-    (issue #46), or if the hub no longer knows it at all (blizzard#9).
-
-    The pause branch is **first** and keys on the pause *fact*, not the lossy derived status. It
-    is conjoined with ``ours``, so a detached-then-paused chunk still abandons."""
-    try:
-        detail = ctx.hub.get_chunk(lease.chunk_id)
-    except ChunkNotFoundError:
-        # The chunk is gone outright (e.g. a store reset) — terminal, not retryable; abandon now
-        # rather than leave the intent open for PULL's `_reconcile_leases` to find it later.
-        Attempt(ctx, lease).abandon(via="resume")
-        return
-    except HubClientError:
-        # Hub unreachable — the intent is durable and the envs stay held. Resuming blind
-        # would risk re-asserting authority over a chunk that may have been reassigned.
-        return
-    ours = detail.route is not None and detail.route.runner_id == ctx.config.runner_id
-    if ours and detail.pause is not None:
-        Attempt(ctx, lease).park_paused(via="resume")
-    elif detail.status == ChunkStatus.RUNNING and ours:
-        _resume_in_place(ctx, lease)
-    else:
-        Attempt(ctx, lease).abandon(via="resume")
-
-
-def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
-    """Kill any survivor, then resume the session under the same lease/epoch/session.
-
-    Kill-first is what prevents two processes on one session — the epoch is not. Only
-    ``pid``/``process_start_time`` are rewritten, so no retry is consumed. The brake is checked
-    **before the kill**: gating after would kill the survivor and leave it un-re-attached."""
-    if Spawner(ctx).suppressed(via="resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
-        return
-    now = ctx.clock.now()
-    if lease.pid is not None:
-        ctx.process.kill(lease.pid)  # kill-first — never two processes on one session
-    _CP_RESUME_AFTER_KILL.reached()  # survivor killed; re-run kills the dead pid (no-op) then re-attaches
-    bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
-    if not bindings or lease.session_id is None:
-        _log.warning(
-            "marked lease has no warm env/session — abandoning", chunk_id=lease.chunk_id, lease_id=lease.lease_id
-        )
-        Attempt(ctx, lease).abandon(killed=True, via="resume")
-        return
-    # The resume-with-message -> record_spawn gap is the un-armable spawn-record window: no
-    # crash point can arm a window whose recovery input (the new pid) does not yet exist.
-    pid = ctx.harness.resume_with_message(
-        bindings[0].workdir,
-        lease.session_id,
-        _RESTART_RESUME_MESSAGE,
-        stdout_path=Spawner(ctx).stdout_path(lease.lease_id),
-        preamble=Spawner(ctx).preamble(lease, bindings),
-        chunk_id=lease.chunk_id,
-        # Reasserted, not sticky (issue #144) — see the judge call site's note.
-        effort=lease.resolved_effort,
-    )
-    ctx.store.record_spawn(
-        lease.lease_id,
-        pid=pid,
-        process_start_time=ctx.process.start_time(pid) or "",
-        session_id=lease.session_id,  # unchanged — same session under the same lease
-        spawned_at=now,
-    )
-    ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
-    _CP_RESUME_AFTER.reached()  # pid recorded, intent cleared — a crash here re-runs RESUME as a no-op
-    _log.info(
-        "resumed in-flight session after restart",
-        chunk_id=lease.chunk_id,
-        lease_id=lease.lease_id,
-        epoch=lease.epoch,
-        pid=pid,
-    )
+        DormantSession(ctx, lease).restart_or_release()
 
 
 # PULL
@@ -437,10 +350,10 @@ def advance(ctx: LoopContext) -> None:
         if lease.lease_id in pending:
             continue  # outcome elicited, awaiting flush — the node boundary
         if lease.lease_id in pause_parked:
-            _resume_if_unpaused(ctx, lease)  # dormant on an operator pause — resume when it lifts
+            DormantSession(ctx, lease).on_unpause()  # dormant on an operator pause — resume when it lifts
             continue
         if lease.lease_id in ask_parked:
-            _resume_if_answered(ctx, lease)  # dormant on a question — resume on the answer
+            DormantSession(ctx, lease).on_answer()  # dormant on a question — resume on the answer
             continue
         if ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
             continue  # worker still running
@@ -461,7 +374,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     # failure. Not a spawn, so it proceeds regardless of the local brake.
     ask = ctx.store.unforwarded_ask(lease.lease_id)
     if ask is not None:
-        _park_on_ask(ctx, lease, ask)
+        DormantSession(ctx, lease).park_on_ask(ask)
         return
     judgement = Judgement.of(ctx, lease)
     if judgement is not None:
@@ -471,129 +384,6 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
 
 
 # Shared helpers
-
-
-def _park_on_ask(ctx: LoopContext, lease: LeaseRecord, ask: AskRecord) -> None:
-    """Park the chunk on a question: forward it to the hub and stop the reap clock.
-
-    The local park fact stops the reap clock and keeps the lease from being re-parked or judged;
-    env bindings stay held so the session is warm for the resume. No retry is consumed.
-    """
-    now = ctx.clock.now()
-    ctx.usage.record_worker(lease, ctx.store.bindings_for_chunk(lease.chunk_id))
-    OutboundFacts(ctx).question_asked(lease, ask, at=now)
-    ctx.store.record_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, question_id=ask.question_id, parked_at=now)
-    _log.info("chunk parked on question", chunk_id=lease.chunk_id, question_id=ask.question_id)
-
-
-def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
-    """Poll a parked lease's question; on an answer, resume the dormant session.
-
-    Crash-safe and re-runnable: an unanswered question polls as a no-op and the reap clock stays
-    stopped. Once answered the agent is reconstituted under the same session, lease and step.
-    """
-    if Spawner(ctx).suppressed(via="answer-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
-        return
-    park = ctx.store.open_park(lease.lease_id)
-    if park is None:
-        return  # not actually parked (raced with a resume)
-    try:
-        question = ctx.hub.get_question(park.question_id)
-    except HubClientError:
-        return  # hub unreachable — the park is durable; retry next tick
-    if not question.answered or question.answer is None:
-        return  # still waiting — reap clock stays stopped
-    bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
-    if not bindings:
-        _log.warning("answered park with no bound env — cannot resume", chunk_id=lease.chunk_id)
-        return
-
-    # The human framing rides a leading `#` comment line and the answer itself is the
-    # payload; the exact prose is unpinned.
-    who = question.answered_by or "operator"
-    message = f"# Answer from {who}. Continue.\n{question.answer}"
-    pid = ctx.harness.resume_with_message(
-        bindings[0].workdir,
-        lease.session_id or "",
-        message,
-        stdout_path=Spawner(ctx).stdout_path(lease.lease_id),
-        preamble=Spawner(ctx).preamble(lease, bindings),
-        chunk_id=lease.chunk_id,
-        # Reasserted, not sticky (issue #144) — see the judge call site's note.
-        effort=lease.resolved_effort,
-    )
-    now = ctx.clock.now()
-    # Same lease and session; record the new pid so the lease reads live again.
-    ctx.store.record_spawn(
-        lease.lease_id,
-        pid=pid,
-        process_start_time=ctx.process.start_time(pid) or "",
-        session_id=lease.session_id or "",
-        spawned_at=now,
-    )
-    ctx.store.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)
-    OutboundFacts(ctx).answer_delivered(lease, park.question_id, at=now)
-    _log.info("resumed dormant session with answer", chunk_id=lease.chunk_id, question_id=park.question_id, pid=pid)
-
-
-def _resume_if_unpaused(ctx: LoopContext, lease: LeaseRecord) -> None:
-    """Poll a pause-parked lease's chunk; once the operator resumes it, restart its session (#46).
-
-    Same lease, epoch and session; only ``pid``/``process_start_time`` are rewritten, so **no
-    retry is consumed** — the pause cost the chunk a process, not an attempt. An **ask-parked**
-    lease returns early even once unpaused, so a lift never conjures an absent answer."""
-    if Spawner(ctx).suppressed(via="pause-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
-        return
-    try:
-        detail = ctx.hub.get_chunk(lease.chunk_id)
-    except ChunkNotFoundError:
-        # The chunk is gone outright — not this step's abandon to make; the reconcile
-        # sweep owns it and runs ahead of this step in the same tick.
-        return
-    except HubClientError:
-        return  # hub unreachable — the park is durable; retry next tick
-    if detail.pause is not None:
-        return  # still paused — the reap clock stays stopped
-    if detail.route is None or detail.route.runner_id != ctx.config.runner_id:
-        return  # detached/reassigned while parked — PULL's sweep abandons it, not this step
-    now = ctx.clock.now()
-    if lease.lease_id in ctx.store.ask_parked_lease_ids():
-        # Dormant on a question underneath the pause: clearing the pause-park is the whole
-        # action, and an answer — not this resume — restarts it.
-        ctx.store.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
-        _log.info("pause lifted on an ask-parked chunk — awaiting its answer", chunk_id=lease.chunk_id)
-        return
-    bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
-    if not bindings or lease.session_id is None:
-        _log.warning("unpaused chunk has no warm env/session — cannot resume", chunk_id=lease.chunk_id)
-        return
-    # The un-armable spawn-record gap: no crash point can arm a window whose recovery input
-    # (the new pid) does not yet exist.
-    pid = ctx.harness.resume_with_message(
-        bindings[0].workdir,
-        lease.session_id,
-        _PAUSE_RESUME_MESSAGE,
-        stdout_path=Spawner(ctx).stdout_path(lease.lease_id),
-        preamble=Spawner(ctx).preamble(lease, bindings),
-        chunk_id=lease.chunk_id,
-        # Reasserted, not sticky (issue #144) — see the judge call site's note.
-        effort=lease.resolved_effort,
-    )
-    ctx.store.record_spawn(
-        lease.lease_id,
-        pid=pid,
-        process_start_time=ctx.process.start_time(pid) or "",
-        session_id=lease.session_id,  # unchanged — same session under the same lease
-        spawned_at=now,
-    )
-    ctx.store.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
-    _log.info(
-        "resumed dormant session after an operator unpause",
-        chunk_id=lease.chunk_id,
-        lease_id=lease.lease_id,
-        epoch=lease.epoch,
-        pid=pid,
-    )
 
 
 # EXTERNAL SUBSCRIPTION USAGE SAMPLE (issue #218)

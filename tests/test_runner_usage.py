@@ -14,8 +14,8 @@ import pytest
 
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.usage import UsageSample
-from blizzard.runner.loop import steps
 from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.steps import advance
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.facts import USAGE_RECORDED
@@ -418,8 +418,8 @@ def test_ask_park_worker_usage_is_idempotent_across_a_re_park(tmp_path):  # type
     )
     ask = store.unforwarded_ask("lease_1")
     assert ask is not None
-    steps._park_on_ask(ctx, lease, ask)
-    steps._park_on_ask(ctx, lease, ask)  # the replay
+    DormantSession(ctx, lease).park_on_ask(ask)
+    DormantSession(ctx, lease).park_on_ask(ask)  # the replay
 
     assert len(_usage_payloads(store)) == 1
     assert store.usage_since(_NOW).input_tokens == 12
