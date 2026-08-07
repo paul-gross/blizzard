@@ -25,6 +25,21 @@ from blizzard.hub import cli_login, session_store
 from blizzard.hub.api.marker_auth import _MARKER_TOKEN_HEADER
 from blizzard.hub.app import build_hosted_app
 from blizzard.hub.cli_context import CLIENT_TIMEOUT, DEFAULT_HUB_URL, ENV_HUB_URL, CliContext
+from blizzard.hub.cli_views import (
+    ChunkDetail,
+    ChunkListing,
+    DecisionListing,
+    FleetStatus,
+    GraphDetail,
+    GraphListing,
+    GraphSyncListing,
+    MigrationIntent,
+    QuestionListing,
+    QueueListing,
+    RunnerDetail,
+    RunnerListing,
+    WorkItemListing,
+)
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.delivery.hub_node import ENV_MARKER_CALLBACK_URL, ENV_MARKER_TOKEN
 from blizzard.hub.graphs import inline_graph_yaml
@@ -45,8 +60,7 @@ def _hub_url_options(f: Callable[..., object]) -> Callable[..., object]:
 
 
 def _json_option(f: Callable[..., object]) -> Callable[..., object]:
-    """``--json`` on every read verb and write verb alike (issue #104): a read prints
-    the raw response body; a write echoes the typed response the same way."""
+    """``--json``, uniform across every read and write verb alike (issue #104)."""
     return click.option("--json", "as_json", is_flag=True, default=False, help="Print the raw response body as JSON.")(
         f
     )
@@ -55,14 +69,6 @@ def _json_option(f: Callable[..., object]) -> Callable[..., object]:
 # The since-the-beginning-of-time cutoff `hub status` passes ``GET /api/spend``
 # for its fleet-total line (issue #60) — a full-fleet overview, not a "today" window.
 _FLEET_SPEND_SINCE = "1970-01-01T00:00:00+00:00"
-
-
-def _format_cost(cost_usd: float, cost_partial: bool) -> str:
-    """A derived cost total's terminal-legible form (issue #60) — always to the cent,
-    with a leading ``~`` when ``cost_partial`` (a crash/reap-path row had no envelope,
-    so the summed figure is a lower bound, never presented as exact)."""
-    amount = f"${cost_usd:.2f}"
-    return f"~{amount}" if cost_partial else amount
 
 
 @click.group(invoke_without_command=True)
@@ -171,55 +177,23 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
 @_json_option
 @_hub_url_options
 def status(as_json: bool, hub_url: str | None) -> None:
-    """The fleet view: every chunk with its derived status, the runners, and open questions.
-
-    A pure client of the hub API: ``GET /chunks`` + ``GET /runners`` +
-    ``GET /questions`` + ``GET /spend`` (issue #60), in the terminal."""
+    """The fleet view: every chunk with its derived status, the runners, and open questions."""
     cli = CliContext.of(hub_url, as_json)
     chunks = cli.get("/api/chunks", "GET /chunks")
     runners = cli.get("/api/runners", "GET /runners")
     questions = cli.get("/api/questions", "GET /questions")
     spend = cli.get("/api/spend", "GET /spend", params={"since": _FLEET_SPEND_SINCE})
 
-    if as_json:
-        cli.echo_json(
-            {
-                "chunks": chunks.json(),
-                "runners": runners.json(),
-                "questions": questions.json(),
-                "spend": spend.json(),
-            }
-        )
-        return
-
-    rows = chunks.json()
-    click.echo(f"chunks ({len(rows)}):")
-    for chunk in rows:
-        node = chunk.get("current_node_id") or "-"
-        cost = chunk.get("cost") or {}
-        cost_str = _format_cost(cost.get("cost_usd", 0.0), cost.get("cost_partial", False))
-        click.echo(f"  {chunk['chunk_id']}  {chunk['status']:<16} @ {node}  {cost_str:>10}")
-    fleet = runners.json().get("runners", [])
-    click.echo(f"\nrunners ({len(fleet)}):")
-    for r in fleet:
-        liveness = "online" if r.get("online") else "offline"
-        # Name which brake is on (issue #43): "paused" alone would hide whether the fleet
-        # stopped this runner or it stopped itself — they are cleared by different verbs.
-        brakes = []
-        if r.get("hub_paused"):
-            brakes.append("hub")
-        if r.get("locally_paused"):
-            reason = r.get("locally_paused_reason")
-            brakes.append(f"local — {reason}" if reason else "local")
-        brake = f" [paused: {'+'.join(brakes)}]" if brakes else ""
-        click.echo(f"  {r['runner_id']:<16} {liveness:<8} ws={r.get('workspace_id', '-')}{brake}")
-    open_qs = questions.json()
-    click.echo(f"\nopen questions ({len(open_qs)}):")
-    for q in open_qs:
-        opts = f"  [{'|'.join(q.get('options') or [])}]" if q.get("options") else ""
-        click.echo(f"  {q['question_id']}  (chunk {q['chunk_id']}): {q['question']}{opts}")
-    fleet_spend = spend.json()
-    click.echo(f"\nfleet spend (all time): {_format_cost(fleet_spend['cost_usd'], fleet_spend['cost_partial'])}")
+    view = FleetStatus(
+        chunks=chunks.json(),
+        runners=runners.json().get("runners", []),
+        questions=questions.json(),
+        spend=spend.json(),
+    )
+    cli.show(
+        {"chunks": view.chunks, "runners": runners.json(), "questions": view.questions, "spend": view.spend},
+        view,
+    )
 
 
 def _parse_pointer(token: str) -> str:
@@ -340,19 +314,8 @@ def chunk_group() -> None:
 def chunk_list(as_json: bool, hub_url: str | None) -> None:
     """The fleet chunk list — derived status per chunk."""
     cli = CliContext.of(hub_url, as_json)
-    resp = cli.get("/api/chunks", "GET /chunks")
-    rows = resp.json()
-    if as_json:
-        cli.echo_json(rows)
-        return
-    if not rows:
-        click.echo("no chunks")
-        return
-    for chunk in rows:
-        node = chunk.get("current_node_name") or chunk.get("current_node_id") or "-"
-        cost = chunk.get("cost") or {}
-        cost_str = _format_cost(cost.get("cost_usd", 0.0), cost.get("cost_partial", False))
-        click.echo(f"{chunk['chunk_id']}  {chunk['status']:<16} @ {node}  {cost_str:>10}")
+    rows = cli.get("/api/chunks", "GET /chunks").json()
+    cli.show(rows, ChunkListing(rows))
 
 
 @chunk_group.command("show")
@@ -364,27 +327,7 @@ def chunk_show(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
     cli = CliContext.of(hub_url, as_json)
     resp = cli.get(f"/api/chunks/{chunk_id}", "GET /chunks/{id}", on_status={404: f"unknown chunk {chunk_id}"})
     detail = resp.json()
-    if as_json:
-        cli.echo_json(detail)
-        return
-    click.echo(
-        f"{detail['chunk_id']}  status={detail['status']}  graph={detail.get('graph_name') or detail['graph_id']}"
-    )
-    node = detail.get("current_node_name") or detail.get("current_node_id") or "-"
-    click.echo(f"  node: {node}")
-    # Both defaults on their own line: `chunk set` can write either, so a text-mode
-    # read-back exists for both. `-` is "express no preference", not unknown.
-    models = ", ".join(detail.get("default_model") or []) or "-"
-    click.echo(f"  default model: {models}   default effort: {detail.get('default_effort') or '-'}")
-    pointers = detail.get("work_refs") or []
-    if pointers:
-        labels = ", ".join(p.get("label") or f"{p['source']}#{p['ref']}" for p in pointers)
-        click.echo(f"  pointers: {labels}")
-    route = detail.get("route")
-    if route:
-        click.echo(f"  runner: {route['runner_id']}  environments: {len(route.get('environment_ids', []))}")
-    cost = detail.get("cost") or {}
-    click.echo(f"  cost: {_format_cost(cost.get('cost_usd', 0.0), cost.get('cost_partial', False))}")
+    cli.show(detail, ChunkDetail(detail))
 
 
 @chunk_group.command("ingest")
@@ -408,10 +351,7 @@ def chunk_ingest(pointers: tuple[str, ...], as_json: bool, hub_url: str | None) 
         )
     cli.check(resp, "POST /chunks", on_status={422: "at least one token required"})
     body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
-    click.echo(f"ingested {len(tokens)} pointer(s) → chunk {body['chunk_id']}")
+    cli.show_lines(body, f"ingested {len(tokens)} pointer(s) → chunk {body['chunk_id']}")
 
 
 @chunk_group.command("set")
@@ -465,9 +405,6 @@ def chunk_set(
         on_status={404: f"unknown chunk {chunk_id}", 409: "chunk is not editable", 422: "invalid request"},
     )
     view = resp.json()
-    if as_json:
-        cli.echo_json(view)
-        return
     parts = []
     if graph_id is not None:
         parts.append(f"graph → {view['graph_id']}")
@@ -475,7 +412,7 @@ def chunk_set(
         parts.append(f"default model → {', '.join(view.get('default_model') or []) or '-'}")
     if default_effort is not None:
         parts.append(f"default effort → {view.get('default_effort') or '-'}")
-    click.echo(f"{chunk_id}: {', '.join(parts)}")
+    cli.show_lines(view, f"{chunk_id}: {', '.join(parts)}")
 
 
 @chunk_group.command("promote")
@@ -640,23 +577,8 @@ def chunk_migrate(
         },
     )
 
-    view = resp.json()
-    if as_json:
-        cli.echo_json(view)
-        return
-    if cancel:
-        click.echo(f"cleared {chunk_id}'s standing migration intent")
-        return
-    intent = view.get("intended_migration")
-    if intent is None:
-        # Shouldn't happen for a successful set, but degrade legibly rather than raise.
-        click.echo(f"{chunk_id}: migration intent not set")
-        return
-    target = intent.get("graph_name") or intent.get("graph_id")
-    if intent.get("mode") == "forced":
-        click.echo(f"{chunk_id} will migrate to {target} node {intent.get('node_name')} at its next transition")
-    else:
-        click.echo(f"{chunk_id} will auto-migrate to {target} at its next transition (name-matched node)")
+    body = resp.json()
+    cli.show(body, MigrationIntent(chunk_id, body, cancelled=cancel))
 
 
 @chunk_group.command("group")
@@ -678,11 +600,8 @@ def chunk_group_cmd(chunk_id: str, merge_ids: tuple[str, ...], as_json: bool, hu
         on_status={404: f"unknown chunk {chunk_id}", 409: "one of the named chunks is not unacquired"},
     )
     body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
     merged = ", ".join(body.get("merged_chunk_ids", [])) or "none"
-    click.echo(f"grouped into {body['chunk_id']} (merged: {merged})")
+    cli.show_lines(body, f"grouped into {body['chunk_id']} (merged: {merged})")
 
 
 @chunk_group.command("work-items")
@@ -701,19 +620,7 @@ def chunk_work_items(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
         on_status={404: f"unknown chunk {chunk_id}"},
     )
     body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
-    items = body.get("items", [])
-    if not items:
-        click.echo("no work items")
-        return
-    for item in items:
-        label = item.get("label") or f"{item['source']}#{item['ref']}"
-        if item.get("error"):
-            click.echo(f"{label}: error — {item['error']}")
-            continue
-        click.echo(f"{label}: {item.get('title') or '(no title)'}")
+    cli.show(body, WorkItemListing(body.get("items", [])))
 
 
 @chunk_group.command("pm", hidden=True)
@@ -722,10 +629,7 @@ def chunk_work_items(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
 @_hub_url_options
 @click.pass_context
 def chunk_pm(ctx: click.Context, chunk_id: str, as_json: bool, hub_url: str | None) -> None:
-    """Deprecated alias for ``blizzard hub chunk work-items`` (issue #55).
-
-    Kept so a rename does not break an operator's muscle memory or a shell script.
-    """
+    """Deprecated alias for ``blizzard hub chunk work-items`` (issue #55)."""
     click.echo(
         "warning: `blizzard hub chunk pm` is deprecated — use `blizzard hub chunk work-items`",
         err=True,
@@ -747,25 +651,8 @@ def runner_group() -> None:
 def runner_list(as_json: bool, hub_url: str | None) -> None:
     """The fleet registry — every runner with derived liveness + paused state."""
     cli = CliContext.of(hub_url, as_json)
-    resp = cli.get("/api/runners", "GET /runners")
-    body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
-    fleet = body.get("runners", [])
-    if not fleet:
-        click.echo("no runners registered")
-        return
-    for r in fleet:
-        liveness = "online" if r.get("online") else "offline"
-        brakes = []
-        if r.get("hub_paused"):
-            brakes.append("hub")
-        if r.get("locally_paused"):
-            reason = r.get("locally_paused_reason")
-            brakes.append(f"local — {reason}" if reason else "local")
-        brake = f" [paused: {'+'.join(brakes)}]" if brakes else ""
-        click.echo(f"{r['runner_id']:<16} {liveness:<8} ws={r.get('workspace_id', '-')}{brake}")
+    body = cli.get("/api/runners", "GET /runners").json()
+    cli.show(body, RunnerListing(body.get("runners", [])))
 
 
 @runner_group.command("show")
@@ -777,12 +664,7 @@ def runner_show(runner_id: str, as_json: bool, hub_url: str | None) -> None:
     cli = CliContext.of(hub_url, as_json)
     resp = cli.get(f"/api/runners/{runner_id}", "GET /runners/{id}", on_status={404: f"unknown runner {runner_id}"})
     body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
-    liveness = "online" if body.get("online") else "offline"
-    click.echo(f"{body['runner_id']}  {liveness}  ws={body.get('workspace_id', '-')}")
-    click.echo(f"  hub_paused={body.get('hub_paused')}  locally_paused={body.get('locally_paused')}")
+    cli.show(body, RunnerDetail(body))
 
 
 @runner_group.command("pause")
@@ -814,14 +696,12 @@ def _set_runner_pause(runner_id: str, *, verb: str, by: str, hub_url: str | None
         on_status={404: f"unknown runner {runner_id}"},
     )
     body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
     state = "paused" if body.get("hub_paused") else "running"
-    click.echo(f"runner {runner_id} is now {state} (at the hub)")
+    lines = [f"runner {runner_id} is now {state} (at the hub)"]
     if body.get("locally_paused"):
         # Resuming here cannot clear the runner's own brake, so don't imply it did.
-        click.echo(f"note: runner {runner_id} also paused itself — clear that with `blizzard runner start`")
+        lines.append(f"note: runner {runner_id} also paused itself — clear that with `blizzard runner start`")
+    cli.show_lines(body, *lines)
 
 
 @runner_group.command("enroll")
@@ -841,10 +721,7 @@ def runner_enroll(runner_id: str, as_json: bool, hub_url: str | None) -> None:
         on_status={404: f"unknown runner {runner_id}"},
     )
     body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
-    click.echo(f"enrolled {runner_id} — bearer token (copy now, shown only once):\n{body['token']}")
+    cli.show_lines(body, f"enrolled {runner_id} — bearer token (copy now, shown only once):\n{body['token']}")
 
 
 # `blizzard hub graph` — issue #101, issue #104, issue #123
@@ -861,17 +738,8 @@ def graph_group() -> None:
 def graph_list(as_json: bool, hub_url: str | None) -> None:
     """List every minted graph, newest first — name, graph_id, effective, retired."""
     cli = CliContext.of(hub_url, as_json)
-    resp = cli.get("/api/graphs", "GET /graphs")
-    rows = resp.json()
-    if as_json:
-        cli.echo_json(rows)
-        return
-    if not rows:
-        click.echo("no graphs minted yet")
-        return
-    for row in rows:
-        marker = "effective" if row["effective"] else ("retired" if row["retired"] else "superseded")
-        click.echo(f"{row['graph_id']}  name={row['name']}  {marker}  created_at={row['created_at']}")
+    rows = cli.get("/api/graphs", "GET /graphs").json()
+    cli.show(rows, GraphListing(rows))
 
 
 @graph_group.command("show")
@@ -883,15 +751,7 @@ def graph_show(graph_id: str, as_json: bool, hub_url: str | None) -> None:
     cli = CliContext.of(hub_url, as_json)
     resp = cli.get(f"/api/graphs/{graph_id}", "GET /graphs/{id}", on_status={404: f"unknown graph {graph_id}"})
     body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
-    marker = "retired" if body.get("retired") else "enabled"
-    click.echo(f"{body['graph_id']}  name={body['name']}  {marker}  entry={body.get('entry_node_id')}")
-    for node in body.get("nodes", []):
-        click.echo(f"  node {node['node_id']}  name={node['name']}  executor={node.get('executor')}")
-    for edge in body.get("edges", []):
-        click.echo(f"  edge {edge['from_node_id']} --[{edge.get('choice_id')}]--> {edge.get('to_node_name')}")
+    cli.show(body, GraphDetail(body))
 
 
 @graph_group.command("mint")
@@ -921,12 +781,8 @@ def graph_mint(path: str, as_json: bool, hub_url: str | None) -> None:
         raise click.ClickException("graph definition invalid:\n" + "\n".join(lines))
     cli.check(resp, "POST /graphs")
     body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
-    click.echo(f"minted graph {body['graph_id']}")
-    for warning in body.get("warnings", []):
-        click.echo(f"warning: {warning}")
+    warnings = [f"warning: {w}" for w in body.get("warnings", [])]
+    cli.show_lines(body, f"minted graph {body['graph_id']}", *warnings)
 
 
 @graph_group.command("sync")
@@ -941,15 +797,7 @@ def graph_sync(as_json: bool, hub_url: str | None) -> None:
     cli = CliContext.of(hub_url, as_json)
     resp = cli.post("/api/graphs/sync", "POST /graphs/sync", json_body={})
     body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-    else:
-        for entry in body.get("entries", []):
-            detail = f" — {entry['detail']}" if entry.get("detail") else ""
-            graph_id = f" {entry['graph_id']}" if entry.get("graph_id") else ""
-            click.echo(f"{entry['name']}: {entry['status']}{graph_id}{detail}")
-        if not body.get("entries"):
-            click.echo("no packaged graphs to reconcile")
+    cli.show(body, GraphSyncListing(body.get("entries", [])))
     if not body.get("ok", True):
         raise click.ClickException("one or more packaged graphs failed to reconcile")
 
@@ -995,12 +843,9 @@ def graph_follow_latest(graph_id: str, value: str, by: str, as_json: bool, hub_u
         on_status={404: f"unknown graph {graph_id}"},
     )
     body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
     stored = body.get("follow_latest")
     rendered = "inherit (the hub default)" if stored is None else str(stored).lower()
-    click.echo(f"graph {graph_id} follow-latest is now {rendered}")
+    cli.show_lines(body, f"graph {graph_id} follow-latest is now {rendered}")
 
 
 def _set_graph_lifecycle(graph_id: str, *, verb: str, by: str, hub_url: str | None, as_json: bool) -> None:
@@ -1012,11 +857,8 @@ def _set_graph_lifecycle(graph_id: str, *, verb: str, by: str, hub_url: str | No
         on_status={404: f"unknown graph {graph_id}"},
     )
     body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
     state = "retired" if body.get("retired") else "enabled"
-    click.echo(f"graph {graph_id} is now {state}")
+    cli.show_lines(body, f"graph {graph_id} is now {state}")
 
 
 # `blizzard hub queue` — issue #87, issue #104
@@ -1033,17 +875,8 @@ def queue_group() -> None:
 def queue_show(as_json: bool, hub_url: str | None) -> None:
     """The hub-ordered ready queue, read-only — a client of ``GET /api/queue``."""
     cli = CliContext.of(hub_url, as_json)
-    resp = cli.get("/api/queue", "GET /queue")
-    body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
-    entries = body.get("entries", [])
-    if not entries:
-        click.echo("queue is empty")
-        return
-    for entry in entries:
-        click.echo(f"{entry['position']}  {entry['chunk_id']}  graph={entry.get('graph_id')}")
+    body = cli.get("/api/queue", "GET /queue").json()
+    cli.show(body, QueueListing(body.get("entries", [])))
 
 
 @queue_group.command("set")
@@ -1064,10 +897,7 @@ def queue_set(chunk_ids: tuple[str, ...], as_json: bool, hub_url: str | None) ->
         on_status={409: "one of the named chunks is not a ready chunk", 422: "chunk_ids must not repeat"},
     )
     body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
-    click.echo(f"queue order set ({len(body.get('entries', []))} ready chunk(s))")
+    cli.show_lines(body, f"queue order set ({len(body.get('entries', []))} ready chunk(s))")
 
 
 @queue_group.command("move")
@@ -1092,11 +922,7 @@ def queue_move(chunk_id: str, position: int, as_json: bool, hub_url: str | None)
         json_body={"chunk_id": chunk_id, "after_chunk_id": after_chunk_id},
         on_status={409: f"chunk {chunk_id} is not a ready chunk"},
     )
-    body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
-    click.echo(f"moved {chunk_id} to position {position}")
+    cli.finish(resp, f"moved {chunk_id} to position {position}")
 
 
 # `blizzard hub decision` — issue #104
@@ -1113,18 +939,8 @@ def decision_group() -> None:
 def decision_list(as_json: bool, hub_url: str | None) -> None:
     """List open decisions awaiting a human (gate surfacing)."""
     cli = CliContext.of(hub_url, as_json)
-    resp = cli.get("/api/decisions", "GET /decisions")
-    body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
-    rows = body.get("decisions", [])
-    if not rows:
-        click.echo("no open decisions")
-        return
-    for d in rows:
-        choices = ", ".join(c["name"] for c in d.get("choices", []))
-        click.echo(f"{d['decision_id']}  chunk={d['chunk_id']}  node={d['node_name']}  choices=[{choices}]")
+    body = cli.get("/api/decisions", "GET /decisions").json()
+    cli.show(body, DecisionListing(body.get("decisions", [])))
 
 
 @decision_group.command("resolve")
@@ -1151,10 +967,7 @@ def decision_resolve(decision_id: str, choice: str, resolved_by: str, as_json: b
         on_status={404: f"no such decision {decision_id}", 400: "invalid choice", 422: "invalid choice"},
     )
     body = resp.json()
-    if as_json:
-        cli.echo_json(body)
-        return
-    click.echo(f"decision {decision_id} resolved: {body['choice']} (by {body['resolved_by']})")
+    cli.show_lines(body, f"decision {decision_id} resolved: {body['choice']} (by {body['resolved_by']})")
 
 
 # `blizzard hub question` — issue #104
@@ -1171,17 +984,8 @@ def question_group() -> None:
 def question_list(as_json: bool, hub_url: str | None) -> None:
     """Every open (unanswered) question across the fleet."""
     cli = CliContext.of(hub_url, as_json)
-    resp = cli.get("/api/questions", "GET /questions")
-    rows = resp.json()
-    if as_json:
-        cli.echo_json(rows)
-        return
-    if not rows:
-        click.echo("no open questions")
-        return
-    for q in rows:
-        opts = f"  [{'|'.join(q.get('options') or [])}]" if q.get("options") else ""
-        click.echo(f"{q['question_id']}  (chunk {q['chunk_id']}): {q['question']}{opts}")
+    rows = cli.get("/api/questions", "GET /questions").json()
+    cli.show(rows, QuestionListing(rows))
 
 
 @question_group.command("answer")

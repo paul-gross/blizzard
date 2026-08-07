@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Protocol
 
 import click
 import httpx
 
 from blizzard.hub import session_store
+
+
+class View(Protocol):
+    def lines(self) -> Iterable[str]: ...
+
 
 # The hub the client verbs talk to: ``BZ_HUB_URL`` overrides the colocated default (band +2).
 ENV_HUB_URL = "BZ_HUB_URL"
@@ -112,10 +119,30 @@ class CliContext:
     def echo_json(self, payload: object) -> None:
         click.echo(json.dumps(payload))
 
+    def show(self, payload: object, view: View) -> None:
+        """Print what a verb read: the raw ``payload`` under ``--json``, else the view's
+        lines — never both, so a payload no view could format still prints raw."""
+        if self.as_json:
+            self.echo_json(payload)
+            return
+        for line in view.lines():
+            click.echo(line)
+
+    def show_lines(self, payload: object, *lines: str) -> None:
+        """:meth:`show` for output small enough that a verb composes it inline."""
+        if self.as_json:
+            self.echo_json(payload)
+            return
+        for line in lines:
+            click.echo(line)
+
     def finish(self, resp: httpx.Response, message: str) -> None:
         """Echo a write verb's result: the raw body under ``--json``, else a static
         success line that never has to parse the body at all."""
-        click.echo(json.dumps(resp.json()) if self.as_json else message)
+        if self.as_json:
+            self.echo_json(resp.json())
+            return
+        click.echo(message)
 
     def _verb(
         self,

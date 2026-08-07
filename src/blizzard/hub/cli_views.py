@@ -1,0 +1,234 @@
+"""What an operator verb prints in text mode — one view per rendered payload, each
+holding its payload verbatim, so ``status`` and the list verbs render a row alike."""
+
+from __future__ import annotations
+
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
+from typing import Any, ClassVar
+
+
+def format_cost(cost_usd: float, cost_partial: bool) -> str:
+    """A derived cost total's terminal-legible form (issue #60) — always to the cent, with
+    a leading ``~`` when ``cost_partial``, i.e. a lower bound never presented as exact."""
+    amount = f"${cost_usd:.2f}"
+    return f"~{amount}" if cost_partial else amount
+
+
+@dataclass(frozen=True)
+class ChunkRow:
+    row: dict[str, Any]
+    #: ``status`` renders the node id where ``chunk list`` prefers the node's name.
+    prefer_node_name: bool = True
+
+    @property
+    def node(self) -> str:
+        name = self.row.get("current_node_name") if self.prefer_node_name else None
+        return name or self.row.get("current_node_id") or "-"
+
+    def line(self) -> str:
+        cost = self.row.get("cost") or {}
+        rendered = format_cost(cost.get("cost_usd", 0.0), cost.get("cost_partial", False))
+        return f"{self.row['chunk_id']}  {self.row['status']:<16} @ {self.node}  {rendered:>10}"
+
+
+@dataclass(frozen=True)
+class RunnerRow:
+    row: dict[str, Any]
+
+    @property
+    def liveness(self) -> str:
+        return "online" if self.row.get("online") else "offline"
+
+    @property
+    def brake(self) -> str:
+        """Name which brake is on (issue #43): "paused" alone would hide whether the fleet
+        stopped this runner or it stopped itself — they are cleared by different verbs."""
+        brakes = []
+        if self.row.get("hub_paused"):
+            brakes.append("hub")
+        if self.row.get("locally_paused"):
+            reason = self.row.get("locally_paused_reason")
+            brakes.append(f"local — {reason}" if reason else "local")
+        return f" [paused: {'+'.join(brakes)}]" if brakes else ""
+
+    def line(self) -> str:
+        return f"{self.row['runner_id']:<16} {self.liveness:<8} ws={self.row.get('workspace_id', '-')}{self.brake}"
+
+
+@dataclass(frozen=True)
+class QuestionRow:
+    row: dict[str, Any]
+
+    def line(self) -> str:
+        options = self.row.get("options") or []
+        offered = f"  [{'|'.join(options)}]" if options else ""
+        return f"{self.row['question_id']}  (chunk {self.row['chunk_id']}): {self.row['question']}{offered}"
+
+
+@dataclass(frozen=True)
+class Listing:
+    rows: Sequence[Any]
+
+    empty: ClassVar[str] = "nothing to show"
+
+    def line(self, row: Any) -> str:
+        raise NotImplementedError
+
+    def lines(self) -> Iterator[str]:
+        if not self.rows:
+            yield self.empty
+            return
+        for row in self.rows:
+            yield self.line(row)
+
+
+class ChunkListing(Listing):
+    empty = "no chunks"
+
+    def line(self, row: Any) -> str:
+        return ChunkRow(row).line()
+
+
+class RunnerListing(Listing):
+    empty = "no runners registered"
+
+    def line(self, row: Any) -> str:
+        return RunnerRow(row).line()
+
+
+class QuestionListing(Listing):
+    empty = "no open questions"
+
+    def line(self, row: Any) -> str:
+        return QuestionRow(row).line()
+
+
+class GraphListing(Listing):
+    empty = "no graphs minted yet"
+
+    def line(self, row: Any) -> str:
+        marker = "effective" if row["effective"] else ("retired" if row["retired"] else "superseded")
+        return f"{row['graph_id']}  name={row['name']}  {marker}  created_at={row['created_at']}"
+
+
+class GraphSyncListing(Listing):
+    empty = "no packaged graphs to reconcile"
+
+    def line(self, row: Any) -> str:
+        detail = f" — {row['detail']}" if row.get("detail") else ""
+        graph_id = f" {row['graph_id']}" if row.get("graph_id") else ""
+        return f"{row['name']}: {row['status']}{graph_id}{detail}"
+
+
+class QueueListing(Listing):
+    empty = "queue is empty"
+
+    def line(self, row: Any) -> str:
+        return f"{row['position']}  {row['chunk_id']}  graph={row.get('graph_id')}"
+
+
+class DecisionListing(Listing):
+    empty = "no open decisions"
+
+    def line(self, row: Any) -> str:
+        choices = ", ".join(c["name"] for c in row.get("choices", []))
+        return f"{row['decision_id']}  chunk={row['chunk_id']}  node={row['node_name']}  choices=[{choices}]"
+
+
+class WorkItemListing(Listing):
+    empty = "no work items"
+
+    def line(self, row: Any) -> str:
+        label = row.get("label") or f"{row['source']}#{row['ref']}"
+        if row.get("error"):
+            return f"{label}: error — {row['error']}"
+        return f"{label}: {row.get('title') or '(no title)'}"
+
+
+@dataclass(frozen=True)
+class ChunkDetail:
+    body: dict[str, Any]
+
+    def lines(self) -> Iterator[str]:
+        body = self.body
+        yield f"{body['chunk_id']}  status={body['status']}  graph={body.get('graph_name') or body['graph_id']}"
+        yield f"  node: {ChunkRow(body).node}"
+        # Both defaults on their own line: `chunk set` can write either, so a text-mode
+        # read-back exists for both. `-` is "express no preference", not unknown.
+        models = ", ".join(body.get("default_model") or []) or "-"
+        yield f"  default model: {models}   default effort: {body.get('default_effort') or '-'}"
+        pointers = body.get("work_refs") or []
+        if pointers:
+            labels = ", ".join(p.get("label") or f"{p['source']}#{p['ref']}" for p in pointers)
+            yield f"  pointers: {labels}"
+        route = body.get("route")
+        if route:
+            yield f"  runner: {route['runner_id']}  environments: {len(route.get('environment_ids', []))}"
+        cost = body.get("cost") or {}
+        yield f"  cost: {format_cost(cost.get('cost_usd', 0.0), cost.get('cost_partial', False))}"
+
+
+@dataclass(frozen=True)
+class MigrationIntent:
+    chunk_id: str
+    body: dict[str, Any]
+    cancelled: bool
+
+    def lines(self) -> Iterator[str]:
+        if self.cancelled:
+            yield f"cleared {self.chunk_id}'s standing migration intent"
+            return
+        intent = self.body.get("intended_migration")
+        if intent is None:
+            # Shouldn't happen for a successful set, but degrade legibly rather than raise.
+            yield f"{self.chunk_id}: migration intent not set"
+            return
+        target = intent.get("graph_name") or intent.get("graph_id")
+        if intent.get("mode") == "forced":
+            yield f"{self.chunk_id} will migrate to {target} node {intent.get('node_name')} at its next transition"
+        else:
+            yield f"{self.chunk_id} will auto-migrate to {target} at its next transition (name-matched node)"
+
+
+@dataclass(frozen=True)
+class RunnerDetail:
+    body: dict[str, Any]
+
+    def lines(self) -> Iterator[str]:
+        yield f"{self.body['runner_id']}  {RunnerRow(self.body).liveness}  ws={self.body.get('workspace_id', '-')}"
+        yield f"  hub_paused={self.body.get('hub_paused')}  locally_paused={self.body.get('locally_paused')}"
+
+
+@dataclass(frozen=True)
+class GraphDetail:
+    body: dict[str, Any]
+
+    def lines(self) -> Iterator[str]:
+        body = self.body
+        marker = "retired" if body.get("retired") else "enabled"
+        yield f"{body['graph_id']}  name={body['name']}  {marker}  entry={body.get('entry_node_id')}"
+        for node in body.get("nodes", []):
+            yield f"  node {node['node_id']}  name={node['name']}  executor={node.get('executor')}"
+        for edge in body.get("edges", []):
+            yield f"  edge {edge['from_node_id']} --[{edge.get('choice_id')}]--> {edge.get('to_node_name')}"
+
+
+@dataclass(frozen=True)
+class FleetStatus:
+    chunks: list[dict[str, Any]]
+    runners: list[dict[str, Any]]
+    questions: list[dict[str, Any]]
+    spend: dict[str, Any]
+
+    def lines(self) -> Iterator[str]:
+        yield f"chunks ({len(self.chunks)}):"
+        for chunk in self.chunks:
+            yield f"  {ChunkRow(chunk, prefer_node_name=False).line()}"
+        yield f"\nrunners ({len(self.runners)}):"
+        for runner in self.runners:
+            yield f"  {RunnerRow(runner).line()}"
+        yield f"\nopen questions ({len(self.questions)}):"
+        for question in self.questions:
+            yield f"  {QuestionRow(question).line()}"
+        yield f"\nfleet spend (all time): {format_cost(self.spend['cost_usd'], self.spend['cost_partial'])}"
