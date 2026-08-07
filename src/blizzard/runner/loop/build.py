@@ -21,6 +21,7 @@ from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapt
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptErrorFactory as HarnessTranscriptErrorFactory
 from blizzard.runner.loop.context import LoopConfig, LoopContext
+from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.internal.subprocess_check_runner import SubprocessCheckRunner
@@ -116,6 +117,7 @@ def build_loop_context(
             transcripts=harness_transcript_source,
         ),
         sessions=SessionResolver(store=store, harness=harness, transcripts=harness_transcript_source),
+        env_release=EnvironmentRelease(store=store, clock=_clock, provider=provider, worker_files=_worker_files),
         # The same source injected into `harness` above, declared here too so the loop's
         # direct readers don't reach through `ctx.harness` for it.
         transcripts=harness_transcript_source,

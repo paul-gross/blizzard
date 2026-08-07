@@ -29,6 +29,7 @@ from blizzard.runner.harness.transcript import IHarnessTranscriptSource, Transcr
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
 from blizzard.runner.loop.context import LoopConfig, LoopContext
+from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.session import SessionResolver
@@ -581,6 +582,7 @@ def make_context(
             transcripts=harness.transcript_source(),
         ),
         sessions=SessionResolver(store=store, harness=_harness, transcripts=harness.transcript_source()),
+        env_release=EnvironmentRelease(store=store, clock=_clock, provider=_provider, worker_files=_files),
         # Mirrors `build_loop_context`'s own composition: the same source `harness`
         # itself holds, resolved once here rather than reached through `ctx.harness`.
         transcripts=harness.transcript_source(),

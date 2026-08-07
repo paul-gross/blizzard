@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig, LoopContext
+from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.steps import pull
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
@@ -126,6 +127,9 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
         worker_files=WorkerStdoutFiles("", store),
         usage=make_usage_recorder(store, hub.clock),
         sessions=make_session_resolver(store),
+        env_release=EnvironmentRelease(
+            store=store, clock=hub.clock, provider=provider, worker_files=WorkerStdoutFiles("", store)
+        ),
     )
 
     pull(ctx)
@@ -198,6 +202,9 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
         worker_files=WorkerStdoutFiles("", store),
         usage=make_usage_recorder(store, hub.clock),
         sessions=make_session_resolver(store),
+        env_release=EnvironmentRelease(
+            store=store, clock=hub.clock, provider=provider, worker_files=WorkerStdoutFiles("", store)
+        ),
     )
 
     pull(ctx)

@@ -1920,7 +1920,7 @@
   "blizzard/runner/loop/build.py": {
    "comments": 14,
    "docstrings": 31,
-   "total": 213
+   "total": 215
   },
   "blizzard/runner/loop/checks.py": {
    "comments": 2,
@@ -1930,7 +1930,12 @@
   "blizzard/runner/loop/context.py": {
    "comments": 29,
    "docstrings": 8,
-   "total": 98
+   "total": 100
+  },
+  "blizzard/runner/loop/env_release.py": {
+   "comments": 0,
+   "docstrings": 11,
+   "total": 43
   },
   "blizzard/runner/loop/hub.py": {
    "comments": 0,
@@ -1979,8 +1984,8 @@
   },
   "blizzard/runner/loop/steps.py": {
    "comments": 252,
-   "docstrings": 250,
-   "total": 2065
+   "docstrings": 240,
+   "total": 2034
   },
   "blizzard/runner/loop/tick.py": {
    "comments": 4,
@@ -2532,7 +2537,7 @@
   "runner_fakes.py": {
    "comments": 43,
    "docstrings": 40,
-   "total": 683
+   "total": 685
   },
   "service/__init__.py": {
    "comments": 0,
@@ -3122,7 +3127,7 @@
   "test_hub_runner_seam.py": {
    "comments": 18,
    "docstrings": 9,
-   "total": 211
+   "total": 218
   },
   "test_hub_signing_service.py": {
    "comments": 8,
@@ -3207,7 +3212,7 @@
   "test_migrated_reclaim_epoch_floor.py": {
    "comments": 20,
    "docstrings": 6,
-   "total": 156
+   "total": 160
   },
   "test_migration_apply.py": {
    "comments": 61,

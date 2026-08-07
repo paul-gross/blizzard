@@ -14,6 +14,7 @@ from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.loop.checks import ICheckRunner
+from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.session import SessionResolver
@@ -90,6 +91,7 @@ class LoopContext:
     worker_files: WorkerStdoutFiles
     usage: UsageRecorder
     sessions: SessionResolver
+    env_release: EnvironmentRelease
     #: The check-runner seam (issue #114) — ``None`` when not wired, so a node with no
     #: ``checks:`` still ticks; a node that declares ``checks:`` needs it.
     check_runner: ICheckRunner | None = None

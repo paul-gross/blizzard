@@ -468,7 +468,7 @@ def _abandon_reassigned(ctx: LoopContext, lease: LeaseRecord, *, killed: bool = 
     if lease.pid is not None and not killed:
         ctx.process.kill(lease.pid)
     _CP_ABANDON_AFTER_KILL.reached()  # worker killed; envs not yet released — recovery is the next tick's re-scan
-    _release_all(ctx, lease.chunk_id)
+    ctx.env_release.release_chunk(lease.chunk_id)
     park = ctx.store.open_park(lease.lease_id)
     if park is not None:
         ctx.store.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)
@@ -763,7 +763,7 @@ def _reconcile_interrupted_claims(ctx: LoopContext) -> None:
             detail = ctx.hub.get_chunk(chunk_id)
         except ChunkNotFoundError:
             _log.warning("hub reports interrupted-claim chunk unknown — releasing envs", chunk_id=chunk_id)
-            _release_all(ctx, chunk_id)
+            ctx.env_release.release_chunk(chunk_id)
             continue
         except HubClientError:
             continue  # hub unreachable — the binding is durable; retry next tick
@@ -773,7 +773,7 @@ def _reconcile_interrupted_claims(ctx: LoopContext) -> None:
             ours = detail.route is not None and detail.route.runner_id == ctx.config.runner_id
             if not ours:
                 _log.info("releasing binding — chunk requeued locally but no longer routed here", chunk_id=chunk_id)
-                _release_all(ctx, chunk_id)
+                ctx.env_release.release_chunk(chunk_id)
                 continue
             _resume_requeued_chunk(ctx, chunk_id)
             continue
@@ -791,7 +791,7 @@ def _reconcile_interrupted_claims(ctx: LoopContext) -> None:
             _reclaim_interrupted(ctx, chunk_id, bindings)  # claim never landed — claim now, reuse the binding
         elif detail.route is not None and not ours:
             _log.info("releasing binding — another runner won the chunk", chunk_id=chunk_id)
-            _release_all(ctx, chunk_id)
+            ctx.env_release.release_chunk(chunk_id)
         elif detail.route is None:
             # No live route, and neither claimable nor ours to adopt (blizzard#202). Release
             # explicitly instead of matching no branch and leaking the binding forever.
@@ -800,7 +800,7 @@ def _reconcile_interrupted_claims(ctx: LoopContext) -> None:
                 chunk_id=chunk_id,
                 hub_status=str(detail.status),
             )
-            _release_all(ctx, chunk_id)
+            ctx.env_release.release_chunk(chunk_id)
 
 
 def _environments_wanted(entry: QueuePeekEntry) -> int:
@@ -879,7 +879,7 @@ def _fill_one(ctx: LoopContext) -> bool:
         _log.info(
             "route claim denied — runner paused at the hub", chunk_id=entry.chunk_id, runner_id=ctx.config.runner_id
         )
-        _release_binding(ctx, entry.chunk_id, acquired)
+        ctx.env_release.release_binding(entry.chunk_id, acquired)
         return False
     if outcome.denied_terminal is not None:
         # The chunk reached a terminal state between this peek and this claim (issue #118)
@@ -889,11 +889,11 @@ def _fill_one(ctx: LoopContext) -> bool:
             chunk_id=entry.chunk_id,
             status=outcome.denied_terminal.status,
         )
-        _release_binding(ctx, entry.chunk_id, acquired)
+        ctx.env_release.release_binding(entry.chunk_id, acquired)
         return True  # peek fresh next iteration
     if outcome.conflict is not None or outcome.claimed is None:
         _log.info("route claim lost the race", chunk_id=entry.chunk_id)
-        _release_binding(ctx, entry.chunk_id, acquired)  # someone else won — undo our binding
+        ctx.env_release.release_binding(entry.chunk_id, acquired)  # someone else won — undo our binding
         return True  # peek fresh next iteration
 
     _CP_FILL_AFTER_CLAIM.reached()
@@ -1204,9 +1204,9 @@ def _apply_response(
         # A cross-graph migration already released the route (#90) — tear the attempt down;
         # the chunk is claimed afresh under the new graph rather than continued in place.
         _log.info("chunk migrated to another graph — releasing envs", chunk_id=chunk_id)
-        _release_all(ctx, chunk_id)
+        ctx.env_release.release_chunk(chunk_id)
     elif outcome == ApplyOutcome.DONE:
-        _release_all(ctx, chunk_id)
+        ctx.env_release.release_chunk(chunk_id)
     elif outcome == ApplyOutcome.PARKED_AT_GATE:
         _log.info("chunk parked at human gate", chunk_id=chunk_id)  # waiting_on_human
 
@@ -1221,13 +1221,13 @@ def _advance_held_chunk(ctx: LoopContext, chunk_id: str) -> None:
         detail = ctx.hub.get_chunk(chunk_id)
     except ChunkNotFoundError:
         _log.warning("hub reports held chunk unknown — releasing envs", chunk_id=chunk_id)
-        _release_all(ctx, chunk_id)
+        ctx.env_release.release_chunk(chunk_id)
         return
     except HubClientError:
         return
     if detail.status == ChunkStatus.DONE:
         _log.info("delivery landed — releasing envs", chunk_id=chunk_id)
-        _release_all(ctx, chunk_id)
+        ctx.env_release.release_chunk(chunk_id)
         return
     decision = detail.decision
     if decision is not None and decision.resolved_choice is not None and not decision.transitioned:
@@ -1270,7 +1270,7 @@ def _spawn_into_held_node(ctx: LoopContext, chunk_id: str) -> None:
         envelope = ctx.hub.get_envelope(chunk_id)
     except ChunkNotFoundError:
         _log.warning("hub reports advanced chunk unknown — releasing envs", chunk_id=chunk_id)
-        _release_all(ctx, chunk_id)
+        ctx.env_release.release_chunk(chunk_id)
         return
     except HubClientError:
         return  # hub unreachable — the transition is durable at the hub; retry next tick
@@ -1613,7 +1613,7 @@ def _adopt_interrupted_claim(ctx: LoopContext, chunk_id: str) -> None:
             rekeyed = ctx.hub.rekey_route_token(chunk_id)
         except ChunkNotFoundError:
             _log.warning("hub reports adopted chunk unknown — releasing envs", chunk_id=chunk_id)
-            _release_all(ctx, chunk_id)
+            ctx.env_release.release_chunk(chunk_id)
             return
         except HubClientError:
             return  # hub unreachable — the binding is durable; retry next tick
@@ -1622,7 +1622,7 @@ def _adopt_interrupted_claim(ctx: LoopContext, chunk_id: str) -> None:
         envelope = ctx.hub.get_envelope(chunk_id)
     except ChunkNotFoundError:
         _log.warning("hub reports adopted chunk unknown — releasing envs", chunk_id=chunk_id)
-        _release_all(ctx, chunk_id)
+        ctx.env_release.release_chunk(chunk_id)
         return
     except HubClientError:
         return  # hub unreachable — the binding is durable; retry next tick
@@ -1644,7 +1644,7 @@ def _resume_requeued_chunk(ctx: LoopContext, chunk_id: str) -> None:
         envelope = ctx.hub.get_envelope(chunk_id)
     except ChunkNotFoundError:
         _log.warning("hub reports requeued chunk unknown — releasing envs", chunk_id=chunk_id)
-        _release_all(ctx, chunk_id)
+        ctx.env_release.release_chunk(chunk_id)
         return
     except HubClientError:
         return  # hub unreachable — the requeue fact is durable; retry next tick
@@ -1673,11 +1673,11 @@ def _reclaim_interrupted(ctx: LoopContext, chunk_id: str, bindings: list[EnvBind
         # Refused outright because this runner is paused upstream, not lost to another
         # runner (issue #44).
         _log.info("interrupted claim denied — runner paused at the hub", chunk_id=chunk_id)
-        _release_all(ctx, chunk_id)
+        ctx.env_release.release_chunk(chunk_id)
         return
     if outcome.conflict is not None or outcome.claimed is None:
         _log.info("interrupted claim lost the race — releasing binding", chunk_id=chunk_id)
-        _release_all(ctx, chunk_id)
+        ctx.env_release.release_chunk(chunk_id)
         return
     _log.info("re-claimed interrupted chunk — spawning current node", chunk_id=chunk_id)
     # A reclaim is a fresh claim, so its token overwrites whatever this chunk's row held
@@ -1700,7 +1700,7 @@ def _requeue(ctx: LoopContext, lease: LeaseRecord) -> None:
         envelope = ctx.hub.get_envelope(lease.chunk_id)  # idempotent re-read
     except ChunkNotFoundError:
         _log.warning("hub reports chunk unknown at requeue — releasing envs", chunk_id=lease.chunk_id)
-        _release_all(ctx, lease.chunk_id)
+        ctx.env_release.release_chunk(lease.chunk_id)
         return
     except HubClientError:
         return  # the closed attempt is durable; FILL/ADVANCE re-drives next tick
@@ -1977,37 +1977,6 @@ def _repo_origins(ctx: LoopContext, bindings: list[EnvBindingRecord]) -> dict[tu
         for repo in ctx.provider.repos(binding.environment_id):
             origins[(binding.environment_id, repo.name)] = repo.origin_url
     return origins
-
-
-def _release_all(ctx: LoopContext, chunk_id: str) -> None:
-    """Release every held environment at the chunk's tenure end, and clean up every
-    lease this chunk ever minted's per-generation usage-stdout files (issue #58) —
-    bounded, one file per attempt ever made under each lease, no longer needed once
-    its usage facts are durable."""
-    now = ctx.clock.now()
-    for binding in ctx.store.bindings_for_chunk(chunk_id):
-        ctx.provider.release(binding.environment_id)
-        ctx.store.record_release(chunk_id=chunk_id, environment_id=binding.environment_id, released_at=now)
-    for lease_id in ctx.store.lease_ids_for_chunk(chunk_id):
-        ctx.worker_files.cleanup(lease_id)
-
-
-def _release_acquired(ctx: LoopContext, acquired: list[AcquiredEnvironment]) -> None:
-    """Release just-acquired (unbound) environments after a lost claim."""
-    for a in acquired:
-        ctx.provider.release(a.environment_id)
-
-
-def _release_binding(ctx: LoopContext, chunk_id: str, acquired: list[AcquiredEnvironment]) -> None:
-    """Undo a just-recorded binding whose claim never landed — release the fact and the env.
-
-    The binding is written before the hub claim, so a claim that fails to send or
-    loses the race must retract both the local binding fact and the provider allocation,
-    leaving the chunk exactly as if it had never been touched (it stays ``ready``)."""
-    now = ctx.clock.now()
-    for a in acquired:
-        ctx.store.record_release(chunk_id=chunk_id, environment_id=a.environment_id, released_at=now)
-        ctx.provider.release(a.environment_id)
 
 
 def _bindings_as_environments(bindings: list[EnvBindingRecord]) -> list[AcquiredEnvironment]:

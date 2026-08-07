@@ -542,7 +542,7 @@ def test_release_all_cleans_up_every_lease_stdout_file(tmp_path):  # type: ignor
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(stdout_dir)),
     )
 
-    steps._release_all(ctx, "ch_1")
+    ctx.env_release.release_chunk("ch_1")
 
     assert not (stdout_dir / "lease_1.1.stdout").exists()
     assert not (stdout_dir / "lease_1.2.stdout").exists()
@@ -562,6 +562,6 @@ def test_release_all_is_a_noop_when_no_stdout_dir_configured(tmp_path):  # type:
         probe=FakeProbe(),
     )
 
-    steps._release_all(ctx, "ch_1")  # must not raise
+    ctx.env_release.release_chunk("ch_1")  # must not raise
 
     assert store.held_environment_ids() == []
