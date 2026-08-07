@@ -37,6 +37,7 @@ from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
+from blizzard.runner.loop.judgement_prompt import JudgementPrompt
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.store.repository import (
     AskRecord,
@@ -1160,9 +1161,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     #      worker just left — the same tree its judgement and the gate are rendered on.
     check_records = _run_or_read_checks(ctx, lease, envelope, bindings)
 
-    # The check results ride between the authored judgement prose and the `<Choice>` tail,
-    # so the worker judges against mechanical truth (issue #114).
-    prompt = (envelope.judgement_prompt or "") + _checks_block(check_records) + _elicitation_tail(envelope)
+    prompt = JudgementPrompt(envelope, check_records).render()
     # The judgement turn carries a re-minted lease identity; the worker is already dead,
     # so invalidating its token orphans nothing.
     output = ctx.harness.judge(
@@ -2298,35 +2297,6 @@ def _release_binding(ctx: LoopContext, chunk_id: str, acquired: list[AcquiredEnv
 
 def _bindings_as_environments(bindings: list[EnvBindingRecord]) -> list[AcquiredEnvironment]:
     return [AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in bindings]
-
-
-def _elicitation_tail(envelope: NodeEnvelope) -> str:
-    """The engine-generated ``<Choice>`` elicitation appended to the judgement prompt.
-
-    Emitted as ``#``-prefixed lines so the tail is inert whether the prompt is read as prose
-    or executed as a script.
-    """
-    lines = ["", "", "# Select exactly one outcome and reply with <Choice>name</Choice>:"]
-    for choice in envelope.node.choices:
-        lines.append(f"#   - {choice.name}: {choice.description}")
-    return "\n".join(lines)
-
-
-def _checks_block(results: list[CheckResultRecord]) -> str:
-    """The runner-executed check results injected into the judgement prompt (issue #114).
-
-    One ``#``-prefixed line per check with its command and ``PASS``/``FAIL``, so the worker
-    judges against mechanical truth. A failed check additionally shows its output tail.
-    """
-    if not results:
-        return ""
-    lines = ["", "", "# Checks (runner-executed at your exit — judge against these, not your recollection):"]
-    for r in results:
-        lines.append(f"#   [{'PASS' if r.passed else 'FAIL'}] {r.command}")
-        if not r.passed:
-            for tail_line in r.output_tail.strip().splitlines():
-                lines.append(f"#       {tail_line}")
-    return "\n".join(lines)
 
 
 # EXTERNAL SUBSCRIPTION USAGE SAMPLE (issue #218)

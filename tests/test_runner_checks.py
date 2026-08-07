@@ -15,7 +15,8 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT, CheckOutcome
-from blizzard.runner.loop.steps import _checks_block, _run_or_read_checks, advance, pull
+from blizzard.runner.loop.judgement_prompt import JudgementPrompt
+from blizzard.runner.loop.steps import _run_or_read_checks, advance, pull
 from blizzard.runner.store.repository import CheckResultRecord, NewLease
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from tests.runner_fakes import (
@@ -31,6 +32,11 @@ from tests.runner_fakes import (
 
 _NOW = datetime(2026, 7, 25, 12, 0, 0, tzinfo=UTC)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
+
+
+def _prompt(results: list[CheckResultRecord]) -> JudgementPrompt:
+    """A judgement prompt over a minimal build node, for the rendering assertions below."""
+    return JudgementPrompt(make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES), results)
 
 
 def _seed_exited_lease(
@@ -301,12 +307,12 @@ def test_checks_ran_marker_is_idempotent(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_checks_block_renders_pass_and_fail_and_shows_the_tail_only_on_failure() -> None:
-    block = _checks_block(
+    block = _prompt(
         [
             CheckResultRecord(command="mise run lint", passed=True, output_tail="all good"),
             CheckResultRecord(command="mise run test", passed=False, output_tail="assert 1 == 2\n1 failed"),
         ]
-    )
+    )._checks_block()
     # Harness-inert: every line is `#`-prefixed so a mock harness that execs the prompt
     # sees only comments.
     assert all(line.startswith("#") for line in block.splitlines() if line)
@@ -320,7 +326,7 @@ def test_checks_block_renders_pass_and_fail_and_shows_the_tail_only_on_failure()
 
 @pytest.mark.unit
 def test_checks_block_is_empty_for_no_checks() -> None:
-    assert _checks_block([]) == ""
+    assert _prompt([])._checks_block() == ""
 
 
 @pytest.mark.component
