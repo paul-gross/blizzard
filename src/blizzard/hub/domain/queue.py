@@ -18,7 +18,6 @@ from blizzard.hub.domain.work import (
     ChunkFacts,
     ChunkStatus,
     IWriteChunkRepository,
-    derive_chunk_status,
 )
 
 _log = get_logger("blizzard.hub.queue")
@@ -187,7 +186,7 @@ class GroupService:
         facts = self._chunks.load_facts(chunk_id)
         if chunk is None or facts is None:
             raise ChunkNotFound(chunk_id)
-        status = derive_chunk_status(facts if facts is not None else ChunkFacts(minted=True))
+        status = (facts if facts is not None else ChunkFacts(minted=True)).status()
         if status not in GROUPABLE_STATUSES:
             raise ChunkNotGroupable(chunk_id, status)
         return chunk, status

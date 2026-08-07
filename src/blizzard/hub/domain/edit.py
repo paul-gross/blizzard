@@ -20,7 +20,6 @@ from blizzard.hub.domain.work import (
     IntendedMigration,
     IWriteChunkRepository,
     MigrationMode,
-    derive_chunk_status,
 )
 
 
@@ -161,7 +160,7 @@ class EditService:
 
         with self._claim_lock:
             facts = self._chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
-            status = derive_chunk_status(facts)
+            status = facts.status()
 
             if graph_id is not UNSET:
                 self._require_editable(chunk.chunk_id, status, "graph_id")

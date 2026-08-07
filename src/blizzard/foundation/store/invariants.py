@@ -16,7 +16,7 @@ from sqlalchemy import Engine, func, select
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor
-from blizzard.hub.domain.work import derive_chunk_status, newest_live_route, newest_live_route_token
+from blizzard.hub.domain.work import newest_live_route, newest_live_route_token
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.internal.chunk_store import ChunkStore, _deserialize_default_model
 from blizzard.runner.store import schema as runner
@@ -384,7 +384,7 @@ def _check_derivation_and_delivery(engine: Engine) -> list[Violation]:
             violations.append(Violation("hub:derived-status-total", f"chunk {chunk.chunk_id} has no loadable facts"))
             continue
         try:
-            derive_chunk_status(facts)
+            facts.status()
         except Exception as exc:  # a fact combination the derivation cannot resolve
             violations.append(
                 Violation("hub:derived-status-total", f"chunk {chunk.chunk_id} derivation raised {exc!r}")

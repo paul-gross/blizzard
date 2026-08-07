@@ -23,7 +23,6 @@ from blizzard.hub.domain.work import (
     Chunk,
     ChunkStatus,
     IWriteChunkRepository,
-    derive_chunk_status,
 )
 from blizzard.wire.envelope import NodeEnvelope
 
@@ -150,7 +149,7 @@ class ClaimService:
         facts = self._chunks.load_facts(chunk.chunk_id)
         # Re-derive status fresh under the claim lock: a stop landing between this
         # runner's peek and its claim POST is invisible to the peek (issue #118).
-        status = derive_chunk_status(facts) if facts is not None else ChunkStatus.NOT_READY
+        status = facts.status() if facts is not None else ChunkStatus.NOT_READY
         if status in TERMINAL_STATUSES:
             raise ClaimDeniedTerminal(chunk_id=chunk.chunk_id, status=status)
 

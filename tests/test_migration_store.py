@@ -27,7 +27,6 @@ from blizzard.hub.domain.work import (
     MigrationMode,
     MigrationSource,
     TransitionFact,
-    derive_chunk_status,
     landing_node,
 )
 from blizzard.hub.store import schema as s
@@ -114,7 +113,7 @@ def test_after_a_migration_the_current_node_is_the_landing_node_and_status_is_re
     facts = _migrated_facts(landed="nd_landed")
     assert facts.current_node_id() == "nd_landed"
     # A runner-executed landing node re-queues the chunk claimable (issue #111 regression).
-    assert derive_chunk_status(facts) is ChunkStatus.READY
+    assert facts.status() is ChunkStatus.READY
     # The fact carries the re-pinned model.
     migration = facts.newest_migration()
     assert migration is not None and migration.model is None
@@ -125,7 +124,7 @@ def test_a_migration_landing_on_a_hub_node_derives_delivering() -> None:
     # Issue #111: a migration re-pinning the chunk onto a hub-executed node is retained
     # by the hub, exactly as a transition into one is — never wrongly derived READY.
     facts = _migrated_facts(landed="nd_landed", landed_executor=Executor.HUB)
-    assert derive_chunk_status(facts) is ChunkStatus.DELIVERING
+    assert facts.status() is ChunkStatus.DELIVERING
 
 
 @unit
@@ -141,7 +140,7 @@ def test_a_null_landing_node_falls_through_to_none_the_schema_entry_allowance() 
     # which the call sites resolve via `... or graph.entry_node_id`.
     facts = _migrated_facts(landed=None)
     assert facts.current_node_id() is None
-    assert derive_chunk_status(facts) is ChunkStatus.READY
+    assert facts.status() is ChunkStatus.READY
 
 
 @unit
@@ -326,7 +325,7 @@ def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(t
     migration = facts.newest_migration()
     assert migration is not None
     assert migration.landed_node_executor is Executor.HUB
-    assert derive_chunk_status(facts) is ChunkStatus.DELIVERING
+    assert facts.status() is ChunkStatus.DELIVERING
 
     ready_ids = {c.chunk_id for c in hub.services.chunks.list_ready()}
     assert chunk_id not in ready_ids

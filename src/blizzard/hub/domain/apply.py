@@ -27,7 +27,6 @@ from blizzard.hub.domain.work import (
     IWriteChunkRepository,
     MigrationMode,
     MigrationSource,
-    derive_chunk_status,
     landing_node,
 )
 from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, checks_gate_violated
@@ -166,7 +165,7 @@ class ApplyService:
         if from_node.judged_by is JudgedBy.HUMAN:
             return _failure(f"human signoff required: node `{from_node.name}` is a gate — resolve its decision")
 
-        if derive_chunk_status(facts) in TERMINAL_STATUSES:
+        if facts.status() in TERMINAL_STATUSES:
             return _failure("chunk is terminal")
         latest = facts.latest_epoch()
         if latest is not None and submission.epoch != latest:
@@ -251,7 +250,7 @@ class ApplyService:
         facts = self._chunks.load_facts(chunk.chunk_id)
         if facts is None:
             return _failure(f"unknown chunk {chunk.chunk_id}")
-        if derive_chunk_status(facts) in TERMINAL_STATUSES:
+        if facts.status() in TERMINAL_STATUSES:
             return _failure("chunk is terminal")
         latest = facts.latest_epoch()
         if latest is not None and submission.epoch != latest:

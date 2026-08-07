@@ -53,7 +53,6 @@ from blizzard.hub.domain.work import (
     UsageFact,
     WorkItemCloseOutcome,
     WorkRef,
-    derive_chunk_status,
     has_landed_repos,
     newest_live_route,
 )
@@ -1921,7 +1920,7 @@ class ChunkStore:
 
     def _status(self, chunk_id: str) -> ChunkStatus:
         facts = self.load_facts(chunk_id)
-        return derive_chunk_status(facts) if facts is not None else ChunkStatus.READY
+        return facts.status() if facts is not None else ChunkStatus.READY
 
     @staticmethod
     def _resolved_ids(conn, decision_ids: list[str]) -> set[str]:  # type: ignore[no-untyped-def]

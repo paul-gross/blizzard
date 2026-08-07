@@ -20,8 +20,6 @@ from blizzard.hub.domain.work import (
     Chunk,
     DecisionChoice,
     IWriteChunkRepository,
-    derive_chunk_status,
-    open_escalation,
 )
 from blizzard.wire.completion import SubmittedArtifact
 from blizzard.wire.decision import DecisionSubmission
@@ -97,7 +95,7 @@ class DecisionService:
                 response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`")
             )
 
-        if derive_chunk_status(facts) in TERMINAL_STATUSES:
+        if facts.status() in TERMINAL_STATUSES:
             return _failure("chunk is terminal")
         latest = facts.latest_epoch()
         if latest is not None and submission.epoch != latest:
@@ -154,7 +152,7 @@ class RequeueService:
         Raises :class:`NotEscalated` if the chunk is not ``needs_human``. Returns the
         freshly-written ``requeues.id`` (issue #213)."""
         facts = self._chunks.load_facts(chunk_id)
-        if facts is None or open_escalation(facts) is None:
+        if facts is None or facts.open_escalation() is None:
             raise NotEscalated(f"chunk {chunk_id} is not escalated (needs_human)")
         now = self._clock.now()
         requeue_id = self._chunks.record_requeue(chunk_id, at=now)  # supersedes the escalation

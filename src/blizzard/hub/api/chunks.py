@@ -47,16 +47,11 @@ from blizzard.hub.domain.work import (
     IntendedMigration,
     MigrationMode,
     WorkRef,
-    awaiting_external_merge,
-    derive_chunk_status,
     derive_chunk_usage,
-    derive_completed_at,
     derive_fleet_summary,
     has_landed_repos,
     holds_claim,
     hub_node_pending,
-    open_escalation,
-    open_pause,
 )
 from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry, WorkSourceError
 from blizzard.wire.chunk import (
@@ -383,11 +378,11 @@ def _summary_view(
     single-chunk caller (a transition verb) gets a fresh one when it passes none."""
     facts = services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
     node_id, node_name = _current_node(services, chunk, facts, graph_cache if graph_cache is not None else {})
-    status = derive_chunk_status(facts)
+    status = facts.status()
     # A finished chunk holds no claim (issue #140) — the rule is `holds_claim`'s. Asked
     # before the read so a terminal chunk costs no `route_of` query at all.
     route = services.chunks.route_of(chunk.chunk_id) if holds_claim(status) else None
-    completed_at = derive_completed_at(facts)
+    completed_at = facts.completed_at()
     return ChunkSummary(
         chunk_id=chunk.chunk_id,
         graph_id=chunk.graph_id,
@@ -418,7 +413,7 @@ def fleet_summary(services: HubServices) -> FleetSummaryView:
     :func:`list_chunks` does, but returns only the four bucket integers, so the payload
     is a fixed four numbers regardless of fleet size."""
     summary = derive_fleet_summary(
-        derive_chunk_status(services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True))
+        (services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)).status()
         for chunk in services.chunks.list_all()
     )
     return FleetSummaryView(
@@ -437,8 +432,8 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     route = services.chunks.route_of(chunk_id)
-    escalation = open_escalation(facts)
-    pause = open_pause(facts)
+    escalation = facts.open_escalation()
+    pause = facts.open_pause()
     decision = services.chunks.decision_for_chunk(chunk_id)
     graph = services.graphs.get(chunk.graph_id)
     node_id = facts.current_node_id() or (graph.entry_node_id if graph is not None else None)
@@ -458,7 +453,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         graph_id=chunk.graph_id,
         graph_name=_graph_name(graph),
         graph_created_at=iso_utc(graph.created_at) if graph is not None else None,
-        status=derive_chunk_status(facts),
+        status=facts.status(),
         current_node_id=node_id,
         current_node_name=node_name,
         latest_epoch=facts.latest_epoch(),
@@ -486,7 +481,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         migrations=_migration_views(facts, history_graphs),
         artifacts=_artifact_views(artifacts, web_base),
         questions=[question_view(q) for q in services.chunks.load_questions(chunk_id)],
-        awaiting_external_merge=awaiting_external_merge(facts),
+        awaiting_external_merge=facts.awaiting_external_merge(),
         open_prs=[PrView(repo=pr.repo, number=pr.number, url=pr.url) for pr in facts.pr_opened],
         cost=_usage_total_view(facts),
         usage=_usage_history_views(facts),

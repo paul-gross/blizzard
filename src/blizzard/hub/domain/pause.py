@@ -8,7 +8,7 @@ resume is never refused. Holds the *write* repository (``bzh:controller-read-onl
 from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.work import Chunk, ChunkFacts, ChunkStatus, IWriteChunkRepository, derive_chunk_status
+from blizzard.hub.domain.work import Chunk, ChunkFacts, ChunkStatus, IWriteChunkRepository
 
 _REFUSED = frozenset({ChunkStatus.DONE, ChunkStatus.STOPPED, ChunkStatus.DELIVERING})
 
@@ -46,6 +46,6 @@ class PauseService:
 
     def _require_pausable(self, chunk_id: str) -> None:
         facts = self._chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-        status = derive_chunk_status(facts)
+        status = facts.status()
         if status in _REFUSED:
             raise ChunkNotPausable(chunk_id, status)

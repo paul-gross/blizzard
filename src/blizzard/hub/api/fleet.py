@@ -28,7 +28,6 @@ from blizzard.hub.domain.graph import Graph, is_newer_mint, resolve_follow_lates
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
-    derive_chunk_status,
     hub_node_pending,
 )
 from blizzard.hub.events.broker import ChunkChangeCause
@@ -252,15 +251,15 @@ def hub_advance(
     node_id = facts.current_node_id()
     node = graph.node_by_id(node_id) if node_id is not None else None
     if node is None or not node.is_hub_command_node:
-        derived = derive_chunk_status(facts)
+        derived = facts.status()
         return HubAdvanceResponse(
             chunk_id=chunk_id, status=derived, ran=False, detail="not parked at a hub command node"
         )
-    prev_status = derive_chunk_status(facts).value
+    prev_status = facts.status().value
     epoch = facts.latest_epoch() or 0
     result = services.hub_node.run(chunk, graph, node, epoch=epoch)
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    derived = derive_chunk_status(facts)
+    derived = facts.status()
     # `key` names the transition this call recorded — absent when the poll deferred or wrote a
     # poll-attempt fact instead, since there is no fresh `transitions` row to key on (issue #213).
     advance_key = f"transitions:{result.transition_id}" if result is not None and result.transition_id else None

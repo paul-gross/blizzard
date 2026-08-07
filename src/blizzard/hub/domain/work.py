@@ -1,7 +1,7 @@
 """Work-lifecycle domain — the chunk, its facts, and its **derived** status.
 
 The center of the model: per ``bzh:facts-not-status`` a chunk's status is never a
-stored column, it is computed by :func:`derive_chunk_status` from the recorded facts.
+stored column, it is computed by :meth:`ChunkFacts.status` from the recorded facts.
 The derivations are pure functions over already-loaded domain facts
 (``bzh:domain-takes-objects``). Precedence is **first match wins**, top to bottom."""
 
@@ -41,7 +41,7 @@ def holds_claim(status: ChunkStatus) -> bool:
     """Whether a chunk at ``status`` still holds the route it may be carrying (issue #140).
     Terminal outranks route liveness, and this is the one place that says so for a
     *route*: a terminal transition from a runner node stamps no ``route.released``, so
-    the raw route fact outlives it. Not consulted by :func:`_has_live_route`."""
+    the raw route fact outlives it. Not consulted by :meth:`ChunkFacts._has_live_route`."""
     return status not in TERMINAL_STATUSES
 
 
@@ -127,7 +127,7 @@ class Chunk:
 class RouteCreatedFact:
     """A ``route.created`` fact — the claim.
 
-    ``seq`` is the monotonic route-event tiebreak (see :func:`_has_live_route`): a
+    ``seq`` is the monotonic route-event tiebreak (see :meth:`ChunkFacts._has_live_route`): a
     per-chunk counter shared with :class:`RouteReleasedFact`, in real write order."""
 
     created_at: datetime
@@ -601,128 +601,121 @@ class ChunkFacts:
         transition = self.newest_transition()
         return transition is not None and transition.to_node_executor is Executor.HUB
 
+    def status(self) -> ChunkStatus:
+        """Derive a chunk's single status from its facts, first match wins.
+
+        ``done`` is the **only** terminal (#63) and derives from *reaching* the terminal
+        transition, not from the landed fact — an authored ``merged -> <node>`` edge can
+        land every repo and keep the chunk running in a post-merge node."""
+        if self.stopped:
+            return ChunkStatus.STOPPED
+        if self.newest_transition_is_terminal() or self.pr_closed:
+            # ``pr.closed`` is the open-pr mode's terminal fact (merged or closed unmerged); its
+            # finalize lands the terminal transition too, but the check keeps this legible.
+            return ChunkStatus.DONE
+        if self._has_open_escalation():
+            return ChunkStatus.NEEDS_HUMAN
+        if self._is_waiting_on_human():
+            # An open question or an open decision (gate); the
+            # reap clock is stopped and the answer/resolution flips it back.
+            return ChunkStatus.WAITING_ON_HUMAN
+        if self._is_paused():
+            # Below the human-gated states (a chunk both parked on a question and paused
+            # is still, first, waiting on a human) and above delivering/running (issue #46).
+            return ChunkStatus.PAUSED
+        if self._newest_transition_enters_hub_node():
+            return ChunkStatus.DELIVERING
+        if self._has_live_route():
+            return ChunkStatus.RUNNING
+        if not self.promoted:
+            # An un-promoted chunk rests ``not_ready`` — visible but never claimed. Below every
+            # post-claim state, so only a fresh chunk with no live route lands here.
+            return ChunkStatus.NOT_READY
+        return ChunkStatus.READY
+
+    def completed_at(self) -> datetime | None:
+        """The instant a terminal chunk finished, or ``None`` (issue #173) — render-only,
+        never a status. Mirrors ``status``'s branch order so the two never disagree, taking
+        the **later** of the terminal transition and ``pr_closed_at`` in open-PR mode, where
+        closing every repo's PR can lag the terminal transition."""
+        if self.stopped:
+            return self.stopped_at
+        terminal_transition = self.newest_transition() if self.newest_transition_is_terminal() else None
+        if terminal_transition is None:
+            return self.pr_closed_at if self.pr_closed else None
+        if self.pr_closed_at is not None:
+            return max(terminal_transition.recorded_at, self.pr_closed_at)
+        return terminal_transition.recorded_at
+
+    def open_escalation(self) -> EscalationFact | None:
+        """The newest escalation not yet closed by a later lease mint, or ``None``.
+
+        Requeue/takeover close an escalation by **supersession** — a later lease mint or a
+        later ``requeue.recorded`` fact, never a resolution fact — so an escalation stays
+        open exactly while nothing was recorded after it."""
+        if not self.escalations:
+            return None
+        newest = max(self.escalations, key=lambda e: e.recorded_at)
+        if any(lease.minted_at > newest.recorded_at for lease in self.leases):
+            return None
+        if any(rq.requeued_at > newest.recorded_at for rq in self.requeues):
+            return None
+        return newest
+
+    def open_questions(self) -> list[QuestionFact]:
+        """The chunk's unanswered questions, oldest first.
+
+        A question is open exactly while no ``question.answered`` row exists; an answer
+        flips it out of ``waiting_on_human``, and non-emptiness is the derivation input."""
+        return sorted((q for q in self.questions if not q.answered), key=lambda q: (q.asked_at, q.question_id))
+
+    def open_decision(self) -> DecisionFact | None:
+        """The newest gate decision no resolution has flipped off, or ``None``.
+
+        A decision is open while it carries no resolution row. Once resolved,
+        ``waiting_on_human`` drops away. Pending-ness is derived, never stored."""
+        unresolved = [d for d in self.decisions if not d.resolved]
+        if not unresolved:
+            return None
+        return max(unresolved, key=lambda d: d.submitted_at)
+
+    def has_open_decision(self) -> bool:
+        """True iff a gate's decision is unresolved — no resolution flips it off."""
+        return self.open_decision() is not None
+
+    def open_pause(self) -> PauseFact | None:
+        """The newest pause fact iff it currently reads paused, else ``None`` (issue #46).
+
+        Reads the fact directly rather than the derived status: PAUSED sits below the
+        human-gated states, so a status-keyed reader would miss a chunk that is paused
+        *and* parked on a question."""
+        return self.pauses[-1] if self.pauses and self.pauses[-1].paused else None
+
+    def awaiting_external_merge(self) -> bool:
+        """A ``delivering`` chunk parked on an open PR — ``pr.opened`` without ``pr.closed``.
+
+        Not a distinct status: the chunk still derives ``delivering``. A **detail** that
+        distinguishes an open-pr park from an in-flight merge."""
+        return bool(self.pr_opened) and not self.pr_closed
+
+    def _has_open_escalation(self) -> bool:
+        """An escalation with no later lease mint — supersession, not resolution."""
+        return self.open_escalation() is not None
+
+    def _is_waiting_on_human(self) -> bool:
+        """An open question or an open decision parks the chunk."""
+        return bool(self.open_questions()) or self.has_open_decision()
+
+    def _is_paused(self) -> bool:
+        """Paused derives from the newest pause fact, newest-fact-wins (issue #46)."""
+        return self.open_pause() is not None
+
+    def _has_live_route(self) -> bool:
+        """A ``route.created`` with no later ``route.released``. See :func:`newest_live_route`."""
+        return newest_live_route(self.routes_created, self.routes_released) is not None
+
 
 # --- The derivation queries -----------------------------------------
-
-
-def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
-    """Derive a chunk's single status from its facts, first match wins.
-
-    ``done`` is the **only** terminal (#63) and derives from *reaching* the terminal
-    transition, not from the landed fact — an authored ``merged -> <node>`` edge can
-    land every repo and keep the chunk running in a post-merge node."""
-    if facts.stopped:
-        return ChunkStatus.STOPPED
-    if facts.newest_transition_is_terminal() or facts.pr_closed:
-        # ``pr.closed`` is the open-pr mode's terminal fact (merged or closed unmerged); its
-        # finalize lands the terminal transition too, but the check keeps this legible.
-        return ChunkStatus.DONE
-    if _has_open_escalation(facts):
-        return ChunkStatus.NEEDS_HUMAN
-    if _is_waiting_on_human(facts):
-        # An open question or an open decision (gate); the
-        # reap clock is stopped and the answer/resolution flips it back.
-        return ChunkStatus.WAITING_ON_HUMAN
-    if _is_paused(facts):
-        # Below the human-gated states (a chunk both parked on a question and paused
-        # is still, first, waiting on a human) and above delivering/running (issue #46).
-        return ChunkStatus.PAUSED
-    if facts._newest_transition_enters_hub_node():
-        return ChunkStatus.DELIVERING
-    if _has_live_route(facts):
-        return ChunkStatus.RUNNING
-    if not facts.promoted:
-        # An un-promoted chunk rests ``not_ready`` — visible but never claimed. Below every
-        # post-claim state, so only a fresh chunk with no live route lands here.
-        return ChunkStatus.NOT_READY
-    return ChunkStatus.READY
-
-
-def derive_completed_at(facts: ChunkFacts) -> datetime | None:
-    """The instant a terminal chunk finished, or ``None`` (issue #173) — render-only,
-    never a status. Mirrors :func:`derive_chunk_status`'s branch order so the two never
-    disagree, taking the **later** of the terminal transition and ``pr_closed_at`` in
-    open-PR mode, where closing every repo's PR can lag the terminal transition."""
-    if facts.stopped:
-        return facts.stopped_at
-    terminal_transition = facts.newest_transition() if facts.newest_transition_is_terminal() else None
-    if terminal_transition is None:
-        return facts.pr_closed_at if facts.pr_closed else None
-    if facts.pr_closed_at is not None:
-        return max(terminal_transition.recorded_at, facts.pr_closed_at)
-    return terminal_transition.recorded_at
-
-
-def _has_open_escalation(facts: ChunkFacts) -> bool:
-    """An escalation with no later lease mint — supersession, not resolution."""
-    return open_escalation(facts) is not None
-
-
-def open_escalation(facts: ChunkFacts) -> EscalationFact | None:
-    """The newest escalation not yet closed by a later lease mint, or ``None``.
-
-    Requeue/takeover close an escalation by **supersession** — a later lease mint or a
-    later ``requeue.recorded`` fact, never a resolution fact — so an escalation stays
-    open exactly while nothing was recorded after it."""
-    if not facts.escalations:
-        return None
-    newest = max(facts.escalations, key=lambda e: e.recorded_at)
-    if any(lease.minted_at > newest.recorded_at for lease in facts.leases):
-        return None
-    if any(rq.requeued_at > newest.recorded_at for rq in facts.requeues):
-        return None
-    return newest
-
-
-def _is_waiting_on_human(facts: ChunkFacts) -> bool:
-    """An open question or an open decision parks the chunk."""
-    return bool(open_questions(facts)) or has_open_decision(facts)
-
-
-def _is_paused(facts: ChunkFacts) -> bool:
-    """Paused derives from the newest pause fact, newest-fact-wins (issue #46)."""
-    return open_pause(facts) is not None
-
-
-def open_pause(facts: ChunkFacts) -> PauseFact | None:
-    """The newest pause fact iff it currently reads paused, else ``None`` (issue #46).
-
-    Reads the fact directly rather than the derived status: PAUSED sits below the
-    human-gated states, so a status-keyed reader would miss a chunk that is paused
-    *and* parked on a question."""
-    return facts.pauses[-1] if facts.pauses and facts.pauses[-1].paused else None
-
-
-def open_questions(facts: ChunkFacts) -> list[QuestionFact]:
-    """The chunk's unanswered questions, oldest first.
-
-    A question is open exactly while no ``question.answered`` row exists; an answer
-    flips it out of ``waiting_on_human``, and non-emptiness is the derivation input."""
-    return sorted((q for q in facts.questions if not q.answered), key=lambda q: (q.asked_at, q.question_id))
-
-
-def has_open_decision(facts: ChunkFacts) -> bool:
-    """True iff a gate's decision is unresolved — no resolution flips it off."""
-    return open_decision(facts) is not None
-
-
-def open_decision(facts: ChunkFacts) -> DecisionFact | None:
-    """The newest gate decision no resolution has flipped off, or ``None``.
-
-    A decision is open while it carries no resolution row. Once resolved,
-    ``waiting_on_human`` drops away. Pending-ness is derived, never stored."""
-    unresolved = [d for d in facts.decisions if not d.resolved]
-    if not unresolved:
-        return None
-    return max(unresolved, key=lambda d: d.submitted_at)
-
-
-def awaiting_external_merge(facts: ChunkFacts) -> bool:
-    """A ``delivering`` chunk parked on an open PR — ``pr.opened`` without ``pr.closed``.
-
-    Not a distinct status: the chunk still derives ``delivering``. A **detail** that
-    distinguishes an open-pr park from an in-flight merge."""
-    return bool(facts.pr_opened) and not facts.pr_closed
 
 
 _MARKER_PREFIX = "merged/"
@@ -817,11 +810,6 @@ def newest_live_route(
     return newest_created
 
 
-def _has_live_route(facts: ChunkFacts) -> bool:
-    """A ``route.created`` with no later ``route.released``. See :func:`newest_live_route`."""
-    return newest_live_route(facts.routes_created, facts.routes_released) is not None
-
-
 def newest_live_route_token(
     routes_created: list[RouteCreatedFact],
     routes_released: list[RouteReleasedFact],
@@ -844,7 +832,7 @@ def newest_live_route_token(
 @dataclass(frozen=True)
 class ChunkChange:
     """A ``chunk-changed`` frame's derived content (issue #212) — the current status
-    (derived the same way every status read is, :func:`derive_chunk_status`), the
+    (derived the same way every status read is, :meth:`ChunkFacts.status`), the
     prev/current node names, the graph id, and the caller-supplied prev-status/runner/cause
     passed straight through. :func:`describe_chunk_change` builds one."""
 
@@ -888,7 +876,7 @@ def describe_chunk_change(
         prev_node = from_node.name if from_node is not None else None
 
     return ChunkChange(
-        status=derive_chunk_status(facts).value,
+        status=facts.status().value,
         prev_status=prev_status,
         node=node,
         prev_node=prev_node,
@@ -1134,7 +1122,7 @@ class IReadChunkRepository(Protocol):
 
     def list_open_escalations(self) -> list[EscalationOpen]:
         """Every currently-open escalation, **fleet-wide** — the same supersession rule
-        :func:`open_escalation` applies per-chunk, applied across every chunk at once
+        :meth:`ChunkFacts.open_escalation` applies per-chunk, applied across every chunk at once
         (issue #125). Escalations are low-volume, so this is a full scan."""
         ...
 

@@ -16,7 +16,7 @@ from sqlalchemy import insert
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.work import ChunkStatus, derive_chunk_status
+from blizzard.hub.domain.work import ChunkStatus
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store import ChunkStore
@@ -46,5 +46,5 @@ def test_backfill_keeps_preexisting_chunks_ready(tmp_path: Path) -> None:
     store = ChunkStore(engine, FixedClock(_T0))
     facts = store.load_facts("ch_legacy")
     assert facts is not None and facts.promoted is True
-    assert derive_chunk_status(facts) is ChunkStatus.READY  # unaffected — still claimable
+    assert facts.status() is ChunkStatus.READY  # unaffected — still claimable
     assert [c.chunk_id for c in store.list_ready()] == ["ch_legacy"]

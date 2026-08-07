@@ -8,7 +8,7 @@ live. Terminal and one-way: an already done or stopped chunk is refused."""
 from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.work import Chunk, ChunkFacts, ChunkStatus, IWriteChunkRepository, derive_chunk_status
+from blizzard.hub.domain.work import Chunk, ChunkFacts, ChunkStatus, IWriteChunkRepository
 
 _REFUSED = frozenset({ChunkStatus.DONE, ChunkStatus.STOPPED})
 
@@ -40,6 +40,6 @@ class StopService:
 
     def _require_stoppable(self, chunk_id: str) -> None:
         facts = self._chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-        status = derive_chunk_status(facts)
+        status = facts.status()
         if status in _REFUSED:
             raise ChunkNotStoppable(chunk_id, status)

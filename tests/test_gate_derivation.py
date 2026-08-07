@@ -22,9 +22,6 @@ from blizzard.hub.domain.work import (
     RouteCreatedFact,
     RouteReleasedFact,
     TransitionFact,
-    derive_chunk_status,
-    open_decision,
-    open_escalation,
 )
 
 pytestmark = pytest.mark.unit
@@ -52,8 +49,8 @@ def test_open_decision_parks_waiting_on_human() -> None:
         routes_created=[RouteCreatedFact(created_at=_at(0))],
         decisions=[DecisionFact(decision_id="dec_1", submitted_at=_at(1), resolved=False)],
     )
-    assert open_decision(facts) is not None
-    assert derive_chunk_status(facts) is ChunkStatus.WAITING_ON_HUMAN
+    assert facts.open_decision() is not None
+    assert facts.status() is ChunkStatus.WAITING_ON_HUMAN
 
 
 def test_resolved_decision_no_longer_waits() -> None:
@@ -65,8 +62,8 @@ def test_resolved_decision_no_longer_waits() -> None:
         routes_created=[RouteCreatedFact(created_at=_at(0))],
         decisions=[DecisionFact(decision_id="dec_1", submitted_at=_at(1), resolved=True)],
     )
-    assert open_decision(facts) is None
-    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+    assert facts.open_decision() is None
+    assert facts.status() is ChunkStatus.RUNNING
 
 
 def test_needs_human_outranks_waiting_on_human() -> None:
@@ -78,7 +75,7 @@ def test_needs_human_outranks_waiting_on_human() -> None:
         escalations=[EscalationFact(epoch=1, recorded_at=_at(2))],
         decisions=[DecisionFact(decision_id="dec_1", submitted_at=_at(1), resolved=False)],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.NEEDS_HUMAN
+    assert facts.status() is ChunkStatus.NEEDS_HUMAN
 
 
 def test_gate_decision_derives_over_a_delivering_transition_is_not_possible() -> None:
@@ -93,7 +90,7 @@ def test_gate_decision_derives_over_a_delivering_transition_is_not_possible() ->
         ],
         decisions=[DecisionFact(decision_id="dec_1", submitted_at=_at(1), resolved=False)],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.WAITING_ON_HUMAN
+    assert facts.status() is ChunkStatus.WAITING_ON_HUMAN
 
 
 def test_requeue_supersedes_an_open_escalation() -> None:
@@ -103,8 +100,8 @@ def test_requeue_supersedes_an_open_escalation() -> None:
         routes_created=[RouteCreatedFact(created_at=_at(0))],
         escalations=[EscalationFact(epoch=1, recorded_at=_at(2))],
     )
-    assert derive_chunk_status(escalated) is ChunkStatus.NEEDS_HUMAN
-    assert open_escalation(escalated) is not None
+    assert escalated.status() is ChunkStatus.NEEDS_HUMAN
+    assert escalated.open_escalation() is not None
 
     # A later requeue fact closes the escalation by supersession (never a resolution)
     # and releases the route, so the chunk re-derives ready for a fresh FILL.
@@ -117,8 +114,8 @@ def test_requeue_supersedes_an_open_escalation() -> None:
         escalations=[EscalationFact(epoch=1, recorded_at=_at(2))],
         requeues=[RequeueFact(requeued_at=_at(3))],
     )
-    assert open_escalation(requeued) is None
-    assert derive_chunk_status(requeued) is ChunkStatus.READY
+    assert requeued.open_escalation() is None
+    assert requeued.status() is ChunkStatus.READY
 
 
 def test_requeue_before_escalation_does_not_supersede() -> None:
@@ -129,10 +126,10 @@ def test_requeue_before_escalation_does_not_supersede() -> None:
         escalations=[EscalationFact(epoch=1, recorded_at=_at(3))],
         requeues=[RequeueFact(requeued_at=_at(1))],
     )
-    assert open_escalation(facts) is not None
-    assert derive_chunk_status(facts) is ChunkStatus.NEEDS_HUMAN
+    assert facts.open_escalation() is not None
+    assert facts.status() is ChunkStatus.NEEDS_HUMAN
 
 
 def test_running_base_has_no_gate() -> None:
-    assert open_decision(_running_facts()) is None
-    assert derive_chunk_status(_running_facts()) is ChunkStatus.RUNNING
+    assert _running_facts().open_decision() is None
+    assert _running_facts().status() is ChunkStatus.RUNNING

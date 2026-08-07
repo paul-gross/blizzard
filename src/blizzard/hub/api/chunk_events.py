@@ -8,7 +8,7 @@ so every emit site enriches the frame the same way.
 from __future__ import annotations
 
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.work import ChunkFacts, derive_chunk_status, describe_chunk_change
+from blizzard.hub.domain.work import ChunkFacts, describe_chunk_change
 from blizzard.hub.events.broker import ChunkChangeCause
 
 
@@ -17,7 +17,7 @@ def snapshot_chunk_status(services: HubServices, chunk_id: str) -> str | None:
     facts = services.chunks.load_facts(chunk_id)
     if facts is None:
         return None
-    return derive_chunk_status(facts).value
+    return facts.status().value
 
 
 def publish_chunk_changed(
@@ -35,7 +35,7 @@ def publish_chunk_changed(
     ``f"transitions:{transition_id}"``, matching :class:`~blizzard.hub.domain.work.ActivityRow`'s key
     format — or ``None``. Degrades to a bare ``{chunk_id, status}`` frame rather than raising."""
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    resolved_status = status if status is not None else derive_chunk_status(facts).value
+    resolved_status = status if status is not None else facts.status().value
     chunk = services.chunks.get(chunk_id)
     graph = services.graphs.get(chunk.graph_id) if chunk is not None else None
     if chunk is None or graph is None:

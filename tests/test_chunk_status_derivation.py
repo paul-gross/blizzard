@@ -26,15 +26,10 @@ from blizzard.hub.domain.work import (
     RouteReleasedFact,
     RouteTokenMintedFact,
     TransitionFact,
-    awaiting_external_merge,
     bounce_count,
     bounces_over_cap,
-    derive_chunk_status,
-    derive_completed_at,
     has_landed_repos,
     newest_live_route_token,
-    open_pause,
-    open_questions,
 )
 
 pytestmark = pytest.mark.unit
@@ -49,19 +44,19 @@ def _at(seconds: int) -> datetime:
 def test_minted_with_no_facts_is_not_ready() -> None:
     # Ingest mints a chunk in the not-ready resting state: visible, never claimed
     # until promoted. Un-promoted with no other facts falls through to not_ready.
-    assert derive_chunk_status(ChunkFacts(minted=True)) is ChunkStatus.NOT_READY
+    assert ChunkFacts(minted=True).status() is ChunkStatus.NOT_READY
 
 
 def test_promoted_chunk_with_no_route_is_ready() -> None:
     # The ``chunk.promoted`` fact flips the resting state to ready — now claimable.
-    assert derive_chunk_status(ChunkFacts(minted=True, promoted=True)) is ChunkStatus.READY
+    assert ChunkFacts(minted=True, promoted=True).status() is ChunkStatus.READY
 
 
 def test_live_route_wins_over_not_ready() -> None:
     # A live route derives running even without promotion: the route check sits above the
     # not_ready fall-through, so a claimed chunk always reads its post-claim state.
     facts = ChunkFacts(minted=True, routes_created=[RouteCreatedFact(created_at=_at(1))])
-    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+    assert facts.status() is ChunkStatus.RUNNING
 
 
 def test_released_route_on_promoted_chunk_re_derives_ready() -> None:
@@ -71,7 +66,7 @@ def test_released_route_on_promoted_chunk_re_derives_ready() -> None:
         routes_created=[RouteCreatedFact(created_at=_at(1))],
         routes_released=[RouteReleasedFact(released_at=_at(2))],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.READY
+    assert facts.status() is ChunkStatus.READY
 
 
 def _detached_route(**extra: object) -> ChunkFacts:
@@ -88,26 +83,26 @@ def _detached_route(**extra: object) -> ChunkFacts:
 
 
 def test_detached_route_with_no_other_facts_re_derives_ready() -> None:
-    assert derive_chunk_status(_detached_route()) is ChunkStatus.READY
+    assert _detached_route().status() is ChunkStatus.READY
 
 
 def test_detached_route_with_an_open_escalation_still_derives_needs_human() -> None:
     # Detach releases the route only; it does not supersede the escalation (that is
     # requeue's job), so a detached, still-escalated chunk stays needs_human.
     facts = _detached_route(escalations=[EscalationFact(epoch=1, recorded_at=_at(3))])
-    assert derive_chunk_status(facts) is ChunkStatus.NEEDS_HUMAN
+    assert facts.status() is ChunkStatus.NEEDS_HUMAN
 
 
 def test_detached_route_with_an_open_question_still_derives_waiting_on_human() -> None:
     # Same shape, an open ask instead of an escalation — explicit acceptance criterion
     # of the detach issue: the ask/answer park survives a detach.
     facts = _detached_route(questions=[QuestionFact(question_id="qn_1", asked_at=_at(3), answered=False)])
-    assert derive_chunk_status(facts) is ChunkStatus.WAITING_ON_HUMAN
+    assert facts.status() is ChunkStatus.WAITING_ON_HUMAN
 
 
 def test_stopped_wins_over_not_ready() -> None:
     # An operator can abandon a chunk before promoting it — stopped still wins.
-    assert derive_chunk_status(ChunkFacts(minted=True, stopped=True)) is ChunkStatus.STOPPED
+    assert ChunkFacts(minted=True, stopped=True).status() is ChunkStatus.STOPPED
 
 
 def test_reclaimed_after_release_is_running_again() -> None:
@@ -116,7 +111,7 @@ def test_reclaimed_after_release_is_running_again() -> None:
         routes_created=[RouteCreatedFact(created_at=_at(1)), RouteCreatedFact(created_at=_at(3))],
         routes_released=[RouteReleasedFact(released_at=_at(2))],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+    assert facts.status() is ChunkStatus.RUNNING
 
 
 def test_same_instant_detach_takes_effect() -> None:
@@ -129,7 +124,7 @@ def test_same_instant_detach_takes_effect() -> None:
         routes_created=[RouteCreatedFact(created_at=_at(1), seq=1)],
         routes_released=[RouteReleasedFact(released_at=_at(1), seq=2)],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.READY
+    assert facts.status() is ChunkStatus.READY
 
 
 def test_same_instant_reclaim_still_derives_running() -> None:
@@ -140,7 +135,7 @@ def test_same_instant_reclaim_still_derives_running() -> None:
         routes_created=[RouteCreatedFact(created_at=_at(1), seq=1), RouteCreatedFact(created_at=_at(2), seq=3)],
         routes_released=[RouteReleasedFact(released_at=_at(2), seq=2)],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+    assert facts.status() is ChunkStatus.RUNNING
 
 
 # Route capability token derivation (issue #84a) — newest-fact-wins, as above.
@@ -211,7 +206,7 @@ def test_newest_transition_into_hub_node_is_delivering() -> None:
             TransitionFact(to_node_id="nd_deliver", to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(5)),
         ],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.DELIVERING
+    assert facts.status() is ChunkStatus.DELIVERING
 
 
 def test_runner_node_transition_stays_running_not_delivering() -> None:
@@ -222,7 +217,7 @@ def test_runner_node_transition_stays_running_not_delivering() -> None:
             TransitionFact(to_node_id="nd_build", to_node_executor=Executor.RUNNER, epoch=1, recorded_at=_at(5)),
         ],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+    assert facts.status() is ChunkStatus.RUNNING
 
 
 def test_delivery_landed_is_done_over_a_live_route() -> None:
@@ -236,7 +231,7 @@ def test_delivery_landed_is_done_over_a_live_route() -> None:
             TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=2, recorded_at=_at(5)),
         ],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.DONE
+    assert facts.status() is ChunkStatus.DONE
 
 
 def test_delivery_landed_without_reaching_terminal_is_not_done() -> None:
@@ -247,7 +242,7 @@ def test_delivery_landed_without_reaching_terminal_is_not_done() -> None:
         delivery_landed=True,
         routes_created=[RouteCreatedFact(created_at=_at(1))],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+    assert facts.status() is ChunkStatus.RUNNING
 
 
 def test_merged_but_running_derives_running_not_done() -> None:
@@ -261,7 +256,7 @@ def test_merged_but_running_derives_running_not_done() -> None:
             TransitionFact(to_node_id="nd_postmerge", to_node_executor=Executor.RUNNER, epoch=2, recorded_at=_at(5)),
         ],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+    assert facts.status() is ChunkStatus.RUNNING
     assert has_landed_repos(facts) is True
 
 
@@ -277,7 +272,7 @@ def test_merged_but_escalated_derives_needs_human_with_landed_detail() -> None:
         ],
         escalations=[EscalationFact(epoch=2, recorded_at=_at(6))],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.NEEDS_HUMAN
+    assert facts.status() is ChunkStatus.NEEDS_HUMAN
     assert has_landed_repos(facts) is True
 
 
@@ -305,21 +300,21 @@ def test_open_pr_park_is_delivering_awaiting_external_merge() -> None:
     facts = _parked_on_open_pr()
     # Still ``delivering`` (the newest transition entered the deliver hub node), with the
     # awaiting-external-merge detail set — not a distinct status.
-    assert derive_chunk_status(facts) is ChunkStatus.DELIVERING
-    assert awaiting_external_merge(facts) is True
+    assert facts.status() is ChunkStatus.DELIVERING
+    assert facts.awaiting_external_merge() is True
 
 
 def test_pr_closed_is_done() -> None:
     # The terminal ``pr.closed`` fact flips the chunk to done, the open-pr counterpart of
     # ``delivery.landed``, and clears the awaiting-external-merge detail.
     facts = _parked_on_open_pr(pr_closed=True)
-    assert derive_chunk_status(facts) is ChunkStatus.DONE
-    assert awaiting_external_merge(facts) is False
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.awaiting_external_merge() is False
 
 
 def test_stopped_wins_over_everything() -> None:
     facts = ChunkFacts(minted=True, stopped=True, delivery_landed=True)
-    assert derive_chunk_status(facts) is ChunkStatus.STOPPED
+    assert facts.status() is ChunkStatus.STOPPED
 
 
 def test_open_escalation_is_needs_human() -> None:
@@ -328,7 +323,7 @@ def test_open_escalation_is_needs_human() -> None:
         routes_created=[RouteCreatedFact(created_at=_at(1))],
         escalations=[EscalationFact(epoch=1, recorded_at=_at(4))],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.NEEDS_HUMAN
+    assert facts.status() is ChunkStatus.NEEDS_HUMAN
 
 
 def test_escalation_closed_by_later_lease_is_no_longer_needs_human() -> None:
@@ -338,7 +333,7 @@ def test_escalation_closed_by_later_lease_is_no_longer_needs_human() -> None:
         escalations=[EscalationFact(epoch=1, recorded_at=_at(4))],
         leases=[LeaseFact(epoch=2, minted_at=_at(6))],  # requeue + re-lease supersedes
     )
-    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+    assert facts.status() is ChunkStatus.RUNNING
 
 
 def test_open_question_is_waiting_on_human_over_a_live_route() -> None:
@@ -349,8 +344,8 @@ def test_open_question_is_waiting_on_human_over_a_live_route() -> None:
         routes_created=[RouteCreatedFact(created_at=_at(1))],
         questions=[QuestionFact(question_id="qn_1", asked_at=_at(3), answered=False)],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.WAITING_ON_HUMAN
-    assert [q.question_id for q in open_questions(facts)] == ["qn_1"]
+    assert facts.status() is ChunkStatus.WAITING_ON_HUMAN
+    assert [q.question_id for q in facts.open_questions()] == ["qn_1"]
 
 
 def test_answered_question_flips_back_to_running() -> None:
@@ -360,8 +355,8 @@ def test_answered_question_flips_back_to_running() -> None:
         routes_created=[RouteCreatedFact(created_at=_at(1))],
         questions=[QuestionFact(question_id="qn_1", asked_at=_at(3), answered=True)],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
-    assert open_questions(facts) == []
+    assert facts.status() is ChunkStatus.RUNNING
+    assert facts.open_questions() == []
 
 
 def test_open_decision_is_waiting_on_human() -> None:
@@ -371,7 +366,7 @@ def test_open_decision_is_waiting_on_human() -> None:
         routes_created=[RouteCreatedFact(created_at=_at(1))],
         decisions=[DecisionFact(decision_id="dec_1", submitted_at=_at(3), resolved=False)],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.WAITING_ON_HUMAN
+    assert facts.status() is ChunkStatus.WAITING_ON_HUMAN
 
 
 def test_resolved_decision_no_longer_waits() -> None:
@@ -380,7 +375,7 @@ def test_resolved_decision_no_longer_waits() -> None:
         routes_created=[RouteCreatedFact(created_at=_at(1))],
         decisions=[DecisionFact(decision_id="dec_1", submitted_at=_at(3), resolved=True)],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+    assert facts.status() is ChunkStatus.RUNNING
 
 
 def test_needs_human_wins_over_an_open_question() -> None:
@@ -391,7 +386,7 @@ def test_needs_human_wins_over_an_open_question() -> None:
         escalations=[EscalationFact(epoch=1, recorded_at=_at(4))],
         questions=[QuestionFact(question_id="qn_1", asked_at=_at(5), answered=False)],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.NEEDS_HUMAN
+    assert facts.status() is ChunkStatus.NEEDS_HUMAN
 
 
 def test_open_question_wins_over_a_hub_node_transition() -> None:
@@ -404,7 +399,7 @@ def test_open_question_wins_over_a_hub_node_transition() -> None:
         ],
         questions=[QuestionFact(question_id="qn_1", asked_at=_at(6), answered=False)],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.WAITING_ON_HUMAN
+    assert facts.status() is ChunkStatus.WAITING_ON_HUMAN
 
 
 def test_current_node_and_latest_epoch_derive_from_facts() -> None:
@@ -438,7 +433,7 @@ def test_paused_wins_over_delivering() -> None:
         ],
         pauses=[PauseFact(paused=True, set_at=_at(6), set_by="operator")],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.PAUSED
+    assert facts.status() is ChunkStatus.PAUSED
 
 
 def test_paused_wins_over_running() -> None:
@@ -447,17 +442,17 @@ def test_paused_wins_over_running() -> None:
         routes_created=[RouteCreatedFact(created_at=_at(1))],
         pauses=[PauseFact(paused=True, set_at=_at(2), set_by="operator")],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.PAUSED
+    assert facts.status() is ChunkStatus.PAUSED
 
 
 def test_paused_wins_over_not_ready() -> None:
     facts = ChunkFacts(minted=True, pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")])
-    assert derive_chunk_status(facts) is ChunkStatus.PAUSED
+    assert facts.status() is ChunkStatus.PAUSED
 
 
 def test_paused_wins_over_ready() -> None:
     facts = ChunkFacts(minted=True, promoted=True, pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")])
-    assert derive_chunk_status(facts) is ChunkStatus.PAUSED
+    assert facts.status() is ChunkStatus.PAUSED
 
 
 def test_waiting_on_human_wins_over_paused() -> None:
@@ -469,7 +464,7 @@ def test_waiting_on_human_wins_over_paused() -> None:
         questions=[QuestionFact(question_id="qn_1", asked_at=_at(2), answered=False)],
         pauses=[PauseFact(paused=True, set_at=_at(3), set_by="operator")],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.WAITING_ON_HUMAN
+    assert facts.status() is ChunkStatus.WAITING_ON_HUMAN
 
 
 def test_needs_human_wins_over_paused() -> None:
@@ -479,7 +474,7 @@ def test_needs_human_wins_over_paused() -> None:
         escalations=[EscalationFact(epoch=1, recorded_at=_at(2))],
         pauses=[PauseFact(paused=True, set_at=_at(3), set_by="operator")],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.NEEDS_HUMAN
+    assert facts.status() is ChunkStatus.NEEDS_HUMAN
 
 
 def test_done_wins_over_paused() -> None:
@@ -491,12 +486,12 @@ def test_done_wins_over_paused() -> None:
         ],
         pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.DONE
+    assert facts.status() is ChunkStatus.DONE
 
 
 def test_stopped_wins_over_paused() -> None:
     facts = ChunkFacts(minted=True, stopped=True, pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")])
-    assert derive_chunk_status(facts) is ChunkStatus.STOPPED
+    assert facts.status() is ChunkStatus.STOPPED
 
 
 def test_resumed_chunk_no_longer_paused() -> None:
@@ -509,7 +504,7 @@ def test_resumed_chunk_no_longer_paused() -> None:
             PauseFact(paused=False, set_at=_at(2), set_by="operator"),
         ],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.READY
+    assert facts.status() is ChunkStatus.READY
 
 
 def test_re_pause_after_resume_derives_paused_again() -> None:
@@ -523,7 +518,7 @@ def test_re_pause_after_resume_derives_paused_again() -> None:
             PauseFact(paused=True, set_at=_at(3), set_by="operator"),
         ],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.PAUSED
+    assert facts.status() is ChunkStatus.PAUSED
 
 
 # `open_pause` is the wire's sole pause source (issue #46 §4) and must never be
@@ -545,8 +540,8 @@ def test_open_pause_survives_a_status_that_hides_the_pause() -> None:
 
     If it ever regresses, a paused chunk parked on a question reads as un-paused."""
     facts = _paused_and_asking()
-    assert derive_chunk_status(facts) is ChunkStatus.WAITING_ON_HUMAN  # the status hides it...
-    pause = open_pause(facts)
+    assert facts.status() is ChunkStatus.WAITING_ON_HUMAN  # the status hides it...
+    pause = facts.open_pause()
     assert pause is not None, "a status-keyed open_pause would return None here — the P4 trap"
     assert pause.set_by == "alice"
     assert pause.set_at == _at(3)
@@ -559,12 +554,12 @@ def test_open_pause_survives_needs_human_too() -> None:
         escalations=[EscalationFact(epoch=1, recorded_at=_at(2))],
         pauses=[PauseFact(paused=True, set_at=_at(3), set_by="operator")],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.NEEDS_HUMAN
-    assert open_pause(facts) is not None
+    assert facts.status() is ChunkStatus.NEEDS_HUMAN
+    assert facts.open_pause() is not None
 
 
 def test_open_pause_is_none_without_any_pause_fact() -> None:
-    assert open_pause(ChunkFacts(minted=True, promoted=True)) is None
+    assert ChunkFacts(minted=True, promoted=True).open_pause() is None
 
 
 def test_open_pause_is_none_after_a_resume() -> None:
@@ -578,7 +573,7 @@ def test_open_pause_is_none_after_a_resume() -> None:
             PauseFact(paused=False, set_at=_at(2), set_by="operator"),
         ],
     )
-    assert open_pause(facts) is None
+    assert facts.open_pause() is None
 
 
 def test_open_pause_returns_the_newest_pause_after_a_re_pause() -> None:
@@ -593,7 +588,7 @@ def test_open_pause_returns_the_newest_pause_after_a_re_pause() -> None:
             PauseFact(paused=True, set_at=_at(3), set_by="bob"),
         ],
     )
-    pause = open_pause(facts)
+    pause = facts.open_pause()
     assert pause is not None
     assert pause.set_by == "bob"
     assert pause.set_at == _at(3)
@@ -638,7 +633,7 @@ def test_bounce_is_informational_never_a_status() -> None:
         ],
         bounces=[_bounce(n, at=_at(n)) for n in range(5)],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+    assert facts.status() is ChunkStatus.RUNNING
     assert bounce_count(facts) == 5
 
 
@@ -653,8 +648,8 @@ def test_open_pause_reads_the_fact_on_a_done_chunk() -> None:
         ],
         pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.DONE
-    assert open_pause(facts) is not None
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.open_pause() is not None
 
 
 # derive_completed_at (issue #173) — mirrors derive_chunk_status's branch order.
@@ -662,16 +657,16 @@ def test_open_pause_reads_the_fact_on_a_done_chunk() -> None:
 
 
 def test_completed_at_is_none_for_every_non_terminal_status() -> None:
-    assert derive_completed_at(ChunkFacts(minted=True)) is None
+    assert ChunkFacts(minted=True).completed_at() is None
     facts = ChunkFacts(minted=True, routes_created=[RouteCreatedFact(created_at=_at(1))])
-    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
-    assert derive_completed_at(facts) is None
+    assert facts.status() is ChunkStatus.RUNNING
+    assert facts.completed_at() is None
 
 
 def test_completed_at_is_the_stop_instant_for_stopped() -> None:
     facts = ChunkFacts(minted=True, stopped=True, stopped_at=_at(9))
-    assert derive_chunk_status(facts) is ChunkStatus.STOPPED
-    assert derive_completed_at(facts) == _at(9)
+    assert facts.status() is ChunkStatus.STOPPED
+    assert facts.completed_at() == _at(9)
 
 
 def test_completed_at_is_the_terminal_transitions_instant_for_done() -> None:
@@ -681,16 +676,16 @@ def test_completed_at_is_the_terminal_transitions_instant_for_done() -> None:
             TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(5)),
         ],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.DONE
-    assert derive_completed_at(facts) == _at(5)
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.completed_at() == _at(5)
 
 
 def test_completed_at_in_open_pr_mode_with_no_terminal_transition_is_the_newest_pr_closed() -> None:
     # Open-pr mode's own terminal fact, standing alone (no terminal transition at all —
     # the deliver hub node's own transition targets the hub node itself, never `done`).
     facts = _parked_on_open_pr(pr_closed=True, pr_closed_at=_at(6))
-    assert derive_chunk_status(facts) is ChunkStatus.DONE
-    assert derive_completed_at(facts) == _at(6)
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.completed_at() == _at(6)
 
 
 def test_completed_at_in_open_pr_mode_takes_the_later_of_transition_and_pr_closed() -> None:
@@ -704,8 +699,8 @@ def test_completed_at_in_open_pr_mode_takes_the_later_of_transition_and_pr_close
         pr_closed=True,
         pr_closed_at=_at(9),
     )
-    assert derive_chunk_status(facts) is ChunkStatus.DONE
-    assert derive_completed_at(facts) == _at(9)
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.completed_at() == _at(9)
 
 
 def test_completed_at_in_open_pr_mode_keeps_the_transition_instant_when_it_is_later() -> None:
@@ -717,8 +712,8 @@ def test_completed_at_in_open_pr_mode_keeps_the_transition_instant_when_it_is_la
         pr_closed=True,
         pr_closed_at=_at(5),
     )
-    assert derive_chunk_status(facts) is ChunkStatus.DONE
-    assert derive_completed_at(facts) == _at(9)
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.completed_at() == _at(9)
 
 
 def test_completed_at_is_none_for_a_chunk_that_migrated_after_reaching_terminal() -> None:
@@ -749,5 +744,5 @@ def test_completed_at_is_none_for_a_chunk_that_migrated_after_reaching_terminal(
             ),
         ],
     )
-    assert derive_chunk_status(facts) is not ChunkStatus.DONE
-    assert derive_completed_at(facts) is None
+    assert facts.status() is not ChunkStatus.DONE
+    assert facts.completed_at() is None
