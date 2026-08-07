@@ -13,7 +13,7 @@ import pytest
 from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
-import blizzard.runner.api.work_items as work_items_route
+import blizzard.runner.api.hub_proxy as hub_proxy
 from blizzard.runner.app import create_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
@@ -66,11 +66,13 @@ def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path, monkeypatch: pytest.
     point untouched, with no proxy-side code change."""
     seen: list[str] = []
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float, **_: object) -> _FakeHubResponse:
+    def fake_request(
+        method: str, url: str, *, headers: dict[str, str], timeout: float, **_: object
+    ) -> _FakeHubResponse:
         seen.append(url)
         return _FakeHubResponse(200, _ITEMS)
 
-    monkeypatch.setattr(work_items_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 200, resp.text
@@ -87,11 +89,13 @@ def test_the_deprecated_pm_items_alias_serves_the_same_view(tmp_path: Path, monk
     the newer half of any skew it is party to, so it never proxies the old path onward."""
     seen: list[str] = []
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float, **_: object) -> _FakeHubResponse:
+    def fake_request(
+        method: str, url: str, *, headers: dict[str, str], timeout: float, **_: object
+    ) -> _FakeHubResponse:
         seen.append(url)
         return _FakeHubResponse(200, _ITEMS)
 
-    monkeypatch.setattr(work_items_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     client = _runner_app(tmp_path)
     canonical = client.get(f"/api/chunks/{_CHUNK}/work-items")
     alias = client.get(f"/api/chunks/{_CHUNK}/pm-items")
@@ -108,11 +112,13 @@ def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(
     """The forward carries the same bearer credential as the loop's own hub client (issue #86b)."""
     seen_headers: list[dict[str, str]] = []
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float, **_: object) -> _FakeHubResponse:
+    def fake_request(
+        method: str, url: str, *, headers: dict[str, str], timeout: float, **_: object
+    ) -> _FakeHubResponse:
         seen_headers.append(dict(headers))
         return _FakeHubResponse(200, _ITEMS)
 
-    monkeypatch.setattr(work_items_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL, hub_token="proxy-token")
     resp = TestClient(create_app(config)).get(f"/api/chunks/{_CHUNK}/work-items")
 
@@ -127,11 +133,13 @@ def test_proxy_sends_no_authorization_header_when_no_token_is_configured(
     """No ``hub_token`` (unenrolled runner) is a valid, warn-mode-only state: no header at all."""
     seen_headers: list[dict[str, str]] = []
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float, **_: object) -> _FakeHubResponse:
+    def fake_request(
+        method: str, url: str, *, headers: dict[str, str], timeout: float, **_: object
+    ) -> _FakeHubResponse:
         seen_headers.append(dict(headers))
         return _FakeHubResponse(200, _ITEMS)
 
-    monkeypatch.setattr(work_items_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 200, resp.text
@@ -161,10 +169,12 @@ def test_proxy_carries_a_degraded_entry_through_rather_than_500ing(
         ]
     }
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float, **_: object) -> _FakeHubResponse:
+    def fake_request(
+        method: str, url: str, *, headers: dict[str, str], timeout: float, **_: object
+    ) -> _FakeHubResponse:
         return _FakeHubResponse(200, degraded)
 
-    monkeypatch.setattr(work_items_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 200, resp.text
@@ -177,10 +187,12 @@ def test_proxy_carries_a_degraded_entry_through_rather_than_500ing(
 def test_proxy_passes_through_the_hub_status(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A hub 404 (unknown chunk / no pointer) surfaces as a 404 with the hub's detail."""
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float, **_: object) -> _FakeHubResponse:
+    def fake_request(
+        method: str, url: str, *, headers: dict[str, str], timeout: float, **_: object
+    ) -> _FakeHubResponse:
         return _FakeHubResponse(404, {"detail": "unknown chunk ch_pass"})
 
-    monkeypatch.setattr(work_items_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 404
@@ -191,10 +203,12 @@ def test_proxy_passes_through_the_hub_status(tmp_path: Path, monkeypatch: pytest
 def test_proxy_502_when_the_hub_is_unreachable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A transport failure to the hub is a 502 — never a pretend answer."""
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float, **_: object) -> _FakeHubResponse:
+    def fake_request(
+        method: str, url: str, *, headers: dict[str, str], timeout: float, **_: object
+    ) -> _FakeHubResponse:
         raise httpx.ConnectError("connection refused")
 
-    monkeypatch.setattr(work_items_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 502

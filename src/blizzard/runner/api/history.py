@@ -7,19 +7,13 @@ forward; authorization resolves before the hub is consulted."""
 
 from __future__ import annotations
 
-import httpx
-from fastapi import APIRouter, Request, status
-from fastapi.exceptions import HTTPException
+from fastapi import APIRouter, Request
 
-from blizzard.foundation.logging import get_logger
-from blizzard.runner.api.lease_scope import authorized_lease, upstream_detail
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.api.hub_proxy import HubProxy
+from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.wire.history import ChunkHistoryView, HistoryRowView, history_rows
 
 router = APIRouter(prefix="/api", tags=["runner"])
-
-_log = get_logger("blizzard.runner.api.history")
-_HUB_TIMEOUT = 15.0
 
 
 @router.get("/leases/{lease_id}/history", response_model=list[HistoryRowView])
@@ -30,19 +24,5 @@ def get_history(lease_id: str, request: Request) -> list[HistoryRowView]:
     attempt completes, so a worker must not read its own current step's absence as a
     gap in the history."""
     lease = authorized_lease(lease_id, request)
-    config: RunnerConfig | None = getattr(request.app.state, "config", None)
-    if config is None or not config.hub_url:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="runner not wired to a hub — start via `blizzard runner host`",
-        )
-    url = f"{config.hub_url.rstrip('/')}/api/fleet/chunks/{lease.chunk_id}"
-    try:
-        upstream = httpx.get(url, headers=config.auth_headers(), timeout=_HUB_TIMEOUT)
-    except httpx.HTTPError as exc:
-        _log.error("history proxy could not reach the hub", chunk_id=lease.chunk_id, error=str(exc))
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"hub unreachable: {exc}") from exc
-    if upstream.status_code != status.HTTP_200_OK:
-        raise HTTPException(status_code=upstream.status_code, detail=upstream_detail(upstream))
-    detail = ChunkHistoryView.model_validate(upstream.json())
-    return history_rows(detail)
+    upstream = HubProxy.of(request, "history").get(f"/api/fleet/chunks/{lease.chunk_id}", chunk_id=lease.chunk_id)
+    return history_rows(ChunkHistoryView.model_validate(upstream.json()))

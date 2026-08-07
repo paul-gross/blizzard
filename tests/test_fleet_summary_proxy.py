@@ -12,7 +12,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-import blizzard.runner.api.fleet_summary as fleet_summary_route
+import blizzard.runner.api.hub_proxy as hub_proxy
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 
@@ -44,11 +44,11 @@ def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path, monkeypatch: pytest.
     """The route forwards to the hub's fleet-summary route and returns the counts verbatim."""
     seen: list[str] = []
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
         seen.append(url)
         return _FakeHubResponse(200, _COUNTS)
 
-    monkeypatch.setattr(fleet_summary_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     resp = _runner_app(tmp_path).get("/api/fleet-summary")
 
     assert resp.status_code == 200, resp.text
@@ -63,11 +63,11 @@ def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(
     """The forward carries the same bearer credential as the loop's own hub client."""
     seen_headers: list[dict[str, str]] = []
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
         seen_headers.append(dict(headers))
         return _FakeHubResponse(200, _COUNTS)
 
-    monkeypatch.setattr(fleet_summary_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     resp = _runner_app(tmp_path, hub_token="proxy-token").get("/api/fleet-summary")
 
     assert resp.status_code == 200, resp.text
@@ -81,11 +81,11 @@ def test_proxy_sends_no_authorization_header_when_no_token_is_configured(
     """No ``hub_token`` (unenrolled runner) is a valid warn-mode state: no header at all."""
     seen_headers: list[dict[str, str]] = []
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
         seen_headers.append(dict(headers))
         return _FakeHubResponse(200, _COUNTS)
 
-    monkeypatch.setattr(fleet_summary_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     resp = _runner_app(tmp_path).get("/api/fleet-summary")
 
     assert resp.status_code == 200, resp.text
@@ -96,10 +96,10 @@ def test_proxy_sends_no_authorization_header_when_no_token_is_configured(
 def test_proxy_passes_through_the_hub_status(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A hub 5xx surfaces with the hub's own status — a distinct error, not empty counts."""
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
         return _FakeHubResponse(500, {"detail": "hub store error"})
 
-    monkeypatch.setattr(fleet_summary_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     resp = _runner_app(tmp_path).get("/api/fleet-summary")
 
     assert resp.status_code == 500
@@ -110,10 +110,10 @@ def test_proxy_passes_through_the_hub_status(tmp_path: Path, monkeypatch: pytest
 def test_proxy_502_when_the_hub_is_unreachable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A transport failure to the hub is a 502 — never a pretend answer of empty counts."""
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
         raise httpx.ConnectError("connection refused")
 
-    monkeypatch.setattr(fleet_summary_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     resp = _runner_app(tmp_path).get("/api/fleet-summary")
 
     assert resp.status_code == 502
@@ -125,12 +125,12 @@ def test_proxy_503_when_the_runner_is_not_wired_to_a_hub(tmp_path: Path, monkeyp
     """No ``hub_url`` (never enrolled) 503s before any outbound call."""
     attempted = False
 
-    def fake_get(*args: object, **kwargs: object) -> _FakeHubResponse:
+    def fake_request(*args: object, **kwargs: object) -> _FakeHubResponse:
         nonlocal attempted
         attempted = True
         return _FakeHubResponse(200, _COUNTS)
 
-    monkeypatch.setattr(fleet_summary_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     resp = _runner_app(tmp_path, hub_url=None).get("/api/fleet-summary")
 
     assert resp.status_code == 503

@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-import blizzard.runner.api.history as history_route
+import blizzard.runner.api.hub_proxy as hub_proxy
 from blizzard.hub.domain.enrollment import hash_token
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
@@ -219,12 +219,12 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
 
 
 def _stub_hub(monkeypatch: pytest.MonkeyPatch, response: _FakeHubResponse, seen: list[str] | None = None) -> None:
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
         if seen is not None:
             seen.append(url)
         return response
 
-    monkeypatch.setattr(history_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
 
 
 @pytest.mark.component
@@ -311,11 +311,11 @@ def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path, m
     _seed_lease(store)
     seen_headers: list[dict[str, str]] = []
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
         seen_headers.append(dict(headers))
         return _FakeHubResponse(200, _DETAIL)
 
-    monkeypatch.setattr(history_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     with TestClient(create_app(config, runner_store=store)) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
@@ -329,10 +329,10 @@ def test_502_when_the_hub_is_unreachable(tmp_path: Path, monkeypatch: pytest.Mon
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
         raise httpx.ConnectError("refused")
 
-    monkeypatch.setattr(history_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 502
@@ -437,10 +437,10 @@ def test_a_workers_history_read_matches_the_transitions_the_hub_recorded(
     assert len(hub_detail["history"]) == 4
     assert hub_detail["artifacts"] == []  # the review-fail attempt produced no artifact anywhere
 
-    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> object:
+    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> object:
         return hub.client.get(url.replace(_HUB_URL, ""))
 
-    monkeypatch.setattr(history_route.httpx, "get", fake_get)
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
     runner_store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     runner_store.record_lease(
         NewLease(

@@ -1,13 +1,7 @@
-"""Shared lease-scoped authorization plus hub-response detail-unwrapping (``canon:one-owner``).
-
-``authorized_lease`` resolves ``lease_id`` to its active lease and checks the presented token, or raises
-the store-free ``503`` / unknown-lease ``404`` / bad-token ``403`` — resolved before any hub call, so an
-unauthorized caller never learns the fleet's hub-wiring state. ``upstream_detail`` unwraps an upstream
-JSON error body, falling back to raw text, so a forwarded non-200 keeps its own message."""
+"""Shared lease-scoped authorization for the worker-facing routes."""
 
 from __future__ import annotations
 
-import httpx
 from fastapi import Request, status
 from fastapi.exceptions import HTTPException
 
@@ -17,8 +11,9 @@ from blizzard.runner.store.repository import IReadRunnerStore, LeaseRecord
 
 
 def authorized_lease(lease_id: str, request: Request) -> LeaseRecord:
-    """Resolve ``lease_id`` to its active lease and check the presented token, or raise
-    the store-free ``503`` / unknown-lease ``404`` / bad-token ``403``."""
+    """Resolve ``lease_id`` to its active lease and check the presented token, or raise the
+    store-free ``503`` / unknown-lease ``404`` / bad-token ``403`` — before any hub call, so an
+    unauthorized caller never learns the fleet's hub-wiring state."""
     store: IReadRunnerStore | None = getattr(request.app.state, "runner_store", None)
     if store is None:
         raise HTTPException(
@@ -35,14 +30,3 @@ def authorized_lease(lease_id: str, request: Request) -> LeaseRecord:
             status_code=status.HTTP_403_FORBIDDEN, detail=f"presented token does not authorize lease {lease_id}"
         )
     return lease
-
-
-def upstream_detail(response: httpx.Response) -> str:
-    """The hub's error detail, unwrapped from its JSON body when present."""
-    try:
-        payload = response.json()
-    except ValueError:
-        return response.text
-    if isinstance(payload, dict) and "detail" in payload:
-        return str(payload["detail"])
-    return response.text

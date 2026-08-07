@@ -7,38 +7,20 @@ persisted or cached, and authorization resolves before the hub is consulted."""
 
 from __future__ import annotations
 
-import httpx
 from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
-from blizzard.foundation.logging import get_logger
-from blizzard.runner.api.lease_scope import authorized_lease, upstream_detail
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.api.hub_proxy import HubProxy
+from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.wire.envelope import EnvelopeArtifact, NodeEnvelope
 
 router = APIRouter(prefix="/api", tags=["runner"])
-
-_log = get_logger("blizzard.runner.api.artifacts")
-_HUB_TIMEOUT = 15.0
 
 
 def _envelope_artifacts(chunk_id: str, request: Request) -> list[EnvelopeArtifact]:
     """Forward the chunk's envelope read to the hub and return its artifacts — the
     layered pass-through, runner principal, worker-credential-free."""
-    config: RunnerConfig | None = getattr(request.app.state, "config", None)
-    if config is None or not config.hub_url:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="runner not wired to a hub — start via `blizzard runner host`",
-        )
-    url = f"{config.hub_url.rstrip('/')}/api/fleet/chunks/{chunk_id}/envelope"
-    try:
-        upstream = httpx.get(url, headers=config.auth_headers(), timeout=_HUB_TIMEOUT)
-    except httpx.HTTPError as exc:
-        _log.error("artifacts proxy could not reach the hub", chunk_id=chunk_id, error=str(exc))
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"hub unreachable: {exc}") from exc
-    if upstream.status_code != status.HTTP_200_OK:
-        raise HTTPException(status_code=upstream.status_code, detail=upstream_detail(upstream))
+    upstream = HubProxy.of(request, "artifacts").get(f"/api/fleet/chunks/{chunk_id}/envelope", chunk_id=chunk_id)
     return NodeEnvelope.model_validate(upstream.json()).artifacts
 
 
