@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -25,25 +24,16 @@ from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.hub import cli_login, session_store
 from blizzard.hub.api.marker_auth import _MARKER_TOKEN_HEADER
 from blizzard.hub.app import build_hosted_app
+from blizzard.hub.cli_context import CLIENT_TIMEOUT, DEFAULT_HUB_URL, ENV_HUB_URL, CliContext
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.delivery.hub_node import ENV_MARKER_CALLBACK_URL, ENV_MARKER_TOKEN
 from blizzard.hub.graphs import inline_graph_yaml
 from blizzard.hub.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 
-# The hub the client verbs talk to: ``BZ_HUB_URL`` overrides the
-# colocated default (band +2). Client verbs are pure API clients.
-ENV_HUB_URL = "BZ_HUB_URL"
-DEFAULT_HUB_URL = "http://127.0.0.1:8421"
-_CLIENT_TIMEOUT = 15.0
-
 # The runtime root the dir-taking verbs resolve, highest to lowest: explicit ``--dir``,
 # then ``BZ_HUB_DIR``, then the cwd. Selectable, not shareable: the store is single-writer.
 ENV_HUB_DIR = "BZ_HUB_DIR"
 DEFAULT_DIR = "."
-
-
-def _hub_url(override: str | None) -> str:
-    return override or os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL)
 
 
 def _hub_url_options(f: Callable[..., object]) -> Callable[..., object]:
@@ -60,92 +50,6 @@ def _json_option(f: Callable[..., object]) -> Callable[..., object]:
     return click.option("--json", "as_json", is_flag=True, default=False, help="Print the raw response body as JSON.")(
         f
     )
-
-
-def _api_error(operation: str, exc: Exception) -> click.ClickException:
-    return click.ClickException(f"{operation} failed: {exc}")
-
-
-def _bearer_headers(resolved_hub_url: str) -> dict[str, str]:
-    """The ``Authorization: Bearer <session-token>`` header for ``resolved_hub_url``
-    (issue #96), read from the local session store — empty when no session is stored
-    for this hub (an ``auth.mode=none`` hub, or one never logged into), so every verb
-    keeps working with no login."""
-    token = session_store.load_session(resolved_hub_url)
-    return {"Authorization": f"Bearer {token}"} if token else {}
-
-
-def _request(
-    method: str,
-    path: str,
-    *,
-    hub_url: str | None,
-    json_body: object | None = None,
-    params: dict[str, str] | None = None,
-) -> httpx.Response:
-    """The one seam every operator verb's HTTP call goes through (issue #104).
-
-    Dispatches to ``httpx``'s module-level verb function so a test's
-    ``monkeypatch.setattr`` still intercepts it, wraps a transport failure in a
-    ``ClickException``, and attaches the stored session token (issue #96) when set."""
-    resolved = _hub_url(hub_url)
-    full_url = f"{resolved.rstrip('/')}{path}"
-    call = getattr(httpx, method)
-    kwargs: dict[str, object] = {"timeout": _CLIENT_TIMEOUT}
-    if json_body is not None:
-        kwargs["json"] = json_body
-    if params is not None:
-        kwargs["params"] = params
-    headers = _bearer_headers(resolved)
-    if headers:
-        kwargs["headers"] = headers
-    try:
-        return call(full_url, **kwargs)
-    except httpx.HTTPError as exc:
-        raise _api_error(f"{method.upper()} {path}", exc) from exc
-
-
-def _detail(resp: httpx.Response, fallback: str) -> str:
-    """The server's own ``detail`` from a JSON error body, falling back when the body
-    is absent, non-JSON, or carries no ``detail`` key."""
-    try:
-        body = resp.json()
-    except ValueError:
-        return fallback
-    if isinstance(body, dict):
-        detail = body.get("detail")
-        if isinstance(detail, str):
-            return detail
-    return fallback
-
-
-#: The actionable hint every verb's own 401 maps to (issue #96), unless the caller named
-#: its own 401 entry in ``on_status``.
-_LOGIN_HINT = "not authenticated — run `blizzard hub login`"
-
-
-def _check(resp: httpx.Response, operation: str, *, on_status: dict[int, str] | None = None) -> None:
-    """Map a handful of status codes to a ``ClickException`` reading the body's own
-    ``detail`` (falling back to the per-code default named in ``on_status``); anything
-    else still errors via ``raise_for_status``. A bare 401 not named in ``on_status``
-    gets the actionable login hint (issue #96)."""
-    if on_status and resp.status_code in on_status:
-        raise click.ClickException(_detail(resp, on_status[resp.status_code]))
-    if resp.status_code == httpx.codes.UNAUTHORIZED:
-        raise click.ClickException(_LOGIN_HINT)
-    try:
-        resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise _api_error(operation, exc) from exc
-
-
-def _finish(resp: httpx.Response, as_json: bool, message: str) -> None:
-    """Echo a write verb's result: the raw body under ``--json``, else a static
-    success line that never has to parse the body at all."""
-    if as_json:
-        click.echo(json.dumps(resp.json()))
-        return
-    click.echo(message)
 
 
 # The since-the-beginning-of-time cutoff `hub status` passes ``GET /api/spend``
@@ -271,26 +175,20 @@ def status(as_json: bool, hub_url: str | None) -> None:
 
     A pure client of the hub API: ``GET /chunks`` + ``GET /runners`` +
     ``GET /questions`` + ``GET /spend`` (issue #60), in the terminal."""
-    base = hub_url
-    chunks = _request("get", "/api/chunks", hub_url=base)
-    _check(chunks, "GET /chunks")
-    runners = _request("get", "/api/runners", hub_url=base)
-    _check(runners, "GET /runners")
-    questions = _request("get", "/api/questions", hub_url=base)
-    _check(questions, "GET /questions")
-    spend = _request("get", "/api/spend", hub_url=base, params={"since": _FLEET_SPEND_SINCE})
-    _check(spend, "GET /spend")
+    cli = CliContext.of(hub_url, as_json)
+    chunks = cli.get("/api/chunks", "GET /chunks")
+    runners = cli.get("/api/runners", "GET /runners")
+    questions = cli.get("/api/questions", "GET /questions")
+    spend = cli.get("/api/spend", "GET /spend", params={"since": _FLEET_SPEND_SINCE})
 
     if as_json:
-        click.echo(
-            json.dumps(
-                {
-                    "chunks": chunks.json(),
-                    "runners": runners.json(),
-                    "questions": questions.json(),
-                    "spend": spend.json(),
-                }
-            )
+        cli.echo_json(
+            {
+                "chunks": chunks.json(),
+                "runners": runners.json(),
+                "questions": questions.json(),
+                "spend": spend.json(),
+            }
         )
         return
 
@@ -360,7 +258,7 @@ def record_marker(name: str, content: str) -> None:
             callback_url,
             json={"name": name, "content": content},
             headers={_MARKER_TOKEN_HEADER: marker_token},
-            timeout=_CLIENT_TIMEOUT,
+            timeout=CLIENT_TIMEOUT,
         )
         resp.raise_for_status()
     except httpx.HTTPError as exc:
@@ -375,8 +273,12 @@ def rotate_signing_key(hub_url: str | None) -> None:
     demoting the old current to previous; no restart. A no-op error under ``auth.mode = "none"``
     (no keypair exists). Human-plane, gated on ``user:manage`` — under ``auth.mode =
     "oauth"`` this requires a hub session (``blizzard hub login``, issue #96)."""
-    resp = _request("post", "/api/auth/rotate-signing-key", hub_url=hub_url, json_body=None)
-    _check(resp, "POST /auth/rotate-signing-key", on_status={404: "the IdP surface is not enabled (auth.mode=none)"})
+    cli = CliContext.of(hub_url)
+    cli.post(
+        "/api/auth/rotate-signing-key",
+        "POST /auth/rotate-signing-key",
+        on_status={404: "the IdP surface is not enabled (auth.mode=none)"},
+    )
     click.echo("signing key rotated")
 
 
@@ -398,16 +300,16 @@ def login(hub_url: str | None, paste: bool, no_browser: bool) -> None:
     resulting session token locally. The CLI never contacts a provider directly.
     ``--paste`` uses the paste-code fallback for a shell with no reachable loopback
     listener; ``--no-browser`` still runs the loopback flow, printing the URL."""
-    base = _hub_url(hub_url)
+    cli = CliContext.of(hub_url)
     try:
         if paste:
-            token = cli_login.paste_code_login(base, prompt_for_code=lambda: click.prompt("Paste the code"))
+            token = cli_login.paste_code_login(cli.hub_url, prompt_for_code=lambda: click.prompt("Paste the code"))
         else:
-            token = cli_login.loopback_login(base, open_browser=not no_browser)
+            token = cli_login.loopback_login(cli.hub_url, open_browser=not no_browser)
     except cli_login.LoginError as exc:
         raise click.ClickException(f"login failed: {exc}") from exc
-    session_store.save_session(base, token)
-    click.echo(f"logged in to {base}")
+    session_store.save_session(cli.hub_url, token)
+    click.echo(f"logged in to {cli.hub_url}")
 
 
 @hub.command()
@@ -417,11 +319,11 @@ def logout(hub_url: str | None) -> None:
     revokes it at the hub, so it stops resolving even if it leaked. A no-op (locally)
     if never logged in; the revoke call is best-effort (a hub already unreachable, or
     an already-expired session, does not block the local cleanup)."""
-    base = _hub_url(hub_url)
+    cli = CliContext.of(hub_url)
     with contextlib.suppress(click.ClickException):
-        _request("post", "/api/auth/logout", hub_url=base, json_body=None)
-    session_store.delete_session(base)
-    click.echo(f"logged out of {base}")
+        cli.send("post", "/api/auth/logout")
+    session_store.delete_session(cli.hub_url)
+    click.echo(f"logged out of {cli.hub_url}")
 
 
 # `blizzard hub chunk` — issue #104
@@ -437,12 +339,11 @@ def chunk_group() -> None:
 @_hub_url_options
 def chunk_list(as_json: bool, hub_url: str | None) -> None:
     """The fleet chunk list — derived status per chunk."""
-    base = hub_url
-    resp = _request("get", "/api/chunks", hub_url=base)
-    _check(resp, "GET /chunks")
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.get("/api/chunks", "GET /chunks")
     rows = resp.json()
     if as_json:
-        click.echo(json.dumps(rows))
+        cli.echo_json(rows)
         return
     if not rows:
         click.echo("no chunks")
@@ -460,12 +361,11 @@ def chunk_list(as_json: bool, hub_url: str | None) -> None:
 @_hub_url_options
 def chunk_show(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
     """One chunk's full aggregate — status, current node, route, pointers, cost."""
-    base = hub_url
-    resp = _request("get", f"/api/chunks/{chunk_id}", hub_url=base)
-    _check(resp, "GET /chunks/{id}", on_status={404: f"unknown chunk {chunk_id}"})
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.get(f"/api/chunks/{chunk_id}", "GET /chunks/{id}", on_status={404: f"unknown chunk {chunk_id}"})
     detail = resp.json()
     if as_json:
-        click.echo(json.dumps(detail))
+        cli.echo_json(detail)
         return
     click.echo(
         f"{detail['chunk_id']}  status={detail['status']}  graph={detail.get('graph_name') or detail['graph_id']}"
@@ -497,19 +397,19 @@ def chunk_ingest(pointers: tuple[str, ...], as_json: bool, hub_url: str | None) 
     Each POINTER is a source-native token — ``source:ref``, ``source#ref``, or a pasted
     work item URL; a batch mints one chunk carrying every pointer. 422 when no
     configured work source claims a token; 409 when a pointer is already held."""
-    base = hub_url
+    cli = CliContext.of(hub_url, as_json)
     tokens = [_parse_pointer(p) for p in pointers]
-    resp = _request("post", "/api/chunks", hub_url=base, json_body={"tokens": tokens})
+    resp = cli.send("post", "/api/chunks", json_body={"tokens": tokens})
     if resp.status_code == httpx.codes.CONFLICT:
         conflict = resp.json()
         raise click.ClickException(
             f"pointer {conflict.get('source')}#{conflict.get('ref')} already held by "
             f"chunk {conflict.get('existing_chunk_id')}"
         )
-    _check(resp, "POST /chunks", on_status={422: "at least one token required"})
+    cli.check(resp, "POST /chunks", on_status={422: "at least one token required"})
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     click.echo(f"ingested {len(tokens)} pointer(s) → chunk {body['chunk_id']}")
 
@@ -550,7 +450,7 @@ def chunk_set(
     CHUNK is claimed, and for ``--graph`` once it is claimed or has moved (#271)."""
     if graph_id is None and not default_model and default_effort is None:
         raise click.UsageError("at least one of --graph/--default-model/--default-effort is required")
-    base = hub_url
+    cli = CliContext.of(hub_url, as_json)
     body: dict[str, object] = {}
     if graph_id is not None:
         body["graph_id"] = graph_id
@@ -558,15 +458,15 @@ def chunk_set(
         body["default_model"] = list(default_model)
     if default_effort is not None:
         body["default_effort"] = default_effort
-    resp = _request("patch", f"/api/chunks/{chunk_id}", hub_url=base, json_body=body)
-    _check(
-        resp,
+    resp = cli.patch(
+        f"/api/chunks/{chunk_id}",
         "PATCH /chunks/{id}",
+        json_body=body,
         on_status={404: f"unknown chunk {chunk_id}", 409: "chunk is not editable", 422: "invalid request"},
     )
     view = resp.json()
     if as_json:
-        click.echo(json.dumps(view))
+        cli.echo_json(view)
         return
     parts = []
     if graph_id is not None:
@@ -587,10 +487,11 @@ def chunk_promote(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
 
     A pure client of the hub API: ``POST /api/chunks/{id}/promote``. Idempotent — promoting
     an already-ready chunk is a harmless no-op; 404 only when the chunk is unknown."""
-    base = hub_url
-    resp = _request("post", f"/api/chunks/{chunk_id}/promote", hub_url=base)
-    _check(resp, "POST /chunks/{id}/promote", on_status={404: f"no such chunk {chunk_id}"})
-    _finish(resp, as_json, f"promoted {chunk_id} — now ready for a runner to claim")
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.post(
+        f"/api/chunks/{chunk_id}/promote", "POST /chunks/{id}/promote", on_status={404: f"no such chunk {chunk_id}"}
+    )
+    cli.finish(resp, f"promoted {chunk_id} — now ready for a runner to claim")
 
 
 @chunk_group.command("pause")
@@ -604,10 +505,14 @@ def chunk_pause(chunk_id: str, by: str, as_json: bool, hub_url: str | None) -> N
     A pure client of the hub API: ``POST /api/chunks/{id}/pause``. Unlike ``detach``, no
     route is released and no retry is consumed. 409 when the chunk is done/stopped/
     delivering."""
-    base = hub_url
-    resp = _request("post", f"/api/chunks/{chunk_id}/pause", hub_url=base, json_body={"by": by})
-    _check(resp, "POST /chunks/{id}/pause", on_status={409: "chunk is not pausable", 404: f"no such chunk {chunk_id}"})
-    _finish(resp, as_json, f"paused {chunk_id} — its worker will be killed and parked, keeping the claim")
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.post(
+        f"/api/chunks/{chunk_id}/pause",
+        "POST /chunks/{id}/pause",
+        json_body={"by": by},
+        on_status={409: "chunk is not pausable", 404: f"no such chunk {chunk_id}"},
+    )
+    cli.finish(resp, f"paused {chunk_id} — its worker will be killed and parked, keeping the claim")
 
 
 @chunk_group.command("resume")
@@ -620,10 +525,14 @@ def chunk_resume(chunk_id: str, by: str, as_json: bool, hub_url: str | None) -> 
 
     A pure client of the hub API: ``POST /api/chunks/{id}/resume``. Idempotent: resuming
     an unpaused chunk is a harmless no-op. 404 only when the chunk is unknown."""
-    base = hub_url
-    resp = _request("post", f"/api/chunks/{chunk_id}/resume", hub_url=base, json_body={"by": by})
-    _check(resp, "POST /chunks/{id}/resume", on_status={404: f"no such chunk {chunk_id}"})
-    _finish(resp, as_json, f"resumed {chunk_id} — its worker resumes in place")
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.post(
+        f"/api/chunks/{chunk_id}/resume",
+        "POST /chunks/{id}/resume",
+        json_body={"by": by},
+        on_status={404: f"no such chunk {chunk_id}"},
+    )
+    cli.finish(resp, f"resumed {chunk_id} — its worker resumes in place")
 
 
 @chunk_group.command("detach")
@@ -636,12 +545,13 @@ def chunk_detach(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
     A pure client of the hub API: ``POST /api/chunks/{id}/detach``. The chunk re-derives
     ready and is re-claimable at its current node; the holding runner releases it on its
     next tick. 409 when the chunk has no live route to release."""
-    base = hub_url
-    resp = _request("post", f"/api/chunks/{chunk_id}/detach", hub_url=base)
-    _check(
-        resp, "POST /chunks/{id}/detach", on_status={409: "chunk has no live route", 404: f"no such chunk {chunk_id}"}
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.post(
+        f"/api/chunks/{chunk_id}/detach",
+        "POST /chunks/{id}/detach",
+        on_status={409: "chunk has no live route", 404: f"no such chunk {chunk_id}"},
     )
-    _finish(resp, as_json, f"detached {chunk_id} — released from its runner, re-claimable at its current node")
+    cli.finish(resp, f"detached {chunk_id} — released from its runner, re-claimable at its current node")
 
 
 @chunk_group.command("requeue")
@@ -650,14 +560,13 @@ def chunk_detach(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
 @_hub_url_options
 def chunk_requeue(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
     """Close an escalation by supersession: requeue CHUNK at its current node."""
-    base = hub_url
-    resp = _request("post", f"/api/chunks/{chunk_id}/requeues", hub_url=base)
-    _check(
-        resp,
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.post(
+        f"/api/chunks/{chunk_id}/requeues",
         "POST /chunks/{id}/requeues",
         on_status={409: "chunk is not escalated", 404: f"no such chunk {chunk_id}"},
     )
-    _finish(resp, as_json, f"requeued {chunk_id} — re-leasable at its current node")
+    cli.finish(resp, f"requeued {chunk_id} — re-leasable at its current node")
 
 
 @chunk_group.command("stop")
@@ -671,10 +580,14 @@ def chunk_stop(chunk_id: str, by: str, as_json: bool, hub_url: str | None) -> No
     A pure client of ``POST /api/chunks/{id}/stop``. The chunk derives ``stopped`` and
     never re-derives ``ready``; any live route is released in the same operation. 409
     when the chunk is already done/stopped. There is no ``un-stop``."""
-    base = hub_url
-    resp = _request("post", f"/api/chunks/{chunk_id}/stop", hub_url=base, json_body={"by": by})
-    _check(resp, "POST /chunks/{id}/stop", on_status={409: "chunk is not stoppable", 404: f"no such chunk {chunk_id}"})
-    _finish(resp, as_json, f"stopped {chunk_id} — terminally abandoned, its route (if any) released")
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.post(
+        f"/api/chunks/{chunk_id}/stop",
+        "POST /chunks/{id}/stop",
+        json_body={"by": by},
+        on_status={409: "chunk is not stoppable", 404: f"no such chunk {chunk_id}"},
+    )
+    cli.finish(resp, f"stopped {chunk_id} — terminally abandoned, its route (if any) released")
 
 
 @chunk_group.command("migrate")
@@ -715,11 +628,11 @@ def chunk_migrate(
             intended["node"] = node
         body = {"intended_migration": intended}
 
-    base = hub_url
-    resp = _request("patch", f"/api/chunks/{chunk_id}", hub_url=base, json_body=body)
-    _check(
-        resp,
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.patch(
+        f"/api/chunks/{chunk_id}",
         "PATCH /chunks/{id}",
+        json_body=body,
         on_status={
             404: f"unknown chunk {chunk_id}",
             409: "chunk is not editable",
@@ -729,7 +642,7 @@ def chunk_migrate(
 
     view = resp.json()
     if as_json:
-        click.echo(json.dumps(view))
+        cli.echo_json(view)
         return
     if cancel:
         click.echo(f"cleared {chunk_id}'s standing migration intent")
@@ -757,18 +670,16 @@ def chunk_group_cmd(chunk_id: str, merge_ids: tuple[str, ...], as_json: bool, hu
     A pure client of ``POST /api/chunks/{id}/group``: the survivor and every merge id
     must currently be **unacquired** — ``not_ready`` or ``ready``, in any mix (409
     otherwise). The survivor absorbs the union of work refs and keeps its own status."""
-    base = hub_url
-    resp = _request(
-        "post", f"/api/chunks/{chunk_id}/group", hub_url=base, json_body={"merge_chunk_ids": list(merge_ids)}
-    )
-    _check(
-        resp,
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.post(
+        f"/api/chunks/{chunk_id}/group",
         "POST /chunks/{id}/group",
+        json_body={"merge_chunk_ids": list(merge_ids)},
         on_status={404: f"unknown chunk {chunk_id}", 409: "one of the named chunks is not unacquired"},
     )
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     merged = ", ".join(body.get("merged_chunk_ids", [])) or "none"
     click.echo(f"grouped into {body['chunk_id']} (merged: {merged})")
@@ -783,12 +694,15 @@ def chunk_work_items(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
 
     A pure client of ``GET /api/chunks/{id}/work-items``; a per-pointer forge failure
     degrades to that entry's own ``error`` rather than failing the whole read."""
-    base = hub_url
-    resp = _request("get", f"/api/chunks/{chunk_id}/work-items", hub_url=base)
-    _check(resp, "GET /chunks/{id}/work-items", on_status={404: f"unknown chunk {chunk_id}"})
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.get(
+        f"/api/chunks/{chunk_id}/work-items",
+        "GET /chunks/{id}/work-items",
+        on_status={404: f"unknown chunk {chunk_id}"},
+    )
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     items = body.get("items", [])
     if not items:
@@ -832,12 +746,11 @@ def runner_group() -> None:
 @_hub_url_options
 def runner_list(as_json: bool, hub_url: str | None) -> None:
     """The fleet registry — every runner with derived liveness + paused state."""
-    base = hub_url
-    resp = _request("get", "/api/runners", hub_url=base)
-    _check(resp, "GET /runners")
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.get("/api/runners", "GET /runners")
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     fleet = body.get("runners", [])
     if not fleet:
@@ -861,12 +774,11 @@ def runner_list(as_json: bool, hub_url: str | None) -> None:
 @_hub_url_options
 def runner_show(runner_id: str, as_json: bool, hub_url: str | None) -> None:
     """One runner's derived liveness + paused state, symmetric with ``runner list``."""
-    base = hub_url
-    resp = _request("get", f"/api/runners/{runner_id}", hub_url=base)
-    _check(resp, "GET /runners/{id}", on_status={404: f"unknown runner {runner_id}"})
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.get(f"/api/runners/{runner_id}", "GET /runners/{id}", on_status={404: f"unknown runner {runner_id}"})
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     liveness = "online" if body.get("online") else "offline"
     click.echo(f"{body['runner_id']}  {liveness}  ws={body.get('workspace_id', '-')}")
@@ -894,11 +806,16 @@ def runner_resume(runner_id: str, by: str, as_json: bool, hub_url: str | None) -
 
 
 def _set_runner_pause(runner_id: str, *, verb: str, by: str, hub_url: str | None, as_json: bool) -> None:
-    resp = _request("post", f"/api/runners/{runner_id}/{verb}", hub_url=hub_url, json_body={"by": by})
-    _check(resp, f"POST /runners/{{id}}/{verb}", on_status={404: f"unknown runner {runner_id}"})
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.post(
+        f"/api/runners/{runner_id}/{verb}",
+        f"POST /runners/{{id}}/{verb}",
+        json_body={"by": by},
+        on_status={404: f"unknown runner {runner_id}"},
+    )
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     state = "paused" if body.get("hub_paused") else "running"
     click.echo(f"runner {runner_id} is now {state} (at the hub)")
@@ -917,12 +834,15 @@ def runner_enroll(runner_id: str, as_json: bool, hub_url: str | None) -> None:
     A thin client of ``POST /runners/{id}/enrollments`` (issue #86a). Re-running
     rotates: the old token stops resolving immediately. RUNNER_ID must already be
     registered at the hub (404 otherwise)."""
-    base = hub_url
-    resp = _request("post", f"/api/runners/{runner_id}/enrollments", hub_url=base)
-    _check(resp, "POST /runners/{id}/enrollments", on_status={404: f"unknown runner {runner_id}"})
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.post(
+        f"/api/runners/{runner_id}/enrollments",
+        "POST /runners/{id}/enrollments",
+        on_status={404: f"unknown runner {runner_id}"},
+    )
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     click.echo(f"enrolled {runner_id} — bearer token (copy now, shown only once):\n{body['token']}")
 
@@ -940,12 +860,11 @@ def graph_group() -> None:
 @_hub_url_options
 def graph_list(as_json: bool, hub_url: str | None) -> None:
     """List every minted graph, newest first — name, graph_id, effective, retired."""
-    base = hub_url
-    resp = _request("get", "/api/graphs", hub_url=base)
-    _check(resp, "GET /graphs")
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.get("/api/graphs", "GET /graphs")
     rows = resp.json()
     if as_json:
-        click.echo(json.dumps(rows))
+        cli.echo_json(rows)
         return
     if not rows:
         click.echo("no graphs minted yet")
@@ -961,12 +880,11 @@ def graph_list(as_json: bool, hub_url: str | None) -> None:
 @_hub_url_options
 def graph_show(graph_id: str, as_json: bool, hub_url: str | None) -> None:
     """One graph's full reified definition — nodes and edges."""
-    base = hub_url
-    resp = _request("get", f"/api/graphs/{graph_id}", hub_url=base)
-    _check(resp, "GET /graphs/{id}", on_status={404: f"unknown graph {graph_id}"})
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.get(f"/api/graphs/{graph_id}", "GET /graphs/{id}", on_status={404: f"unknown graph {graph_id}"})
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     marker = "retired" if body.get("retired") else "enabled"
     click.echo(f"{body['graph_id']}  name={body['name']}  {marker}  entry={body.get('entry_node_id')}")
@@ -986,7 +904,7 @@ def graph_mint(path: str, as_json: bool, hub_url: str | None) -> None:
     A file PATH inlines ``prompt``/``prompt_addendum`` file references relative to its
     own directory first (issue #123); stdin carries no such directory, so its YAML
     posts verbatim. Renders the full validation report on a 422 (issue #104)."""
-    base = hub_url
+    cli = CliContext.of(hub_url, as_json)
     if path == "-":
         definition_yaml = click.get_text_stream("stdin").read()
     else:
@@ -995,16 +913,16 @@ def graph_mint(path: str, as_json: bool, hub_url: str | None) -> None:
         except (yaml.YAMLError, OSError, ValueError) as exc:
             raise click.ClickException(f"failed to load {path}: {exc}") from exc
 
-    resp = _request("post", "/api/graphs", hub_url=base, json_body={"definition_yaml": definition_yaml})
+    resp = cli.send("post", "/api/graphs", json_body={"definition_yaml": definition_yaml})
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
         report = resp.json()
         lines = [f"error: {e}" for e in report.get("errors", [])]
         lines += [f"warning: {w}" for w in report.get("warnings", [])]
         raise click.ClickException("graph definition invalid:\n" + "\n".join(lines))
-    _check(resp, "POST /graphs")
+    cli.check(resp, "POST /graphs")
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     click.echo(f"minted graph {body['graph_id']}")
     for warning in body.get("warnings", []):
@@ -1020,11 +938,11 @@ def graph_sync(as_json: bool, hub_url: str | None) -> None:
     The deploy verb (issue #146) — graphs live in the store, not on disk, so run it at
     the end of every deploy; it is idempotent. The **hub's own** packaged set is what is
     reconciled, not this CLI's. Exits non-zero only if a packaged graph failed to load."""
-    resp = _request("post", "/api/graphs/sync", hub_url=hub_url, json_body={})
-    _check(resp, "POST /graphs/sync")
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.post("/api/graphs/sync", "POST /graphs/sync", json_body={})
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
     else:
         for entry in body.get("entries", []):
             detail = f" — {entry['detail']}" if entry.get("detail") else ""
@@ -1068,17 +986,17 @@ def graph_follow_latest(graph_id: str, value: str, by: str, as_json: bool, hub_u
     With the policy on, a chunk pinned to this mint re-pins to the newest enabled mint
     of the same *name* at its next transition. ``inherit`` (the stored ``null``, and
     every mint's default) defers to the hub's own ``follow_latest``."""
+    cli = CliContext.of(hub_url, as_json)
     follow_latest = None if value == "inherit" else value == "true"
-    resp = _request(
-        "post",
+    resp = cli.post(
         f"/api/graphs/{graph_id}/follow-latest",
-        hub_url=hub_url,
+        "POST /graphs/{id}/follow-latest",
         json_body={"follow_latest": follow_latest, "by": by},
+        on_status={404: f"unknown graph {graph_id}"},
     )
-    _check(resp, "POST /graphs/{id}/follow-latest", on_status={404: f"unknown graph {graph_id}"})
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     stored = body.get("follow_latest")
     rendered = "inherit (the hub default)" if stored is None else str(stored).lower()
@@ -1086,11 +1004,16 @@ def graph_follow_latest(graph_id: str, value: str, by: str, as_json: bool, hub_u
 
 
 def _set_graph_lifecycle(graph_id: str, *, verb: str, by: str, hub_url: str | None, as_json: bool) -> None:
-    resp = _request("post", f"/api/graphs/{graph_id}/{verb}", hub_url=hub_url, json_body={"by": by})
-    _check(resp, f"POST /graphs/{{id}}/{verb}", on_status={404: f"unknown graph {graph_id}"})
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.post(
+        f"/api/graphs/{graph_id}/{verb}",
+        f"POST /graphs/{{id}}/{verb}",
+        json_body={"by": by},
+        on_status={404: f"unknown graph {graph_id}"},
+    )
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     state = "retired" if body.get("retired") else "enabled"
     click.echo(f"graph {graph_id} is now {state}")
@@ -1109,12 +1032,11 @@ def queue_group() -> None:
 @_hub_url_options
 def queue_show(as_json: bool, hub_url: str | None) -> None:
     """The hub-ordered ready queue, read-only — a client of ``GET /api/queue``."""
-    base = hub_url
-    resp = _request("get", "/api/queue", hub_url=base)
-    _check(resp, "GET /queue")
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.get("/api/queue", "GET /queue")
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     entries = body.get("entries", [])
     if not entries:
@@ -1134,16 +1056,16 @@ def queue_set(chunk_ids: tuple[str, ...], as_json: bool, hub_url: str | None) ->
     A pure client of ``PUT /api/queue`` — an idempotent whole-order replacement
     (issue #104). Every id must be a ready chunk (409) and must not repeat (422); a
     ready chunk not named keeps its relative order, appended after the named ones."""
-    base = hub_url
-    resp = _request("put", "/api/queue", hub_url=base, json_body={"chunk_ids": list(chunk_ids)})
-    _check(
-        resp,
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.put(
+        "/api/queue",
         "PUT /queue",
+        json_body={"chunk_ids": list(chunk_ids)},
         on_status={409: "one of the named chunks is not a ready chunk", 422: "chunk_ids must not repeat"},
     )
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     click.echo(f"queue order set ({len(body.get('entries', []))} ready chunk(s))")
 
@@ -1159,19 +1081,20 @@ def queue_move(chunk_id: str, position: int, as_json: bool, hub_url: str | None)
     A client of the single-chunk fractional ``POST /api/queue/position`` (issue #137):
     reads the current order, drops CHUNK_ID out of it, clamps POSITION into what's left,
     and sends one anchor. 409 when CHUNK_ID is not a ready chunk."""
-    base = hub_url
-    peek = _request("get", "/api/queue", hub_url=base)
-    _check(peek, "GET /queue")
+    cli = CliContext.of(hub_url, as_json)
+    peek = cli.get("/api/queue", "GET /queue")
     rest = [entry["chunk_id"] for entry in peek.json().get("entries", []) if entry["chunk_id"] != chunk_id]
     index = min(max(position, 0), len(rest))
     after_chunk_id = rest[index - 1] if index > 0 else None
-    resp = _request(
-        "post", "/api/queue/position", hub_url=base, json_body={"chunk_id": chunk_id, "after_chunk_id": after_chunk_id}
+    resp = cli.post(
+        "/api/queue/position",
+        "POST /queue/position",
+        json_body={"chunk_id": chunk_id, "after_chunk_id": after_chunk_id},
+        on_status={409: f"chunk {chunk_id} is not a ready chunk"},
     )
-    _check(resp, "POST /queue/position", on_status={409: f"chunk {chunk_id} is not a ready chunk"})
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     click.echo(f"moved {chunk_id} to position {position}")
 
@@ -1189,12 +1112,11 @@ def decision_group() -> None:
 @_hub_url_options
 def decision_list(as_json: bool, hub_url: str | None) -> None:
     """List open decisions awaiting a human (gate surfacing)."""
-    base = hub_url
-    resp = _request("get", "/api/decisions", hub_url=base)
-    _check(resp, "GET /decisions")
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.get("/api/decisions", "GET /decisions")
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     rows = body.get("decisions", [])
     if not rows:
@@ -1216,24 +1138,21 @@ def decision_resolve(decision_id: str, choice: str, resolved_by: str, as_json: b
 
     A pure client of ``POST /api/decisions/{id}/resolutions`` (issue #104's pluralized
     resolution route)."""
-    base = hub_url
-    resp = _request(
-        "post",
-        f"/api/decisions/{decision_id}/resolutions",
-        hub_url=base,
-        json_body={"choice": choice, "resolved_by": resolved_by},
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.send(
+        "post", f"/api/decisions/{decision_id}/resolutions", json_body={"choice": choice, "resolved_by": resolved_by}
     )
     if resp.status_code == httpx.codes.CONFLICT:
         winner = resp.json()
         raise click.ClickException(f"already resolved by {winner.get('already_resolved_by')}")
-    _check(
+    cli.check(
         resp,
         "POST /decisions/{id}/resolutions",
         on_status={404: f"no such decision {decision_id}", 400: "invalid choice", 422: "invalid choice"},
     )
     body = resp.json()
     if as_json:
-        click.echo(json.dumps(body))
+        cli.echo_json(body)
         return
     click.echo(f"decision {decision_id} resolved: {body['choice']} (by {body['resolved_by']})")
 
@@ -1251,12 +1170,11 @@ def question_group() -> None:
 @_hub_url_options
 def question_list(as_json: bool, hub_url: str | None) -> None:
     """Every open (unanswered) question across the fleet."""
-    base = hub_url
-    resp = _request("get", "/api/questions", hub_url=base)
-    _check(resp, "GET /questions")
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.get("/api/questions", "GET /questions")
     rows = resp.json()
     if as_json:
-        click.echo(json.dumps(rows))
+        cli.echo_json(rows)
         return
     if not rows:
         click.echo("no open questions")
@@ -1277,15 +1195,12 @@ def question_answer(question_id: str, answer_text: str, answered_by: str, as_jso
 
     A racing second answer loses and is told who already answered. A pure client of
     ``POST /api/questions/{id}/answers`` (issue #104)."""
-    base = hub_url
-    resp = _request(
-        "post",
-        f"/api/questions/{question_id}/answers",
-        hub_url=base,
-        json_body={"answer": answer_text, "answered_by": answered_by},
+    cli = CliContext.of(hub_url, as_json)
+    resp = cli.send(
+        "post", f"/api/questions/{question_id}/answers", json_body={"answer": answer_text, "answered_by": answered_by}
     )
     if resp.status_code == httpx.codes.CONFLICT:
         winner = resp.json()
         raise click.ClickException(f"already answered by {winner.get('answered_by')}: {winner.get('answer')!r}")
-    _check(resp, "POST /questions/{id}/answers", on_status={404: f"unknown question {question_id}"})
-    _finish(resp, as_json, f"answered {question_id}: {answer_text!r} (the runner will resume the session)")
+    cli.check(resp, "POST /questions/{id}/answers", on_status={404: f"unknown question {question_id}"})
+    cli.finish(resp, f"answered {question_id}: {answer_text!r} (the runner will resume the session)")
