@@ -20,7 +20,7 @@ from blizzard.hub.domain.graph import (
     Node,
     RunStep,
 )
-from blizzard.hub.domain.graph_validation import ValidationResult, validate_graph
+from blizzard.hub.domain.graph_validation import ValidationResult, Validator
 
 
 class GraphValidationError(Exception):
@@ -126,7 +126,7 @@ class GraphMintService:
         self._clock = clock
 
     def mint(self, doc: GraphDoc, *, definition_yaml: str) -> tuple[Graph, list[str]]:
-        result = validate_graph(doc)
+        result = Validator.of(doc).result
         if not result.ok:
             raise GraphValidationError(result)
         graph = reify_graph(doc, self._clock)
@@ -138,7 +138,7 @@ class GraphMintService:
         """Late-bound resolvability of cross-graph targets (issue #90) — a **warning**,
         never an error: a ``graph:<name>`` target resolves by name at apply time, so a
         target not minted yet is legal. The one mint-time step touching the repository,
-        which keeps :func:`validate_graph` pure."""
+        which keeps :class:`Validator` pure."""
         warnings: list[str] = []
         seen: set[str] = set()
         for edge in graph.edges:

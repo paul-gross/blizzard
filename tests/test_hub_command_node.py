@@ -32,9 +32,9 @@ from blizzard.hub.delivery.hub_node import (
     poll_timeout_for,
 )
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
-from blizzard.hub.domain.graph import HUB_PENDING_CHOICE, Executor, parse_graph_doc
+from blizzard.hub.domain.graph import HUB_PENDING_CHOICE, Executor, GraphDoc
 from blizzard.hub.domain.graph_authoring import reify_graph
-from blizzard.hub.domain.graph_validation import validate_graph
+from blizzard.hub.domain.graph_validation import Validator
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
@@ -105,12 +105,12 @@ nodes:
 
 
 def _errors(yaml_nodes: dict) -> list[str]:
-    doc = parse_graph_doc({"name": "g", "entry": "build", "nodes": yaml_nodes})
-    return validate_graph(doc).errors
+    doc = GraphDoc.of({"name": "g", "entry": "build", "nodes": yaml_nodes})
+    return Validator.of(doc).result.errors
 
 
 def test_hub_node_with_run_and_choices_is_valid() -> None:
-    doc = parse_graph_doc(
+    doc = GraphDoc.of(
         {
             "name": "g",
             "entry": "build",
@@ -132,7 +132,7 @@ def test_hub_node_with_run_and_choices_is_valid() -> None:
             },
         }
     )
-    result = validate_graph(doc)
+    result = Validator.of(doc).result
     assert result.errors == []
 
 
@@ -322,7 +322,7 @@ def test_poll_interval_for_and_poll_timeout_for_default_when_unauthored() -> Non
 
 
 def test_poll_interval_for_and_poll_timeout_for_honor_the_authored_override() -> None:
-    doc = parse_graph_doc(
+    doc = GraphDoc.of(
         {
             "name": "g",
             "entry": "merge",
@@ -404,7 +404,7 @@ def test_hubnode_after_poll_before_slot_release_crash_point_is_registered() -> N
 
 
 def _reified_merge_node():  # type: ignore[no-untyped-def]
-    doc = parse_graph_doc({"name": "g", "entry": "build", "nodes": _yaml_nodes()})
+    doc = GraphDoc.of({"name": "g", "entry": "build", "nodes": _yaml_nodes()})
     graph = reify_graph(doc, FixedClock(datetime(2026, 7, 17, tzinfo=UTC)))
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None

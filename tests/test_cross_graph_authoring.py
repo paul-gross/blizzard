@@ -13,9 +13,9 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.graph import GraphDoc, classify_choice_target, parse_graph_doc, target_graph_of
+from blizzard.hub.domain.graph import ChoiceTarget, GraphDoc
 from blizzard.hub.domain.graph_authoring import reify_graph
-from blizzard.hub.domain.graph_validation import validate_graph
+from blizzard.hub.domain.graph_validation import Validator
 from tests.support import build_hub
 
 unit = pytest.mark.unit
@@ -30,7 +30,7 @@ def _doc(*, to: str, model: str | None = None) -> GraphDoc:
     pass_choice: dict[str, object] = {"description": "done", "to": to}
     if model is not None:
         pass_choice["model"] = model
-    return parse_graph_doc(
+    return GraphDoc.of(
         {
             "name": "src",
             "entry": "build",
@@ -52,12 +52,12 @@ def _doc(*, to: str, model: str | None = None) -> GraphDoc:
 
 
 @unit
-def test_classify_choice_target_distinguishes_node_graph_and_malformed() -> None:
-    assert classify_choice_target("review") == ("node", "review")
-    assert classify_choice_target("done") == ("node", "done")
-    assert classify_choice_target("graph:default-delivery") == ("graph", "default-delivery")
-    assert classify_choice_target("graph:") == ("malformed", None)
-    assert classify_choice_target("graph:a:b") == ("malformed", None)  # the deferred explicit-node form
+def test_choice_target_distinguishes_node_graph_and_malformed() -> None:
+    assert ChoiceTarget.of("review") == ChoiceTarget(node="review")
+    assert ChoiceTarget.of("done") == ChoiceTarget(node="done")
+    assert ChoiceTarget.of("graph:default-delivery") == ChoiceTarget(graph="default-delivery")
+    assert ChoiceTarget.of("graph:").malformed
+    assert ChoiceTarget.of("graph:a:b").malformed  # the deferred explicit-node form
 
 
 # Unit — parse / reify / validate
@@ -72,26 +72,26 @@ def test_cross_graph_target_parses_reifies_and_validates() -> None:
     pass_choice = next(c for c in build.judgement.choices if c.name == "pass")
     assert pass_choice.target_graph == "default-delivery"
 
-    assert validate_graph(doc).ok  # no same-graph-node error for a well-formed cross-graph target
+    assert Validator.of(doc).result.ok  # no same-graph-node error for a well-formed cross-graph target
 
     graph = reify_graph(doc, FixedClock(_T0))
     edge = next(e for e in graph.edges if e.to_node_name == "graph:default-delivery")
     assert edge.target_graph == "default-delivery"
     # The target is recoverable from the raw persisted ``to_node_name`` alone.
-    assert target_graph_of(edge.to_node_name) == "default-delivery"
+    assert ChoiceTarget.of(edge.to_node_name).graph == "default-delivery"
 
 
 @unit
 def test_malformed_cross_graph_target_is_a_validation_error() -> None:
     for bad in ("graph:", "graph:a:b"):
-        result = validate_graph(_doc(to=bad))
+        result = Validator.of(_doc(to=bad)).result
         assert not result.ok
         assert any("malformed cross-graph target" in e for e in result.errors), result.errors
 
 
 @unit
 def test_same_graph_to_a_nonexistent_sibling_still_errors() -> None:
-    result = validate_graph(_doc(to="ghost"))
+    result = Validator.of(_doc(to="ghost")).result
     assert not result.ok
     assert any("resolves to no node" in e for e in result.errors), result.errors
 
@@ -148,7 +148,7 @@ def test_minting_a_graph_with_an_unresolved_cross_graph_target_warns(tmp_path: P
 @component
 def test_cross_graph_edge_round_trips_through_the_store(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    doc = parse_graph_doc(
+    doc = GraphDoc.of(
         {
             "name": "src",
             "entry": "build",

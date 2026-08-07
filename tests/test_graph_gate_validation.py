@@ -9,14 +9,14 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from blizzard.hub.domain.graph import parse_graph_doc
-from blizzard.hub.domain.graph_validation import validate_graph
+from blizzard.hub.domain.graph import GraphDoc
+from blizzard.hub.domain.graph_validation import Validator
 
 pytestmark = pytest.mark.unit
 
 
 def _doc(graph: dict):  # type: ignore[no-untyped-def]
-    return parse_graph_doc(yaml.safe_load(yaml.safe_dump(graph)))
+    return GraphDoc.of(yaml.safe_load(yaml.safe_dump(graph)))
 
 
 _GATE_NODES = {
@@ -55,7 +55,7 @@ _GATE_NODES = {
 
 
 def test_human_gate_node_mints_without_a_judgement_prompt() -> None:
-    result = validate_graph(_doc({"name": "g", "entry": "build", "nodes": _GATE_NODES}))
+    result = Validator.of(_doc({"name": "g", "entry": "build", "nodes": _GATE_NODES})).result
     assert result.ok, result.errors
 
 
@@ -72,7 +72,7 @@ def test_human_gate_with_a_judgement_prompt_is_rejected() -> None:
             },
         },
     }
-    result = validate_graph(_doc({"name": "g", "entry": "build", "nodes": nodes}))
+    result = Validator.of(_doc({"name": "g", "entry": "build", "nodes": nodes})).result
     assert not result.ok
     assert any("must not declare `judgement.prompt`" in e for e in result.errors)
 
@@ -89,6 +89,6 @@ def test_human_gate_choice_must_resolve() -> None:
             },
         },
     }
-    result = validate_graph(_doc({"name": "g", "entry": "build", "nodes": nodes}))
+    result = Validator.of(_doc({"name": "g", "entry": "build", "nodes": nodes})).result
     assert not result.ok
     assert any("resolves to no node" in e for e in result.errors)

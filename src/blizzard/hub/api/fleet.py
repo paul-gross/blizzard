@@ -26,7 +26,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.hub_node import poll_interval_for
 from blizzard.hub.domain.claim import ClaimConflict, ClaimDeniedPaused, ClaimDeniedTerminal
 from blizzard.hub.domain.envelope import addendum_for_transition, build_node_envelope
-from blizzard.hub.domain.graph import Graph, is_newer_mint, resolve_follow_latest
+from blizzard.hub.domain.graph import FollowLatest, Graph, Mint
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
@@ -127,10 +127,10 @@ def _resolve_follow_latest_target(
     so the apply service stays a taker-of-objects (``bzh:domain-takes-objects``)."""
     if chunk.intended_migration is not None:
         return None
-    if not resolve_follow_latest(services.graphs.follow_latest(graph.graph_id), hub_default=hub_default):
+    if not FollowLatest.of(services.graphs.follow_latest(graph.graph_id), hub_default=hub_default).enabled:
         return None
     newest = services.graphs.get_enabled_by_name(graph.name)
-    if newest is None or not is_newer_mint(newest, graph):
+    if newest is None or not Mint.of(newest).newer_than(Mint.of(graph)):
         return None
     return newest
 

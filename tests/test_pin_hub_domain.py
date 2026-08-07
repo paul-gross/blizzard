@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.hub.domain.envelope import build_node_envelope
-from blizzard.hub.domain.graph import Executor, JudgedBy, Node, SessionMode, resolve_follow_latest
+from blizzard.hub.domain.graph import Executor, FollowLatest, JudgedBy, Node, SessionMode
 from blizzard.hub.domain.work import Chunk, WorkRef
 
 pytestmark = pytest.mark.unit
@@ -60,9 +60,9 @@ def test_build_node_envelope_requires_graph_explicitly() -> None:
         )
 
 
-def test_resolve_follow_latest_requires_hub_default_explicitly() -> None:
+def test_follow_latest_requires_hub_default_explicitly() -> None:
     """``hub_default`` carries no default of its own (issue #164): a caller that forgets
     the hub setting gets a ``TypeError``, never a silent ``True`` (migrating a fleet that
     never opted in) or a silent ``False`` (never migrating anything)."""
     with pytest.raises(TypeError):
-        resolve_follow_latest(None)  # type: ignore[call-arg]
+        FollowLatest.of(None)  # type: ignore[call-arg]

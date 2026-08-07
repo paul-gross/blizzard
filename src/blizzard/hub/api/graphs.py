@@ -19,7 +19,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.graph import Graph, GraphParseError, Node, mark_effective, parse_graph_doc
+from blizzard.hub.domain.graph import Graph, GraphDoc, GraphParseError, Mints, Node
 from blizzard.hub.domain.graph_authoring import GraphValidationError
 from blizzard.hub.graph_sync import GraphSyncStatus, reconcile_packaged_graphs
 from blizzard.wire.graph import (
@@ -119,7 +119,7 @@ def mint_graph(request: GraphMintRequest, services: Annotated[HubServices, Depen
         raw = yaml.safe_load(request.definition_yaml)
         if not isinstance(raw, dict):
             raise GraphParseError("graph definition must be a YAML mapping")
-        doc = parse_graph_doc(raw)
+        doc = GraphDoc.of(raw)
     except (GraphParseError, yaml.YAMLError) as exc:
         report = GraphValidationReport(ok=False, errors=[str(exc)], warnings=[])
         return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=report.model_dump())
@@ -155,7 +155,7 @@ def list_graphs(services: Annotated[HubServices, Depends(get_services)]) -> list
     """Every minted graph, newest first, newest non-retired per name marked ``effective``."""
     graphs = services.graphs.list_all()
     retired_ids = services.graphs.retired_graph_ids()
-    effective_by_id = mark_effective(graphs, retired_ids=retired_ids)
+    effective_by_id = Mints.of(graphs, retired_ids=retired_ids).effective
     return [
         GraphSummaryView(
             graph_id=g.graph_id,

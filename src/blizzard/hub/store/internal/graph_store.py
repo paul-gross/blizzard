@@ -15,6 +15,7 @@ from sqlalchemy import Engine, insert, select
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.graph import (
     Choice,
+    ChoiceTarget,
     Edge,
     Executor,
     Graph,
@@ -26,7 +27,6 @@ from blizzard.hub.domain.graph import (
     RunStep,
     SessionDecl,
     SessionMode,
-    target_graph_of,
 )
 from blizzard.hub.store.schema import (
     graph_choices,
@@ -259,7 +259,7 @@ class GraphStore:
                 prompt_addendum=er.prompt_addendum,
                 # The cross-graph target is re-derived from the raw ``to_node_name`` (#90),
                 # not a stored column; the per-choice model override is its own column.
-                target_graph=target_graph_of(er.to_node_name),
+                target_graph=ChoiceTarget.of(er.to_node_name).graph,
                 model=er.to_graph_model,
             )
             for er in edge_rows

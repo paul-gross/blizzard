@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from blizzard.hub.domain.graph import GraphDoc, parse_graph_doc
+from blizzard.hub.domain.graph import GraphDoc
 
 _GRAPHS_DIR = Path(__file__).resolve().parent
 DEFAULT_GRAPH_PATH = _GRAPHS_DIR / "default" / "graph.yaml"
@@ -38,7 +38,7 @@ def load_graph_doc(path: Path) -> GraphDoc:
     Inlining resolves every ``prompt`` / ``judgement.prompt`` / ``prompt_addendum`` file reference
     relative to ``path`` and substitutes the file's text, so the parsed :class:`GraphDoc` carries prose,
     never paths. A missing referenced file raises :class:`FileNotFoundError`."""
-    return parse_graph_doc(_load_and_inline(path))
+    return GraphDoc.of(_load_and_inline(path))
 
 
 def load_default_graph_doc() -> GraphDoc:

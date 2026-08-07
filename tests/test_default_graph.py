@@ -10,14 +10,14 @@ from __future__ import annotations
 import pytest
 
 from blizzard.hub.domain.graph import Executor, SessionMode
-from blizzard.hub.domain.graph_validation import validate_graph
+from blizzard.hub.domain.graph_validation import Validator
 from blizzard.hub.graphs import default_graph_yaml, load_default_graph_doc, packaged_graph_paths
 
 pytestmark = pytest.mark.unit
 
 
 def test_default_graph_validates_with_no_errors_or_warnings() -> None:
-    result = validate_graph(load_default_graph_doc())
+    result = Validator.of(load_default_graph_doc()).result
     assert result.ok, result.errors
     assert result.warnings == []
 

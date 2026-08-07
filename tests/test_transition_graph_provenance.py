@@ -16,7 +16,7 @@ from sqlalchemy import insert
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.api.chunk_views import ChunkHistoryView
 from blizzard.hub.api.graph_names import GraphNames
-from blizzard.hub.domain.graph import Executor, Graph, parse_graph_doc
+from blizzard.hub.domain.graph import Executor, Graph, GraphDoc
 from blizzard.hub.domain.graph_authoring import reify_graph
 from blizzard.hub.domain.work import ChunkFacts, TransitionFact
 from blizzard.hub.store import schema as s
@@ -38,7 +38,7 @@ def _two_node_graph(entry: str, other: str, *, other_executor: str) -> Graph:
         if other_executor == "hub"
         else {"executor": "runner", "judgement": {"prompt": "p", "choices": {"ok": {"description": "d", "to": "done"}}}}
     )
-    doc = parse_graph_doc(
+    doc = GraphDoc.of(
         {
             "name": f"g-{entry}",
             "entry": entry,

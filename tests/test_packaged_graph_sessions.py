@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 import yaml as yaml_lib
 
-from blizzard.hub.domain.graph import SessionMode, classify_session, parse_graph_doc
-from blizzard.hub.domain.graph_validation import validate_graph
+from blizzard.hub.domain.graph import GraphDoc, SessionMode, SessionRef
+from blizzard.hub.domain.graph_validation import Validator
 
 pytestmark = pytest.mark.unit
 
@@ -23,7 +23,7 @@ _PACKAGED = ("advanced-development-workflow", "default", "basic-development-work
 
 def _doc(name: str):  # type: ignore[no-untyped-def]
     raw = yaml_lib.safe_load((_GRAPHS_ROOT / name / "graph.yaml").read_text())
-    return parse_graph_doc(raw)
+    return GraphDoc.of(raw)
 
 
 @pytest.mark.parametrize("name", _PACKAGED)
@@ -31,7 +31,7 @@ def test_every_packaged_graph_still_validates(name: str) -> None:
     """The one way this tuning can break a deploy: a graph referencing a pool it does not
     declare is rejected at mint, and `graph_sync` reconciliation of the packaged set would
     go red on first boot."""
-    result = validate_graph(_doc(name))
+    result = Validator.of(_doc(name)).result
     assert result.ok, result.errors
 
 
@@ -127,6 +127,6 @@ def test_no_packaged_node_carries_a_malformed_session(name: str) -> None:
 def test_the_bare_forms_still_parse_to_no_pool() -> None:
     """The back-compat floor: bare `fresh`/`resume` and `resume:<node>` keep today's
     meaning, so a graph that adopts none of this is untouched."""
-    assert classify_session("resume") == (SessionMode.RESUME, None, False)
-    assert classify_session("fresh") == (SessionMode.FRESH, None, False)
-    assert classify_session("resume:build") == (SessionMode.RESUME, "build", False)
+    assert SessionRef.of("resume") == SessionRef(SessionMode.RESUME)
+    assert SessionRef.of("fresh") == SessionRef(SessionMode.FRESH)
+    assert SessionRef.of("resume:build") == SessionRef(SessionMode.RESUME, "build")

@@ -13,7 +13,7 @@ export function producesNames(node: GraphNodeView): readonly string[] | undefine
  * resume (issue #115), `fresh:<session>` / `resume:<session>` for a graph-level named
  * session (issue #144), bare `resume`/`fresh` otherwise. The wire splits the authored
  * value in two (`session` carries the mode, `session_source` the reference target, per
- * `classify_session`), so rendering `session` alone silently drops the targeting and an
+ * `SessionRef`), so rendering `session` alone silently drops the targeting and an
  * operator cannot tell a targeted resume from a plain one. Recombining the two covers
  * all five forms with no branching: `session_source` is null exactly for the two bare
  * ones. The target name alone does not say whether it is a declared session or a node —

@@ -15,6 +15,11 @@ from typing import Protocol
 
 from blizzard.hub.domain.artifacts import ArtifactKind
 
+
+class GraphParseError(ValueError):
+    """A graph definition is structurally malformed (before validation)."""
+
+
 # The reserved terminal a choice may point at instead of a node name.
 RESERVED_TERMINAL = "done"
 
@@ -23,28 +28,28 @@ RESERVED_TERMINAL = "done"
 GRAPH_TARGET_PREFIX = "graph:"
 
 
-def classify_choice_target(to: str) -> tuple[str, str | None]:
-    """Classify a choice ``to:`` value into ``(kind, value)`` — pure syntax (issue #90).
+@dataclass(frozen=True)
+class ChoiceTarget:
+    """What a choice's ``to:`` value points at (issue #90) — pure syntax.
 
-    ``("node", <name>)`` a same-graph node or the reserved terminal; ``("graph", <name>)``
-    a well-formed ``graph:<name>``; ``("malformed", None)`` any other ``graph:``-prefixed
-    value. Parsing never validates."""
-    if not to.startswith(GRAPH_TARGET_PREFIX):
-        return ("node", to)
-    name = to[len(GRAPH_TARGET_PREFIX) :]
-    if not name or ":" in name:
-        return ("malformed", None)
-    return ("graph", name)
+    ``node`` a same-graph node or the reserved terminal, ``graph`` a well-formed
+    ``graph:<name>``; neither set is :attr:`malformed`."""
 
+    node: str | None = None
+    graph: str | None = None
 
-def target_graph_of(to_node_name: str) -> str | None:
-    """The target graph name a reified edge's ``to_node_name`` encodes, or ``None`` for
-    a same-graph node or terminal target (issue #90).
+    @classmethod
+    def of(cls, to: str) -> ChoiceTarget:
+        if not to.startswith(GRAPH_TARGET_PREFIX):
+            return cls(node=to)
+        name = to[len(GRAPH_TARGET_PREFIX) :]
+        if not name or ":" in name:
+            return cls()
+        return cls(graph=name)
 
-    A cross-graph edge persists its target as the raw ``graph:<name>`` string, with no
-    separate column; this re-derives the structured name on load."""
-    kind, value = classify_choice_target(to_node_name)
-    return value if kind == "graph" else None
+    @property
+    def malformed(self) -> bool:
+        return self.node is None and self.graph is None
 
 
 class Executor(StrEnum):
@@ -80,30 +85,35 @@ SESSION_FRESH_TARGET_PREFIX = "fresh:"
 SESSION_LEGAL_FORMS = "`fresh`, `resume`, `resume:<node>`, `fresh:<session>`, or `resume:<session>`"
 
 
-def classify_session(raw: str) -> tuple[SessionMode, str | None, bool]:
-    """Classify an authored ``session:`` value into ``(mode, source, malformed)`` — pure
-    syntax, mirroring :func:`classify_choice_target` (issues #115, #144).
+@dataclass(frozen=True)
+class SessionRef:
+    """What an authored ``session:`` value names (issues #115, #144) — pure syntax.
 
     ``source`` is the ``<name>`` of a ``resume:``/``fresh:`` form, carried verbatim and
-    ``None`` for a bare form; under ``malformed`` neither may be relied on."""
-    if raw == SessionMode.FRESH.value:
-        return (SessionMode.FRESH, None, False)
-    if raw == SessionMode.RESUME.value:
-        return (SessionMode.RESUME, None, False)
-    if raw.startswith(SESSION_RESUME_TARGET_PREFIX):
-        name = raw[len(SESSION_RESUME_TARGET_PREFIX) :]
-        if name:
-            return (SessionMode.RESUME, name, False)
-    if raw.startswith(SESSION_FRESH_TARGET_PREFIX):
-        name = raw[len(SESSION_FRESH_TARGET_PREFIX) :]
-        if name:
-            return (SessionMode.FRESH, name, False)
-    return (SessionMode.RESUME, None, True)
+    ``None`` for a bare form; under :attr:`malformed` no field may be relied on."""
+
+    mode: SessionMode
+    source: str | None = None
+    malformed: bool = False
+
+    @classmethod
+    def of(cls, raw: str) -> SessionRef:
+        if raw == SessionMode.FRESH.value:
+            return cls(SessionMode.FRESH)
+        if raw == SessionMode.RESUME.value:
+            return cls(SessionMode.RESUME)
+        if raw.startswith(SESSION_RESUME_TARGET_PREFIX):
+            name = raw[len(SESSION_RESUME_TARGET_PREFIX) :]
+            if name:
+                return cls(SessionMode.RESUME, name)
+        if raw.startswith(SESSION_FRESH_TARGET_PREFIX):
+            name = raw[len(SESSION_FRESH_TARGET_PREFIX) :]
+            if name:
+                return cls(SessionMode.FRESH, name)
+        return cls(SessionMode.RESUME, malformed=True)
 
 
 class RetriesExhausted(StrEnum):
-    """The only exhaustion target in the MVP."""
-
     ESCALATE = "escalate"
 
 
@@ -119,6 +129,47 @@ HUB_PENDING_CHOICE = "pending"
 # The default kick-back cap a hub node omitting ``bounce_cap`` tolerates before the
 # chunk escalates (#64). Per-node, not global.
 DEFAULT_BOUNCE_CAP = 5
+
+
+@dataclass(frozen=True)
+class Parser:
+    """One authored mapping, read through the coercions the doc types share.
+
+    Structural coercion only — a shape that cannot be read raises
+    :class:`GraphParseError`; whether a readable value is *legal* is the validator's."""
+
+    body: dict[str, object]
+
+    @classmethod
+    def of(cls, value: object, where: object) -> Parser:
+        if not isinstance(value, dict):
+            raise GraphParseError(f"expected a map at {where!r}, got {type(value).__name__}")
+        return cls(value)
+
+    def get(self, key: str, default: object = None) -> object:
+        return self.body.get(key, default)
+
+    def require(self, key: str, message: str) -> object:
+        try:
+            return self.body[key]
+        except KeyError as exc:
+            raise GraphParseError(message) from exc
+
+    def text(self, key: str) -> str | None:
+        value = self.body.get(key)
+        return str(value) if value is not None else None
+
+    def number(self, key: str) -> int | None:
+        value = self.body.get(key)
+        return int(str(value)) if value is not None else None
+
+    def items(self, key: str) -> list[object]:
+        value = self.body.get(key)
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise GraphParseError(f"expected a list, got {type(value).__name__}")
+        return value
 
 
 # --- Authoring doc (parsed from a YAML body, pre-mint) ----------------------
@@ -140,14 +191,44 @@ class ChoiceDoc:
     # Gated on green checks (issue #114): unroutable while any of its node's is red.
     requires_checks: bool = False
 
+    @classmethod
+    def of(cls, key: object, raw: object) -> ChoiceDoc:
+        body = Parser.of(raw, key)
+        name = str(key)
+        to = body.text("to")
+        return cls(
+            name=name,
+            description=body.text("description"),
+            to=to,
+            prompt_addendum=body.text("prompt_addendum"),
+            target_graph=ChoiceTarget.of(to).graph if to is not None else None,
+            model=body.text("model"),
+            requires_checks=bool(body.get("requires_checks", False)),
+        )
+
 
 @dataclass(frozen=True)
 class JudgementDoc:
-    """A node's judgement block as authored."""
-
     prompt: str | None
     by: JudgedBy
     choices: list[ChoiceDoc]
+
+    @classmethod
+    def of(cls, raw: object) -> JudgementDoc | None:
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            raise GraphParseError("`judgement` must be a map")
+        body = Parser(raw)
+        by = JudgedBy(str(body.get("by", JudgedBy.WORKER.value)))
+        choices_raw = body.get("choices", {})
+        if not isinstance(choices_raw, dict):
+            raise GraphParseError("`judgement.choices` must be a map of choice name -> entry")
+        return cls(
+            prompt=body.text("prompt"),
+            by=by,
+            choices=[ChoiceDoc.of(name, entry) for name, entry in choices_raw.items()],
+        )
 
 
 @dataclass(frozen=True)
@@ -161,6 +242,17 @@ class RunStepDoc:
     name: str | None = None
     produces: str | None = None
 
+    @classmethod
+    def of(cls, raw: object) -> RunStepDoc:
+        if isinstance(raw, str):
+            return cls(command=raw)
+        body = Parser.of(raw, "run entry")
+        return cls(
+            command=str(body.require("command", "a `run` entry must declare `command`")),
+            name=body.text("name"),
+            produces=body.text("produces"),
+        )
+
 
 @dataclass(frozen=True)
 class ProducesSpec:
@@ -172,11 +264,39 @@ class ProducesSpec:
     name: str
     kind: ArtifactKind = ArtifactKind.ASSET
 
+    @classmethod
+    def of(cls, raw: object, *, node: str) -> ProducesSpec:
+        if isinstance(raw, str):
+            return cls(name=raw, kind=ArtifactKind.ASSET)
+        body = Parser.of(raw, f"node {node!r} `produces` entry")
+        name = str(body.require("name", f"node {node!r}: a `produces` entry must declare `name`"))
+        raw_kind = body.get("kind", ArtifactKind.ASSET.value)
+        try:
+            kind = ArtifactKind(str(raw_kind))
+        except ValueError as exc:
+            raise GraphParseError(
+                f"node {node!r} produces `{name}`: unknown kind {raw_kind!r} — "
+                f"expected `{ArtifactKind.ASSET.value}` or `{ArtifactKind.GIT_COMMIT.value}`"
+            ) from exc
+        return cls(name=name, kind=kind)
+
+
+class NodeShape[StepT]:
+    """What the authored and the reified node share — the one owner of the predicate
+    keyed on that pair."""
+
+    executor: Executor
+    run: list[StepT]
+
+    @property
+    def is_hub_command_node(self) -> bool:
+        """True for a generic hub command node — ``executor: hub`` plus a non-empty
+        ``run:``. A predicate, not an assertion: an empty ``run:`` is authorable."""
+        return self.executor is Executor.HUB and bool(self.run)
+
 
 @dataclass(frozen=True)
-class NodeDoc:
-    """One node as authored."""
-
+class NodeDoc(NodeShape[RunStepDoc]):
     name: str
     executor: Executor
     prompt: str | None
@@ -194,17 +314,60 @@ class NodeDoc:
     # The pending-poll cadence (#66), in seconds — ``None`` accepts the executor default.
     poll_interval_seconds: int | None = None
     poll_timeout_seconds: int | None = None
-    # The parsed ``<name>`` of a ``resume:``/``fresh:`` form (issues #115, #144), read
-    # with ``session`` beside it; ``None`` for a bare form.
+    # See :class:`SessionRef` (issues #115, #144), whose fields these carry.
     session_source: str | None = None
-    # Whether the authored ``session:`` value was structurally malformed — kept separate
-    # from ``session_source``, which is ``None`` in that case too.
     session_malformed: bool = False
-    # Where ``checks:`` run (issue #114) — relative to the leased env's binding workdir;
-    # ``None`` runs them at its root. Per-check cwd is a documented deferral.
+    # Where ``checks:`` run (issue #114) — ``None`` runs them at the binding workdir's root.
     checks_cwd: str | None = None
     # The per-check timeout (issue #114), in seconds; a timeout is a red check.
     checks_timeout: int | None = None
+
+    @classmethod
+    def of(cls, key: object, raw: object) -> NodeDoc:
+        body = Parser.of(raw, key)
+        name = str(key)
+        executor = Executor(str(body.get("executor", Executor.RUNNER.value)))
+        session = SessionRef.of(str(body.get("session", SessionMode.RESUME.value)))
+        checks = [str(c) for c in body.items("checks")]
+        produces = [ProducesSpec.of(p, node=name) for p in body.items("produces")]
+        retries_max, retries_exhausted = cls._retries(body.get("retries"))
+        bounce_cap = body.number("bounce_cap")
+        poll_interval_seconds = body.number("poll_interval")
+        poll_timeout_seconds = body.number("poll_timeout")
+        checks_cwd = body.text("checks_cwd")
+        checks_timeout = body.number("checks_timeout")
+        run = [RunStepDoc.of(r) for r in body.items("run")]
+        return cls(
+            name=name,
+            executor=executor,
+            prompt=body.text("prompt"),
+            checks=checks,
+            produces=produces,
+            session=session.mode,
+            retries_max=retries_max,
+            retries_exhausted=retries_exhausted,
+            mode=body.text("mode"),
+            bounce_cap=bounce_cap,
+            judgement=JudgementDoc.of(body.get("judgement")),
+            run=run,
+            poll_interval_seconds=poll_interval_seconds,
+            poll_timeout_seconds=poll_timeout_seconds,
+            session_source=session.source,
+            session_malformed=session.malformed,
+            checks_cwd=checks_cwd,
+            checks_timeout=checks_timeout,
+        )
+
+    @staticmethod
+    def _retries(raw: object) -> tuple[int | None, str | None]:
+        if not isinstance(raw, dict):
+            return (None, None)
+        raw_max = raw.get("max")
+        raw_exhausted = raw.get("exhausted")
+        return (
+            int(raw_max) if raw_max is not None else None,
+            str(raw_exhausted) if raw_exhausted is not None else None,
+        )
 
 
 @dataclass(frozen=True)
@@ -217,6 +380,15 @@ class RotatePolicy:
     max_context_tokens: int | None = None
     max_transcript_bytes: int | None = None
     max_invocations: int | None = None
+
+    @classmethod
+    def of(cls, raw: object, *, session: str) -> RotatePolicy:
+        body = Parser.of(raw, f"session {session!r} `rotate`")
+        return cls(
+            max_context_tokens=body.number("max_context_tokens"),
+            max_transcript_bytes=body.number("max_transcript_bytes"),
+            max_invocations=body.number("max_invocations"),
+        )
 
 
 @dataclass(frozen=True)
@@ -231,6 +403,22 @@ class SessionDecl:
     effort: str | None = None
     rotate: RotatePolicy | None = None
 
+    @classmethod
+    def of(cls, key: object, raw: object) -> SessionDecl:
+        body = Parser.of(raw, f"session {key!r}")
+        name = str(key)
+        raw_model = body.get("model")
+        # A single string is the one-entry spelling, normalized to the same one-entry list
+        # the sequence form parses to, so readers see exactly one shape.
+        model = [str(raw_model)] if isinstance(raw_model, str) else [str(m) for m in body.items("model")]
+        raw_rotate = body.get("rotate")
+        return cls(
+            name=name,
+            model=model,
+            effort=body.text("effort"),
+            rotate=RotatePolicy.of(raw_rotate, session=name) if raw_rotate is not None else None,
+        )
+
 
 @dataclass(frozen=True)
 class GraphDoc:
@@ -243,210 +431,33 @@ class GraphDoc:
     # sibling of ``nodes:``, empty for every graph that declares none.
     sessions: dict[str, SessionDecl] = field(default_factory=dict)
 
+    @classmethod
+    def of(cls, raw: dict[str, object]) -> GraphDoc:
+        """Parse a plain ``dict`` (from ``yaml.safe_load``) into a whole doc."""
+        try:
+            name = str(raw["name"])
+            entry = str(raw["entry"])
+            nodes_raw = raw["nodes"]
+        except KeyError as exc:
+            raise GraphParseError(f"graph definition missing required key: {exc}") from exc
+        if not isinstance(nodes_raw, dict):
+            raise GraphParseError("`nodes` must be a map of node name -> node")
+        return cls(
+            name=name,
+            entry=entry,
+            nodes=[NodeDoc.of(node_name, body) for node_name, body in nodes_raw.items()],
+            sessions=cls._sessions(raw.get("sessions")),
+        )
+
+    @staticmethod
+    def _sessions(raw: object) -> dict[str, SessionDecl]:
+        if raw is None:
+            return {}
+        body = Parser.of(raw, "`sessions`").body
+        return {str(name): SessionDecl.of(name, decl) for name, decl in body.items()}
+
     def node(self, name: str) -> NodeDoc | None:
         return next((n for n in self.nodes if n.name == name), None)
-
-
-def parse_graph_doc(raw: dict[str, object]) -> GraphDoc:
-    """Parse a plain ``dict`` (from ``yaml.safe_load``) into a :class:`GraphDoc`.
-
-    Structural coercion only — never validation. A malformed shape raises
-    :class:`GraphParseError`; whether a well-formed doc is *legal* is the validator's."""
-    try:
-        name = str(raw["name"])
-        entry = str(raw["entry"])
-        nodes_raw = raw["nodes"]
-    except KeyError as exc:
-        raise GraphParseError(f"graph definition missing required key: {exc}") from exc
-    if not isinstance(nodes_raw, dict):
-        raise GraphParseError("`nodes` must be a map of node name -> node")
-
-    nodes = [_parse_node(str(node_name), _as_dict(body, node_name)) for node_name, body in nodes_raw.items()]
-    return GraphDoc(name=name, entry=entry, nodes=nodes, sessions=_parse_sessions(raw.get("sessions")))
-
-
-def _parse_sessions(raw: object) -> dict[str, SessionDecl]:
-    """Parse the optional top-level ``sessions:`` map (issue #144).
-
-    Absent reads as ``{}``; structural coercion only, never validation."""
-    if raw is None:
-        return {}
-    body = _as_dict(raw, "`sessions`")
-    return {str(name): _parse_session(str(name), _as_dict(decl, f"session {name!r}")) for name, decl in body.items()}
-
-
-def _parse_session(name: str, body: dict[str, object]) -> SessionDecl:
-    raw_model = body.get("model")
-    # A single string is the one-entry spelling, normalized to the same one-entry list
-    # the sequence form parses to, so readers see exactly one shape.
-    model = [str(raw_model)] if isinstance(raw_model, str) else [str(m) for m in _as_list(raw_model)]
-    raw_effort = body.get("effort")
-    raw_rotate = body.get("rotate")
-    rotate = _parse_rotate(_as_dict(raw_rotate, f"session {name!r} `rotate`")) if raw_rotate is not None else None
-    return SessionDecl(
-        name=name,
-        model=model,
-        effort=str(raw_effort) if raw_effort is not None else None,
-        rotate=rotate,
-    )
-
-
-def _parse_rotate(body: dict[str, object]) -> RotatePolicy:
-    def _int_or_none(key: str) -> int | None:
-        value = body.get(key)
-        return int(str(value)) if value is not None else None
-
-    return RotatePolicy(
-        max_context_tokens=_int_or_none("max_context_tokens"),
-        max_transcript_bytes=_int_or_none("max_transcript_bytes"),
-        max_invocations=_int_or_none("max_invocations"),
-    )
-
-
-def _parse_node(name: str, body: dict[str, object]) -> NodeDoc:
-    executor = Executor(str(body.get("executor", Executor.RUNNER.value)))
-    session, session_source, session_malformed = classify_session(str(body.get("session", SessionMode.RESUME.value)))
-    checks = [str(c) for c in _as_list(body.get("checks", []))]
-    produces = [_parse_produces_entry(p, name) for p in _as_list(body.get("produces", []))]
-    retries = body.get("retries")
-    retries_max: int | None = None
-    retries_exhausted: str | None = None
-    if isinstance(retries, dict):
-        raw_max = retries.get("max")
-        retries_max = int(raw_max) if raw_max is not None else None
-        raw_exhausted = retries.get("exhausted")
-        retries_exhausted = str(raw_exhausted) if raw_exhausted is not None else None
-    prompt = body.get("prompt")
-    mode = body.get("mode")
-    raw_bounce_cap = body.get("bounce_cap")
-    bounce_cap = int(str(raw_bounce_cap)) if raw_bounce_cap is not None else None
-    raw_poll_interval = body.get("poll_interval")
-    poll_interval_seconds = int(str(raw_poll_interval)) if raw_poll_interval is not None else None
-    raw_poll_timeout = body.get("poll_timeout")
-    poll_timeout_seconds = int(str(raw_poll_timeout)) if raw_poll_timeout is not None else None
-    raw_checks_cwd = body.get("checks_cwd")
-    checks_cwd = str(raw_checks_cwd) if raw_checks_cwd is not None else None
-    raw_checks_timeout = body.get("checks_timeout")
-    checks_timeout = int(str(raw_checks_timeout)) if raw_checks_timeout is not None else None
-    run = [_parse_run_step(r) for r in _as_list(body.get("run", []))]
-    return NodeDoc(
-        name=name,
-        executor=executor,
-        prompt=str(prompt) if prompt is not None else None,
-        checks=checks,
-        produces=produces,
-        session=session,
-        retries_max=retries_max,
-        retries_exhausted=retries_exhausted,
-        mode=str(mode) if mode is not None else None,
-        bounce_cap=bounce_cap,
-        judgement=_parse_judgement(body.get("judgement")),
-        run=run,
-        poll_interval_seconds=poll_interval_seconds,
-        poll_timeout_seconds=poll_timeout_seconds,
-        session_source=session_source,
-        session_malformed=session_malformed,
-        checks_cwd=checks_cwd,
-        checks_timeout=checks_timeout,
-    )
-
-
-def _parse_produces_entry(raw: object, node_name: str) -> ProducesSpec:
-    """Normalize one authored ``produces:`` entry (D1, issue #143).
-
-    A bare string names an asset; a mapping ``{name, kind}`` names an explicit kind.
-    Structural coercion only — an unrecognized ``kind`` raises :class:`GraphParseError`
-    rather than a bare :class:`ValueError`, since these entries are user-authored."""
-    if isinstance(raw, str):
-        return ProducesSpec(name=raw, kind=ArtifactKind.ASSET)
-    body = _as_dict(raw, f"node {node_name!r} `produces` entry")
-    try:
-        entry_name = str(body["name"])
-    except KeyError as exc:
-        raise GraphParseError(f"node {node_name!r}: a `produces` entry must declare `name`") from exc
-    raw_kind = body.get("kind", ArtifactKind.ASSET.value)
-    try:
-        kind = ArtifactKind(str(raw_kind))
-    except ValueError as exc:
-        raise GraphParseError(
-            f"node {node_name!r} produces `{entry_name}`: unknown kind {raw_kind!r} — "
-            f"expected `{ArtifactKind.ASSET.value}` or `{ArtifactKind.GIT_COMMIT.value}`"
-        ) from exc
-    return ProducesSpec(name=entry_name, kind=kind)
-
-
-def _parse_run_step(raw: object) -> RunStepDoc:
-    if isinstance(raw, str):
-        return RunStepDoc(command=raw)
-    body = _as_dict(raw, "run entry")
-    try:
-        command = str(body["command"])
-    except KeyError as exc:
-        raise GraphParseError("a `run` entry must declare `command`") from exc
-    name = body.get("name")
-    produces = body.get("produces")
-    return RunStepDoc(
-        command=command,
-        name=str(name) if name is not None else None,
-        produces=str(produces) if produces is not None else None,
-    )
-
-
-def _parse_judgement(raw: object) -> JudgementDoc | None:
-    if raw is None:
-        return None
-    if not isinstance(raw, dict):
-        raise GraphParseError("`judgement` must be a map")
-    by = JudgedBy(str(raw.get("by", JudgedBy.WORKER.value)))
-    prompt = raw.get("prompt")
-    choices_raw = raw.get("choices", {})
-    if not isinstance(choices_raw, dict):
-        raise GraphParseError("`judgement.choices` must be a map of choice name -> entry")
-    choices = [_parse_choice(str(cn), _as_dict(cb, cn)) for cn, cb in choices_raw.items()]
-    return JudgementDoc(prompt=str(prompt) if prompt is not None else None, by=by, choices=choices)
-
-
-def _parse_choice(name: str, body: dict[str, object]) -> ChoiceDoc:
-    description = body.get("description")
-    to = body.get("to")
-    addendum = body.get("prompt_addendum")
-    model = body.get("model")
-    requires_checks = bool(body.get("requires_checks", False))
-    to_str = str(to) if to is not None else None
-    # Structural coercion only — a malformed ``graph:`` form parses to ``target_graph=None``
-    # and the validator rejects it against the raw ``to`` (parse never validates).
-    target_graph = None
-    if to_str is not None:
-        kind, value = classify_choice_target(to_str)
-        if kind == "graph":
-            target_graph = value
-    return ChoiceDoc(
-        name=name,
-        description=str(description) if description is not None else None,
-        to=to_str,
-        prompt_addendum=str(addendum) if addendum is not None else None,
-        target_graph=target_graph,
-        model=str(model) if model is not None else None,
-        requires_checks=requires_checks,
-    )
-
-
-def _as_dict(value: object, where: object) -> dict[str, object]:
-    if not isinstance(value, dict):
-        raise GraphParseError(f"expected a map at {where!r}, got {type(value).__name__}")
-    return value
-
-
-def _as_list(value: object) -> list[object]:
-    if value is None:
-        return []
-    if not isinstance(value, list):
-        raise GraphParseError(f"expected a list, got {type(value).__name__}")
-    return value
-
-
-class GraphParseError(ValueError):
-    """A graph definition is structurally malformed (before validation)."""
 
 
 # --- Reified graph (post-mint, id-carrying, immutable) ----------------------
@@ -488,7 +499,7 @@ class RunStep:
 
 
 @dataclass(frozen=True)
-class Node:
+class Node(NodeShape[RunStep]):
     """One station in one immutable graph."""
 
     node_id: str
@@ -512,32 +523,22 @@ class Node:
     # The pending-poll cadence (#66), in seconds — see ``NodeDoc.poll_interval_seconds``.
     poll_interval_seconds: int | None = None
     poll_timeout_seconds: int | None = None
-    # The session reference target (issues #115, #144) — see ``NodeDoc.session_source``.
     # A validated graph never carries a malformed session, so no malformed flag here.
     session_source: str | None = None
     # See ``NodeDoc.checks_cwd`` / ``NodeDoc.checks_timeout`` (issue #114).
     checks_cwd: str | None = None
     checks_timeout: int | None = None
 
-    @property
-    def is_hub_command_node(self) -> bool:
-        """True for a generic hub command node — ``executor: hub`` plus a non-empty
-        ``run:``. A predicate, not an assertion: an empty ``run:`` is authorable."""
-        return self.executor is Executor.HUB and bool(self.run)
-
 
 @dataclass(frozen=True)
 class Graph:
-    """A reified, immutable workflow graph."""
-
     graph_id: str
     name: str
     entry_node_id: str
     nodes: list[Node]
     edges: list[Edge]
     created_at: datetime
-    # The graph-level named-session declarations (issue #144), in authored order;
-    # :meth:`session_by_name` is the lookup.
+    # The graph-level named-session declarations (issue #144), in authored order.
     sessions: list[SessionDecl] = field(default_factory=list)
 
     def session_by_name(self, name: str) -> SessionDecl | None:
@@ -560,39 +561,74 @@ class Graph:
         return next((e for e in self.edges if e.from_node_id == node_id and e.choice_id in choice_ids), None)
 
 
-def mark_effective(graphs: list[Graph], *, retired_ids: Collection[str]) -> dict[str, bool]:
-    """Mark the newest non-retired ``created_at`` graph per ``name`` as effective.
+# --- Mint selection (which mint of a name a chunk sees) ---------------------
 
-    Keyed by ``graph_id``. A retired graph is never a candidate. ``retired_ids`` carries
-    no default, so omitting it raises — pinned by
-    tests/test_graph_domain.py::test_mark_effective_requires_retired_ids_explicitly"""
-    newest_by_name: dict[str, Graph] = {}
-    for graph in graphs:
-        if graph.graph_id in retired_ids:
-            continue
-        current = newest_by_name.get(graph.name)
+
+@dataclass(frozen=True)
+class Mint:
+    """One minted graph, ordered by when it was minted."""
+
+    graph: Graph
+
+    @classmethod
+    def of(cls, graph: Graph) -> Mint:
+        return cls(graph)
+
+    @property
+    def order(self) -> tuple[datetime, str]:
         # Tie-break on graph_id descending — ULIDs sort lexically by creation.
-        if current is None or (graph.created_at, graph.graph_id) > (current.created_at, current.graph_id):
-            newest_by_name[graph.name] = graph
-    effective_ids = {g.graph_id for g in newest_by_name.values()}
-    return {g.graph_id: g.graph_id in effective_ids for g in graphs}
+        return (self.graph.created_at, self.graph.graph_id)
+
+    def newer_than(self, other: Mint) -> bool:
+        """**Strictly** newer — pinned by
+        tests/test_follow_latest_policy.py::test_the_policy_never_drags_a_chunk_backwards_onto_an_older_mint"""
+        return self.order > other.order
 
 
-def is_newer_mint(candidate: Graph, current: Graph) -> bool:
-    """Whether ``candidate`` is a strictly newer mint than ``current``.
+@dataclass(frozen=True)
+class Mints:
+    """Every mint of every name, with the retired ones out of contention (issue #101)."""
 
-    ``created_at`` first, ``graph_id`` as the tie-break. **Strictly** newer — pinned by
-    tests/test_follow_latest_policy.py::test_the_policy_never_drags_a_chunk_backwards_onto_an_older_mint"""
-    return (candidate.created_at, candidate.graph_id) > (current.created_at, current.graph_id)
+    mints: list[Mint]
+    retired_ids: Collection[str]
+
+    @classmethod
+    def of(cls, graphs: list[Graph], *, retired_ids: Collection[str]) -> Mints:
+        return cls([Mint.of(g) for g in graphs], retired_ids)
+
+    @property
+    def newest_by_name(self) -> dict[str, Mint]:
+        newest: dict[str, Mint] = {}
+        for candidate in self.mints:
+            if candidate.graph.graph_id in self.retired_ids:
+                continue
+            current = newest.get(candidate.graph.name)
+            if current is None or candidate.newer_than(current):
+                newest[candidate.graph.name] = candidate
+        return newest
+
+    @property
+    def effective(self) -> dict[str, bool]:
+        """Whether each ``graph_id`` is the newest non-retired mint of its name.
+
+        ``retired_ids`` carries no default, so omitting it raises — pinned by
+        tests/test_graph_domain.py::test_mints_effective_requires_retired_ids_explicitly"""
+        effective_ids = {m.graph.graph_id for m in self.newest_by_name.values()}
+        return {m.graph.graph_id: m.graph.graph_id in effective_ids for m in self.mints}
 
 
-def resolve_follow_latest(graph_policy: bool | None, *, hub_default: bool) -> bool:
+@dataclass(frozen=True)
+class FollowLatest:
     """Whether a chunk pinned to a graph follows the newest mint of its name (issue #164).
 
-    The graph's own tri-state wins where set; ``None`` inherits ``hub_default``, which
-    carries no default, so omitting it raises — pinned by
-    tests/test_pin_hub_domain.py::test_resolve_follow_latest_requires_hub_default_explicitly"""
-    return hub_default if graph_policy is None else graph_policy
+    ``hub_default`` carries no default, so omitting it raises — pinned by
+    tests/test_pin_hub_domain.py::test_follow_latest_requires_hub_default_explicitly"""
+
+    enabled: bool
+
+    @classmethod
+    def of(cls, graph_policy: bool | None, *, hub_default: bool) -> FollowLatest:
+        return cls(hub_default if graph_policy is None else graph_policy)
 
 
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
@@ -630,8 +666,8 @@ class IReadGraphRepository(Protocol):
     def retired_graph_ids(self) -> set[str]:
         """Every ``graph_id`` whose newest lifecycle fact reads retired (issue #101).
 
-        The set :func:`mark_effective` excludes from candidacy — the bulk counterpart
-        to :meth:`is_retired`.
+        The set :class:`Mints` excludes from candidacy — the bulk counterpart to
+        :meth:`is_retired`.
         """
         ...
 
@@ -639,7 +675,7 @@ class IReadGraphRepository(Protocol):
         """This graph's own follow-latest policy — the stored tri-state (issue #164).
 
         ``None`` — the value for a graph with no policy fact — inherits the hub-level
-        setting (:func:`resolve_follow_latest`). Newest-fact-wins.
+        setting (:class:`FollowLatest`). Newest-fact-wins.
         """
         ...
 

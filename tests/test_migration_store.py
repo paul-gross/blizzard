@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
-from blizzard.hub.domain.graph import Executor, parse_graph_doc
+from blizzard.hub.domain.graph import Executor, GraphDoc
 from blizzard.hub.domain.graph_authoring import reify_graph
 from blizzard.hub.domain.work import (
     ChunkFacts,
@@ -146,7 +146,7 @@ def test_a_null_landing_node_falls_through_to_none_the_schema_entry_allowance() 
 @unit
 def test_landing_node_is_name_match_else_entry() -> None:
     graph = reify_graph(
-        parse_graph_doc(
+        GraphDoc.of(
             {
                 "name": "triage",
                 "entry": "intake",

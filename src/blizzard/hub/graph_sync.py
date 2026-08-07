@@ -14,7 +14,7 @@ from pathlib import Path
 import yaml
 
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.graph import GraphDoc, GraphParseError, IReadGraphRepository, parse_graph_doc
+from blizzard.hub.domain.graph import GraphDoc, GraphParseError, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService, GraphValidationError
 from blizzard.hub.graphs import inline_graph_yaml, load_graph_doc, packaged_graph_paths
 
@@ -94,7 +94,7 @@ def _parse_stored(stored: str | None, name: str) -> GraphDoc | None:
         return None
     try:
         raw = yaml.safe_load(stored)
-        return parse_graph_doc(raw) if isinstance(raw, dict) else None
+        return GraphDoc.of(raw) if isinstance(raw, dict) else None
     except (yaml.YAMLError, GraphParseError):
         _log.warning("stored graph definition no longer parses; treating it as changed", graph=name)
         return None

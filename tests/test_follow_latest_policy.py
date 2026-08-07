@@ -1,6 +1,6 @@
 """The standing follow-latest migration policy (issue #164).
 
-Two tiers: the precedence rule (`resolve_follow_latest`) is a pure function at the unit
+Two tiers: the precedence rule (`FollowLatest`) is a pure value object at the unit
 tier; the policy's effect on a real transition is driven over the live HTTP surface at
 the component tier.
 """
@@ -13,7 +13,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.hub.domain.graph import resolve_follow_latest
+from blizzard.hub.domain.graph import FollowLatest
 from blizzard.hub.domain.work import MigrationSource
 from tests.support import HubHarness, build_hub, pointer_token, report_lease
 
@@ -81,8 +81,8 @@ nodes:
         (False, False, False),
     ],
 )
-def test_resolve_follow_latest_precedence(graph_policy: bool | None, hub_default: bool, expected: bool) -> None:
-    assert resolve_follow_latest(graph_policy, hub_default=hub_default) is expected
+def test_follow_latest_precedence(graph_policy: bool | None, hub_default: bool, expected: bool) -> None:
+    assert FollowLatest.of(graph_policy, hub_default=hub_default).enabled is expected
 
 
 # The policy at a real transition — component tier

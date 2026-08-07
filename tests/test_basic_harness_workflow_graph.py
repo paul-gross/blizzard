@@ -10,7 +10,7 @@ import pytest
 
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.graph import Executor, SessionMode
-from blizzard.hub.domain.graph_validation import validate_graph
+from blizzard.hub.domain.graph_validation import Validator
 from blizzard.hub.graphs import _GRAPHS_DIR, load_graph_doc, packaged_graph_paths
 
 pytestmark = pytest.mark.unit
@@ -23,7 +23,7 @@ def _doc():  # type: ignore[no-untyped-def]
 
 
 def test_bas_hwf_validates_with_no_errors_or_warnings() -> None:
-    result = validate_graph(_doc())
+    result = Validator.of(_doc()).result
     assert result.ok, result.errors
     assert result.warnings == []
 

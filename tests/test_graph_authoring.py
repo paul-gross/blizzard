@@ -15,7 +15,6 @@ from blizzard.hub.domain.graph import (
     GraphParseError,
     JudgedBy,
     ProducesSpec,
-    parse_graph_doc,
 )
 from blizzard.hub.domain.graph_authoring import reify_graph
 from blizzard.hub.graphs import _GRAPHS_DIR, load_graph_doc
@@ -125,7 +124,7 @@ def test_every_land_ff_outcome_is_authored_on_the_shipped_bas_dwf_deliver_node()
 
 
 def test_reify_carries_an_authored_bounce_cap() -> None:
-    doc = parse_graph_doc(
+    doc = GraphDoc.of(
         {
             "name": "t",
             "entry": "deliver",
@@ -140,7 +139,7 @@ def test_reify_carries_an_authored_bounce_cap() -> None:
 
 def test_reify_carries_authored_poll_interval_and_timeout() -> None:
     """A hub command node's ``poll_interval``/``poll_timeout`` (#66) survive reify."""
-    doc = parse_graph_doc(
+    doc = GraphDoc.of(
         {
             "name": "t",
             "entry": "merge",
@@ -165,7 +164,7 @@ def test_reify_carries_authored_poll_interval_and_timeout() -> None:
 def test_reify_defaults_poll_interval_and_timeout_to_none() -> None:
     """A hub command node authoring neither field reifies both as ``None`` — the
     executor's own defaults apply (#66)."""
-    doc = parse_graph_doc(
+    doc = GraphDoc.of(
         {
             "name": "t",
             "entry": "merge",
@@ -217,28 +216,28 @@ def _produces_doc(produces: object) -> dict[str, object]:
 
 
 def test_parse_normalizes_a_bare_string_produces_entry_to_an_asset_spec() -> None:
-    doc = parse_graph_doc(_produces_doc(["review-findings"]))
+    doc = GraphDoc.of(_produces_doc(["review-findings"]))
     build = doc.node("build")
     assert build is not None
     assert build.produces == [ProducesSpec(name="review-findings", kind=ArtifactKind.ASSET)]
 
 
 def test_parse_normalizes_a_mapping_produces_entry_to_its_declared_kind() -> None:
-    doc = parse_graph_doc(_produces_doc([{"name": "commit", "kind": "git_commit"}]))
+    doc = GraphDoc.of(_produces_doc([{"name": "commit", "kind": "git_commit"}]))
     build = doc.node("build")
     assert build is not None
     assert build.produces == [ProducesSpec(name="commit", kind=ArtifactKind.GIT_COMMIT)]
 
 
 def test_parse_normalizes_a_mapping_produces_entry_with_no_kind_to_asset() -> None:
-    doc = parse_graph_doc(_produces_doc([{"name": "notes"}]))
+    doc = GraphDoc.of(_produces_doc([{"name": "notes"}]))
     build = doc.node("build")
     assert build is not None
     assert build.produces == [ProducesSpec(name="notes", kind=ArtifactKind.ASSET)]
 
 
 def test_parse_produces_both_forms_together_round_trip_through_reify() -> None:
-    doc = parse_graph_doc(_produces_doc(["review-findings", {"name": "commit", "kind": "git_commit"}]))
+    doc = GraphDoc.of(_produces_doc(["review-findings", {"name": "commit", "kind": "git_commit"}]))
     graph = reify_graph(doc, _clock())
     build = graph.node_by_name("build")
     assert build is not None
@@ -250,13 +249,13 @@ def test_parse_produces_both_forms_together_round_trip_through_reify() -> None:
 
 def test_parse_rejects_an_unknown_produces_kind() -> None:
     with pytest.raises(GraphParseError, match="unknown kind"):
-        parse_graph_doc(_produces_doc([{"name": "bad", "kind": "bogus"}]))
+        GraphDoc.of(_produces_doc([{"name": "bad", "kind": "bogus"}]))
 
 
 def test_reify_carries_checks_gating_fields() -> None:
     """``checks_cwd``/``checks_timeout`` on a node and ``requires_checks`` on a choice
     (issue #114) survive reify onto the immutable ``Node``/``Choice``."""
-    doc = parse_graph_doc(
+    doc = GraphDoc.of(
         {
             "name": "t",
             "entry": "build",
