@@ -210,7 +210,7 @@ def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_gen
     )
     # Generation 1's envelope file is still on disk; generation 2 never wrote its own.
     # Written via the path-builder so a collapsed path would write where 2 reads.
-    with open(steps._stdout_path(ctx, "lease_1", 1), "w") as f:
+    with open(ctx.worker_files.stdout_path("lease_1", 1), "w") as f:
         f.write("<generation-1's own envelope>")
 
     advance(ctx)

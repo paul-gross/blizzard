@@ -28,6 +28,7 @@ from blizzard.runner.loop.internal.subprocess_worktree_git import SubprocessWork
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.loop.steps import mark_crash_resume_intents, mark_resume_intents
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 
 _log = get_logger("blizzard.runner.loop")
@@ -101,6 +102,7 @@ def build_loop_context(
         # The check-runner seam (issue #114) — see `runner/loop/checks.py`.
         check_runner=SubprocessCheckRunner(env_passthrough=config.worker_env_passthrough),
         config=loop_config,
+        worker_files=WorkerStdoutFiles(str(worker_stdout_dir), store),
         # The same source injected into `harness` above, declared here too so the loop's
         # direct readers don't reach through `ctx.harness` for it.
         transcripts=harness_transcript_source,

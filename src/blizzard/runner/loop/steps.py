@@ -7,7 +7,6 @@ mid-tick and a restart re-run the tick harmlessly; startup recovery is REAP runn
 
 from __future__ import annotations
 
-import contextlib
 import json
 import os
 import uuid
@@ -202,60 +201,13 @@ _CP_FLUSH_AFTER_APPLY = crashpoint("flush.after-apply-response", "apply-response
 # Usage telemetry (issue #58) — the per-lease stdout redirect and its readback.
 
 
-def _stdout_path(ctx: LoopContext, lease_id: str, generation: int) -> str:
-    """This lease's per-generation stdout redirect target, or ``""`` for no redirect.
-
-    Scoped to ``(lease_id, generation)`` so a readback sees only that attempt's own line,
-    and opened in append mode so a retry reusing the generation number does not collide."""
-    if not ctx.config.worker_stdout_dir:
-        return ""
-    return os.path.join(ctx.config.worker_stdout_dir, f"{lease_id}.{generation}.stdout")
-
-
-def _stderr_path(ctx: LoopContext, lease_id: str, generation: int) -> str:
-    """This lease's per-generation harness-**stderr** redirect target (issue #125, change
-    L(iii)), or ``""`` for no redirect — the sibling of :func:`_stdout_path`, so a launched
-    worker that crashed to stderr leaves a readable tail for the ``worker-lost`` event."""
-    if not ctx.config.worker_stdout_dir:
-        return ""
-    return os.path.join(ctx.config.worker_stdout_dir, f"{lease_id}.{generation}.stderr")
-
-
-def _stderr_tail(ctx: LoopContext, lease: LeaseRecord, *, limit: int = 2000) -> str:
-    """The tail of this lease's most-recent captured spawn-stderr (change L(iii)), or ``""``.
-
-    Best-effort and never raises (a hung-but-live worker that never crashed to stderr, or a
-    test with no ``worker_stdout_dir``, is the ordinary empty case) — folded into a
-    `_fail_attempt` event's detail so a dead worker's last words reach the operator."""
-    generation = ctx.store.lease_generation(lease.lease_id)
-    if generation <= 0:
-        return ""
-    text = _read_stdout(_stderr_path(ctx, lease.lease_id, generation))
-    return text[-limit:] if text else ""
-
-
 def _pending_generation(ctx: LoopContext, lease_id: str) -> int:
     """The spawn generation this lease's next spawn/resume is about to mint — one past
     :meth:`~blizzard.runner.store.repository.IReadRunnerStore.lease_generation`'s
     durably-recorded count, read *before* this attempt's own ``record_spawn`` call
     lands. Every write call site (:func:`_spawn_attempt`, and each resume family
-    member) reads this to name its own :func:`_stdout_path` ahead of that call."""
+    member) reads this to name its own stdout path ahead of that call."""
     return ctx.store.lease_generation(lease_id) + 1
-
-
-def _read_stdout(path: str) -> str:
-    """The per-lease stdout file's full text, or ``""`` when absent/unreadable.
-
-    Never raises: a missing file (nothing was ever redirected, or it was already
-    cleaned up at release) is the ordinary "no envelope" case the caller falls back
-    from, not a fault to log."""
-    if not path:
-        return ""
-    try:
-        with open(path, "rb") as f:
-            return f.read().decode("utf-8", errors="replace")
-    except OSError:
-        return ""
 
 
 def _record_worker_usage(ctx: LoopContext, lease: LeaseRecord, bindings: list[EnvBindingRecord]) -> None:
@@ -304,7 +256,7 @@ def _worker_usage_sample(
     """This attempt's own spawn/resume usage, parsed off *this generation's own* stdout
     envelope, falling back to a transcript-summed, cost-absent sample when none survived.
     Never fabricated: no envelope and no transcript is simply no fact."""
-    output = _read_stdout(_stdout_path(ctx, lease.lease_id, generation))
+    output = ctx.worker_files.read_stdout(lease.lease_id, generation)
     # Same attribution fallback as the judge fact (issue #144): on a resume the stamp is
     # what the session was MINTED with, not what a fresh resolution would produce now.
     sample = ctx.harness.parse_usage(output, kind, model=lease.resolved_model) if output else None
@@ -549,7 +501,7 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
         bindings[0].workdir,
         lease.session_id,
         _RESTART_RESUME_MESSAGE,
-        stdout_path=_stdout_path(ctx, lease.lease_id, _pending_generation(ctx, lease.lease_id)),
+        stdout_path=ctx.worker_files.stdout_path(lease.lease_id, _pending_generation(ctx, lease.lease_id)),
         preamble=_resume_preamble(ctx, lease, bindings),
         chunk_id=lease.chunk_id,
         # Reasserted, not sticky (issue #144) — see the judge call site's note.
@@ -1612,8 +1564,8 @@ def _spawn_attempt(
         local_api_url=ctx.config.local_api_url,
         workspace_root=ctx.config.workspace_root,
         prompt_prefix=prompt_prefix,
-        stdout_path=_stdout_path(ctx, lease_id, generation),
-        stderr_path=_stderr_path(ctx, lease_id, generation),
+        stdout_path=ctx.worker_files.stdout_path(lease_id, generation),
+        stderr_path=ctx.worker_files.stderr_path(lease_id, generation),
         lease_token=lease_token,
     )
     try:
@@ -1722,7 +1674,7 @@ def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str, via: str
 
     # Best-effort: a worker that never crashed to stderr wrote no tail, which is the
     # ordinary case.
-    stderr_tail = _stderr_tail(ctx, lease)
+    stderr_tail = ctx.worker_files.stderr_tail(lease)
 
     # attempt_count includes this lease, and a first attempt is not a retry.
     retried = ctx.store.attempt_count(lease.chunk_id, lease.node_id) - 1
@@ -2009,7 +1961,7 @@ def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
         bindings[0].workdir,
         lease.session_id or "",
         message,
-        stdout_path=_stdout_path(ctx, lease.lease_id, _pending_generation(ctx, lease.lease_id)),
+        stdout_path=ctx.worker_files.stdout_path(lease.lease_id, _pending_generation(ctx, lease.lease_id)),
         preamble=_resume_preamble(ctx, lease, bindings),
         chunk_id=lease.chunk_id,
         # Reasserted, not sticky (issue #144) — see the judge call site's note.
@@ -2072,7 +2024,7 @@ def _resume_if_unpaused(ctx: LoopContext, lease: LeaseRecord) -> None:
         bindings[0].workdir,
         lease.session_id,
         _PAUSE_RESUME_MESSAGE,
-        stdout_path=_stdout_path(ctx, lease.lease_id, _pending_generation(ctx, lease.lease_id)),
+        stdout_path=ctx.worker_files.stdout_path(lease.lease_id, _pending_generation(ctx, lease.lease_id)),
         preamble=_resume_preamble(ctx, lease, bindings),
         chunk_id=lease.chunk_id,
         # Reasserted, not sticky (issue #144) — see the judge call site's note.
@@ -2192,20 +2144,7 @@ def _release_all(ctx: LoopContext, chunk_id: str) -> None:
         ctx.provider.release(binding.environment_id)
         ctx.store.record_release(chunk_id=chunk_id, environment_id=binding.environment_id, released_at=now)
     for lease_id in ctx.store.lease_ids_for_chunk(chunk_id):
-        _cleanup_stdout(ctx, lease_id)
-
-
-def _cleanup_stdout(ctx: LoopContext, lease_id: str) -> None:
-    """Remove every one of a lease's per-generation stdout files, if any.
-
-    Bounded to the durably recorded generation count plus one: the un-armable spawn-record gap
-    can leave a file for a generation whose own ``record_spawn`` never landed. A missing file at
-    any of those generations is a no-op."""
-    if not ctx.config.worker_stdout_dir:
-        return
-    for generation in range(1, ctx.store.lease_generation(lease_id) + 2):
-        with contextlib.suppress(OSError):
-            os.remove(_stdout_path(ctx, lease_id, generation))
+        ctx.worker_files.cleanup(lease_id)
 
 
 def _release_acquired(ctx: LoopContext, acquired: list[AcquiredEnvironment]) -> None:

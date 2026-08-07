@@ -31,6 +31,7 @@ from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
 from blizzard.runner.loop.process import IProcessProbe
+from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import IWriteRunnerStore
@@ -566,6 +567,7 @@ def make_context(
         worktree_git=_wt,
         check_runner=_check_runner,
         config=resolved_config,
+        worker_files=WorkerStdoutFiles(resolved_config.worker_stdout_dir, store),
         # Mirrors `build_loop_context`'s own composition: the same source `harness`
         # itself holds, resolved once here rather than reached through `ctx.harness`.
         transcripts=harness.transcript_source(),

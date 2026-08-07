@@ -16,6 +16,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.steps import pull
+from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.store.repository import NewLease
 from tests.runner_fakes import FakeHarness, FakeProbe, FakeProvider, FakeWorktreeGit, make_store
 from tests.support import build_hub, pointer_token, report_lease
@@ -114,6 +115,7 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
         process=probe,
         worktree_git=FakeWorktreeGit(),
         config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        worker_files=WorkerStdoutFiles("", store),
     )
 
     pull(ctx)
@@ -183,6 +185,7 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
         process=probe,
         worktree_git=FakeWorktreeGit(),
         config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        worker_files=WorkerStdoutFiles("", store),
     )
 
     pull(ctx)
