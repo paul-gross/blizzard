@@ -105,144 +105,135 @@ def _normalize_records(records: list[dict[str, Any]], *, is_sidechain_file: bool
             continue
         main_records.append(record)
 
-    turns, agent_id_by_tool_turn, discovered_agent_ids, tool_turns_by_record_uuid = _collapse(main_records)
-    unlinked = _assemble_inline_sidechains(sidechain_records, turns, tool_turns_by_record_uuid)
+    collapser = _TurnCollapser()
+    collapser.feed_all(main_records)
+    unlinked = (
+        _SidechainAssembler(collapser.turns, collapser.tool_turns_by_record_uuid).assemble(sidechain_records)
+        if sidechain_records
+        else []
+    )
     return NormalizedFile(
-        turns=turns,
+        turns=collapser.turns,
         unlinked_sidechains=unlinked,
-        agent_id_by_tool_turn=agent_id_by_tool_turn,
-        discovered_agent_ids=frozenset(discovered_agent_ids),
+        agent_id_by_tool_turn=collapser.agent_id_by_tool_turn,
+        discovered_agent_ids=frozenset(collapser.discovered_agent_ids),
         harness_version=harness_version,
     )
 
 
-def _collapse(
-    records: list[dict[str, Any]],
-) -> tuple[list[NormalizedTurn], dict[int, str], set[str], dict[str, list[int]]]:
-    pending_tool_index: dict[str, int] = {}
-    tool_turns_by_record_uuid: dict[str, list[int]] = {}
-    agent_id_by_tool_turn: dict[int, str] = {}
-    discovered_agent_ids: set[str] = set()
-    turns: list[NormalizedTurn] = []
+class _TurnCollapser:
+    """The main conversation's records folded into turns, in file order."""
 
-    for record in records:
-        timestamp = _parse_timestamp(record.get("timestamp"))
-        record_type = record.get("type")
-        if record_type == "assistant":
-            _collapse_assistant(record, timestamp, turns, pending_tool_index, tool_turns_by_record_uuid)
-        elif record_type == "user":
-            _collapse_user(record, timestamp, turns, pending_tool_index, agent_id_by_tool_turn, discovered_agent_ids)
+    def __init__(self) -> None:
+        self.turns: list[NormalizedTurn] = []
+        self.tool_turns_by_record_uuid: dict[str, list[int]] = {}
+        self.agent_id_by_tool_turn: dict[int, str] = {}
+        self.discovered_agent_ids: set[str] = set()
+        #: `tool_use_id` → turn index, so a later `tool_result` lands its output.
+        self._pending_tool_index: dict[str, int] = {}
 
-    return turns, agent_id_by_tool_turn, discovered_agent_ids, tool_turns_by_record_uuid
+    def feed_all(self, records: list[dict[str, Any]]) -> None:
+        for record in records:
+            timestamp = _parse_timestamp(record.get("timestamp"))
+            record_type = record.get("type")
+            if record_type == "assistant":
+                self._assistant(record, timestamp)
+            elif record_type == "user":
+                self._user(record, timestamp)
 
+    def _assistant(self, record: dict[str, Any], timestamp: datetime | None) -> None:
+        content = record.get("message", {}).get("content") if isinstance(record.get("message"), dict) else None
+        if not isinstance(content, list):
+            return
 
-def _collapse_assistant(
-    record: dict[str, Any],
-    timestamp: datetime | None,
-    turns: list[NormalizedTurn],
-    pending_tool_index: dict[str, int],
-    tool_turns_by_record_uuid: dict[str, list[int]],
-) -> None:
-    content = record.get("message", {}).get("content") if isinstance(record.get("message"), dict) else None
-    if not isinstance(content, list):
-        return
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "thinking":
+                self.turns.append(_thinking_turn(timestamp, block, len(self.turns)))
 
-    for block in content:
-        if isinstance(block, dict) and block.get("type") == "thinking":
-            turns.append(_thinking_turn(timestamp, block, len(turns)))
+        text_parts = [str(b.get("text", "")) for b in content if isinstance(b, dict) and b.get("type") == "text"]
+        joined = "\n".join(p for p in text_parts if p)
+        if joined:
+            text, block_truncated = _clean(joined)
+            self.turns.append(_new_turn("asst", timestamp, len(self.turns), text=text, truncated=block_truncated))
 
-    text_parts = [str(b.get("text", "")) for b in content if isinstance(b, dict) and b.get("type") == "text"]
-    joined = "\n".join(p for p in text_parts if p)
-    if joined:
-        text, block_truncated = _clean(joined)
-        turns.append(_new_turn("asst", timestamp, len(turns), text=text, truncated=block_truncated))
-
-    record_uuid = record.get("uuid")
-    tool_indices: list[int] = []
-    for block in content:
-        if not isinstance(block, dict) or block.get("type") != "tool_use":
-            continue
-        name = str(block.get("name", ""))
-        input_map, input_unparsed, input_shape = _normalize_tool_input(block.get("input"))
-        raw_tool_use_id = block.get("id")
-        tool_use_id = raw_tool_use_id if isinstance(raw_tool_use_id, str) else None
-        tool = ToolCall(
-            name=name,
-            input=input_map,
-            input_unparsed=input_unparsed,
-            input_shape=input_shape,
-            tool_use_id=tool_use_id,
-            output=None,
-            output_truncated=False,
-        )
-        turns.append(
-            NormalizedTurn(
-                index=len(turns),
-                kind="tool",
-                timestamp=timestamp,
-                text="",
-                tool=tool,
-                thinking_redacted=False,
-                sidechain=None,
-                truncated=False,
-            )
-        )
-        tool_indices.append(len(turns) - 1)
-        if tool_use_id is not None:
-            pending_tool_index[tool_use_id] = len(turns) - 1
-
-    if isinstance(record_uuid, str) and tool_indices:
-        tool_turns_by_record_uuid.setdefault(record_uuid, []).extend(tool_indices)
-
-
-def _collapse_user(
-    record: dict[str, Any],
-    timestamp: datetime | None,
-    turns: list[NormalizedTurn],
-    pending_tool_index: dict[str, int],
-    agent_id_by_tool_turn: dict[int, str],
-    discovered_agent_ids: set[str],
-) -> None:
-    message = record.get("message")
-    content = message.get("content") if isinstance(message, dict) else None
-
-    tool_result_blocks = None
-    if isinstance(content, list):
-        blocks = [b for b in content if isinstance(b, dict) and b.get("type") == "tool_result"]
-        tool_result_blocks = blocks or None
-
-    if tool_result_blocks is not None:
-        tool_use_result = record.get("toolUseResult")
-        raw_agent_id = tool_use_result.get("agentId") if isinstance(tool_use_result, dict) else None
-        agent_id = raw_agent_id if isinstance(raw_agent_id, str) and raw_agent_id else None
-        if agent_id is not None:
-            # A discovered agent id is always a read *candidate*, whether or not it can
-            # be attached below — attachment stays best-effort, discovery does not.
-            discovered_agent_ids.add(agent_id)
-        # `toolUseResult.agentId` is one field on the record, not one per block, so it is
-        # attributable only when this record resolves exactly one `tool_result`.
-        agent_id_unambiguous = len(tool_result_blocks) == 1
-        for block in tool_result_blocks:
-            tool_use_id = block.get("tool_use_id")
-            if not isinstance(tool_use_id, str):
+        record_uuid = record.get("uuid")
+        tool_indices: list[int] = []
+        for block in content:
+            if not isinstance(block, dict) or block.get("type") != "tool_use":
                 continue
-            index = pending_tool_index.get(tool_use_id)
-            if index is None:
-                continue  # unmatched tool_result — its tool_use fell outside this call's lines
-            output, output_truncated = _clean(_extract_text(block.get("content")))
-            turn = turns[index]
-            assert turn.tool is not None
-            updated_tool = replace(
-                turn.tool, output=output, output_truncated=turn.tool.output_truncated or output_truncated
+            name = str(block.get("name", ""))
+            input_map, input_unparsed, input_shape = _normalize_tool_input(block.get("input"))
+            raw_tool_use_id = block.get("id")
+            tool_use_id = raw_tool_use_id if isinstance(raw_tool_use_id, str) else None
+            tool = ToolCall(
+                name=name,
+                input=input_map,
+                input_unparsed=input_unparsed,
+                input_shape=input_shape,
+                tool_use_id=tool_use_id,
+                output=None,
+                output_truncated=False,
             )
-            turns[index] = replace(turn, tool=updated_tool, truncated=turn.truncated or output_truncated)
-            if agent_id_unambiguous and agent_id is not None:
-                agent_id_by_tool_turn[index] = agent_id
-        return
+            self.turns.append(
+                NormalizedTurn(
+                    index=len(self.turns),
+                    kind="tool",
+                    timestamp=timestamp,
+                    text="",
+                    tool=tool,
+                    thinking_redacted=False,
+                    sidechain=None,
+                    truncated=False,
+                )
+            )
+            tool_indices.append(len(self.turns) - 1)
+            if tool_use_id is not None:
+                self._pending_tool_index[tool_use_id] = len(self.turns) - 1
 
-    # A plain user record (first spawn prompt, or a later --resume injection) — env.
-    text, block_truncated = _clean(_extract_text(content))
-    turns.append(_new_turn("env", timestamp, len(turns), text=text, truncated=block_truncated))
+        if isinstance(record_uuid, str) and tool_indices:
+            self.tool_turns_by_record_uuid.setdefault(record_uuid, []).extend(tool_indices)
+
+    def _user(self, record: dict[str, Any], timestamp: datetime | None) -> None:
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+
+        tool_result_blocks = None
+        if isinstance(content, list):
+            blocks = [b for b in content if isinstance(b, dict) and b.get("type") == "tool_result"]
+            tool_result_blocks = blocks or None
+
+        if tool_result_blocks is not None:
+            tool_use_result = record.get("toolUseResult")
+            raw_agent_id = tool_use_result.get("agentId") if isinstance(tool_use_result, dict) else None
+            agent_id = raw_agent_id if isinstance(raw_agent_id, str) and raw_agent_id else None
+            if agent_id is not None:
+                # A discovered agent id is always a read *candidate*, whether or not it can
+                # be attached below — attachment stays best-effort, discovery does not.
+                self.discovered_agent_ids.add(agent_id)
+            # `toolUseResult.agentId` is one field on the record, not one per block, so it is
+            # attributable only when this record resolves exactly one `tool_result`.
+            agent_id_unambiguous = len(tool_result_blocks) == 1
+            for block in tool_result_blocks:
+                tool_use_id = block.get("tool_use_id")
+                if not isinstance(tool_use_id, str):
+                    continue
+                index = self._pending_tool_index.get(tool_use_id)
+                if index is None:
+                    continue  # unmatched tool_result — its tool_use fell outside this call's lines
+                output, output_truncated = _clean(_extract_text(block.get("content")))
+                turn = self.turns[index]
+                assert turn.tool is not None
+                updated_tool = replace(
+                    turn.tool, output=output, output_truncated=turn.tool.output_truncated or output_truncated
+                )
+                self.turns[index] = replace(turn, tool=updated_tool, truncated=turn.truncated or output_truncated)
+                if agent_id_unambiguous and agent_id is not None:
+                    self.agent_id_by_tool_turn[index] = agent_id
+            return
+
+        # A plain user record (first spawn prompt, or a later --resume injection) — env.
+        text, block_truncated = _clean(_extract_text(content))
+        self.turns.append(_new_turn("env", timestamp, len(self.turns), text=text, truncated=block_truncated))
 
 
 def _thinking_turn(timestamp: datetime | None, block: dict[str, Any], index: int) -> NormalizedTurn:
@@ -295,47 +286,87 @@ def _normalize_tool_input(raw_input: object) -> tuple[Mapping[str, Any], str | N
 # --- inline sidechain assembly (link routes 2-4) -----------------------------
 
 
-def _assemble_inline_sidechains(
-    sidechain_records: list[dict[str, Any]],
-    turns: list[NormalizedTurn],
-    tool_turns_by_record_uuid: dict[str, list[int]],
-) -> list[SidechainConversation]:
-    if not sidechain_records:
-        return []
+class _SidechainAssembler:
+    """Inline sidechain runs spliced onto the tool turns that spawned them."""
 
-    unlinked: list[SidechainConversation] = []
-    # Every tool turn index a run has already claimed, so two sidechains resolving to the
-    # same call never collapse — the loser falls through to its own next route.
-    claimed: set[int] = set()
-    # Built once, not per run: route 3 otherwise rescans every turn for every sidechain
-    # run (O(runs x turns)).
-    tool_turn_indices_by_prompt = _index_tool_turns_by_prompt(turns)
-    for run in _group_sidechain_runs(sidechain_records):
-        # `run`'s records all carry `isSidechain: true`, so normalize them as their own
-        # main conversation rather than forking a further level of sidechain routing.
-        conv_turns = _normalize_records(run, is_sidechain_file=True).turns
-        agent_id = _first_str(run, "agentId")
+    def __init__(self, turns: list[NormalizedTurn], tool_turns_by_record_uuid: dict[str, list[int]]) -> None:
+        self.turns = turns
+        self.tool_turns_by_record_uuid = tool_turns_by_record_uuid
+        # Every tool turn index a run has already claimed, so two sidechains resolving to
+        # the same call never collapse — the loser falls through to its own next route.
+        self.claimed: set[int] = set()
+        # Built once, not per run: route 3 otherwise rescans every turn per run.
+        self.tool_turn_indices_by_prompt = _index_tool_turns_by_prompt(turns)
 
-        target_index = _resolve_uuid_chain(run, tool_turns_by_record_uuid)
-        link: SidechainLink = "uuid-chain"
-        if target_index is not None and target_index in claimed:
-            target_index = None
-        if target_index is None:
-            target_index = _resolve_prompt_timestamp(run, turns, claimed, tool_turn_indices_by_prompt)
-            link = "prompt-timestamp"
-        if target_index is None:
-            link = "unlinked"
+    def assemble(self, sidechain_records: list[dict[str, Any]]) -> list[SidechainConversation]:
+        """Splice each run onto its spawning turn; return the runs that linked to none."""
+        unlinked: list[SidechainConversation] = []
+        for run in _group_sidechain_runs(sidechain_records):
+            # `run`'s records all carry `isSidechain: true`, so normalize them as their own
+            # main conversation rather than forking a further level of sidechain routing.
+            conv_turns = _normalize_records(run, is_sidechain_file=True).turns
+            agent_id = _first_str(run, "agentId")
 
-        agent_type = _infer_agent_type(run, turns, target_index)
-        conversation = SidechainConversation(agent_id=agent_id, agent_type=agent_type, link=link, turns=conv_turns)
+            target_index = self._resolve_uuid_chain(run)
+            link: SidechainLink = "uuid-chain"
+            if target_index is not None and target_index in self.claimed:
+                target_index = None
+            if target_index is None:
+                target_index = self._resolve_prompt_timestamp(run)
+                link = "prompt-timestamp"
+            if target_index is None:
+                link = "unlinked"
 
-        if target_index is None:
-            unlinked.append(conversation)
-        else:
-            claimed.add(target_index)
-            turns[target_index] = replace(turns[target_index], sidechain=conversation)
+            agent_type = self._infer_agent_type(run, target_index)
+            conversation = SidechainConversation(agent_id=agent_id, agent_type=agent_type, link=link, turns=conv_turns)
 
-    return unlinked
+            if target_index is None:
+                unlinked.append(conversation)
+            else:
+                self.claimed.add(target_index)
+                self.turns[target_index] = replace(self.turns[target_index], sidechain=conversation)
+
+        return unlinked
+
+    def _resolve_uuid_chain(self, run: list[dict[str, Any]]) -> int | None:
+        parent_uuid = run[0].get("parentUuid")
+        if not isinstance(parent_uuid, str):
+            return None
+        indices = self.tool_turns_by_record_uuid.get(parent_uuid)
+        if not indices or len(indices) != 1:
+            # No match, or the spawning record emitted more than one tool call —
+            # ambiguous, so fall through to route 3 rather than guess.
+            return None
+        return indices[0]
+
+    def _resolve_prompt_timestamp(self, run: list[dict[str, Any]]) -> int | None:
+        prompt_text = _first_user_text(run)
+        if not prompt_text:
+            return None
+        root_timestamp = _parse_timestamp(run[0].get("timestamp"))
+
+        best_index: int | None = None
+        best_timestamp: datetime | None = None
+        for i in self.tool_turn_indices_by_prompt.get(prompt_text, ()):
+            if i in self.claimed:
+                continue
+            turn = self.turns[i]
+            assert turn.timestamp is not None  # only a timestamped turn is ever indexed
+            if root_timestamp is not None and turn.timestamp > root_timestamp:
+                continue  # only a preceding call can be this sidechain's spawn
+            if best_timestamp is None or turn.timestamp > best_timestamp:
+                best_index = i
+                best_timestamp = turn.timestamp
+        return best_index
+
+    def _infer_agent_type(self, run: list[dict[str, Any]], target_index: int | None) -> str | None:
+        if target_index is not None:
+            tool = self.turns[target_index].tool
+            if tool is not None:
+                candidate = tool.input.get("subagent_type")
+                if isinstance(candidate, str):
+                    return candidate
+        return _first_str(run, "agentType")
 
 
 def _group_sidechain_runs(records: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
@@ -392,22 +423,10 @@ def _group_sidechain_runs(records: list[dict[str, Any]]) -> list[list[dict[str, 
     return runs
 
 
-def _resolve_uuid_chain(run: list[dict[str, Any]], tool_turns_by_record_uuid: dict[str, list[int]]) -> int | None:
-    parent_uuid = run[0].get("parentUuid")
-    if not isinstance(parent_uuid, str):
-        return None
-    indices = tool_turns_by_record_uuid.get(parent_uuid)
-    if not indices or len(indices) != 1:
-        # No match, or the spawning record emitted more than one tool call —
-        # ambiguous, so fall through to route 3 rather than guess.
-        return None
-    return indices[0]
-
-
 def _index_tool_turns_by_prompt(turns: list[NormalizedTurn]) -> dict[str, list[int]]:
-    """Every tool-call turn index, keyed by its own ``prompt``/``description`` input
-    text — built once so :func:`_resolve_prompt_timestamp` never rescans per run. Only a
-    timestamped turn is indexed: an un-timestamped one can never win "nearest preceding"."""
+    """Every tool-call turn index, keyed by its own ``prompt``/``description`` input text.
+    Only a timestamped turn is indexed: an un-timestamped one can never win "nearest
+    preceding"."""
     index: dict[str, list[int]] = {}
     for i, turn in enumerate(turns):
         if turn.kind != "tool" or turn.tool is None or turn.timestamp is None:
@@ -416,42 +435,6 @@ def _index_tool_turns_by_prompt(turns: list[NormalizedTurn]) -> dict[str, list[i
         if isinstance(candidate, str) and candidate:
             index.setdefault(candidate, []).append(i)
     return index
-
-
-def _resolve_prompt_timestamp(
-    run: list[dict[str, Any]],
-    turns: list[NormalizedTurn],
-    claimed: set[int],
-    tool_turn_indices_by_prompt: dict[str, list[int]],
-) -> int | None:
-    prompt_text = _first_user_text(run)
-    if not prompt_text:
-        return None
-    root_timestamp = _parse_timestamp(run[0].get("timestamp"))
-
-    best_index: int | None = None
-    best_timestamp: datetime | None = None
-    for i in tool_turn_indices_by_prompt.get(prompt_text, ()):
-        if i in claimed:
-            continue
-        turn = turns[i]
-        assert turn.timestamp is not None  # only a timestamped turn is ever indexed
-        if root_timestamp is not None and turn.timestamp > root_timestamp:
-            continue  # only a preceding call can be this sidechain's spawn
-        if best_timestamp is None or turn.timestamp > best_timestamp:
-            best_index = i
-            best_timestamp = turn.timestamp
-    return best_index
-
-
-def _infer_agent_type(run: list[dict[str, Any]], turns: list[NormalizedTurn], target_index: int | None) -> str | None:
-    if target_index is not None:
-        tool = turns[target_index].tool
-        if tool is not None:
-            candidate = tool.input.get("subagent_type")
-            if isinstance(candidate, str):
-                return candidate
-    return _first_str(run, "agentType")
 
 
 def _first_user_text(run: list[dict[str, Any]]) -> str | None:
