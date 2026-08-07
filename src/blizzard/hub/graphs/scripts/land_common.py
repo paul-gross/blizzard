@@ -1,9 +1,8 @@
-"""Shared helpers for the land scripts (issue #230).
+"""What every land script is built from (issue #230).
 
 Pure stdlib, exactly like the scripts that import from here (``bzh:deterministic-shell``).
-``forge_request`` is the one HTTP seam out; the rest are small pure helpers plus the
-durable marker-write wrappers, which raise rather than let a script print ``landed`` over
-an unrecorded merge."""
+:class:`LandRun` is one node visit — its injected env, the forge, and the durable marker
+channel, which raises rather than let a script print ``landed`` over an unrecorded merge."""
 
 from __future__ import annotations
 
@@ -14,6 +13,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 # The mid-run marker callback's token header (issue #230) — a **delivery** credential,
@@ -23,6 +23,20 @@ _MARKER_CALLBACK_ENV = "BZ_HUB_MARKER_CALLBACK_URL"
 _ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
 
 _MARKER_PREFIX = "merged/"
+
+_ENV_FORGE_URL = "BZ_FORGE_URL"
+_ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
+_ENV_FORGE_OWNER = "BZ_FORGE_OWNER"
+_ENV_BASE_BRANCH = "BZ_HUB_BASE_BRANCH"
+_ENV_GIT_COMMITS = "BZ_HUB_GIT_COMMITS"
+_ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"
+_ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
+_ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"
+_ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
+
+# Test-only instrumentation for the mid-script crash sweep: the between-repo window is a
+# wall-clock race a `kill -9` must land inside, so a positive value widens it.
+_ENV_TEST_PAUSE_AFTER_FIRST_MARKER = "BZ_HUB_LAND_TEST_PAUSE_SECONDS"
 
 # GitHub caps PR/issue titles at 256 characters; a resolved feature title longer than
 # that is truncated with an ellipsis so PR creation never fails on an over-long title.
@@ -130,30 +144,30 @@ class MarkerWriteError(Exception):
     abort rather than print ``landed`` over an unrecorded merge."""
 
 
-def post_marker(
-    *,
-    callback_url: str,
-    token: str,
-    request: Callable[..., tuple[int, Any]],
-) -> Callable[[str, str], None]:
-    """Build the generic ``post(name, content)`` durable-marker-write closure (issue #232).
+@dataclass(frozen=True)
+class MarkerWriter:
+    """The run's durable marker channel (issues #65, #230, #232), carrying its capability
+    token as :data:`_MARKER_TOKEN_HEADER`. Constructing one reaches nothing — every failure
+    mode, a missing ``callback_url`` included, surfaces on the write."""
 
-    A confirmed write (any 2xx, replays included) is the only success; anything else retries
-    a bounded number of times, then raises :class:`MarkerWriteError` — including a falsy
-    ``callback_url``, which is fatal only once something actually reaches the closure."""
+    callback_url: str
+    token: str
+    request: Callable[..., tuple[int, Any]]
 
-    def post(name: str, content: str) -> None:
-        if not callback_url:
+    def post(self, name: str, content: str) -> None:
+        """Write marker ``name``, or raise. A confirmed 2xx (replays included) is the only
+        success; a connection error or 5xx retries a bounded number of times first."""
+        if not self.callback_url:
             raise MarkerWriteError(
                 f"could not write marker {name!r}: no {_MARKER_CALLBACK_ENV} was configured for this run"
             )
-        headers = {_MARKER_TOKEN_HEADER: token} if token else None
+        headers = {_MARKER_TOKEN_HEADER: self.token} if self.token else None
         body = {"name": name, "content": content}
         last_status: int | None = None
         last_body: Any = None
         for attempt in range(1, _MARKER_WRITE_ATTEMPTS + 1):
             try:
-                status, response_body = request("POST", callback_url, token=None, headers=headers, body=body)
+                status, response_body = self.request("POST", self.callback_url, token=None, headers=headers, body=body)
             except OSError as exc:
                 last_status, last_body = None, str(exc)
                 if attempt < _MARKER_WRITE_ATTEMPTS:
@@ -170,23 +184,76 @@ def post_marker(
                 continue
             raise MarkerWriteError(f"could not write marker {name!r}: HTTP {last_status} {last_body!r}")
 
-    return post
+    def record(self, repo: str, commit_hash: str) -> None:
+        """Mark ``repo`` landed — call immediately after it does, mid-run."""
+        self.post(f"{_MARKER_PREFIX}{repo}", commit_hash)
 
 
-def marker_recorder(
-    *,
-    callback_url: str,
-    token: str,
-    request: Callable[..., tuple[int, Any]],
-) -> Callable[[str, str], None]:
-    """:func:`post_marker` specialized to the ``merged/<repo>`` marker name (issues #65,
-    #230) — call it immediately after each repo lands, mid-run.
+@dataclass(frozen=True)
+class LandRun:
+    """One ``deliver`` node visit: the env the executor injected, and the two channels out
+    of it — the forge and :attr:`markers`."""
 
-    Every write carries the run's marker capability token as :data:`_MARKER_TOKEN_HEADER`;
-    retry and failure behavior are :func:`post_marker`'s."""
-    post = post_marker(callback_url=callback_url, token=token, request=request)
+    forge_url: str
+    base_branch: str
+    commits: list[dict[str, str]]
+    already: set[str]
+    markers: MarkerWriter
+    owner: str = ""
+    token: str | None = None
+    feature_title: str = ""
+    #: The HTTP seam, resolved per call so :func:`forge_request` stays substitutable.
+    request: Callable[..., tuple[int, Any]] | None = None
 
-    def record(repo: str, commit_hash: str) -> None:
-        post(f"{_MARKER_PREFIX}{repo}", commit_hash)
+    @classmethod
+    def from_env(cls) -> LandRun:
+        """Read the whole injected env (``bzh:hub-node-env-contract``); a missing required
+        var exits non-zero naming it, before anything reaches the forge."""
+        forge_url = require_env(_ENV_FORGE_URL).rstrip("/")
+        token = os.environ.get(_ENV_FORGE_TOKEN)
+        owner = os.environ.get(_ENV_FORGE_OWNER, "")
+        base_branch = require_env(_ENV_BASE_BRANCH)
+        commits: list[dict[str, str]] = require_json_env(_ENV_GIT_COMMITS)
+        return cls(
+            forge_url=forge_url,
+            base_branch=base_branch,
+            commits=commits,
+            already=set(json.loads(os.environ.get(_ENV_ARTIFACT_NAMES, "[]"))),
+            markers=MarkerWriter(
+                callback_url=os.environ.get(_ENV_MARKER_CALLBACK_URL, ""),
+                token=os.environ.get(_ENV_MARKER_TOKEN, ""),
+                request=forge_request,
+            ),
+            owner=owner,
+            token=token,
+            feature_title=os.environ.get(_ENV_FEATURE_TITLE) or "",
+        )
 
-    return record
+    def api(self, method: str, path: str, body: dict[str, Any] | None = None) -> tuple[int, Any]:
+        """One forge call, ``path`` relative to the injected forge URL."""
+        request = self.request or forge_request
+        return request(method, f"{self.forge_url}{path}", token=self.token, body=body)
+
+    def repo(self, bare_repo: str) -> str:
+        """``bare_repo`` as the ``owner/name`` a forge route resolves."""
+        return qualify_repo(bare_repo, self.owner)
+
+    def pending(self) -> list[dict[str, str]]:
+        """The repos still to land — those with no ``merged/<repo>`` marker yet. Exits
+        non-zero when the graph promised commits and this run was handed none."""
+        refuse_empty_delivery(self.commits)
+        return [c for c in self.commits if f"{_MARKER_PREFIX}{c['repo']}" not in self.already]
+
+    def pause_for_crash_window(self, *, marker_index: int, pending_count: int) -> None:
+        """Widen the between-repo window for the mid-script crash sweep — test-only.
+
+        Inert unless :data:`_ENV_TEST_PAUSE_AFTER_FIRST_MARKER` names a positive number of
+        seconds, and fires only after the FIRST marker of a genuinely multi-repo run, so a
+        crash-recovery re-run never pauses."""
+        raw = os.environ.get(_ENV_TEST_PAUSE_AFTER_FIRST_MARKER)
+        if not raw or marker_index != 1 or pending_count < 2:
+            return
+        seconds = float(raw)
+        if seconds > 0:
+            print(f"[test] pausing {seconds}s after the first marker to widen the crash window", file=sys.stderr)
+            time.sleep(seconds)

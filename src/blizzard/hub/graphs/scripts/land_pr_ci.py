@@ -7,33 +7,10 @@ hub-command-node authoring contract (``blizzard-context:/standards/hub-nodes.md`
 
 from __future__ import annotations
 
-import json
-import os
 import sys
 from typing import Any
 
-from blizzard.hub.graphs.scripts.land_common import (
-    _MARKER_PREFIX,
-    MarkerWriteError,
-    forge_request,
-    marker_recorder,
-    post_marker,
-    pr_title,
-    qualify_repo,
-    refuse_empty_delivery,
-    require_env,
-    require_json_env,
-)
-
-_ENV_FORGE_URL = "BZ_FORGE_URL"
-_ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
-_ENV_FORGE_OWNER = "BZ_FORGE_OWNER"
-_ENV_BASE_BRANCH = "BZ_HUB_BASE_BRANCH"
-_ENV_GIT_COMMITS = "BZ_HUB_GIT_COMMITS"
-_ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"
-_ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
-_ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"
-_ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
+from blizzard.hub.graphs.scripts.land_common import LandRun, MarkerWriteError, pr_title
 
 _HUB_USER = "blizzard-hub"
 
@@ -160,25 +137,14 @@ def main() -> int:
 
 
 def _land() -> int:
-    forge_url = require_env(_ENV_FORGE_URL).rstrip("/")
-    token = os.environ.get(_ENV_FORGE_TOKEN)
-    owner = os.environ.get(_ENV_FORGE_OWNER, "")
-    base_branch = require_env(_ENV_BASE_BRANCH)
-    commits: list[dict[str, str]] = require_json_env(_ENV_GIT_COMMITS)
-    already: set[str] = set(json.loads(os.environ.get(_ENV_ARTIFACT_NAMES, "[]")))
-    callback_url = os.environ.get(_ENV_MARKER_CALLBACK_URL, "")
-    marker_token = os.environ.get(_ENV_MARKER_TOKEN, "")
-    feature_title = os.environ.get(_ENV_FEATURE_TITLE) or ""
-
-    def api(method: str, path: str, body: dict[str, Any] | None = None) -> tuple[int, Any]:
-        return forge_request(method, f"{forge_url}{path}", token=token, body=body)
+    run = LandRun.from_env()
 
     def fetch_check_runs(repo: str, ref: str) -> list[dict[str, Any]] | None:
         """GET ``repo``'s check-runs at ``ref``, degrading to ``None`` on ANY read
         failure — a non-200 response, a malformed body, or an outright exception (the
         shape a real forge outage raises) — never a bounce or a crash (issue #232)."""
         try:
-            status, payload = api("GET", f"/repos/{repo}/commits/{ref}/check-runs")
+            status, payload = run.api("GET", f"/repos/{repo}/commits/{ref}/check-runs")
         except Exception:
             return None
         if status != 200 or not isinstance(payload, dict):
@@ -186,11 +152,7 @@ def _land() -> int:
         check_runs = payload.get("check_runs")
         return check_runs if isinstance(check_runs, list) else None
 
-    record_marker = marker_recorder(callback_url=callback_url, token=marker_token, request=forge_request)
-    write_findings = post_marker(callback_url=callback_url, token=marker_token, request=forge_request)
-
-    refuse_empty_delivery(commits)
-    pending = [c for c in commits if f"{_MARKER_PREFIX}{c['repo']}" not in already]
+    pending = run.pending()
     if not pending:
         print(_LANDED)
         return 0
@@ -204,18 +166,18 @@ def _land() -> int:
     try:
         for commit in pending:
             bare_repo = commit["repo"]
-            repo = qualify_repo(bare_repo, owner)
+            repo = run.repo(bare_repo)
             branch = commit["branch"]
-            status, listed = api("GET", f"/repos/{repo}/pulls?state=open")
+            status, listed = run.api("GET", f"/repos/{repo}/pulls?state=open")
             existing = next((p for p in (listed or []) if p.get("head", {}).get("ref") == branch), None)
             if existing is None:
-                status, created = api(
+                status, created = run.api(
                     "POST",
                     f"/repos/{repo}/pulls",
                     {
-                        "title": pr_title(feature_title, branch),
+                        "title": pr_title(run.feature_title, branch),
                         "head": branch,
-                        "base": base_branch,
+                        "base": run.base_branch,
                         "user": _HUB_USER,
                     },
                 )
@@ -226,7 +188,7 @@ def _land() -> int:
                     continue
                 existing = created
             number = int(existing["number"])
-            status, pull = api("GET", f"/repos/{repo}/pulls/{number}")
+            status, pull = run.api("GET", f"/repos/{repo}/pulls/{number}")
             head_sha = (pull.get("head") or {}).get("sha") or commit["commit"]
             state = pull.get("mergeable_state")
             decision = classify(state, merged=bool(pull.get("merged")))
@@ -235,7 +197,7 @@ def _land() -> int:
             if decision == _UPDATE:
                 # Guarded on the head just read, so updates never stack. Any non-202 other
                 # than a named conflict waits — the NEXT poll's state is authoritative.
-                ustatus, ubody = api(
+                ustatus, ubody = run.api(
                     "PUT",
                     f"/repos/{repo}/pulls/{number}/update-branch",
                     {"expected_head_sha": head_sha},
@@ -252,7 +214,7 @@ def _land() -> int:
                     # through to the plain wait below.
                     check_runs = fetch_check_runs(repo, head_sha)
                     if check_runs is not None and classify_checks(check_runs) == _FAILED:
-                        base_checks = fetch_check_runs(repo, base_branch)
+                        base_checks = fetch_check_runs(repo, run.base_branch)
                         checks = [
                             {
                                 "name": run.get("name"),
@@ -302,7 +264,7 @@ def _land() -> int:
     if failures:
         # Nothing merges (chunk atomicity). The write is deliberately unguarded, unlike
         # the wait path below: unwritten findings leave `resolve` nothing to read (#243).
-        write_findings(_FINDINGS_NAME, render_findings(failures))
+        run.markers.post(_FINDINGS_NAME, render_findings(failures))
         print(_CI_FAILURE)
         return 0
 
@@ -311,7 +273,7 @@ def _land() -> int:
         # failure here degrades to `pending` since the next poll re-writes them (#243).
         if wait_records:
             try:
-                write_findings(_FINDINGS_NAME, render_findings(wait_records))
+                run.markers.post(_FINDINGS_NAME, render_findings(wait_records))
             except MarkerWriteError as exc:
                 print(f"delivery-findings write failed (wait path, non-fatal): {exc}", file=sys.stderr)
         print(_PENDING)
@@ -320,11 +282,11 @@ def _land() -> int:
     # --- merge stage: merge the CURRENT head sha, which a self-heal update-branch may
     #     have advanced past the originally-recorded artifact commit.
     for bare_repo, repo, number, head_sha in to_merge:
-        status, result = api(
+        status, result = run.api(
             "PUT",
             f"/repos/{repo}/pulls/{number}/merge",
             {
-                "commit_message": feature_title or f"blizzard: land {bare_repo}",
+                "commit_message": run.feature_title or f"blizzard: land {bare_repo}",
                 "sha": head_sha,
                 "merge_method": "merge",
                 "user": _HUB_USER,
@@ -334,13 +296,13 @@ def _land() -> int:
         if status != 200 or not (result or {}).get("merged"):
             # An already-merged PR is a prior run's un-marked merge, a no-op to redo
             # (bzh:hub-node-step-idempotence); anything else is a race worth re-polling.
-            _, pull = api("GET", f"/repos/{repo}/pulls/{number}")
+            _, pull = run.api("GET", f"/repos/{repo}/pulls/{number}")
             if not (pull or {}).get("merged"):
                 print(f"merge of {repo}#{number} did not land ({result}); will re-poll", file=sys.stderr)
                 print(_PENDING)
                 return 0
             landed_sha = pull.get("merge_commit_sha") or head_sha
-        record_marker(bare_repo, landed_sha or head_sha)
+        run.markers.record(bare_repo, landed_sha or head_sha)
 
     print(_LANDED)
     return 0

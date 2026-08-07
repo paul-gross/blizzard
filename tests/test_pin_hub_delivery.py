@@ -19,7 +19,7 @@ from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.work import IWriteChunkRepository
 from blizzard.hub.graphs import _GRAPHS_DIR, inline_graph_yaml
-from blizzard.hub.graphs.scripts import land_pr_ci
+from blizzard.hub.graphs.scripts import land_common, land_pr_ci
 from tests.support import FakeHubCommandRunner, FakeHubWorkdir, HubHarness, build_hub, pointer_token, report_lease
 
 # -- marker_auth: the authority is instance-scoped, never persisted -------------------
@@ -106,7 +106,7 @@ def test_a_terminal_failure_findings_write_failure_exits_non_zero_instead_of_rou
     monkeypatch.delenv("BZ_FORGE_OWNER", raising=False)
     monkeypatch.delenv("BZ_FORGE_TOKEN", raising=False)
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
-    monkeypatch.setattr(land_pr_ci, "forge_request", _blocked_forge_with_a_terminal_check(calls, marker_status=500))
+    monkeypatch.setattr(land_common, "forge_request", _blocked_forge_with_a_terminal_check(calls, marker_status=500))
 
     exit_code = land_pr_ci.main()
 

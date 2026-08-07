@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.delivery.hub_node import ENV_MARKER_CALLBACK_URL, ENV_MARKER_TOKEN
-from blizzard.hub.graphs.scripts.land_common import MarkerWriteError, marker_recorder
+from blizzard.hub.graphs.scripts.land_common import MarkerWriteError, MarkerWriter
 from tests.support import (
     FakeHubCommandRunner,
     HubHarness,
@@ -137,7 +137,7 @@ def test_an_operators_own_chunk_control_session_still_works_with_no_marker_token
 
 def _hub_request(hub: HubHarness):
     """``land_common.forge_request``'s exact signature, funnelled through the wired hub
-    app — the seam ``marker_recorder`` takes as ``request``, so the closure under test
+    app — the seam ``MarkerWriter`` takes as ``request``, so the writer under test
     is the shipped one, sending the header name ``land_common`` actually sends."""
 
     def request(
@@ -155,15 +155,15 @@ def _hub_request(hub: HubHarness):
 
 
 def test_the_land_scripts_own_recorder_records_durably_against_an_oauth_hub(tmp_path: Path) -> None:
-    """The issue's headline claim end to end: the real ``marker_recorder`` closure,
+    """The issue's headline claim end to end: the real ``MarkerWriter``,
     holding the real minted token, writes a marker durably readable back — against a
     hub with authentication genuinely on."""
     hub = build_hub(tmp_path, auth_mode="oauth")
     chunk_id = _seed_chunk(hub)
     token = hub.services.marker_authority.issue(chunk_id, node_id=_NODE_ID, epoch=_EPOCH)
-    record = marker_recorder(callback_url=_marker_url(chunk_id), token=token, request=_hub_request(hub))
+    markers = MarkerWriter(callback_url=_marker_url(chunk_id), token=token, request=_hub_request(hub))
 
-    record("acme-widget", "sha:abc123")
+    markers.record("acme-widget", "sha:abc123")
 
     assert _MARKER_NAME in _recorded_marker_names(hub, chunk_id)
 
@@ -174,10 +174,10 @@ def test_the_land_scripts_own_recorder_fails_loudly_when_the_hub_refuses(tmp_pat
     stage (``MarkerWriteError``), and the refused write records nothing."""
     hub = build_hub(tmp_path, auth_mode="oauth")
     chunk_id = _seed_chunk(hub)
-    record = marker_recorder(callback_url=_marker_url(chunk_id), token="", request=_hub_request(hub))
+    markers = MarkerWriter(callback_url=_marker_url(chunk_id), token="", request=_hub_request(hub))
 
     with pytest.raises(MarkerWriteError):
-        record("acme-widget", "sha:abc123")
+        markers.record("acme-widget", "sha:abc123")
 
     assert _recorded_marker_names(hub, chunk_id) == set()
 
@@ -266,15 +266,15 @@ def test_the_token_the_executor_injects_authorizes_the_route_it_names(tmp_path: 
 
     def land_the_repo(_command: str) -> None:
         """Stand in for a land script at the exact point one runs: build the shipped
-        ``marker_recorder`` out of nothing but the injected env, and spend it."""
+        a ``MarkerWriter`` out of nothing but the injected env, and spend it."""
         env = runner.calls[-1][2]
-        record = marker_recorder(
+        markers = MarkerWriter(
             callback_url=env[ENV_MARKER_CALLBACK_URL],
             token=env.get(ENV_MARKER_TOKEN, ""),
             request=_hub_request(hub),
         )
         try:
-            record("acme-widget", "sha:abc123")
+            markers.record("acme-widget", "sha:abc123")
         except MarkerWriteError as exc:
             # Captured rather than raised: an exception here would escape into the
             # completion request, failing on a 500 naming neither status nor refusal.

@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from blizzard.hub.graphs.scripts import land_ff
+from blizzard.hub.graphs.scripts import land_common, land_ff
 
 pytestmark = pytest.mark.unit
 
@@ -83,7 +83,7 @@ def _scripted_forge(
     marker_headers: list[dict[str, str] | None] | None = None,
     marker_status: int | list[int] = 200,
 ):
-    """A minimal, deterministic double for ``land_ff.forge_request``: a GET on each repo's
+    """A minimal, deterministic double for ``land_common.forge_request``: a GET on each repo's
     base ref returns the repo's ``current_shas`` entry, a PATCH succeeds (200) unless the
     repo names an override status in ``patch_status``. Records every call for assertion.
     ``marker_status`` scripts the marker POST's response(s) — a single status repeated, or
@@ -131,7 +131,7 @@ def test_every_repo_fast_forwards_and_prints_landed(
     _set_base_env(monkeypatch, commits=commits)
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     monkeypatch.setattr(
-        land_ff,
+        land_common,
         "forge_request",
         _scripted_forge(calls, current_shas={_REPO_A: "old-a", _REPO_B: "old-b"}),
     )
@@ -163,7 +163,7 @@ def test_non_fast_forward_rejection_prints_conflict(
     _set_base_env(monkeypatch, commits=commits)
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     monkeypatch.setattr(
-        land_ff,
+        land_common,
         "forge_request",
         _scripted_forge(
             calls,
@@ -183,7 +183,7 @@ def test_a_repo_with_a_durable_marker_is_skipped(
     _set_base_env(monkeypatch, commits=commits, already=[f"merged/{_REPO_A}"])
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     monkeypatch.setattr(
-        land_ff,
+        land_common,
         "forge_request",
         _scripted_forge(calls, current_shas={_REPO_B: "old-b"}),
     )
@@ -205,7 +205,7 @@ def test_crash_recovery_treats_an_already_advanced_ref_as_success_not_conflict(
     _set_base_env(monkeypatch, commits=commits)
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     monkeypatch.setattr(
-        land_ff,
+        land_common,
         "forge_request",
         _scripted_forge(calls, current_shas={_REPO_A: _COMMIT_A}),
     )
@@ -223,7 +223,7 @@ def test_no_pull_request_endpoint_is_ever_called(
     _set_base_env(monkeypatch, commits=commits)
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     monkeypatch.setattr(
-        land_ff,
+        land_common,
         "forge_request",
         _scripted_forge(calls, current_shas={_REPO_A: "old-a", _REPO_B: "old-b"}),
     )
@@ -242,7 +242,7 @@ def test_the_marker_post_carries_the_token_header(monkeypatch: pytest.MonkeyPatc
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     marker_headers: list[dict[str, str] | None] = []
     monkeypatch.setattr(
-        land_ff,
+        land_common,
         "forge_request",
         _scripted_forge(calls, current_shas={_REPO_A: "old-a"}, marker_headers=marker_headers),
     )
@@ -259,7 +259,7 @@ def test_a_non_2xx_marker_write_aborts_without_printing_landed(
     _set_base_env(monkeypatch, commits=commits)
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     monkeypatch.setattr(
-        land_ff,
+        land_common,
         "forge_request",
         _scripted_forge(calls, current_shas={_REPO_A: "old-a"}, marker_status=401),
     )
@@ -280,7 +280,7 @@ def test_a_503_then_200_on_the_marker_write_retries_exactly_once_then_lands(
     _set_base_env(monkeypatch, commits=commits)
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     monkeypatch.setattr(
-        land_ff,
+        land_common,
         "forge_request",
         _scripted_forge(calls, current_shas={_REPO_A: "old-a"}, marker_status=[503, 200]),
     )
@@ -334,7 +334,7 @@ def test_an_empty_callback_url_with_a_pending_repo_fails_instead_of_landing_sile
     monkeypatch.delenv("BZ_HUB_MARKER_CALLBACK_URL", raising=False)
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     monkeypatch.setattr(
-        land_ff,
+        land_common,
         "forge_request",
         _scripted_forge(calls, current_shas={_REPO_A: "old-a"}),
     )

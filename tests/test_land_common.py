@@ -1,6 +1,6 @@
 """``land_common``'s shared helpers — unit tier (issue #230).
 
-Exercises ``require_env``, ``require_json_env``, and ``marker_recorder`` directly, with
+Exercises ``require_env``, ``require_json_env``, and ``MarkerWriter`` directly, with
 no forge or script involved, proving the shared durable-write and env-diagnostic
 behavior without re-deriving it through a whole ``main()`` per script."""
 
@@ -56,7 +56,7 @@ def test_require_json_env_exits_non_zero_naming_malformed_json(
     assert "SOME_JSON" in capsys.readouterr().err
 
 
-# -- marker_recorder ------------------------------------------------------------------
+# -- MarkerWriter ------------------------------------------------------------------
 
 
 def _request_returning(*results: tuple[int, Any] | Exception):
@@ -78,9 +78,9 @@ def _request_returning(*results: tuple[int, Any] | Exception):
 
 def test_a_2xx_response_succeeds_with_no_retry() -> None:
     request = _request_returning((200, {"recorded": True}))
-    record = land_common.marker_recorder(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
+    markers = land_common.MarkerWriter(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
 
-    record(_REPO, "sha1")
+    markers.record(_REPO, "sha1")
 
     assert len(request.calls) == 1  # type: ignore[attr-defined]
 
@@ -89,16 +89,16 @@ def test_the_idempotent_recorded_false_replay_still_succeeds() -> None:
     """A 2xx is success regardless of body — the hub's own idempotent replay of an
     already-recorded marker reports ``recorded: false`` and that is still durable."""
     request = _request_returning((200, {"recorded": False}))
-    record = land_common.marker_recorder(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
+    markers = land_common.MarkerWriter(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
 
-    record(_REPO, "sha1")  # must not raise
+    markers.record(_REPO, "sha1")  # must not raise
 
 
 def test_the_marker_post_carries_the_token_header() -> None:
     request = _request_returning((200, {}))
-    record = land_common.marker_recorder(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
+    markers = land_common.MarkerWriter(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
 
-    record(_REPO, "sha1")
+    markers.record(_REPO, "sha1")
 
     call = request.calls[0]  # type: ignore[attr-defined]
     assert call["headers"] == {"X-Blizzard-Marker-Token": _TOKEN}
@@ -108,18 +108,18 @@ def test_the_marker_post_carries_the_token_header() -> None:
 
 def test_an_empty_token_sends_no_marker_token_header() -> None:
     request = _request_returning((200, {}))
-    record = land_common.marker_recorder(callback_url=_CALLBACK_URL, token="", request=request)
+    markers = land_common.MarkerWriter(callback_url=_CALLBACK_URL, token="", request=request)
 
-    record(_REPO, "sha1")
+    markers.record(_REPO, "sha1")
 
     assert request.calls[0]["headers"] is None  # type: ignore[attr-defined]
 
 
 def test_a_5xx_then_a_2xx_retries_exactly_once_and_succeeds() -> None:
     request = _request_returning((503, {"message": "unavailable"}), (200, {}))
-    record = land_common.marker_recorder(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
+    markers = land_common.MarkerWriter(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
 
-    record(_REPO, "sha1")  # must not raise
+    markers.record(_REPO, "sha1")  # must not raise
 
     assert len(request.calls) == 2  # type: ignore[attr-defined]
 
@@ -128,10 +128,10 @@ def test_a_5xx_on_every_attempt_raises_after_exactly_three_calls() -> None:
     request = _request_returning(
         (503, {"message": "unavailable"}), (503, {"message": "unavailable"}), (503, {"message": "unavailable"})
     )
-    record = land_common.marker_recorder(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
+    markers = land_common.MarkerWriter(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
 
     with pytest.raises(land_common.MarkerWriteError) as exc:
-        record(_REPO, "sha1")
+        markers.record(_REPO, "sha1")
 
     assert len(request.calls) == 3  # type: ignore[attr-defined]
     assert _REPO in str(exc.value)
@@ -140,10 +140,10 @@ def test_a_5xx_on_every_attempt_raises_after_exactly_three_calls() -> None:
 
 def test_a_4xx_raises_immediately_with_no_retry() -> None:
     request = _request_returning((401, {"message": "unauthorized"}))
-    record = land_common.marker_recorder(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
+    markers = land_common.MarkerWriter(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
 
     with pytest.raises(land_common.MarkerWriteError) as exc:
-        record(_REPO, "sha1")
+        markers.record(_REPO, "sha1")
 
     assert len(request.calls) == 1  # type: ignore[attr-defined]
     assert _REPO in str(exc.value)
@@ -152,9 +152,9 @@ def test_a_4xx_raises_immediately_with_no_retry() -> None:
 
 def test_a_connection_error_then_success_retries_and_succeeds() -> None:
     request = _request_returning(OSError("connection refused"), (200, {}))
-    record = land_common.marker_recorder(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
+    markers = land_common.MarkerWriter(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
 
-    record(_REPO, "sha1")  # must not raise
+    markers.record(_REPO, "sha1")  # must not raise
 
     assert len(request.calls) == 2  # type: ignore[attr-defined]
 
@@ -163,10 +163,10 @@ def test_a_connection_error_on_every_attempt_raises_after_three_calls() -> None:
     request = _request_returning(
         OSError("connection refused"), OSError("connection refused"), OSError("connection refused")
     )
-    record = land_common.marker_recorder(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
+    markers = land_common.MarkerWriter(callback_url=_CALLBACK_URL, token=_TOKEN, request=request)
 
     with pytest.raises(land_common.MarkerWriteError):
-        record(_REPO, "sha1")
+        markers.record(_REPO, "sha1")
 
     assert len(request.calls) == 3  # type: ignore[attr-defined]
 
@@ -175,17 +175,17 @@ def test_constructing_with_no_callback_url_is_not_fatal_by_itself() -> None:
     """A chunk with nothing pending never calls ``record`` — that must stay a silent
     no-op; only invoking the closure is fatal."""
     request = _request_returning()
-    land_common.marker_recorder(callback_url="", token=_TOKEN, request=request)  # must not raise
+    land_common.MarkerWriter(callback_url="", token=_TOKEN, request=request)  # must not raise
 
     assert request.calls == []  # type: ignore[attr-defined]
 
 
 def test_invoking_the_closure_with_no_callback_url_raises() -> None:
     request = _request_returning()
-    record = land_common.marker_recorder(callback_url="", token=_TOKEN, request=request)
+    markers = land_common.MarkerWriter(callback_url="", token=_TOKEN, request=request)
 
     with pytest.raises(land_common.MarkerWriteError) as exc:
-        record(_REPO, "sha1")
+        markers.record(_REPO, "sha1")
 
     assert _REPO in str(exc.value)
     assert request.calls == []  # type: ignore[attr-defined]

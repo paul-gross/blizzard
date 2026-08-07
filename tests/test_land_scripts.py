@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from blizzard.hub.graphs.scripts import land_default, land_ff, land_pr_ci
+from blizzard.hub.graphs.scripts import land_common, land_default, land_ff, land_pr_ci
 
 pytestmark = pytest.mark.unit
 
@@ -113,7 +113,7 @@ def test_feature_title_is_used_as_the_pr_title_and_merge_commit_message(
 ) -> None:
     _set_base_env(monkeypatch, feature_title="Add rate limiting to the widget API")
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
-    monkeypatch.setattr(module, "forge_request", _scripted_forge(calls))
+    monkeypatch.setattr(land_common, "forge_request", _scripted_forge(calls))
 
     assert module.main() == 0
 
@@ -127,7 +127,7 @@ def test_missing_feature_title_falls_back_to_the_branch_and_land_strings(
 ) -> None:
     _set_base_env(monkeypatch, feature_title=None)
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
-    monkeypatch.setattr(module, "forge_request", _scripted_forge(calls))
+    monkeypatch.setattr(land_common, "forge_request", _scripted_forge(calls))
 
     assert module.main() == 0
 
@@ -140,7 +140,7 @@ def test_an_over_long_feature_title_is_truncated_for_the_pr_title(monkeypatch: p
     long_title = "x" * 300
     _set_base_env(monkeypatch, feature_title=long_title)
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
-    monkeypatch.setattr(module, "forge_request", _scripted_forge(calls))
+    monkeypatch.setattr(land_common, "forge_request", _scripted_forge(calls))
 
     assert module.main() == 0
 
@@ -231,7 +231,7 @@ def test_dirty_pr_bounces_conflict_without_merging(
 ) -> None:
     _set_base_env(monkeypatch, feature_title="t")
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
-    monkeypatch.setattr(land_pr_ci, "forge_request", _forge_with_state(calls, mergeable_state="dirty"))
+    monkeypatch.setattr(land_common, "forge_request", _forge_with_state(calls, mergeable_state="dirty"))
 
     assert land_pr_ci.main() == 0
     assert _last_line(capsys) == "conflict"  # the ONE true bounce
@@ -244,7 +244,7 @@ def test_behind_pr_fires_update_branch_and_pends(
 ) -> None:
     _set_base_env(monkeypatch, feature_title="t")
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
-    monkeypatch.setattr(land_pr_ci, "forge_request", _forge_with_state(calls, mergeable_state="behind"))
+    monkeypatch.setattr(land_common, "forge_request", _forge_with_state(calls, mergeable_state="behind"))
 
     assert land_pr_ci.main() == 0
     assert _last_line(capsys) == "pending"  # self-heal in flight, re-poll
@@ -259,7 +259,7 @@ def test_blocked_pr_pends_without_updating_or_merging(
 ) -> None:
     _set_base_env(monkeypatch, feature_title="t")
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
-    monkeypatch.setattr(land_pr_ci, "forge_request", _forge_with_state(calls, mergeable_state="blocked"))
+    monkeypatch.setattr(land_common, "forge_request", _forge_with_state(calls, mergeable_state="blocked"))
 
     assert land_pr_ci.main() == 0
     assert _last_line(capsys) == "pending"  # required checks not green — wait, do not bounce
@@ -271,7 +271,7 @@ def test_clean_pr_merges_the_current_head_sha(
 ) -> None:
     _set_base_env(monkeypatch, feature_title="t")
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
-    monkeypatch.setattr(land_pr_ci, "forge_request", _forge_with_state(calls, mergeable_state="clean"))
+    monkeypatch.setattr(land_common, "forge_request", _forge_with_state(calls, mergeable_state="clean"))
 
     assert land_pr_ci.main() == 0
     assert _last_line(capsys) == "landed"
@@ -298,7 +298,7 @@ def test_a_terminal_check_failure_prints_the_failure_edge_and_writes_findings(
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
     monkeypatch.setattr(
-        land_pr_ci,
+        land_common,
         "forge_request",
         _forge_with_state(
             calls,
@@ -330,7 +330,7 @@ def test_a_base_branch_also_red_names_the_change_as_not_at_fault(
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
     monkeypatch.setattr(
-        land_pr_ci,
+        land_common,
         "forge_request",
         _forge_with_state(
             calls,
@@ -354,7 +354,7 @@ def test_a_check_runs_read_failure_degrades_to_a_plain_pending_not_the_failure_e
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
     monkeypatch.setattr(
-        land_pr_ci,
+        land_common,
         "forge_request",
         _forge_with_state(
             calls,
@@ -375,7 +375,7 @@ def test_a_wait_path_findings_write_failure_degrades_to_a_plain_pending_not_a_bo
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
     monkeypatch.setattr(
-        land_pr_ci,
+        land_common,
         "forge_request",
         _forge_with_state(
             calls,
@@ -458,7 +458,7 @@ def test_two_pending_repos_one_failing_names_only_the_failing_repo_and_merges_ne
             return 200, {"recorded": True}
         return responses[(method, url)]
 
-    monkeypatch.setattr(land_pr_ci, "forge_request", fake)
+    monkeypatch.setattr(land_common, "forge_request", fake)
 
     assert land_pr_ci.main() == 0
     assert _last_line(capsys) == "failure"
@@ -477,7 +477,7 @@ def test_an_in_progress_check_writes_exactly_one_wait_finding_and_pends(
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
     monkeypatch.setattr(
-        land_pr_ci,
+        land_common,
         "forge_request",
         _forge_with_state(calls, mergeable_state="blocked", head_check_runs=[_check_run("in_progress", None)]),
     )
@@ -499,7 +499,7 @@ def test_an_unknown_mergeable_state_never_reads_check_runs_or_writes_findings(
 ) -> None:
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
-    monkeypatch.setattr(land_pr_ci, "forge_request", _forge_with_state(calls, mergeable_state="unknown"))
+    monkeypatch.setattr(land_common, "forge_request", _forge_with_state(calls, mergeable_state="unknown"))
 
     assert land_pr_ci.main() == 0
     assert _last_line(capsys) == "pending"
@@ -513,7 +513,7 @@ def test_an_empty_check_runs_list_is_not_a_substantive_wait(
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
     monkeypatch.setattr(
-        land_pr_ci, "forge_request", _forge_with_state(calls, mergeable_state="blocked", head_check_runs=[])
+        land_common, "forge_request", _forge_with_state(calls, mergeable_state="blocked", head_check_runs=[])
     )
 
     assert land_pr_ci.main() == 0
@@ -636,7 +636,7 @@ def test_the_marker_post_carries_the_token_header(monkeypatch: pytest.MonkeyPatc
     _set_base_env(monkeypatch, feature_title="t")
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     marker_headers: list[dict[str, str] | None] = []
-    monkeypatch.setattr(module, "forge_request", _forge_double_for(module, calls, marker_headers=marker_headers))
+    monkeypatch.setattr(land_common, "forge_request", _forge_double_for(module, calls, marker_headers=marker_headers))
 
     assert module.main() == 0
 
@@ -649,7 +649,7 @@ def test_a_non_2xx_marker_write_aborts_without_printing_landed(
 ) -> None:
     _set_base_env(monkeypatch, feature_title="t")
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
-    monkeypatch.setattr(module, "forge_request", _forge_double_for(module, calls, marker_status=401))
+    monkeypatch.setattr(land_common, "forge_request", _forge_double_for(module, calls, marker_status=401))
 
     exit_code = module.main()
 
@@ -666,7 +666,7 @@ def test_a_503_then_200_on_the_marker_write_retries_exactly_once_then_lands(
 ) -> None:
     _set_base_env(monkeypatch, feature_title="t")
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
-    monkeypatch.setattr(module, "forge_request", _forge_double_for(module, calls, marker_status=[503, 200]))
+    monkeypatch.setattr(land_common, "forge_request", _forge_double_for(module, calls, marker_status=[503, 200]))
 
     assert module.main() == 0
 
@@ -720,7 +720,7 @@ def test_an_empty_callback_url_with_a_pending_repo_fails_instead_of_landing_sile
     _set_base_env(monkeypatch, feature_title="t")
     monkeypatch.delenv("BZ_HUB_MARKER_CALLBACK_URL", raising=False)
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
-    monkeypatch.setattr(module, "forge_request", _forge_double_for(module, calls))
+    monkeypatch.setattr(land_common, "forge_request", _forge_double_for(module, calls))
 
     exit_code = module.main()
 
