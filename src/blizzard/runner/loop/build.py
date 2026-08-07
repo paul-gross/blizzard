@@ -26,6 +26,7 @@ from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.internal.subprocess_check_runner import SubprocessCheckRunner
 from blizzard.runner.loop.internal.subprocess_worktree_git import SubprocessWorktreeGit
 from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.loop.session import SessionResolver
 from blizzard.runner.loop.steps import mark_crash_resume_intents, mark_resume_intents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop.usage import UsageRecorder
@@ -114,6 +115,7 @@ def build_loop_context(
             workspace_root=config.workspace_root,
             transcripts=harness_transcript_source,
         ),
+        sessions=SessionResolver(store=store, harness=harness, transcripts=harness_transcript_source),
         # The same source injected into `harness` above, declared here too so the loop's
         # direct readers don't reach through `ctx.harness` for it.
         transcripts=harness_transcript_source,

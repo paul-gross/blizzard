@@ -18,7 +18,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource, mangle_cwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
 from blizzard.runner.harness.usage import UsageSample
-from blizzard.runner.loop.steps import _resolve_session, advance, fill, pull
+from blizzard.runner.loop.steps import advance, fill, pull
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, RotatePolicyView
 from tests.runner_fakes import (
@@ -423,7 +423,7 @@ def _resolve(
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
     )
-    return _resolve_session(ctx, "ch_1", envelope.node, "/ws/e1")
+    return ctx.sessions.resume_target("ch_1", envelope.node, "/ws/e1")
 
 
 @pytest.mark.component

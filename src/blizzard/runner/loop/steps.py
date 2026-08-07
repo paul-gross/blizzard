@@ -17,7 +17,6 @@ from blizzard.foundation.ids import LEASE_PREFIX, mint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.artifacts import ArtifactKind
-from blizzard.hub.domain.graph import SessionMode
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.lease_auth import mint_lease_token
 from blizzard.runner.domain.leases import as_utc, is_heartbeat_stale
@@ -47,7 +46,6 @@ from blizzard.runner.store.repository import (
     IWriteRunnerStore,
     LeaseRecord,
     NewLease,
-    PoolHead,
 )
 from blizzard.wire.completion import (
     CheckResult,
@@ -56,7 +54,7 @@ from blizzard.wire.completion import (
     checks_gate_violated,
 )
 from blizzard.wire.decision import DecisionSubmission, DecisionView
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope
+from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import (
     ANSWER_DELIVERED,
     ESCALATION_RECORDED,
@@ -902,8 +900,7 @@ def _fill_one(ctx: LoopContext) -> bool:
     # Stash the won claim's plaintext route token (issue #84a) before spawning: every later
     # reader takes it out of the store, never off `outcome.claimed` directly.
     ctx.store.set_route_token(entry.chunk_id, token=outcome.claimed.route_token, at=ctx.clock.now())
-    resume_from = _resolve_session(
-        ctx,
+    resume_from = ctx.sessions.resume_target(
         entry.chunk_id,
         outcome.claimed.envelope.node,
         resolve_spawn_cwd(ctx.config.workspace_root, acquired[0].workdir if acquired else None),
@@ -1195,8 +1192,7 @@ def _apply_response(
     """Act on the apply-response: continue in place, hold at a hub node, or finish."""
     if outcome == ApplyOutcome.NEXT and next_envelope is not None:
         envs = _bindings_as_environments(bindings)
-        resume_from = _resolve_session(
-            ctx,
+        resume_from = ctx.sessions.resume_target(
             chunk_id,
             next_envelope.node,
             resolve_spawn_cwd(ctx.config.workspace_root, envs[0].workdir if envs else None),
@@ -1280,8 +1276,7 @@ def _spawn_into_held_node(ctx: LoopContext, chunk_id: str) -> None:
         return  # hub unreachable — the transition is durable at the hub; retry next tick
     _log.info("hub advanced held chunk into a fresh node — spawning", chunk_id=chunk_id)
     held = _bindings_as_environments(bindings)
-    resume_from = _resolve_session(
-        ctx,
+    resume_from = ctx.sessions.resume_target(
         chunk_id,
         envelope.node,
         resolve_spawn_cwd(ctx.config.workspace_root, held[0].workdir if held else None),
@@ -1336,91 +1331,6 @@ def _spawn_suppressed(ctx: LoopContext, *, via: str, chunk_id: str, lease_id: st
     return True
 
 
-def _resolve_session(ctx: LoopContext, chunk_id: str, node: NodeConfig, spawn_cwd: str | None) -> str | None:
-    """The prior session id a node-entry spawn resumes, or ``None`` to mint fresh (#115, #144).
-
-    **Only the resume-vs-mint decision** — the configuration a spawn runs under resolves
-    elsewhere. No match anywhere falls back to fresh: a resume target is best-effort.
-    """
-    if node.session is SessionMode.FRESH:
-        return None
-    if node.session_name is not None:
-        return _resume_pool_head(ctx, chunk_id, node, spawn_cwd)
-    return ctx.store.latest_session_id(chunk_id, node.session_source)
-
-
-def _resume_pool_head(ctx: LoopContext, chunk_id: str, node: NodeConfig, spawn_cwd: str | None) -> str | None:
-    """The named pool's head if it is still resumable, else ``None`` to mint a new one."""
-    pool = node.session_name or ""
-    head = ctx.store.pool_head(chunk_id, pool)
-    if head is None:
-        return None  # an empty pool — this member mints the head
-    breach = _rotation_breach(ctx, head, node, spawn_cwd)
-    if breach is None:
-        return head.session_id
-    _log.info(
-        "rotating session pool",
-        chunk_id=chunk_id,
-        session_pool=pool,
-        breached=breach,
-        old_session_id=head.session_id,
-    )
-    return None
-
-
-def _rotation_breach(ctx: LoopContext, head: PoolHead, node: NodeConfig, spawn_cwd: str | None) -> str | None:
-    """Why this pool head must not be resumed, or ``None`` when it may be (issue #144).
-
-    A head is resumed only while every *readable* threshold is under bound and its stamped model
-    still matches the resolved one. An unreadable signal is *not measured* and never a breach.
-    """
-    # Model drift first: the one check that needs no telemetry, and an edited declaration
-    # should rotate regardless of how much context the old head accumulated.
-    resolved = ctx.harness.resolve_model(node.session_model) if node.session_model else None
-    if resolved is not None and head.resolved_model is not None and head.resolved_model != resolved:
-        return "model-drift"
-
-    rotate = node.session_rotate
-    if rotate is None:
-        return None  # the declaration bounds nothing
-
-    if rotate.max_context_tokens is not None:
-        tokens = ctx.store.session_context_tokens(head.session_id)
-        if tokens is not None and tokens > rotate.max_context_tokens:
-            return "max_context_tokens"
-
-    # A count is never an unknown — it is the number of rows that exist.
-    if (
-        rotate.max_invocations is not None
-        and ctx.store.session_invocation_count(head.session_id) > rotate.max_invocations
-    ):
-        return "max_invocations"
-
-    if rotate.max_transcript_bytes is not None and ctx.transcripts is not None:
-        # `size_bytes` returns `None` for an unreadable transcript — treated as unknown,
-        # never a zero that would make the threshold silently inert.
-        size = ctx.transcripts.size_bytes(head.session_id, spawn_cwd=spawn_cwd)
-        if size is not None and size > rotate.max_transcript_bytes:
-            return "max_transcript_bytes"
-
-    return None
-
-
-def _resolve_model_and_effort(
-    ctx: LoopContext, chunk_id: str, node: NodeConfig, resume_from: str | None
-) -> tuple[str | None, str | None]:
-    """The model and effort this spawn runs under, and stamps (issue #144).
-
-    **The stamp describes the session, not the preference.** A spawn that *resumes* inherits both
-    from the resumed session's own stamp, and an inherited ``None`` stays *unknown*.
-    """
-    if resume_from is not None:
-        prior = ctx.store.lease_for_session(resume_from)
-        return (prior.resolved_model, prior.resolved_effort) if prior is not None else (None, None)
-    model = ctx.harness.resolve_model(node.session_model)
-    return (model, ctx.harness.resolve_effort(node.session_effort))
-
-
 def _spawn_attempt(
     ctx: LoopContext,
     chunk_id: str,
@@ -1444,7 +1354,7 @@ def _spawn_attempt(
     lease_id = mint(LEASE_PREFIX, ctx.clock)
     node = envelope.node
     retries_max = node.retries_max if node.retries_max is not None else ctx.config.default_retries_max
-    resolved_model, resolved_effort = _resolve_model_and_effort(ctx, chunk_id, node, resume_from)
+    resolved_model, resolved_effort = ctx.sessions.model_and_effort(node, resume_from)
     ctx.store.record_lease(
         NewLease(
             lease_id=lease_id,

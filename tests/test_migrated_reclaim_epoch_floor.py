@@ -21,6 +21,7 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeWorktreeGit,
+    make_session_resolver,
     make_store,
     make_usage_recorder,
 )
@@ -122,6 +123,7 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
         config=LoopConfig(runner_id="r2", workspace_id="w2", max_agents=1),
         worker_files=WorkerStdoutFiles("", store),
         usage=make_usage_recorder(store, hub.clock),
+        sessions=make_session_resolver(store),
     )
     fill(ctx)
 

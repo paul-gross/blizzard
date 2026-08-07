@@ -31,11 +31,12 @@ from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
 from blizzard.runner.loop.process import IProcessProbe
+from blizzard.runner.loop.session import SessionResolver
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.store.repository import IWriteRunnerStore
+from blizzard.runner.store.repository import IReadRunnerStore, IWriteRunnerStore
 from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, RouteView
 from blizzard.wire.completion import CompletionSubmission
@@ -579,6 +580,7 @@ def make_context(
             workspace_root=resolved_config.workspace_root,
             transcripts=harness.transcript_source(),
         ),
+        sessions=SessionResolver(store=store, harness=_harness, transcripts=harness.transcript_source()),
         # Mirrors `build_loop_context`'s own composition: the same source `harness`
         # itself holds, resolved once here rather than reached through `ctx.harness`.
         transcripts=harness.transcript_source(),
@@ -597,6 +599,16 @@ def make_usage_recorder(
         else FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict=None),
         worker_files=WorkerStdoutFiles("", store),
         workspace_root="",
+    )
+
+
+def make_session_resolver(store: IReadRunnerStore, *, harness: IHarnessAdapter | None = None) -> SessionResolver:
+    """A resolver for a context assembled without :func:`make_context`."""
+    return SessionResolver(
+        store=store,
+        harness=harness
+        if harness is not None
+        else FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict=None),
     )
 
 

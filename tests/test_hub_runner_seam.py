@@ -23,6 +23,7 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeWorktreeGit,
+    make_session_resolver,
     make_store,
     make_usage_recorder,
 )
@@ -124,6 +125,7 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
         config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
         worker_files=WorkerStdoutFiles("", store),
         usage=make_usage_recorder(store, hub.clock),
+        sessions=make_session_resolver(store),
     )
 
     pull(ctx)
@@ -195,6 +197,7 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
         config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
         worker_files=WorkerStdoutFiles("", store),
         usage=make_usage_recorder(store, hub.clock),
+        sessions=make_session_resolver(store),
     )
 
     pull(ctx)
