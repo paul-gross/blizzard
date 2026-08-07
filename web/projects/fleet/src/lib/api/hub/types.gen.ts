@@ -906,9 +906,8 @@ export type EnvelopeChoice = {
  * EscalationReport
  *
  * A runner's ``escalation.recorded`` — the runner ran out of moves on this node.
- *
  * ``takeover_command`` may carry operator prose instead of a literal command, or be empty;
- * ``wrapped_takeover_command`` is the wrapped equivalent and implies the raw one.
+ * ``wrapped_takeover_command`` is the wrapped equivalent of ``takeover_command``.
  */
 export type EscalationReport = {
     /**
@@ -934,8 +933,7 @@ export type EscalationReport = {
  *
  * An open escalation on a ``needs_human`` chunk — the takeover command(s) for the parked session,
  * present only while the escalation is open; a later lease mint supersedes it.
- * ``wrapped_takeover_command`` is the wrapped equivalent of ``takeover_command``, empty when none was
- * composed — wrapped implies raw, never the reverse.
+ * ``wrapped_takeover_command`` is optional, empty when none was composed.
  */
 export type EscalationView = {
     /**
@@ -2187,7 +2185,7 @@ export type RouteClaimResponse = {
  * RouteTokenRekeyResponse
  *
  * A fresh plaintext route capability token for the chunk's live route (issue #84b),
- * returned exactly once here — the recovery path for a token never read back.
+ * returned exactly once here.
  */
 export type RouteTokenRekeyResponse = {
     /**

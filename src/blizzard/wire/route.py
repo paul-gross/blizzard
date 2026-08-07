@@ -62,7 +62,7 @@ class RouteClaimPausedDenial(BaseModel):
 
 class RouteTokenRekeyResponse(BaseModel):
     """A fresh plaintext route capability token for the chunk's live route (issue #84b),
-    returned exactly once here — the recovery path for a token never read back."""
+    returned exactly once here."""
 
     chunk_id: str
     route_token: str

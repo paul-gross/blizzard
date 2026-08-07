@@ -9,17 +9,13 @@ import { KitButton } from '../kit/kit-button';
  * (`bzh:frontend-container-presentational`) — no query, no store access.
  *
  * `wrapped_takeover_command` is the `blizzard runner takeover` form the runner
- * composes so the command runs from any directory on the runner's host and records
- * the takeover first, closing the window where the fleet might respawn or judge the
- * still-open session. It is primary whenever present, with the raw
- * `takeover_command` demoted to a collapsed fallback disclosure below it — wrapped
- * implies raw, never the reverse; see `blizzard-context:/domain/humans.md` for the
- * full account. When wrapped is absent but raw is present, the raw field renders as
- * the primary copyable command instead — the fallback the wire contract
- * (`EscalationView.wrapped_takeover_command`) promises. That shape covers rows
- * stored before the wrapped column existed and runners that could not compose one;
- * a hub-authored escalation's guidance prose also lands here and copies as text,
- * which is harmless.
+ * composes; it is primary whenever present, with the raw `takeover_command`
+ * demoted to a collapsed fallback disclosure below it. When wrapped is absent but
+ * raw is present, the raw field renders as the primary copyable command instead.
+ * Wrapped-vs-raw rules and the wire field's own optionality:
+ * `blizzard-context:/domain/humans.md` §Escalation and `EscalationView` in
+ * `src/blizzard/wire/chunk.py`. A hub-authored escalation's guidance prose also
+ * lands here and copies as text, which is harmless.
  *
  * "Takeover" in the class/selector name is the deliberate operator-facing word for
  * entering a parked session — matching `blizzard runner takeover` and the "Needs

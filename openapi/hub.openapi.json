@@ -1484,7 +1484,7 @@
         "type": "object"
       },
       "EscalationReport": {
-        "description": "A runner's ``escalation.recorded`` \u2014 the runner ran out of moves on this node.\n\n``takeover_command`` may carry operator prose instead of a literal command, or be empty;\n``wrapped_takeover_command`` is the wrapped equivalent and implies the raw one.",
+        "description": "A runner's ``escalation.recorded`` \u2014 the runner ran out of moves on this node.\n``takeover_command`` may carry operator prose instead of a literal command, or be empty;\n``wrapped_takeover_command`` is the wrapped equivalent of ``takeover_command``.",
         "properties": {
           "epoch": {
             "title": "Epoch",
@@ -1513,7 +1513,7 @@
         "type": "object"
       },
       "EscalationView": {
-        "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) for the parked session,\npresent only while the escalation is open; a later lease mint supersedes it.\n``wrapped_takeover_command`` is the wrapped equivalent of ``takeover_command``, empty when none was\ncomposed \u2014 wrapped implies raw, never the reverse.",
+        "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) for the parked session,\npresent only while the escalation is open; a later lease mint supersedes it.\n``wrapped_takeover_command`` is optional, empty when none was composed.",
         "properties": {
           "epoch": {
             "title": "Epoch",
@@ -3396,7 +3396,7 @@
         "type": "object"
       },
       "RouteTokenRekeyResponse": {
-        "description": "A fresh plaintext route capability token for the chunk's live route (issue #84b),\nreturned exactly once here \u2014 the recovery path for a token never read back.",
+        "description": "A fresh plaintext route capability token for the chunk's live route (issue #84b),\nreturned exactly once here.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",

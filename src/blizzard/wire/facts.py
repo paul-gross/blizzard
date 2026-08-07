@@ -41,9 +41,8 @@ class LeaseMintReport(BaseModel):
 
 class EscalationReport(BaseModel):
     """A runner's ``escalation.recorded`` — the runner ran out of moves on this node.
-
     ``takeover_command`` may carry operator prose instead of a literal command, or be empty;
-    ``wrapped_takeover_command`` is the wrapped equivalent and implies the raw one."""
+    ``wrapped_takeover_command`` is the wrapped equivalent of ``takeover_command``."""
 
     epoch: int
     runner_id: str

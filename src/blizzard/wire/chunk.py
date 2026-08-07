@@ -131,8 +131,7 @@ class RouteView(BaseModel):
 class EscalationView(BaseModel):
     """An open escalation on a ``needs_human`` chunk — the takeover command(s) for the parked session,
     present only while the escalation is open; a later lease mint supersedes it.
-    ``wrapped_takeover_command`` is the wrapped equivalent of ``takeover_command``, empty when none was
-    composed — wrapped implies raw, never the reverse."""
+    ``wrapped_takeover_command`` is optional, empty when none was composed."""
 
     epoch: int
     takeover_command: str

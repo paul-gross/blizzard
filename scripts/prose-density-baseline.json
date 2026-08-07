@@ -1934,8 +1934,8 @@
   },
   "blizzard/runner/loop/hub.py": {
    "comments": 0,
-   "docstrings": 52,
-   "total": 147
+   "docstrings": 50,
+   "total": 145
   },
   "blizzard/runner/loop/internal/__init__.py": {
    "comments": 0,
@@ -2239,8 +2239,8 @@
   },
   "blizzard/wire/chunk.py": {
    "comments": 29,
-   "docstrings": 90,
-   "total": 410
+   "docstrings": 89,
+   "total": 409
   },
   "blizzard/wire/completion.py": {
    "comments": 13,
@@ -2264,8 +2264,8 @@
   },
   "blizzard/wire/facts.py": {
    "comments": 10,
-   "docstrings": 20,
-   "total": 82
+   "docstrings": 19,
+   "total": 81
   },
   "blizzard/wire/fleet.py": {
    "comments": 0,
@@ -3363,6 +3363,11 @@
    "comments": 7,
    "docstrings": 7,
    "total": 60
+  },
+  "test_restated_invariants.py": {
+   "comments": 40,
+   "docstrings": 13,
+   "total": 598
   },
   "test_review_cycle.py": {
    "comments": 19,

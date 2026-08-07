@@ -1931,7 +1931,7 @@ def _escalate(ctx: LoopContext, lease: LeaseRecord, *, reason: str = "retries ex
             model=lease.resolved_model,
             effort=lease.resolved_effort,
         )
-        # Wrapped implies raw, never the reverse (blizzard-context:/domain/humans.md).
+        # Wrapped-vs-raw rules: `blizzard-context:/domain/humans.md` §Escalation.
         # `bindings` is checked explicitly above — an empty one is not provably unreachable.
         if ctx.config.runner_dir:
             wrapped_takeover = wrapped_takeover_command(lease.chunk_id, ctx.config.runner_dir)

@@ -189,10 +189,10 @@ class ClaimService:
 
     def rekey(self, route: Route) -> str:
         """Rotate a live route's capability token (issue #84b) — the lost-plaintext
-        recovery path. Appends a new ``route_token_minted`` fact rather than mutating the
-        prior one (``bzh:facts-not-status``); newest-fact-wins supersedes the old token
-        with no separate revocation step, and a re-run is idempotent by construction.
-        Takes an already-resolved live route (``bzh:domain-takes-objects``)."""
+        recovery: a claim whose route-token response was never read back has no other
+        way to learn it. Appends a new ``route_token_minted`` fact rather than mutating
+        the prior one (``bzh:facts-not-status``); newest-fact-wins supersedes the old
+        token, re-run idempotent. Takes an already-resolved route (``bzh:domain-takes-objects``)."""
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
         self._chunks.record_route_token(route.chunk_id, token_hash=hash_token(route_token), at=self._clock.now())
         return route_token

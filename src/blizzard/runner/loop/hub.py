@@ -140,8 +140,6 @@ class IHubClient(Protocol):
 
     def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:
         """``POST /api/fleet/chunks/{id}/route-token`` — rotate the chunk's route
-        capability token (issue #84b).
-
-        The lost-plaintext recovery: a runner that crashed between the hub minting a
-        claim's token and reading the claim response back has no other way to learn it."""
+        capability token (issue #84b). Why it exists: `src/blizzard/hub/domain/claim.py`'s
+        ``ClaimService.rekey``."""
         ...
