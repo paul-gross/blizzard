@@ -25,6 +25,11 @@ _CP_AFTER_MINT = crashpoint("spawn.after-lease-mint.before-spawn", "lease minted
 _CP_AFTER_SPAWN = crashpoint("spawn.after-spawn", "worker spawned; pid recorded")
 
 
+def environments_for(bindings: list[EnvBindingRecord]) -> list[AcquiredEnvironment]:
+    """This chunk's held environments, as the spawn primitives want them."""
+    return [AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in bindings]
+
+
 @dataclass(frozen=True)
 class MintedLease:
     """A lease recorded and announced to the hub, with no worker behind it yet."""
@@ -130,7 +135,7 @@ class Spawner:
         lease_token, token_hash = mint_lease_token()
         self.ctx.store.record_lease_token(lease.lease_id, token_hash, self.ctx.clock.now())
         return WorkerPreamble(
-            environments=[AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in bindings],
+            environments=environments_for(bindings),
             lease_id=lease.lease_id,
             local_api_url=self.ctx.config.local_api_url,
             lease_token=lease_token,

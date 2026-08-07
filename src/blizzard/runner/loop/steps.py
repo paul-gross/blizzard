@@ -17,14 +17,19 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import as_utc, is_heartbeat_stale
-from blizzard.runner.domain.takeover import wrapped_takeover_command
 from blizzard.runner.environments.provider import (
-    AcquiredEnvironment,
     EnvironmentPreparationError,
     WorkspaceAcquisitionError,
 )
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
+from blizzard.runner.loop.attempt import (
+    FAILED,
+    PARKED,
+    REAPED,
+    TRANSITIONED,
+    Attempt,
+)
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
@@ -33,7 +38,7 @@ from blizzard.runner.loop.judgement_prompt import JudgementPrompt
 from blizzard.runner.loop.outbound import COMPLETION_KIND, DECISION_KIND, OutboundFacts
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.produces import ProducesReconciler
-from blizzard.runner.loop.spawn import Spawner
+from blizzard.runner.loop.spawn import Spawner, environments_for
 from blizzard.runner.store.repository import (
     AskRecord,
     BufferedFact,
@@ -52,7 +57,6 @@ from blizzard.wire.completion import (
 from blizzard.wire.decision import DecisionSubmission, DecisionView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import (
-    EVENT_RECORDED,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     RUNNER_LOCALLY_PAUSED,
     RunnerFact,
@@ -75,14 +79,6 @@ __all__ = [
 ]
 
 _log = get_logger("blizzard.runner.loop")
-
-# Closure reasons (lease_closures.reason).
-_TRANSITIONED = "transitioned"
-_REAPED = "reaped"
-_FAILED = "failed"
-_ESCALATED = "escalated"
-_PARKED = "parked"  # a runner-config gate: the node-step completed, the chunk parks on a decision
-_RELEASED = "released"  # the chunk was found reassigned/detached/unknown — abandon, no requeue (blizzard#9)
 
 #: The message RESUME delivers into a marked session on a restart — ``#``-prefixed so it
 #: is inert in prose and in a behavior script alike. The exact prose is unpinned.
@@ -108,18 +104,6 @@ _CP_REAP_AFTER = crashpoint("reap.after-expire", "REAP done; stale leases expire
 _CP_RESUME_BEFORE = crashpoint("resume.before-reattach", "entered RESUME with marked intents; none re-attached yet")
 _CP_RESUME_AFTER_KILL = crashpoint("resume.after-kill.before-reattach", "survivor killed; session not yet re-attached")
 _CP_RESUME_AFTER = crashpoint("resume.after-reattach", "session re-attached under the same lease; intent cleared")
-
-# ABANDON — the reassigned/detached release. A crash here leaves a still-active lease with
-# a dead pid, envs unreleased and no closure; recovery is `_reconcile_leases`.
-_CP_ABANDON_AFTER_KILL = crashpoint(
-    "abandon.after-kill.before-release", "detached worker killed; environments not yet released"
-)
-
-# PAUSE — the operator's per-chunk pause park (issue #46): the worker dies, the claim, route,
-# epoch and envs survive. A crash before the park is recovered by `_resume_marked_lease`.
-_CP_PAUSE_PARK_AFTER_KILL = crashpoint(
-    "pause.after-kill.before-park", "paused worker killed; pause-park not yet durable"
-)
 
 # PULL — the single outbound flusher (store-and-forward drain).
 _CP_PULL_BEFORE = crashpoint("pull.before-flush", "entered PULL; registry synced, buffer not drained")
@@ -248,7 +232,7 @@ def reap(ctx: LoopContext) -> None:
             continue
         if lease.pid is None or lease.session_id is None:
             _log.info("reaping unspawned lease", lease_id=lease.lease_id, chunk_id=lease.chunk_id)
-            _fail_attempt(ctx, lease, reason=_REAPED, via="reap")
+            Attempt(ctx, lease).fail(reason=REAPED, via="reap")
             continue
         if not ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
             continue  # exited — ADVANCE's (exit-is-done)
@@ -259,7 +243,7 @@ def reap(ctx: LoopContext) -> None:
                 deferred += 1
                 continue
             _log.info("reaping stalled worker", lease_id=lease.lease_id, chunk_id=lease.chunk_id, pid=lease.pid)
-            _fail_attempt(ctx, lease, reason=_REAPED, via="reap")
+            Attempt(ctx, lease).fail(reason=REAPED, via="reap")
         # A live, beating worker runs on.
     if deferred:
         _log.info("reap deferred — locally paused", runner_id=ctx.config.runner_id, count=deferred)
@@ -351,7 +335,7 @@ def _resume_marked_lease(ctx: LoopContext, lease: LeaseRecord) -> None:
     except ChunkNotFoundError:
         # The chunk is gone outright (e.g. a store reset) — terminal, not retryable; abandon now
         # rather than leave the intent open for PULL's `_reconcile_leases` to find it later.
-        _abandon_reassigned(ctx, lease, via="resume")
+        Attempt(ctx, lease).abandon(via="resume")
         return
     except HubClientError:
         # Hub unreachable — the intent is durable and the envs stay held. Resuming blind
@@ -359,11 +343,11 @@ def _resume_marked_lease(ctx: LoopContext, lease: LeaseRecord) -> None:
         return
     ours = detail.route is not None and detail.route.runner_id == ctx.config.runner_id
     if ours and detail.pause is not None:
-        _kill_and_park_paused(ctx, lease, via="resume")
+        Attempt(ctx, lease).park_paused(via="resume")
     elif detail.status == ChunkStatus.RUNNING and ours:
         _resume_in_place(ctx, lease)
     else:
-        _abandon_reassigned(ctx, lease, via="resume")
+        Attempt(ctx, lease).abandon(via="resume")
 
 
 def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
@@ -383,7 +367,7 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
         _log.warning(
             "marked lease has no warm env/session — abandoning", chunk_id=lease.chunk_id, lease_id=lease.lease_id
         )
-        _abandon_reassigned(ctx, lease, killed=True, via="resume")
+        Attempt(ctx, lease).abandon(killed=True, via="resume")
         return
     # The resume-with-message -> record_spawn gap is the un-armable spawn-record window: no
     # crash point can arm a window whose recovery input (the new pid) does not yet exist.
@@ -412,48 +396,6 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
         lease_id=lease.lease_id,
         epoch=lease.epoch,
         pid=pid,
-    )
-
-
-def _abandon_reassigned(ctx: LoopContext, lease: LeaseRecord, *, killed: bool = False, via: str) -> None:
-    """Release a chunk the hub reassigned, detached, or no longer knows about (blizzard#9) —
-    reached from restart-resume or a live tick.
-
-    No epoch bump and no requeue — the work is not this runner's any more. The lease closes
-    ``released``, and any open ask park is retired alongside (blizzard#202)."""
-    now = ctx.clock.now()
-    if lease.pid is not None and not killed:
-        ctx.process.kill(lease.pid)
-    _CP_ABANDON_AFTER_KILL.reached()  # worker killed; envs not yet released — recovery is the next tick's re-scan
-    ctx.env_release.release_chunk(lease.chunk_id)
-    park = ctx.store.open_park(lease.lease_id)
-    if park is not None:
-        ctx.store.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)
-    ctx.store.record_closure(
-        lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=_RELEASED, closed_at=now
-    )
-    ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
-    _log.info("abandoned reassigned/detached/unknown chunk", chunk_id=lease.chunk_id, lease_id=lease.lease_id, via=via)
-
-
-def _kill_and_park_paused(ctx: LoopContext, lease: LeaseRecord, *, via: str) -> None:
-    """Kill a paused chunk's worker and park its lease — the claim is **kept** (issue #46).
-
-    The deliberate inverse of :func:`_abandon_reassigned`: no environment released, no closure,
-    no epoch bump, no lease minted — **no retry is consumed**, and the route, epoch and session
-    all survive. Not gated by the local brake: a kill is not a spawn."""
-    now = ctx.clock.now()
-    if lease.pid is not None:
-        ctx.process.kill(lease.pid)
-    _CP_PAUSE_PARK_AFTER_KILL.reached()  # worker dead; the park is not yet durable
-    ctx.store.record_pause_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, parked_at=now)
-    ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
-    _log.info(
-        "parked chunk on an operator pause — claim retained",
-        chunk_id=lease.chunk_id,
-        lease_id=lease.lease_id,
-        epoch=lease.epoch,
-        via=via,
     )
 
 
@@ -506,33 +448,18 @@ def _reconcile_leases(ctx: LoopContext) -> None:
         except ChunkNotFoundError:
             # Terminal, not retryable (blizzard#9). Ordered before the HubClientError arm
             # because it subclasses it, or the 404 would be swallowed as "hub unreachable".
-            _abandon_reassigned(ctx, lease, via="pull")
+            Attempt(ctx, lease).abandon(via="pull")
             continue
         except HubClientError:
             continue  # hub unreachable — last-known directive holds; keep working
         if detail.status == ChunkStatus.STOPPED:
             # Honor the terminal fact directly (issue #118), rather than waiting on the
             # route check below to observe the release.
-            _abandon_reassigned(ctx, lease, via="pull")
+            Attempt(ctx, lease).abandon(via="pull")
         elif detail.route is None or detail.route.runner_id != ctx.config.runner_id:
-            _abandon_reassigned(ctx, lease, via="pull")
+            Attempt(ctx, lease).abandon(via="pull")
         elif detail.pause is not None and lease.lease_id not in pause_parked:
-            _kill_and_park_paused(ctx, lease, via="pull")
-
-
-def _reassigned_or_detached(ctx: LoopContext, lease: LeaseRecord) -> bool:
-    """True iff the hub no longer routes ``lease``'s chunk to this runner, or the
-    chunk is gone outright (blizzard#9).
-
-    Unreachable hub → ``False``: a transport failure is never read as a detach. A 404 is the
-    one exception — terminal, not something to wait out (blizzard#9)."""
-    try:
-        detail = ctx.hub.get_chunk(lease.chunk_id)
-    except ChunkNotFoundError:
-        return True  # the chunk no longer exists at the hub — terminal, not retryable
-    except HubClientError:
-        return False  # hub unreachable — last-known directive holds; keep working
-    return detail.route is None or detail.route.runner_id != ctx.config.runner_id
+            Attempt(ctx, lease).park_paused(via="pull")
 
 
 def flush_outbound(ctx: LoopContext) -> None:
@@ -616,13 +543,13 @@ def _flush_decision(ctx: LoopContext, fact: BufferedFact) -> bool:
         return True  # already parked on an earlier flush whose ack was lost
     if response.outcome == ApplyOutcome.FAILURE:
         _log.warning("decision rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
-        _fail_attempt(ctx, lease, reason=_FAILED, via="pull")
+        Attempt(ctx, lease).fail(reason=FAILED, via="pull")
         return True
     ctx.store.record_closure(
         lease_id=lease.lease_id,
         chunk_id=lease.chunk_id,
         node_id=lease.node_id,
-        reason=_PARKED,
+        reason=PARKED,
         closed_at=ctx.clock.now(),
     )
     _log.info("chunk parked at runner-config gate", chunk_id=lease.chunk_id, node=lease.node_name)
@@ -639,11 +566,11 @@ def _consume_apply_response(ctx: LoopContext, lease: LeaseRecord, response: Appl
         # A semantic rejection — a stale-epoch or terminal completion. The attempt failed;
         # requeue or escalate. The chunk never advanced.
         _log.warning("completion rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
-        _fail_attempt(ctx, lease, reason=_FAILED, via="pull")
+        Attempt(ctx, lease).fail(reason=FAILED, via="pull")
         return
     now = ctx.clock.now()
     ctx.store.record_closure(
-        lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=_TRANSITIONED, closed_at=now
+        lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=TRANSITIONED, closed_at=now
     )
     _CP_ADV_AFTER_CLOSURE.reached()
     if response.outcome == ApplyOutcome.NEXT and _park_on_cost_cap(ctx, lease):
@@ -676,7 +603,7 @@ def _park_on_cost_cap(ctx: LoopContext, lease: LeaseRecord) -> bool:
         spend_usd=cost.cost_usd,
         cost_partial=cost.cost_partial,
     )
-    _escalate(ctx, lease, reason=f"spend cap ${cap:.2f} reached (spend ${cost.cost_usd:.2f}{partial_note})")
+    Attempt(ctx, lease).escalate(reason=f"spend cap ${cap:.2f} reached (spend ${cost.cost_usd:.2f}{partial_note})")
     return True
 
 
@@ -1022,7 +949,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     choice = ctx.harness.parse_verdict(output)
     if choice is None:
         _log.warning("verdict-less judgement — failing attempt", chunk_id=lease.chunk_id, lease_id=lease.lease_id)
-        _fail_attempt(ctx, lease, reason=_FAILED, via="advance")
+        Attempt(ctx, lease).fail(reason=FAILED, via="advance")
         return
     _CP_ADV_AFTER_JUDGE.reached()
     _CP_ADV_AFTER_USAGE.reached()
@@ -1037,7 +964,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
             lease_id=lease.lease_id,
             choice=choice,
         )
-        _fail_attempt(ctx, lease, reason=_FAILED, via="advance")
+        Attempt(ctx, lease).fail(reason=FAILED, via="advance")
         return
 
     # 2a. Nudge-once (issue #113): the guard fact is recorded BEFORE the resume, which is what
@@ -1133,7 +1060,7 @@ def _apply_response(
 ) -> None:
     """Act on the apply-response: continue in place, hold at a hub node, or finish."""
     if outcome == ApplyOutcome.NEXT and next_envelope is not None:
-        envs = _bindings_as_environments(bindings)
+        envs = environments_for(bindings)
         resume_from = ctx.sessions.resume_target(
             chunk_id,
             next_envelope.node,
@@ -1217,7 +1144,7 @@ def _spawn_into_held_node(ctx: LoopContext, chunk_id: str) -> None:
     except HubClientError:
         return  # hub unreachable — the transition is durable at the hub; retry next tick
     _log.info("hub advanced held chunk into a fresh node — spawning", chunk_id=chunk_id)
-    held = _bindings_as_environments(bindings)
+    held = environments_for(bindings)
     resume_from = ctx.sessions.resume_target(
         chunk_id,
         envelope.node,
@@ -1255,126 +1182,6 @@ def _resolve_gate(ctx: LoopContext, chunk_id: str, decision: DecisionView) -> No
 # Shared helpers
 
 
-#: The classification each `_fail_attempt` branch surfaces (issue #125). The
-#: locally-paused defer branch surfaces nothing — a deferral is not an outcome.
-_ATTEMPT_FAILED = ("warning", "attempt-failed")
-_WORKER_LOST = ("critical", "worker-lost")
-_ATTEMPT_ABANDONED = ("info", "attempt-abandoned")
-
-
-def _failure_event(
-    lease: LeaseRecord, *, severity: str, kind: str, message: str, reason: str, via: str, stderr_tail: str = ""
-) -> dict[str, object]:
-    """The ``event.recorded`` payload one `_fail_attempt` branch surfaces (issue #125), whose
-    ``detail`` carries the ``(reason, via)`` that classified it and any captured stderr tail."""
-    detail: dict[str, object] = {"via": via, "reason": reason, "node": lease.node_name}
-    if stderr_tail:
-        detail["stderr_tail"] = stderr_tail
-    return {
-        "severity": severity,
-        "kind": kind,
-        "chunk_id": lease.chunk_id,
-        "lease_id": lease.lease_id,
-        "node_name": lease.node_name,
-        "message": message,
-        "detail": detail,
-    }
-
-
-def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str, via: str) -> None:
-    """Close a failed attempt, then requeue at the node or escalate per the budget.
-
-    An escalation is a one-way door this same tick's flush cannot retract, so the
-    exhausted-retries branch re-asks the ownership question first (blizzard#38) and defers
-    entirely while locally paused (issue #45). The requeue branch needs no such gate."""
-    now = ctx.clock.now()
-    if lease.pid is not None:
-        ctx.process.kill(lease.pid)  # best-effort hygiene; the epoch fence is the guarantee
-
-    # Best-effort: a worker that never crashed to stderr wrote no tail, which is the
-    # ordinary case.
-    stderr_tail = ctx.worker_files.stderr_tail(lease)
-
-    # attempt_count includes this lease, and a first attempt is not a retry.
-    retried = ctx.store.attempt_count(lease.chunk_id, lease.node_id) - 1
-    if retried < lease.retries_max:
-        # Retry: enqueued ATOMICALLY with the closure it describes (issue #125).
-        severity, kind = _ATTEMPT_FAILED
-        ctx.store.record_closure(
-            lease_id=lease.lease_id,
-            chunk_id=lease.chunk_id,
-            node_id=lease.node_id,
-            reason=reason,
-            closed_at=now,
-            event_kind=EVENT_RECORDED,
-            event_payload=json.dumps(
-                _failure_event(
-                    lease,
-                    severity=severity,
-                    kind=kind,
-                    message=f"attempt failed, retrying — {reason} (via {via})",
-                    reason=reason,
-                    via=via,
-                    stderr_tail=stderr_tail,
-                )
-            ),
-        )
-        _requeue(ctx, lease)
-        return
-    if _reassigned_or_detached(ctx, lease):
-        # Emitted HERE rather than in the shared abandon helper, which the ordinary detach
-        # sweep also reaches and which must stay silent.
-        severity, kind = _ATTEMPT_ABANDONED
-        OutboundFacts(ctx).event(
-            chunk_id=lease.chunk_id,
-            lease_id=lease.lease_id,
-            at=now,
-            payload=_failure_event(
-                lease,
-                severity=severity,
-                kind=kind,
-                message=f"attempt abandoned — chunk reassigned ({reason}, via {via})",
-                reason=reason,
-                via=via,
-                stderr_tail=stderr_tail,
-            ),
-        )
-        _abandon_reassigned(ctx, lease, killed=True, via=via)
-        return
-    if ctx.store.local_paused(ctx.config.runner_id):
-        # Deliberate deferral, not a surfaced failure — emit nothing (issue #125).
-        _log.info(
-            "escalation deferred — locally paused",
-            runner_id=ctx.config.runner_id,
-            via=via,
-            chunk_id=lease.chunk_id,
-            lease_id=lease.lease_id,
-        )
-        return
-    # Escalate: enqueued ATOMICALLY with the closure it describes (issue #125).
-    severity, kind = _WORKER_LOST
-    ctx.store.record_closure(
-        lease_id=lease.lease_id,
-        chunk_id=lease.chunk_id,
-        node_id=lease.node_id,
-        reason=_ESCALATED,
-        closed_at=now,
-        event_kind=EVENT_RECORDED,
-        event_payload=json.dumps(
-            _failure_event(
-                lease,
-                severity=severity,
-                kind=kind,
-                message=f"worker lost — retries exhausted ({reason}, via {via})",
-                reason=reason,
-                via=via,
-                stderr_tail=stderr_tail,
-            )
-        ),
-    )
-    _escalate(ctx, lease)
-
-
 def _adopt_interrupted_claim(ctx: LoopContext, chunk_id: str) -> None:
     """Spawn the current node for a claimed chunk whose FILL crashed before the lease minted.
 
@@ -1404,7 +1211,7 @@ def _adopt_interrupted_claim(ctx: LoopContext, chunk_id: str) -> None:
     except HubClientError:
         return  # hub unreachable — the binding is durable; retry next tick
     _log.info("adopting interrupted claim — spawning current node", chunk_id=chunk_id)
-    Spawner(ctx).spawn(chunk_id, envelope, _bindings_as_environments(bindings), via="adopt")
+    Spawner(ctx).spawn(chunk_id, envelope, environments_for(bindings), via="adopt")
 
 
 def _resume_requeued_chunk(ctx: LoopContext, chunk_id: str) -> None:
@@ -1426,7 +1233,7 @@ def _resume_requeued_chunk(ctx: LoopContext, chunk_id: str) -> None:
     except HubClientError:
         return  # hub unreachable — the requeue fact is durable; retry next tick
     _log.info("resuming requeued chunk — spawning current node", chunk_id=chunk_id)
-    Spawner(ctx).spawn(chunk_id, envelope, _bindings_as_environments(bindings), via="requeue-resume")
+    Spawner(ctx).spawn(chunk_id, envelope, environments_for(bindings), via="requeue-resume")
 
 
 def _reclaim_interrupted(ctx: LoopContext, chunk_id: str, bindings: list[EnvBindingRecord]) -> None:
@@ -1435,7 +1242,7 @@ def _reclaim_interrupted(ctx: LoopContext, chunk_id: str, bindings: list[EnvBind
     The environment was bound but the claim never landed, so the chunk still reads ``ready``.
     The route is claimed with the environment already held rather than re-acquired; a lost race
     releases the binding."""
-    envs = _bindings_as_environments(bindings)
+    envs = environments_for(bindings)
     claim = RouteClaim(
         chunk_id=chunk_id,
         runner_id=ctx.config.runner_id,
@@ -1461,53 +1268,6 @@ def _reclaim_interrupted(ctx: LoopContext, chunk_id: str, bindings: list[EnvBind
     # before — a fresh claim always wins (issue #84a).
     ctx.store.set_route_token(chunk_id, token=outcome.claimed.route_token, at=ctx.clock.now())
     Spawner(ctx).spawn(chunk_id, outcome.claimed.envelope, envs, via="reclaim")
-
-
-def _requeue(ctx: LoopContext, lease: LeaseRecord) -> None:
-    """Re-attempt the node in the same environments — new session, new lease, fresh epoch.
-
-    The prior attempt's lease is already closed before this runs, so a 404 here leaves no active
-    lease behind for any later sweep to clean up — the binding would be held forever. It is
-    therefore released here rather than retried (blizzard#9)."""
-    bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
-    if not bindings:
-        _log.warning("requeue with no bound env — cannot re-spawn", chunk_id=lease.chunk_id)
-        return
-    try:
-        envelope = ctx.hub.get_envelope(lease.chunk_id)  # idempotent re-read
-    except ChunkNotFoundError:
-        _log.warning("hub reports chunk unknown at requeue — releasing envs", chunk_id=lease.chunk_id)
-        ctx.env_release.release_chunk(lease.chunk_id)
-        return
-    except HubClientError:
-        return  # the closed attempt is durable; FILL/ADVANCE re-drives next tick
-    _log.info("requeuing at node", chunk_id=lease.chunk_id, node=lease.node_name)
-    Spawner(ctx).spawn(lease.chunk_id, envelope, _bindings_as_environments(bindings), via="requeue")
-
-
-def _escalate(ctx: LoopContext, lease: LeaseRecord, *, reason: str = "retries exhausted") -> None:
-    """Park the chunk needs-human at the hub, envs held for takeover."""
-    now = ctx.clock.now()
-    bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
-    takeover = ""
-    wrapped_takeover = ""
-    if lease.session_id is not None and bindings:
-        # Composed from the lease's own stamps (issue #144), so a takeover lands in exactly
-        # the configuration the parked session ran with, never a fresh resolution.
-        takeover = ctx.harness.resume_command(
-            bindings[0].workdir,
-            lease.session_id,
-            model=lease.resolved_model,
-            effort=lease.resolved_effort,
-        )
-        # Wrapped-vs-raw rules: `blizzard-context:/domain/humans.md` §Escalation.
-        # `bindings` is checked explicitly above — an empty one is not provably unreachable.
-        if ctx.config.runner_dir:
-            wrapped_takeover = wrapped_takeover_command(lease.chunk_id, ctx.config.runner_dir)
-    OutboundFacts(ctx).escalation(lease, takeover=takeover, wrapped_takeover=wrapped_takeover, at=now)
-    _log.info(
-        f"escalated to needs-human — {reason}", chunk_id=lease.chunk_id, takeover=takeover, wrapped=wrapped_takeover
-    )
 
 
 def _park_on_ask(ctx: LoopContext, lease: LeaseRecord, ask: AskRecord) -> None:
@@ -1715,10 +1475,6 @@ def _repo_origins(ctx: LoopContext, bindings: list[EnvBindingRecord]) -> dict[tu
         for repo in ctx.provider.repos(binding.environment_id):
             origins[(binding.environment_id, repo.name)] = repo.origin_url
     return origins
-
-
-def _bindings_as_environments(bindings: list[EnvBindingRecord]) -> list[AcquiredEnvironment]:
-    return [AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in bindings]
 
 
 # EXTERNAL SUBSCRIPTION USAGE SAMPLE (issue #218)

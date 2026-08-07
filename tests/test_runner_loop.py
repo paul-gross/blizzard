@@ -32,11 +32,11 @@ from blizzard.runner.harness.preamble import (
     RESUME_WORKSPACE_UNCHANGED,
     PreambleFingerprint,
 )
+from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.loop.steps import (
-    _escalate,
     advance,
     fill,
     mark_resume_intents,
@@ -1706,7 +1706,7 @@ def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path
         config=config,
     )
 
-    _escalate(ctx, lease)
+    Attempt(ctx, lease).escalate()
 
     escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
@@ -1749,7 +1749,7 @@ def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_comm
         config=config,
     )
 
-    _escalate(ctx, lease)
+    Attempt(ctx, lease).escalate()
 
     escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
@@ -1799,7 +1799,7 @@ def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  # type: ig
     # back into the chunk, the same shape a retries-exhausted escalation carries.
     assert payload["takeover_command"].startswith("cd /ws/e1 &&") and "--resume sess-a" in payload["takeover_command"]
     # The cap-park caller shares the same composition-root `ctx` as every other
-    # `_escalate` call — with `runner_dir` configured, it composes a real wrapped command.
+    # `Attempt.escalate` call — with `runner_dir` configured, it composes a real wrapped command.
     assert payload["wrapped_takeover_command"] == "blizzard runner takeover ch_1 --dir /tmp/runner-dir"
     # Envs stay held for the takeover; nothing was released on a cap park.
     assert store.held_environment_ids() == ["e1"]
@@ -1808,7 +1808,7 @@ def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  # type: ig
 @pytest.mark.unit
 def test_cost_cap_park_leaves_wrapped_empty_without_runner_dir(tmp_path):  # type: ignore[no-untyped-def]
     """A cap park with no `runner_dir` configured composes the raw fallback normally but
-    leaves the wrapped command empty, same as any other `_escalate` caller — there is no
+    leaves the wrapped command empty, same as any other `Attempt.escalate` caller — there is no
     runtime dir to fill `--dir` with."""
     store = _store(tmp_path)
     _seed_running_lease(store)
