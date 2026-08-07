@@ -750,7 +750,7 @@
   "blizzard/hub/api/chunks.py": {
    "comments": 16,
    "docstrings": 96,
-   "total": 859
+   "total": 848
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
@@ -770,7 +770,7 @@
   "blizzard/hub/api/fleet.py": {
    "comments": 30,
    "docstrings": 58,
-   "total": 634
+   "total": 629
   },
   "blizzard/hub/api/graphs.py": {
    "comments": 1,
@@ -1010,7 +1010,7 @@
   "blizzard/hub/delivery/hub_node.py": {
    "comments": 44,
    "docstrings": 62,
-   "total": 630
+   "total": 628
   },
   "blizzard/hub/delivery/internal/__init__.py": {
    "comments": 0,
@@ -1050,7 +1050,7 @@
   "blizzard/hub/domain/apply.py": {
    "comments": 34,
    "docstrings": 57,
-   "total": 597
+   "total": 595
   },
   "blizzard/hub/domain/artifacts.py": {
    "comments": 0,
@@ -1060,12 +1060,12 @@
   "blizzard/hub/domain/claim.py": {
    "comments": 19,
    "docstrings": 25,
-   "total": 198
+   "total": 195
   },
   "blizzard/hub/domain/decisions.py": {
    "comments": 8,
    "docstrings": 21,
-   "total": 183
+   "total": 180
   },
   "blizzard/hub/domain/detach.py": {
    "comments": 0,
@@ -1075,7 +1075,7 @@
   "blizzard/hub/domain/edit.py": {
    "comments": 9,
    "docstrings": 41,
-   "total": 216
+   "total": 214
   },
   "blizzard/hub/domain/enrollment.py": {
    "comments": 2,
@@ -1150,7 +1150,7 @@
   "blizzard/hub/domain/queue.py": {
    "comments": 5,
    "docstrings": 33,
-   "total": 193
+   "total": 192
   },
   "blizzard/hub/domain/readiness.py": {
    "comments": 0,
@@ -1175,7 +1175,7 @@
   "blizzard/hub/domain/work.py": {
    "comments": 44,
    "docstrings": 436,
-   "total": 1517
+   "total": 1491
   },
   "blizzard/hub/domain/work_closure.py": {
    "comments": 4,
@@ -1250,7 +1250,7 @@
   "blizzard/hub/store/internal/chunk_store.py": {
    "comments": 56,
    "docstrings": 111,
-   "total": 1982
+   "total": 1980
   },
   "blizzard/hub/store/internal/graph_store.py": {
    "comments": 10,
@@ -1920,7 +1920,7 @@
   "blizzard/runner/loop/build.py": {
    "comments": 14,
    "docstrings": 31,
-   "total": 198
+   "total": 211
   },
   "blizzard/runner/loop/checks.py": {
    "comments": 2,
@@ -1930,7 +1930,7 @@
   "blizzard/runner/loop/context.py": {
    "comments": 29,
    "docstrings": 8,
-   "total": 92
+   "total": 96
   },
   "blizzard/runner/loop/hub.py": {
    "comments": 0,
@@ -1973,14 +1973,24 @@
    "total": 74
   },
   "blizzard/runner/loop/steps.py": {
-   "comments": 263,
-   "docstrings": 299,
-   "total": 2281
+   "comments": 259,
+   "docstrings": 266,
+   "total": 2155
   },
   "blizzard/runner/loop/tick.py": {
    "comments": 4,
    "docstrings": 7,
    "total": 40
+  },
+  "blizzard/runner/loop/usage.py": {
+   "comments": 4,
+   "docstrings": 10,
+   "total": 78
+  },
+  "blizzard/runner/loop/worker_stdout.py": {
+   "comments": 0,
+   "docstrings": 22,
+   "total": 74
   },
   "blizzard/runner/loop/worktree.py": {
    "comments": 0,
@@ -2516,8 +2526,8 @@
   },
   "runner_fakes.py": {
    "comments": 43,
-   "docstrings": 38,
-   "total": 643
+   "docstrings": 39,
+   "total": 671
   },
   "service/__init__.py": {
    "comments": 0,
@@ -2742,7 +2752,7 @@
   "test_chunk_status_derivation.py": {
    "comments": 66,
    "docstrings": 23,
-   "total": 755
+   "total": 745
   },
   "test_chunk_stop.py": {
    "comments": 5,
@@ -2962,7 +2972,7 @@
   "test_gate_derivation.py": {
    "comments": 9,
    "docstrings": 7,
-   "total": 138
+   "total": 135
   },
   "test_gates.py": {
    "comments": 53,
@@ -3087,7 +3097,7 @@
   "test_hub_command_node.py": {
    "comments": 55,
    "docstrings": 82,
-   "total": 1392
+   "total": 1391
   },
   "test_hub_command_runner.py": {
    "comments": 0,
@@ -3107,7 +3117,7 @@
   "test_hub_runner_seam.py": {
    "comments": 18,
    "docstrings": 9,
-   "total": 196
+   "total": 208
   },
   "test_hub_signing_service.py": {
    "comments": 8,
@@ -3192,7 +3202,7 @@
   "test_migrated_reclaim_epoch_floor.py": {
    "comments": 20,
    "docstrings": 6,
-   "total": 144
+   "total": 154
   },
   "test_migration_apply.py": {
    "comments": 61,
@@ -3202,7 +3212,7 @@
   "test_migration_store.py": {
    "comments": 35,
    "docstrings": 16,
-   "total": 494
+   "total": 491
   },
   "test_openapi_export.py": {
    "comments": 0,

@@ -28,6 +28,7 @@ from blizzard.runner.loop.internal.subprocess_worktree_git import SubprocessWork
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.loop.steps import mark_crash_resume_intents, mark_resume_intents
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 
@@ -91,9 +92,11 @@ def build_loop_context(
         external_usage_sample_interval_seconds=config.external_usage_sample_interval_seconds,
         runner_dir=str(config.root),
     )
+    _worker_files = WorkerStdoutFiles(str(worker_stdout_dir), store)
+    _clock = SystemClock()
     return LoopContext(
         store=store,
-        clock=SystemClock(),
+        clock=_clock,
         hub=hub,
         provider=provider,
         harness=harness,
@@ -102,7 +105,15 @@ def build_loop_context(
         # The check-runner seam (issue #114) — see `runner/loop/checks.py`.
         check_runner=SubprocessCheckRunner(env_passthrough=config.worker_env_passthrough),
         config=loop_config,
-        worker_files=WorkerStdoutFiles(str(worker_stdout_dir), store),
+        worker_files=_worker_files,
+        usage=UsageRecorder(
+            store=store,
+            clock=_clock,
+            harness=harness,
+            worker_files=_worker_files,
+            workspace_root=config.workspace_root,
+            transcripts=harness_transcript_source,
+        ),
         # The same source injected into `harness` above, declared here too so the loop's
         # direct readers don't reach through `ctx.harness` for it.
         transcripts=harness_transcript_source,

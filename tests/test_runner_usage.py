@@ -320,8 +320,8 @@ def test_usage_replay_after_crash_is_idempotent(tmp_path):  # type: ignore[no-un
     assert lease is not None
     bindings = store.bindings_for_chunk("ch_1")
 
-    steps._record_attempt_usage(ctx, lease, bindings, judge_output="<judged output>")
-    steps._record_attempt_usage(ctx, lease, bindings, judge_output="<judged output>")  # the replay
+    ctx.usage.record_attempt(lease, bindings, judge_output="<judged output>")
+    ctx.usage.record_attempt(lease, bindings, judge_output="<judged output>")  # the replay
 
     payloads = _usage_payloads(store)
     assert len(payloads) == 1  # the spawn fact only — not doubled by the replay

@@ -16,7 +16,14 @@ from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.steps import fill, flush_outbound
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
-from tests.runner_fakes import FakeHarness, FakeProbe, FakeProvider, FakeWorktreeGit, make_store
+from tests.runner_fakes import (
+    FakeHarness,
+    FakeProbe,
+    FakeProvider,
+    FakeWorktreeGit,
+    make_store,
+    make_usage_recorder,
+)
 from tests.support import build_hub, ingest, report_lease
 
 pytestmark = pytest.mark.component
@@ -114,6 +121,7 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
         worktree_git=FakeWorktreeGit(),
         config=LoopConfig(runner_id="r2", workspace_id="w2", max_agents=1),
         worker_files=WorkerStdoutFiles("", store),
+        usage=make_usage_recorder(store, hub.clock),
     )
     fill(ctx)
 

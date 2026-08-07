@@ -31,7 +31,6 @@ from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.harness.preamble import render_worker_preamble
 from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
-from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
@@ -208,70 +207,6 @@ def _pending_generation(ctx: LoopContext, lease_id: str) -> int:
     lands. Every write call site (:func:`_spawn_attempt`, and each resume family
     member) reads this to name its own stdout path ahead of that call."""
     return ctx.store.lease_generation(lease_id) + 1
-
-
-def _record_worker_usage(ctx: LoopContext, lease: LeaseRecord, bindings: list[EnvBindingRecord]) -> None:
-    """Record just this attempt's spawn/resume invocation usage — no judgement ran.
-
-    Keyed on ``(lease, generation, kind)``, so it is idempotent across a re-run and
-    distinct from the next generation's own resume fact (issue #58).
-    """
-    generation = ctx.store.lease_generation(lease.lease_id)
-    kind: UsageKind = "spawn" if generation <= 1 else "resume"
-    worker_sample = _worker_usage_sample(ctx, lease, bindings, generation=generation, kind=kind)
-    if worker_sample is not None:
-        _store_usage(ctx, lease, generation=generation, sample=worker_sample)
-
-
-def _record_attempt_usage(
-    ctx: LoopContext, lease: LeaseRecord, bindings: list[EnvBindingRecord], *, judge_output: str
-) -> None:
-    """Record this attempt's harness usage: the spawn/resume invocation whose exit ADVANCE
-    is judging, and the judgement resume that elicited its verdict — each its own fact,
-    keyed on ``(lease, generation, kind)``, so a crash finds both durable or neither."""
-    _record_worker_usage(ctx, lease, bindings)
-    generation = ctx.store.lease_generation(lease.lease_id)
-    # Attribute to the lease's own `resolved_model` stamp (issue #144), not the adapter
-    # default: a judge turn on a sonnet session would otherwise book its spend against opus.
-    judge_sample = ctx.harness.parse_usage(judge_output, "judge", model=lease.resolved_model)
-    if judge_sample is not None:
-        _store_usage(ctx, lease, generation=generation, sample=judge_sample)
-
-
-def _store_usage(ctx: LoopContext, lease: LeaseRecord, *, generation: int, sample: UsageSample) -> None:
-    ctx.store.record_usage(
-        lease_id=lease.lease_id,
-        chunk_id=lease.chunk_id,
-        node_id=lease.node_id,
-        epoch=lease.epoch,
-        generation=generation,
-        sample=sample,
-        recorded_at=ctx.clock.now(),
-    )
-
-
-def _worker_usage_sample(
-    ctx: LoopContext, lease: LeaseRecord, bindings: list[EnvBindingRecord], *, generation: int, kind: UsageKind
-) -> UsageSample | None:
-    """This attempt's own spawn/resume usage, parsed off *this generation's own* stdout
-    envelope, falling back to a transcript-summed, cost-absent sample when none survived.
-    Never fabricated: no envelope and no transcript is simply no fact."""
-    output = ctx.worker_files.read_stdout(lease.lease_id, generation)
-    # Same attribution fallback as the judge fact (issue #144): on a resume the stamp is
-    # what the session was MINTED with, not what a fresh resolution would produce now.
-    sample = ctx.harness.parse_usage(output, kind, model=lease.resolved_model) if output else None
-    if sample is not None:
-        return sample
-    if lease.session_id is None:
-        return None
-    if ctx.transcripts is None:
-        return None
-    fallback_workdir = bindings[0].workdir if bindings else None
-    spawn_cwd = resolve_spawn_cwd(ctx.config.workspace_root, fallback_workdir)
-    lines = ctx.transcripts.read_raw_lines(lease.session_id, spawn_cwd=spawn_cwd)
-    if not lines:
-        return None
-    return ctx.harness.sum_transcript_usage(lines, kind, model=lease.resolved_model)
 
 
 # Runner spend ceiling (issue #61b) — the tick-level kill-switch, first in the tick.
@@ -1129,7 +1064,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
 
     # 2c. Record this attempt's harness usage (issue #58) *before* the verdict is parsed, so
     #      a verdict-less fail does not discard the spend the attempt genuinely burned.
-    _record_attempt_usage(ctx, lease, bindings, judge_output=output)
+    ctx.usage.record_attempt(lease, bindings, judge_output=output)
 
     choice = ctx.harness.parse_verdict(output)
     if choice is None:
@@ -1185,7 +1120,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         nudge_generation = ctx.store.lease_generation(lease.lease_id)
         nudge_sample = ctx.harness.parse_usage(nudge_output, "nudge", model=lease.resolved_model)
         if nudge_sample is not None:
-            _store_usage(ctx, lease, generation=nudge_generation, sample=nudge_sample)
+            ctx.usage.record_sample(lease, generation=nudge_generation, sample=nudge_sample)
         # Re-read: a worker that attached during the nudge must have its content picked
         # up before assembly below, not the assessment fallback it just corrected.
         attachments = ctx.store.attachments_for_lease(lease.lease_id)
@@ -1910,7 +1845,7 @@ def _park_on_ask(ctx: LoopContext, lease: LeaseRecord, ask: AskRecord) -> None:
     env bindings stay held so the session is warm for the resume. No retry is consumed.
     """
     now = ctx.clock.now()
-    _record_worker_usage(ctx, lease, ctx.store.bindings_for_chunk(lease.chunk_id))
+    ctx.usage.record_worker(lease, ctx.store.bindings_for_chunk(lease.chunk_id))
     payload = json.dumps(
         {
             "question_id": ask.question_id,

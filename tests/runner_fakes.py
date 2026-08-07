@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import MetaData
 
-from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.graph import SessionMode
 from blizzard.hub.domain.work import ChunkStatus
@@ -31,6 +31,7 @@ from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
 from blizzard.runner.loop.process import IProcessProbe
+from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
@@ -557,9 +558,11 @@ def make_context(
     _probe: IProcessProbe = probe
     _wt: IWorktreeGit = worktree_git if worktree_git is not None else FakeWorktreeGit()
     _check_runner: ICheckRunner = check_runner if check_runner is not None else FakeCheckRunner()
+    _clock: IClock = clock if clock is not None else FixedClock(datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC))
+    _files = WorkerStdoutFiles(resolved_config.worker_stdout_dir, store)
     return LoopContext(
         store=store,
-        clock=clock if clock is not None else FixedClock(datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)),
+        clock=_clock,
         hub=_hub,
         provider=_provider,
         harness=_harness,
@@ -567,10 +570,33 @@ def make_context(
         worktree_git=_wt,
         check_runner=_check_runner,
         config=resolved_config,
-        worker_files=WorkerStdoutFiles(resolved_config.worker_stdout_dir, store),
+        worker_files=_files,
+        usage=UsageRecorder(
+            store=store,
+            clock=_clock,
+            harness=_harness,
+            worker_files=_files,
+            workspace_root=resolved_config.workspace_root,
+            transcripts=harness.transcript_source(),
+        ),
         # Mirrors `build_loop_context`'s own composition: the same source `harness`
         # itself holds, resolved once here rather than reached through `ctx.harness`.
         transcripts=harness.transcript_source(),
+    )
+
+
+def make_usage_recorder(
+    store: IWriteRunnerStore, clock: IClock, *, harness: IHarnessAdapter | None = None
+) -> UsageRecorder:
+    """A recorder for a context assembled without :func:`make_context`, recording nowhere useful."""
+    return UsageRecorder(
+        store=store,
+        clock=clock,
+        harness=harness
+        if harness is not None
+        else FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t"), verdict=None),
+        worker_files=WorkerStdoutFiles("", store),
+        workspace_root="",
     )
 
 
