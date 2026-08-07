@@ -28,11 +28,8 @@ from blizzard.hub.domain.graph import Graph, is_newer_mint, resolve_follow_lates
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
-    current_node_id,
     derive_chunk_status,
     hub_node_pending,
-    latest_epoch,
-    newest_transition,
 )
 from blizzard.hub.events.broker import ChunkChangeCause
 from blizzard.wire.chunk import ChunkDetail, ChunkPauseRequest, ChunkSummary, HubAdvanceResponse, WorkItemsView
@@ -221,7 +218,7 @@ def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    node_id = current_node_id(facts) or graph.entry_node_id
+    node_id = facts.current_node_id() or graph.entry_node_id
     node = graph.node_by_id(node_id)
     if node is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="chunk has no current runner node (terminal)")
@@ -230,8 +227,8 @@ def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
         graph=graph,
         node=node,
         artifacts=services.chunks.load_artifacts(chunk_id),
-        epoch=latest_epoch(facts) or 0,
-        arrival_addendum=addendum_for_transition(graph, newest_transition(facts)),
+        epoch=facts.latest_epoch() or 0,
+        arrival_addendum=addendum_for_transition(graph, facts.newest_transition()),
     )
 
 
@@ -252,7 +249,7 @@ def hub_advance(
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    node_id = current_node_id(facts)
+    node_id = facts.current_node_id()
     node = graph.node_by_id(node_id) if node_id is not None else None
     if node is None or not node.is_hub_command_node:
         derived = derive_chunk_status(facts)
@@ -260,7 +257,7 @@ def hub_advance(
             chunk_id=chunk_id, status=derived, ran=False, detail="not parked at a hub command node"
         )
     prev_status = derive_chunk_status(facts).value
-    epoch = latest_epoch(facts) or 0
+    epoch = facts.latest_epoch() or 0
     result = services.hub_node.run(chunk, graph, node, epoch=epoch)
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     derived = derive_chunk_status(facts)

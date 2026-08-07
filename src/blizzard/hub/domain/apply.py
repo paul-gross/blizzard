@@ -29,7 +29,6 @@ from blizzard.hub.domain.work import (
     MigrationSource,
     derive_chunk_status,
     landing_node,
-    latest_epoch,
 )
 from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, checks_gate_violated
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
@@ -169,7 +168,7 @@ class ApplyService:
 
         if derive_chunk_status(facts) in TERMINAL_STATUSES:
             return _failure("chunk is terminal")
-        latest = latest_epoch(facts)
+        latest = facts.latest_epoch()
         if latest is not None and submission.epoch != latest:
             return _failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
 
@@ -254,7 +253,7 @@ class ApplyService:
             return _failure(f"unknown chunk {chunk.chunk_id}")
         if derive_chunk_status(facts) in TERMINAL_STATUSES:
             return _failure("chunk is terminal")
-        latest = latest_epoch(facts)
+        latest = facts.latest_epoch()
         if latest is not None and submission.epoch != latest:
             return _failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
 

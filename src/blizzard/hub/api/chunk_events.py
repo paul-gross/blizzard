@@ -8,7 +8,7 @@ so every emit site enriches the frame the same way.
 from __future__ import annotations
 
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.work import ChunkFacts, derive_chunk_status, describe_chunk_change, newest_transition
+from blizzard.hub.domain.work import ChunkFacts, derive_chunk_status, describe_chunk_change
 from blizzard.hub.events.broker import ChunkChangeCause
 
 
@@ -43,7 +43,7 @@ def publish_chunk_changed(
         return
 
     from_graph = None
-    transition = newest_transition(facts)
+    transition = facts.newest_transition()
     if transition is not None and transition.graph_id is not None and transition.graph_id != graph.graph_id:
         from_graph = services.graphs.get(transition.graph_id)
 

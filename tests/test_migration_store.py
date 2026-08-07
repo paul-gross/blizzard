@@ -27,10 +27,8 @@ from blizzard.hub.domain.work import (
     MigrationMode,
     MigrationSource,
     TransitionFact,
-    current_node_id,
     derive_chunk_status,
     landing_node,
-    newest_migration,
 )
 from blizzard.hub.store import schema as s
 from tests.support import build_hub, pointer_token, report_lease
@@ -114,11 +112,11 @@ def _migrated_facts(
 @unit
 def test_after_a_migration_the_current_node_is_the_landing_node_and_status_is_ready() -> None:
     facts = _migrated_facts(landed="nd_landed")
-    assert current_node_id(facts) == "nd_landed"
+    assert facts.current_node_id() == "nd_landed"
     # A runner-executed landing node re-queues the chunk claimable (issue #111 regression).
     assert derive_chunk_status(facts) is ChunkStatus.READY
     # The fact carries the re-pinned model.
-    migration = newest_migration(facts)
+    migration = facts.newest_migration()
     assert migration is not None and migration.model is None
 
 
@@ -133,7 +131,7 @@ def test_a_migration_landing_on_a_hub_node_derives_delivering() -> None:
 @unit
 def test_a_migration_with_a_repinned_model_carries_it() -> None:
     facts = _migrated_facts(landed="nd_landed", model="claude-sonnet-5")
-    migration = newest_migration(facts)
+    migration = facts.newest_migration()
     assert migration is not None and migration.model == "claude-sonnet-5"
 
 
@@ -142,7 +140,7 @@ def test_a_null_landing_node_falls_through_to_none_the_schema_entry_allowance() 
     # A NULL landed_node_id reads as "the target's entry": current_node_id returns None,
     # which the call sites resolve via `... or graph.entry_node_id`.
     facts = _migrated_facts(landed=None)
-    assert current_node_id(facts) is None
+    assert facts.current_node_id() is None
     assert derive_chunk_status(facts) is ChunkStatus.READY
 
 
@@ -325,7 +323,7 @@ def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(t
 
     facts = hub.services.chunks.load_facts(chunk_id)
     assert facts is not None
-    migration = newest_migration(facts)
+    migration = facts.newest_migration()
     assert migration is not None
     assert migration.landed_node_executor is Executor.HUB
     assert derive_chunk_status(facts) is ChunkStatus.DELIVERING
@@ -490,5 +488,5 @@ def test_record_migration_with_clear_intent_on_a_hub_landing_retains_the_route(t
     assert hub.services.chunks.route_of(chunk_id) is not None  # retained (hub landing, issue #111)
     facts = hub.services.chunks.load_facts(chunk_id)
     assert facts is not None
-    migration = newest_migration(facts)
+    migration = facts.newest_migration()
     assert migration is not None and migration.landed_node_executor is Executor.HUB

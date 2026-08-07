@@ -522,6 +522,85 @@ class ChunkFacts:
     # Never a status: pending is a facet of ``delivering``.
     hub_node_polls: list[HubNodePollFact] = field(default_factory=list)
 
+    def newest_transition(self) -> TransitionFact | None:
+        """The chunk's newest accepted transition — its current node derives from this.
+
+        Ordered by ``(recorded_at, epoch)``: the fencing epoch breaks a tie between two
+        transitions stamped at the same instant."""
+        if not self.transitions:
+            return None
+        return max(self.transitions, key=lambda t: (t.recorded_at, t.epoch))
+
+    def transition_history(self) -> list[TransitionFact]:
+        """The chunk's accepted transitions in the order they were recorded (oldest first).
+
+        Ordered by the same key ``newest_transition`` selects the tail of, so "the last
+        entry is the current node" holds by construction."""
+        return sorted(self.transitions, key=lambda t: (t.recorded_at, t.epoch))
+
+    def newest_migration(self) -> MigrationFact | None:
+        """The chunk's newest cross-graph migration fact, or ``None`` (issue #90).
+
+        Ordered by ``(recorded_at, epoch)`` — the same key ``newest_transition`` uses."""
+        if not self.migrations:
+            return None
+        return max(self.migrations, key=lambda m: (m.recorded_at, m.epoch))
+
+    def latest_epoch(self) -> int | None:
+        """The chunk's latest fencing epoch — its newest lease's, else ``None``."""
+        if not self.leases:
+            return None
+        return max(lease.epoch for lease in self.leases)
+
+    def current_node_id(self) -> str | None:
+        """The chunk's current node id — the newest movement fact's target, else ``None``.
+
+        Normally the newest transition's ``to_node_id``; when a **migration** is the latest
+        movement (issue #90), the migration's ``landed_node_id`` instead. ``None`` means the
+        chunk has not yet moved, and the caller resolves the pinned graph's entry node."""
+        if self._latest_movement_is_migration():
+            migration = self.newest_migration()
+            assert migration is not None  # _latest_movement_is_migration guarantees it
+            return migration.landed_node_id
+        transition = self.newest_transition()
+        return transition.to_node_id if transition is not None else None
+
+    def newest_transition_is_terminal(self) -> bool:
+        """The newest accepted transition's target is the reserved terminal (``done``, #63).
+
+        The **sole** DONE trigger — reaching the terminal, not any landed/closed fact. A
+        later migration supersedes the transition entirely (issue #90): a re-queued chunk
+        is never DONE off a pre-migration terminal."""
+        if self._latest_movement_is_migration():
+            return False
+        transition = self.newest_transition()
+        return transition is not None and transition.to_node_id == RESERVED_TERMINAL
+
+    def _latest_movement_is_migration(self) -> bool:
+        """The chunk's newest movement fact is a migration, not a transition (issue #90).
+
+        A migration re-queues the chunk, so once it is the latest movement the pre-migration
+        transition's terminal/hub identity is superseded. Ties go to the migration — it is
+        recorded *after* the transition that brought the chunk to the node it leaves."""
+        migration = self.newest_migration()
+        if migration is None:
+            return False
+        transition = self.newest_transition()
+        if transition is None:
+            return True
+        return (migration.recorded_at, migration.epoch) >= (transition.recorded_at, transition.epoch)
+
+    def _newest_transition_enters_hub_node(self) -> bool:
+        """The newest accepted transition's target is a hub-executed node.
+
+        A later migration supersedes it (issue #90), and that landing node can itself be
+        hub-executed (issue #111), deriving ``delivering`` rather than ``ready``."""
+        if self._latest_movement_is_migration():
+            migration = self.newest_migration()
+            return migration is not None and migration.landed_node_executor is Executor.HUB
+        transition = self.newest_transition()
+        return transition is not None and transition.to_node_executor is Executor.HUB
+
 
 # --- The derivation queries -----------------------------------------
 
@@ -534,7 +613,7 @@ def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
     land every repo and keep the chunk running in a post-merge node."""
     if facts.stopped:
         return ChunkStatus.STOPPED
-    if newest_transition_is_terminal(facts) or facts.pr_closed:
+    if facts.newest_transition_is_terminal() or facts.pr_closed:
         # ``pr.closed`` is the open-pr mode's terminal fact (merged or closed unmerged); its
         # finalize lands the terminal transition too, but the check keeps this legible.
         return ChunkStatus.DONE
@@ -548,7 +627,7 @@ def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
         # Below the human-gated states (a chunk both parked on a question and paused
         # is still, first, waiting on a human) and above delivering/running (issue #46).
         return ChunkStatus.PAUSED
-    if _newest_transition_enters_hub_node(facts):
+    if facts._newest_transition_enters_hub_node():
         return ChunkStatus.DELIVERING
     if _has_live_route(facts):
         return ChunkStatus.RUNNING
@@ -566,7 +645,7 @@ def derive_completed_at(facts: ChunkFacts) -> datetime | None:
     open-PR mode, where closing every repo's PR can lag the terminal transition."""
     if facts.stopped:
         return facts.stopped_at
-    terminal_transition = newest_transition(facts) if newest_transition_is_terminal(facts) else None
+    terminal_transition = facts.newest_transition() if facts.newest_transition_is_terminal() else None
     if terminal_transition is None:
         return facts.pr_closed_at if facts.pr_closed else None
     if facts.pr_closed_at is not None:
@@ -685,54 +764,6 @@ def bounces_over_cap(facts: ChunkFacts, cap: int) -> bool:
     return bounce_count(facts) > cap
 
 
-def newest_migration(facts: ChunkFacts) -> MigrationFact | None:
-    """The chunk's newest cross-graph migration fact, or ``None`` (issue #90).
-
-    Ordered by ``(recorded_at, epoch)`` — the same key :func:`newest_transition` uses."""
-    if not facts.migrations:
-        return None
-    return max(facts.migrations, key=lambda m: (m.recorded_at, m.epoch))
-
-
-def _latest_movement_is_migration(facts: ChunkFacts) -> bool:
-    """The chunk's newest movement fact is a migration, not a transition (issue #90).
-
-    A migration re-queues the chunk, so once it is the latest movement the pre-migration
-    transition's terminal/hub identity is superseded. Ties go to the migration — it is
-    recorded *after* the transition that brought the chunk to the node it leaves."""
-    migration = newest_migration(facts)
-    if migration is None:
-        return False
-    transition = newest_transition(facts)
-    if transition is None:
-        return True
-    return (migration.recorded_at, migration.epoch) >= (transition.recorded_at, transition.epoch)
-
-
-def newest_transition_is_terminal(facts: ChunkFacts) -> bool:
-    """The newest accepted transition's target is the reserved terminal (``done``, #63).
-
-    The **sole** DONE trigger — reaching the terminal, not any landed/closed fact. A
-    later migration supersedes the transition entirely (issue #90): a re-queued chunk
-    is never DONE off a pre-migration terminal."""
-    if _latest_movement_is_migration(facts):
-        return False
-    transition = newest_transition(facts)
-    return transition is not None and transition.to_node_id == RESERVED_TERMINAL
-
-
-def _newest_transition_enters_hub_node(facts: ChunkFacts) -> bool:
-    """The newest accepted transition's target is a hub-executed node.
-
-    A later migration supersedes it (issue #90), and that landing node can itself be
-    hub-executed (issue #111), deriving ``delivering`` rather than ``ready``."""
-    if _latest_movement_is_migration(facts):
-        migration = newest_migration(facts)
-        return migration is not None and migration.landed_node_executor is Executor.HUB
-    transition = newest_transition(facts)
-    return transition is not None and transition.to_node_executor is Executor.HUB
-
-
 def landing_node(target_graph: Graph, from_node_name: str | None) -> str:
     """The node a migration lands on in ``target_graph`` — name-match-else-entry (issue #90).
 
@@ -762,7 +793,7 @@ def hub_node_pending(facts: ChunkFacts) -> HubNodePollFact | None:
     Not a distinct status: the chunk still derives ``delivering``. A poll fact recorded
     for the newest transition's ``(to_node_id, epoch)`` with no later transition means
     the node is still waiting on external state."""
-    transition = newest_transition(facts)
+    transition = facts.newest_transition()
     if transition is None or transition.to_node_executor is not Executor.HUB:
         return None
     history = hub_node_poll_history(facts, node_id=transition.to_node_id, epoch=transition.epoch)
@@ -810,38 +841,6 @@ def newest_live_route_token(
     return max(candidates, key=lambda t: (t.minted_at, t.seq))
 
 
-def newest_transition(facts: ChunkFacts) -> TransitionFact | None:
-    """The chunk's newest accepted transition — its current node derives from this.
-
-    Ordered by ``(recorded_at, epoch)``: the fencing epoch breaks a tie between two
-    transitions stamped at the same instant."""
-    if not facts.transitions:
-        return None
-    return max(facts.transitions, key=lambda t: (t.recorded_at, t.epoch))
-
-
-def transition_history(facts: ChunkFacts) -> list[TransitionFact]:
-    """The chunk's accepted transitions in the order they were recorded (oldest first).
-
-    Ordered by ``(recorded_at, epoch)``, the same key :func:`newest_transition` selects
-    the tail of, so "the last entry is the current node" holds by construction."""
-    return sorted(facts.transitions, key=lambda t: (t.recorded_at, t.epoch))
-
-
-def current_node_id(facts: ChunkFacts) -> str | None:
-    """The chunk's current node id — the newest movement fact's target, else ``None``.
-
-    Normally the newest transition's ``to_node_id``; when a **migration** is the latest
-    movement (issue #90), the migration's ``landed_node_id`` instead. ``None`` means the
-    chunk has not yet moved, and the caller resolves the pinned graph's entry node."""
-    if _latest_movement_is_migration(facts):
-        migration = newest_migration(facts)
-        assert migration is not None  # _latest_movement_is_migration guarantees it
-        return migration.landed_node_id
-    transition = newest_transition(facts)
-    return transition.to_node_id if transition is not None else None
-
-
 @dataclass(frozen=True)
 class ChunkChange:
     """A ``chunk-changed`` frame's derived content (issue #212) — the current status
@@ -872,15 +871,15 @@ def describe_chunk_change(
     (``bzh:domain-takes-objects``) — no store, no ids resolved here. ``graph`` must be
     the chunk's *post-mutation* pin. ``prev_node`` resolves against ``from_graph`` when
     the newest transition's own ``graph_id`` differs, honoring the same
-    ``graph_id``-provenance :func:`transition_history` does."""
+    ``graph_id``-provenance ``ChunkFacts.transition_history`` does."""
     assert chunk.graph_id == graph.graph_id, "graph must be the chunk's post-mutation pin"
 
-    current_id = current_node_id(facts) or graph.entry_node_id
+    current_id = facts.current_node_id() or graph.entry_node_id
     current = graph.node_by_id(current_id)
     node = current.name if current is not None else None
 
     prev_node: str | None = None
-    transition = newest_transition(facts)
+    transition = facts.newest_transition()
     if transition is not None and transition.from_node_id is not None:
         target_graph = graph
         if transition.graph_id is not None and transition.graph_id != graph.graph_id and from_graph is not None:
@@ -897,13 +896,6 @@ def describe_chunk_change(
         cause=cause,
         graph_id=graph.graph_id,
     )
-
-
-def latest_epoch(facts: ChunkFacts) -> int | None:
-    """The chunk's latest fencing epoch — its newest lease's, else ``None``."""
-    if not facts.leases:
-        return None
-    return max(lease.epoch for lease in facts.leases)
 
 
 @dataclass(frozen=True)

@@ -48,7 +48,6 @@ from blizzard.hub.domain.work import (
     MigrationMode,
     WorkRef,
     awaiting_external_merge,
-    current_node_id,
     derive_chunk_status,
     derive_chunk_usage,
     derive_completed_at,
@@ -56,10 +55,8 @@ from blizzard.hub.domain.work import (
     has_landed_repos,
     holds_claim,
     hub_node_pending,
-    latest_epoch,
     open_escalation,
     open_pause,
-    transition_history,
 )
 from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry, WorkSourceError
 from blizzard.wire.chunk import (
@@ -141,7 +138,7 @@ def _history_views(facts: ChunkFacts, graphs: dict[str | None, Graph | None]) ->
     #90), keyed by ``TransitionFact.graph_id`` — not the chunk's current pin (pinned by
     ``tests/test_transition_graph_provenance.py``)."""
     views: list[TransitionView] = []
-    for t in transition_history(facts):
+    for t in facts.transition_history():
         graph = graphs.get(t.graph_id)
         views.append(
             TransitionView(
@@ -325,7 +322,7 @@ def _current_node(
     if chunk.graph_id not in cache:
         cache[chunk.graph_id] = services.graphs.get(chunk.graph_id)
     graph = cache[chunk.graph_id]
-    node_id = current_node_id(facts) or (graph.entry_node_id if graph is not None else None)
+    node_id = facts.current_node_id() or (graph.entry_node_id if graph is not None else None)
     if node_id is None:
         return None, None
     node = graph.node_by_id(node_id) if graph is not None else None
@@ -444,7 +441,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     pause = open_pause(facts)
     decision = services.chunks.decision_for_chunk(chunk_id)
     graph = services.graphs.get(chunk.graph_id)
-    node_id = current_node_id(facts) or (graph.entry_node_id if graph is not None else None)
+    node_id = facts.current_node_id() or (graph.entry_node_id if graph is not None else None)
     node_name = _node_name(graph, node_id)
     web_base = _branch_url_source(chunk, services.work_sources)
     history_graphs = _history_graphs(services, chunk, facts)
@@ -464,7 +461,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         status=derive_chunk_status(facts),
         current_node_id=node_id,
         current_node_name=node_name,
-        latest_epoch=latest_epoch(facts),
+        latest_epoch=facts.latest_epoch(),
         work_refs=_pointer_views(chunk, services.work_sources),
         default_model=list(chunk.default_model),
         default_effort=chunk.default_effort,

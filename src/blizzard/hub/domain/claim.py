@@ -23,9 +23,7 @@ from blizzard.hub.domain.work import (
     Chunk,
     ChunkStatus,
     IWriteChunkRepository,
-    current_node_id,
     derive_chunk_status,
-    latest_epoch,
 )
 from blizzard.wire.envelope import NodeEnvelope
 
@@ -158,7 +156,7 @@ class ClaimService:
 
         # The claim carries the current epoch (0 before the first lease report) and mints
         # no lease of its own; the fence consumes the runner's reported epoch, not this.
-        epoch = latest_epoch(facts) or 0 if facts is not None else 0
+        epoch = facts.latest_epoch() or 0 if facts is not None else 0
         now = self._clock.now()
 
         route = Route(
@@ -174,7 +172,7 @@ class ClaimService:
         route_id = self._chunks.record_route(route, token_hash=hash_token(route_token), at=now)
         _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE.reached()
 
-        node_id = (current_node_id(facts) if facts is not None else None) or graph.entry_node_id
+        node_id = (facts.current_node_id() if facts is not None else None) or graph.entry_node_id
         node = graph.node_by_id(node_id)
         if node is None:  # pragma: no cover - a pinned graph always resolves its own node
             raise ClaimConflict(held_by_runner_id=runner_id)

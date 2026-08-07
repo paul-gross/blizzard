@@ -29,11 +29,9 @@ from blizzard.hub.domain.work import (
     awaiting_external_merge,
     bounce_count,
     bounces_over_cap,
-    current_node_id,
     derive_chunk_status,
     derive_completed_at,
     has_landed_repos,
-    latest_epoch,
     newest_live_route_token,
     open_pause,
     open_questions,
@@ -418,14 +416,14 @@ def test_current_node_and_latest_epoch_derive_from_facts() -> None:
             TransitionFact(to_node_id="nd_deliver", to_node_executor=Executor.HUB, epoch=3, recorded_at=_at(4)),
         ],
     )
-    assert current_node_id(facts) == "nd_deliver"
-    assert latest_epoch(facts) == 3
+    assert facts.current_node_id() == "nd_deliver"
+    assert facts.latest_epoch() == 3
 
 
 def test_current_node_and_epoch_none_before_any_fact() -> None:
     facts = ChunkFacts(minted=True)
-    assert current_node_id(facts) is None
-    assert latest_epoch(facts) is None
+    assert facts.current_node_id() is None
+    assert facts.latest_epoch() is None
 
 
 # --- Pause (issue #46) --------------------------------------------------------

@@ -20,7 +20,6 @@ from blizzard.hub.domain.work import (
     IntendedMigration,
     IWriteChunkRepository,
     MigrationMode,
-    current_node_id,
     derive_chunk_status,
 )
 
@@ -166,7 +165,7 @@ class EditService:
 
             if graph_id is not UNSET:
                 self._require_editable(chunk.chunk_id, status, "graph_id")
-                if current_node_id(facts) is not None:
+                if facts.current_node_id() is not None:
                     raise ChunkAlreadyMoved(chunk.chunk_id)
                 if graph_target is not None and self._graphs.is_retired(graph_target.graph_id):
                     raise TargetGraphRetired(graph_target.graph_id)

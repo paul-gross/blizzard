@@ -21,7 +21,6 @@ from blizzard.hub.domain.work import (
     DecisionChoice,
     IWriteChunkRepository,
     derive_chunk_status,
-    latest_epoch,
     open_escalation,
 )
 from blizzard.wire.completion import SubmittedArtifact
@@ -100,7 +99,7 @@ class DecisionService:
 
         if derive_chunk_status(facts) in TERMINAL_STATUSES:
             return _failure("chunk is terminal")
-        latest = latest_epoch(facts)
+        latest = facts.latest_epoch()
         if latest is not None and submission.epoch != latest:
             return _failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
 
