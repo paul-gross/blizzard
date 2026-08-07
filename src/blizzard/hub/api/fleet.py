@@ -20,6 +20,7 @@ from blizzard.hub.api import queue as queue_api
 from blizzard.hub.api import runners as runners_api
 from blizzard.hub.api.auth import RunnerPrincipal, assert_owns, require_runner_principal
 from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.ingest_broadcast import IngestBroadcast
 from blizzard.hub.composition import HubServices
 from blizzard.hub.delivery.hub_node import poll_interval_for
 from blizzard.hub.domain.claim import ClaimConflict, ClaimDeniedPaused, ClaimDeniedTerminal
@@ -29,20 +30,11 @@ from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
 )
-from blizzard.hub.events.broker import ChunkChangeCause
 from blizzard.wire.chunk import ChunkDetail, ChunkPauseRequest, ChunkSummary, HubAdvanceResponse, WorkItemsView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import (
-    ANSWER_DELIVERED,
-    ESCALATION_RECORDED,
-    EVENT_RECORDED,
-    EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-    LEASE_MINTED,
-    QUESTION_ASKED,
-    RUNNER_LOCALLY_PAUSED,
-    RUNNER_LOCALLY_RESUMED,
     EscalationReport,
     LeaseMintReport,
     RunnerFactAck,
@@ -62,14 +54,6 @@ from blizzard.wire.route import (
 from blizzard.wire.runner import RunnerRegistrationRequest, RunnerRegistrationResponse, RunnerView
 
 router = APIRouter(prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_runner_principal)])
-
-#: The ``chunk-changed`` cause for each chunk-scoped fact kind :func:`ingest_runner_facts` lands.
-_INGEST_CAUSE_BY_FACT_KIND: dict[str, ChunkChangeCause] = {
-    QUESTION_ASKED: "question-asked",
-    ANSWER_DELIVERED: "question-answered",
-    ESCALATION_RECORDED: "escalated",
-    LEASE_MINTED: "claimed",
-}
 
 
 def _mode(request: Request) -> str:
@@ -488,92 +472,13 @@ def ingest_runner_facts(
     http_request: Request,
     principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
 ) -> RunnerFactAck:
-    """Land runner-minted facts, idempotent by per-runner seq high-water: a pushed seq at or below the
-    high-water mark is already-applied and re-acked, a fresh one is applied and advances the mark. Each
-    freshly-applied fact re-broadcasts on the SSE stream. ``chunk-changed`` publishes unconditionally,
-    on the fact rather than on a status *change*, so a fact that moves no status (``answer.delivered``,
-    issue #165) still stales the chunk read."""
+    """Land runner-minted facts — ``FactIngestService.ingest`` owns the seq high-water idempotence,
+    :class:`IngestBroadcast` what each freshly-applied fact re-broadcasts on the SSE stream."""
     assert_owns(principal, batch.runner_id, mode=_mode(http_request))
-    # One pre-mutation snapshot per distinct chunk, taken before the loop and reused: this is the hot
-    # path (issue #212), and a batch touching one chunk repeatedly would otherwise double its reads.
-    prev_statuses: dict[str, str | None] = {}
-    for fact in batch.facts:
-        candidate = fact.payload.get("chunk_id")
-        if isinstance(candidate, str) and candidate not in prev_statuses:
-            prev_statuses[candidate] = chunk_events.snapshot_chunk_status(services, candidate)
+    broadcast = IngestBroadcast.before_ingest(services, batch)
     result = services.facts.ingest(batch, route_token_mode=_route_token_mode(http_request))
-    ack = result.ack
-    if ack.applied:
-        applied = set(ack.applied)
-        for fact in batch.facts:
-            if fact.seq not in applied:
-                continue
-            # Runner-scoped facts (issue #43) carry no chunk_id, so they are handled before the chunk
-            # branch below, which would otherwise skip them: applied to the store but never pushed.
-            if fact.kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
-                # The frame carries the fact's own `by`/`reason` (issue #151), with the same `by`
-                # default applied when the fact omits one.
-                by = fact.payload.get("by")
-                reason = fact.payload.get("reason")
-                local_pause_id = result.row_id_by_seq.get(fact.seq)
-                services.events.publish_runner_changed(
-                    batch.runner_id,
-                    kind="locally-paused" if fact.kind == RUNNER_LOCALLY_PAUSED else "locally-resumed",
-                    by=by if isinstance(by, str) else "operator",
-                    reason=reason if isinstance(reason, str) else None,
-                    key=f"runner_local_pause_facts:{local_pause_id}" if local_pause_id is not None else None,
-                )
-                continue
-            # A sampled external-subscription-usage snapshot (issue #218) is runner-scoped, handled
-            # here for the same reason as the pair above. No `key`: no fact-table row identity to name.
-            if fact.kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED:
-                services.events.publish_runner_changed(batch.runner_id, kind="external-usage")
-                continue
-            # An operational event (issue #125) may be runner-scoped, so it is broadcast before the
-            # chunk branch below; it moves no derived status, so it does not fall through.
-            if fact.kind == EVENT_RECORDED:
-                ev_chunk = fact.payload.get("chunk_id")
-                event_id = result.row_id_by_seq.get(fact.seq)
-                services.events.publish_event_logged(
-                    severity=str(fact.payload.get("severity", "")),
-                    kind=str(fact.payload.get("kind", "")),
-                    chunk_id=ev_chunk if isinstance(ev_chunk, str) else None,
-                    runner_id=batch.runner_id,
-                    key=f"event_log:{event_id}" if event_id is not None else None,
-                )
-                continue
-            chunk_id = fact.payload.get("chunk_id")
-            if not isinstance(chunk_id, str):
-                continue
-            cause = _INGEST_CAUSE_BY_FACT_KIND.get(fact.kind)
-            key: str | None = None
-            if fact.kind == QUESTION_ASKED:
-                question_id = fact.payload.get("question_id")
-                if isinstance(question_id, str):
-                    key = f"questions:{question_id}"
-                    services.events.publish_question_asked(chunk_id, question_id, key=key)
-            elif fact.kind == ANSWER_DELIVERED:
-                question_id = fact.payload.get("question_id")
-                if isinstance(question_id, str):
-                    key = f"question_answers:{question_id}"
-            elif fact.kind == ESCALATION_RECORDED:
-                escalation_id = result.row_id_by_seq.get(fact.seq)
-                if escalation_id is not None:
-                    key = f"escalations:{escalation_id}"
-            elif fact.kind == LEASE_MINTED:
-                # This site writes a `lease_facts` row, but its `claimed` cause maps to
-                # ``route_created`` (issue #213), so a lost-ack replay dedupes against the live route.
-                route = services.chunks.route_of(chunk_id)
-                if route is not None and route.route_id is not None:
-                    key = f"route_created:{route.route_id}"
-            chunk_events.publish_chunk_changed(
-                services,
-                chunk_id,
-                cause=cause,
-                prev_status=prev_statuses.get(chunk_id),
-                key=key,
-            )
-    return ack
+    broadcast.publish(result)
+    return result.ack
 
 
 @router.post("/runners", response_model=RunnerRegistrationResponse, status_code=status.HTTP_201_CREATED)
