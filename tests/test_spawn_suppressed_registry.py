@@ -16,11 +16,12 @@ pytestmark = pytest.mark.unit
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _LOOP = _REPO_ROOT / "src" / "blizzard" / "runner" / "loop"
-_SCANNED = (_LOOP / "steps.py", _LOOP / "spawn.py")
+_SCANNED = (_LOOP / "steps.py", _LOOP / "spawn.py", _LOOP / "judgement.py")
 
-#: Function names deliberately exempt from the gate, each with a reason. Empty today —
-#: an addition here must be a considered exemption, not a patch over a real gap.
-_ALLOWED_UNGATED: frozenset[str] = frozenset()
+#: Helpers exempt from calling the gate themselves, because every call site is inside a
+#: function that does — re-derived by `test_exempt_helpers_are_reached_only_from_gated_scopes`
+#: rather than taken on trust.
+_ALLOWED_UNGATED = frozenset({"_elicit"})
 
 _GATE_NAME = "suppressed"
 _GATED_METHODS = frozenset({"spawn", "resume_with_message", "judge"})
@@ -51,7 +52,7 @@ def _calls_in_own_scope(func: ast.FunctionDef | ast.AsyncFunctionDef) -> list[as
     def _walk(node: ast.AST) -> None:
         for child in ast.iter_child_nodes(node):
             if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
-                continue  # a nested scope's calls are its own, not this function's
+                continue
             if isinstance(child, ast.Call):
                 calls.append(child)
             _walk(child)
@@ -66,8 +67,6 @@ def _functions(path: Path) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
 
 
 def _ungated_spawn_functions(path: Path) -> list[str]:
-    """Every function name in ``path`` whose own body calls a gated harness primitive
-    but never calls the gate, minus the explicit allowlist."""
     violations: list[str] = []
     for node in _functions(path):
         own_calls = _calls_in_own_scope(node)
@@ -87,6 +86,22 @@ def test_every_harness_spawn_call_site_is_gated() -> None:
         "function(s) call `ctx.harness.spawn`/`ctx.harness.resume_with_message` without also "
         f"calling `Spawner.{_GATE_NAME}` — a runner told to spawn no workers would spawn one "
         f"(issue #45/#46): {violations}"
+    )
+
+
+def test_exempt_helpers_are_reached_only_from_gated_scopes() -> None:
+    """The allowlist's own premise, checked: an exempt helper may skip the gate only while
+    every function that calls it takes it. A new caller that forgets fails here."""
+    ungated_callers: list[str] = []
+    for path in _SCANNED:
+        for node in _functions(path):
+            calls = _calls_in_own_scope(node)
+            reaches_exempt = any(isinstance(c.func, ast.Attribute) and c.func.attr in _ALLOWED_UNGATED for c in calls)
+            if reaches_exempt and node.name not in _ALLOWED_UNGATED and not any(_is_gate_call(c) for c in calls):
+                ungated_callers.append(f"{node.name} ({path.relative_to(_REPO_ROOT)}:{node.lineno})")
+    assert not ungated_callers, (
+        f"function(s) call an allowlisted helper ({sorted(_ALLOWED_UNGATED)}) without taking the "
+        f"gate themselves, so the exemption no longer holds: {ungated_callers}"
     )
 
 

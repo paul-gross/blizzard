@@ -19,7 +19,8 @@ from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
 from blizzard.runner.loop.build import build_loop_context
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT, CheckOutcome
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.steps import _run_or_read_checks, advance, resume
+from blizzard.runner.loop.judgement import Judgement
+from blizzard.runner.loop.steps import advance, resume
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, PauseView, RouteView
@@ -149,11 +150,11 @@ def test_checks_rerun_under_a_fresh_lease_epoch_at_the_same_chunk_and_node(tmp_p
     second = store.lease("lease_b")
     assert first is not None and second is not None
 
-    assert [(r.command, r.passed) for r in _run_or_read_checks(_ctx(red), first, envelope, bindings)] == [
+    assert [(r.command, r.passed) for r in Judgement(_ctx(red), first, envelope, bindings).checks()] == [
         ("mise run lint", False)
     ]
 
-    results = _run_or_read_checks(_ctx(green), second, envelope, bindings)
+    results = Judgement(_ctx(green), second, envelope, bindings).checks()
 
     assert green.calls == [("mise run lint", "/ws/e1", DEFAULT_CHECK_TIMEOUT)], (
         "the retry read a prior attempt's recorded result back instead of re-running its checks"

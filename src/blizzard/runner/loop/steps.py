@@ -8,7 +8,6 @@ mid-tick and a restart re-run the tick harmlessly; startup recovery is REAP runn
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timedelta
 
 from blizzard.foundation.crash import crashpoint
@@ -29,28 +28,21 @@ from blizzard.runner.loop.attempt import (
     TRANSITIONED,
     Attempt,
 )
-from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT
 from blizzard.runner.loop.context import LoopContext
-from blizzard.runner.loop.git_commits import DeclaredCommits
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
-from blizzard.runner.loop.judgement_prompt import JudgementPrompt
+from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.outbound import COMPLETION_KIND, DECISION_KIND, OutboundFacts
 from blizzard.runner.loop.process import IProcessProbe
-from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.spawn import Spawner, environments_for
 from blizzard.runner.store.repository import (
     AskRecord,
     BufferedFact,
-    CheckResultRecord,
     EnvBindingRecord,
     IWriteRunnerStore,
     LeaseRecord,
 )
 from blizzard.wire.completion import (
-    CheckResult,
     CompletionSubmission,
-    SubmittedArtifact,
-    checks_gate_violated,
 )
 from blizzard.wire.decision import DecisionSubmission, DecisionView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
@@ -113,37 +105,6 @@ _CP_FILL_BEFORE_ACQUIRE = crashpoint("fill.before-env-acquire", "peeked a ready 
 _CP_FILL_AFTER_ACQUIRE = crashpoint("fill.after-env-acquire.before-bind", "envs acquired; binding not recorded")
 _CP_FILL_AFTER_BIND = crashpoint("fill.after-bind.before-claim", "binding recorded; route not claimed at the hub")
 _CP_FILL_AFTER_CLAIM = crashpoint("fill.after-claim.before-spawn", "hub holds the route; lease not minted")
-
-# ADVANCE — judge an exited worker: verify -> elicit verdict -> buffer completion. Verify
-# is read-only, so it needs no crash point of its own (`bzh:crash-correctness` exemption).
-_CP_ADV_AFTER_JUDGE = crashpoint("advance.after-judgement.before-buffer", "verdict parsed; completion not buffered")
-# Usage recording (issue #58) sits between the verdict and the completion buffer: a crash
-# here finds this attempt's usage facts already durable, or neither — never a double-count.
-_CP_ADV_AFTER_USAGE = crashpoint("advance.after-usage.before-buffer", "usage facts recorded; completion not buffered")
-
-# ADVANCE's nudge-once (issue #113): the durable `(lease, epoch)` fact is recorded BEFORE
-# the resume it guards, so "at most one nudge" holds across a crash at either point.
-_CP_NUDGE_AFTER_FIRED_FACT = crashpoint(
-    "nudge.after-fired-fact.before-resume",
-    "nudge-fired fact durable; the resume that delivers the nudge has not run yet",
-)
-_CP_NUDGE_AFTER_RESUME = crashpoint(
-    "nudge.after-resume.before-reassemble",
-    "nudge resume returned; attachments not yet re-read and the completion not yet reassembled",
-)
-
-# ADVANCE's checks-at-exit (issue #114): result rows are durable before the marker, so a
-# crash between them leaves `checks_ran` unset and recovery safely re-runs (latest-wins).
-_CP_CHECKS_AFTER_RESULTS = crashpoint(
-    "checks.after-results.before-marker",
-    "check result rows durable; the checks-ran marker has not been written yet",
-)
-_CP_CHECKS_AFTER_MARKER = crashpoint(
-    "checks.after-marker.before-judge",
-    "checks-ran marker durable; the judgement has not been elicited yet",
-)
-
-_CP_ADV_AFTER_BUFFER = crashpoint("advance.after-buffer.before-flush", "completion buffered; not yet flushed")
 
 # The between-attempts boundary the per-chunk spend cap checks at (issue #61a): a crash
 # here leaves no active lease and no escalation, recovered by `_reconcile_interrupted_claims`.
@@ -830,215 +791,19 @@ def advance(ctx: LoopContext) -> None:
             _advance_held_chunk(ctx, chunk_id)
 
 
-def _run_or_read_checks(
-    ctx: LoopContext, lease: LeaseRecord, envelope: NodeEnvelope, bindings: list[EnvBindingRecord]
-) -> list[CheckResultRecord]:
-    """Run the node's ``checks:`` at worker exit, or read the results back (issue #114).
-
-    Rows are recorded before the marker, which is what makes them exactly-once across a crash.
-    The re-run key is ``(lease, epoch)``, so a retry re-runs against the rebuilt tree.
-    """
-    node = envelope.node
-    if not node.checks:
-        return []
-    if ctx.store.checks_ran(lease.lease_id, lease.epoch):
-        return ctx.store.check_results_for_lease(lease.lease_id, lease.epoch)
-    if ctx.check_runner is None:
-        # The seam is unwired but the node declares checks — a wiring bug, never a production
-        # path. Surface it loudly and skip rather than wedge the tick.
-        _log.error(
-            "node declares checks but no check-runner seam is wired — skipping checks",
-            node=node.node_name,
-            lease_id=lease.lease_id,
-        )
-        return []
-    cwd = os.path.join(bindings[0].workdir, node.checks_cwd) if node.checks_cwd else bindings[0].workdir
-    timeout = node.checks_timeout or DEFAULT_CHECK_TIMEOUT
-    results: list[CheckResultRecord] = []
-    for command in node.checks:
-        outcome = ctx.check_runner.run(command, cwd, timeout)
-        results.append(CheckResultRecord(command=command, passed=outcome.passed, output_tail=outcome.output_tail))
-    # Rows first, then the marker — what `runner:checks-recorded-when-marked` rests on.
-    ctx.store.record_check_results(
-        lease_id=lease.lease_id,
-        chunk_id=lease.chunk_id,
-        node_id=lease.node_id,
-        epoch=lease.epoch,
-        results=results,
-        at=ctx.clock.now(),
-    )
-    _CP_CHECKS_AFTER_RESULTS.reached()
-    ctx.store.record_checks_ran(lease_id=lease.lease_id, epoch=lease.epoch, at=ctx.clock.now())
-    _CP_CHECKS_AFTER_MARKER.reached()
-    _log.info(
-        "checks executed",
-        node=node.node_name,
-        count=len(results),
-        red=sum(1 for r in results if not r.passed),
-        lease_id=lease.lease_id,
-    )
-    return results
-
-
 def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
-    """Park on an open ask, else elicit the verdict and buffer the completion.
-
-    The judgement elicitation is itself a spawn, so the local brake gates it (issue #45) —
-    placed low here, since the branches above it start no process.
-    """
+    """Park on an open ask, else elicit the verdict and buffer the completion."""
     if lease.session_id is None:
         return  # not spawned — REAP's residue (guarded by the caller too)
-
     # Ask-and-exit: an exit holding an unforwarded ask is a park, an exit with neither is a
     # failure. Not a spawn, so it proceeds regardless of the local brake.
     ask = ctx.store.unforwarded_ask(lease.lease_id)
     if ask is not None:
         _park_on_ask(ctx, lease, ask)
         return
-
-    bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
-    if not bindings:
-        _log.warning("exited worker with no bound env — skipping", chunk_id=lease.chunk_id)
-        return
-
-    try:
-        envelope = ctx.hub.get_envelope(lease.chunk_id)
-    except HubClientError:
-        return  # hub unreachable — the worker's exit is durable; retry next tick
-
-    commits = DeclaredCommits(ctx, lease, bindings)
-    artifacts = commits.verify()
-
-    # 1b. This operator gates this node by name, so the outcome is a human's: buffer a
-    #      Decision instead of eliciting a verdict. Not a spawn, so it is ungated.
-    if lease.node_name in ctx.config.gates:
-        _buffer_decision(ctx, lease, artifacts)
-        return
-
-    # 2. Elicit the verdict via the judgement resume — a spawn primitive, gated here rather
-    #    than at the top so the non-spawn work above still happens while paused (issue #45).
-    if Spawner(ctx).suppressed(via="advance", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
-        return
-
-    # 1c. Run the node's `checks:` before the judgement (issue #114), against the tree the
-    #      worker just left — the same tree its judgement and the gate are rendered on.
-    check_records = _run_or_read_checks(ctx, lease, envelope, bindings)
-
-    prompt = JudgementPrompt(envelope, check_records).render()
-    # The judgement turn carries a re-minted lease identity; the worker is already dead,
-    # so invalidating its token orphans nothing.
-    output = ctx.harness.judge(
-        bindings[0].workdir,
-        lease.session_id,
-        prompt,
-        preamble=Spawner(ctx).preamble(lease, bindings),
-        chunk_id=lease.chunk_id,
-        # Reassert the stamped effort (issue #144): effort is NOT session-sticky, so a
-        # resume that omits it drops the declared value back to the ambient default.
-        effort=lease.resolved_effort,
-        model=lease.resolved_model,
-    )
-
-    # 2c. Record this attempt's harness usage (issue #58) *before* the verdict is parsed, so
-    #      a verdict-less fail does not discard the spend the attempt genuinely burned.
-    ctx.usage.record_attempt(lease, bindings, judge_output=output)
-
-    choice = ctx.harness.parse_verdict(output)
-    if choice is None:
-        _log.warning("verdict-less judgement — failing attempt", chunk_id=lease.chunk_id, lease_id=lease.lease_id)
-        Attempt(ctx, lease).fail(reason=FAILED, via="advance")
-        return
-    _CP_ADV_AFTER_JUDGE.reached()
-    _CP_ADV_AFTER_USAGE.reached()
-
-    # The checks gate (issue #114) is evaluated BEFORE the nudge, so it judges the exact
-    # checks the worker was shown — gate and worker can never diverge on "the tree".
-    selected = next((c for c in envelope.node.choices if c.name == choice), None)
-    if selected is not None and checks_gate_violated(selected.requires_checks, check_records):
-        _log.warning(
-            "requires_checks choice selected with a red check — failing attempt",
-            chunk_id=lease.chunk_id,
-            lease_id=lease.lease_id,
-            choice=choice,
-        )
-        Attempt(ctx, lease).fail(reason=FAILED, via="advance")
-        return
-
-    # 2a. Nudge-once (issue #113): the guard fact is recorded BEFORE the resume, which is what
-    #      makes "at most one nudge per (lease, epoch)" hold across a kill -9 at either point.
-    assessment = ctx.harness.parse_assessment(output)
-    attachments = ctx.store.attachments_for_lease(lease.lease_id)
-    produces = ProducesReconciler(envelope)
-    missing = produces.missing(artifacts, attachments)
-    if missing and not ctx.store.nudge_fired(lease.lease_id, lease.epoch):
-        _log.warning(
-            "nudging worker for unattached produces names",
-            node=envelope.node.node_name,
-            missing=[spec.name for spec in missing],
-            lease_id=lease.lease_id,
-            epoch=lease.epoch,
-        )
-        ctx.store.record_nudge_fired(lease_id=lease.lease_id, epoch=lease.epoch, at=ctx.clock.now())
-        _CP_NUDGE_AFTER_FIRED_FACT.reached()
-        # `judge`, not `resume_with_message`: the reply is discarded, but the resume must be
-        # *synchronous* or the attachments re-read below races the worker still attaching.
-        nudge_output = ctx.harness.judge(
-            bindings[0].workdir,
-            lease.session_id,
-            produces.nudge_message(missing),
-            preamble=Spawner(ctx).preamble(lease, bindings),
-            chunk_id=lease.chunk_id,
-            effort=lease.resolved_effort,
-            model=lease.resolved_model,
-        )
-        _CP_NUDGE_AFTER_RESUME.reached()
-        # A distinct `nudge` kind (issue #58) so it cannot collide with the primary
-        # judgement's own fact at this same generation.
-        nudge_generation = ctx.store.lease_generation(lease.lease_id)
-        nudge_sample = ctx.harness.parse_usage(nudge_output, "nudge", model=lease.resolved_model)
-        if nudge_sample is not None:
-            ctx.usage.record_sample(lease, generation=nudge_generation, sample=nudge_sample)
-        # Re-read: a worker that attached during the nudge must have its content picked
-        # up before assembly below, not the assessment fallback it just corrected.
-        attachments = ctx.store.attachments_for_lease(lease.lease_id)
-        artifacts = commits.amend(artifacts)
-
-    # 2b. Harvest asset artifacts for any `produces` name no git commit covers, read from
-    #      the durable store so a restart between attach and completion still sees it.
-    artifacts += produces.collect_assets(artifacts, assessment, attachments)
-
-    # 3. Buffer the completion — one atomic, epoch-fenced write. The entry names the lease,
-    #    so ADVANCE skips it until the flush closes it.
-    submission = CompletionSubmission(
-        choice=choice,
-        epoch=lease.epoch,
-        runner_id=ctx.config.runner_id,
-        from_node_id=lease.node_id,
-        # `(command, passed)` only — `output_tail` stays runner-local, off the wire.
-        check_results=[CheckResult(command=r.command, passed=r.passed) for r in check_records],
-        artifacts=artifacts,
-        route_token=ctx.store.route_token(lease.chunk_id),  # issue #84a — stamped at enqueue
-    )
-    OutboundFacts(ctx).completion(lease, submission, at=ctx.clock.now())
-    _CP_ADV_AFTER_BUFFER.reached()
-    _log.info("completion buffered", chunk_id=lease.chunk_id, lease_id=lease.lease_id, choice=choice)
-
-
-def _buffer_decision(ctx: LoopContext, lease: LeaseRecord, artifacts: list[SubmittedArtifact]) -> None:
-    """Buffer a runner-config gate decision — the gated node-step's outcome.
-
-    The choice set is not the runner's, so the submission carries only the step's artifacts
-    and its fence; ADVANCE skips this lease until the flush closes it.
-    """
-    submission = DecisionSubmission(
-        from_node_id=lease.node_id,
-        epoch=lease.epoch,
-        runner_id=ctx.config.runner_id,
-        artifacts=artifacts,
-        route_token=ctx.store.route_token(lease.chunk_id),  # issue #84a — stamped at enqueue
-    )
-    OutboundFacts(ctx).decision(lease, submission, at=ctx.clock.now())
-    _log.info("runner-config gate: decision buffered", chunk_id=lease.chunk_id, node=lease.node_name)
+    judgement = Judgement.of(ctx, lease)
+    if judgement is not None:
+        judgement.run()
 
 
 def _apply_response(

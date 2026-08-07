@@ -2,7 +2,7 @@
 
 A real ADVANCE tick against a real tmp store proves checks run at worker exit, before
 judgement, in the declared cwd, and each result is a durable fact surviving a runner
-kill. Plus unit coverage of ``_run_or_read_checks``'s idempotency and the store round trip.
+kill. Plus unit coverage of ``Judgement.checks``'s idempotency and the store round trip.
 """
 
 from __future__ import annotations
@@ -15,8 +15,9 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT, CheckOutcome
+from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.judgement_prompt import JudgementPrompt
-from blizzard.runner.loop.steps import _run_or_read_checks, advance, pull
+from blizzard.runner.loop.steps import advance, pull
 from blizzard.runner.store.repository import CheckResultRecord, NewLease
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from tests.runner_fakes import (
@@ -213,7 +214,7 @@ def _lease_and_bindings(store, *, checks_cwd=None, checks_timeout=None):
 
 
 @pytest.mark.unit
-def test_run_or_read_checks_is_idempotent_reading_back_without_rerunning(tmp_path: Path) -> None:
+def test_checks_is_idempotent_reading_back_without_rerunning(tmp_path: Path) -> None:
     """First call runs the checks and records them; a second call on the same
     ``(lease, epoch)`` reads the recorded facts back and never re-invokes the seam — the
     crash-recovery re-drive contract."""
@@ -222,30 +223,30 @@ def test_run_or_read_checks_is_idempotent_reading_back_without_rerunning(tmp_pat
     ctx = _ctx_for_unit(store, check_runner=check_runner, clock=FixedClock(_NOW))
     lease, bindings, envelope = _lease_and_bindings(store)
 
-    first = _run_or_read_checks(ctx, lease, envelope, bindings)
+    first = Judgement(ctx, lease, envelope, bindings).checks()
     assert [(r.command, r.passed, r.output_tail) for r in first] == [("mise run lint", True, "ok")]
     assert len(check_runner.calls) == 1
     assert store.checks_ran("lease_b", 1) is True
 
-    second = _run_or_read_checks(ctx, lease, envelope, bindings)
+    second = Judgement(ctx, lease, envelope, bindings).checks()
     assert [(r.command, r.passed, r.output_tail) for r in second] == [("mise run lint", True, "ok")]
     assert len(check_runner.calls) == 1, "a re-drive must read the recorded facts back, not re-run the checks"
 
 
 @pytest.mark.unit
-def test_run_or_read_checks_resolves_checks_cwd_relative_to_the_binding_workdir(tmp_path: Path) -> None:
+def test_checks_resolves_checks_cwd_relative_to_the_binding_workdir(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     check_runner = FakeCheckRunner()
     ctx = _ctx_for_unit(store, check_runner=check_runner, clock=FixedClock(_NOW))
     lease, bindings, envelope = _lease_and_bindings(store, checks_cwd="blizzard", checks_timeout=42)
 
-    _run_or_read_checks(ctx, lease, envelope, bindings)
+    Judgement(ctx, lease, envelope, bindings).checks()
 
     assert check_runner.calls == [("mise run lint", "/ws/e1/blizzard", 42)]
 
 
 @pytest.mark.unit
-def test_run_or_read_checks_is_empty_and_runs_nothing_for_a_node_with_no_checks(tmp_path: Path) -> None:
+def test_checks_is_empty_and_runs_nothing_for_a_node_with_no_checks(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     check_runner = FakeCheckRunner()
     ctx = _ctx_for_unit(store, check_runner=check_runner, clock=FixedClock(_NOW))
@@ -255,7 +256,7 @@ def test_run_or_read_checks_is_empty_and_runs_nothing_for_a_node_with_no_checks(
     bindings = store.bindings_for_chunk("ch_1")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES, epoch=1)  # no checks
 
-    assert _run_or_read_checks(ctx, lease, envelope, bindings) == []
+    assert Judgement(ctx, lease, envelope, bindings).checks() == []
     assert check_runner.calls == []
     assert store.checks_ran("lease_b", 1) is False
 
