@@ -16,17 +16,16 @@ from pathlib import Path
 from urllib.parse import quote
 
 import click
-import httpx
 import uvicorn
 
 from blizzard.cli.host_directory import resolve_host_directory
-from blizzard.cli.param_rank import source_rank
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.runner.app import build_hosted_app
+from blizzard.runner.cli_daemon import RunnerDaemon
 from blizzard.runner.cli_worker import WorkerCall
-from blizzard.runner.config import ConfigError, RunnerConfig, socket_path_for
+from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.listeners import ListenerError, bind_listeners, unlink_socket
 from blizzard.runner.loop.build import (
@@ -49,8 +48,6 @@ DEFAULT_DIR = "."
 # the right address. `BZ_*` is the operator's config namespace, distinct from the worker's
 # spawn-injected `BLIZZARD_*` one, which `cli_worker` owns.
 ENV_LOCAL_API_URL = "BZ_RUNNER_URL"
-# A machine-local round trip (issue #43), so a hook-scale budget rather than the hub-client one.
-_LOCAL_CLIENT_TIMEOUT = 5.0
 # Each `selftest` poll is a machine-local read of already-computed state, so a short interval is free.
 _SELFTEST_POLL_INTERVAL = 0.2
 # A CLI-side backstop above the server's own authoritative run budget, so the CLI never spins forever
@@ -58,44 +55,10 @@ _SELFTEST_POLL_INTERVAL = 0.2
 _SELFTEST_POLL_TIMEOUT = 600.0
 
 
-# Ranked by where each value came from (`param_rank.py`) because `--dir` always *has* a value: an
-# explicit flag beats an ambient variable, and only a genuine tie on the command line is ambiguous.
-def _local_api_client(directory: str, runner_url: str | None) -> tuple[httpx.Client, str]:
-    """A client of the runner's local API, over the socket or TCP — never the store, never the hub."""
-    ctx = click.get_current_context()
-    dir_rank = source_rank(ctx.get_parameter_source("directory"))
-    url_rank = source_rank(ctx.get_parameter_source("runner_url")) if runner_url is not None else -1
-
-    if dir_rank == 2 and url_rank == 2:
-        raise click.UsageError(
-            "--dir and --runner-url are mutually exclusive: --dir names the socket, --runner-url TCP"
-        )
-    if url_rank > dir_rank and runner_url is not None:
-        return httpx.Client(base_url=runner_url, timeout=_LOCAL_CLIENT_TIMEOUT), runner_url
-
-    sock = socket_path_for(Path(directory))
-    if not sock.exists():
-        # No degraded read path — an absent socket is a daemon-not-running diagnostic,
-        # never a reason to fall back to reading the store.
-        raise click.ClickException(
-            f"no runner daemon is serving at {sock} — start one with `blizzard runner host --dir {directory}`"
-        )
-    # The base_url host is a placeholder: the UDS transport decides where the bytes go.
-    transport = httpx.HTTPTransport(uds=str(sock))
-    return httpx.Client(transport=transport, base_url="http://runner", timeout=_LOCAL_CLIENT_TIMEOUT), str(sock)
-
-
 def _set_local_paused(*, paused: bool, by: str, directory: str, runner_url: str | None) -> None:
     """PATCH the runner singleton's own pause brake — the declarative pattern applied locally."""
-    client, where = _local_api_client(directory, runner_url)
-    verb = "pause" if paused else "start"
-    try:
-        with client:
-            resp = client.patch("/api/runner", json={"paused": paused, "by": by})
-            resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise click.ClickException(f"{verb}: could not reach the runner at {where} ({exc})") from exc
-    view = resp.json()
+    with RunnerDaemon.reach("pause" if paused else "start", directory, runner_url) as daemon:
+        view = daemon.patch("/api/runner", json_body={"paused": paused, "by": by}).json()
     if paused:
         click.echo(f"runner {view['runner_id']} is now locally paused — it starts no new workers")
         if view.get("hub_paused"):
@@ -293,9 +256,8 @@ def external_usage_probe(directory: str) -> None:
 def heartbeat() -> None:
     """Worker hook: record a lease heartbeat (identity from the environment).
 
-    A pure client of the runner's local API, taking its lease and runner URL from the spawn
-    environment, so no arguments. Fails **soft**: a hook must never break the worker's tool call, so a
-    missing identity or an unreachable runner is reported to stderr and this still exits 0."""
+    Fails **soft**: a hook must never break the worker's tool call, so a missing identity or an
+    unreachable runner is reported to stderr and this still exits 0."""
     worker = WorkerCall.hook("heartbeat")
     if worker is not None:
         worker.soft_post(
@@ -305,11 +267,11 @@ def heartbeat() -> None:
 
 @runner.command("session-end")
 def session_end() -> None:
-    """Worker hook: record the session's exit (identity from the environment).
+    """Worker hook: record the session's exit (identity from the environment) — the worker's
+    "declared done" signal.
 
-    A pure client of the runner's local API, taking its identity from the spawn environment. The
-    recorded fact is the worker's "declared done" signal. Fails **soft**, like the heartbeat: a hook
-    must never break the worker's exit, so a failure is reported to stderr and this still exits 0."""
+    Fails **soft**, like the heartbeat: a hook must never break the worker's exit, so a failure
+    is reported to stderr and this still exits 0."""
     worker = WorkerCall.hook("session-end")
     if worker is not None:
         worker.soft_post(worker.leased("session-end"), failure="could not reach the runner")
@@ -319,10 +281,7 @@ def session_end() -> None:
 @click.argument("prompt")
 @click.option("--options", default=None, help="Pipe-separated answer options.")
 def ask(prompt: str, options: str | None) -> None:
-    """Worker: ask-and-exit; the ask fact is durable before the worker exits.
-
-    A pure client of the runner's local API, taking its identity from the spawn environment, so no
-    identity arguments. The ask is a durable runner-store fact before this returns."""
+    """Worker: ask-and-exit — the ask is a durable runner-store fact before this returns."""
     worker = WorkerCall.of("ask")
     body: dict[str, object] = {"question": prompt}
     if options:
@@ -361,9 +320,8 @@ def _artifact_summary(artifact: dict) -> dict:
 def artifact_list(content: bool) -> None:
     """Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch.
 
-    A pure client of the runner's local API, which proxies to the hub as the runner principal — the
-    worker holds no hub credential. Content is elided by default (issue #169), since inlining every
-    upstream asset's full text has overflowed tool output; ``--content`` restores it."""
+    Content is elided by default (issue #169), since inlining every upstream asset's full text
+    has overflowed tool output; ``--content`` restores it."""
     worker = WorkerCall.of("artifact list")
     resp = worker.get(worker.leased("artifacts"), failure="could not read the artifacts")
     if content:
@@ -528,9 +486,8 @@ def chunk_group() -> None:
 def chunk_history() -> None:
     """Worker: read this chunk's own transition history as kind-discriminated JSON (issue #237) — the
     merged, oldest-first timeline, one row per accepted transition, cross-graph migration, or delivery
-    bounce, each carrying its own ``kind``. A pure client of the runner's local API, which proxies to
-    the hub as the runner principal. The in-flight node-step this call is part of is not there yet: a
-    transition is recorded only once an attempt completes."""
+    bounce, each carrying its own ``kind``. The in-flight node-step this call is part of is not
+    there yet: a transition is recorded only once an attempt completes."""
     worker = WorkerCall.of("chunk history")
     resp = worker.get(worker.leased("history"), failure="could not read the history")
     click.echo(resp.text)
@@ -555,9 +512,7 @@ def attach(ctx: click.Context, name: str) -> None:
 def work_items(chunk_id: str) -> None:
     """Worker: pass-through read of a chunk's work items (runner -> hub -> vendor).
 
-    A pure client of the runner's local API, whose proxy route forwards to the hub — the worker never
-    talks to the hub or the work source directly. The runner URL is inherited from the spawn
-    environment, so no identity argument; the items print as JSON, one entry per pointer."""
+    The items print as JSON, one entry per pointer."""
     worker = WorkerCall.of("work-items", lease=False)
     resp = worker.get(f"/api/chunks/{chunk_id}/work-items", failure="could not read the work item")
     click.echo(resp.text)
@@ -596,28 +551,16 @@ def pm_items(ctx: click.Context, chunk_id: str) -> None:
 )
 def status(directory: str, runner_url: str | None) -> None:
     """The machine-local view: capacities, held environments, open asks, escalations, open takeovers
-    (issue #51). A pure client of the runner's local API — the same door ``pause``/``start`` use — so
-    every section is this runner's own local read and the view renders fully with the hub unreachable;
-    hub reachability is itself reported, not assumed. No store access, no hub call."""
-    client, where = _local_api_client(directory, runner_url)
-    try:
-        with client:
-            runner_resp = client.get("/api/runner")
-            runner_resp.raise_for_status()
-            leases_resp = client.get("/api/leases")
-            leases_resp.raise_for_status()
-            envs_resp = client.get("/api/environments")
-            envs_resp.raise_for_status()
-            asks_resp = client.get("/api/asks", params={"open": "true"})
-            asks_resp.raise_for_status()
-            escalations_resp = client.get("/api/escalations")
-            escalations_resp.raise_for_status()
-            takeovers_resp = client.get("/api/takeovers")
-            takeovers_resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise click.ClickException(f"status: could not reach the runner at {where} ({exc})") from exc
+    (issue #51). Every section is this runner's own local read, so the view renders fully with the
+    hub unreachable; hub reachability is itself reported, not assumed."""
+    with RunnerDaemon.reach("status", directory, runner_url) as daemon:
+        view = daemon.get("/api/runner").json()
+        leases_resp = daemon.get("/api/leases")
+        envs_resp = daemon.get("/api/environments")
+        asks_resp = daemon.get("/api/asks", params={"open": "true"})
+        escalations_resp = daemon.get("/api/escalations")
+        takeovers_resp = daemon.get("/api/takeovers")
 
-    view = runner_resp.json()
     click.echo(f"runner {view['runner_id']}  workspace={view['workspace_id']}")
     pause = view["pause"]
     brakes = [name for name, on in (("local", pause["local"]), ("hub", pause["hub"])) if on]
@@ -734,25 +677,20 @@ def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None)
     session while it is open; the lease token travels only in the response body and the exec, never
     printed. ``--force`` supersedes a live worker attempt instead of refusing. The end-PATCH runs in a
     ``finally`` around the child, so a stranded open takeover cannot outlive an interrupted session."""
-    client, where = _local_api_client(directory, runner_url)
-    try:
-        with client:
-            resp = client.post(f"/api/chunks/{chunk_id}/takeovers", json={"force": force})
-            if resp.status_code == 409:
-                raise click.ClickException(f"takeover: {resp.json().get('detail', 'chunk is not takeable')}")
-            resp.raise_for_status()
-            view = resp.json()
-            click.echo(f"taking over chunk {chunk_id} in {view['workdir']}")
-            try:
-                # The takeover env (issue #258), layered over the terminal env: the forwarded
-                # vars deliberately WIN over the terminal's own, and carry the lease token.
-                child_env = {**os.environ, **view.get("env", {})}
-                exit_code = subprocess.call(view["command"], shell=True, cwd=view["workdir"], env=child_env)
-            finally:
-                end_resp = client.patch(f"/api/chunks/{chunk_id}/takeovers/{view['takeover_id']}")
-                end_resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise click.ClickException(f"takeover: could not reach the runner at {where} ({exc})") from exc
+    with RunnerDaemon.reach("takeover", directory, runner_url) as daemon:
+        resp = daemon.send("post", f"/api/chunks/{chunk_id}/takeovers", json_body={"force": force})
+        if resp.status_code == 409:
+            raise click.ClickException(f"takeover: {resp.json().get('detail', 'chunk is not takeable')}")
+        resp.raise_for_status()
+        view = resp.json()
+        click.echo(f"taking over chunk {chunk_id} in {view['workdir']}")
+        try:
+            # The takeover env (issue #258), layered over the terminal env: the forwarded
+            # vars deliberately WIN over the terminal's own, and carry the lease token.
+            child_env = {**os.environ, **view.get("env", {})}
+            exit_code = subprocess.call(view["command"], shell=True, cwd=view["workdir"], env=child_env)
+        finally:
+            daemon.patch(f"/api/chunks/{chunk_id}/takeovers/{view['takeover_id']}")
     if exit_code != 0:
         raise SystemExit(exit_code)
 
@@ -779,15 +717,11 @@ def requeue(chunk_id: str, directory: str, runner_url: str | None) -> None:
     attempt — new session, new lease, fresh epoch — at the current node. The route is never released
     and the chunk never re-enters the hub's queue. Refused ``409`` while its takeover is still open,
     or while it is not parked needs_human."""
-    client, where = _local_api_client(directory, runner_url)
-    try:
-        with client:
-            resp = client.post(f"/api/chunks/{chunk_id}/requeues")
-            if resp.status_code == 409:
-                raise click.ClickException(f"requeue: {resp.json().get('detail', 'chunk is not requeueable')}")
-            resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise click.ClickException(f"requeue: could not reach the runner at {where} ({exc})") from exc
+    with RunnerDaemon.reach("requeue", directory, runner_url) as daemon:
+        resp = daemon.send("post", f"/api/chunks/{chunk_id}/requeues")
+        if resp.status_code == 409:
+            raise click.ClickException(f"requeue: {resp.json().get('detail', 'chunk is not requeueable')}")
+        resp.raise_for_status()
     click.echo(f"requeued chunk {chunk_id} — a fresh attempt will spawn at its current node")
 
 
@@ -812,27 +746,20 @@ def selftest(coding_harness: str, directory: str, runner_url: str | None) -> Non
     throwaway scratch repo — spawn with a pre-assigned session id, a trivial edit+commit, verdict
     elicitation, an automated follow-up resume, and resume-command composition — touching no chunk,
     lease, environment, or hub. Posts the run, polls it, prints each check, exits non-zero on failure."""
-    client, where = _local_api_client(directory, runner_url)
-    try:
-        with client:
-            resp = client.post("/api/selftests", json={"harness": coding_harness})
-            if resp.status_code == 422:
-                raise click.ClickException(resp.json().get("detail", "unknown coding harness"))
-            resp.raise_for_status()
-            run = resp.json()
-            deadline = time.monotonic() + _SELFTEST_POLL_TIMEOUT
-            while run["status"] == "running":
-                if time.monotonic() > deadline:
-                    raise click.ClickException(
-                        f"selftest {run['id']} did not finish within {_SELFTEST_POLL_TIMEOUT:g}s "
-                        "— the runner may be wedged"
-                    )
-                time.sleep(_SELFTEST_POLL_INTERVAL)
-                resp = client.get(f"/api/selftests/{run['id']}")
-                resp.raise_for_status()
-                run = resp.json()
-    except httpx.HTTPError as exc:
-        raise click.ClickException(f"selftest: could not reach the runner at {where} ({exc})") from exc
+    with RunnerDaemon.reach("selftest", directory, runner_url) as daemon:
+        resp = daemon.send("post", "/api/selftests", json_body={"harness": coding_harness})
+        if resp.status_code == 422:
+            raise click.ClickException(resp.json().get("detail", "unknown coding harness"))
+        resp.raise_for_status()
+        run = resp.json()
+        deadline = time.monotonic() + _SELFTEST_POLL_TIMEOUT
+        while run["status"] == "running":
+            if time.monotonic() > deadline:
+                raise click.ClickException(
+                    f"selftest {run['id']} did not finish within {_SELFTEST_POLL_TIMEOUT:g}s — the runner may be wedged"
+                )
+            time.sleep(_SELFTEST_POLL_INTERVAL)
+            run = daemon.get(f"/api/selftests/{run['id']}").json()
 
     for check in run["checks"]:
         mark = "PASS" if check["passed"] else "FAIL"

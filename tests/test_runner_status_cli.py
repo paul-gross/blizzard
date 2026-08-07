@@ -19,7 +19,6 @@ import pytest
 import uvicorn
 from click.testing import CliRunner
 
-import blizzard.runner.cli as runner_cli
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
@@ -80,7 +79,7 @@ def _no_hub(monkeypatch: pytest.MonkeyPatch) -> None:
     def explode(*_args: object, **_kwargs: object) -> object:
         raise AssertionError("`runner status` contacted the hub; it must be a pure client of the local API")
 
-    monkeypatch.setattr(runner_cli.httpx, "post", explode)
+    monkeypatch.setattr(httpx, "post", explode)
 
 
 @pytest.mark.component
