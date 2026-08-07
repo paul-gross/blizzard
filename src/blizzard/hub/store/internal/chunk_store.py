@@ -53,7 +53,6 @@ from blizzard.hub.domain.work import (
     UsageFact,
     WorkItemCloseOutcome,
     WorkRef,
-    has_landed_repos,
     newest_live_route,
 )
 from blizzard.hub.store import schema as s
@@ -468,7 +467,7 @@ class ChunkStore:
             if (row.chunk_id, row.source, row.ref) in terminal:
                 continue
             facts = self.load_facts(row.chunk_id)
-            if facts is None or not has_landed_repos(facts, self.load_artifacts(row.chunk_id)):
+            if facts is None or not facts.has_landed_repos(self.load_artifacts(row.chunk_id)):
                 continue  # never landed — has_landed_repos is the sole gate, not chunk status
             result.append(ClosableWorkRef(chunk_id=row.chunk_id, ref=WorkRef(source=row.source, ref=row.ref)))
         return result

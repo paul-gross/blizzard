@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.work import ChunkFacts, UsageFact, derive_chunk_usage
+from blizzard.hub.domain.work import ChunkFacts, UsageFact
 
 pytestmark = pytest.mark.unit
 
@@ -50,7 +50,7 @@ def _usage(
 
 
 def test_no_usage_facts_derives_a_zero_non_partial_total() -> None:
-    usage = derive_chunk_usage(ChunkFacts(minted=True))
+    usage = ChunkFacts(minted=True).usage_total()
     assert usage.input_tokens == 0
     assert usage.output_tokens == 0
     assert usage.cache_read_tokens == 0
@@ -83,7 +83,7 @@ def test_derive_chunk_usage_sums_every_row_by_token_class_and_cost() -> None:
             ),
         ],
     )
-    usage = derive_chunk_usage(facts)
+    usage = facts.usage_total()
     assert usage.input_tokens == 300
     assert usage.output_tokens == 125
     assert usage.cache_read_tokens == 30
@@ -101,7 +101,7 @@ def test_a_cost_absent_row_contributes_tokens_but_flags_the_total_partial() -> N
             _usage(input_tokens=40, output_tokens=10, cost_usd=None, recorded_at=_at(2)),
         ],
     )
-    usage = derive_chunk_usage(facts)
+    usage = facts.usage_total()
     assert usage.input_tokens == 140
     assert usage.output_tokens == 60
     # cost_usd is a lower bound: only the rows that carried a cost are summed.
@@ -117,7 +117,7 @@ def test_every_row_carrying_cost_derives_a_non_partial_total() -> None:
             _usage(cost_usd=0.02, recorded_at=_at(2)),
         ],
     )
-    assert derive_chunk_usage(facts).cost_partial is False
+    assert facts.usage_total().cost_partial is False
 
 
 def test_stale_epoch_usage_row_is_still_summed() -> None:
@@ -132,6 +132,6 @@ def test_stale_epoch_usage_row_is_still_summed() -> None:
             _usage(epoch=1, cost_usd=0.05, recorded_at=_at(3)),
         ],
     )
-    usage = derive_chunk_usage(facts)
+    usage = facts.usage_total()
     assert usage.cost_usd == pytest.approx(0.15)
     assert usage.cost_partial is False

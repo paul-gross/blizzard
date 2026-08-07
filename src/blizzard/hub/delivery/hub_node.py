@@ -33,9 +33,6 @@ from blizzard.hub.domain.work import (
     Chunk,
     HubNodePollFact,
     IWriteChunkRepository,
-    bounce_count,
-    bounces_over_cap,
-    hub_node_poll_history,
     landed_repos_from_markers,
 )
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
@@ -315,7 +312,7 @@ class HubNodeExecutor:
         BEFORE the slot is acquired, so a pending chunk never contends for it."""
         now = self._clock.now()
         facts = self._chunks.load_facts(chunk.chunk_id)
-        poll_history = hub_node_poll_history(facts, node_id=node.node_id, epoch=epoch) if facts is not None else []
+        poll_history = facts.hub_node_poll_history(node_id=node.node_id, epoch=epoch) if facts is not None else []
         if poll_history and now - poll_history[-1].polled_at < poll_interval_for(node):
             return None  # not yet due — never touches the fleet-wide slot
         slot_id = self._chunks.acquire_hub_exec_slot(
@@ -451,7 +448,7 @@ class HubNodeExecutor:
 
         facts = self._chunks.load_facts(chunk.chunk_id)
         cap = node.bounce_cap if node.bounce_cap is not None else DEFAULT_BOUNCE_CAP
-        if facts is not None and bounces_over_cap(facts, cap):
+        if facts is not None and facts.bounces_over_cap(cap):
             # Hub-authored escalation, no runner runtime dir to compose a wrapped
             # takeover command from — leaves wrapped_takeover_command at its store default.
             self._chunks.record_bounce_escalation(
@@ -462,7 +459,8 @@ class HubNodeExecutor:
                 to_node_name="",
                 wrote_transition=False,
                 detail=(
-                    f"poll_timeout exceeded — bounce cap ({cap}) crossed after {bounce_count(facts)} bounces, escalated"
+                    f"poll_timeout exceeded — bounce cap ({cap}) crossed after "
+                    f"{facts.bounce_count()} bounces, escalated"
                 ),
             )
         artifact = ArtifactRow(
@@ -556,7 +554,7 @@ class HubNodeExecutor:
                 )
                 facts = self._chunks.load_facts(chunk.chunk_id)
                 cap = node.bounce_cap if node.bounce_cap is not None else DEFAULT_BOUNCE_CAP
-                if facts is not None and bounces_over_cap(facts, cap):
+                if facts is not None and facts.bounces_over_cap(cap):
                     # Hub-authored escalation, no runner runtime dir to compose a wrapped
                     # takeover command from — leaves wrapped_takeover_command at its store default.
                     self._chunks.record_bounce_escalation(
@@ -566,7 +564,7 @@ class HubNodeExecutor:
                         outcome_choice=choice,
                         to_node_name="",
                         wrote_transition=False,
-                        detail=f"bounce cap ({cap}) crossed after {bounce_count(facts)} bounces, escalated",
+                        detail=f"bounce cap ({cap}) crossed after {facts.bounce_count()} bounces, escalated",
                     )
                 envelope_artifact = ArtifactRow(
                     kind=ArtifactKind.ASSET,

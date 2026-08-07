@@ -28,7 +28,6 @@ from blizzard.hub.domain.graph import Graph, is_newer_mint, resolve_follow_lates
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
-    hub_node_pending,
 )
 from blizzard.hub.events.broker import ChunkChangeCause
 from blizzard.wire.chunk import ChunkDetail, ChunkPauseRequest, ChunkSummary, HubAdvanceResponse, WorkItemsView
@@ -267,7 +266,7 @@ def hub_advance(
         services, chunk_id, cause="hub-advanced", prev_status=prev_status, key=advance_key
     )
     if result is None:
-        pending = hub_node_pending(facts)
+        pending = facts.hub_node_pending()
         next_poll_at = pending.polled_at + poll_interval_for(node) if pending is not None else None
         # A future `next_poll_at` distinguishes "not yet due to poll" (#66) from a genuinely busy slot;
         # a pending node whose interval elapsed but lost the slot race falls through to the busy branch.

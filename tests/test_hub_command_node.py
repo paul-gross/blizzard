@@ -41,7 +41,6 @@ from blizzard.hub.domain.work import (
     HubNodePollFact,
     IWriteChunkRepository,
     TransitionFact,
-    hub_node_pending,
 )
 from tests.support import (
     FakeHubCommandRunner,
@@ -355,7 +354,7 @@ def _facts_at_hub_node(
 
 
 def test_hub_node_pending_is_none_with_no_poll_fact() -> None:
-    assert hub_node_pending(_facts_at_hub_node(polls=[])) is None
+    assert _facts_at_hub_node(polls=[]).hub_node_pending() is None
 
 
 def test_hub_node_pending_returns_the_newest_matching_poll_fact() -> None:
@@ -365,7 +364,7 @@ def test_hub_node_pending_returns_the_newest_matching_poll_fact() -> None:
             HubNodePollFact(node_id="nd_merge", epoch=1, polled_at=datetime(2026, 7, 17, 0, 1, tzinfo=UTC)),
         ]
     )
-    pending = hub_node_pending(facts)
+    pending = facts.hub_node_pending()
     assert pending is not None
     assert pending.polled_at == datetime(2026, 7, 17, 0, 1, tzinfo=UTC)
 
@@ -376,7 +375,7 @@ def test_hub_node_pending_ignores_a_poll_fact_from_a_stale_epoch() -> None:
     node-keyed alone."""
     stale_poll = HubNodePollFact(node_id="nd_merge", epoch=1, polled_at=datetime(2026, 7, 17, tzinfo=UTC))
     facts = _facts_at_hub_node(epoch=2, polls=[stale_poll])
-    assert hub_node_pending(facts) is None
+    assert facts.hub_node_pending() is None
 
 
 def test_hub_node_pending_is_none_off_a_non_hub_node() -> None:
@@ -392,7 +391,7 @@ def test_hub_node_pending_is_none_off_a_non_hub_node() -> None:
         ],
         hub_node_polls=[HubNodePollFact(node_id="nd_build", epoch=1, polled_at=datetime(2026, 7, 17, tzinfo=UTC))],
     )
-    assert hub_node_pending(facts) is None
+    assert facts.hub_node_pending() is None
 
 
 def test_hubnode_after_poll_before_slot_release_crash_point_is_registered() -> None:

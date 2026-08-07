@@ -26,9 +26,6 @@ from blizzard.hub.domain.work import (
     RouteReleasedFact,
     RouteTokenMintedFact,
     TransitionFact,
-    bounce_count,
-    bounces_over_cap,
-    has_landed_repos,
     newest_live_route_token,
 )
 
@@ -257,7 +254,7 @@ def test_merged_but_running_derives_running_not_done() -> None:
         ],
     )
     assert facts.status() is ChunkStatus.RUNNING
-    assert has_landed_repos(facts) is True
+    assert facts.has_landed_repos() is True
 
 
 def test_merged_but_escalated_derives_needs_human_with_landed_detail() -> None:
@@ -273,11 +270,11 @@ def test_merged_but_escalated_derives_needs_human_with_landed_detail() -> None:
         escalations=[EscalationFact(epoch=2, recorded_at=_at(6))],
     )
     assert facts.status() is ChunkStatus.NEEDS_HUMAN
-    assert has_landed_repos(facts) is True
+    assert facts.has_landed_repos() is True
 
 
 def test_has_landed_repos_false_with_no_landed_facts_at_all() -> None:
-    assert has_landed_repos(ChunkFacts(minted=True)) is False
+    assert ChunkFacts(minted=True).has_landed_repos() is False
 
 
 def _parked_on_open_pr(**extra: object) -> ChunkFacts:
@@ -599,27 +596,27 @@ def _bounce(epoch: int, *, at: datetime, cause: str = "conflict") -> BounceFact:
 
 
 def test_bounce_count_zero_with_no_bounces() -> None:
-    assert bounce_count(ChunkFacts(minted=True)) == 0
+    assert ChunkFacts(minted=True).bounce_count() == 0
 
 
 def test_bounce_count_counts_every_recorded_bounce() -> None:
     facts = ChunkFacts(minted=True, bounces=[_bounce(2, at=_at(1)), _bounce(4, at=_at(2)), _bounce(6, at=_at(3))])
-    assert bounce_count(facts) == 3
+    assert facts.bounce_count() == 3
 
 
 def test_bounces_over_cap_false_at_the_cap() -> None:
     # A cap of 5 tolerates exactly 5 bounces — the cap counts bounces survived, not a
     # zero-indexed budget, so the 5th does not cross it.
     facts = ChunkFacts(minted=True, bounces=[_bounce(n, at=_at(n)) for n in range(5)])
-    assert bounce_count(facts) == 5
-    assert bounces_over_cap(facts, 5) is False
+    assert facts.bounce_count() == 5
+    assert facts.bounces_over_cap(5) is False
 
 
 def test_bounces_over_cap_true_once_crossed() -> None:
     # The 6th bounce crosses a cap of 5.
     facts = ChunkFacts(minted=True, bounces=[_bounce(n, at=_at(n)) for n in range(6)])
-    assert bounce_count(facts) == 6
-    assert bounces_over_cap(facts, 5) is True
+    assert facts.bounce_count() == 6
+    assert facts.bounces_over_cap(5) is True
 
 
 def test_bounce_is_informational_never_a_status() -> None:
@@ -634,7 +631,7 @@ def test_bounce_is_informational_never_a_status() -> None:
         bounces=[_bounce(n, at=_at(n)) for n in range(5)],
     )
     assert facts.status() is ChunkStatus.RUNNING
-    assert bounce_count(facts) == 5
+    assert facts.bounce_count() == 5
 
 
 def test_open_pause_reads_the_fact_on_a_done_chunk() -> None:

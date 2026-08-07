@@ -246,7 +246,7 @@ class BounceFact:
 class HubNodePollFact:
     """A ``hub_node_poll`` row — one pending-poll attempt at a hub command node (#66).
     Append-only. ``epoch`` is the arrival epoch of the current visit to ``node_id``, not
-    a fresh one per poll. Pending-ness (:func:`hub_node_pending`) derives from these rows
+    a fresh one per poll. Pending-ness (:meth:`ChunkFacts.hub_node_pending`) derives from these rows
     plus the newest transition, so a ``kill -9`` between polls resumes from the store."""
 
     node_id: str
@@ -308,7 +308,7 @@ class UsageFact:
     """A ``usage.recorded`` fact — one harness invocation's usage/cost telemetry (issue #59).
     Deliberately **not** epoch-fenced: a row whose epoch trails the chunk's latest is real
     spend by a fenced-out zombie attempt and must still be summed, never dropped. The
-    chunk-level total (:func:`derive_chunk_usage`) sums every row regardless of epoch."""
+    chunk-level total (:meth:`ChunkFacts.usage_total`) sums every row regardless of epoch."""
 
     node_id: str
     epoch: int
@@ -515,10 +515,10 @@ class ChunkFacts:
     pr_opened: list[PrOpenedFact] = field(default_factory=list)
     pauses: list[PauseFact] = field(default_factory=list)
     usage: list[UsageFact] = field(default_factory=list)
-    # The chunk's recorded delivery kick-backs (#64) — feeds :func:`bounce_count` /
-    # :func:`bounces_over_cap` and the chunk-detail bounce history. Never a status.
+    # The chunk's recorded delivery kick-backs (#64) — feeds :meth:`ChunkFacts.bounce_count` /
+    # :meth:`ChunkFacts.bounces_over_cap` and the chunk-detail bounce history. Never a status.
     bounces: list[BounceFact] = field(default_factory=list)
-    # The chunk's recorded hub-node poll attempts (#66) — feeds :func:`hub_node_pending`.
+    # The chunk's recorded hub-node poll attempts (#66) — feeds :meth:`ChunkFacts.hub_node_pending`.
     # Never a status: pending is a facet of ``delivering``.
     hub_node_polls: list[HubNodePollFact] = field(default_factory=list)
 
@@ -714,6 +714,57 @@ class ChunkFacts:
         """A ``route.created`` with no later ``route.released``. See :func:`newest_live_route`."""
         return newest_live_route(self.routes_created, self.routes_released) is not None
 
+    def has_landed_repos(self, artifacts: Sequence[ArtifactRow] = ()) -> bool:
+        """True iff any repo has landed for this chunk — informational, never a status (#63).
+
+        ``artifacts`` carries the generic ``merged/<repo>`` marker convention (#67) — the
+        current landing truth; the fact inputs are read alongside for back-compat, so a
+        historical chunk still reads landed."""
+        return self.delivery_landed or bool(self.landed_repos) or bool(landed_repos_from_markers(artifacts))
+
+    def bounce_count(self) -> int:
+        """The chunk's total recorded delivery kick-backs (#64) — informational.
+
+        Feeds the cap check (``bounces_over_cap``) and the chunk-detail bounce history;
+        never itself a status — a bounce is contention, not failure."""
+        return len(self.bounces)
+
+    def bounces_over_cap(self, cap: int) -> bool:
+        """True once the chunk's bounce count has **crossed** ``cap`` (#64).
+
+        Crossed, not reached: a node whose ``bounce_cap`` is 5 tolerates 5 kick-backs
+        before this flips True on the 6th — the cap counts bounces a chunk survives before
+        escalating, not a zero-indexed budget."""
+        return self.bounce_count() > cap
+
+    def hub_node_poll_history(self, *, node_id: str, epoch: int) -> list[HubNodePollFact]:
+        """A hub node's poll attempts for one (node, epoch) visit, oldest first (#66).
+
+        The earliest entry bounds ``poll_timeout``, the newest gates ``poll_interval`` —
+        read off this history rather than in-memory state, so a ``kill -9`` resumes here."""
+        return sorted(
+            (p for p in self.hub_node_polls if p.node_id == node_id and p.epoch == epoch), key=lambda p: p.polled_at
+        )
+
+    def hub_node_pending(self) -> HubNodePollFact | None:
+        """The chunk's in-progress hub-node poll, or ``None`` — chunk-detail honesty (#66).
+
+        Not a distinct status: the chunk still derives ``delivering``. A poll fact recorded
+        for the newest transition's ``(to_node_id, epoch)`` with no later transition means
+        the node is still waiting on external state."""
+        transition = self.newest_transition()
+        if transition is None or transition.to_node_executor is not Executor.HUB:
+            return None
+        history = self.hub_node_poll_history(node_id=transition.to_node_id, epoch=transition.epoch)
+        return history[-1] if history else None
+
+    def usage_total(self) -> UsageTotal:
+        """Sum a chunk's usage facts into its derived total — tokens by class + cost.
+
+        Deliberately unfenced by epoch (unlike the status derivations): every recorded
+        usage row is real spend, summed regardless of which epoch minted it."""
+        return _sum_usage(self.usage)
+
 
 # --- The derivation queries -----------------------------------------
 
@@ -731,32 +782,6 @@ def landed_repos_from_markers(artifacts: Sequence[ArtifactRow]) -> frozenset[str
     )
 
 
-def has_landed_repos(facts: ChunkFacts, artifacts: Sequence[ArtifactRow] = ()) -> bool:
-    """True iff any repo has landed for this chunk — informational, never a status (#63).
-
-    ``artifacts`` carries the generic ``merged/<repo>`` marker convention (#67) — the
-    current landing truth; the fact inputs are read alongside for back-compat, so a
-    historical chunk still reads landed."""
-    return facts.delivery_landed or bool(facts.landed_repos) or bool(landed_repos_from_markers(artifacts))
-
-
-def bounce_count(facts: ChunkFacts) -> int:
-    """The chunk's total recorded delivery kick-backs (#64) — informational.
-
-    Feeds the cap check (:func:`bounces_over_cap`) and the chunk-detail bounce
-    history; never itself a status — a bounce is contention, not failure."""
-    return len(facts.bounces)
-
-
-def bounces_over_cap(facts: ChunkFacts, cap: int) -> bool:
-    """True once the chunk's bounce count has **crossed** ``cap`` (#64).
-
-    Crossed, not reached: a node whose ``bounce_cap`` is 5 tolerates 5 kick-backs
-    before this flips True on the 6th — the cap counts bounces a chunk survives before
-    escalating, not a zero-indexed budget."""
-    return bounce_count(facts) > cap
-
-
 def landing_node(target_graph: Graph, from_node_name: str | None) -> str:
     """The node a migration lands on in ``target_graph`` — name-match-else-entry (issue #90).
 
@@ -768,29 +793,6 @@ def landing_node(target_graph: Graph, from_node_name: str | None) -> str:
         if node is not None:
             return node.node_id
     return target_graph.entry_node_id
-
-
-def hub_node_poll_history(facts: ChunkFacts, *, node_id: str, epoch: int) -> list[HubNodePollFact]:
-    """A hub node's poll attempts for one (node, epoch) visit, oldest first (#66).
-
-    The earliest entry bounds ``poll_timeout``, the newest gates ``poll_interval`` —
-    read off this history rather than in-memory state, so a ``kill -9`` resumes here."""
-    return sorted(
-        (p for p in facts.hub_node_polls if p.node_id == node_id and p.epoch == epoch), key=lambda p: p.polled_at
-    )
-
-
-def hub_node_pending(facts: ChunkFacts) -> HubNodePollFact | None:
-    """The chunk's in-progress hub-node poll, or ``None`` — chunk-detail honesty (#66).
-
-    Not a distinct status: the chunk still derives ``delivering``. A poll fact recorded
-    for the newest transition's ``(to_node_id, epoch)`` with no later transition means
-    the node is still waiting on external state."""
-    transition = facts.newest_transition()
-    if transition is None or transition.to_node_executor is not Executor.HUB:
-        return None
-    history = hub_node_poll_history(facts, node_id=transition.to_node_id, epoch=transition.epoch)
-    return history[-1] if history else None
 
 
 def newest_live_route(
@@ -903,7 +905,7 @@ class UsageTotal:
 
 def _sum_usage(rows: list[UsageFact]) -> UsageTotal:
     """Sum ``rows`` into one total — see :class:`UsageTotal` for the lower-bound +
-    PARTIAL contract this implements. Shared by :func:`derive_chunk_usage` (one
+    PARTIAL contract this implements. Shared by :meth:`ChunkFacts.usage_total` (one
     chunk's facts) and :func:`derive_fleet_usage` (an arbitrary set of rows, e.g.
     fleet spend-since)."""
     return UsageTotal(
@@ -916,17 +918,9 @@ def _sum_usage(rows: list[UsageFact]) -> UsageTotal:
     )
 
 
-def derive_chunk_usage(facts: ChunkFacts) -> UsageTotal:
-    """Sum a chunk's usage facts into its derived total — tokens by class + cost.
-
-    Deliberately unfenced by epoch (unlike the status derivations above): every recorded
-    usage row is real spend, summed regardless of which epoch minted it."""
-    return _sum_usage(facts.usage)
-
-
 def derive_fleet_usage(rows: list[UsageFact]) -> UsageTotal:
     """Sum usage facts across the whole fleet into one total (issue #60) — the fleet
-    spend-since read's derivation. Same summation as :func:`derive_chunk_usage`, over an
+    spend-since read's derivation. Same summation as :meth:`ChunkFacts.usage_total`, over an
     arbitrary set of rows (here: every usage fact at or after a cutoff instant,
     :meth:`IReadChunkRepository.usage_since`) rather than one chunk's own facts."""
     return _sum_usage(rows)
@@ -1054,7 +1048,7 @@ class IReadChunkRepository(Protocol):
 
     def closable_work_refs(self) -> list[ClosableWorkRef]:
         """Every ``(chunk_id, ref)`` pair a landed, non-grouped chunk still owes a closure
-        attempt — :func:`has_landed_repos` is the sole landing gate, so a chunk that landed
+        attempt — :meth:`ChunkFacts.has_landed_repos` is the sole landing gate, so a chunk that landed
         and was *later* stopped still closes. A ref already carrying a terminal
         (``closed``/``gone``) closure fact is excluded; one carrying only ``failed`` is not."""
         ...
@@ -1221,7 +1215,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
     def record_bounce(self, chunk_id: str, *, epoch: int, cause: str, envelope: str, at: datetime) -> bool:
         """Record one delivery kick-back (#64), idempotent by ``(chunk_id, epoch)``.
 
-        Append-only, and the sole input :func:`bounce_count` derives from; the natural key
+        Append-only, and the sole input :meth:`ChunkFacts.bounce_count` derives from; the natural key
         makes a redelivery replay after a ``kill -9`` re-enter harmlessly rather than
         double-count. Returns True iff it wrote."""
         ...

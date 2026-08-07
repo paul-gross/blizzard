@@ -47,11 +47,8 @@ from blizzard.hub.domain.work import (
     IntendedMigration,
     MigrationMode,
     WorkRef,
-    derive_chunk_usage,
     derive_fleet_summary,
-    has_landed_repos,
     holds_claim,
-    hub_node_pending,
 )
 from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry, WorkSourceError
 from blizzard.wire.chunk import (
@@ -230,7 +227,7 @@ def _history_graphs(services: HubServices, chunk: Chunk, facts: ChunkFacts) -> d
 
 def _usage_total_view(facts: ChunkFacts) -> ChunkUsageTotalView:
     """A chunk's derived usage/cost total, wired onto both the summary and detail views."""
-    usage = derive_chunk_usage(facts)
+    usage = facts.usage_total()
     return ChunkUsageTotalView(
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
@@ -441,7 +438,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     web_base = _branch_url_source(chunk, services.work_sources)
     history_graphs = _history_graphs(services, chunk, facts)
     artifacts = services.chunks.load_artifacts(chunk_id)
-    pending = hub_node_pending(facts)
+    pending = facts.hub_node_pending()
     pending_view = None
     if pending is not None:
         pending_node = graph.node_by_id(pending.node_id) if graph is not None else None
@@ -486,7 +483,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         cost=_usage_total_view(facts),
         usage=_usage_history_views(facts),
         pending=pending_view,
-        landed=has_landed_repos(facts, artifacts),
+        landed=facts.has_landed_repos(artifacts),
         bounces=[
             BounceView(cause=b.cause, envelope=b.envelope, recorded_at=iso_utc(b.recorded_at))
             for b in sorted(facts.bounces, key=lambda b: b.recorded_at)
