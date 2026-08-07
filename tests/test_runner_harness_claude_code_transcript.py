@@ -18,7 +18,7 @@ from structlog.testing import capture_logs
 
 from blizzard.runner.harness.internal import claude_code_transcript as source_module
 from blizzard.runner.harness.internal.claude_code_normalizer import NORMALIZER_VERSION
-from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource, mangle_cwd
+from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from tests import transcript_fixtures as fx
 
@@ -115,7 +115,7 @@ def test_turns_since_multi_match_falls_back_to_newest_mtime_without_a_hint(tmp_p
 
 @pytest.mark.unit
 def test_mangle_cwd_replaces_slashes_with_dashes() -> None:
-    assert mangle_cwd("/home/user/foo") == "-home-user-foo"
+    assert ClaudeCodeTranscriptSource.mangle_cwd("/home/user/foo") == "-home-user-foo"
 
 
 # Cold (`since=None`) tail cap
@@ -247,7 +247,7 @@ def test_turns_since_forward_read_with_nothing_new_yields_no_turns(tmp_path: Pat
 def test_a_position_past_the_files_current_size_starts_that_file_over(tmp_path: Path) -> None:
     """A `main` offset past the file's current size (truncated/replaced since minted)
     is as malformed as a negative offset — clamped to 0 (start over), not reaching
-    `_read_forward`'s own clamp, whose negative delta would inflate the budget."""
+    `FileRead.forward`'s own clamp, whose negative delta would inflate the budget."""
     from blizzard.runner.harness.transcript import TranscriptPosition
 
     path = _write_main(tmp_path, [fx.user_env("hello")])
@@ -278,7 +278,7 @@ def test_a_position_past_the_files_current_size_starts_that_file_over(tmp_path: 
 def test_a_malformed_position_token_starts_over_rather_than_degrading_to_unreadable(tmp_path: Path, token: str) -> None:
     """A foreign or malformed position token degrades to "start over", never a raise
     or `available=False, reason="unreadable"` — each parametrized token targets one
-    tolerant-decode branch of `_decode_position`."""
+    tolerant-decode branch of `Position.of`."""
     from blizzard.runner.harness.transcript import TranscriptPosition
 
     _write_main(tmp_path, [fx.user_env("hello")])
@@ -302,7 +302,7 @@ def test_read_forward_a_record_wider_than_the_budget_makes_forward_progress(
     path.write_bytes(b"x" * 100)  # one line, no newline anywhere, wider than the budget below
     monkeypatch.setattr(source_module, "MAX_BATCH_BYTES", 10)
 
-    result = source_module._read_forward(path, start_offset=0, budget=10)
+    result = source_module.FileRead.forward(path, start_offset=0, budget=10)
 
     assert result.hit_budget is True
     assert result.next_offset == 10  # forced whole-window consumption, not a stall at 0
@@ -317,7 +317,7 @@ def test_read_forward_a_narrow_non_ceiling_budget_never_force_consumes(tmp_path:
     path.write_bytes(b"x" * 100)  # one ordinary-width record — not oversized
     assert source_module.MAX_BATCH_BYTES > 10  # the budget below is a small fraction of the real ceiling
 
-    result = source_module._read_forward(path, start_offset=0, budget=10)
+    result = source_module.FileRead.forward(path, start_offset=0, budget=10)
 
     assert result.hit_budget is True  # more remains — correctly reported
     assert result.next_offset == 0  # but NOT force-consumed
@@ -332,7 +332,7 @@ def test_read_forward_a_live_appended_partial_line_within_the_budget_waits(tmp_p
     path = tmp_path / "partial.jsonl"
     path.write_bytes(b"x" * 5)  # shorter than the budget below, still no newline
 
-    result = source_module._read_forward(path, start_offset=0, budget=100)
+    result = source_module.FileRead.forward(path, start_offset=0, budget=100)
 
     assert result.hit_budget is False
     assert result.next_offset == 0
@@ -728,7 +728,7 @@ def test_forward_read_resumes_a_partially_delivered_sidecar_from_its_recorded_of
 @pytest.mark.unit
 def test_a_sidecar_position_past_its_files_current_size_starts_that_sidecar_over(tmp_path: Path) -> None:
     """The sidecar twin of the main file's past-EOF clamp: a stale recorded offset
-    restarts that sidecar from 0 rather than reaching `_read_forward`'s own clamp
+    restarts that sidecar from 0 rather than reaching `FileRead.forward`'s own clamp
     (whose negative delta would inflate the budget) or silently skipping its content."""
     project_dir = "-home-user-workspace"
     main_lines = [
@@ -855,15 +855,15 @@ def test_a_sidecar_that_fails_to_open_logs_warning_and_the_batch_stays_available
     sidecar_path.write_text(fx.sidecar_record("hello", agent_id="agent-abc") + "\n")
 
     # `is_file()` gates entry, so a directory never reaches `open()` for a sidecar —
-    # patch `_read_cold` to raise for this path instead, portable across root/non-root.
-    orig_read_cold = source_module._read_cold
+    # patch the cold read to raise for this path instead, portable across root/non-root.
+    orig_cold = source_module.FileRead.cold
 
-    def failing_read_cold(path: Path) -> object:
+    def failing_cold(path: Path) -> object:
         if path == sidecar_path:
             raise OSError("simulated sidecar read failure")
-        return orig_read_cold(path)
+        return orig_cold(path)
 
-    monkeypatch.setattr(source_module, "_read_cold", failing_read_cold)
+    monkeypatch.setattr(source_module.FileRead, "cold", staticmethod(failing_cold))
     source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
 
     with capture_logs() as logs:

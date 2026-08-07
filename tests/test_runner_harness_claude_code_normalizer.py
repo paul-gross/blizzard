@@ -11,7 +11,7 @@ import json
 import pytest
 
 from blizzard.runner.harness.internal import claude_code_normalizer as normalizer_module
-from blizzard.runner.harness.internal.claude_code_normalizer import normalize_lines
+from blizzard.runner.harness.internal.claude_code_normalizer import Record, Run, normalize_lines
 from tests import transcript_fixtures as fx
 
 # --- Record collapse — env/asst/tool ---
@@ -443,9 +443,8 @@ def test_prompt_timestamp_route_treats_a_candidate_with_no_timestamp_as_a_non_ma
 
 @pytest.mark.unit
 def test_prompt_timestamp_route_tolerates_an_offset_less_candidate_timestamp() -> None:
-    """`_parse_timestamp` coerces an offset-less stamp to UTC rather than leaving it
-    naive, so comparing an offset-less and an aware timestamp never raises
-    `TypeError`."""
+    """`Record.at` coerces an offset-less stamp to UTC rather than leaving it naive,
+    so comparing an offset-less and an aware timestamp never raises `TypeError`."""
     lines = [
         fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}, uuid="spawn-1", ts="2026-07-16T09:59:00Z"),
         fx.sidechain_run_record("find X", uuid="run-root", parent_uuid="orphan", role="user", ts="2026-07-16T10:00:00"),
@@ -473,7 +472,7 @@ def test_unresolvable_inline_sidechain_surfaces_unlinked_not_among_top_level_tur
 
 
 @pytest.mark.unit
-def test_group_sidechain_runs_stays_fast_and_correct_under_duplicate_uuid_values() -> None:
+def test_threading_stays_fast_under_duplicate_uuid_values() -> None:
     """A duplicate `uuid` value shared by every record on a chain — not a shared
     `parentUuid` alone — is what degrades a naive per-link rescan to quadratic."""
     import time
@@ -496,13 +495,15 @@ def test_group_sidechain_runs_stays_fast_and_correct_under_duplicate_uuid_values
         )
 
     start = time.monotonic()
-    runs = normalizer_module._group_sidechain_runs(records)
+    runs = Run.thread([Record(r) for r in records])
     elapsed = time.monotonic() - start
 
-    assert elapsed < 5.0, f"grouping {len(records)} duplicate-uuid records took {elapsed:.1f}s — likely quadratic again"
+    assert elapsed < 5.0, (
+        f"threading {len(records)} duplicate-uuid records took {elapsed:.1f}s — likely quadratic again"
+    )
     assert len(runs) == 1
-    assert len(runs[0]) == n + 1
-    assert [r["message"]["content"] for r in runs[0][1:]] == [f"link {i}" for i in range(n)]
+    assert len(runs[0].records) == n + 1
+    assert [r.content for r in runs[0].records[1:]] == [f"link {i}" for i in range(n)]
 
 
 # --- New: sidecar-file normalization (is_sidechain_file=True) ---

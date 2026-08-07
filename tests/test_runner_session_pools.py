@@ -15,7 +15,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.graph import SessionMode
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource, mangle_cwd
+from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.loop.steps import Advance, Fill, Pull
@@ -559,7 +559,7 @@ def test_max_transcript_bytes_fires_against_the_real_repository_at_the_productio
     store = _store(tmp_path)
     head = _seed_head(store)
     projects_root = tmp_path / "projects"
-    project_dir = projects_root / mangle_cwd("/ws/e1")
+    project_dir = projects_root / ClaudeCodeTranscriptSource.mangle_cwd("/ws/e1")
     project_dir.mkdir(parents=True)
     (project_dir / f"{head}.jsonl").write_text("x" * 5000)
     source = ClaudeCodeTranscriptSource(str(projects_root), TranscriptErrorFactory(get_logger("test")))
