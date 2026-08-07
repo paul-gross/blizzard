@@ -11,6 +11,7 @@ import html
 import json
 import re
 import secrets
+from dataclasses import dataclass
 from datetime import timedelta
 from urllib.parse import quote
 
@@ -23,8 +24,9 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, resolve_identity
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.service import CLI_CLIENT_ID
+from blizzard.hub.auth.signing import SigningKeyService
+from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE
-from blizzard.hub.domain.registry import RunnerRegistration
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -33,20 +35,141 @@ JWT_TTL = timedelta(seconds=60)
 
 _RESPONSE_MODES = {"form_post", "fragment"}
 
-#: The ``cli`` client id's built-in redirect form (issue #96) — an ephemeral
-#: ``127.0.0.1`` loopback callback, or the fixed out-of-band paste-code marker.
 _CLI_LOOPBACK_REDIRECT_RE = re.compile(r"^http://127\.0\.0\.1:\d+/callback$")
 CLI_OOB_REDIRECT_URI = "urn:ietf:wg:oauth:2.0:oob"
 
 
-def _valid_cli_redirect_uri(redirect_uri: str) -> bool:
-    return redirect_uri == CLI_OOB_REDIRECT_URI or bool(_CLI_LOOPBACK_REDIRECT_RE.match(redirect_uri))
+@dataclass(frozen=True)
+class CliRedirect:
+    """The ``cli`` client id's built-in redirect form (issue #96) — an ephemeral ``127.0.0.1``
+    loopback callback, or the fixed out-of-band paste-code marker."""
+
+    uri: str
+
+    @property
+    def out_of_band(self) -> bool:
+        return self.uri == CLI_OOB_REDIRECT_URI
+
+    @property
+    def valid(self) -> bool:
+        return self.out_of_band or bool(_CLI_LOOPBACK_REDIRECT_RE.match(self.uri))
 
 
-def _resolve_client(services, client: str) -> RunnerRegistration | None:  # type: ignore[no-untyped-def]
-    """Resolve an authorize ``client`` id to its registered redirect set — only a
-    registered runner is a valid client on this branch."""
-    return services.registry.get_runner(client)
+@dataclass(frozen=True)
+class IdpSurface:
+    """The hub's own IdP, resolved for one request — absent, and so a ``404``, without an
+    oauth-mode hub and a signing keypair."""
+
+    request: Request
+
+    @classmethod
+    def of(cls, request: Request) -> IdpSurface:
+        if request.app.state.config.auth.mode == AUTH_MODE_NONE:
+            raise cls._absent()
+        return cls(request)
+
+    @property
+    def services(self) -> HubServices:
+        return get_services(self.request)
+
+    @property
+    def signing(self) -> SigningKeyService:
+        signing = self.services.signing
+        if signing is None:
+            raise self._absent()
+        return signing
+
+    @staticmethod
+    def _absent() -> HTTPException:
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")
+
+
+@dataclass(frozen=True)
+class Delivery:
+    """One rendered handoff of an authorize result back to the client that asked for it."""
+
+    redirect_uri: str
+    state: str
+
+    @classmethod
+    def cli_code(cls, *, redirect_uri: str, code: str, state: str) -> Delivery:
+        if CliRedirect(redirect_uri).out_of_band:
+            return PasteCode(redirect_uri, state, code)
+        return LoopbackCode(redirect_uri, state, code)
+
+    @classmethod
+    def federation_token(cls, *, redirect_uri: str, token: str, state: str, response_mode: str) -> Delivery:
+        """A token is **never** put in a query string (AC)."""
+        if response_mode == "fragment":
+            return FragmentToken(redirect_uri, state, token)
+        return FormPostToken(redirect_uri, state, token)
+
+    def response(self) -> HTMLResponse | RedirectResponse:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class PasteCode(Delivery):
+    """The out-of-band fallback: the code rendered for the operator to copy by hand."""
+
+    code: str
+
+    def response(self) -> HTMLResponse:
+        escaped = html.escape(self.code)
+        body = (
+            "<!doctype html><html><body>"
+            "<p>Copy this code and paste it into the waiting <code>blizzard hub login</code> prompt:</p>"
+            f'<pre style="font-size:1.5em">{escaped}</pre>'
+            "</body></html>"
+        )
+        return HTMLResponse(body)
+
+
+@dataclass(frozen=True)
+class LoopbackCode(Delivery):
+    """The loopback callback: a ``302`` carrying the code in the query string."""
+
+    code: str
+
+    def response(self) -> RedirectResponse:
+        separator = "&" if "?" in self.redirect_uri else "?"
+        target = f"{self.redirect_uri}{separator}code={quote(self.code, safe='')}&state={quote(self.state, safe='')}"
+        return RedirectResponse(target, status_code=status.HTTP_302_FOUND)
+
+
+@dataclass(frozen=True)
+class FragmentToken(Delivery):
+    """A client-side redirect that carries the token in the URL fragment."""
+
+    token: str
+
+    def response(self) -> HTMLResponse:
+        target = f"{self.redirect_uri}#token={self.token}&state={self.state}"
+        # `json.dumps` alone is not script-context-safe against a `</script>` breakout;
+        # `target` cannot carry one here, but the substitution is defensive.
+        script_safe = json.dumps(target).replace("</", "<\\/")
+        body = f"<!doctype html><html><body><script>location.replace({script_safe});</script></body></html>"
+        return HTMLResponse(body)
+
+
+@dataclass(frozen=True)
+class FormPostToken(Delivery):
+    """An auto-submitting form that POSTs the token to the redirect target."""
+
+    token: str
+
+    def response(self) -> HTMLResponse:
+        action = html.escape(self.redirect_uri, quote=True)
+        token_value = html.escape(self.token, quote=True)
+        state_value = html.escape(self.state, quote=True)
+        body = (
+            '<!doctype html><html><body onload="document.forms[0].submit()">'
+            f'<form method="post" action="{action}">'
+            f'<input type="hidden" name="token" value="{token_value}">'
+            f'<input type="hidden" name="state" value="{state_value}">'
+            "</form></body></html>"
+        )
+        return HTMLResponse(body)
 
 
 @router.get("/authorize", response_model=None)
@@ -59,17 +182,15 @@ def authorize(
     code_challenge: str | None = None,
     code_challenge_method: str | None = None,
 ) -> HTMLResponse | RedirectResponse:
-    if request.app.state.config.auth.mode == AUTH_MODE_NONE:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")
+    surface = IdpSurface.of(request)
     if response_mode not in _RESPONSE_MODES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"unknown response_mode {response_mode!r}")
-    services = get_services(request)
-    if services.signing is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")
+    services = surface.services
+    signing = surface.signing
 
     is_cli = client == CLI_CLIENT_ID
     if is_cli:
-        if not _valid_cli_redirect_uri(redirect_uri):
+        if not CliRedirect(redirect_uri).valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="client=cli's redirect_uri must be the registered ephemeral loopback form",
@@ -80,7 +201,7 @@ def authorize(
                 detail="client=cli requires a PKCE code_challenge (S256) — PKCE is mandatory for this public client",
             )
     else:
-        registration = _resolve_client(services, client)
+        registration = services.registry.get_runner(client)
         if registration is None or redirect_uri not in registration.redirect_uris:
             # One undifferentiated 400 for both cases — the open-redirect guard (AC):
             # a caller cannot fingerprint valid client ids by probing.
@@ -112,7 +233,7 @@ def authorize(
         assert user is not None, f"resolved identity {identity.user_id!r} has no backing user row"
         assert code_challenge is not None  # already validated above
         code = services.auth.mint_cli_code(user, code_challenge=code_challenge, redirect_uri=redirect_uri)
-        return _cli_delivery(redirect_uri=redirect_uri, code=code, state=state)
+        return Delivery.cli_code(redirect_uri=redirect_uri, code=code, state=state).response()
 
     email = user.email if user is not None else None
     claims = {
@@ -121,20 +242,18 @@ def authorize(
         "email": email,
         "role": identity.role.value,
         "aud": client,
-        "jti": _mint_jti(),
+        "jti": secrets.token_urlsafe(18),
     }
-    token = services.signing.sign(claims, now=services.clock.now(), ttl=JWT_TTL)
-    return _delivery_page(redirect_uri=redirect_uri, token=token, state=state, response_mode=response_mode)
+    token = signing.sign(claims, now=services.clock.now(), ttl=JWT_TTL)
+    delivery = Delivery.federation_token(
+        redirect_uri=redirect_uri, token=token, state=state, response_mode=response_mode
+    )
+    return delivery.response()
 
 
 @router.get("/jwks.json")
 def jwks(request: Request) -> dict[str, object]:
-    if request.app.state.config.auth.mode == AUTH_MODE_NONE:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")
-    services = get_services(request)
-    if services.signing is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")
-    return services.signing.public_jwks()
+    return IdpSurface.of(request).signing.public_jwks()
 
 
 class CliTokenRequest(BaseModel):
@@ -157,9 +276,7 @@ def cli_token(request: Request, body: CliTokenRequest) -> CliTokenResponse:
 
     Public plane — there is no session yet; this route is what mints one. One
     undifferentiated 400 covers every failure, telling a caller nothing about which."""
-    if request.app.state.config.auth.mode == AUTH_MODE_NONE:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")
-    services = get_services(request)
+    services = IdpSurface.of(request).services
     token = services.auth.exchange_cli_code(body.code, code_verifier=body.code_verifier, redirect_uri=body.redirect_uri)
     if token is None:
         raise HTTPException(
@@ -177,59 +294,5 @@ def cli_token(request: Request, body: CliTokenRequest) -> CliTokenResponse:
 def rotate_signing_key(request: Request) -> Response:
     """Mint a fresh current signing key, demoting the old current to previous (issue
     #95). Human-plane, gated on ``user:manage`` and closed to a runner bearer token."""
-    if request.app.state.config.auth.mode == AUTH_MODE_NONE:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")
-    services = get_services(request)
-    if services.signing is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="the IdP surface is not enabled")
-    services.signing.rotate()
+    IdpSurface.of(request).signing.rotate()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-def _mint_jti() -> str:
-    return secrets.token_urlsafe(18)
-
-
-def _cli_delivery(*, redirect_uri: str, code: str, state: str) -> HTMLResponse | RedirectResponse:
-    """Deliver a ``client=cli`` authorize code (issue #96) — a 302 carrying the code in
-    the query string for the loopback form, or a paste-able page for out-of-band."""
-    if redirect_uri == CLI_OOB_REDIRECT_URI:
-        return _paste_code_page(code)
-    separator = "&" if "?" in redirect_uri else "?"
-    target = f"{redirect_uri}{separator}code={quote(code, safe='')}&state={quote(state, safe='')}"
-    return RedirectResponse(target, status_code=status.HTTP_302_FOUND)
-
-
-def _paste_code_page(code: str) -> HTMLResponse:
-    """The paste-code fallback's rendered page (issue #96)."""
-    escaped = html.escape(code)
-    body = (
-        "<!doctype html><html><body>"
-        "<p>Copy this code and paste it into the waiting <code>blizzard hub login</code> prompt:</p>"
-        f'<pre style="font-size:1.5em">{escaped}</pre>'
-        "</body></html>"
-    )
-    return HTMLResponse(body)
-
-
-def _delivery_page(*, redirect_uri: str, token: str, state: str, response_mode: str) -> HTMLResponse:
-    """Render the token delivery — **never** a query string (AC): either an
-    auto-submitting ``form_post`` or a client-side redirect into the URL fragment."""
-    if response_mode == "fragment":
-        target = f"{redirect_uri}#token={token}&state={state}"
-        # `json.dumps` alone is not script-context-safe against a `</script>` breakout;
-        # `target` cannot carry one here, but the substitution is defensive.
-        script_safe = json.dumps(target).replace("</", "<\\/")
-        body = f"<!doctype html><html><body><script>location.replace({script_safe});</script></body></html>"
-        return HTMLResponse(body)
-    action = html.escape(redirect_uri, quote=True)
-    token_value = html.escape(token, quote=True)
-    state_value = html.escape(state, quote=True)
-    body = (
-        '<!doctype html><html><body onload="document.forms[0].submit()">'
-        f'<form method="post" action="{action}">'
-        f'<input type="hidden" name="token" value="{token_value}">'
-        f'<input type="hidden" name="state" value="{state_value}">'
-        "</form></body></html>"
-    )
-    return HTMLResponse(body)

@@ -7,17 +7,21 @@ reach these to log in at all. Under ``auth.mode = "none"`` every route here is i
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-from blizzard.foundation.forwarded import TrustedProxies
+from blizzard.foundation.origin import Origin
+from blizzard.foundation.return_to import ReturnTo
 from blizzard.hub.api.auth_session import _SESSION_COOKIE_NAME, _presented_session_id
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.hashing import hash_session_id
-from blizzard.hub.auth.oauth.provider import OAuthExchangeError
+from blizzard.hub.auth.oauth.provider import IOAuthProvider, OAuthExchangeError
 from blizzard.hub.auth.service import ABSOLUTE_MAX_AGE, PROVIDER_LOGIN_STATE_KIND
+from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -33,31 +37,58 @@ class ProviderSummary(BaseModel):
     type: str
 
 
-def _client_ip(request: Request, trusted: TrustedProxies) -> str:
-    """The effective client IP the throttle keys on and the auth facts record — the
-    ``X-Forwarded-For`` client when the direct peer is a trusted proxy (issue #130),
-    else the direct peer (``"unknown"`` for a peer-less connection)."""
-    direct = request.client.host if request.client is not None else "unknown"
-    return trusted.effective_client_ip(direct_peer=direct, forwarded_for=request.headers.get("x-forwarded-for"))
+@dataclass(frozen=True)
+class LoginRefusal:
+    """A refused login attempt against one provider: the fact it records, and the opaque
+    ``400`` the browser is handed — never which of the checks it failed."""
+
+    facts: AuthFactsService
+    actor: str
+    subject: str
+
+    def login_failed(self, detail: str) -> Response:
+        self.facts.login_failed(actor=self.actor, subject=self.subject, detail=detail)
+        return self._response("login_failed")
+
+    def sso_refused(self, detail: str) -> Response:
+        self.facts.sso_refused(actor=self.actor, subject=self.subject, detail=detail)
+        return self._response("sso_refused")
+
+    def _response(self, error: str) -> Response:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"error": error})
 
 
-def _secure_cookie(request: Request, trusted: TrustedProxies) -> bool:
-    """Whether the session cookie is minted ``Secure`` — keyed on the effective scheme,
-    which honors ``X-Forwarded-Proto`` only from a trusted proxy (issue #130)."""
-    scheme = trusted.effective_scheme(
-        direct_scheme=request.url.scheme,
-        peer=request.client.host if request.client is not None else None,
-        forwarded_proto=request.headers.get("x-forwarded-proto"),
-    )
-    return scheme == "https"
+@dataclass(frozen=True)
+class ProviderLogin:
+    """One call at a named provider's login routes, and the hub state it is judged against."""
 
+    request: Request
+    services: HubServices
+    name: str
 
-def _safe_return_to(raw: str | None) -> str:
-    """Only a same-origin relative path is honored — anything else (an absolute URL,
-    a protocol-relative ``//host`` — an open-redirect vector) falls back to ``/``."""
-    if raw and raw.startswith("/") and not raw.startswith("//"):
-        return raw
-    return "/"
+    @classmethod
+    def of(cls, request: Request, name: str) -> ProviderLogin:
+        return cls(request, get_services(request), name)
+
+    @property
+    def origin(self) -> Origin:
+        return Origin(self.request, self.services.trusted_proxies)
+
+    @property
+    def provider(self) -> IOAuthProvider | None:
+        return self.services.oauth_providers.get(self.name)
+
+    @property
+    def callback_url(self) -> str:
+        return f"{str(self.request.base_url).rstrip('/')}/api/auth/{self.name}/callback"
+
+    @property
+    def refusal(self) -> LoginRefusal:
+        return LoginRefusal(self.services.auth_facts, actor=self.origin.ip, subject=self.name)
+
+    def assert_not_throttled(self) -> None:
+        if not self.services.auth_throttle.allow(self.origin.ip):
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_THROTTLE_DETAIL)
 
 
 @router.get("/providers", response_model=list[ProviderSummary])
@@ -74,52 +105,43 @@ def list_providers(request: Request) -> list[ProviderSummary]:
 def authorize(name: str, request: Request, return_to: str | None = None) -> RedirectResponse:
     if request.app.state.config.auth.mode == AUTH_MODE_NONE:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="login is not enabled")
-    services = get_services(request)
-    if not services.auth_throttle.allow(_client_ip(request, services.trusted_proxies)):
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_THROTTLE_DETAIL)
-    provider = services.oauth_providers.get(name)
+    login = ProviderLogin.of(request, name)
+    login.assert_not_throttled()
+    provider = login.provider
     if provider is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown provider {name!r}")
-    state = services.auth.start_state(
-        kind=PROVIDER_LOGIN_STATE_KIND, provider_name=name, return_to=_safe_return_to(return_to)
+    state = login.services.auth.start_state(
+        kind=PROVIDER_LOGIN_STATE_KIND, provider_name=name, return_to=ReturnTo(return_to).safe
     )
-    redirect_uri = _callback_url(request, name)
-    return RedirectResponse(provider.authorize_url(state=state, redirect_uri=redirect_uri))
+    return RedirectResponse(provider.authorize_url(state=state, redirect_uri=login.callback_url))
 
 
 @router.get("/{name}/callback")
 def callback(name: str, request: Request, code: str | None = None, state: str | None = None) -> Response:
     if request.app.state.config.auth.mode == AUTH_MODE_NONE:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="login is not enabled")
-    services = get_services(request)
-    client_ip = _client_ip(request, services.trusted_proxies)
-    if not services.auth_throttle.allow(client_ip):
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_THROTTLE_DETAIL)
+    login = ProviderLogin.of(request, name)
+    login.assert_not_throttled()
+    refusal = login.refusal
 
-    entry = services.auth.consume_state(state) if state else None
+    entry = login.services.auth.consume_state(state) if state else None
     if entry is None or entry.kind != PROVIDER_LOGIN_STATE_KIND:
-        return _login_failed(services.auth_facts, actor=client_ip, subject=name, detail="bad or expired state")
+        return refusal.login_failed("bad or expired state")
     if entry.provider_name != name:
-        # A state minted for one provider presented to another's callback — a
-        # cross-provider replay/tamper attempt, refused outright.
-        services.auth_facts.sso_refused(
-            actor=client_ip,
-            subject=name,
-            detail=f"state minted for provider {entry.provider_name!r}",
-        )
-        return _error_response(status.HTTP_400_BAD_REQUEST, "sso_refused")
+        # A state minted for one provider presented to another's callback — a replay/tamper attempt.
+        return refusal.sso_refused(f"state minted for provider {entry.provider_name!r}")
 
-    provider = services.oauth_providers.get(name)
+    provider = login.provider
     if provider is None or code is None:
-        return _login_failed(services.auth_facts, actor=client_ip, subject=name, detail="missing code")
+        return refusal.login_failed("missing code")
 
     try:
-        identity = provider.exchange(code=code, redirect_uri=_callback_url(request, name))
+        identity = provider.exchange(code=code, redirect_uri=login.callback_url)
     except OAuthExchangeError as exc:
-        return _login_failed(services.auth_facts, actor=client_ip, subject=name, detail=str(exc))
+        return refusal.login_failed(str(exc))
 
-    user = services.auth.link_or_mint(identity, provider_name=name)
-    plaintext, _session = services.auth.mint_session(user)
+    user = login.services.auth.link_or_mint(identity, provider_name=name)
+    plaintext, _session = login.services.auth.mint_session(user)
 
     response = RedirectResponse(entry.return_to, status_code=status.HTTP_302_FOUND)
     response.set_cookie(
@@ -127,7 +149,7 @@ def callback(name: str, request: Request, code: str | None = None, state: str | 
         plaintext,
         httponly=True,
         samesite="lax",
-        secure=_secure_cookie(request, services.trusted_proxies),
+        secure=login.origin.secure,
         max_age=int(ABSOLUTE_MAX_AGE.total_seconds()),
     )
     return response
@@ -146,16 +168,3 @@ def logout(request: Request, response: Response) -> Response:
     response.delete_cookie(_SESSION_COOKIE_NAME)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
-
-
-def _callback_url(request: Request, name: str) -> str:
-    return f"{str(request.base_url).rstrip('/')}/api/auth/{name}/callback"
-
-
-def _login_failed(facts: AuthFactsService, *, actor: str, subject: str, detail: str) -> Response:
-    facts.login_failed(actor=actor, subject=subject, detail=detail)
-    return _error_response(status.HTTP_400_BAD_REQUEST, "login_failed")
-
-
-def _error_response(status_code: int, error: str) -> Response:
-    return JSONResponse(status_code=status_code, content={"error": error})
