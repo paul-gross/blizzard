@@ -21,6 +21,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.api.marker_auth import require_marker_authority
 from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
@@ -35,7 +36,6 @@ from blizzard.hub.domain.edit import (
     MigrationTargetIsCurrentPin,
     TargetGraphRetired,
 )
-from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.pause import ChunkNotPausable
@@ -108,19 +108,7 @@ def publish_open_decision(services: HubServices, chunk_id: str) -> None:
         services.events.publish_decision_opened(chunk_id, decision.decision_id, key=f"decisions:{decision.decision_id}")
 
 
-def _node_name(graph: Graph | None, node_id: str | None) -> str | None:
-    """The human graph name for ``node_id`` in ``graph``, or ``None`` when unresolvable."""
-    if graph is None or node_id is None:
-        return None
-    node = graph.node_by_id(node_id)
-    return node.name if node is not None else None
-
-
-def _graph_name(graph: Graph | None) -> str | None:
-    return graph.name if graph is not None else None
-
-
-def _history_views(facts: ChunkFacts, graphs: dict[str | None, Graph | None]) -> list[TransitionView]:
+def _history_views(facts: ChunkFacts, names: GraphNames) -> list[TransitionView]:
     """The chunk's transitions oldest-first.
 
     Each edge's node ids resolve against *the graph the transition happened in* (issue
@@ -128,24 +116,23 @@ def _history_views(facts: ChunkFacts, graphs: dict[str | None, Graph | None]) ->
     ``tests/test_transition_graph_provenance.py``)."""
     views: list[TransitionView] = []
     for t in facts.transition_history():
-        graph = graphs.get(t.graph_id)
         views.append(
             TransitionView(
                 from_node_id=t.from_node_id,
-                from_node_name=_node_name(graph, t.from_node_id),
+                from_node_name=names.node_name(t.graph_id, t.from_node_id),
                 to_node_id=t.to_node_id,
-                to_node_name=_node_name(graph, t.to_node_id),
+                to_node_name=names.node_name(t.graph_id, t.to_node_id),
                 choice_name=t.choice_name,
                 epoch=t.epoch,
                 recorded_at=iso_utc(t.recorded_at),
                 graph_id=t.graph_id,
-                graph_name=_graph_name(graph),
+                graph_name=names.graph_name(t.graph_id),
             )
         )
     return views
 
 
-def _migration_views(facts: ChunkFacts, graphs: dict[str | None, Graph | None]) -> list[MigrationView]:
+def _migration_views(facts: ChunkFacts, names: GraphNames) -> list[MigrationView]:
     """The chunk's cross-graph migration steps oldest-first (issue #90).
 
     Each step names the graph it left and the graph it re-pinned to: ``from_node``
@@ -153,18 +140,16 @@ def _migration_views(facts: ChunkFacts, graphs: dict[str | None, Graph | None]) 
     side's own graph, so neither degrades to a raw id when the two differ."""
     views: list[MigrationView] = []
     for m in sorted(facts.migrations, key=lambda m: (m.recorded_at, m.epoch)):
-        from_graph = graphs.get(m.from_graph_id)
-        to_graph = graphs.get(m.to_graph_id)
         views.append(
             MigrationView(
                 from_node_id=m.from_node_id,
-                from_node_name=_node_name(from_graph, m.from_node_id),
+                from_node_name=names.node_name(m.from_graph_id, m.from_node_id),
                 from_graph_id=m.from_graph_id,
-                from_graph_name=_graph_name(from_graph),
+                from_graph_name=names.graph_name(m.from_graph_id),
                 to_graph_id=m.to_graph_id,
-                to_graph_name=_graph_name(to_graph),
+                to_graph_name=names.graph_name(m.to_graph_id),
                 landed_node_id=m.landed_node_id,
-                landed_node_name=_node_name(to_graph, m.landed_node_id),
+                landed_node_name=names.node_name(m.to_graph_id, m.landed_node_id),
                 choice_name=m.choice_name,
                 model=m.model,
                 source=m.source.value if m.source is not None else None,
@@ -174,40 +159,18 @@ def _migration_views(facts: ChunkFacts, graphs: dict[str | None, Graph | None]) 
     return views
 
 
-def _intended_migration_view(services: HubServices, chunk: Chunk) -> IntendedMigrationView | None:
+def _intended_migration_view(chunk: Chunk, names: GraphNames) -> IntendedMigrationView | None:
     """The chunk's standing migration intent as a view (issue #124), or ``None`` when no
-    intent is set. ``graph_name`` is resolved from the stored ``graph_id`` the same way
-    ``_migration_views`` resolves a recorded migration's target name — null when the
-    target graph cannot be resolved."""
+    intent is set."""
     intent = chunk.intended_migration
     if intent is None:
         return None
-    target_graph = services.graphs.get(intent.graph_id)
     return IntendedMigrationView(
         mode=intent.mode,
         graph_id=intent.graph_id,
-        graph_name=_graph_name(target_graph),
+        graph_name=names.graph_name(intent.graph_id),
         node_name=intent.node_name,
     )
-
-
-def _history_graphs(services: HubServices, chunk: Chunk, facts: ChunkFacts) -> dict[str | None, Graph | None]:
-    """The graphs a chunk's history spans, by id (issue #90).
-
-    The chunk's current pin plus every distinct graph its transitions were recorded in
-    and every graph its migrations left or entered — each resolved once."""
-    graphs: dict[str | None, Graph | None] = {chunk.graph_id: services.graphs.get(chunk.graph_id)}
-
-    def ensure(graph_id: str | None) -> None:
-        if graph_id is not None and graph_id not in graphs:
-            graphs[graph_id] = services.graphs.get(graph_id)
-
-    for t in facts.transitions:
-        ensure(t.graph_id)
-    for m in facts.migrations:
-        ensure(m.from_graph_id)
-        ensure(m.to_graph_id)
-    return graphs
 
 
 def _usage_total_view(facts: ChunkFacts) -> ChunkUsageTotalView:
@@ -288,22 +251,13 @@ def _artifact_views(rows: list[ArtifactRow], web_base: IWorkSource | None) -> li
     return views
 
 
-def _current_node(
-    services: HubServices, chunk: Chunk, facts: ChunkFacts, cache: dict[str, Graph | None]
-) -> tuple[str | None, str | None]:
-    """The chunk's current node as ``(id, name)`` — the newest transition's target, or
-    the pinned graph's entry node before the first transition (a nicer board value than
-    ``None``). The name is the node's human graph name, resolved here so the board is
-    legible without reassembly; the graph per graph_id is memoised in ``cache``
-    so a fleet list resolves each once."""
-    if chunk.graph_id not in cache:
-        cache[chunk.graph_id] = services.graphs.get(chunk.graph_id)
-    graph = cache[chunk.graph_id]
+def _current_node(chunk: Chunk, facts: ChunkFacts, names: GraphNames) -> tuple[str | None, str | None]:
+    """The chunk's current node as ``(id, name)`` — the newest transition's target, or the
+    pinned graph's entry node before the first transition (a nicer board value than ``None``).
+    The name rides along so the board is legible without reassembly."""
+    graph = names.graph(chunk.graph_id)
     node_id = facts.current_node_id() or (graph.entry_node_id if graph is not None else None)
-    if node_id is None:
-        return None, None
-    node = graph.node_by_id(node_id) if graph is not None else None
-    return node_id, node.name if node is not None else None
+    return node_id, names.node_name(chunk.graph_id, node_id)
 
 
 @router.post(
@@ -350,16 +304,13 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
     return ChunkIngestResponse(chunk_id=chunk_id)
 
 
-def _summary_view(
-    services: HubServices, chunk: Chunk, *, graph_cache: dict[str, Graph | None] | None = None
-) -> ChunkSummary:
+def _summary_view(services: HubServices, chunk: Chunk, *, names: GraphNames | None = None) -> ChunkSummary:
     """One chunk's derived fleet-list row (issue #104) — shared by :func:`list_chunks`
     and every transition verb (``promote``/``detach``/``pause``/``resume``/``stop``/
     ``requeues``), so both derive the same row from the same facts (``canon:one-owner``).
-    ``graph_cache`` lets a full-list caller memoise each graph lookup across chunks; a
-    single-chunk caller (a transition verb) gets a fresh one when it passes none."""
+    A full-list caller passes its own :class:`GraphNames` to share resolution across chunks."""
     facts = services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
-    node_id, node_name = _current_node(services, chunk, facts, graph_cache if graph_cache is not None else {})
+    node_id, node_name = _current_node(chunk, facts, names or GraphNames(services.graphs.get))
     status = facts.status()
     # A finished chunk holds no claim (issue #140) — the rule is `holds_claim`'s. Asked
     # before the read so a terminal chunk costs no `route_of` query at all.
@@ -384,8 +335,8 @@ def _summary_view(
 @router.get("/chunks", response_model=list[ChunkSummary], dependencies=[Depends(require(FLEET_VIEW))])
 def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list[ChunkSummary]:
     """The fleet chunk list — derived status per chunk."""
-    graph_cache: dict[str, Graph | None] = {}
-    return [_summary_view(services, chunk, graph_cache=graph_cache) for chunk in services.chunks.list_all()]
+    names = GraphNames(services.graphs.get)
+    return [_summary_view(services, chunk, names=names) for chunk in services.chunks.list_all()]
 
 
 def fleet_summary(services: HubServices) -> FleetSummaryView:
@@ -417,11 +368,10 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     escalation = facts.open_escalation()
     pause = facts.open_pause()
     decision = services.chunks.decision_for_chunk(chunk_id)
-    graph = services.graphs.get(chunk.graph_id)
-    node_id = facts.current_node_id() or (graph.entry_node_id if graph is not None else None)
-    node_name = _node_name(graph, node_id)
+    names = GraphNames(services.graphs.get)
+    graph = names.graph(chunk.graph_id)
+    node_id, node_name = _current_node(chunk, facts, names)
     web_base = _branch_url_source(chunk, services.work_sources)
-    history_graphs = _history_graphs(services, chunk, facts)
     artifacts = services.chunks.load_artifacts(chunk_id)
     pending = facts.hub_node_pending()
     pending_view = None
@@ -433,7 +383,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     return ChunkDetail(
         chunk_id=chunk.chunk_id,
         graph_id=chunk.graph_id,
-        graph_name=_graph_name(graph),
+        graph_name=names.graph_name(chunk.graph_id),
         graph_created_at=iso_utc(graph.created_at) if graph is not None else None,
         status=facts.status(),
         current_node_id=node_id,
@@ -442,7 +392,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         work_refs=_pointer_views(chunk, services.work_sources),
         default_model=list(chunk.default_model),
         default_effort=chunk.default_effort,
-        intended_migration=_intended_migration_view(services, chunk),
+        intended_migration=_intended_migration_view(chunk, names),
         route=RouteView(
             runner_id=route.runner_id,
             workspace_id=route.workspace_id,
@@ -459,8 +409,8 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         else None,
         pause=PauseView(by=pause.set_by, set_at=iso_utc(pause.set_at)) if pause is not None else None,
         decision=to_decision_view(decision) if decision is not None else None,
-        history=_history_views(facts, history_graphs),
-        migrations=_migration_views(facts, history_graphs),
+        history=_history_views(facts, names),
+        migrations=_migration_views(facts, names),
         artifacts=_artifact_views(artifacts, web_base),
         questions=[question_view(q) for q in services.chunks.load_questions(chunk_id)],
         awaiting_external_merge=facts.awaiting_external_merge(),
@@ -690,7 +640,7 @@ def patch_chunk(
         graph_id=updated.graph_id,
         default_model=list(updated.default_model),
         default_effort=updated.default_effort,
-        intended_migration=_intended_migration_view(services, updated),
+        intended_migration=_intended_migration_view(updated, GraphNames(services.graphs.get)),
     )
 
 
