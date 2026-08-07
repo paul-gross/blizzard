@@ -94,7 +94,7 @@ class IHubClient(Protocol):
         hub command node one step (#65/#66).
 
         ``ran=False`` means the hub declined to run a step this call — simply retried on a
-        later :func:`~blizzard.runner.loop.steps.advance` tick."""
+        later :class:`~blizzard.runner.loop.steps.Advance` tick."""
         ...
 
     def get_question(self, question_id: str) -> QuestionView:

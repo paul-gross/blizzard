@@ -15,7 +15,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop.steps import advance, pull, reap
+from blizzard.runner.loop.steps import Advance, Pull, Reap
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.facts import ANSWER_DELIVERED, QUESTION_ASKED
@@ -104,7 +104,7 @@ def test_exited_worker_with_open_ask_parks_without_a_verdict(tmp_path):  # type:
         store, hub=FakeHub(), provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe()
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     # Parked: the reap clock is stopped.
     assert store.parked_lease_ids() == {"lease_1"}
@@ -134,8 +134,8 @@ def test_park_is_not_repeated_and_never_elicits_a_verdict(tmp_path):  # type: ig
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    advance(ctx)  # parks
-    advance(ctx)  # still parked, answer not yet in — a no-op poll
+    Advance(ctx).run()  # parks
+    Advance(ctx).run()  # still parked, answer not yet in — a no-op poll
 
     assert store.parked_lease_ids() == {"lease_1"}
     assert len([f for f in store.pending_outbound() if f.kind == QUESTION_ASKED]) == 1  # not re-forwarded
@@ -162,7 +162,7 @@ def test_parked_lease_is_not_reaped_though_pid_reads_alive_and_stale(tmp_path): 
     probe = FakeProbe(alive={(_HANDLE_PID, _HANDLE_START)})
     ctx = _ctx(store, probe=probe, clock=FixedClock(later))
 
-    reap(ctx)
+    Reap(ctx).run()
 
     assert store.active_lease("lease_1") is not None  # not closed
     assert probe.killed == []  # not killed
@@ -193,7 +193,7 @@ def test_ask_forwards_correctly_while_a_pause_park_exists(tmp_path):  # type: ig
         store, hub=FakeHub(), provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe()
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     # The ask-park landed on lease_1 alongside the pre-existing pause-park on the
     # unrelated lease_other — parked_lease_ids() is their union (§1.3).
@@ -226,7 +226,7 @@ def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path):  # t
     harness.resume_pid = 4321
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    advance(ctx)
+    Advance(ctx).run()
 
     # The dormant session was resumed around the answer — same session id, same lease.
     assert harness.resumed == [("/ws/e1", "sess-a", "# Answer from alice. Continue.\nrest")]
@@ -270,12 +270,12 @@ def test_worker_resumed_after_a_park_past_the_threshold_survives_the_next_reap(t
         clock=FixedClock(answered_at),
     )
 
-    advance(ctx)
+    Advance(ctx).run()
     resumed = store.active_lease("lease_1")
     assert resumed is not None and resumed.pid == 4321
 
     # The next tick, half a minute into the resumed worker's first inference turn.
-    reap(
+    Reap(
         make_context(
             store,
             hub=hub,
@@ -284,7 +284,7 @@ def test_worker_resumed_after_a_park_past_the_threshold_survives_the_next_reap(t
             probe=resumed_probe,
             clock=FixedClock(answered_at + timedelta(seconds=30)),
         )
-    )
+    ).run()
 
     assert store.active_lease("lease_1") is not None  # not reaped
     assert resumed_probe.killed == []
@@ -319,7 +319,7 @@ def test_a_chunk_stopped_hub_side_while_parked_on_an_ask_retires_the_open_park(t
     )
     ctx = _ctx(store, hub=hub)
 
-    pull(ctx)
+    Pull(ctx).run()
 
     # The lease is closed, the ask-park is retired, and the environment is freed — no
     # facet of this abandoned, ask-parked chunk lingers as "open" or "held".

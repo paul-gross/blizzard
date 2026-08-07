@@ -36,14 +36,7 @@ from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.spawn import Spawner
-from blizzard.runner.loop.steps import (
-    advance,
-    fill,
-    mark_resume_intents,
-    pull,
-    reap,
-    resume,
-)
+from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
@@ -142,7 +135,7 @@ def test_fill_claims_acquires_binds_and_spawns(tmp_path):  # type: ignore[no-unt
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
 
-    fill(ctx)
+    Fill(ctx).run()
 
     assert len(hub.claims) == 1
     assert hub.claims[0].environment_ids == ["e1"]
@@ -175,7 +168,7 @@ def test_spawn_preamble_carries_lease_and_local_api(tmp_path):  # type: ignore[n
         config=LoopConfig(runner_id="r1", workspace_id="ws1", local_api_url="http://127.0.0.1:9999"),
     )
 
-    fill(ctx)
+    Fill(ctx).run()
 
     _, preamble = harness.spawns[0]
     lease = store.active_lease_for_chunk("ch_1")
@@ -197,7 +190,7 @@ def test_route_token_never_reaches_the_worker_preamble_or_prompt(tmp_path):  # t
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    fill(ctx)
+    Fill(ctx).run()
 
     assert store.route_token("ch_1") == "super-secret-route-token"  # stashed locally, as expected
     _, preamble = harness.spawns[0]
@@ -227,14 +220,14 @@ def test_fill_reports_lease_mint_to_hub(tmp_path):  # type: ignore[no-untyped-de
         probe=FakeProbe(),
     )
 
-    fill(ctx)
+    Fill(ctx).run()
 
     # The lease.minted rides the outbound buffer (store-and-forward); PULL's
     # flusher reports it up to POST /events, so it is not pushed inline at spawn.
     buffered = [b for b in store.pending_outbound() if b.kind == LEASE_MINTED]
     assert len(buffered) == 1
     assert json.loads(buffered[0].payload) == {"chunk_id": "ch_1", "epoch": 1, "route_token": "rtok_test"}
-    pull(ctx)
+    Pull(ctx).run()
     assert [(f.kind, f.payload["epoch"]) for f in hub.pushed] == [(LEASE_MINTED, 1)]
 
 
@@ -254,7 +247,7 @@ def test_fill_stashes_the_claims_route_token(tmp_path):  # type: ignore[no-untyp
         probe=FakeProbe(),
     )
 
-    fill(ctx)
+    Fill(ctx).run()
 
     assert store.route_token("ch_1") == "rtok-abc123"
 
@@ -271,7 +264,7 @@ def test_fill_mints_a_lease_capability_token_and_carries_its_plaintext_to_spawn(
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    fill(ctx)
+    Fill(ctx).run()
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
@@ -295,8 +288,8 @@ def test_completion_and_decision_submissions_carry_the_stashed_route_token(tmp_p
         probe=FakeProbe(),
     )
 
-    fill(ctx)  # claims and stashes the token, spawns the worker
-    advance(ctx)  # worker "exited" (FakeProbe reports it dead) — judged and buffered
+    Fill(ctx).run()  # claims and stashes the token, spawns the worker
+    Advance(ctx).run()  # worker "exited" (FakeProbe reports it dead) — judged and buffered
 
     buffered = [b for b in store.pending_outbound() if b.kind == "completion.submitted"]
     assert len(buffered) == 1
@@ -316,8 +309,8 @@ def test_same_runner_requeue_after_failure_reuses_the_same_route_token(tmp_path)
     harness = FakeHarness(handle=_HANDLE, verdict=None)  # no parseable <Choice> -> fail -> requeue
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    fill(ctx)  # claims (epoch 1), stashes the token
-    advance(ctx)  # verdict-less exit -> fail attempt -> requeue in place (fresh lease, epoch 2)
+    Fill(ctx).run()  # claims (epoch 1), stashes the token
+    Advance(ctx).run()  # verdict-less exit -> fail attempt -> requeue in place (fresh lease, epoch 2)
 
     lease_mints = [json.loads(b.payload) for b in store.pending_outbound() if b.kind == LEASE_MINTED]
     assert [m["epoch"] for m in lease_mints] == [1, 2]
@@ -337,7 +330,7 @@ def test_fill_conflict_releases_and_does_not_bind(tmp_path):  # type: ignore[no-
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
 
-    fill(ctx)
+    Fill(ctx).run()
 
     assert provider.released == ["e1"]  # released the acquired-but-unclaimed env
     assert store.held_environment_ids() == []
@@ -360,7 +353,7 @@ def test_fill_paused_denial_releases_and_stops_filling(tmp_path):  # type: ignor
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
 
-    fill(ctx)
+    Fill(ctx).run()
 
     assert len(hub.claims) == 1  # the claim was actually attempted
     assert provider.released == ["e1"]  # released the acquired-but-unclaimed env
@@ -385,7 +378,7 @@ def test_fill_terminal_denial_releases_and_keeps_filling(tmp_path):  # type: ign
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
 
-    fill(ctx)
+    Fill(ctx).run()
 
     assert len(hub.claims) == 1  # the claim was actually attempted
     assert provider.released == ["e1"]  # released the acquired-but-unclaimed env
@@ -404,7 +397,7 @@ def test_fill_env_bound_skips(tmp_path):  # type: ignore[no-untyped-def]
         store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
     )
 
-    fill(ctx)
+    Fill(ctx).run()
 
     assert hub.claims == []
     assert store.list_active_leases() == []
@@ -421,7 +414,7 @@ def test_fill_preparation_failure_skips_without_claiming(tmp_path):  # type: ign
         store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
     )
 
-    fill(ctx)
+    Fill(ctx).run()
 
     assert hub.claims == []
     assert store.list_active_leases() == []
@@ -444,7 +437,7 @@ def test_fill_respects_max_agents(tmp_path):  # type: ignore[no-untyped-def]
         config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
     )
 
-    fill(ctx)
+    Fill(ctx).run()
 
     assert hub.claims == []  # no free slot
 
@@ -476,7 +469,7 @@ def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path
         probe=FakeProbe(),
     )
 
-    fill(ctx)
+    Fill(ctx).run()
 
     assert store.held_environment_ids() == []
     assert store.live_tenure_chunk_ids() == []
@@ -508,7 +501,7 @@ def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path):  # typ
     wt = FakeWorktreeGit()
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), worktree_git=wt)
 
-    advance(ctx)  # probe reports the worker dead (empty alive set) -> exit-is-done
+    Advance(ctx).run()  # probe reports the worker dead (empty alive set) -> exit-is-done
 
     # The declared commit was verified read-only and the completion is BUFFERED — not
     # yet submitted.
@@ -518,7 +511,7 @@ def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path):  # typ
     assert len(buffered) == 1 and buffered[0].lease_id == "lease_1"
     assert store.active_lease_for_chunk("ch_1") is not None  # still open, awaiting flush
 
-    pull(ctx)  # the flusher delivers the completion and drives the apply-response
+    Pull(ctx).run()  # the flusher delivers the completion and drives the apply-response
 
     assert len(hub.completions) == 1
     chunk_id, submission = hub.completions[0]
@@ -558,13 +551,13 @@ def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path)
     wt = FakeWorktreeGit(False)  # every declaration fails verification
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), worktree_git=wt)
 
-    advance(ctx)
+    Advance(ctx).run()
 
     # verify WAS called on the declaration, but the False verdict dropped it, so the
     # buffered completion names no git-commit artifact.
     assert wt.verified_calls == [("file:///origins/toy-api.git", "e1", "abc123")]
 
-    pull(ctx)
+    Pull(ctx).run()
 
     assert len(hub.completions) == 1
     _chunk_id, submission = hub.completions[0]
@@ -597,13 +590,13 @@ def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path):
     wt = FakeWorktreeGit()
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), worktree_git=wt)
 
-    advance(ctx)
+    Advance(ctx).run()
 
     # Only the read-only verify ran, over the worker's own declared branch — no branch
     # was ever inferred off any local HEAD, detached or otherwise.
     assert wt.verified_calls == [("file:///origins/toy-api.git", "feature/worker-declared", "deadbeef")]
 
-    pull(ctx)
+    Pull(ctx).run()
 
     _chunk_id, submission = hub.completions[0]
     assert submission.artifacts[0].branch_name == "feature/worker-declared"
@@ -626,8 +619,8 @@ def test_advance_elicits_verdict_exactly_once_while_flush_pending(tmp_path):  # 
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    advance(ctx)
-    advance(ctx)  # completion already buffered -> the lease is skipped
+    Advance(ctx).run()
+    Advance(ctx).run()  # completion already buffered -> the lease is skipped
 
     assert len(harness.judged) == 1  # judged once
     buffered = [b for b in store.pending_outbound() if b.kind == "completion.submitted"]
@@ -647,8 +640,8 @@ def test_flush_next_spawns_next_node_in_place(tmp_path):  # type: ignore[no-unty
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.node_name == "review" and lease.epoch == 2  # fresh epoch, same env
@@ -687,7 +680,7 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
         handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100"), verdict="pass"
     )
     ctx1 = make_context(store, hub=hub, provider=provider, harness=harness1, probe=FakeProbe(), clock=FixedClock(_NOW))
-    fill(ctx1)
+    Fill(ctx1).run()
 
     assert harness1.resume_froms == [None]  # (e) first arrival falls back to fresh
     build_lease_1 = store.active_lease_for_chunk("ch_1")
@@ -711,8 +704,8 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
         probe=FakeProbe(),
         clock=FixedClock(_NOW + timedelta(minutes=1)),
     )
-    advance(ctx2)  # build worker "exited" (empty alive set) -> judged pass -> buffered
-    pull(ctx2)  # flush -> apply-response NEXT -> spawn review
+    Advance(ctx2).run()  # build worker "exited" (empty alive set) -> judged pass -> buffered
+    Pull(ctx2).run()  # flush -> apply-response NEXT -> spawn review
 
     assert harness2.resume_froms == [None]  # (c) fresh review always gets a new sid
     review_lease = store.active_lease_for_chunk("ch_1")
@@ -735,8 +728,8 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
         probe=FakeProbe(),
         clock=FixedClock(_NOW + timedelta(minutes=2)),
     )
-    advance(ctx3)  # review worker "exited" -> judged fail -> buffered
-    pull(ctx3)  # flush -> apply-response NEXT -> spawn build, resuming in place
+    Advance(ctx3).run()  # review worker "exited" -> judged fail -> buffered
+    Pull(ctx3).run()  # flush -> apply-response NEXT -> spawn build, resuming in place
 
     assert harness3.resume_froms == ["sess-build-1"]  # (b) resumes build's own session
     build_lease_2 = store.active_lease_for_chunk("ch_1")
@@ -764,7 +757,7 @@ def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_p
         handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100"), verdict="pass"
     )
     ctx1 = make_context(store, hub=hub, provider=provider, harness=harness1, probe=FakeProbe(), clock=FixedClock(_NOW))
-    fill(ctx1)
+    Fill(ctx1).run()
 
     hub.envelopes["ch_1"] = build_env  # `_advance_exited_worker`'s own idempotent re-read
     hub.apply_responses = [
@@ -782,8 +775,8 @@ def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_p
         probe=FakeProbe(),
         clock=FixedClock(_NOW + timedelta(minutes=1)),
     )
-    advance(ctx2)
-    pull(ctx2)
+    Advance(ctx2).run()
+    Pull(ctx2).run()
 
     hub.envelopes["ch_1"] = review_env  # `_advance_exited_worker`'s own idempotent re-read
     harness3 = FakeHarness(
@@ -798,8 +791,8 @@ def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_p
         probe=FakeProbe(),
         clock=FixedClock(_NOW + timedelta(minutes=2)),
     )
-    advance(ctx3)
-    pull(ctx3)
+    Advance(ctx3).run()
+    Pull(ctx3).run()
 
     assert harness3.resume_froms == ["sess-review-1"]  # (a) chunk-most-recent, not build's own
 
@@ -820,7 +813,7 @@ def test_within_node_retry_stays_fresh_even_when_the_node_is_resume(tmp_path):  
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    advance(ctx)  # no parseable <Choice> -> failure -> requeue in place, fresh
+    Advance(ctx).run()  # no parseable <Choice> -> failure -> requeue in place, fresh
 
     assert harness.resume_froms == [None]  # (d) a retry never resolves a resume target
     lease = store.active_lease_for_chunk("ch_1")
@@ -857,7 +850,7 @@ def _first_build_spawn(store, hub, provider, env, *, session, at, config=None): 
         clock=FixedClock(at),
         config=config if config is not None else _preamble_config(),
     )
-    fill(ctx)
+    Fill(ctx).run()
     return harness
 
 
@@ -877,8 +870,8 @@ def _reenter_build(store, hub, provider, env, *, session, pid, at, config=None):
         clock=FixedClock(at),
         config=config if config is not None else _preamble_config(),
     )
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
     return harness
 
 
@@ -1017,7 +1010,7 @@ def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerp
     _first_build_spawn(store, hub, provider, env, session="sess-build-1", at=_NOW)
 
     # --- The graceful-restart re-attach, interleaved: mark, then RESUME in place.
-    mark_resume_intents(store, now=_NOW + timedelta(seconds=30))
+    ResumeIntents(store).mark_graceful(now=_NOW + timedelta(seconds=30))
     hub.chunks["ch_1"] = ChunkDetail(
         chunk_id="ch_1",
         graph_id="gr_1",
@@ -1027,7 +1020,7 @@ def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerp
         route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
     )
     resume_harness = FakeHarness(handle=_HANDLE, verdict="pass")
-    resume(
+    Resume(
         make_context(
             store,
             hub=hub,
@@ -1037,7 +1030,7 @@ def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerp
             clock=FixedClock(_NOW + timedelta(seconds=45)),
             config=_preamble_config(),
         )
-    )
+    ).run()
     assert resume_harness.resumed  # the resume-with-message really ran
 
     # --- The next node entry on the same session still finds an honest fingerprint.
@@ -1125,8 +1118,8 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # ty
         worktree_git=FakeWorktreeGit(),
     )
 
-    advance(ctx)  # buffers the completion (with the harvested findings asset)
-    pull(ctx)  # the flusher delivers it to the hub (store-and-forward)
+    Advance(ctx).run()  # buffers the completion (with the harvested findings asset)
+    Pull(ctx).run()  # the flusher delivers it to the hub (store-and-forward)
 
     _, submission = hub.completions[0]
     findings = [a for a in submission.artifacts if a.name == "review-findings"]
@@ -1170,8 +1163,8 @@ def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path): 
         store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe(), worktree_git=wt
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     assert wt.verified_calls == []  # no declaration for this lease -> verify never called
     _chunk_id, submission = hub.completions[0]
@@ -1275,8 +1268,8 @@ def test_flush_done_releases_environments(tmp_path):  # type: ignore[no-untyped-
         store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     assert provider.released == ["e1"]
     assert store.held_environment_ids() == []
@@ -1295,7 +1288,7 @@ def test_advance_skips_running_worker(tmp_path):  # type: ignore[no-untyped-def]
         probe=FakeProbe(alive={_ALIVE}),
     )
 
-    advance(ctx)  # worker alive -> nothing judged, nothing polled
+    Advance(ctx).run()  # worker alive -> nothing judged, nothing polled
 
     assert store.pending_outbound() == []
     assert store.active_lease_for_chunk("ch_1") is not None
@@ -1320,17 +1313,17 @@ def test_completion_survives_hub_outage_and_applies_once(tmp_path):  # type: ign
         probe=FakeProbe(),
     )
 
-    advance(ctx)  # worker exited -> completion buffered
+    Advance(ctx).run()  # worker exited -> completion buffered
 
     hub.down = True
-    pull(ctx)  # flush fails — the completion stays buffered
+    Pull(ctx).run()  # flush fails — the completion stays buffered
     assert hub.completions == []
     assert [b.kind for b in store.pending_outbound()] == ["completion.submitted"]
     assert store.active_lease_for_chunk("ch_1") is not None  # not advanced
 
     hub.down = False
-    pull(ctx)  # hub back -> flush applies
-    pull(ctx)  # a redundant extra drain must not resubmit (buffer already acked)
+    Pull(ctx).run()  # hub back -> flush applies
+    Pull(ctx).run()  # a redundant extra drain must not resubmit (buffer already acked)
 
     assert len(hub.completions) == 1  # applied exactly once
     assert store.pending_outbound() == []
@@ -1358,7 +1351,7 @@ def test_poll_hub_node_releases_on_done(tmp_path):  # type: ignore[no-untyped-de
         store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     assert provider.released == ["e1"]
     assert store.held_environment_ids() == []
@@ -1381,7 +1374,7 @@ def test_poll_hub_node_waits_while_delivering(tmp_path):  # type: ignore[no-unty
         store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     assert provider.released == []  # still delivering — hold
     assert store.held_environment_ids() == ["e1"]
@@ -1429,7 +1422,7 @@ def test_advance_held_chunk_spawns_into_post_merge_node(tmp_path):  # type: igno
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
 
-    advance(ctx)
+    Advance(ctx).run()
 
     assert len(harness.spawns) == 1
     spawned_envelope, _ = harness.spawns[0]
@@ -1479,7 +1472,7 @@ def test_advance_held_chunk_does_not_respawn_a_buffered_escalation(tmp_path):  #
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
 
-    advance(ctx)
+    Advance(ctx).run()
 
     assert harness.spawns == []  # no re-spawn — the epoch gate held
     assert store.active_lease_for_chunk("ch_1") is None  # nothing minted
@@ -1501,7 +1494,7 @@ def test_advance_held_chunk_with_no_binding_and_no_active_lease_is_a_noop(tmp_pa
         probe=FakeProbe(),
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     assert store.held_environment_ids() == []
 
@@ -1520,7 +1513,7 @@ def test_verdict_less_exit_fails_and_requeues(tmp_path):  # type: ignore[no-unty
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    advance(ctx)  # no parseable <Choice> -> failure -> requeue in place (local, no hub call)
+    Advance(ctx).run()  # no parseable <Choice> -> failure -> requeue in place (local, no hub call)
 
     assert hub.completions == []  # never submitted a completion
     lease = store.active_lease_for_chunk("ch_1")
@@ -1553,7 +1546,7 @@ def test_reap_orphan_requeues(tmp_path):  # type: ignore[no-untyped-def]
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    reap(ctx)
+    Reap(ctx).run()
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.lease_id != "lease_1"  # a fresh lease replaced the orphan
@@ -1577,7 +1570,7 @@ def test_reap_stalled_but_alive_worker(tmp_path):  # type: ignore[no-untyped-def
         store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe, clock=FixedClock(later)
     )
 
-    reap(ctx)
+    Reap(ctx).run()
 
     assert 100 in probe.killed  # the stalled worker was killed (best-effort hygiene)
     lease = store.active_lease_for_chunk("ch_1")
@@ -1603,7 +1596,7 @@ def test_reap_leaves_fresh_beating_worker(tmp_path):  # type: ignore[no-untyped-
         clock=FixedClock(soon),
     )
 
-    reap(ctx)
+    Reap(ctx).run()
 
     assert probe.killed == []
     survivor = store.active_lease_for_chunk("ch_1")
@@ -1627,7 +1620,7 @@ def test_reap_leaves_exited_worker_for_advance(tmp_path):  # type: ignore[no-unt
         clock=FixedClock(later),
     )
 
-    reap(ctx)
+    Reap(ctx).run()
 
     assert probe.killed == []  # not reaped — exit-is-done belongs to ADVANCE
     survivor = store.active_lease_for_chunk("ch_1")
@@ -1651,7 +1644,7 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path):  # type: ignore[n
         ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), config=config)
         if i == 1:
             _seed_running_lease(store, pid=300, start="start-0")
-        advance(ctx)
+        Advance(ctx).run()
 
     assert store.active_lease_for_chunk("ch_1") is None  # no more retries
     escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
@@ -1785,8 +1778,8 @@ def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  # type: ig
         config=_cap_config(5.0),
     )
 
-    advance(ctx)  # the attempt finishes and its completion is buffered — not yet applied
-    pull(ctx)  # the flush applies it (NEXT); the cap check runs at that boundary and parks
+    Advance(ctx).run()  # the attempt finishes and its completion is buffered — not yet applied
+    Pull(ctx).run()  # the flush applies it (NEXT); the cap check runs at that boundary and parks
 
     # No next attempt spawned — the cap parked before `Spawner.spawn`, not by killing anyone.
     assert harness.spawns == []
@@ -1827,8 +1820,8 @@ def test_cost_cap_park_leaves_wrapped_empty_without_runner_dir(tmp_path):  # typ
         config=_cap_config(5.0, runner_dir=""),
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
     assert len(escalations) == 1
@@ -1859,8 +1852,8 @@ def test_cost_cap_park_does_not_consume_a_retry(tmp_path):  # type: ignore[no-un
         config=_cap_config(5.0),
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     assert store.attempt_count("ch_1", "nd_review") == 0  # no lease ever minted for the next node
 
@@ -1880,7 +1873,7 @@ def test_cost_cap_never_kills_a_live_worker(tmp_path):  # type: ignore[no-untype
         store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe, config=_cap_config(5.0)
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     # ADVANCE never even looked at this lease — still running, no judgement, no park.
     assert harness.judged == []
@@ -1911,8 +1904,8 @@ def test_cost_cap_under_cap_continues_normally(tmp_path):  # type: ignore[no-unt
         config=_cap_config(5.0),
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.node_name == "review" and lease.epoch == 2
@@ -1934,8 +1927,8 @@ def test_cost_cap_absent_never_parks_regardless_of_spend(tmp_path):  # type: ign
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.node_name == "review"
@@ -1966,9 +1959,9 @@ def test_cost_cap_partial_total_trips_the_lower_bound_and_logs_partial(tmp_path)
         config=_cap_config(5.0),
     )
 
-    advance(ctx)
+    Advance(ctx).run()
     with capture_logs() as captured:
-        pull(ctx)
+        Pull(ctx).run()
 
     assert store.active_lease_for_chunk("ch_1") is None  # parked despite being only a lower bound
     escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
@@ -2003,8 +1996,8 @@ def test_cost_cap_raised_then_requeued_resumes_normally(tmp_path):  # type: igno
         probe=FakeProbe(),
         config=_cap_config(5.0),
     )
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
     assert store.active_lease_for_chunk("ch_1") is None  # parked
 
     # The operator raises the cap and requeues at the hub: `running` with a live route
@@ -2020,7 +2013,7 @@ def test_cost_cap_raised_then_requeued_resumes_normally(tmp_path):  # type: igno
         config=_cap_config(100.0),  # raised well above the $7 spend
     )
 
-    fill(ctx2)  # `_reconcile_interrupted_claims` adopts — spawns the current (review) node
+    Fill(ctx2).run()  # `_reconcile_interrupted_claims` adopts — spawns the current (review) node
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.node_name == "review"
@@ -2107,7 +2100,7 @@ def test_spawn_prefixes_static_workspace_prompt_and_sets_workspace_root(tmp_path
         ),
     )
 
-    fill(ctx)
+    Fill(ctx).run()
 
     _, preamble = harness.spawns[0]
     assert preamble.workspace_root == "/ws"
@@ -2137,7 +2130,7 @@ def test_spawn_reflects_runtime_prompt_override_with_no_restart(tmp_path):  # ty
         config=LoopConfig(runner_id="r1", workspace_id="ws1", workspace_prompt="STATIC-PROMPT"),
     )
 
-    fill(ctx)
+    Fill(ctx).run()
 
     _, preamble = harness.spawns[0]
     assert preamble.prompt_prefix.startswith(f"{DEFAULT_BLIZZARD_PREAMBLE}\n\nOVERRIDDEN\n\n")
@@ -2183,7 +2176,7 @@ def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: 
         handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100"), verdict="pass"
     )
     ctx1 = make_context(store, hub=hub, provider=provider, harness=harness1, probe=FakeProbe(), clock=FixedClock(_NOW))
-    fill(ctx1)
+    Fill(ctx1).run()
 
     assert harness1.resume_froms == [None]
     assert store.fingerprint_reads == []  # never looked one up
@@ -2202,8 +2195,8 @@ def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: 
         probe=FakeProbe(),
         clock=FixedClock(_NOW + timedelta(minutes=1)),
     )
-    advance(ctx2)
-    pull(ctx2)
+    Advance(ctx2).run()
+    Pull(ctx2).run()
 
     assert harness2.resume_froms == ["sess-build-1"]
     assert store.fingerprint_reads == ["sess-build-1"]  # exactly one, for the resumed session
@@ -2274,8 +2267,8 @@ def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path):  #
         worktree_git=wt,
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     assert len(wt.verified_calls) == 2  # both envs' declarations were checked
     _chunk_id, submission = hub.completions[0]

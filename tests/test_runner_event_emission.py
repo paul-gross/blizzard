@@ -17,7 +17,7 @@ from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
 from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
-from blizzard.runner.loop.steps import advance, fill, reap
+from blizzard.runner.loop.steps import Advance, Fill, Reap
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, RouteView
 from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED
@@ -89,7 +89,7 @@ def _dead_worker_ctx(store, **kwargs):  # type: ignore[no-untyped-def]
 def test_retry_branch_emits_a_warning_attempt_failed(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_lease(store, retries_max=2)  # retried=0 < 2 -> retry
-    advance(_dead_worker_ctx(store))
+    Advance(_dead_worker_ctx(store)).run()
 
     events = _events(store)
     assert len(events) == 1
@@ -105,7 +105,7 @@ def test_retry_branch_emits_a_warning_attempt_failed(tmp_path):  # type: ignore[
 def test_escalate_branch_emits_a_critical_worker_lost(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_lease(store, retries_max=0)  # retried=0, not < 0 -> escalate
-    advance(_dead_worker_ctx(store))
+    Advance(_dead_worker_ctx(store)).run()
 
     events = _events(store)
     assert len(events) == 1
@@ -120,7 +120,7 @@ def test_locally_paused_defer_emits_nothing(tmp_path):  # type: ignore[no-untype
     store.record_local_pause(
         "r1", paused=True, at=_NOW, by="operator", report_kind="runner.locally_paused", report_payload="{}"
     )
-    advance(_dead_worker_ctx(store))
+    Advance(_dead_worker_ctx(store)).run()
 
     # ...but the locally-paused defer surfaces nothing (and no escalation either).
     assert _events(store) == []
@@ -146,7 +146,7 @@ def test_reap_stalled_but_alive_worker_emits_via_reap(tmp_path):  # type: ignore
         clock=FixedClock(later),
     )
 
-    reap(ctx)
+    Reap(ctx).run()
 
     events = _events(store)
     assert len(events) == 1
@@ -179,7 +179,7 @@ def test_reassign_abandon_branch_emits_an_info_attempt_abandoned(tmp_path):  # t
         probe=FakeProbe(),
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     events = _events(store)
     assert len(events) == 1
@@ -195,8 +195,8 @@ def test_at_most_once_a_second_tick_emits_no_duplicate(tmp_path):  # type: ignor
     _seed_lease(store, retries_max=0)  # escalate — no fresh lease to re-fail
     ctx = _dead_worker_ctx(store)
 
-    advance(ctx)
-    advance(ctx)  # the attempt is closed/escalated — nothing left to fail
+    Advance(ctx).run()
+    Advance(ctx).run()  # the attempt is closed/escalated — nothing left to fail
 
     assert len(_events(store)) == 1
 
@@ -215,7 +215,7 @@ def test_env_prep_failure_emits_a_command_failed(tmp_path):  # type: ignore[no-u
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
     )
-    fill(ctx)
+    Fill(ctx).run()
 
     events = _events(store)
     assert len(events) == 1
@@ -253,7 +253,7 @@ def test_git_verify_failure_emits_a_command_failed_and_continues(tmp_path):  # t
     wt = _VerifyFailsWorktreeGit()
     ctx = _dead_worker_ctx(store, worktree_git=wt)
 
-    advance(ctx)  # no exception — a read-only verify failure never crash-loops the tick
+    Advance(ctx).run()  # no exception — a read-only verify failure never crash-loops the tick
 
     events = _events(store)
     assert [(e["severity"], e["kind"]) for e in events] == [
@@ -286,7 +286,7 @@ def test_spawn_launch_failure_emits_a_command_failed_and_reraises(tmp_path):  # 
     )
 
     with pytest.raises(HarnessSpawnError):  # re-raised — no worker started, retries next tick
-        fill(ctx)
+        Fill(ctx).run()
 
     events = _events(store)
     assert len(events) == 1

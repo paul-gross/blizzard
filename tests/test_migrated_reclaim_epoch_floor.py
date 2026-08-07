@@ -13,9 +13,10 @@ import pytest
 
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig, LoopContext
+from blizzard.runner.loop.drain import OutboundDrain
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
-from blizzard.runner.loop.steps import fill, flush_outbound
+from blizzard.runner.loop.steps import Fill
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from tests.runner_fakes import (
     FakeHarness,
@@ -129,7 +130,7 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
             store=store, clock=hub.clock, provider=provider, worker_files=WorkerStdoutFiles("", store)
         ),
     )
-    fill(ctx)
+    Fill(ctx).run()
 
     # AC #2/#3: the fresh runner had NO local history (floor 0) yet minted strictly above the
     # hub floor — `max(0, N) + 1 == N + 1`.
@@ -140,7 +141,7 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
 
     # Report the freshly-minted lease up through the real store-and-forward buffer, so the hub
     # learns the raised floor (N+1) the fence below consumes.
-    flush_outbound(ctx)
+    OutboundDrain(ctx).run()
 
     # AC #4: a completion at the old epoch (N), now below the fresh lease's floor, is
     # rejected. It rides the target `build` node so it reaches the epoch fence itself.

@@ -18,7 +18,7 @@ from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.attachments import AttachmentService
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop.steps import advance, pull
+from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from tests.runner_fakes import (
@@ -96,8 +96,8 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
         worktree_git=FakeWorktreeGit(),
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     _, submission = hub.completions[0]
     by_name = {a.name: a for a in submission.artifacts}

@@ -13,7 +13,7 @@ import pytest
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.steps import advance, fill, pull
+from blizzard.runner.loop.steps import Advance, Fill, Pull
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, RouteView
 from blizzard.wire.decision import DecisionChoiceModel, DecisionView
@@ -86,7 +86,7 @@ def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  # ty
         config=LoopConfig(runner_id="r1", workspace_id="ws1", gates=("build",)),
     )
 
-    advance(ctx)  # gated -> the declared commit is verified, a decision is buffered, no verdict elicited
+    Advance(ctx).run()  # gated -> the declared commit is verified, a decision is buffered, no verdict elicited
 
     assert wt.verified_calls == [("file:///origins/toy-api.git", "e1", "abc123")]
     assert harness.judged == []  # the human judges — no verdict elicitation
@@ -95,7 +95,7 @@ def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  # ty
     assert hub.decisions_submitted == []  # not yet flushed
     assert store.active_lease_for_chunk("ch_1") is not None  # open until the flush parks it
 
-    pull(ctx)  # the flusher submits the decision and parks the chunk
+    Pull(ctx).run()  # the flusher submits the decision and parks the chunk
 
     assert len(hub.decisions_submitted) == 1
     chunk_id, submission = hub.decisions_submitted[0]
@@ -133,8 +133,8 @@ def test_gated_node_decision_elicited_exactly_once_while_flush_pending(tmp_path)
         config=LoopConfig(runner_id="r1", workspace_id="ws1", gates=("build",)),
     )
 
-    advance(ctx)
-    advance(ctx)  # decision already buffered -> the lease is skipped (pending_submission)
+    Advance(ctx).run()
+    Advance(ctx).run()  # decision already buffered -> the lease is skipped (pending_submission)
 
     buffered = [b for b in store.pending_outbound() if b.kind == "decision.submitted"]
     assert len(buffered) == 1
@@ -179,7 +179,7 @@ def test_resolved_gate_is_advanced_by_the_resolving_transition(tmp_path):  # typ
     )
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    advance(ctx)  # the held-chunk poll picks up the resolved decision
+    Advance(ctx).run()  # the held-chunk poll picks up the resolved decision
 
     assert len(hub.completions) == 1
     chunk_id, submission = hub.completions[0]
@@ -226,7 +226,7 @@ def test_unresolved_gate_keeps_waiting(tmp_path):  # type: ignore[no-untyped-def
         probe=FakeProbe(),
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     assert hub.completions == []  # nothing to resolve yet
     assert store.active_lease_for_chunk("ch_1") is None
@@ -271,7 +271,7 @@ def test_fill_leaves_a_resolved_gate_to_advance(tmp_path):  # type: ignore[no-un
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
 
-    fill(ctx)  # the reconciler runs first; it must leave the resolved gate untouched
+    Fill(ctx).run()  # the reconciler runs first; it must leave the resolved gate untouched
 
     assert harness.spawns == []  # no worker spawned on the human-judged node
     assert store.active_lease_for_chunk("ch_1") is None  # no fresh-epoch lease minted
@@ -280,7 +280,7 @@ def test_fill_leaves_a_resolved_gate_to_advance(tmp_path):  # type: ignore[no-un
 
     # ADVANCE owns it: the resolving transition is recorded at the parked epoch.
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN, detail="deliver took over")]
-    advance(ctx)
+    Advance(ctx).run()
 
     assert len(hub.completions) == 1
     _, submission = hub.completions[0]

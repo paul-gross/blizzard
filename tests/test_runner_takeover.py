@@ -23,7 +23,7 @@ from blizzard.runner.domain.takeover import (
     TakeoverService,
 )
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop.steps import advance, reap
+from blizzard.runner.loop.steps import Advance, Reap
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.facts import LEASE_MINTED
@@ -291,7 +291,7 @@ def test_reap_skips_a_stalled_worker_under_an_open_takeover(tmp_path) -> None:  
     clock = FixedClock(_NOW + HEARTBEAT_STALENESS_THRESHOLD * 2)  # long stale, would ordinarily reap
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=probe, clock=clock)
 
-    reap(ctx)
+    Reap(ctx).run()
 
     # Untouched: no closure recorded, no fresh mint, no kill attempted a second time.
     assert store.active_lease("lease_1") is not None
@@ -317,7 +317,7 @@ def test_advance_skips_judgement_and_the_held_chunk_poll_under_an_open_takeover(
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=probe, clock=FixedClock(_NOW))
 
-    advance(ctx)
+    Advance(ctx).run()
 
     assert harness.judged == []  # never resumed to elicit a verdict
     assert store.pending_outbound() == []  # no completion buffered
@@ -358,7 +358,7 @@ def test_advance_skips_the_held_chunk_gate_hub_node_poll_under_an_open_takeover(
         clock=FixedClock(_NOW),
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     assert provider.released == []
     assert store.held_environment_ids() == ["e1"]

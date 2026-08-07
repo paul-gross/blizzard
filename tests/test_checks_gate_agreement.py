@@ -14,7 +14,7 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.checks import CheckOutcome
-from blizzard.runner.loop.steps import advance, pull
+from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from tests.runner_fakes import (
@@ -150,8 +150,8 @@ def _runner_fails(tmp_path: Path, requires_checks: bool, results: list[tuple[str
         check_runner=check_runner,
         clock=clock,
     )
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
     # A gate failure buffers no completion; an accepted `pass` buffers exactly one.
     return hub.completions == []
 

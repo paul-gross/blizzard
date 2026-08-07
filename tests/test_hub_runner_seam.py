@@ -16,7 +16,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
-from blizzard.runner.loop.steps import pull
+from blizzard.runner.loop.steps import Pull
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.store.repository import NewLease
 from tests.runner_fakes import (
@@ -132,7 +132,7 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
         ),
     )
 
-    pull(ctx)
+    Pull(ctx).run()
 
     assert probe.killed == [100]  # worker killed
     assert provider.released == ["e1"]  # environment released
@@ -207,7 +207,7 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
         ),
     )
 
-    pull(ctx)
+    Pull(ctx).run()
 
     assert probe.killed == [100]  # worker killed
     assert provider.released == ["e1"]  # environment released

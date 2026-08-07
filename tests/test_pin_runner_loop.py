@@ -20,7 +20,7 @@ from blizzard.runner.loop.build import build_loop_context
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT, CheckOutcome
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.judgement import Judgement
-from blizzard.runner.loop.steps import advance, resume
+from blizzard.runner.loop.steps import Advance, Resume
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, PauseView, RouteView
@@ -98,7 +98,7 @@ def test_resume_parks_a_paused_chunk_whose_derived_status_hides_the_pause(tmp_pa
         clock=FixedClock(_NOW),
     )
 
-    resume(ctx)
+    Resume(ctx).run()
 
     assert store.pause_parked_lease_ids() == {"lease_1"}, "the pause was read off the status, not the fact"
     lease = store.active_lease("lease_1")
@@ -221,7 +221,7 @@ def test_the_nudge_guard_fact_is_durable_before_the_nudge_resume_runs(tmp_path) 
         clock=FixedClock(_NOW),
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     assert len(harness.fired_at_judge) == 2, "expected the verdict elicitation plus exactly one nudge"
     assert harness.fired_at_judge[1] is True, "the nudge resume ran before its guard fact was durable"

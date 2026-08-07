@@ -18,7 +18,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop.steps import advance, fill, mark_crash_resume_intents
+from blizzard.runner.loop.steps import Advance, Fill, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store import schema as runner_schema
 from blizzard.runner.store.repository import NewLease
@@ -129,7 +129,7 @@ def test_restart_into_a_standing_pause_keeps_the_claim(tmp_path):  # type: ignor
     _seed_running_lease(store)
     probe = FakeProbe()  # the worker died with the daemon — a real restart's shape
     # Startup crash-recovery marks the killed-mid-work lease (the ungraceful path, #13).
-    assert mark_crash_resume_intents(store, process=probe, now=_NOW + timedelta(seconds=1)) == 1
+    assert ResumeIntents(store).mark_crashed(process=probe, now=_NOW + timedelta(seconds=1)) == 1
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _paused_chunk()  # paused while the runner was down; route still ours
@@ -172,7 +172,7 @@ def test_a_chunk_detached_and_then_paused_is_still_abandoned(tmp_path):  # type:
     store = _store(tmp_path)
     _seed_running_lease(store)
     probe = FakeProbe()
-    assert mark_crash_resume_intents(store, process=probe, now=_NOW + timedelta(seconds=1)) == 1
+    assert ResumeIntents(store).mark_crashed(process=probe, now=_NOW + timedelta(seconds=1)) == 1
 
     hub = FakeHub()
     detached = _paused_chunk()
@@ -507,7 +507,7 @@ def test_fill_does_not_reconcile_a_pause_parked_chunk_as_an_interrupted_claim(tm
     ctx = _make_ctx(store, hub, harness, probe)
 
     tick(ctx)  # kills + parks
-    fill(ctx)  # the seam under test, driven again on the parked shape
+    Fill(ctx).run()  # the seam under test, driven again on the parked shape
 
     # The load-bearing fact: the lease is still ACTIVE, so the reconciler skips the chunk.
     assert store.active_lease_for_chunk("ch_1") is not None
@@ -530,7 +530,7 @@ def test_advance_does_not_drive_a_pause_parked_chunk_as_a_held_chunk(tmp_path): 
     ctx = _make_ctx(store, hub, harness, probe)
 
     tick(ctx)  # kills + parks
-    advance(ctx)  # the seam under test, driven again on the parked shape
+    Advance(ctx).run()  # the seam under test, driven again on the parked shape
 
     assert store.active_lease_for_chunk("ch_1") is not None
     # No verdict elicited from the killed worker, and nothing buffered on its behalf.

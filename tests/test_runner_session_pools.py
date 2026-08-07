@@ -18,7 +18,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource, mangle_cwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
 from blizzard.runner.harness.usage import UsageSample
-from blizzard.runner.loop.steps import advance, fill, pull
+from blizzard.runner.loop.steps import Advance, Fill, Pull
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, RotatePolicyView
 from tests.runner_fakes import (
@@ -85,7 +85,7 @@ def test_a_fresh_named_member_mints_the_head_a_later_resume_member_continues(tmp
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     h1 = FakeHarness(handle=WorkerHandle(session_id="sess-code-1", pid=100, process_start_time="t100"), verdict="pass")
-    fill(_ctx(store, hub, provider, h1))
+    Fill(_ctx(store, hub, provider, h1)).run()
 
     assert h1.resume_froms == [None]  # `fresh:code` always mints
 
@@ -93,8 +93,8 @@ def test_a_fresh_named_member_mints_the_head_a_later_resume_member_continues(tmp
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
     h2 = FakeHarness(handle=WorkerHandle(session_id="unused", pid=200, process_start_time="t200"), verdict="pass")
     ctx2 = _ctx(store, hub, provider, h2, minutes=1)
-    advance(ctx2)
-    pull(ctx2)
+    Advance(ctx2).run()
+    Pull(ctx2).run()
 
     # `verify` continues the head `build` minted — a session it never ran at its own node.
     assert h2.resume_froms == ["sess-code-1"]
@@ -116,7 +116,7 @@ def test_an_empty_pool_falls_back_to_minting_rather_than_erroring(tmp_path):  # 
     hub.claim_outcome = claimed_outcome("ch_1", env)
     harness = FakeHarness(handle=WorkerHandle(session_id="sess-1", pid=100, process_start_time="t"), verdict="pass")
 
-    fill(_ctx(store, hub, provider, harness))
+    Fill(_ctx(store, hub, provider, harness)).run()
 
     assert harness.resume_froms == [None]
     lease = store.active_lease_for_chunk("ch_1")
@@ -137,23 +137,23 @@ def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_l
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     h1 = FakeHarness(handle=WorkerHandle(session_id="sess-code-1", pid=100, process_start_time="t1"), verdict="pass")
-    fill(_ctx(store, hub, provider, h1))
+    Fill(_ctx(store, hub, provider, h1)).run()
 
     # build#1 -> verify#1
     hub.envelopes["ch_1"] = build_env
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
     h2 = FakeHarness(handle=WorkerHandle(session_id="unused", pid=200, process_start_time="t2"), verdict="fail")
     ctx2 = _ctx(store, hub, provider, h2, minutes=1)
-    advance(ctx2)
-    pull(ctx2)
+    Advance(ctx2).run()
+    Pull(ctx2).run()
 
     # verify#1 fails -> back into build (`fresh:code`), which must MINT, not continue.
     hub.envelopes["ch_1"] = verify_env
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_env)]
     h3 = FakeHarness(handle=WorkerHandle(session_id="sess-code-2", pid=300, process_start_time="t3"), verdict="pass")
     ctx3 = _ctx(store, hub, provider, h3, minutes=2)
-    advance(ctx3)
-    pull(ctx3)
+    Advance(ctx3).run()
+    Pull(ctx3).run()
 
     assert h3.resume_froms == [None]  # the forced rotation point
 
@@ -162,8 +162,8 @@ def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_l
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
     h4 = FakeHarness(handle=WorkerHandle(session_id="unused", pid=400, process_start_time="t4"), verdict="pass")
     ctx4 = _ctx(store, hub, provider, h4, minutes=3)
-    advance(ctx4)
-    pull(ctx4)
+    Advance(ctx4).run()
+    Pull(ctx4).run()
 
     assert h4.resume_froms == ["sess-code-2"]
 
@@ -207,14 +207,14 @@ def test_a_retry_at_a_pooled_node_becomes_the_head_a_later_member_continues(tmp_
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     h1 = FakeHarness(handle=WorkerHandle(session_id="sess-attempt-1", pid=100, process_start_time="t1"), verdict="pass")
-    fill(_ctx(store, hub, provider, h1))
+    Fill(_ctx(store, hub, provider, h1)).run()
 
     # The first attempt produces no parseable verdict — a retry-consuming failure, which
     # re-spawns at the same node with a fresh session.
     hub.envelopes["ch_1"] = build_env
     h2 = FakeHarness(handle=WorkerHandle(session_id="sess-attempt-2", pid=200, process_start_time="t2"), verdict=None)
     ctx2 = _ctx(store, hub, provider, h2, minutes=1)
-    advance(ctx2)
+    Advance(ctx2).run()
 
     retry_lease = store.active_lease_for_chunk("ch_1")
     assert retry_lease is not None
@@ -227,8 +227,8 @@ def test_a_retry_at_a_pooled_node_becomes_the_head_a_later_member_continues(tmp_
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
     h3 = FakeHarness(handle=WorkerHandle(session_id="unused", pid=300, process_start_time="t3"), verdict="pass")
     ctx3 = _ctx(store, hub, provider, h3, minutes=2)
-    advance(ctx3)
-    pull(ctx3)
+    Advance(ctx3).run()
+    Pull(ctx3).run()
 
     assert h3.resume_froms == ["sess-attempt-2"]
 
@@ -248,7 +248,7 @@ def test_a_mint_stamps_what_it_resolved(tmp_path):  # type: ignore[no-untyped-de
     harness = FakeHarness(handle=WorkerHandle(session_id="sess-1", pid=100, process_start_time="t"), verdict="pass")
     harness.resolved_model = "sonnet"
 
-    fill(_ctx(store, hub, provider, harness))
+    Fill(_ctx(store, hub, provider, harness)).run()
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
@@ -273,7 +273,7 @@ def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tm
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     h1 = FakeHarness(handle=WorkerHandle(session_id="sess-code-1", pid=100, process_start_time="t1"), verdict="pass")
     h1.resolved_model = "sonnet"
-    fill(_ctx(store, hub, provider, h1))
+    Fill(_ctx(store, hub, provider, h1)).run()
 
     hub.envelopes["ch_1"] = build_env
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=retro_env)]
@@ -281,8 +281,8 @@ def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tm
     # A fresh resolution at `retrospective` would produce the runner default…
     h2.resolved_model = "opus"
     ctx2 = _ctx(store, hub, provider, h2, minutes=1)
-    advance(ctx2)
-    pull(ctx2)
+    Advance(ctx2).run()
+    Pull(ctx2).run()
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.node_name == "retrospective"
@@ -307,7 +307,7 @@ def test_a_lease_predating_the_stamps_inherits_unknown_rather_than_a_guess(tmp_p
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
     h1 = FakeHarness(handle=WorkerHandle(session_id="sess-1", pid=100, process_start_time="t1"), verdict="pass")
-    fill(_ctx(store, hub, provider, h1))
+    Fill(_ctx(store, hub, provider, h1)).run()
     # Simulate a pre-#144 lease: blank the stamps the mint just wrote.
     _blank_stamps(store, "ch_1")
 
@@ -315,8 +315,8 @@ def test_a_lease_predating_the_stamps_inherits_unknown_rather_than_a_guess(tmp_p
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=resume_env)]
     h2 = FakeHarness(handle=WorkerHandle(session_id="unused", pid=200, process_start_time="t2"), verdict="pass")
     ctx2 = _ctx(store, hub, provider, h2, minutes=1)
-    advance(ctx2)
-    pull(ctx2)
+    Advance(ctx2).run()
+    Pull(ctx2).run()
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None

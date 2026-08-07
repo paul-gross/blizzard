@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop.steps import advance, fill, pull, reap
+from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, RouteView
@@ -122,7 +122,7 @@ def test_pull_abandons_a_live_detached_chunk(tmp_path):  # type: ignore[no-untyp
     probe = FakeProbe(alive={(100, "start-100")})
     ctx = _ctx(store, hub, provider=provider, probe=probe)
 
-    pull(ctx)
+    Pull(ctx).run()
 
     assert probe.killed == [100]  # worker killed
     assert provider.released == ["e1"]  # environment released
@@ -142,7 +142,7 @@ def test_pull_abandons_a_chunk_reassigned_to_another_runner(tmp_path):  # type: 
     probe = FakeProbe(alive={(100, "start-100")})
     ctx = _ctx(store, hub, provider=provider, probe=probe)
 
-    pull(ctx)
+    Pull(ctx).run()
 
     assert probe.killed == [100]
     assert provider.released == ["e1"]
@@ -165,7 +165,7 @@ def test_pull_abandons_a_lease_whose_chunk_is_stopped_though_still_routed_to_thi
     probe = FakeProbe(alive={(100, "start-100")})
     ctx = _ctx(store, hub, provider=provider, probe=probe)
 
-    pull(ctx)
+    Pull(ctx).run()
 
     assert probe.killed == [100]
     assert provider.released == ["e1"]
@@ -185,7 +185,7 @@ def test_pull_leaves_a_still_running_lease_untouched(tmp_path):  # type: ignore[
     probe = FakeProbe(alive={(100, "start-100")})
     ctx = _ctx(store, hub, provider=provider, probe=probe)
 
-    pull(ctx)
+    Pull(ctx).run()
 
     assert probe.killed == []
     assert provider.released == []
@@ -207,7 +207,7 @@ def test_pull_leaves_a_still_ours_non_running_lease_untouched(tmp_path, status):
     probe = FakeProbe(alive={(100, "start-100")})
     ctx = _ctx(store, hub, provider=provider, probe=probe)
 
-    pull(ctx)
+    Pull(ctx).run()
 
     assert probe.killed == []
     assert provider.released == []
@@ -229,7 +229,7 @@ def test_pull_defers_when_hub_unreachable(tmp_path):  # type: ignore[no-untyped-
     probe = FakeProbe(alive={(100, "start-100")})
     ctx = _ctx(store, hub, provider=provider, probe=probe)
 
-    pull(ctx)
+    Pull(ctx).run()
 
     # No abandon, no crash — the lease and its environment survive untouched.
     assert probe.killed == []
@@ -273,7 +273,7 @@ def test_pull_abandons_before_it_flushes(tmp_path):  # type: ignore[no-untyped-d
     probe = FakeProbe(alive={(100, "start-100")})
     ctx = _ctx(store, hub, provider=provider, probe=probe)
 
-    pull(ctx)
+    Pull(ctx).run()
 
     assert hub.calls == ["get_chunk", "push_facts"]  # the ownership check precedes the flush
     # And the abandon's effects (kill + release + close) are already in place.
@@ -298,7 +298,7 @@ def test_reap_abandons_instead_of_escalating_a_detached_chunk(tmp_path):  # type
     probe = FakeProbe()
     ctx = _ctx(store, hub, provider=provider, probe=probe)
 
-    reap(ctx)
+    Reap(ctx).run()
 
     # No escalation.recorded — the whole point. The abandon surfaces an *info*
     # ``attempt-abandoned`` operational event (issue #125), which is not an escalation.
@@ -324,7 +324,7 @@ def test_reap_still_escalates_an_exhausted_lease_that_is_still_ours(tmp_path):  
     probe = FakeProbe()
     ctx = _ctx(store, hub, provider=provider, probe=probe)
 
-    reap(ctx)
+    Reap(ctx).run()
 
     # The genuine escalation still posts — alongside its critical ``worker-lost``
     # operational event, enqueued atomically with the same closure (issue #125).
@@ -382,7 +382,7 @@ def test_pull_abandons_a_live_lease_whose_chunk_the_hub_reports_unknown(tmp_path
     probe = FakeProbe()  # the worker has already exited — no alive pid
     ctx = _ctx(store, hub, provider=provider, probe=probe)
 
-    pull(ctx)
+    Pull(ctx).run()
 
     assert probe.killed == [100]  # worker reaped (best-effort — already exited)
     assert provider.released == ["e1"]  # environment released
@@ -405,7 +405,7 @@ def test_pull_defers_a_live_lease_on_a_transient_hub_failure(tmp_path):  # type:
     probe = FakeProbe()  # the worker has already exited — no alive pid
     ctx = _ctx(store, hub, provider=provider, probe=probe)
 
-    pull(ctx)
+    Pull(ctx).run()
 
     assert probe.killed == []  # not reaped — a transient failure is not terminal
     assert provider.released == []  # environment stays held
@@ -425,7 +425,7 @@ def test_advance_held_chunk_unknown_at_the_hub_releases_envs(tmp_path):  # type:
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = _ctx(store, hub, provider=provider, probe=FakeProbe())
 
-    advance(ctx)
+    Advance(ctx).run()
 
     assert provider.released == ["e1"]
     assert store.bindings_for_chunk("ch_1") == []
@@ -442,7 +442,7 @@ def test_advance_held_chunk_defers_on_a_transient_hub_failure(tmp_path):  # type
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = _ctx(store, hub, provider=provider, probe=FakeProbe())
 
-    advance(ctx)
+    Advance(ctx).run()
 
     assert provider.released == []
     assert len(store.bindings_for_chunk("ch_1")) == 1  # unchanged, still held
@@ -461,7 +461,7 @@ def test_reap_abandons_instead_of_escalating_a_chunk_unknown_at_the_hub(tmp_path
     probe = FakeProbe()
     ctx = _ctx(store, hub, provider=provider, probe=probe)
 
-    reap(ctx)
+    Reap(ctx).run()
 
     # No escalation — abandoned as an *info* ``attempt-abandoned`` event (issue #125).
     pending = store.pending_outbound()
@@ -486,7 +486,7 @@ def test_reap_orphan_requeue_releases_envs_when_chunk_unknown_at_the_hub(tmp_pat
     probe = FakeProbe()
     ctx = _ctx(store, hub, provider=provider, probe=probe)
 
-    reap(ctx)
+    Reap(ctx).run()
 
     assert provider.released == ["e1"]  # environment released rather than held forever
     assert store.active_lease("lease_1") is None
@@ -506,7 +506,7 @@ def test_fill_releases_an_interrupted_claim_binding_when_chunk_unknown_at_the_hu
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = _ctx(store, hub, provider=provider, probe=FakeProbe())
 
-    fill(ctx)
+    Fill(ctx).run()
 
     assert provider.released == ["e1"]
     assert store.bindings_for_chunk("ch_1") == []

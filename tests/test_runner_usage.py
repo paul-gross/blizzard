@@ -16,7 +16,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.dormant import DormantSession
-from blizzard.runner.loop.steps import advance
+from blizzard.runner.loop.steps import Advance
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.facts import USAGE_RECORDED
 from tests.runner_fakes import (
@@ -111,7 +111,7 @@ def test_advance_records_spawn_and_judge_usage_facts(tmp_path):  # type: ignore[
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(stdout_dir)),
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     payloads = _usage_payloads(store)
     assert len(payloads) == 2
@@ -154,7 +154,7 @@ def test_advance_records_resume_kind_on_a_later_generation(tmp_path):  # type: i
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(stdout_dir)),
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     payloads = _usage_payloads(store)
     resume_payload = next(p for p in payloads if p["kind"] == "resume")
@@ -213,7 +213,7 @@ def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_gen
     with open(ctx.worker_files.stdout_path("lease_1", 1), "w") as f:
         f.write("<generation-1's own envelope>")
 
-    advance(ctx)
+    Advance(ctx).run()
 
     payloads = _usage_payloads(store)
     resume_payload = next(p for p in payloads if p["kind"] == "resume")
@@ -257,7 +257,7 @@ def test_advance_falls_back_to_transcript_usage_when_no_envelope(tmp_path):  # t
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(stdout_dir)),
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     payloads = _usage_payloads(store)
     spawn_payload = next(p for p in payloads if p["kind"] == "spawn")
@@ -284,7 +284,7 @@ def test_advance_records_no_usage_fact_when_no_envelope_and_no_transcript(tmp_pa
         config=LoopConfig(runner_id="r1", workspace_id="ws1"),  # no worker_stdout_dir, no transcripts
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     assert _usage_payloads(store) == []
 
@@ -365,7 +365,7 @@ def test_ask_and_exit_records_the_worker_usage_before_parking(tmp_path):  # type
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(stdout_dir)),
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     # Parked on the question, no verdict elicited — a park is not a judgement.
     assert store.parked_lease_ids() == {"lease_1"}
@@ -464,7 +464,7 @@ def test_verdict_less_failure_still_records_spawn_and_judge_usage(tmp_path):  # 
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(stdout_dir)),
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     # It failed the attempt: no completion buffered, the attempt requeued.
     completions = [f for f in store.pending_outbound() if f.kind == "completion.submitted"]
@@ -509,7 +509,7 @@ def test_verdict_less_failure_falls_back_to_transcript_when_no_envelope(tmp_path
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(tmp_path / "missing")),
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     spawn_payload = next(p for p in _usage_payloads(store) if p["kind"] == "spawn")
     assert spawn_payload["cost_usd"] is None

@@ -28,7 +28,7 @@ from blizzard.runner.loop.internal.subprocess_check_runner import SubprocessChec
 from blizzard.runner.loop.internal.subprocess_worktree_git import SubprocessWorktreeGit
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.loop.session import SessionResolver
-from blizzard.runner.loop.steps import mark_crash_resume_intents, mark_resume_intents
+from blizzard.runner.loop.steps import ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
@@ -144,7 +144,7 @@ def mark_resume_intents_on_shutdown(config: RunnerConfig) -> int:
     engine = create_engine_from_url(config.db_url)
     store = SqlAlchemyRunnerStore(engine)
     try:
-        return mark_resume_intents(store, now=SystemClock().now())
+        return ResumeIntents(store).mark_graceful(now=SystemClock().now())
     finally:
         engine.dispose()
 
@@ -158,7 +158,7 @@ def mark_crash_resume_intents_on_startup(config: RunnerConfig) -> int:
     engine = create_engine_from_url(config.db_url)
     store = SqlAlchemyRunnerStore(engine)
     try:
-        return mark_crash_resume_intents(store, process=LinuxProcessProbe(), now=SystemClock().now())
+        return ResumeIntents(store).mark_crashed(process=LinuxProcessProbe(), now=SystemClock().now())
     finally:
         engine.dispose()
 

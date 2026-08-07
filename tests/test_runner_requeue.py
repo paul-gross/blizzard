@@ -15,7 +15,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.requeue import ChunkNotRequeueable, RequeueBlockedByOpenTakeover, RequeueService
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop.steps import fill
+from blizzard.runner.loop.steps import Fill
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, RouteView
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
@@ -167,7 +167,7 @@ def test_fill_spawns_a_fresh_attempt_after_requeue_and_consumes_the_mark(tmp_pat
         clock=FixedClock(_EVEN_LATER),  # strictly after the requeue mark — a real fresh mint
     )
 
-    fill(ctx)
+    Fill(ctx).run()
 
     assert len(harness.spawns) == 1
     fresh = store.active_lease_for_chunk("ch_1")
@@ -208,7 +208,7 @@ def test_fill_releases_the_binding_when_a_requeued_chunk_is_no_longer_routed_her
         clock=FixedClock(_EVEN_LATER),  # strictly after the binding's bound_at
     )
 
-    fill(ctx)
+    Fill(ctx).run()
 
     assert harness.spawns == []
     assert store.held_environment_ids() == []

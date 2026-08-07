@@ -1,6 +1,6 @@
-"""The reconciliation step functions — REAP → PULL → FILL → ADVANCE (``bzh:steppable-loop``).
+"""The reconciliation steps — REAP → PULL → FILL → ADVANCE (``bzh:steppable-loop``).
 
-Each is an individually callable function of a :class:`LoopContext`. Every step is
+Each is an individually runnable :class:`Step` over a :class:`LoopContext`. Every step is
 idempotent and holds no state of its own — all facts live in the runner store, so a crash
 mid-tick and a restart re-run the tick harmlessly; startup recovery is REAP running first.
 """
@@ -8,6 +8,8 @@ mid-tick and a restart re-run the tick harmlessly; startup recovery is REAP runn
 from __future__ import annotations
 
 import json
+from collections.abc import Container, Iterator
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from blizzard.foundation.crash import crashpoint
@@ -37,17 +39,17 @@ from blizzard.wire.facts import (
     RUNNER_LOCALLY_PAUSED,
 )
 
-#: This module's public API — the loop steps it owns.
+#: This module's public API — the loop steps it owns, in tick order.
 __all__ = [
-    "advance",
-    "check_spend_ceiling",
-    "fill",
-    "flush_outbound",
-    "mark_resume_intents",
-    "pull",
-    "reap",
-    "resume",
-    "sample_external_subscription_usage",
+    "Advance",
+    "ExternalUsageSample",
+    "Fill",
+    "Pull",
+    "Reap",
+    "Resume",
+    "ResumeIntents",
+    "SpendCeiling",
+    "Step",
 ]
 
 _log = get_logger("blizzard.runner.loop")
@@ -72,366 +74,370 @@ _CP_PULL_BEFORE = crashpoint("pull.before-flush", "entered PULL; registry synced
 _CP_PULL_AFTER = crashpoint("pull.after-flush", "PULL done; buffer drained as far as it could")
 
 
-# Usage telemetry (issue #58) — the per-lease stdout redirect and its readback.
+@dataclass(frozen=True)
+class Step:
+    """One reconciliation step over a tick's context — individually runnable, so a test or
+    a CLI verb can drive exactly one (``bzh:steppable-loop``)."""
+
+    ctx: LoopContext
+
+    def run(self) -> None:
+        raise NotImplementedError
 
 
-# Runner spend ceiling (issue #61b) — the tick-level kill-switch, first in the tick.
+class SpendCeiling(Step):
+    """The tick-level kill-switch (issue #61b) — first in the tick."""
 
-
-def check_spend_ceiling(ctx: LoopContext) -> None:
-    """Engage the local pause brake once this runner's rolling-window spend reaches
-    ``cost.runner_ceiling_usd``; absent, there is no ceiling (issue #61). Runs **first** in
-    the tick so a crossing is visible to every later step in the same pass, engages exactly
-    once, and never lifts — only a conscious clear does (tests/test_runner_paused.py)."""
-    cap = ctx.config.runner_ceiling_usd
-    if cap is None:
-        return
-    if ctx.store.local_paused(ctx.config.runner_id):
-        return  # already engaged — engage-once; `blizzard runner start` is the only clear
-    now = ctx.clock.now()
-    since = now - timedelta(hours=ctx.config.runner_ceiling_window_hours)
-    totals = ctx.store.usage_since(since)
-    if totals.cost_usd < cap:
-        return
-    partial_note = " (PARTIAL — true spend may be higher)" if totals.cost_partial else ""
-    window_hours = ctx.config.runner_ceiling_window_hours
-    reason = (
-        f"spend ceiling ${cap:.2f} reached over the trailing {window_hours:g}h "
-        f"(spend ${totals.cost_usd:.2f}{partial_note})"
-    )
-    _log.warning(
-        f"runner locally paused — {reason}",
-        runner_id=ctx.config.runner_id,
-        ceiling_usd=cap,
-        spend_usd=totals.cost_usd,
-        window_hours=ctx.config.runner_ceiling_window_hours,
-        cost_partial=totals.cost_partial,
-    )
-    ctx.store.record_local_pause(
-        ctx.config.runner_id,
-        paused=True,
-        at=now,
-        by="runner-ceiling",
-        report_kind=RUNNER_LOCALLY_PAUSED,
-        report_payload=json.dumps(
-            {"runner_id": ctx.config.runner_id, "by": "runner-ceiling", "at": iso_utc(now), "reason": reason}
-        ),
-    )
-
-
-# REAP
-
-
-def reap(ctx: LoopContext) -> None:
-    """Expire leases whose worker is gone or **stalled** — each a failed attempt.
-
-    An **orphan** (minted but never spawned) and a **stalled-but-alive** worker end here.
-    An exited session-bearing worker is ADVANCE's: exit is the done declaration, and the
-    conservative staleness threshold is what keeps the two apart."""
-    _CP_REAP_BEFORE.reached()
-    local_paused = ctx.store.local_paused(ctx.config.runner_id)
-    now = ctx.clock.now()
-    parked = ctx.store.parked_lease_ids()
-    taken_over = ctx.store.open_takeover_chunk_ids()
-    deferred = 0
-    for lease in ctx.store.list_active_leases():
-        if lease.chunk_id in taken_over:
-            continue  # the human holds this session — no loop step touches it
-        if lease.lease_id in parked:
-            # Dormant on a question: no live worker to stall, so the reap clock is
-            # stopped — a parked chunk is never reaped for inactivity.
-            continue
-        if lease.pid is None or lease.session_id is None:
-            _log.info("reaping unspawned lease", lease_id=lease.lease_id, chunk_id=lease.chunk_id)
-            Attempt(ctx, lease).fail(reason=REAPED, via="reap")
-            continue
-        if not ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
-            continue  # exited — ADVANCE's (exit-is-done)
-        if is_heartbeat_stale(ctx.store, lease, now):
-            if local_paused:
-                # Do not kill a live worker while the brake is on — a pause is not a
-                # drain. The first tick after it clears reaps this lease as it would now.
-                deferred += 1
-                continue
-            _log.info("reaping stalled worker", lease_id=lease.lease_id, chunk_id=lease.chunk_id, pid=lease.pid)
-            Attempt(ctx, lease).fail(reason=REAPED, via="reap")
-        # A live, beating worker runs on.
-    if deferred:
-        _log.info("reap deferred — locally paused", runner_id=ctx.config.runner_id, count=deferred)
-    _CP_REAP_AFTER.reached()
-
-
-# RESUME — the restart re-attach: graceful marking (#12) + crash detection (#13)
-
-
-def mark_resume_intents(store: IWriteRunnerStore, *, now: datetime) -> int:
-    """Mark every in-flight lease for same-lease restart-resume — the graceful-shutdown hook.
-
-    Marks an active, non-parked, session-bearing lease and returns the count. Store-only, and
-    one durable row per mark, so a crash mid-marking degrades to the ungraceful path.
-    """
-    parked = store.parked_lease_ids()
-    pending = store.pending_submission_lease_ids()
-    marked = 0
-    for lease in store.list_active_leases():
-        if lease.pid is None or lease.session_id is None:
-            continue
-        if lease.lease_id in parked or lease.lease_id in pending:
-            continue
-        store.record_resume_intent(lease_id=lease.lease_id, marked_at=now)
-        marked += 1
-    if marked:
-        _log.info("marked in-flight leases for restart-resume", count=marked)
-    return marked
-
-
-def mark_crash_resume_intents(store: IWriteRunnerStore, *, process: IProcessProbe, now: datetime) -> int:
-    """Detect crash-orphaned sessions at startup and mark them for same-lease resume (#13).
-
-    Staleness is measured against :meth:`last_daemon_liveness`, not the clock at recovery,
-    which at startup is ``downtime + idle-at-crash``. Returns the number marked.
-    """
-    parked = store.parked_lease_ids()
-    pending = store.pending_submission_lease_ids()
-    ended = store.session_ended_lease_ids()
-    # as_utc: this instant is about to be subtracted from, and a naive one compares wrong.
-    last_alive = store.last_daemon_liveness()
-    crashed_at = as_utc(last_alive) if last_alive is not None else now
-    marked = 0
-    for lease in store.list_active_leases():
-        if lease.pid is None or lease.session_id is None:
-            continue  # never reached spawn-return — REAP's residue, nothing to resume
-        if lease.lease_id in parked or lease.lease_id in pending:
-            continue  # dormant on a question / outcome already elicited — not a crash to resume
-        if lease.lease_id in ended:
-            continue  # declared done (SessionEnd fired) — ADVANCE judges it (exit-is-done)
-        if process.is_alive(lease.pid, lease.process_start_time or ""):
-            continue  # orphaned-but-alive — re-adopted via its live heartbeat, never re-spawned
-        if is_heartbeat_stale(store, lease, crashed_at):
-            continue  # stalled at crash time — reaped & retried per the node's budget, unchanged
-        store.record_resume_intent(lease_id=lease.lease_id, marked_at=now)
-        marked += 1
-    if marked:
-        _log.info("marked crash-interrupted leases for restart-resume", count=marked)
-    return marked
-
-
-def resume(ctx: LoopContext) -> None:
-    """Re-attach to in-flight sessions a restart marked for same-lease resume — startup recovery.
-
-    Each marked lease is either resumed in place — unchanged ``lease_id``/``epoch``/
-    ``session_id``, no retry consumed — or abandoned with no epoch bump. Runs before ADVANCE so a
-    resumed lease reads live again by the time ADVANCE iterates."""
-    intents = ctx.store.resume_intent_lease_ids()
-    if not intents:
-        return
-    _CP_RESUME_BEFORE.reached()  # marked intents present; a crash here re-runs RESUME unchanged
-    active = {lease.lease_id: lease for lease in ctx.store.list_active_leases()}
-    for lease_id in intents:
-        lease = active.get(lease_id)
-        if lease is None:
-            ctx.store.record_resume_clear(lease_id=lease_id, cleared_at=ctx.clock.now())
-            continue
-        DormantSession(ctx, lease).restart_or_release()
-
-
-# PULL
-
-
-def pull(ctx: LoopContext) -> None:
-    """Exchange facts with the hub: sync the registry, reconcile ownership, drain the buffer."""
-    _sync_registry(ctx)
-    _reconcile_leases(ctx)
-    _CP_PULL_BEFORE.reached()
-    flush_outbound(ctx)
-    _CP_PULL_AFTER.reached()
-
-
-def _sync_registry(ctx: LoopContext) -> None:
-    """Register + heartbeat and mirror the hub's pause brake locally.
-
-    Registration is idempotent and doubles as the runner-level liveness heartbeat. The pause
-    brake is mirrored locally, and an unreachable hub leaves the last mirrored value standing.
-    """
-    try:
-        ctx.hub.register_runner(
-            ctx.config.runner_id,
-            ctx.config.workspace_id,
-            env_capacity=ctx.config.env_capacity,
-            url=ctx.config.public_url or None,
-            redirect_uris=ctx.config.redirect_uris,
+    def run(self) -> None:
+        """Engage the local pause brake once this runner's rolling-window spend reaches
+        ``cost.runner_ceiling_usd``; absent, there is no ceiling (issue #61). Runs **first** in
+        the tick so a crossing is visible to every later step in the same pass, engages exactly
+        once, and never lifts — only a conscious clear does (tests/test_runner_paused.py)."""
+        ctx = self.ctx
+        cap = ctx.config.runner_ceiling_usd
+        if cap is None:
+            return
+        if ctx.store.local_paused(ctx.config.runner_id):
+            return  # already engaged — engage-once; `blizzard runner start` is the only clear
+        now = ctx.clock.now()
+        since = now - timedelta(hours=ctx.config.runner_ceiling_window_hours)
+        totals = ctx.store.usage_since(since)
+        if totals.cost_usd < cap:
+            return
+        partial_note = " (PARTIAL — true spend may be higher)" if totals.cost_partial else ""
+        window_hours = ctx.config.runner_ceiling_window_hours
+        reason = (
+            f"spend ceiling ${cap:.2f} reached over the trailing {window_hours:g}h "
+            f"(spend ${totals.cost_usd:.2f}{partial_note})"
         )
-        paused = ctx.hub.fetch_runner_paused(ctx.config.runner_id)
-    except HubClientError:
-        return  # hub unreachable — keep the last-mirrored brake
-    ctx.store.set_hub_paused(ctx.config.runner_id, paused=paused, at=ctx.clock.now())
-
-
-def _reconcile_leases(ctx: LoopContext) -> None:
-    """Reconcile every active lease against the hub's view of its chunk — abandon it if the hub
-    no longer routes it here, else park it if the operator paused it (issue #46).
-
-    Both questions share **one** ``get_chunk`` per lease, and a transport failure is never read
-    as a detach or a pause. The pause branch keys on the pause *fact*, which an ask-park masks."""
-    pause_parked = ctx.store.pause_parked_lease_ids()  # hoisted: the park guard, one read per tick
-    for lease in ctx.store.list_active_leases():
-        try:
-            detail = ctx.hub.get_chunk(lease.chunk_id)
-        except ChunkNotFoundError:
-            # Terminal, not retryable (blizzard#9). Ordered before the HubClientError arm
-            # because it subclasses it, or the 404 would be swallowed as "hub unreachable".
-            Attempt(ctx, lease).abandon(via="pull")
-            continue
-        except HubClientError:
-            continue  # hub unreachable — last-known directive holds; keep working
-        if detail.status == ChunkStatus.STOPPED:
-            # Honor the terminal fact directly (issue #118), rather than waiting on the
-            # route check below to observe the release.
-            Attempt(ctx, lease).abandon(via="pull")
-        elif detail.route is None or detail.route.runner_id != ctx.config.runner_id:
-            Attempt(ctx, lease).abandon(via="pull")
-        elif detail.pause is not None and lease.lease_id not in pause_parked:
-            Attempt(ctx, lease).park_paused(via="pull")
-
-
-def flush_outbound(ctx: LoopContext) -> None:
-    """Drain the outbound buffer in FIFO order until a fact fails to deliver."""
-    OutboundDrain(ctx).run()
-
-
-# FILL
-
-
-def fill(ctx: LoopContext) -> None:
-    """Keep the fleet busy: peek → acquire → claim-by-route → bind → spawn.
-
-    Open slots are ``MAX_AGENTS - active_leases``; for each, peek the ready queue, acquire the
-    chunk's environments all-or-nothing, and claim the route. Either brake stops *new* claims.
-    """
-    InterruptedClaims(ctx).reconcile()
-    hub_paused = ctx.store.hub_paused(ctx.config.runner_id)
-    local_paused = ctx.store.local_paused(ctx.config.runner_id)
-    if hub_paused or local_paused:
-        _log.info(
-            "paused — no new claims this tick",
+        _log.warning(
+            f"runner locally paused — {reason}",
             runner_id=ctx.config.runner_id,
-            hub_paused=hub_paused,
-            local_paused=local_paused,
+            ceiling_usd=cap,
+            spend_usd=totals.cost_usd,
+            window_hours=ctx.config.runner_ceiling_window_hours,
+            cost_partial=totals.cost_partial,
         )
-        return
-    slots = ctx.config.max_agents - len(ctx.store.list_active_leases())
-    queue = ReadyQueue(ctx)
-    for _ in range(max(slots, 0)):
-        if not queue.claim_one():
-            break
+        ctx.store.record_local_pause(
+            ctx.config.runner_id,
+            paused=True,
+            at=now,
+            by="runner-ceiling",
+            report_kind=RUNNER_LOCALLY_PAUSED,
+            report_payload=json.dumps(
+                {"runner_id": ctx.config.runner_id, "by": "runner-ceiling", "at": iso_utc(now), "reason": reason}
+            ),
+        )
 
 
-# ADVANCE
+class Reap(Step):
+    def run(self) -> None:
+        """Expire leases whose worker is gone or **stalled** — each a failed attempt.
+
+        An **orphan** (minted but never spawned) and a **stalled-but-alive** worker end here.
+        An exited session-bearing worker is ADVANCE's: exit is the done declaration, and the
+        conservative staleness threshold is what keeps the two apart."""
+        ctx = self.ctx
+        _CP_REAP_BEFORE.reached()
+        local_paused = ctx.store.local_paused(ctx.config.runner_id)
+        now = ctx.clock.now()
+        parked = ctx.store.parked_lease_ids()
+        taken_over = ctx.store.open_takeover_chunk_ids()
+        deferred = 0
+        for lease in ctx.store.list_active_leases():
+            if lease.chunk_id in taken_over:
+                continue  # the human holds this session — no loop step touches it
+            if lease.lease_id in parked:
+                # Dormant on a question: no live worker to stall, so the reap clock is
+                # stopped — a parked chunk is never reaped for inactivity.
+                continue
+            if lease.pid is None or lease.session_id is None:
+                _log.info("reaping unspawned lease", lease_id=lease.lease_id, chunk_id=lease.chunk_id)
+                Attempt(ctx, lease).fail(reason=REAPED, via="reap")
+                continue
+            if not ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
+                continue  # exited — ADVANCE's (exit-is-done)
+            if is_heartbeat_stale(ctx.store, lease, now):
+                if local_paused:
+                    # Do not kill a live worker while the brake is on — a pause is not a
+                    # drain. The first tick after it clears reaps this lease as it would now.
+                    deferred += 1
+                    continue
+                _log.info("reaping stalled worker", lease_id=lease.lease_id, chunk_id=lease.chunk_id, pid=lease.pid)
+                Attempt(ctx, lease).fail(reason=REAPED, via="reap")
+            # A live, beating worker runs on.
+        if deferred:
+            _log.info("reap deferred — locally paused", runner_id=ctx.config.runner_id, count=deferred)
+        _CP_REAP_AFTER.reached()
 
 
-def advance(ctx: LoopContext) -> None:
-    """Judge finished workers and move chunks through the graph.
+@dataclass(frozen=True)
+class ResumeIntents:
+    """Marking in-flight leases for same-lease restart-resume — the graceful-shutdown hook
+    (#12) and the startup crash-orphan scan (#13). Store-only: no context, no hub."""
 
-    Two responsibilities: an exited session-bearing worker is a done declaration to judge and
-    buffer, and a held chunk with no active lease is driven separately.
-    """
-    pending = ctx.store.pending_submission_lease_ids()
-    ask_parked = ctx.store.ask_parked_lease_ids()
-    pause_parked = ctx.store.pause_parked_lease_ids()
-    resume_intents = ctx.store.resume_intent_lease_ids()
-    taken_over = ctx.store.open_takeover_chunk_ids()
-    for lease in ctx.store.list_active_leases():
-        if lease.chunk_id in taken_over:
-            continue  # the human holds this session — no loop step touches it
-        if lease.pid is None or lease.session_id is None:
-            continue  # REAP's residue
-        if lease.lease_id in resume_intents:
-            continue  # RESUME hasn't re-attached (or abandoned) it yet — not exited work
-        if lease.lease_id in pending:
-            continue  # outcome elicited, awaiting flush — the node boundary
-        if lease.lease_id in pause_parked:
-            DormantSession(ctx, lease).on_unpause()  # dormant on an operator pause — resume when it lifts
-            continue
-        if lease.lease_id in ask_parked:
-            DormantSession(ctx, lease).on_answer()  # dormant on a question — resume on the answer
-            continue
-        if ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
-            continue  # worker still running
-        _advance_exited_worker(ctx, lease)
+    store: IWriteRunnerStore
 
-    for chunk_id in ctx.store.live_tenure_chunk_ids():
-        if chunk_id in taken_over:
-            continue  # the human holds this chunk — no gate/hub-node poll while they do
-        if ctx.store.active_lease_for_chunk(chunk_id) is None:
-            HeldChunk(ctx, chunk_id).drive()
+    def mark_graceful(self, *, now: datetime) -> int:
+        """Mark every in-flight lease, and return the count. One durable row per mark, so a
+        crash mid-marking degrades to the ungraceful path."""
+        marked = self._mark(self._resumable(), now=now)
+        if marked:
+            _log.info("marked in-flight leases for restart-resume", count=marked)
+        return marked
 
+    def mark_crashed(self, *, process: IProcessProbe, now: datetime) -> int:
+        """Mark the leases a crash orphaned mid-session, and return the count.
 
-def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
-    """Park on an open ask, else elicit the verdict and buffer the completion."""
-    if lease.session_id is None:
-        return  # not spawned — REAP's residue (guarded by the caller too)
-    # Ask-and-exit: an exit holding an unforwarded ask is a park, an exit with neither is a
-    # failure. Not a spawn, so it proceeds regardless of the local brake.
-    ask = ctx.store.unforwarded_ask(lease.lease_id)
-    if ask is not None:
-        DormantSession(ctx, lease).park_on_ask(ask)
-        return
-    judgement = Judgement.of(ctx, lease)
-    if judgement is not None:
-        judgement.run()
+        Staleness is measured against :meth:`last_daemon_liveness`, not the clock at recovery,
+        which at startup is ``downtime + idle-at-crash``."""
+        ended = self.store.session_ended_lease_ids()
+        # as_utc: this instant is about to be subtracted from, and a naive one compares wrong.
+        last_alive = self.store.last_daemon_liveness()
+        crashed_at = as_utc(last_alive) if last_alive is not None else now
+        marked = self._mark(self._crash_orphaned(ended, process, crashed_at), now=now)
+        if marked:
+            _log.info("marked crash-interrupted leases for restart-resume", count=marked)
+        return marked
 
-    # Every other shape keeps its binding and is polled again next tick.
+    def _resumable(self) -> Iterator[LeaseRecord]:
+        """Active, session-bearing leases that are neither parked nor mid-submission —
+        an unspawned one is REAP's residue, with nothing to resume."""
+        parked = self.store.parked_lease_ids()
+        pending = self.store.pending_submission_lease_ids()
+        for lease in self.store.list_active_leases():
+            if lease.pid is None or lease.session_id is None:
+                continue
+            if lease.lease_id in parked or lease.lease_id in pending:
+                continue
+            yield lease
 
+    def _crash_orphaned(
+        self, ended: Container[str], process: IProcessProbe, crashed_at: datetime
+    ) -> Iterator[LeaseRecord]:
+        for lease in self._resumable():
+            if lease.lease_id in ended:
+                continue  # declared done (SessionEnd fired) — ADVANCE judges it (exit-is-done)
+            if lease.pid is not None and process.is_alive(lease.pid, lease.process_start_time or ""):
+                continue  # orphaned-but-alive — re-adopted via its live heartbeat, never re-spawned
+            if is_heartbeat_stale(self.store, lease, crashed_at):
+                continue  # stalled at crash time — reaped & retried per the node's budget, unchanged
+            yield lease
 
-# Shared helpers
-
-
-# EXTERNAL SUBSCRIPTION USAGE SAMPLE (issue #218)
-
-
-def _external_usage_payload(snapshot: ExternalSubscriptionUsageSnapshot) -> dict[str, object]:
-    """The stable JSON shape for a sampled snapshot — both this attempt's stored
-    ``payload`` and its buffered outbound report use this exact shape, and phase 3's wire
-    fact payload is defined to match it field-for-field: ``sampled_at``, ``windows``, and
-    per-window ``window``/``utilization_pct``/``resets_at``/``window_seconds``."""
-    return {
-        "sampled_at": iso_utc(snapshot.sampled_at),
-        "windows": [
-            {
-                "window": w.window,
-                "utilization_pct": w.utilization_pct,
-                "resets_at": iso_utc(w.resets_at),
-                "window_seconds": w.window_seconds,
-            }
-            for w in snapshot.windows
-        ],
-    }
+    def _mark(self, leases: Iterator[LeaseRecord], *, now: datetime) -> int:
+        marked = 0
+        for lease in leases:
+            self.store.record_resume_intent(lease_id=lease.lease_id, marked_at=now)
+            marked += 1
+        return marked
 
 
-def sample_external_subscription_usage(ctx: LoopContext) -> None:
-    """Sample the harness's own subscription rate-limit utilization (issue #218).
+class Resume(Step):
+    def run(self) -> None:
+        """Re-attach to in-flight sessions a restart marked for same-lease resume — startup recovery.
 
-    The cadence anchor is derived as ``max(sampled_at)``, never a stored "last sampled" column,
-    and an attempt row is recorded either way — a ``NULL`` payload when nothing was produced.
-    """
-    try:
-        anchor = ctx.store.last_external_usage_attempt_at()
-        if anchor is not None:
-            elapsed = ctx.clock.now() - anchor
-            if elapsed < timedelta(seconds=ctx.config.external_usage_sample_interval_seconds):
-                return
-        snapshot = ctx.harness.sample_external_subscription_usage()
-        if snapshot is None:
-            ctx.store.record_external_usage_attempt(
-                sampled_at=ctx.clock.now(), payload=None, report_kind="", report_payload=""
+        Each marked lease is either resumed in place — unchanged ``lease_id``/``epoch``/
+        ``session_id``, no retry consumed — or abandoned with no epoch bump. Runs before ADVANCE so a
+        resumed lease reads live again by the time ADVANCE iterates."""
+        ctx = self.ctx
+        intents = ctx.store.resume_intent_lease_ids()
+        if not intents:
+            return
+        _CP_RESUME_BEFORE.reached()  # marked intents present; a crash here re-runs RESUME unchanged
+        active = {lease.lease_id: lease for lease in ctx.store.list_active_leases()}
+        for lease_id in intents:
+            lease = active.get(lease_id)
+            if lease is None:
+                ctx.store.record_resume_clear(lease_id=lease_id, cleared_at=ctx.clock.now())
+                continue
+            DormantSession(ctx, lease).restart_or_release()
+
+
+class Pull(Step):
+    def run(self) -> None:
+        """Exchange facts with the hub: sync the registry, reconcile ownership, drain the buffer."""
+        self._sync_registry()
+        self._reconcile_leases()
+        _CP_PULL_BEFORE.reached()
+        OutboundDrain(self.ctx).run()
+        _CP_PULL_AFTER.reached()
+
+    def _sync_registry(self) -> None:
+        """Register + heartbeat and mirror the hub's pause brake locally.
+
+        Registration is idempotent and doubles as the runner-level liveness heartbeat. The pause
+        brake is mirrored locally, and an unreachable hub leaves the last mirrored value standing.
+        """
+        ctx = self.ctx
+        try:
+            ctx.hub.register_runner(
+                ctx.config.runner_id,
+                ctx.config.workspace_id,
+                env_capacity=ctx.config.env_capacity,
+                url=ctx.config.public_url or None,
+                redirect_uris=ctx.config.redirect_uris,
+            )
+            paused = ctx.hub.fetch_runner_paused(ctx.config.runner_id)
+        except HubClientError:
+            return  # hub unreachable — keep the last-mirrored brake
+        ctx.store.set_hub_paused(ctx.config.runner_id, paused=paused, at=ctx.clock.now())
+
+    def _reconcile_leases(self) -> None:
+        """Reconcile every active lease against the hub's view of its chunk — abandon it if the hub
+        no longer routes it here, else park it if the operator paused it (issue #46).
+
+        Both questions share **one** ``get_chunk`` per lease, and a transport failure is never read
+        as a detach or a pause. The pause branch keys on the pause *fact*, which an ask-park masks."""
+        ctx = self.ctx
+        pause_parked = ctx.store.pause_parked_lease_ids()  # hoisted: the park guard, one read per tick
+        for lease in ctx.store.list_active_leases():
+            try:
+                detail = ctx.hub.get_chunk(lease.chunk_id)
+            except ChunkNotFoundError:
+                # Terminal, not retryable (blizzard#9). Ordered before the HubClientError arm
+                # because it subclasses it, or the 404 would be swallowed as "hub unreachable".
+                Attempt(ctx, lease).abandon(via="pull")
+                continue
+            except HubClientError:
+                continue  # hub unreachable — last-known directive holds; keep working
+            if detail.status == ChunkStatus.STOPPED:
+                # Honor the terminal fact directly (issue #118), rather than waiting on the
+                # route check below to observe the release.
+                Attempt(ctx, lease).abandon(via="pull")
+            elif detail.route is None or detail.route.runner_id != ctx.config.runner_id:
+                Attempt(ctx, lease).abandon(via="pull")
+            elif detail.pause is not None and lease.lease_id not in pause_parked:
+                Attempt(ctx, lease).park_paused(via="pull")
+
+
+class Fill(Step):
+    def run(self) -> None:
+        """Keep the fleet busy: peek → acquire → claim-by-route → bind → spawn.
+
+        Open slots are ``MAX_AGENTS - active_leases``; for each, peek the ready queue, acquire the
+        chunk's environments all-or-nothing, and claim the route. Either brake stops *new* claims.
+        """
+        ctx = self.ctx
+        InterruptedClaims(ctx).reconcile()
+        hub_paused = ctx.store.hub_paused(ctx.config.runner_id)
+        local_paused = ctx.store.local_paused(ctx.config.runner_id)
+        if hub_paused or local_paused:
+            _log.info(
+                "paused — no new claims this tick",
+                runner_id=ctx.config.runner_id,
+                hub_paused=hub_paused,
+                local_paused=local_paused,
             )
             return
-        payload = json.dumps(_external_usage_payload(snapshot))
-        ctx.store.record_external_usage_attempt(
-            sampled_at=ctx.clock.now(),
-            payload=payload,
-            report_kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-            report_payload=payload,
-        )
-    except Exception as exc:  # second line of defense — the adapter contract already promises this
-        _log.warning("external subscription usage sample step failed", detail=str(exc))
+        slots = ctx.config.max_agents - len(ctx.store.list_active_leases())
+        queue = ReadyQueue(ctx)
+        for _ in range(max(slots, 0)):
+            if not queue.claim_one():
+                break
+
+
+class Advance(Step):
+    def run(self) -> None:
+        """Judge finished workers and move chunks through the graph.
+
+        Two responsibilities: an exited session-bearing worker is a done declaration to judge and
+        buffer, and a held chunk with no active lease is driven separately.
+        """
+        ctx = self.ctx
+        pending = ctx.store.pending_submission_lease_ids()
+        ask_parked = ctx.store.ask_parked_lease_ids()
+        pause_parked = ctx.store.pause_parked_lease_ids()
+        resume_intents = ctx.store.resume_intent_lease_ids()
+        taken_over = ctx.store.open_takeover_chunk_ids()
+        for lease in ctx.store.list_active_leases():
+            if lease.chunk_id in taken_over:
+                continue  # the human holds this session — no loop step touches it
+            if lease.pid is None or lease.session_id is None:
+                continue  # REAP's residue
+            if lease.lease_id in resume_intents:
+                continue  # RESUME hasn't re-attached (or abandoned) it yet — not exited work
+            if lease.lease_id in pending:
+                continue  # outcome elicited, awaiting flush — the node boundary
+            if lease.lease_id in pause_parked:
+                DormantSession(ctx, lease).on_unpause()  # dormant on an operator pause — resume when it lifts
+                continue
+            if lease.lease_id in ask_parked:
+                DormantSession(ctx, lease).on_answer()  # dormant on a question — resume on the answer
+                continue
+            if ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
+                continue  # worker still running
+            self._advance_exited_worker(lease)
+
+        for chunk_id in ctx.store.live_tenure_chunk_ids():
+            if chunk_id in taken_over:
+                continue  # the human holds this chunk — no gate/hub-node poll while they do
+            if ctx.store.active_lease_for_chunk(chunk_id) is None:
+                HeldChunk(ctx, chunk_id).drive()
+
+    def _advance_exited_worker(self, lease: LeaseRecord) -> None:
+        """Park on an open ask, else elicit the verdict and buffer the completion."""
+        if lease.session_id is None:
+            return  # not spawned — REAP's residue (guarded by the caller too)
+        # Ask-and-exit: an exit holding an unforwarded ask is a park, an exit with neither is a
+        # failure. Not a spawn, so it proceeds regardless of the local brake.
+        ask = self.ctx.store.unforwarded_ask(lease.lease_id)
+        if ask is not None:
+            DormantSession(self.ctx, lease).park_on_ask(ask)
+            return
+        judgement = Judgement.of(self.ctx, lease)
+        if judgement is not None:
+            judgement.run()
+
+        # Every other shape keeps its binding and is polled again next tick.
+
+
+class ExternalUsageSample(Step):
+    """The harness's own subscription rate-limit utilization (issue #218) — last in the tick."""
+
+    def run(self) -> None:
+        """Sample the harness's rate-limit utilization.
+
+        The cadence anchor is derived as ``max(sampled_at)``, never a stored "last sampled" column,
+        and an attempt row is recorded either way — a ``NULL`` payload when nothing was produced.
+        """
+        ctx = self.ctx
+        try:
+            anchor = ctx.store.last_external_usage_attempt_at()
+            if anchor is not None:
+                elapsed = ctx.clock.now() - anchor
+                if elapsed < timedelta(seconds=ctx.config.external_usage_sample_interval_seconds):
+                    return
+            snapshot = ctx.harness.sample_external_subscription_usage()
+            if snapshot is None:
+                ctx.store.record_external_usage_attempt(
+                    sampled_at=ctx.clock.now(), payload=None, report_kind="", report_payload=""
+                )
+                return
+            payload = json.dumps(self._payload(snapshot))
+            ctx.store.record_external_usage_attempt(
+                sampled_at=ctx.clock.now(),
+                payload=payload,
+                report_kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+                report_payload=payload,
+            )
+        except Exception as exc:  # second line of defense — the adapter contract already promises this
+            _log.warning("external subscription usage sample step failed", detail=str(exc))
+
+    @staticmethod
+    def _payload(snapshot: ExternalSubscriptionUsageSnapshot) -> dict[str, object]:
+        """The stable JSON shape for a sampled snapshot — both this attempt's stored
+        ``payload`` and its buffered outbound report use this exact shape, and phase 3's wire
+        fact payload is defined to match it field-for-field: ``sampled_at``, ``windows``, and
+        per-window ``window``/``utilization_pct``/``resets_at``/``window_seconds``."""
+        return {
+            "sampled_at": iso_utc(snapshot.sampled_at),
+            "windows": [
+                {
+                    "window": w.window,
+                    "utilization_pct": w.utilization_pct,
+                    "resets_at": iso_utc(w.resets_at),
+                    "window_seconds": w.window_seconds,
+                }
+                for w in snapshot.windows
+            ],
+        }

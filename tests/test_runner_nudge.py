@@ -17,7 +17,7 @@ from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.loop.produces import ProducesReconciler
-from blizzard.runner.loop.steps import _advance_exited_worker, advance, pull
+from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.graph import ProducesEntry
@@ -193,8 +193,8 @@ def test_nudge_fires_once_lists_missing_name_and_picks_up_the_attach(tmp_path: P
         clock=clock,
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     # Two harness resumes: the original verdict elicitation, then exactly one nudge.
     assert len(harness.judged) == 2, "expected the verdict resume plus exactly one nudge resume"
@@ -259,8 +259,8 @@ def test_nudge_fires_once_and_picks_up_a_git_commit_declared_mid_nudge(tmp_path:
         clock=clock,
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     # Two harness resumes: the original verdict elicitation, then exactly one nudge.
     assert len(harness.judged) == 2, "expected the verdict resume plus exactly one nudge resume"
@@ -321,8 +321,8 @@ def test_nudge_resume_records_its_own_usage_fact(tmp_path: Path) -> None:
         clock=clock,
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     assert len(harness.judged) == 2, "expected the verdict resume plus exactly one nudge resume"
 
@@ -365,8 +365,8 @@ def test_nudge_does_not_refire_on_a_second_advance_pass(tmp_path: Path) -> None:
     )
 
     lease = store.list_active_leases()[0]
-    _advance_exited_worker(ctx, lease)
-    pull(ctx)  # the flusher delivers the buffered completion to the hub
+    Advance(ctx)._advance_exited_worker(lease)
+    Pull(ctx).run()  # the flusher delivers the buffered completion to the hub
 
     # Only the original verdict elicitation — no nudge resume was attempted a second
     # time, because the durable fact already said this attempt's nudge was spent.
@@ -416,8 +416,8 @@ def test_fully_attached_node_does_not_nudge(tmp_path: Path) -> None:
         clock=clock,
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     assert len(harness.judged) == 1, "a fully-attached node must not be nudged"
     assert store.nudge_fired("lease_r", 1) is False

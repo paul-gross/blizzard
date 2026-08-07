@@ -17,7 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot, ExternalSubscriptionUsageWindow
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.steps import sample_external_subscription_usage
+from blizzard.runner.loop.steps import ExternalUsageSample
 from blizzard.runner.loop.tick import tick
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
@@ -107,7 +107,7 @@ def test_first_ever_attempt_samples_immediately(tmp_path) -> None:  # type: igno
     ctx = _ctx(store, harness=harness, clock=FixedClock(_NOW))
 
     assert store.last_external_usage_attempt_at() is None
-    sample_external_subscription_usage(ctx)
+    ExternalUsageSample(ctx).run()
 
     assert harness.external_usage_calls == 1
     assert store.last_external_usage_attempt_at() == _NOW
@@ -120,11 +120,11 @@ def test_within_the_interval_the_adapter_is_not_called(tmp_path) -> None:  # typ
     clock = FixedClock(_NOW)
     ctx = _ctx(store, harness=harness, clock=clock, interval_seconds=300)
 
-    sample_external_subscription_usage(ctx)
+    ExternalUsageSample(ctx).run()
     assert harness.external_usage_calls == 1
 
     clock.advance(timedelta(seconds=299))
-    sample_external_subscription_usage(ctx)
+    ExternalUsageSample(ctx).run()
     assert harness.external_usage_calls == 1  # still gated — under the interval
 
 
@@ -135,11 +135,11 @@ def test_at_exactly_the_interval_the_adapter_is_called(tmp_path) -> None:  # typ
     clock = FixedClock(_NOW)
     ctx = _ctx(store, harness=harness, clock=clock, interval_seconds=300)
 
-    sample_external_subscription_usage(ctx)
+    ExternalUsageSample(ctx).run()
     assert harness.external_usage_calls == 1
 
     clock.advance(timedelta(seconds=300))
-    sample_external_subscription_usage(ctx)
+    ExternalUsageSample(ctx).run()
     assert harness.external_usage_calls == 2  # exactly at the interval — samples
 
 
@@ -150,9 +150,9 @@ def test_past_the_interval_the_adapter_is_called(tmp_path) -> None:  # type: ign
     clock = FixedClock(_NOW)
     ctx = _ctx(store, harness=harness, clock=clock, interval_seconds=300)
 
-    sample_external_subscription_usage(ctx)
+    ExternalUsageSample(ctx).run()
     clock.advance(timedelta(seconds=301))
-    sample_external_subscription_usage(ctx)
+    ExternalUsageSample(ctx).run()
 
     assert harness.external_usage_calls == 2
 
@@ -168,7 +168,7 @@ def test_a_successful_sample_records_one_attempt_and_enqueues_one_runner_scoped_
     harness = FakeHarness(handle=_HANDLE, verdict="pass", external_usage_snapshot=snapshot)
     ctx = _ctx(store, harness=harness, clock=FixedClock(_NOW))
 
-    sample_external_subscription_usage(ctx)
+    ExternalUsageSample(ctx).run()
 
     assert store.last_external_usage_attempt_at() == _NOW
 
@@ -199,7 +199,7 @@ def test_no_sample_records_a_null_payload_attempt_and_enqueues_nothing(tmp_path)
     clock = FixedClock(_NOW)
     ctx = _ctx(store, harness=harness, clock=clock, interval_seconds=300)
 
-    sample_external_subscription_usage(ctx)
+    ExternalUsageSample(ctx).run()
 
     assert store.last_external_usage_attempt_at() == _NOW
     assert [f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND] == []
@@ -207,7 +207,7 @@ def test_no_sample_records_a_null_payload_attempt_and_enqueues_nothing(tmp_path)
     # The next tick, still within the interval, must not re-sample — the NULL-payload
     # attempt still counts as "tried" for cadence purposes.
     clock.advance(timedelta(seconds=100))
-    sample_external_subscription_usage(ctx)
+    ExternalUsageSample(ctx).run()
     assert harness.external_usage_calls == 1
     assert store.last_external_usage_attempt_at() == _NOW  # unchanged — no new attempt
 
@@ -243,7 +243,7 @@ def test_a_raising_step_called_directly_returns_without_raising(tmp_path) -> Non
     harness = FakeHarness(handle=_HANDLE, verdict="pass", external_usage_raises=ValueError("nope"))
     ctx = _ctx(store, harness=harness, clock=FixedClock(_NOW))
 
-    sample_external_subscription_usage(ctx)  # must not raise
+    ExternalUsageSample(ctx).run()  # must not raise
 
     assert store.last_external_usage_attempt_at() is None
 

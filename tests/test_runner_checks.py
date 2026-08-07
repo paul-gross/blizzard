@@ -17,7 +17,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT, CheckOutcome
 from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.judgement_prompt import JudgementPrompt
-from blizzard.runner.loop.steps import advance, pull
+from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.runner.store.repository import CheckResultRecord, NewLease
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from tests.runner_fakes import (
@@ -89,8 +89,8 @@ def test_advance_runs_checks_records_facts_and_injects_them_into_the_submission(
         clock=clock,
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     # Both checks ran, in the env workdir root (no checks_cwd), under the default timeout.
     assert [c[0] for c in check_runner.calls] == ["mise run lint", "mise run test"]
@@ -136,8 +136,8 @@ def test_advance_records_a_red_check_and_still_buffers_the_completion(tmp_path: 
         clock=clock,
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     records = store.check_results_for_lease("lease_b", 1)
     assert [(r.command, r.passed, r.output_tail) for r in records] == [("mise run test", False, "2 failed")]
@@ -171,8 +171,8 @@ def test_advance_with_no_checks_runs_nothing_and_carries_empty_check_results(tmp
         clock=clock,
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     assert check_runner.calls == []
     assert store.checks_ran("lease_b", 1) is False
@@ -356,7 +356,7 @@ def test_advance_injects_the_check_results_into_the_judgement_prompt(tmp_path: P
         clock=clock,
     )
 
-    advance(ctx)
+    Advance(ctx).run()
 
     # The single judge elicitation carries the check block, between the prose and the tail.
     assert len(harness.judged) == 1
@@ -410,8 +410,8 @@ def test_advance_gates_a_requires_checks_pass_with_a_red_check_and_consumes_a_re
         clock=FixedClock(_NOW),
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     # The gated `pass` over a red check never buffers a completion — it failed the attempt.
     assert hub.completions == []
@@ -445,8 +445,8 @@ def test_advance_lets_a_red_check_route_through_a_non_gated_fail(tmp_path: Path)
         clock=FixedClock(_NOW),
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     # The non-gated `fail` buffers and applies normally, red check notwithstanding.
     assert len(hub.completions) == 1
@@ -479,8 +479,8 @@ def test_advance_accepts_a_requires_checks_pass_when_checks_are_green(tmp_path: 
         clock=FixedClock(_NOW),
     )
 
-    advance(ctx)
-    pull(ctx)
+    Advance(ctx).run()
+    Pull(ctx).run()
 
     assert len(hub.completions) == 1
     assert hub.completions[0][1].choice == "pass"
