@@ -1,17 +1,16 @@
 """The runner-local lease list — ``GET /api/leases`` (issue #28; widened issue #29).
 
 Active leases plus recently-closed ones, answered entirely from the local sqlite store and
-the process probe. **Hub-free** by design: no hub call, no forge call, no title. Read-only
-over its wiring (``bzh:controller-read-only``); unwired, the probe answers 503.
-"""
+the process probe. **Hub-free** by design: no hub call, no forge call, no title, and
+read-only over its wiring (``bzh:controller-read-only``)."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, status
-from fastapi.exceptions import HTTPException
+from fastapi import APIRouter, Request
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.domain.leases import LeaseActivity, LocalLeaseService
+from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.domain.leases import LeaseActivity
 from blizzard.wire.lease import LeaseListResponse, LeaseView
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -41,10 +40,5 @@ def _view(activity: LeaseActivity) -> LeaseView:
 @router.get("/leases", response_model=LeaseListResponse)
 def list_leases(request: Request) -> LeaseListResponse:
     """Active leases, then recently-closed ones, derived at read time (issue #28/#29)."""
-    service: LocalLeaseService | None = getattr(request.app.state, "leases", None)
-    if service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="lease service not wired — start via `blizzard runner host`",
-        )
+    service = RunnerWiring.of(request).leases()
     return LeaseListResponse(items=[_view(activity) for activity in service.list_recent()])

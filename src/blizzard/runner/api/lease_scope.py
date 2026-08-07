@@ -6,25 +6,19 @@ from fastapi import Request, status
 from fastapi.exceptions import HTTPException
 
 from blizzard.runner.api.lease_token import presented_lease_token
+from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.domain.lease_auth import check_lease_token
-from blizzard.runner.store.repository import IReadRunnerStore, LeaseRecord
+from blizzard.runner.store.repository import LeaseRecord
 
 
 def authorized_lease(lease_id: str, request: Request) -> LeaseRecord:
     """Resolve ``lease_id`` to its active lease and check the presented token, or raise the
     store-free ``503`` / unknown-lease ``404`` / bad-token ``403`` — before any hub call, so an
     unauthorized caller never learns the fleet's hub-wiring state."""
-    store: IReadRunnerStore | None = getattr(request.app.state, "runner_store", None)
-    if store is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="runner store not wired — start via `blizzard runner host`",
-        )
-    lease = store.active_lease(lease_id)
-    if lease is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no active lease {lease_id}")
+    wiring = RunnerWiring.of(request)
+    lease = wiring.active_lease(lease_id)
     if not check_lease_token(
-        presented_token=presented_lease_token(request), stored_hash=store.lease_token_hash(lease_id)
+        presented_token=presented_lease_token(request), stored_hash=wiring.reads().lease_token_hash(lease_id)
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=f"presented token does not authorize lease {lease_id}"

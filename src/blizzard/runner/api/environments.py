@@ -7,11 +7,10 @@ bound to and when, a free row carries neither. Derived at read time from the ``h
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, status
-from fastapi.exceptions import HTTPException
+from fastapi import APIRouter, Request
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.domain.status import RunnerStatusService
+from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.wire.runner_status import EnvironmentListResponse, EnvironmentView
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -20,12 +19,7 @@ router = APIRouter(prefix="/api", tags=["runner"])
 @router.get("/environments", response_model=EnvironmentListResponse)
 def list_environments(request: Request) -> EnvironmentListResponse:
     """Every environment in this runner's configured pool, held or free."""
-    service: RunnerStatusService | None = getattr(request.app.state, "runner_status", None)
-    if service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="runner status service not wired — start via `blizzard runner host`",
-        )
+    service = RunnerWiring.of(request).status()
     return EnvironmentListResponse(
         items=[
             EnvironmentView(

@@ -11,11 +11,11 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.exceptions import HTTPException
 from pydantic import BaseModel
 
-from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import QUESTION_PREFIX, mint
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.federation import require_human_api
-from blizzard.runner.store.repository import AskRecord, IReadRunnerStore, IWriteRunnerStore
+from blizzard.runner.store.repository import AskRecord
 from blizzard.wire.runner_status import AskListResponse, AskView
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -39,16 +39,9 @@ class AskResponse(BaseModel):
 @router.post("/leases/{lease_id}/asks", response_model=AskResponse, status_code=status.HTTP_201_CREATED)
 def record_ask(lease_id: str, request_body: AskRequest, request: Request) -> AskResponse:
     """Record a worker's ask against its lease, minting the question id."""
-    store: IWriteRunnerStore | None = getattr(request.app.state, "runner_store", None)
-    clock: IClock | None = getattr(request.app.state, "clock", None)
-    if store is None or clock is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="runner store not wired — start via `blizzard runner host`",
-        )
-    lease = store.active_lease(lease_id)
-    if lease is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no active lease {lease_id}")
+    wiring = RunnerWiring.of(request)
+    store, clock = wiring.store(), wiring.clock()
+    lease = wiring.active_lease(lease_id)
     question_id = mint(QUESTION_PREFIX, clock)
     store.record_ask(
         lease_id=lease_id,
@@ -86,10 +79,4 @@ def list_asks(request: Request, open_only: bool = Query(True, alias="open")) -> 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="only open asks are queryable — no closed-ask history is kept",
         )
-    store: IReadRunnerStore | None = getattr(request.app.state, "runner_store", None)
-    if store is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="runner store not wired — start via `blizzard runner host`",
-        )
-    return AskListResponse(items=[_ask_view(a) for a in store.open_asks()])
+    return AskListResponse(items=[_ask_view(a) for a in RunnerWiring.of(request).reads().open_asks()])

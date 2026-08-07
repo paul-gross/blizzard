@@ -2,8 +2,8 @@
 
 A worker durably declares a ``git_commit`` artifact for a repo it touched, authorized by
 the lease token it inherited at spawn, presented as ``X-Blizzard-Lease-Token`` or a bearer
-header (the dedicated one checked first). Read-only over its wiring: ``503`` unwired,
-``404`` unknown lease, ``403`` bad token, ``400`` for a repo the lease does not hold."""
+header (the dedicated one checked first). ``404`` unknown lease, ``403`` bad token, and
+``400`` for a repo the lease does not hold."""
 
 from __future__ import annotations
 
@@ -11,25 +11,14 @@ from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
 from blizzard.runner.api.lease_token import presented_lease_token
+from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.domain.git_commit_declaration import (
     GitCommitDeclarationRejected,
-    GitCommitDeclarationService,
     GitCommitDeclarationUnknownRepo,
 )
-from blizzard.runner.store.repository import IReadRunnerStore
 from blizzard.wire.git_commits import GitCommitDeclarationRequest, GitCommitDeclarationResponse
 
 router = APIRouter(prefix="/api", tags=["runner"])
-
-
-def _service(request: Request) -> GitCommitDeclarationService:
-    service: GitCommitDeclarationService | None = getattr(request.app.state, "git_commit_declarations", None)
-    if service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="git-commit declaration service not wired — start via `blizzard runner host`",
-        )
-    return service
 
 
 @router.post(
@@ -40,16 +29,8 @@ def record_git_commit_declaration(
 ) -> GitCommitDeclarationResponse:
     """Record a worker's explicit git-commit declaration for ``request_body.repo`` against
     its lease."""
-    service = _service(request)
-    store: IReadRunnerStore | None = getattr(request.app.state, "runner_store", None)
-    if store is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="runner store not wired — start via `blizzard runner host`",
-        )
-    lease = store.active_lease(lease_id)
-    if lease is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no active lease {lease_id}")
+    service = RunnerWiring.of(request).git_commits()
+    lease = RunnerWiring.of(request).active_lease(lease_id)
     try:
         environment_id = service.declare(
             lease,

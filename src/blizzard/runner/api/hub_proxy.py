@@ -14,6 +14,7 @@ from fastapi import Request, status
 from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.config import RunnerConfig
 
 _HUB_TIMEOUT = 15.0
@@ -30,7 +31,7 @@ class HubProxy:
     def of(cls, request: Request, what: str) -> HubProxy:
         """This runner's channel to the hub, or ``503`` when it is wired to none — built where
         the forward happens, so a lease-scoped route authorizes before reaching here."""
-        config: RunnerConfig | None = getattr(request.app.state, "config", None)
+        config = RunnerWiring.of(request).maybe_config()
         if config is None or not config.hub_url:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

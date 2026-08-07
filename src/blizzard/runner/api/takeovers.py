@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import (
     ChunkNotTakeable,
@@ -26,23 +27,11 @@ router = APIRouter(prefix="/api", tags=["runner"])
 
 
 def _service(request: Request) -> TakeoverService:
-    service: TakeoverService | None = getattr(request.app.state, "takeover", None)
-    if service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="takeover service not wired — start via `blizzard runner host`",
-        )
-    return service
+    return RunnerWiring.of(request).takeover()
 
 
 def _status_service(request: Request) -> RunnerStatusService:
-    service: RunnerStatusService | None = getattr(request.app.state, "runner_status", None)
-    if service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="runner status service not wired — start via `blizzard runner host`",
-        )
-    return service
+    return RunnerWiring.of(request).status()
 
 
 @router.post("/chunks/{chunk_id}/takeovers", response_model=TakeoverOpenResponse, status_code=status.HTTP_201_CREATED)

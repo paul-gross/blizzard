@@ -2,8 +2,7 @@
 (issue #113), plus its read-back counterpart ``GET`` (issue #169).
 
 The lease token is presented as ``X-Blizzard-Lease-Token`` or ``Authorization: Bearer``,
-the dedicated header checked first. ``503`` unwired, ``404`` unknown/closed lease,
-``403`` missing/mismatched token."""
+the dedicated header checked first. ``404`` unknown/closed lease, ``403`` bad token."""
 
 from __future__ import annotations
 
@@ -12,36 +11,19 @@ from fastapi.exceptions import HTTPException
 
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.lease_token import presented_lease_token
-from blizzard.runner.domain.attachments import AttachmentRejected, AttachmentService
+from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.domain.attachments import AttachmentRejected
 from blizzard.runner.store.repository import IReadRunnerStore
 from blizzard.wire.attachments import AttachmentRequest, AttachmentResponse, StagedAttachment
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
-def _service(request: Request) -> AttachmentService:
-    service: AttachmentService | None = getattr(request.app.state, "attachments", None)
-    if service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="attachment service not wired — start via `blizzard runner host`",
-        )
-    return service
-
-
 @router.post("/leases/{lease_id}/attachments", response_model=AttachmentResponse, status_code=status.HTTP_200_OK)
 def record_attachment(lease_id: str, request_body: AttachmentRequest, request: Request) -> AttachmentResponse:
     """Record a worker's explicit artifact for ``request_body.name`` against its lease."""
-    service = _service(request)
-    store: IReadRunnerStore | None = getattr(request.app.state, "runner_store", None)
-    if store is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="runner store not wired — start via `blizzard runner host`",
-        )
-    lease = store.active_lease(lease_id)
-    if lease is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no active lease {lease_id}")
+    service = RunnerWiring.of(request).attachments()
+    lease = RunnerWiring.of(request).active_lease(lease_id)
     try:
         service.attach(
             lease,

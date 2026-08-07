@@ -6,11 +6,10 @@ rather than read back off the outbound buffer, which holds only the unacked tail
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, status
-from fastapi.exceptions import HTTPException
+from fastapi import APIRouter, Request
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.domain.status import RunnerStatusService
+from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.wire.runner_status import EscalationListResponse
 from blizzard.wire.runner_status import EscalationView as EscalationViewWire
 
@@ -20,12 +19,7 @@ router = APIRouter(prefix="/api", tags=["runner"])
 @router.get("/escalations", response_model=EscalationListResponse)
 def list_escalations(request: Request) -> EscalationListResponse:
     """Every escalation still open — no later lease mint has superseded it."""
-    service: RunnerStatusService | None = getattr(request.app.state, "runner_status", None)
-    if service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="runner status service not wired — start via `blizzard runner host`",
-        )
+    service = RunnerWiring.of(request).status()
     return EscalationListResponse(
         items=[
             EscalationViewWire(

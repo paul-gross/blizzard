@@ -1,0 +1,105 @@
+"""Resolving what the composition root wired onto ``app.state`` (``bzh:dependency-injection``).
+
+Every seam is optional — the OpenAPI exporter and the unit tier build a store-free app — so a
+route asks for what it needs and is refused with a ``503`` naming it, never served on nothing."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import NoReturn
+
+from fastapi import Request, status
+from fastapi.exceptions import HTTPException
+from starlette.datastructures import State
+
+from blizzard.foundation.clock import IClock
+from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.attachments import AttachmentService
+from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationService
+from blizzard.runner.domain.leases import LocalLeaseService
+from blizzard.runner.domain.requeue import RequeueService
+from blizzard.runner.domain.status import RunnerStatusService
+from blizzard.runner.domain.takeover import TakeoverService
+from blizzard.runner.selftest.service import SelfTestService
+from blizzard.runner.store.repository import IReadRunnerStore, IWriteRunnerStore, LeaseRecord
+from blizzard.runner.transcripts.service import LocalTranscriptService
+
+_STORE = "runner store"
+
+
+@dataclass(frozen=True)
+class RunnerWiring:
+    """One route's view of the wired runner — each accessor resolves its seam or refuses,
+    bar the ``maybe_`` pair, for the two reads that degrade instead."""
+
+    state: State
+
+    @classmethod
+    def of(cls, request: Request) -> RunnerWiring:
+        return cls(request.app.state)
+
+    def config(self) -> RunnerConfig:
+        config = self.maybe_config()
+        return config if config is not None else _refuse(_STORE)
+
+    def clock(self) -> IClock:
+        clock: IClock | None = getattr(self.state, "clock", None)
+        return clock if clock is not None else _refuse(_STORE)
+
+    def store(self) -> IWriteRunnerStore:
+        store = self.maybe_store()
+        return store if store is not None else _refuse(_STORE)
+
+    def reads(self) -> IReadRunnerStore:
+        return self.store()
+
+    def active_lease(self, lease_id: str) -> LeaseRecord:
+        lease = self.store().active_lease(lease_id)
+        if lease is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no active lease {lease_id}")
+        return lease
+
+    def status(self) -> RunnerStatusService:
+        service: RunnerStatusService | None = getattr(self.state, "runner_status", None)
+        return service if service is not None else _refuse("runner status service")
+
+    def leases(self) -> LocalLeaseService:
+        service: LocalLeaseService | None = getattr(self.state, "leases", None)
+        return service if service is not None else _refuse("lease service")
+
+    def transcripts(self) -> LocalTranscriptService:
+        service: LocalTranscriptService | None = getattr(self.state, "transcripts", None)
+        return service if service is not None else _refuse("transcript service")
+
+    def takeover(self) -> TakeoverService:
+        service: TakeoverService | None = getattr(self.state, "takeover", None)
+        return service if service is not None else _refuse("takeover service")
+
+    def requeue(self) -> RequeueService:
+        service: RequeueService | None = getattr(self.state, "requeue", None)
+        return service if service is not None else _refuse("requeue service")
+
+    def attachments(self) -> AttachmentService:
+        service: AttachmentService | None = getattr(self.state, "attachments", None)
+        return service if service is not None else _refuse("attachment service")
+
+    def git_commits(self) -> GitCommitDeclarationService:
+        service: GitCommitDeclarationService | None = getattr(self.state, "git_commit_declarations", None)
+        return service if service is not None else _refuse("git-commit declaration service")
+
+    def selftests(self) -> SelfTestService:
+        service: SelfTestService | None = getattr(self.state, "selftests", None)
+        return service if service is not None else _refuse("selftest service")
+
+    def maybe_config(self) -> RunnerConfig | None:
+        return getattr(self.state, "config", None)
+
+    def maybe_store(self) -> IWriteRunnerStore | None:
+        return getattr(self.state, "runner_store", None)
+
+
+def _refuse(what: str) -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=f"{what} not wired — start via `blizzard runner host`",
+    )

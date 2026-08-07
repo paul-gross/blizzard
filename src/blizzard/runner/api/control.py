@@ -3,19 +3,17 @@
 Pause is *state on the runner singleton*, not a directive queue: pause/start facts append and
 the flag derives from the newest. This route owns only the **local** brake, reachable with the
 hub down; the fleet-level brake is the hub's own. Effective paused is the OR of the two, so all
-three values are reported back rather than one ambiguous ``paused``. An unwired store 503s."""
+three values are reported back rather than one ambiguous ``paused``."""
 
 from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Request, status
-from fastapi.exceptions import HTTPException
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.status import RunnerStatusService
+from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
 from blizzard.wire.runner_status import CapacitiesView, HubConnectivityView, PauseStateView, RunnerStatusView
@@ -46,15 +44,9 @@ def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerCo
     Independent of the hub's brake: it works with the hub unreachable, and neither reads nor
     writes the hub's flag. Every spawn site honors it, and escalation at an exhausted budget is
     deferred. Not a drain: a live worker is left running, and no retry is consumed."""
-    store: IWriteRunnerStore | None = getattr(request.app.state, "runner_store", None)
-    config: RunnerConfig | None = getattr(request.app.state, "config", None)
-    clock = getattr(request.app.state, "clock", None)
-    if store is None or config is None or clock is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="runner store not wired — start via `blizzard runner host`",
-        )
-    now = clock.now()
+    wiring = RunnerWiring.of(request)
+    store, config = wiring.store(), wiring.config()
+    now = wiring.clock().now()
     # The brake and its upward report are one write: mirroring runs hub→runner only, so a
     # brake never reported up would never be repaired (tests/test_ingest_and_pause_verbs.py).
     store.record_local_pause(
@@ -75,13 +67,7 @@ def get_runner(request: Request) -> RunnerStatusView:
 
     Derived entirely from local store facts plus the injected clock — no hub call, so it
     is truthful with the hub unreachable. An unwired service answers 503."""
-    service: RunnerStatusService | None = getattr(request.app.state, "runner_status", None)
-    if service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="runner status service not wired — start via `blizzard runner host`",
-        )
-    summary = service.summary()
+    summary = RunnerWiring.of(request).status().summary()
     return RunnerStatusView(
         runner_id=summary.runner_id,
         workspace_id=summary.workspace_id,
