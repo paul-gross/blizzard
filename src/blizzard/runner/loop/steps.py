@@ -14,7 +14,6 @@ from datetime import datetime, timedelta
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import as_utc, is_heartbeat_stale
 from blizzard.runner.environments.provider import (
@@ -32,8 +31,8 @@ from blizzard.runner.loop.attempt import (
 )
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT
 from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop.git_commits import DeclaredCommits
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
-from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
 from blizzard.runner.loop.judgement_prompt import JudgementPrompt
 from blizzard.runner.loop.outbound import COMPLETION_KIND, DECISION_KIND, OutboundFacts
 from blizzard.runner.loop.process import IProcessProbe
@@ -44,7 +43,6 @@ from blizzard.runner.store.repository import (
     BufferedFact,
     CheckResultRecord,
     EnvBindingRecord,
-    GitCommitDeclarationRecord,
     IWriteRunnerStore,
     LeaseRecord,
 )
@@ -908,9 +906,8 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     except HubClientError:
         return  # hub unreachable — the worker's exit is durable; retry next tick
 
-    # 1. Confirm the declared git commits read-only against the forge (issue #143). A failed
-    #    verify is surfaced informationally, never re-raised into a crash-looping tick.
-    artifacts, declared_this_attempt = _verify_and_collect_git_commits(ctx, lease, bindings)
+    commits = DeclaredCommits(ctx, lease, bindings)
+    artifacts = commits.verify()
 
     # 1b. This operator gates this node by name, so the outcome is a human's: buffer a
     #      Decision instead of eliciting a verdict. Not a spawn, so it is ungated.
@@ -1004,14 +1001,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         # Re-read: a worker that attached during the nudge must have its content picked
         # up before assembly below, not the assessment fallback it just corrected.
         attachments = ctx.store.attachments_for_lease(lease.lease_id)
-        # Re-verify: overlaid by repo name rather than appended, so a hiccup cannot regress
-        # an artifact this attempt already has while a genuine amendment still wins.
-        post_nudge_artifacts, _ = _verify_and_collect_git_commits(
-            ctx, lease, bindings, already_declared=declared_this_attempt
-        )
-        by_repo = {a.name: a for a in artifacts}
-        by_repo.update({a.name: a for a in post_nudge_artifacts})
-        artifacts = list(by_repo.values())
+        artifacts = commits.amend(artifacts)
 
     # 2b. Harvest asset artifacts for any `produces` name no git commit covers, read from
     #      the durable store so a restart between attach and completion still sees it.
@@ -1391,90 +1381,6 @@ def _resume_if_unpaused(ctx: LoopContext, lease: LeaseRecord) -> None:
         epoch=lease.epoch,
         pid=pid,
     )
-
-
-def _verify_and_collect_git_commits(
-    ctx: LoopContext,
-    lease: LeaseRecord,
-    bindings: list[EnvBindingRecord],
-    already_declared: dict[tuple[str, str], GitCommitDeclarationRecord] | None = None,
-) -> tuple[list[SubmittedArtifact], dict[tuple[str, str], GitCommitDeclarationRecord]]:
-    """Confirm each of this lease's declared git commits read-only against the origin its
-    declaring environment's manifest names (issue #143). Never mutates git and never infers a
-    branch off residue. Spans **every** bound environment, since the declaration key carries the
-    env. A declaration that does not verify is reported, never silently dropped, and
-    ``already_declared`` skips one this attempt already resolved."""
-
-    already_declared = already_declared or {}
-    declarations = ctx.store.git_commit_declarations_for_lease(lease.lease_id)
-    origins = _repo_origins(ctx, bindings)
-    submitted: list[SubmittedArtifact] = []
-    for key, declared in declarations.items():
-        if already_declared.get(key) == declared:
-            continue
-        env_id, repo = key
-        origin_url = origins.get(key)
-        if origin_url is None:
-            # Reaching here means the manifest changed under the lease, not a worker typo.
-            # An unresolvable origin means this commit cannot be delivered — say so.
-            OutboundFacts(ctx).command_failed(
-                chunk_id=lease.chunk_id,
-                lease_id=lease.lease_id,
-                node_name=lease.node_name,
-                command=f"resolve origin for --repo {repo!r} in environment {env_id!r}",
-                stderr_tail=(
-                    f"environment {env_id!r} no longer lists repo {repo!r}; "
-                    f"it lists {sorted(name for (env, name) in origins if env == env_id)}"
-                ),
-            )
-            continue
-        try:
-            verified = ctx.worktree_git.verify(origin_url, declared.branch, declared.commit)
-        except WorktreeGitError as exc:
-            OutboundFacts(ctx).command_failed(
-                chunk_id=lease.chunk_id,
-                lease_id=lease.lease_id,
-                node_name=lease.node_name,
-                command=f"git ls-remote {origin_url} {declared.branch} (--repo {repo!r}, --env {env_id!r})",
-                stderr_tail=str(exc),
-            )
-            continue
-        if not verified:
-            OutboundFacts(ctx).command_failed(
-                chunk_id=lease.chunk_id,
-                lease_id=lease.lease_id,
-                node_name=lease.node_name,
-                command=f"git ls-remote {origin_url} {declared.branch} (--repo {repo!r}, --env {env_id!r})",
-                stderr_tail=(
-                    f"declared commit {declared.commit} is not what branch {declared.branch!r} "
-                    f"points at on {origin_url} — push the branch (or re-declare the sha "
-                    f"`git rev-parse HEAD` actually produced) and declare it again"
-                ),
-            )
-            continue
-        submitted.append(
-            SubmittedArtifact(
-                name=repo,
-                kind=ArtifactKind.GIT_COMMIT,
-                forge=origin_url,
-                repo=repo,
-                branch_name=declared.branch,
-                commit_hash=declared.commit,
-            )
-        )
-    return submitted, declarations
-
-
-def _repo_origins(ctx: LoopContext, bindings: list[EnvBindingRecord]) -> dict[tuple[str, str], str]:
-    """``{(environment_id, repo): origin_url}`` across every bound environment.
-
-    The provider is the authority on both which repos an env holds and where each pushes, so
-    this is a lookup, never a path guessed from a workdir or a cwd."""
-    origins: dict[tuple[str, str], str] = {}
-    for binding in bindings:
-        for repo in ctx.provider.repos(binding.environment_id):
-            origins[(binding.environment_id, repo.name)] = repo.origin_url
-    return origins
 
 
 # EXTERNAL SUBSCRIPTION USAGE SAMPLE (issue #218)
