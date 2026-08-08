@@ -29,10 +29,9 @@ from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.listeners import ListenerError, bind_listeners, unlink_socket
 from blizzard.runner.loop.build import (
+    LoopWiring,
     PeriodicDriver,
-    mark_crash_resume_intents_on_startup,
-    mark_resume_intents_on_shutdown,
-    run_single_tick,
+    ResumeMarking,
 )
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 
@@ -164,7 +163,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
 
     # Ungraceful-restart recovery (#13): a `kill -9` never ran the graceful shutdown marker below, so
     # sessions killed mid-work are marked here for the same startup RESUME the first tick runs.
-    resumable = mark_crash_resume_intents_on_startup(config)
+    resumable = ResumeMarking(config).on_startup()
     if resumable:
         click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
 
@@ -175,7 +174,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         # Stop the loop first so no in-flight tick races the marking: `stop()` blocks on the tick
         # thread, so the loop is quiescent before every in-flight lease is marked.
         driver.stop()
-        marked = mark_resume_intents_on_shutdown(config)
+        marked = ResumeMarking(config).on_shutdown()
         if marked:
             click.echo(f"marked {marked} in-flight lease(s) for restart-resume")
         # uvicorn closes a pre-bound socket but does not unlink its file; leaving it would
@@ -204,7 +203,7 @@ def tick_cmd(directory: str) -> None:
         ensure_current_revision(config)
     except RevisionMismatchError as exc:
         raise click.ClickException(str(exc)) from exc
-    run_single_tick(config)
+    LoopWiring.of(config).tick_once()
     click.echo("tick complete")
 
 

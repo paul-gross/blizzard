@@ -11,7 +11,7 @@ import os
 import signal
 from typing import Protocol
 
-from blizzard.foundation.process import is_zombie, read_process_start_time
+from blizzard.foundation.process import ProcStat
 
 
 class IProcessProbe(Protocol):
@@ -34,12 +34,12 @@ class LinuxProcessProbe:
     """``/proc``-backed probe: field-22 ``starttime`` is the reuse-proof identity."""
 
     def start_time(self, pid: int) -> str | None:
-        return read_process_start_time(pid)
+        return ProcStat.of(pid).start_time
 
     def is_alive(self, pid: int, process_start_time: str) -> bool:
         # An unreaped child lingers in /proc with the same start time after it exits, so
         # a zombie must read as dead here.
-        if is_zombie(pid):
+        if ProcStat.of(pid).zombie:
             return False
         current = self.start_time(pid)
         return current is not None and current == process_start_time

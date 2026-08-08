@@ -2,50 +2,43 @@
 
 The OS reuses pids, so a recorded pid may later name a different process; pairing it
 with the process **start time** pins the identity. Linux ``/proc`` is the reference
-source; the value is an opaque stable token compared for equality, never interpreted.
-"""
+source; the value is an opaque stable token compared for equality, never interpreted."""
 
 from __future__ import annotations
 
-
-def read_process_start_time(pid: int) -> str | None:
-    """The process's stable start-time token from ``/proc/<pid>/stat``, or ``None``.
-
-    Returns ``None`` when no process with ``pid`` exists (or is unreadable).
-    """
-    try:
-        with open(f"/proc/{pid}/stat", encoding="utf-8") as fh:
-            stat = fh.read()
-    except (FileNotFoundError, ProcessLookupError, PermissionError):
-        return None
-    rest = _stat_fields_after_comm(stat)
-    if rest is None or len(rest) < 20:
-        return None
-    return rest[19]
+from dataclasses import dataclass
 
 
-def is_zombie(pid: int) -> bool:
-    """True iff ``pid`` names a defunct (exited-but-unreaped) process.
+@dataclass(frozen=True)
+class ProcStat:
+    """One process's ``/proc/<pid>/stat`` fields after ``comm`` — ``state`` at 0, ``starttime`` at 19.
 
-    An exited-but-unreaped process keeps its ``/proc`` entry and start time, so a bare
-    start-time match reads it as alive forever; the kernel marks state ``Z`` (field 3).
-    """
-    try:
-        with open(f"/proc/{pid}/stat", encoding="utf-8") as fh:
-            stat = fh.read()
-    except (FileNotFoundError, ProcessLookupError, PermissionError):
-        return False
-    rest = _stat_fields_after_comm(stat)
-    return rest is not None and len(rest) >= 1 and rest[0] == "Z"
+    Empty for a pid naming no process, or whose stat line is unreadable or malformed."""
 
+    fields: tuple[str, ...]
 
-def _stat_fields_after_comm(stat: str) -> list[str] | None:
-    """The ``/proc/<pid>/stat`` fields after ``comm`` — ``state`` is index 0, ``starttime`` 19.
+    @classmethod
+    def of(cls, pid: int) -> ProcStat:
+        """Read ``pid``'s stat line — a vanished or unreadable pid yields empty fields."""
+        try:
+            with open(f"/proc/{pid}/stat", encoding="utf-8") as fh:
+                stat = fh.read()
+        except (FileNotFoundError, ProcessLookupError, PermissionError):
+            return cls(())
+        # ``comm`` (field 2) is paren-wrapped and may contain spaces and parens, so split
+        # after the *last* ``)``; the remainder begins at field 3 (``state``).
+        close = stat.rfind(")")
+        return cls(tuple(stat[close + 1 :].split())) if close != -1 else cls(())
 
-    The ``comm`` field (2) is paren-wrapped and may contain spaces and parens, so we
-    split after the *last* ``)``; the remainder begins at field 3 (``state``).
-    """
-    close = stat.rfind(")")
-    if close == -1:
-        return None
-    return stat[close + 1 :].split()
+    @property
+    def start_time(self) -> str | None:
+        """The stable start-time token, or ``None`` when this pid named no live process."""
+        return self.fields[19] if len(self.fields) >= 20 else None
+
+    @property
+    def zombie(self) -> bool:
+        """True iff the kernel marks the process defunct — exited, not yet reaped.
+
+        Such a process keeps its ``/proc`` entry and start time, so a bare start-time
+        match reads it as alive forever."""
+        return len(self.fields) >= 1 and self.fields[0] == "Z"

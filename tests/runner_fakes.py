@@ -583,7 +583,7 @@ def make_context(
         ),
         sessions=SessionResolver(store=store, harness=_harness, transcripts=harness.transcript_source()),
         env_release=EnvironmentRelease(store=store, clock=_clock, provider=_provider, worker_files=_files),
-        # Mirrors `build_loop_context`'s own composition: the same source `harness`
+        # Mirrors `LoopWiring.context`'s own composition: the same source `harness`
         # itself holds, resolved once here rather than reached through `ctx.harness`.
         transcripts=harness.transcript_source(),
     )

@@ -16,7 +16,7 @@ import httpx
 import pytest
 
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.loop.build import run_single_tick
+from blizzard.runner.loop.build import LoopWiring
 from tests.e2e.test_acceptance_loop import (
     _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
@@ -152,7 +152,7 @@ def _drive_until(config: RunnerConfig, hub: httpx.Client, chunk_id: str, env: di
         with _runner_api(config):
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
-                run_single_tick(config)
+                LoopWiring.of(config).tick_once()
                 detail = hub.get(f"/api/chunks/{chunk_id}")
                 assert detail.status_code == 200, detail.text
                 body = detail.json()

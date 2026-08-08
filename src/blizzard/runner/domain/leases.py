@@ -21,11 +21,9 @@ __all__ = [
     "IProcessProbe",
     "LeaseActivity",
     "LeaseState",
+    "Liveness",
     "LocalLeaseService",
     "as_utc",
-    "derive_lease_state",
-    "is_heartbeat_stale",
-    "last_activity",
 ]
 
 #: Deliberately **conservative**: heartbeats ride tool calls, so this is bounded below
@@ -42,7 +40,7 @@ LeaseState = Literal["running", "stale", "parked", "spawning", "exited", "closed
 
 
 class _Unread:
-    """The "caller did not supply a heartbeat" sentinel for :func:`last_activity`.
+    """The "caller did not supply a heartbeat" sentinel for :meth:`Liveness.of`.
 
     A distinct type rather than ``None``, because ``None`` is itself a meaningful value
     there — a lease that has never beaten — and the two must not collapse."""
@@ -51,31 +49,27 @@ class _Unread:
 _UNREAD = _Unread()
 
 
-def is_heartbeat_stale(store: IReadRunnerStore, lease: LeaseRecord, now: datetime) -> bool:
-    """True iff the lease's last activity is older than the staleness threshold.
-
-    See :func:`last_activity` for what "last activity" means."""
-    return _staleness_exceeded(last_activity(store, lease), now, threshold=HEARTBEAT_STALENESS_THRESHOLD)
-
-
-def last_activity(
-    store: IReadRunnerStore, lease: LeaseRecord, *, heartbeat: datetime | None | _Unread = _UNREAD
-) -> datetime:
+@dataclass(frozen=True)
+class Liveness:
     """A lease's staleness baseline: the newest of its heartbeat, its spawn, and its mint.
 
-    A freshly spawned worker must never read as stalled inside the threshold window, for
-    **every** spawn generation, not just the first (issue #150). ``max`` over all three
-    rather than a chain: only the newest is "activity", floored at ``created_at``."""
-    beat = store.latest_heartbeat(lease.lease_id) if isinstance(heartbeat, _Unread) else heartbeat
-    facts = (beat, store.latest_spawn(lease.lease_id))
-    return max([as_utc(lease.created_at), *(as_utc(fact) for fact in facts if fact is not None)])
+    ``max`` over all three rather than a chain, so a worker respawned into an old lease
+    reads fresh for **every** spawn generation, not just the first (issue #150)."""
 
+    last_activity: datetime
 
-def _staleness_exceeded(last_activity_at: datetime, now: datetime, *, threshold: timedelta) -> bool:
-    """Pure comparison: True iff ``last_activity_at`` is older than ``threshold`` as of ``now``.
+    @classmethod
+    def of(
+        cls, store: IReadRunnerStore, lease: LeaseRecord, *, heartbeat: datetime | None | _Unread = _UNREAD
+    ) -> Liveness:
+        """Read the lease's activity facts, taking an already-read ``heartbeat`` if offered."""
+        beat = store.latest_heartbeat(lease.lease_id) if isinstance(heartbeat, _Unread) else heartbeat
+        facts = (beat, store.latest_spawn(lease.lease_id))
+        return cls(max([as_utc(lease.created_at), *(as_utc(fact) for fact in facts if fact is not None)]))
 
-    Split out so a caller with its own store read reuses the exact comparison."""
-    return now - as_utc(last_activity_at) > threshold
+    def stale(self, now: datetime, *, threshold: timedelta = HEARTBEAT_STALENESS_THRESHOLD) -> bool:
+        """True iff the baseline is older than ``threshold`` as of ``now``."""
+        return now - as_utc(self.last_activity) > threshold
 
 
 # ``as_utc`` is re-exported: callers depend on the name at this path.
@@ -86,39 +80,40 @@ def _staleness_exceeded(last_activity_at: datetime, now: datetime, *, threshold:
 
 @dataclass(frozen=True)
 class LeaseActivity:
-    """A lease with its derived state and joined binding facts — the panel's read model.
+    """A lease with the facts its state derives from, plus its binding — the panel's read model.
 
     ``closed_at``/``closure_reason`` are ``None`` iff the lease is active; a closed one
     also carries no ``environment_id`` or ``workdir``, its bindings being long released."""
 
     lease: LeaseRecord
-    state: LeaseState
-    environment_id: str | None
-    workdir: str | None
-    last_heartbeat_at: datetime | None
-    closed_at: datetime | None
-    closure_reason: str | None
+    closed: bool
+    parked: bool
+    alive: bool
+    stale: bool
+    environment_id: str | None = None
+    workdir: str | None = None
+    last_heartbeat_at: datetime | None = None
+    closed_at: datetime | None = None
+    closure_reason: str | None = None
 
+    @property
+    def state(self) -> LeaseState:
+        """The lease's state, derived from the resolved facts — pure, no store, no I/O.
 
-def derive_lease_state(
-    lease: LeaseRecord, *, is_closed: bool, is_parked: bool, is_alive: bool, is_stale: bool
-) -> LeaseState:
-    """Derive a lease's state from precomputed facts — pure, no store, no I/O.
-
-    The precedence is the point: ``closed`` outranks ``is_alive`` because a closed
-    lease's pid may have been reused, and ``parked`` outranks ``stale`` because parking
-    stops the reap clock. Every input is a fact the caller resolved beforehand."""
-    if is_closed:
-        return "closed"
-    if is_parked:
-        return "parked"
-    if lease.pid is None or lease.session_id is None:
-        return "spawning"
-    if not is_alive:
-        return "exited"
-    if is_stale:
-        return "stale"
-    return "running"
+        The precedence is the point: ``closed`` outranks ``alive`` because a closed
+        lease's pid may have been reused, and ``parked`` outranks ``stale`` because
+        parking stops the reap clock."""
+        if self.closed:
+            return "closed"
+        if self.parked:
+            return "parked"
+        if self.lease.pid is None or self.lease.session_id is None:
+            return "spawning"
+        if not self.alive:
+            return "exited"
+        if self.stale:
+            return "stale"
+        return "running"
 
 
 class IProcessProbe(Protocol):
@@ -160,24 +155,19 @@ class LocalLeaseService:
         activities: list[LeaseActivity] = []
         for lease in self._store.list_active_leases():
             last_heartbeat = self._store.latest_heartbeat(lease.lease_id)
-            baseline = last_activity(self._store, lease, heartbeat=last_heartbeat)
-            state = derive_lease_state(
-                lease,
-                is_closed=False,
-                is_parked=lease.lease_id in parked,
-                is_alive=self._is_alive(lease),
-                is_stale=_staleness_exceeded(baseline, now, threshold=self._stale_after),
-            )
+            liveness = Liveness.of(self._store, lease, heartbeat=last_heartbeat)
+            alive = self._is_alive(lease)
             binding = self._first_binding(lease.chunk_id)
             activities.append(
                 LeaseActivity(
                     lease=lease,
-                    state=state,
+                    closed=False,
+                    parked=lease.lease_id in parked,
+                    alive=alive,
+                    stale=liveness.stale(now, threshold=self._stale_after),
                     environment_id=binding.environment_id if binding else None,
                     workdir=binding.workdir if binding else None,
                     last_heartbeat_at=last_heartbeat,
-                    closed_at=None,
-                    closure_reason=None,
                 )
             )
         return activities
@@ -197,10 +187,10 @@ class LocalLeaseService:
         return [
             LeaseActivity(
                 lease=record.lease,
-                state=derive_lease_state(record.lease, is_closed=True, is_parked=False, is_alive=False, is_stale=False),
-                environment_id=None,
-                workdir=None,
-                last_heartbeat_at=None,
+                closed=True,
+                parked=False,
+                alive=False,
+                stale=False,
                 closed_at=record.closed_at,
                 closure_reason=record.reason,
             )
@@ -209,7 +199,7 @@ class LocalLeaseService:
 
     def _is_alive(self, lease: LeaseRecord) -> bool:
         if lease.pid is None:
-            return False  # spawning — derive_lease_state short-circuits before this matters
+            return False  # spawning — `LeaseActivity.state` short-circuits before this matters
         return self._process.is_alive(lease.pid, lease.process_start_time or "")
 
     def _first_binding(self, chunk_id: str) -> EnvBindingRecord | None:

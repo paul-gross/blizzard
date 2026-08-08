@@ -17,7 +17,7 @@ import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.loop.build import run_single_tick
+from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _free_port, _git_bare, _runner_api, _runner_config
 from tests.service.support import (
@@ -48,7 +48,7 @@ def _drive(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: f
     os.environ.update(fenced)
     try:
         for _ in range(ticks):
-            run_single_tick(config)
+            LoopWiring.of(config).tick_once()
             time.sleep(pause)
     finally:
         os.environ.clear()

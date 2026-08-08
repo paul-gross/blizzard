@@ -13,7 +13,7 @@ import time
 
 import pytest
 
-from blizzard.foundation.process import is_zombie, read_process_start_time
+from blizzard.foundation.process import ProcStat
 from blizzard.runner.loop.process import LinuxProcessProbe
 
 
@@ -30,7 +30,7 @@ def test_current_process_is_alive_at_its_own_start_time() -> None:
 def test_absent_pid_is_dead() -> None:
     probe = LinuxProcessProbe()
     # A pid that cannot be running (max+something); start_time is None -> dead.
-    assert read_process_start_time(2**31 - 1) is None
+    assert ProcStat.of(2**31 - 1).start_time is None
     assert not probe.is_alive(2**31 - 1, "whatever")
 
 
@@ -50,10 +50,10 @@ def test_exited_but_unreaped_worker_reads_dead() -> None:
     start = _await_start_time(probe, proc.pid)
     deadline = time.monotonic() + 5.0
     while time.monotonic() < deadline:
-        if is_zombie(proc.pid):
+        if ProcStat.of(proc.pid).zombie:
             break
         time.sleep(0.02)
-    assert is_zombie(proc.pid), "child did not become a zombie"
+    assert ProcStat.of(proc.pid).zombie, "child did not become a zombie"
     assert not probe.is_alive(proc.pid, start)
     proc.wait()  # reap it so the test process leaves no zombie behind
 

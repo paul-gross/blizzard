@@ -19,7 +19,7 @@ import httpx
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.process import read_process_start_time
+from blizzard.foundation.process import ProcStat
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.harness.adapter import (
     HarnessSpawnError,
@@ -267,7 +267,7 @@ class ClaudeCodeAdapter:
                 _log.error("harness spawn failed", binary=self._binary, cwd=workdir, detail=str(exc))
                 raise HarnessSpawnError(f"failed to spawn {self._binary} in {workdir}: {exc}") from exc
 
-        start_time = read_process_start_time(proc.pid) or ""
+        start_time = ProcStat.of(proc.pid).start_time or ""
         _log.info("spawned worker", binary=self._binary, pid=proc.pid, session_id=session_id, cwd=workdir)
         return WorkerHandle(session_id=session_id, pid=proc.pid, process_start_time=start_time)
 

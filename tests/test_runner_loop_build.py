@@ -1,4 +1,4 @@
-"""``build_loop_context`` wiring (``bzh:dependency-injection``) — issue #88.
+"""``LoopWiring`` composition (``bzh:dependency-injection``) — issue #88.
 
 The composition root threads ``RunnerConfig.worker_env_passthrough`` into the
 ``ClaudeCodeAdapter`` it constructs, so the operator's ``[worker] env_passthrough``
@@ -13,12 +13,12 @@ import pytest
 
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
-from blizzard.runner.loop.build import PeriodicDriver, build_loop_context
+from blizzard.runner.loop.build import LoopWiring, PeriodicDriver
 from tests.runner_fakes import FakeHub
 
 
 @pytest.mark.unit
-def test_build_loop_context_threads_worker_env_passthrough_into_the_adapter(tmp_path: Path) -> None:
+def test_loop_wiring_threads_worker_env_passthrough_into_the_adapter(tmp_path: Path) -> None:
     config = RunnerConfig(
         root=tmp_path,
         db_url=RunnerConfig.default_db_url(tmp_path),
@@ -26,14 +26,14 @@ def test_build_loop_context_threads_worker_env_passthrough_into_the_adapter(tmp_
         worker_env_passthrough=("MY_HARNESS_QUIRK", "ANOTHER_VAR"),
     )
 
-    ctx = build_loop_context(config, FakeHub(), workspace_prompt="", runner_prompt="")
+    ctx = LoopWiring(config, "", "").context(FakeHub())
 
     assert isinstance(ctx.harness, ClaudeCodeAdapter)
     assert ctx.harness._env_passthrough == ("MY_HARNESS_QUIRK", "ANOTHER_VAR")
 
 
 @pytest.mark.unit
-def test_build_loop_context_threads_external_usage_credentials_path_into_the_adapter(tmp_path: Path) -> None:
+def test_loop_wiring_threads_external_usage_credentials_path_into_the_adapter(tmp_path: Path) -> None:
     """An unthreaded override leaves every daemon this root builds reading the
     adapter's own default credentials path and reaching the real Anthropic endpoint
     (issue #218)."""
@@ -45,14 +45,14 @@ def test_build_loop_context_threads_external_usage_credentials_path_into_the_ada
         external_usage_credentials_path=scratch,
     )
 
-    ctx = build_loop_context(config, FakeHub(), workspace_prompt="", runner_prompt="")
+    ctx = LoopWiring(config, "", "").context(FakeHub())
 
     assert isinstance(ctx.harness, ClaudeCodeAdapter)
     assert ctx.harness._credentials_path == scratch
 
 
 @pytest.mark.unit
-def test_build_loop_context_threads_runner_dir_from_the_resolved_root(tmp_path: Path) -> None:
+def test_loop_wiring_threads_runner_dir_from_the_resolved_root(tmp_path: Path) -> None:
     """The wrapped takeover command (issue #251) needs ``LoopConfig.runner_dir`` to
     mirror ``RunnerConfig``'s resolved ``root``. Routed through ``RunnerConfig.load()``
     with an un-resolved ``..``-bearing path, since a bare ``tmp_path`` already resolves."""
@@ -62,7 +62,7 @@ def test_build_loop_context_threads_runner_dir_from_the_resolved_root(tmp_path: 
     unresolved_root = tmp_path / "nested" / ".." / "runner"
 
     config = RunnerConfig.load(unresolved_root)
-    ctx = build_loop_context(config, FakeHub(), workspace_prompt="", runner_prompt="")
+    ctx = LoopWiring(config, "", "").context(FakeHub())
 
     assert ".." not in ctx.config.runner_dir
     assert ctx.config.runner_dir == str(real_root.resolve())

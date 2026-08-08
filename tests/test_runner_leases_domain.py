@@ -1,4 +1,4 @@
-"""Derived lease state — ``derive_lease_state`` and ``LocalLeaseService`` (issue #28).
+"""Derived lease state — ``LeaseActivity.state`` and ``LocalLeaseService`` (issue #28).
 
 Two tiers: the pure precedence tests (no store, no I/O) sit at unit; ``LocalLeaseService
 .list_active()`` — wired against a real tmp sqlite store with the fake process probe
@@ -16,10 +16,9 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.domain.leases import (
     HEARTBEAT_STALENESS_THRESHOLD,
+    LeaseActivity,
+    Liveness,
     LocalLeaseService,
-    derive_lease_state,
-    is_heartbeat_stale,
-    last_activity,
 )
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import LeaseRecord, NewLease
@@ -48,95 +47,95 @@ def _lease_record(**overrides: object) -> LeaseRecord:
     return LeaseRecord(**fields)  # type: ignore[arg-type]
 
 
-# derive_lease_state — pure, all six states + precedence
+# LeaseActivity.state — pure, all six states + precedence
 
 
 @pytest.mark.unit
-def test_derive_lease_state_running_when_alive_and_fresh() -> None:
+def test_state_running_when_alive_and_fresh() -> None:
     lease = _lease_record()
-    assert derive_lease_state(lease, is_closed=False, is_parked=False, is_alive=True, is_stale=False) == "running"
+    assert LeaseActivity(lease, closed=False, parked=False, alive=True, stale=False).state == "running"
 
 
 @pytest.mark.unit
-def test_derive_lease_state_stale_when_alive_but_heartbeat_old() -> None:
+def test_state_stale_when_alive_but_heartbeat_old() -> None:
     lease = _lease_record()
-    assert derive_lease_state(lease, is_closed=False, is_parked=False, is_alive=True, is_stale=True) == "stale"
+    assert LeaseActivity(lease, closed=False, parked=False, alive=True, stale=True).state == "stale"
 
 
 @pytest.mark.unit
-def test_derive_lease_state_exited_when_process_not_alive() -> None:
+def test_state_exited_when_process_not_alive() -> None:
     """A dead pid is ADVANCE's exit-is-done, not a stall — it derives exited
     even when the (stale) heartbeat check would also fire, since exit is checked first."""
     lease = _lease_record()
-    assert derive_lease_state(lease, is_closed=False, is_parked=False, is_alive=False, is_stale=True) == "exited"
+    assert LeaseActivity(lease, closed=False, parked=False, alive=False, stale=True).state == "exited"
 
 
 @pytest.mark.unit
-def test_derive_lease_state_spawning_when_pid_unset() -> None:
+def test_state_spawning_when_pid_unset() -> None:
     lease = _lease_record(pid=None, process_start_time=None)
-    assert derive_lease_state(lease, is_closed=False, is_parked=False, is_alive=False, is_stale=False) == "spawning"
+    assert LeaseActivity(lease, closed=False, parked=False, alive=False, stale=False).state == "spawning"
 
 
 @pytest.mark.unit
-def test_derive_lease_state_spawning_when_session_unset() -> None:
+def test_state_spawning_when_session_unset() -> None:
     lease = _lease_record(session_id=None)
-    assert derive_lease_state(lease, is_closed=False, is_parked=False, is_alive=True, is_stale=False) == "spawning"
+    assert LeaseActivity(lease, closed=False, parked=False, alive=True, stale=False).state == "spawning"
 
 
 @pytest.mark.unit
-def test_derive_lease_state_parked_when_dormant_on_a_question() -> None:
+def test_state_parked_when_dormant_on_a_question() -> None:
     lease = _lease_record()
-    assert derive_lease_state(lease, is_closed=False, is_parked=True, is_alive=True, is_stale=False) == "parked"
+    assert LeaseActivity(lease, closed=False, parked=True, alive=True, stale=False).state == "parked"
 
 
 @pytest.mark.unit
-def test_derive_lease_state_parked_wins_over_stale() -> None:
+def test_state_parked_wins_over_stale() -> None:
     """Precedence: a lease that is both parked and stale derives parked — the reap
     clock is stopped for a dormant lease, so a growing heartbeat age is expected, not
     a stall."""
     lease = _lease_record()
-    assert derive_lease_state(lease, is_closed=False, is_parked=True, is_alive=True, is_stale=True) == "parked"
+    assert LeaseActivity(lease, closed=False, parked=True, alive=True, stale=True).state == "parked"
 
 
 @pytest.mark.unit
-def test_derive_lease_state_spawning_wins_over_an_ancient_heartbeat() -> None:
+def test_state_spawning_wins_over_an_ancient_heartbeat() -> None:
     """Precedence: a lease with no pid/session derives spawning even when its
     heartbeat baseline reads as stale — the mint→spawn window has no live worker to
     stall yet."""
     lease = _lease_record(pid=None, process_start_time=None, session_id=None)
-    assert derive_lease_state(lease, is_closed=False, is_parked=False, is_alive=False, is_stale=True) == "spawning"
+    assert LeaseActivity(lease, closed=False, parked=False, alive=False, stale=True).state == "spawning"
 
 
 @pytest.mark.unit
-def test_derive_lease_state_closed_when_closure_fact_exists() -> None:
+def test_state_closed_when_closure_fact_exists() -> None:
     lease = _lease_record()
-    assert derive_lease_state(lease, is_closed=True, is_parked=False, is_alive=True, is_stale=False) == "closed"
+    assert LeaseActivity(lease, closed=True, parked=False, alive=True, stale=False).state == "closed"
 
 
 @pytest.mark.unit
-def test_derive_lease_state_closed_wins_over_alive_pid_reuse() -> None:
+def test_state_closed_wins_over_alive_pid_reuse() -> None:
     """Precedence: a closed lease's pid may have been reused by an unrelated
     process, so ``is_alive=True`` can be a false positive. Closure is the terminal
     fact and must win, or a finished agent would misread as still ``running``."""
     lease = _lease_record()
-    assert derive_lease_state(lease, is_closed=True, is_parked=False, is_alive=True, is_stale=False) == "closed"
+    assert LeaseActivity(lease, closed=True, parked=False, alive=True, stale=False).state == "closed"
 
 
 @pytest.mark.unit
-def test_derive_lease_state_closed_wins_over_stale() -> None:
+def test_state_closed_wins_over_stale() -> None:
     lease = _lease_record()
-    assert derive_lease_state(lease, is_closed=True, is_parked=False, is_alive=True, is_stale=True) == "closed"
+    assert LeaseActivity(lease, closed=True, parked=False, alive=True, stale=True).state == "closed"
 
 
 @pytest.mark.unit
-def test_derive_lease_state_closed_wins_over_parked() -> None:
+def test_state_closed_wins_over_parked() -> None:
     """Precedence: closed outranks even parked — the highest-precedence live state — the
     same way parked outranks stale."""
     lease = _lease_record()
-    assert derive_lease_state(lease, is_closed=True, is_parked=True, is_alive=True, is_stale=False) == "closed"
+    assert LeaseActivity(lease, closed=True, parked=True, alive=True, stale=False).state == "closed"
 
 
-# is_heartbeat_stale — the staleness-boundary pin (Phase 1 escalation #2)
+# Liveness.stale — the staleness-boundary pin (Phase 1 escalation #2)
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]
@@ -160,7 +159,7 @@ def _seed_lease(store, *, chunk="ch_1", lease="lease_1", created_at=_NOW) -> Non
 
 
 @pytest.mark.unit
-def test_is_heartbeat_stale_at_exact_threshold_is_not_stale(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_stale_at_exact_threshold_is_not_stale(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """The true edge: ``now - last == THRESHOLD`` reads not-stale (strict ``>``)."""
     store = _store(tmp_path)
     _seed_lease(store)
@@ -169,11 +168,11 @@ def test_is_heartbeat_stale_at_exact_threshold_is_not_stale(tmp_path) -> None:  
     assert lease is not None
     at_threshold = _NOW + HEARTBEAT_STALENESS_THRESHOLD
 
-    assert is_heartbeat_stale(store, lease, at_threshold) is False
+    assert Liveness.of(store, lease).stale(at_threshold) is False
 
 
 @pytest.mark.unit
-def test_is_heartbeat_stale_just_past_threshold_is_stale(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_stale_just_past_threshold_is_stale(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """One microsecond past the threshold flips stale — pins against a ``>``→``>=`` drift."""
     store = _store(tmp_path)
     _seed_lease(store)
@@ -182,7 +181,7 @@ def test_is_heartbeat_stale_just_past_threshold_is_stale(tmp_path) -> None:  # t
     assert lease is not None
     just_past = _NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(microseconds=1)
 
-    assert is_heartbeat_stale(store, lease, just_past) is True
+    assert Liveness.of(store, lease).stale(just_past) is True
 
 
 @pytest.mark.unit
@@ -199,15 +198,15 @@ def test_a_worker_resumed_after_a_long_park_gets_the_full_staleness_window(tmp_p
 
     # Parked for two hours: without the spawn fact in the baseline the lease is long stale.
     resumed_at = _NOW + timedelta(hours=2)
-    assert is_heartbeat_stale(store, lease, resumed_at) is True
+    assert Liveness.of(store, lease).stale(resumed_at) is True
 
     # The answer-resume respawns the same lease — a second generation, same lease_id.
     store.record_spawn("lease_1", pid=2, process_start_time="s2", session_id="sess", spawned_at=resumed_at)
 
-    assert is_heartbeat_stale(store, lease, resumed_at + timedelta(seconds=1)) is False
-    assert is_heartbeat_stale(store, lease, resumed_at + HEARTBEAT_STALENESS_THRESHOLD) is False
+    assert Liveness.of(store, lease).stale(resumed_at + timedelta(seconds=1)) is False
+    assert Liveness.of(store, lease).stale(resumed_at + HEARTBEAT_STALENESS_THRESHOLD) is False
     assert (
-        is_heartbeat_stale(store, lease, resumed_at + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
+        Liveness.of(store, lease).stale(resumed_at + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
     )  # and the window still closes, absent new heartbeats
 
 
@@ -223,8 +222,8 @@ def test_a_heartbeat_newer_than_the_spawn_still_sets_the_baseline(tmp_path) -> N
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
 
-    assert is_heartbeat_stale(store, lease, _NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(minutes=1)) is False
-    assert is_heartbeat_stale(store, lease, beat_at + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
+    assert Liveness.of(store, lease).stale(_NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(minutes=1)) is False
+    assert Liveness.of(store, lease).stale(beat_at + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
 
 
 @pytest.mark.unit
@@ -236,8 +235,8 @@ def test_a_lease_with_neither_a_beat_nor_a_spawn_falls_back_to_its_mint(tmp_path
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
 
-    assert is_heartbeat_stale(store, lease, _NOW + HEARTBEAT_STALENESS_THRESHOLD) is False
-    assert is_heartbeat_stale(store, lease, _NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
+    assert Liveness.of(store, lease).stale(_NOW + HEARTBEAT_STALENESS_THRESHOLD) is False
+    assert Liveness.of(store, lease).stale(_NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
 
 
 # LocalLeaseService.list_active() — component tier, real sqlite store
@@ -410,9 +409,9 @@ def test_list_recent_closed_activity_carries_no_environment_binding(tmp_path) ->
 
 
 @pytest.mark.unit
-def test_last_activity_uses_a_supplied_heartbeat_without_re_reading_it(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_liveness_uses_a_supplied_heartbeat_without_re_reading_it(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """The caller may already have read `latest_heartbeat`, so it can hand it in
-    rather than have `last_activity` re-query. The sentinel keeps a supplied `None`
+    rather than have `Liveness.of` re-query. The sentinel keeps a supplied `None`
     (a lease that genuinely never beat) distinct from "not supplied, go read it"."""
     store = _store(tmp_path)
     _seed_lease(store)
@@ -422,8 +421,8 @@ def test_last_activity_uses_a_supplied_heartbeat_without_re_reading_it(tmp_path)
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
 
-    assert last_activity(store, lease) == beat_at  # unsupplied: reads it itself
-    assert last_activity(store, lease, heartbeat=beat_at) == beat_at  # supplied: same answer
+    assert Liveness.of(store, lease).last_activity == beat_at  # unsupplied: reads it itself
+    assert Liveness.of(store, lease, heartbeat=beat_at).last_activity == beat_at  # supplied: same answer
     # A supplied None means "never beat" and must not be re-read into the real value —
     # the baseline falls back to the spawn, not to the heartbeat sitting in the store.
-    assert last_activity(store, lease, heartbeat=None) == _NOW
+    assert Liveness.of(store, lease, heartbeat=None).last_activity == _NOW

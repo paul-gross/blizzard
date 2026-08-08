@@ -24,7 +24,7 @@ import uvicorn
 
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.loop.build import run_single_tick
+from blizzard.runner.loop.build import LoopWiring
 from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
     REPO,
@@ -167,7 +167,7 @@ def _tick_until(
         deadline = time.monotonic() + timeout
         status = "?"
         while time.monotonic() < deadline:
-            run_single_tick(config)
+            LoopWiring.of(config).tick_once()
             status = hub.get(f"/api/chunks/{chunk_id}").json()["status"]
             if status in targets:
                 return status
@@ -184,7 +184,7 @@ def _tick_n(config: RunnerConfig, fenced: dict[str, str], count: int) -> None:
     os.environ.update(fenced)
     try:
         for _ in range(count):
-            run_single_tick(config)
+            LoopWiring.of(config).tick_once()
             time.sleep(0.3)
     finally:
         os.environ.clear()

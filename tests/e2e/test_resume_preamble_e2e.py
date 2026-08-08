@@ -24,7 +24,7 @@ from blizzard.runner.harness.preamble import (
     RESUME_STANDING_UNCHANGED,
     RESUME_UPDATED_NOTICE,
 )
-from blizzard.runner.loop.build import run_single_tick
+from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
@@ -187,7 +187,7 @@ def _drive(config, hub, chunk_id, fenced_env, *, on_tick=None, timeout: float = 
                 deadline = time.monotonic() + timeout
                 status = "ready"
                 while time.monotonic() < deadline:
-                    run_single_tick(config)
+                    LoopWiring.of(config).tick_once()
                     if on_tick is not None:
                         on_tick(runner)
                     detail = hub.get(f"/api/chunks/{chunk_id}")

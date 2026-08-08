@@ -99,7 +99,7 @@ def test_resume_command_without_a_permission_mode_stays_bare() -> None:
 class _FakeSpawnedProcess:
     """A stand-in for the ``Popen`` handle ``spawn`` reads ``.pid`` off of.
 
-    An implausibly large pid so ``read_process_start_time`` finds nothing and returns
+    An implausibly large pid so ``ProcStat.of`` finds nothing and returns
     ``None`` gracefully, as it does for any already-exited/foreign pid."""
 
     pid = 9_999_999

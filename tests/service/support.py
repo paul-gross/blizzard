@@ -241,7 +241,7 @@ def mock_runner(
 def http_hub_client(port: int) -> Iterator[HttpHubClient]:
     """A real :class:`HttpHubClient` pointed at a mock-hub subprocess on ``port``, driven
     directly rather than through the runner loop — for a wire-parity assertion that needs
-    a specific ``IHubClient`` method's response (see ``run_single_tick`` for the
+    a specific ``IHubClient`` method's response (see ``LoopWiring.tick_once`` for the
     behavioral-outcome alternative)."""
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:

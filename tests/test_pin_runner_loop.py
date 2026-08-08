@@ -16,7 +16,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
-from blizzard.runner.loop.build import build_loop_context
+from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT, CheckOutcome
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.judgement import Judgement
@@ -232,7 +232,7 @@ def test_the_nudge_guard_fact_is_durable_before_the_nudge_resume_runs(tmp_path) 
 
 
 @pytest.mark.unit
-def test_build_loop_context_uses_the_injected_prompts_and_never_re_derives_them(tmp_path: Path) -> None:
+def test_loop_wiring_uses_the_injected_prompts_and_never_re_derives_them(tmp_path: Path) -> None:
     """Re-deriving them here would raise ``ConfigError`` on a configured-but-missing prompt
     file from whatever thread this runs on — for the daemon, the background loop thread —
     instead of from ``host``'s own startup call."""
@@ -245,7 +245,7 @@ def test_build_loop_context_uses_the_injected_prompts_and_never_re_derives_them(
     )
 
     try:
-        ctx = build_loop_context(config, FakeHub(), workspace_prompt="ws prose", runner_prompt="runner prose")
+        ctx = LoopWiring(config, "ws prose", "runner prose").context(FakeHub())
     except ConfigError as exc:  # pragma: no cover - the pinned regression
         pytest.fail(f"the prompts were re-derived here instead of taken from the caller: {exc}")
 

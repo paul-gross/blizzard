@@ -16,7 +16,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.runner.loop.build import run_single_tick
+from blizzard.runner.loop.build import LoopWiring
 from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
     REPO,
@@ -83,7 +83,7 @@ def _drive_recording_labels(
             deadline = time.monotonic() + 120.0
             status = "ready"
             while time.monotonic() < deadline:
-                run_single_tick(config)
+                LoopWiring.of(config).tick_once()
                 detail = hub.get(f"/api/chunks/{chunk_id}")
                 assert detail.status_code == 200, detail.text
                 status = detail.json()["status"]

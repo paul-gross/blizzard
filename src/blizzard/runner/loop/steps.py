@@ -16,7 +16,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.work import ChunkStatus
-from blizzard.runner.domain.leases import as_utc, is_heartbeat_stale
+from blizzard.runner.domain.leases import Liveness, as_utc
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.loop.attempt import (
     REAPED,
@@ -157,7 +157,7 @@ class Reap(Step):
                 continue
             if not ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
                 continue  # exited — ADVANCE's (exit-is-done)
-            if is_heartbeat_stale(ctx.store, lease, now):
+            if Liveness.of(ctx.store, lease).stale(now):
                 if local_paused:
                     # Do not kill a live worker while the brake is on — a pause is not a
                     # drain. The first tick after it clears reaps this lease as it would now.
@@ -220,7 +220,7 @@ class ResumeIntents:
                 continue  # declared done (SessionEnd fired) — ADVANCE judges it (exit-is-done)
             if lease.pid is not None and process.is_alive(lease.pid, lease.process_start_time or ""):
                 continue  # orphaned-but-alive — re-adopted via its live heartbeat, never re-spawned
-            if is_heartbeat_stale(self.store, lease, crashed_at):
+            if Liveness.of(self.store, lease).stale(crashed_at):
                 continue  # stalled at crash time — reaped & retried per the node's budget, unchanged
             yield lease
 

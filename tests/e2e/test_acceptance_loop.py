@@ -25,7 +25,7 @@ import uvicorn
 from blizzard.hub.config import HubConfig, WorkSourceConfig
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
-from blizzard.runner.loop.build import run_single_tick
+from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.runtime import init_environment as init_runner_environment
 from tests.support import daemon_log_sink, read_daemon_log, write_work_sources
 
@@ -463,7 +463,7 @@ def _drive_until_done(
             deadline = time.monotonic() + timeout
             status = "ready"
             while time.monotonic() < deadline:
-                run_single_tick(config)
+                LoopWiring.of(config).tick_once()
                 detail = hub.get(f"/api/chunks/{chunk_id}")
                 assert detail.status_code == 200, detail.text
                 status = detail.json()["status"]
