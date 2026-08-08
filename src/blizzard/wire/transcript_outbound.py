@@ -18,6 +18,11 @@ from pydantic import BaseModel
 TRANSCRIPT_DELTA = "transcript.delta"
 TRANSCRIPT_FINAL = "transcript.final"
 
+#: The per-record cap (plan D4) — enforced runner-side (truncated in place) and, in case a
+#: runner ever ships an over-cap record anyway, rejected-but-acked hub-side so it can never
+#: wedge the mark.
+TRANSCRIPT_RECORD_MAX_BYTES = 1024 * 1024
+
 
 class TranscriptFact(BaseModel):
     """One buffered transcript fact: its per-runner seq, its kind, and its payload.
