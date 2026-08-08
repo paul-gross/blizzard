@@ -23,17 +23,13 @@ ENV_HUB_URL = "BZ_HUB_URL"
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"
 CLIENT_TIMEOUT = 15.0
 
-#: The actionable hint every verb's own 401 maps to (issue #96), unless the caller named
-#: its own 401 entry in ``on_status``.
+#: The actionable hint a verb's own unnamed 401 maps to (issue #96).
 _LOGIN_HINT = "not authenticated — run `blizzard hub login`"
 
 
 @dataclass(frozen=True)
 class CliContext:
-    """One operator verb's invocation — the resolved hub, and whether to print JSON.
-
-    Built inside each verb from that verb's own ``--hub-url``/``--json`` options rather
-    than once at the group, so the flags stay where an operator already types them."""
+    """One operator verb's invocation — the resolved hub, and whether to print JSON."""
 
     hub_url: str
     as_json: bool = False
