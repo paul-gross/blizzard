@@ -1,12 +1,10 @@
 """The frontend mount seam — StaticFiles + SPA fallback.
 
-The build output is mounted with an SPA fallback, so a deep client-side route
-resolves to ``index.html`` instead of 404. When the assets dir holds no
-``index.html``, the mount serves a runtime placeholder instead.
-"""
+A deep client-side route resolves to ``index.html`` instead of 404."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +13,8 @@ from fastapi.responses import HTMLResponse
 from starlette.exceptions import HTTPException
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
+
+from blizzard.foundation.assets import EmbeddedFrontend
 
 _PLACEHOLDER_HTML = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>{app_name}</title></head>
@@ -41,19 +41,28 @@ class SpaStaticFiles(StaticFiles):
             raise
 
 
-def mount_web_app(app: FastAPI, static_dir: Path, *, app_name: str) -> None:
-    """Mount the embedded frontend for ``app_name`` at ``/`` with an SPA fallback.
+@dataclass(frozen=True)
+class Frontend:
+    """One app's frontend mount — its bundle directory and its placeholder name."""
 
-    Serves a runtime placeholder when ``static_dir/index.html`` is absent, so the
-    mount point is always live. Call **after** the API routers.
-    """
-    index = static_dir / "index.html"
-    if index.exists():
-        app.mount("/", SpaStaticFiles(directory=str(static_dir), html=True), name="web")
-        return
+    directory: Path
+    app_name: str
 
-    placeholder = _PLACEHOLDER_HTML.format(app_name=app_name)
+    @classmethod
+    def embedded(cls, app: str, *, app_name: str) -> Frontend:
+        """The wheel-embedded bundle for ``app`` (``hub`` / ``runner``)."""
+        return cls(EmbeddedFrontend(app).directory, app_name)
 
-    @app.get("/", include_in_schema=False)
-    def _web_root() -> HTMLResponse:
-        return HTMLResponse(placeholder)
+    def mount(self, app: FastAPI) -> None:
+        """Serves a placeholder when ``index.html`` is absent, so the mount point is
+        always live. Call **after** the API routers."""
+        index = self.directory / "index.html"
+        if index.exists():
+            app.mount("/", SpaStaticFiles(directory=str(self.directory), html=True), name="web")
+            return
+
+        placeholder = _PLACEHOLDER_HTML.format(app_name=self.app_name)
+
+        @app.get("/", include_in_schema=False)
+        def _web_root() -> HTMLResponse:
+            return HTMLResponse(placeholder)

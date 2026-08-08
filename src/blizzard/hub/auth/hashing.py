@@ -1,12 +1,11 @@
-"""The session-id hasher — shared by mint and resolve so the two can never drift onto
-different digests of the same plaintext (issue #91).
-"""
+"""The session-id hasher (issue #91)."""
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from typing import ClassVar
+
+from blizzard.foundation.hashing import Sha256Hex
 
 
 @dataclass(frozen=True)
@@ -21,4 +20,4 @@ class SessionId:
     @property
     def hash(self) -> str:
         """The sha256 hex digest a presented session id (cookie or bearer) is looked up by."""
-        return hashlib.sha256(self.plaintext.encode("utf-8")).hexdigest()
+        return Sha256Hex(self.plaintext).hex

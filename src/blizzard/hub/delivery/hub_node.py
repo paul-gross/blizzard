@@ -13,7 +13,7 @@ from datetime import timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.foundation.ids import ARTIFACT_PREFIX, TRANSITION_PREFIX, mint
+from blizzard.foundation.ids import ARTIFACT_PREFIX, TRANSITION_PREFIX, Id
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
@@ -475,7 +475,7 @@ class HubNodeExecutor:
             data=envelope_payload,
             repo=None,
             forge=None,
-            artifact_id=mint(ARTIFACT_PREFIX, self._clock),
+            artifact_id=Id.mint(ARTIFACT_PREFIX, self._clock).value,
             chunk_id=chunk.chunk_id,
             node_id=node.node_id,
             node_name=node.name,
@@ -582,7 +582,7 @@ class HubNodeExecutor:
                     data=envelope_payload,
                     repo=None,
                     forge=None,
-                    artifact_id=mint(ARTIFACT_PREFIX, self._clock),
+                    artifact_id=Id.mint(ARTIFACT_PREFIX, self._clock).value,
                     chunk_id=chunk.chunk_id,
                     node_id=node.node_id,
                     node_name=node.name,
@@ -590,7 +590,7 @@ class HubNodeExecutor:
                 )
                 extra_artifacts = [*(extra_artifacts or []), envelope_artifact]
 
-        fresh_transition_id = mint(TRANSITION_PREFIX, self._clock)
+        fresh_transition_id = Id.mint(TRANSITION_PREFIX, self._clock).value
         wrote = self._chunks.record_hub_step_transition(
             chunk.chunk_id,
             from_node_id=node.node_id,

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import CHOICE_PREFIX, GRAPH_PREFIX, NODE_PREFIX, mint
+from blizzard.foundation.ids import CHOICE_PREFIX, GRAPH_PREFIX, NODE_PREFIX, Id
 from blizzard.hub.domain.graph import (
     RESERVED_TERMINAL,
     Choice,
@@ -64,11 +64,11 @@ class Reification:
     def of(cls, doc: GraphDoc, clock: IClock) -> Reification:
         return cls(
             doc=doc,
-            graph_id=mint(GRAPH_PREFIX, clock),
-            node_ids={node.name: mint(NODE_PREFIX, clock) for node in doc.nodes},
+            graph_id=Id.mint(GRAPH_PREFIX, clock).value,
+            node_ids={node.name: Id.mint(NODE_PREFIX, clock).value for node in doc.nodes},
             created_at=clock.now(),
             choice_ids={
-                (index, position): mint(CHOICE_PREFIX, clock)
+                (index, position): Id.mint(CHOICE_PREFIX, clock).value
                 for index, nd in enumerate(doc.nodes)
                 for position, _ in enumerate(cls._choice_docs(nd))
             },

@@ -8,6 +8,7 @@ the instant comes from an injected :class:`IClock` (``bzh:injected-clock``).
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from blizzard.foundation.clock import IClock
@@ -35,44 +36,49 @@ MIGRATION_PREFIX = "mg"  # a chunk_migrations fact (issue #90)
 USER_PREFIX = "usr"  # a hub-local user (issue #91)
 
 
-def _encode(value: int, length: int) -> str:
-    chars = []
-    for _ in range(length):
-        value, rem = divmod(value, 32)
-        chars.append(_CROCKFORD[rem])
-    return "".join(reversed(chars))
+@dataclass(frozen=True)
+class Id:
+    """A prefixed ULID — the id *is* the creation record, so an entity storing no
+    timestamp column still has one."""
 
+    prefix: str
+    ulid: str
 
-def ulid(clock: IClock) -> str:
-    """A bare 26-char Crockford-base32 ULID stamped from ``clock``."""
-    millis = int(clock.now().timestamp() * 1000)
-    randomness = int.from_bytes(os.urandom(10), "big")
-    return _encode(millis, _TIME_CHARS) + _encode(randomness, _RAND_CHARS)
+    @classmethod
+    def mint(cls, prefix: str, clock: IClock) -> Id:
+        millis = int(clock.now().timestamp() * 1000)
+        randomness = int.from_bytes(os.urandom(10), "big")
+        return cls(prefix, cls._encode(millis, _TIME_CHARS) + cls._encode(randomness, _RAND_CHARS))
 
+    @staticmethod
+    def _encode(value: int, length: int) -> str:
+        chars = []
+        for _ in range(length):
+            value, rem = divmod(value, 32)
+            chars.append(_CROCKFORD[rem])
+        return "".join(reversed(chars))
 
-def mint(prefix: str, clock: IClock) -> str:
-    """Mint a prefixed ULID — ``<prefix>_<ulid>``."""
-    return f"{prefix}_{ulid(clock)}"
+    @classmethod
+    def parse(cls, value: str) -> Id | None:
+        """The id ``value`` spells, or ``None`` when it is not a well-formed prefixed ULID."""
+        prefix, sep, ulid = value.partition("_")
+        return cls(prefix, ulid) if sep == "_" and len(ulid) == _ULID_CHARS else None
 
+    @property
+    def value(self) -> str:
+        return f"{self.prefix}_{self.ulid}"
 
-def has_prefix(value: str, prefix: str) -> bool:
-    """True when ``value`` is a well-formed ``<prefix>_<ulid>`` id."""
-    head, sep, tail = value.partition("_")
-    return sep == "_" and head == prefix and len(tail) == _ULID_CHARS
+    @property
+    def minted_at(self) -> datetime | None:
+        """The UTC instant this id was minted, decoded from its leading 48 timestamp
+        bits; ``None`` when a character is outside the Crockford alphabet."""
+        millis = 0
+        for char in self.ulid[:_TIME_CHARS]:
+            index = _CROCKFORD.find(char.upper())
+            if index < 0:
+                return None
+            millis = millis * 32 + index
+        return datetime.fromtimestamp(millis / 1000, tz=UTC)
 
-
-def minted_at(value: str) -> datetime | None:
-    """The UTC instant a prefixed-ULID id was minted, decoded from its leading
-    48 timestamp bits — the id *is* the creation record, so entities that store no
-    separate timestamp column still have one. ``None`` when ``value`` is not a
-    well-formed prefixed ULID."""
-    _, sep, tail = value.partition("_")
-    if sep != "_" or len(tail) != _ULID_CHARS:
-        return None
-    millis = 0
-    for char in tail[:_TIME_CHARS]:
-        index = _CROCKFORD.find(char.upper())
-        if index < 0:
-            return None
-        millis = millis * 32 + index
-    return datetime.fromtimestamp(millis / 1000, tz=UTC)
+    def has_prefix(self, prefix: str) -> bool:
+        return self.prefix == prefix

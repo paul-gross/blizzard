@@ -12,7 +12,7 @@ from typing import cast
 
 import pytest
 
-from blizzard.foundation.ids import ARTIFACT_PREFIX, mint
+from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.graph import DEFAULT_BOUNCE_CAP
@@ -68,7 +68,7 @@ def _seed_at_deliver_with_an_unlanded_commit(hub: HubHarness, chunk_id: str, nod
         data=f"feat/thing:{'c' * 40}",
         repo="acme/widget",
         forge=None,
-        artifact_id=mint(ARTIFACT_PREFIX, hub.clock),
+        artifact_id=Id.mint(ARTIFACT_PREFIX, hub.clock).value,
         chunk_id=chunk_id,
         node_id=nodes["build"],
         node_name="build",

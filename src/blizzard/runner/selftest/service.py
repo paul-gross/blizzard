@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import SELFTEST_PREFIX, mint
+from blizzard.foundation.ids import SELFTEST_PREFIX, Id
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.selftest.checks import IProcessProbe, SelfTest
 from blizzard.runner.selftest.model import SelfTestCheck, SelfTestRun, SelfTestStatus
@@ -64,7 +64,7 @@ class SelfTestService:
         adapter = self._adapters.get(harness)
         if adapter is None:
             raise UnknownHarnessError(harness, self.known_harnesses)
-        run = SelfTestRun(id=mint(SELFTEST_PREFIX, self._clock), harness=harness)
+        run = SelfTestRun(id=Id.mint(SELFTEST_PREFIX, self._clock).value, harness=harness)
         with self._lock:
             self._runs[run.id] = run
         threading.Thread(target=self._execute, args=(run.id, adapter), daemon=True).start()

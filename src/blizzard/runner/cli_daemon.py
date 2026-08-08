@@ -10,7 +10,7 @@ from typing import Literal
 import click
 import httpx
 
-from blizzard.cli.param_rank import source_rank
+from blizzard.cli.param_rank import ParamSource
 from blizzard.runner.config import RunnerConfig
 
 # A machine-local round trip (issue #43), so a hook-scale budget rather than the hub-client one.
@@ -33,15 +33,14 @@ class RunnerDaemon:
     def reach(cls, verb: str, directory: str, runner_url: str | None) -> RunnerDaemon:
         """Ranked by where each value came from (``param_rank``) because ``--dir`` always *has*
         one: an explicit flag beats an ambient variable, and only a tie on the line is ambiguous."""
-        ctx = click.get_current_context()
-        dir_rank = source_rank(ctx.get_parameter_source("directory"))
-        url_rank = source_rank(ctx.get_parameter_source("runner_url")) if runner_url is not None else -1
+        dir_source = ParamSource.of("directory")
+        url_source = ParamSource.of("runner_url") if runner_url is not None else None
 
-        if dir_rank == 2 and url_rank == 2:
+        if dir_source.on_commandline and url_source is not None and url_source.on_commandline:
             raise click.UsageError(
                 "--dir and --runner-url are mutually exclusive: --dir names the socket, --runner-url TCP"
             )
-        if url_rank > dir_rank and runner_url is not None:
+        if url_source is not None and url_source > dir_source and runner_url is not None:
             return cls(verb, httpx.Client(base_url=runner_url, timeout=LOCAL_CLIENT_TIMEOUT), runner_url)
 
         sock = RunnerConfig.socket_path_for(Path(directory))

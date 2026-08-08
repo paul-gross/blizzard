@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.exceptions import HTTPException
 from pydantic import BaseModel
 
-from blizzard.foundation.ids import QUESTION_PREFIX, mint
+from blizzard.foundation.ids import QUESTION_PREFIX, Id
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.federation import require_human_api
@@ -42,7 +42,7 @@ def record_ask(lease_id: str, request_body: AskRequest, request: Request) -> Ask
     wiring = RunnerWiring.of(request)
     store, clock = wiring.store(), wiring.clock()
     lease = wiring.active_lease(lease_id)
-    question_id = mint(QUESTION_PREFIX, clock)
+    question_id = Id.mint(QUESTION_PREFIX, clock).value
     store.record_ask(
         lease_id=lease_id,
         chunk_id=lease.chunk_id,

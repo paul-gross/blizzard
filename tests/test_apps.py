@@ -13,7 +13,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from blizzard.foundation.web import mount_web_app
+from blizzard.foundation.web import Frontend
 from tests.conftest import Daemon
 
 # The app boots with real internal collaborators, doubles only at the (absent) seams.
@@ -46,7 +46,7 @@ def test_frontend_mount_serves_placeholder(daemon: Daemon, tmp_path: Path) -> No
     static_dir = tmp_path / "static"
     static_dir.mkdir()
     app = FastAPI()
-    mount_web_app(app, static_dir, app_name=f"blizzard-{daemon.name}")
+    Frontend(static_dir, app_name=f"blizzard-{daemon.name}").mount(app)
     with TestClient(app) as client:
         response = client.get("/")
     assert response.status_code == 200
@@ -61,7 +61,7 @@ def test_spa_fallback_serves_index_for_client_route(tmp_path: Path) -> None:
     static_dir.mkdir()
     (static_dir / "index.html").write_text("<app-root></app-root>")
     app = FastAPI()
-    mount_web_app(app, static_dir, app_name="blizzard-hub")
+    Frontend(static_dir, app_name="blizzard-hub").mount(app)
     with TestClient(app) as client:
         response = client.get("/board/some-chunk-id")
     assert response.status_code == 200

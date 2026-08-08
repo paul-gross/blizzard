@@ -22,17 +22,6 @@ from blizzard.foundation.store.engine import create_engine_from_url
 _VERSION_TABLE_COLUMN_LENGTH = 255
 
 
-def _ensure_wide_version_table(url: str) -> None:
-    engine = create_engine_from_url(url)
-    try:
-        metadata = MetaData()
-        version_num = Column("version_num", String(_VERSION_TABLE_COLUMN_LENGTH), primary_key=True)
-        Table("alembic_version", metadata, version_num)
-        metadata.create_all(engine, checkfirst=True)
-    finally:
-        engine.dispose()
-
-
 class RevisionMismatchError(RuntimeError):
     """Raised when a store's applied revision differs from the code's expected head; the message names
     the command to run, so a skew fails loud instead of a schema being rewritten under running data."""
@@ -62,9 +51,19 @@ class MigrationRunner:
         cfg.set_main_option("sqlalchemy.url", self.url)
         return cfg
 
+    def _ensure_wide_version_table(self) -> None:
+        engine = create_engine_from_url(self.url)
+        try:
+            metadata = MetaData()
+            version_num = Column("version_num", String(_VERSION_TABLE_COLUMN_LENGTH), primary_key=True)
+            Table("alembic_version", metadata, version_num)
+            metadata.create_all(engine, checkfirst=True)
+        finally:
+            engine.dispose()
+
     def upgrade(self, revision: str = "head") -> None:
         """Apply pending revisions up to ``revision`` (idempotent — a no-op when current)."""
-        _ensure_wide_version_table(self.url)
+        self._ensure_wide_version_table()
         command.upgrade(self._config(), revision)
 
     def downgrade(self, revision: str) -> None:

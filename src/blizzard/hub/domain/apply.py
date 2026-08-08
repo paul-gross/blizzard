@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, MIGRATION_PREFIX, TRANSITION_PREFIX, mint
+from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, MIGRATION_PREFIX, TRANSITION_PREFIX, Id
 from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
@@ -270,7 +270,7 @@ class ApplyService:
         if migrated is not None:
             return migrated
 
-        fresh_transition_id = mint(TRANSITION_PREFIX, self._clock)
+        fresh_transition_id = Id.mint(TRANSITION_PREFIX, self._clock).value
         self._chunks.record_transition(
             transition_id=fresh_transition_id,
             chunk_id=chunk.chunk_id,
@@ -346,7 +346,7 @@ class ApplyService:
         if migrated is not None:
             return migrated
 
-        fresh_transition_id = mint(TRANSITION_PREFIX, self._clock)
+        fresh_transition_id = Id.mint(TRANSITION_PREFIX, self._clock).value
         self._chunks.record_transition(
             transition_id=fresh_transition_id,
             chunk_id=chunk.chunk_id,
@@ -529,7 +529,7 @@ class ApplyService:
             artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in artifacts],
             release_route=not lands_on_hub,
             clear_intent=clear_intent,
-            migration_id=mint(MIGRATION_PREFIX, self._clock),
+            migration_id=Id.mint(MIGRATION_PREFIX, self._clock).value,
         )
         _CP_MIGRATE_AFTER_RECORD.reached()
         if lands_on_hub:
@@ -591,7 +591,7 @@ class ApplyService:
         if self._chunks.find_decision(chunk.chunk_id, node_id=gate_node.node_id, epoch=epoch) is not None:
             return
         self._chunks.record_decision(
-            decision_id=mint(DECISION_PREFIX, self._clock),
+            decision_id=Id.mint(DECISION_PREFIX, self._clock).value,
             chunk_id=chunk.chunk_id,
             node_id=gate_node.node_id,
             node_name=gate_node.name,
@@ -622,7 +622,7 @@ class ApplyService:
             data=data,
             repo=artifact.repo if is_commit else None,
             forge=artifact.forge if is_commit else None,
-            artifact_id=mint(ARTIFACT_PREFIX, self._clock),
+            artifact_id=Id.mint(ARTIFACT_PREFIX, self._clock).value,
             chunk_id=chunk.chunk_id,
             node_id=from_node.node_id,
             node_name=from_node.name,

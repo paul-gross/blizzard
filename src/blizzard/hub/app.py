@@ -17,13 +17,12 @@ from typing import Protocol
 from fastapi import FastAPI
 
 from blizzard import __version__
-from blizzard.foundation.assets import frontend_dir
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
-from blizzard.foundation.web import mount_web_app
+from blizzard.foundation.web import Frontend
 from blizzard.hub.api.auth_login import router as auth_login_router
 from blizzard.hub.api.chunks import router as chunks_router
 from blizzard.hub.api.decisions import router as decisions_router
@@ -155,7 +154,7 @@ def create_app(
     # *because of where it is mounted*; see `blizzard.hub.api.fleet`.
     app.include_router(fleet_router)
 
-    mount_web_app(app, frontend_dir("hub"), app_name="blizzard-hub")
+    Frontend.embedded("hub", app_name="blizzard-hub").mount(app)
 
     log.info("hub app created", db_url=config.db_url, services_wired=services is not None)
     return app

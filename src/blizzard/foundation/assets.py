@@ -2,11 +2,11 @@
 
 The compiled Angular apps live under ``blizzard/static/<app>`` inside the
 package, so they ship in the one wheel and are found the same way whether the
-package is installed or run from a source checkout. Until a build fills these
-directories, ``index.html`` is absent."""
+package is installed or run from a source checkout."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import blizzard
@@ -14,6 +14,12 @@ import blizzard
 _STATIC_ROOT = Path(blizzard.__file__).resolve().parent / "static"
 
 
-def frontend_dir(app_name: str) -> Path:
-    """Return the embedded static-assets directory for ``app_name`` (``hub`` / ``runner``)."""
-    return _STATIC_ROOT / app_name
+@dataclass(frozen=True)
+class EmbeddedFrontend:
+    """The wheel-embedded static-assets directory for one compiled app."""
+
+    app: str
+
+    @property
+    def directory(self) -> Path:
+        return _STATIC_ROOT / self.app

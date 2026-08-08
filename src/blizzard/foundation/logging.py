@@ -1,8 +1,6 @@
 """structlog wiring (``bzh:structlog-logging``), routed to **stderr**.
 
-Diagnostics go to stderr so a daemon's stdout stays a clean surface; the renderer is
-chosen by configuration, defaulting on TTY detection.
-"""
+Diagnostics go to stderr so a daemon's stdout stays a clean surface."""
 
 from __future__ import annotations
 
@@ -18,16 +16,44 @@ _configured = False
 ENV_LOG_FORMAT = "BZ_LOG_FORMAT"
 
 
-def _resolve_use_json(json_logs: bool | None) -> bool:
-    """Pick the renderer: explicit arg > ``$BZ_LOG_FORMAT`` > TTY detection."""
-    if json_logs is not None:
-        return json_logs
-    fmt = os.environ.get(ENV_LOG_FORMAT, "").strip().lower()
-    if fmt == "json":
-        return True
-    if fmt in {"console", "text"}:
-        return False
-    return not sys.stderr.isatty()
+class LogFormat:
+    """The chosen renderer; the processor chain around it is the same either way."""
+
+    @classmethod
+    def of(cls, json_logs: bool | None) -> LogFormat:
+        """Pick the renderer: explicit arg > ``$BZ_LOG_FORMAT`` > TTY detection."""
+        if json_logs is not None:
+            return Json() if json_logs else Console()
+        fmt = os.environ.get(ENV_LOG_FORMAT, "").strip().lower()
+        if fmt == "json":
+            return Json()
+        if fmt in {"console", "text"}:
+            return Console()
+        return Json() if not sys.stderr.isatty() else Console()
+
+    def renderer(self) -> structlog.types.Processor:
+        raise NotImplementedError
+
+    def apply(self) -> None:
+        structlog.configure(
+            processors=[
+                structlog.processors.add_log_level,
+                structlog.processors.TimeStamper(fmt="iso"),
+                self.renderer(),
+            ],
+            logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
+            cache_logger_on_first_use=True,
+        )
+
+
+class Json(LogFormat):
+    def renderer(self) -> structlog.types.Processor:
+        return structlog.processors.JSONRenderer()
+
+
+class Console(LogFormat):
+    def renderer(self) -> structlog.types.Processor:
+        return structlog.dev.ConsoleRenderer()
 
 
 def configure(*, json_logs: bool | None = None) -> None:
@@ -35,19 +61,7 @@ def configure(*, json_logs: bool | None = None) -> None:
     global _configured
     if _configured:
         return
-    use_json = _resolve_use_json(json_logs)
-    renderer: structlog.types.Processor = (
-        structlog.processors.JSONRenderer() if use_json else structlog.dev.ConsoleRenderer()
-    )
-    structlog.configure(
-        processors=[
-            structlog.processors.add_log_level,
-            structlog.processors.TimeStamper(fmt="iso"),
-            renderer,
-        ],
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
-        cache_logger_on_first_use=True,
-    )
+    LogFormat.of(json_logs).apply()
     _configured = True
 
 

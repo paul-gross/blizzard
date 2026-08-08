@@ -12,7 +12,7 @@ import shlex
 from dataclasses import dataclass, field
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import TAKEOVER_PREFIX, mint
+from blizzard.foundation.ids import TAKEOVER_PREFIX, Id
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerPreamble
@@ -128,7 +128,7 @@ class TakeoverService:
         session_id = reference.session_id
 
         now = self._clock.now()
-        takeover_id = mint(TAKEOVER_PREFIX, self._clock)
+        takeover_id = Id.mint(TAKEOVER_PREFIX, self._clock).value
         fence_epoch = self._store.latest_epoch(chunk_id) + 1 if live else None
 
         # Fact-before-command (bzh:crash-correctness): recorded — and so reachable by

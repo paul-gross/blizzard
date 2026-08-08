@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.foundation.ids import minted_at
+from blizzard.foundation.ids import Id
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.graph_names import GraphNames
@@ -244,7 +244,8 @@ class ChunkView:
         views: list[ArtifactView] = []
         for row in sorted(rows, key=lambda r: (r.node_name, r.name, r.epoch)):
             artifact = row.artifact
-            attached = minted_at(row.artifact_id)
+            artifact_id = Id.parse(row.artifact_id)
+            attached = artifact_id.minted_at if artifact_id is not None else None
             common = {
                 "key": row.store_key,
                 "kind": row.kind.value,

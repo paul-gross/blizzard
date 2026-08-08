@@ -24,7 +24,7 @@ from sqlalchemy import insert as sa_insert
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.forwarded import TrustedProxies
-from blizzard.foundation.ids import USER_PREFIX, mint
+from blizzard.foundation.ids import USER_PREFIX, Id
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.app import create_app
@@ -693,7 +693,7 @@ def seed_user(
     No login mechanism exists yet (issue #91), so a test wanting a ``ResolvedIdentity``
     seeds the row directly rather than through a route."""
     user = User(
-        user_id=mint(USER_PREFIX, hub.clock),
+        user_id=Id.mint(USER_PREFIX, hub.clock).value,
         username=username,
         display_name=display_name or username,
         email=email,

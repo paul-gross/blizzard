@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, mint
+from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, Id
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.graph import Graph, Node
@@ -100,7 +100,7 @@ class DecisionService:
         if latest is not None and submission.epoch != latest:
             return DecisionSubmitResult.failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
 
-        decision_id = mint(DECISION_PREFIX, self._clock)
+        decision_id = Id.mint(DECISION_PREFIX, self._clock).value
         self._chunks.record_decision(
             decision_id=decision_id,
             chunk_id=chunk.chunk_id,
@@ -127,7 +127,7 @@ class DecisionService:
             data=data,
             repo=artifact.repo if is_commit else None,
             forge=artifact.forge if is_commit else None,
-            artifact_id=mint(ARTIFACT_PREFIX, self._clock),
+            artifact_id=Id.mint(ARTIFACT_PREFIX, self._clock).value,
             chunk_id=chunk.chunk_id,
             node_id=from_node.node_id,
             node_name=from_node.name,

@@ -15,7 +15,7 @@ from sqlalchemy import Connection, Engine, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import ARTIFACT_PREFIX, HUB_EXEC_SLOT_PREFIX, MIGRATION_PREFIX, mint
+from blizzard.foundation.ids import ARTIFACT_PREFIX, HUB_EXEC_SLOT_PREFIX, MIGRATION_PREFIX, Id
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Executor
@@ -1069,7 +1069,7 @@ class ChunkStore:
         The token fact is a second row on the same shared per-chunk seq counter
         (:meth:`_next_route_seq`), allocated by its own call to the allocator, never a
         fixed +1. Returns the freshly-minted ``route_created.route_id`` (issue #213)."""
-        route_id = mint(_ROUTE_PREFIX, self._clock)
+        route_id = Id.mint(_ROUTE_PREFIX, self._clock).value
         with self._engine.begin() as conn:
             conn.execute(
                 insert(s.route_created).values(
@@ -1554,7 +1554,9 @@ class ChunkStore:
         with self._engine.begin() as conn:
             if self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch):
                 return None
-            resolved_migration_id = migration_id if migration_id is not None else mint(MIGRATION_PREFIX, self._clock)
+            resolved_migration_id = (
+                migration_id if migration_id is not None else Id.mint(MIGRATION_PREFIX, self._clock).value
+            )
             conn.execute(
                 insert(s.chunk_migrations).values(
                     migration_id=resolved_migration_id,
@@ -1731,7 +1733,7 @@ class ChunkStore:
                 conn.execute(
                     update(s.hub_exec_slot).where(s.hub_exec_slot.c.slot_id == row.slot_id).values(released_at=at)
                 )
-            slot_id = mint(HUB_EXEC_SLOT_PREFIX, self._clock)
+            slot_id = Id.mint(HUB_EXEC_SLOT_PREFIX, self._clock).value
             conn.execute(
                 insert(s.hub_exec_slot).values(
                     slot_id=slot_id, holder_chunk_id=chunk_id, node_id=node_id, acquired_at=at, released_at=None
@@ -1789,7 +1791,7 @@ class ChunkStore:
                 return False
             conn.execute(
                 insert(s.artifacts).values(
-                    artifact_id=mint(ARTIFACT_PREFIX, self._clock),
+                    artifact_id=Id.mint(ARTIFACT_PREFIX, self._clock).value,
                     chunk_id=chunk_id,
                     node_id=node_id,
                     node_name=node_name,

@@ -17,14 +17,13 @@ from fastapi import APIRouter, Depends, FastAPI, Request, params
 from fastapi.responses import RedirectResponse
 
 from blizzard import __version__
-from blizzard.foundation.assets import frontend_dir
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
-from blizzard.foundation.web import mount_web_app
+from blizzard.foundation.web import Frontend
 from blizzard.runner.api.artifacts import router as artifacts_router
 from blizzard.runner.api.asks import router as asks_router
 from blizzard.runner.api.attachments import router as attachments_router
@@ -218,7 +217,7 @@ def create_app(
 
     # The runner-served web app: the human web lane the middleware above gates
     # (issue #95) — the only browser-facing surface this daemon serves.
-    mount_web_app(app, frontend_dir("runner"), app_name="blizzard-runner")
+    Frontend.embedded("runner", app_name="blizzard-runner").mount(app)
 
     log.info("runner app created", db_url=config.db_url, readiness_wired=readiness is not None)
     return app

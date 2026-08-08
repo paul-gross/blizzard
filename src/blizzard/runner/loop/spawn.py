@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.crash import crashpoint
-from blizzard.foundation.ids import LEASE_PREFIX, mint
+from blizzard.foundation.ids import LEASE_PREFIX, Id
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.environments.provider import AcquiredEnvironment
@@ -164,7 +164,7 @@ class Spawner:
         # Mint above the max of both floors (bzh:epoch-fencing, #112): the local fence alone is 0
         # for a chunk this runner never drove, so a migrated chunk would mint below hub truth.
         epoch = max(self.ctx.store.latest_epoch(chunk_id), envelope.epoch) + 1
-        lease_id = mint(LEASE_PREFIX, self.ctx.clock)
+        lease_id = Id.mint(LEASE_PREFIX, self.ctx.clock).value
         node = envelope.node
         retries_max = node.retries_max if node.retries_max is not None else self.ctx.config.default_retries_max
         model, effort = self.ctx.sessions.model_and_effort(node, resume_from)

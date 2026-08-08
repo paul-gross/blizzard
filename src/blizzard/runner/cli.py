@@ -19,7 +19,7 @@ from urllib.parse import quote
 import click
 import uvicorn
 
-from blizzard.cli.host_directory import resolve_host_directory
+from blizzard.cli.host_directory import HostDirectory
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.artifacts import ArtifactKind
@@ -122,7 +122,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
 
     DIRECTORY (positional) and --dir are equivalent — pass one; giving both requires
     they agree. Defaults to $BZ_RUNNER_DIR, then the cwd."""
-    directory = resolve_host_directory(directory, dir_option)
+    directory = HostDirectory(directory, dir_option).path
     try:
         config = RunnerConfig.load(Path(directory), host=host_, port=port)
     except ConfigError as exc:

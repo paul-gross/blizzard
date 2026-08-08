@@ -8,7 +8,7 @@ by a non-terminal chunk rejects the whole ingest ``409``; re-ingest is legal onc
 from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import CHUNK_PREFIX, mint
+from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import Chunk, IWriteChunkRepository, WorkRef
 
@@ -35,7 +35,7 @@ class IngestService:
             if holder is not None:
                 raise IngestConflict(existing_chunk_id=holder, pointer=pointer)
         chunk = Chunk(
-            chunk_id=mint(CHUNK_PREFIX, self._clock),
+            chunk_id=Id.mint(CHUNK_PREFIX, self._clock).value,
             graph_id=graph.graph_id,
             work_refs=list(pointers),
             minted_at=self._clock.now(),

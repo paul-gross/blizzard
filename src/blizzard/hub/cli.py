@@ -19,7 +19,7 @@ import httpx
 import uvicorn
 import yaml
 
-from blizzard.cli.host_directory import resolve_host_directory
+from blizzard.cli.host_directory import HostDirectory
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.hub import cli_login, session_store
 from blizzard.hub.api.marker_auth import _MARKER_TOKEN_HEADER
@@ -145,7 +145,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
 
     DIRECTORY (positional) and --dir are equivalent — pass one; giving both requires
     they agree. Defaults to $BZ_HUB_DIR, then the cwd."""
-    directory = resolve_host_directory(directory, dir_option)
+    directory = HostDirectory(directory, dir_option).path
     try:
         config = HubConfig.load(Path(directory), host=host_, port=port, allow_external_db=allow_external_db)
     except ConfigError as exc:
