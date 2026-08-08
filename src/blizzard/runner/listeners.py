@@ -123,11 +123,3 @@ class Listeners:
             self.uds.unlink()
             raise
         return [uds, tcp]
-
-
-def bind_listeners(config: RunnerConfig) -> list[socket.socket]:
-    return Listeners.of(config).bound()
-
-
-def unlink_socket(path: Path) -> None:
-    Uds(path).unlink()

@@ -23,7 +23,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.listeners import bind_listeners, unlink_socket
+from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import NewLease
 
@@ -45,7 +45,7 @@ def _init_runner(tmp_path: Path) -> Path:
 def _serve_local_api(root: Path) -> Iterator[tuple[Path, str]]:
     config = RunnerConfig.load(root, port=0)
     app = build_hosted_app(config)
-    sockets = bind_listeners(config)
+    sockets = Listeners.of(config).bound()
     tcp_url = f"http://{sockets[1].getsockname()[0]}:{sockets[1].getsockname()[1]}"
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
     thread = threading.Thread(target=lambda: server.run(sockets=sockets), daemon=True)
@@ -56,7 +56,7 @@ def _serve_local_api(root: Path) -> Iterator[tuple[Path, str]]:
     finally:
         server.should_exit = True
         thread.join(timeout=10.0)
-        unlink_socket(config.socket_path)
+        Uds(config.socket_path).unlink()
 
 
 def _await_socket(path: Path, timeout: float = 10.0) -> None:

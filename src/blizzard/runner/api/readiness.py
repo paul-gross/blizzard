@@ -10,7 +10,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from blizzard.runner.domain.readiness import ReadinessService
+from blizzard.foundation.store.readiness import ReadinessService
 
 router = APIRouter(prefix="/api", tags=["meta"])
 

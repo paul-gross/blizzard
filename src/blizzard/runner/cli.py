@@ -28,7 +28,7 @@ from blizzard.runner.cli_daemon import RunnerDaemon
 from blizzard.runner.cli_worker import WorkerCall
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
-from blizzard.runner.listeners import ListenerError, bind_listeners, unlink_socket
+from blizzard.runner.listeners import ListenerError, Listeners, Uds
 from blizzard.runner.loop.build import (
     LoopWiring,
     PeriodicDriver,
@@ -143,7 +143,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     # Two doors onto the one app (issue #43), bound up front so a clash fails startup loudly and
     # served by the single `Server` below, which keeps the shutdown path on one frame.
     try:
-        sockets = bind_listeners(config)
+        sockets = Listeners.of(config).bound()
     except ListenerError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(
@@ -179,8 +179,8 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         if marked:
             click.echo(f"marked {marked} in-flight lease(s) for restart-resume")
         # uvicorn closes a pre-bound socket but does not unlink its file; leaving it would
-        # make the next start take the stale-corpse path in `bind_listeners` for nothing.
-        unlink_socket(config.socket_path)
+        # make the next start take the stale-corpse path in `Uds.bound` for nothing.
+        Uds(config.socket_path).unlink()
 
 
 @runner.command("tick")

@@ -7,6 +7,8 @@ persisted or cached, and authorization resolves before the hub is consulted."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
@@ -17,11 +19,20 @@ from blizzard.wire.envelope import EnvelopeArtifact, NodeEnvelope
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
-def _envelope_artifacts(chunk_id: str, request: Request) -> list[EnvelopeArtifact]:
-    """Forward the chunk's envelope read to the hub and return its artifacts — the
-    layered pass-through, runner principal, worker-credential-free."""
-    upstream = HubProxy.of(request, "artifacts").get(f"/api/fleet/chunks/{chunk_id}/envelope", chunk_id=chunk_id)
-    return NodeEnvelope.model_validate(upstream.json()).artifacts
+@dataclass(frozen=True)
+class Artifacts:
+    """One chunk's envelope artifacts, read through the layered forward to the hub."""
+
+    items: list[EnvelopeArtifact]
+
+    @classmethod
+    def of(cls, chunk_id: str, request: Request) -> Artifacts:
+        upstream = HubProxy.of(request, "artifacts").get(f"/api/fleet/chunks/{chunk_id}/envelope", chunk_id=chunk_id)
+        return cls(NodeEnvelope.model_validate(upstream.json()).artifacts)
+
+    def named(self, name: str, *, node: str | None) -> list[EnvelopeArtifact]:
+        matches = [a for a in self.items if a.name == name]
+        return matches if node is None else [a for a in matches if a.node_name == node]
 
 
 @router.get("/leases/{lease_id}/artifacts", response_model=list[EnvelopeArtifact])
@@ -29,7 +40,7 @@ def list_artifacts(lease_id: str, request: Request) -> list[EnvelopeArtifact]:
     """The worker's own node-step inputs — every artifact resolved latest-by-epoch,
     both kinds, kind-discriminated."""
     lease = authorized_lease(lease_id, request)
-    return _envelope_artifacts(lease.chunk_id, request)
+    return Artifacts.of(lease.chunk_id, request).items
 
 
 @router.get("/leases/{lease_id}/artifacts/{name:path}", response_model=EnvelopeArtifact)
@@ -38,9 +49,7 @@ def get_artifact(lease_id: str, name: str, request: Request, node: str | None = 
     has none by that name. More than one upstream node can emit the same name (issue #169), so a bare
     name resolving to several candidates is ``409`` naming them, never an arbitrary pick."""
     lease = authorized_lease(lease_id, request)
-    matches = [a for a in _envelope_artifacts(lease.chunk_id, request) if a.name == name]
-    if node is not None:
-        matches = [a for a in matches if a.node_name == node]
+    matches = Artifacts.of(lease.chunk_id, request).named(name, node=node)
     if not matches:
         qualifier = f" from node {node!r}" if node is not None else ""
         raise HTTPException(

@@ -40,15 +40,15 @@ class RunnerWiring:
 
     def config(self) -> RunnerConfig:
         config = self.maybe_config()
-        return config if config is not None else _refuse(_STORE)
+        return config if config is not None else self._refuse(_STORE)
 
     def clock(self) -> IClock:
         clock: IClock | None = getattr(self.state, "clock", None)
-        return clock if clock is not None else _refuse(_STORE)
+        return clock if clock is not None else self._refuse(_STORE)
 
     def store(self) -> IWriteRunnerStore:
         store = self.maybe_store()
-        return store if store is not None else _refuse(_STORE)
+        return store if store is not None else self._refuse(_STORE)
 
     def reads(self) -> IReadRunnerStore:
         return self.store()
@@ -61,35 +61,35 @@ class RunnerWiring:
 
     def status(self) -> RunnerStatusService:
         service: RunnerStatusService | None = getattr(self.state, "runner_status", None)
-        return service if service is not None else _refuse("runner status service")
+        return service if service is not None else self._refuse("runner status service")
 
     def leases(self) -> LocalLeaseService:
         service: LocalLeaseService | None = getattr(self.state, "leases", None)
-        return service if service is not None else _refuse("lease service")
+        return service if service is not None else self._refuse("lease service")
 
     def transcripts(self) -> LocalTranscriptService:
         service: LocalTranscriptService | None = getattr(self.state, "transcripts", None)
-        return service if service is not None else _refuse("transcript service")
+        return service if service is not None else self._refuse("transcript service")
 
     def takeover(self) -> TakeoverService:
         service: TakeoverService | None = getattr(self.state, "takeover", None)
-        return service if service is not None else _refuse("takeover service")
+        return service if service is not None else self._refuse("takeover service")
 
     def requeue(self) -> RequeueService:
         service: RequeueService | None = getattr(self.state, "requeue", None)
-        return service if service is not None else _refuse("requeue service")
+        return service if service is not None else self._refuse("requeue service")
 
     def attachments(self) -> AttachmentService:
         service: AttachmentService | None = getattr(self.state, "attachments", None)
-        return service if service is not None else _refuse("attachment service")
+        return service if service is not None else self._refuse("attachment service")
 
     def git_commits(self) -> GitCommitDeclarationService:
         service: GitCommitDeclarationService | None = getattr(self.state, "git_commit_declarations", None)
-        return service if service is not None else _refuse("git-commit declaration service")
+        return service if service is not None else self._refuse("git-commit declaration service")
 
     def selftests(self) -> SelfTestService:
         service: SelfTestService | None = getattr(self.state, "selftests", None)
-        return service if service is not None else _refuse("selftest service")
+        return service if service is not None else self._refuse("selftest service")
 
     def maybe_config(self) -> RunnerConfig | None:
         return getattr(self.state, "config", None)
@@ -97,9 +97,9 @@ class RunnerWiring:
     def maybe_store(self) -> IWriteRunnerStore | None:
         return getattr(self.state, "runner_store", None)
 
-
-def _refuse(what: str) -> NoReturn:
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail=f"{what} not wired — start via `blizzard runner host`",
-    )
+    @staticmethod
+    def _refuse(what: str) -> NoReturn:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"{what} not wired — start via `blizzard runner host`",
+        )

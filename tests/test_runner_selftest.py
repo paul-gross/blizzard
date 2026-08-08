@@ -30,7 +30,7 @@ from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnap
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
-from blizzard.runner.listeners import bind_listeners, unlink_socket
+from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.scratch_git import ScratchRepo
@@ -492,7 +492,7 @@ def _serve_local_api(root: Path) -> Iterator[Path]:
     real socket rather than a stubbed transport."""
     config = RunnerConfig.load(root, port=0)
     app = build_hosted_app(config)
-    sockets = bind_listeners(config)
+    sockets = Listeners.of(config).bound()
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
     thread = threading.Thread(target=lambda: server.run(sockets=sockets), daemon=True)
     thread.start()
@@ -502,7 +502,7 @@ def _serve_local_api(root: Path) -> Iterator[Path]:
     finally:
         server.should_exit = True
         thread.join(timeout=10.0)
-        unlink_socket(config.socket_path)
+        Uds(config.socket_path).unlink()
 
 
 def _await_socket(path: Path, timeout: float = 10.0) -> None:

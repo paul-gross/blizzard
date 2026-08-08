@@ -1,6 +1,6 @@
 """Readiness — the store-status seam, its domain rule, and the ``/api/ready`` probe.
 
-unit (``evaluate_readiness``): the pure rule against a fake reader — reachable and
+unit (``Readiness.of``): the pure rule against a fake reader — reachable and
 at-head is ready, unreachable or drifted is not. component (``/api/ready``): the real
 SQLAlchemy store-status reader over a real migrated store, through the HTTP surface.
 """
@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from blizzard.foundation.store.readiness import Readiness, ReadinessService
 from blizzard.foundation.store.status import StoreStatus
-from blizzard.hub.domain.readiness import ReadinessService, evaluate_readiness
 from tests.conftest import Daemon
 
 
@@ -29,7 +29,7 @@ class _FakeReader:
 
 @pytest.mark.unit
 def test_ready_when_reachable_and_at_head() -> None:
-    r = evaluate_readiness(
+    r = Readiness.of(
         StoreStatus(reachable=True, revision="20260713_1112_hub_initial"), expected_revision="20260713_1112_hub_initial"
     )
     assert r.ready is True
@@ -39,7 +39,7 @@ def test_ready_when_reachable_and_at_head() -> None:
 
 @pytest.mark.unit
 def test_not_ready_when_store_unreachable() -> None:
-    r = evaluate_readiness(
+    r = Readiness.of(
         StoreStatus(reachable=False, revision=None, detail="boom"), expected_revision="20260713_1112_hub_initial"
     )
     assert r.ready is False
@@ -49,7 +49,7 @@ def test_not_ready_when_store_unreachable() -> None:
 
 @pytest.mark.unit
 def test_not_ready_on_revision_drift() -> None:
-    r = evaluate_readiness(StoreStatus(reachable=True, revision=None), expected_revision="20260713_1112_hub_initial")
+    r = Readiness.of(StoreStatus(reachable=True, revision=None), expected_revision="20260713_1112_hub_initial")
     assert r.ready is False
     assert "expected 20260713_1112_hub_initial" in r.detail
 

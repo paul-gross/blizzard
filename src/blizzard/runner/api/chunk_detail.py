@@ -19,7 +19,7 @@ def get_chunk(chunk_id: str, request: Request) -> ChunkHeaderView:
 
     The upstream aggregate is validated down to :class:`ChunkHeaderView`, keeping the
     transition/artifact history out of this route's own schema entirely."""
-    upstream = _proxy(request).get(f"/api/fleet/chunks/{chunk_id}")
+    upstream = HubProxy.of(request, "chunk-detail").get(f"/api/fleet/chunks/{chunk_id}")
     return ChunkHeaderView.model_validate(upstream.json())
 
 
@@ -27,16 +27,12 @@ def get_chunk(chunk_id: str, request: Request) -> ChunkHeaderView:
 def pause_chunk(chunk_id: str, request: Request) -> ChunkSummary:
     """Forward the chunk-detail dock's Pause to the hub — kills the active worker, keeps
     the claim (issue #46). ``409`` when the chunk is not in a pausable state."""
-    upstream = _proxy(request).post(f"/api/fleet/chunks/{chunk_id}/pause")
+    upstream = HubProxy.of(request, "chunk-detail").post(f"/api/fleet/chunks/{chunk_id}/pause")
     return ChunkSummary.model_validate(upstream.json())
 
 
 @router.post("/chunks/{chunk_id}/resume", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
 def resume_chunk(chunk_id: str, request: Request) -> ChunkSummary:
     """Forward the chunk-detail dock's Resume to the hub — idempotent, never refused."""
-    upstream = _proxy(request).post(f"/api/fleet/chunks/{chunk_id}/resume")
+    upstream = HubProxy.of(request, "chunk-detail").post(f"/api/fleet/chunks/{chunk_id}/resume")
     return ChunkSummary.model_validate(upstream.json())
-
-
-def _proxy(request: Request) -> HubProxy:
-    return HubProxy.of(request, "chunk-detail")

@@ -23,6 +23,7 @@ from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
+from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.web import mount_web_app
 from blizzard.runner.api.artifacts import router as artifacts_router
 from blizzard.runner.api.asks import router as asks_router
@@ -60,7 +61,6 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.attachments import AttachmentService
 from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationService
 from blizzard.runner.domain.leases import LocalLeaseService
-from blizzard.runner.domain.readiness import ReadinessService
 from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService

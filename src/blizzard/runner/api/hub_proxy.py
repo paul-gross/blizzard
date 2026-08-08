@@ -56,20 +56,20 @@ class HubProxy:
             self._log().error(f"{self.what} proxy could not reach the hub", url=url, error=str(exc), **fields)
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"hub unreachable: {exc}") from exc
         if upstream.status_code != expect:
-            raise HTTPException(status_code=upstream.status_code, detail=upstream_detail(upstream))
+            raise HTTPException(status_code=upstream.status_code, detail=self._detail(upstream))
         return upstream
 
     def _log(self) -> structlog.stdlib.BoundLogger:
         # The route module's own logger — `what` is its module name in hyphens.
         return get_logger(f"blizzard.runner.api.{self.what.replace('-', '_')}")
 
-
-def upstream_detail(response: httpx.Response) -> str:
-    """The hub's error detail, unwrapped from its JSON body when present."""
-    try:
-        payload = response.json()
-    except ValueError:
+    @staticmethod
+    def _detail(response: httpx.Response) -> str:
+        """The hub's error detail, unwrapped from its JSON body when present."""
+        try:
+            payload = response.json()
+        except ValueError:
+            return response.text
+        if isinstance(payload, dict) and "detail" in payload:
+            return str(payload["detail"])
         return response.text
-    if isinstance(payload, dict) and "detail" in payload:
-        return str(payload["detail"])
-    return response.text

@@ -11,13 +11,11 @@ from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import (
     ChunkNotTakeable,
     LiveWorkerConflict,
     SubmissionPending,
     TakeoverEndedElsewhere,
-    TakeoverService,
 )
 from blizzard.wire.runner_status import OpenTakeoverListResponse
 from blizzard.wire.runner_status import OpenTakeoverView as OpenTakeoverViewWire
@@ -26,21 +24,13 @@ from blizzard.wire.takeover import TakeoverEndResponse, TakeoverOpenResponse, Ta
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
-def _service(request: Request) -> TakeoverService:
-    return RunnerWiring.of(request).takeover()
-
-
-def _status_service(request: Request) -> RunnerStatusService:
-    return RunnerWiring.of(request).status()
-
-
 @router.post("/chunks/{chunk_id}/takeovers", response_model=TakeoverOpenResponse, status_code=status.HTTP_201_CREATED)
 def open_takeover(chunk_id: str, request_body: TakeoverRequest, request: Request) -> TakeoverOpenResponse:
     """Open a takeover over a parked chunk with no running attempt (``409`` otherwise).
 
     ``force`` supersedes a live worker attempt instead of refusing, consuming no retry
     and recording no escalation."""
-    service = _service(request)
+    service = RunnerWiring.of(request).takeover()
     try:
         opened = service.open(chunk_id, force=request_body.force)
     except (ChunkNotTakeable, LiveWorkerConflict, SubmissionPending) as exc:
@@ -53,7 +43,7 @@ def open_takeover(chunk_id: str, request_body: TakeoverRequest, request: Request
 @router.patch("/chunks/{chunk_id}/takeovers/{takeover_id}", response_model=TakeoverEndResponse)
 def end_takeover(chunk_id: str, takeover_id: str, request: Request) -> TakeoverEndResponse:
     """Mark a takeover ended — the CLI calls this once its exec'd interactive child exits."""
-    service = _service(request)
+    service = RunnerWiring.of(request).takeover()
     try:
         service.close(chunk_id, takeover_id)
     except TakeoverEndedElsewhere as exc:
@@ -64,7 +54,7 @@ def end_takeover(chunk_id: str, takeover_id: str, request: Request) -> TakeoverE
 @router.get("/takeovers", response_model=OpenTakeoverListResponse)
 def list_open_takeovers(request: Request) -> OpenTakeoverListResponse:
     """Every takeover still open — the recovery surface for a stranded one."""
-    service = _status_service(request)
+    service = RunnerWiring.of(request).status()
     return OpenTakeoverListResponse(
         items=[
             OpenTakeoverViewWire(chunk_id=t.chunk_id, takeover_id=t.takeover_id, held_since=iso_utc(t.held_since))

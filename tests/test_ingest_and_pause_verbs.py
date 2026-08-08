@@ -26,7 +26,7 @@ from blizzard.hub.cli import hub as hub_group
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.listeners import bind_listeners, unlink_socket
+from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 
 
@@ -458,7 +458,7 @@ def _serve_local_api(root: Path) -> Iterator[tuple[Path, str]]:
     # human-lane gating resolves to the authless path these hub-free tests assume.
     config = dataclasses.replace(config, hub_url="http://127.0.0.1:1")
     app = build_hosted_app(config)
-    sockets = bind_listeners(config)
+    sockets = Listeners.of(config).bound()
     tcp_url = f"http://{sockets[1].getsockname()[0]}:{sockets[1].getsockname()[1]}"
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
     thread = threading.Thread(target=lambda: server.run(sockets=sockets), daemon=True)
@@ -469,7 +469,7 @@ def _serve_local_api(root: Path) -> Iterator[tuple[Path, str]]:
     finally:
         server.should_exit = True
         thread.join(timeout=10.0)
-        unlink_socket(config.socket_path)
+        Uds(config.socket_path).unlink()
 
 
 def _await_socket(path: Path, timeout: float = 10.0) -> None:
