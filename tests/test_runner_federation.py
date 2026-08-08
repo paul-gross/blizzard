@@ -1,7 +1,6 @@
-"""The runner's SSO federation bounce end to end, over the app's own TestClient —
-``GET /api/auth/login``, ``POST /api/auth/callback``, the three-tenant partition, and
-the authless-under-none fallback (component tier, issue #95).
-"""
+"""The runner's SSO federation bounce end to end, over the app's own TestClient — ``GET
+/api/auth/login``, ``POST /api/auth/callback``, the three-tenant partition, the authless-under-none
+fallback (component tier, issue #95), and per-request declared-origin selection (issue #287)."""
 
 from __future__ import annotations
 
@@ -16,6 +15,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 from jwt.algorithms import RSAAlgorithm
+from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -73,6 +73,7 @@ def _build_app(
     trusted_proxies: tuple[str, ...] = (),
     client_host: str | None = None,
     base_url: str | None = None,
+    extra_public_urls: tuple[str, ...] = (),
 ) -> TestClient:
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
     metadata.create_all(engine)
@@ -81,7 +82,7 @@ def _build_app(
         db_url=f"sqlite:///{tmp_path / 'runner.db'}",
         runner_id=_RUNNER_ID,
         hub_url="http://hub.example",
-        public_url="https://runner-a.example",
+        public_urls=("https://runner-a.example", *extra_public_urls),
         trusted_proxies=trusted_proxies,
     )
     store = SqlAlchemyRunnerStore(engine)
@@ -393,3 +394,122 @@ def test_bounce_cookies_stay_lax_on_a_plain_http_non_loopback_runner(tmp_path: P
     assert "bz_runner_bounce_state" in header
     assert "samesite=lax" in header
     assert "secure" not in header
+
+
+# --- Multi-origin callback selection (issue #287) ------------------------------
+
+_TAILNET = "https://tailnet.example:8431"
+_LOOPBACK = "http://127.0.0.1:8431"
+
+
+def test_login_presents_the_declared_origin_the_browser_actually_reached(tmp_path: Path) -> None:
+    _private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk, extra_public_urls=(_TAILNET,), base_url=_TAILNET)
+    resp = client.get("/api/auth/login", follow_redirects=False)
+    params = parse_qs(urlparse(resp.headers["location"]).query)
+    assert params["redirect_uri"] == [f"{_TAILNET}/api/auth/callback"]
+
+
+def test_login_presents_each_declared_origin_to_the_browser_that_reached_it(tmp_path: Path) -> None:
+    _private_key, jwk = _keypair()
+    for origin in (_TAILNET, _LOOPBACK, "https://runner-a.example"):
+        client = _build_app(
+            tmp_path,
+            oauth_enabled=True,
+            jwk=jwk,
+            extra_public_urls=(_TAILNET, _LOOPBACK),
+            base_url=origin,
+        )
+        resp = client.get("/api/auth/login", follow_redirects=False)
+        params = parse_qs(urlparse(resp.headers["location"]).query)
+        assert params["redirect_uri"] == [f"{origin}/api/auth/callback"], origin
+
+
+def test_login_falls_back_to_the_canonical_origin_for_an_unmatched_host(tmp_path: Path) -> None:
+    _private_key, jwk = _keypair()
+    client = _build_app(
+        tmp_path,
+        oauth_enabled=True,
+        jwk=jwk,
+        extra_public_urls=(_TAILNET,),
+        base_url="https://evil.example",
+    )
+    resp = client.get("/api/auth/login", follow_redirects=False)
+    params = parse_qs(urlparse(resp.headers["location"]).query)
+    assert params["redirect_uri"] == ["https://runner-a.example/api/auth/callback"]
+
+
+def test_a_declared_https_origin_keeps_its_scheme_when_the_proxy_forwards_cleartext(tmp_path: Path) -> None:
+    _private_key, jwk = _keypair()
+    client = _build_app(
+        tmp_path,
+        oauth_enabled=True,
+        jwk=jwk,
+        extra_public_urls=(_TAILNET,),
+        base_url="http://tailnet.example:8431",  # cleartext hop from the proxy
+    )
+    resp = client.get("/api/auth/login", follow_redirects=False)
+    params = parse_qs(urlparse(resp.headers["location"]).query)
+    assert params["redirect_uri"] == [f"{_TAILNET}/api/auth/callback"]
+
+
+def test_bounce_cookies_are_samesite_none_secure_on_a_proxied_declared_https_origin(tmp_path: Path) -> None:
+    _private_key, jwk = _keypair()
+    client = _build_app(
+        tmp_path,
+        oauth_enabled=True,
+        jwk=jwk,
+        extra_public_urls=(_TAILNET,),
+        base_url="http://tailnet.example:8431",
+        trusted_proxies=(_PROXY_IP,),
+        client_host=_PROXY_IP,
+    )
+    resp = client.get("/api/auth/login", follow_redirects=False, headers={"x-forwarded-proto": "https"})
+    header = _bounce_set_cookie_headers(resp).lower()
+    assert "bz_runner_bounce_state" in header
+    assert "samesite=none" in header
+    assert "secure" in header
+
+
+def test_a_proxied_origin_without_trusted_proxies_still_falls_back_to_lax(tmp_path: Path) -> None:
+    _private_key, jwk = _keypair()
+    client = _build_app(
+        tmp_path,
+        oauth_enabled=True,
+        jwk=jwk,
+        extra_public_urls=(_TAILNET,),
+        base_url="http://tailnet.example:8431",
+        client_host=_PROXY_IP,  # no trusted_proxies configured
+    )
+    resp = client.get("/api/auth/login", follow_redirects=False, headers={"x-forwarded-proto": "https"})
+    header = _bounce_set_cookie_headers(resp).lower()
+    assert "samesite=lax" in header
+
+
+def test_declaring_no_extra_origins_presents_the_canonical_callback_unchanged(tmp_path: Path) -> None:
+    _private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
+    resp = client.get("/api/auth/login", follow_redirects=False)
+    params = parse_qs(urlparse(resp.headers["location"]).query)
+    assert params["redirect_uri"] == ["https://runner-a.example/api/auth/callback"]
+
+
+def test_a_proxy_that_rewrites_host_falls_back_and_is_not_silent(tmp_path: Path) -> None:
+    _private_key, jwk = _keypair()
+    client = _build_app(
+        tmp_path,
+        oauth_enabled=True,
+        jwk=jwk,
+        extra_public_urls=(_TAILNET,),
+        base_url="http://127.0.0.1:8431",  # nginx's default Host: $proxy_host, not the browser's
+        trusted_proxies=(_PROXY_IP,),
+        client_host=_PROXY_IP,
+    )
+    with capture_logs() as logs:
+        resp = client.get("/api/auth/login", follow_redirects=False, headers={"x-forwarded-proto": "https"})
+    params = parse_qs(urlparse(resp.headers["location"]).query)
+    assert params["redirect_uri"] == ["https://runner-a.example/api/auth/callback"]
+    warned = [entry for entry in logs if entry["log_level"] == "warning"]
+    assert warned
+    assert warned[0]["arrived_host"] == "127.0.0.1:8431"
+    assert _TAILNET in warned[0]["declared"]

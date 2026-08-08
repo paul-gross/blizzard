@@ -88,7 +88,7 @@ def _oauth_app() -> TestClient:
         db_url="sqlite://",
         runner_id="runner-guard",
         hub_url="http://hub.example",
-        public_url="https://runner-guard.example",
+        public_urls=("https://runner-guard.example",),
     )
     return TestClient(create_app(config, hub_http_client=_oauth_hub_client()))
 

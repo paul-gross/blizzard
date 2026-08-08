@@ -50,13 +50,14 @@ class Runtime:
         root = self.root.resolve()
         root.mkdir(parents=True, exist_ok=True)
 
-        config = RunnerConfig.scaffold(root)
+        # An existing file is authoritative and the environment is discarded, so `scaffold` — which
+        # reads the environment and rejects a malformed value — must not run on that path (issue #287).
+        scaffolding = not (root / CONFIG_FILENAME).exists()
+        config = RunnerConfig.scaffold(root) if scaffolding else RunnerConfig.load(root)
         config.data_dir.mkdir(parents=True, exist_ok=True)
-        if not config.config_path.exists():
+        if scaffolding:
             config.config_path.write_text(config.to_toml())
             _log.info("runner config scaffolded", path=str(config.config_path))
-        else:
-            config = RunnerConfig.load(root)
 
         # Written idempotently: the content is versioned with the runner, so re-running
         # `init` refreshes it to head.

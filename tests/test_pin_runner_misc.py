@@ -130,7 +130,7 @@ def test_the_default_hub_client_never_reaches_the_configured_hub_url(tmp_path: P
             db_url="sqlite://",
             runner_id="runner-hermetic",
             hub_url=f"http://127.0.0.1:{server.server_address[1]}",
-            public_url="http://runner-hermetic.example",
+            public_urls=("http://runner-hermetic.example",),
         )
         client = TestClient(create_app(config))  # no hub_http_client: the default is under test
 

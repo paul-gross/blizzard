@@ -93,7 +93,7 @@
           "file": "src/blizzard/hub/cli.py",
           "symbol": "chunk_ingest",
           "role": "allowed",
-          "reason": "This docstring IS the `blizzard hub chunk ingest --help` text — an operator-facing published surface with no source tree to point at, the same structural cause as this fact's docs/deployment.md survivor below."
+          "reason": "This docstring IS the `blizzard hub chunk ingest --help` text \u2014 an operator-facing published surface with no source tree to point at, the same structural cause as this fact's docs/deployment.md survivor below."
         },
         {
           "file": "docs/deployment.md",
@@ -143,9 +143,31 @@
           "file": "src/blizzard/hub/api/fleet.py",
           "symbol": "rekey_route_token",
           "role": "allowed",
-          "reason": "This docstring generates into openapi/ and thence the generated client — a published surface with no source tree to point at; restated inline per one-prose-home.md's published-surface clause, the same structural cause as the chunk_ingest survivor."
+          "reason": "This docstring generates into openapi/ and thence the generated client \u2014 a published surface with no source tree to point at; restated inline per one-prose-home.md's published-surface clause, the same structural cause as the chunk_ingest survivor."
         }
       ]
+    },
+    {
+      "id": "federation-origin-declared-not-derived",
+      "statement": "A runner's federation redirect_uri is selected from the origins it declared in public_url and registered with the hub, never derived from the request; the browser follows it, so a loopback-only declaration is reachable from the runner's own host alone.",
+      "owner": "docs/deployment.md#runner-side-federation",
+      "owner_kind": "doc-section",
+      "owner_assert": {
+        "quote": "followed by the browser rather than the runner"
+      },
+      "markers": [
+        "followed by the browser rather than the runner"
+      ],
+      "sites": [
+        {
+          "file": "docs/deployment.md",
+          "symbol": "runner-side-federation",
+          "role": "owner"
+        }
+      ],
+      "marker_acknowledgments": {
+        "followed by the browser rather than the runner": "R1: 8 words, chosen because the fact's other phrasings all carry an apostrophe and so cannot normalize to themselves as a marker. The runner's generated blizzard-runner.toml scaffold comment (src/blizzard/runner/config.py's to_toml) is a fourth, sanctioned restatement under bzh:one-prose-home's published-surface clause, but it is not carried as a site: it lives inside string literals, which prose_spans.py does not extract, so a site entry for it is unobservable and reads as stale. Named here instead of dropped."
+      }
     }
   ]
 }

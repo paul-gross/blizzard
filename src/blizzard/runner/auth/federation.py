@@ -33,7 +33,7 @@ from blizzard.runner.auth.session import (
     verify_session_cookie,
 )
 from blizzard.runner.auth.validate import FederationTokenError, validate_federation_token
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config import CALLBACK_PATH, RunnerConfig
 
 _log = get_logger("blizzard.runner.auth")
 
@@ -190,11 +190,30 @@ def require_human_api(request: Request) -> RunnerSession:
     return HumanLane(request).demand_api()
 
 
+def _callback_url(request: Request, config: RunnerConfig) -> str:
+    """The callback this bounce presents: the declared origin the browser actually reached, so the hub's
+    cross-site ``form_post`` lands where the bounce cookies live. Selection is membership in the declared
+    set, never construction from the request; `docs/deployment.md` §Runner-side federation owns why."""
+    origins = config.public_origins
+    arrived = request.headers.get("host")
+    chosen = origins.select(arrived)
+    if chosen is None:
+        # The bounce still completes against the canonical origin, which is registered — but the cookies
+        # were set on this request's origin, so a remote browser dead-ends on `bad or expired state`.
+        _log.warning(
+            "no declared origin matches the arriving Host — falling back to the canonical origin",
+            arrived_host=arrived,
+            declared=list(origins.urls),
+            falling_back_to=origins.canonical,
+        )
+    return f"{chosen or origins.canonical or ''}{CALLBACK_PATH}"
+
+
 @router.get("/login")
 def login(request: Request, return_to: str = "/") -> Response:
     config: RunnerConfig = request.app.state.config
     state = secrets.token_urlsafe(24)
-    callback_url = f"{config.public_url.rstrip('/')}/api/auth/callback"
+    callback_url = _callback_url(request, config)
     target = (
         f"{config.hub_url.rstrip('/')}/api/auth/authorize"
         f"?client={quote(config.runner_id, safe='')}"

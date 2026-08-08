@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from blizzard.foundation.forwarded import TrustedProxies
+from blizzard.foundation.public_origins import PublicOrigins
 
 CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"
@@ -42,8 +43,12 @@ ENV_RUNNER_PROMPT = "BZ_RUNNER_PROMPT"  # the blizzard-preamble override, inline
 # Where the harness writes session transcripts (issue #29); empty resolves to a default at
 # the composition root, never here.
 ENV_TRANSCRIPTS_ROOT = "BZ_TRANSCRIPTS_ROOT"
-# This runner's own browser-reachable base URL (issue #95).
+# The browser-reachable base URLs this runner answers on (issues #95, #287), comma-separated.
 ENV_PUBLIC_URL = "BZ_RUNNER_PUBLIC_URL"
+
+# The federation callback route, owned here so the registered URI set and the URL the bounce
+# presents cannot drift; `runner.auth.federation` imports it rather than restating the literal.
+CALLBACK_PATH = "/api/auth/callback"
 
 # Reconciliation-loop defaults — the runner is machine-level and single-workspace.
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"  # the hub's default bind (band +2)
@@ -244,9 +249,9 @@ class RunnerConfig:
     #: The declared extension to the worker spawn-environment allowlist (issue #88) — a
     #: worker's env is that allowlist, never a full ``os.environ`` copy.
     worker_env_passthrough: tuple[str, ...] = ()
-    #: The runner's own browser-reachable base URL (issue #95); empty registers no
-    #: federation identity, leaving the human web surface unreachable via the SSO bounce.
-    public_url: str = ""
+    #: Every browser-reachable origin this runner answers on, authored as `public_url` — one URL or
+    #: a list; first is canonical, empty registers no federation identity (issues #95, #287).
+    public_urls: tuple[str, ...] = ()
     #: The hub username naming this runner's own sovereign (issue #95) — config-only,
     #: never assignable through a JWT claim.
     auth_superuser: str | None = None
@@ -267,12 +272,24 @@ class RunnerConfig:
     trusted_proxies: tuple[str, ...] = ()
 
     @property
+    def public_origins(self) -> PublicOrigins:
+        """Every origin this runner answers on (issue #287), in declaration order."""
+        return PublicOrigins.of(*self.public_urls)
+
+    @property
+    def public_url(self) -> str:
+        """The canonical origin — the first declared. It is what the hub records as this runner's own
+        URL, and what a request whose ``Host`` matches no declared origin falls back to. Empty when
+        none is declared, which is how a runner registers no federation identity at all."""
+        return self.public_origins.canonical or ""
+
+    @property
     def redirect_uris(self) -> tuple[str, ...]:
-        """The one redirect URI this runner presents to the hub's IdP authorize endpoint
-        (issue #95) — derived from :attr:`public_url`, never independently configured."""
-        if not self.public_url:
-            return ()
-        return (f"{self.public_url.rstrip('/')}/api/auth/callback",)
+        """The redirect URIs this runner presents to the hub's IdP authorize endpoint (issue #95) — one
+        per declared origin (issue #287), derived from :attr:`public_origins`, never independently
+        configured. The hub exact-matches a presented URI against this registered set, so an origin
+        missing from it cannot complete a bounce."""
+        return self.public_origins.callback_uris(CALLBACK_PATH)
 
     @property
     def config_path(self) -> Path:
@@ -352,6 +369,7 @@ class RunnerConfig:
         produces a runnable config; each falls back to its dataclass default."""
         envs = os.environ.get(ENV_WORKSPACE_ENVS)
         gates = os.environ.get(ENV_GATES)
+        public_urls = os.environ.get(ENV_PUBLIC_URL, "")
         return cls(
             root=root,
             db_url=cls.default_db_url(root),
@@ -376,12 +394,19 @@ class RunnerConfig:
             # Empty on a fresh scaffold means the baked-in preamble is used (issue #103).
             runner_prompt=os.environ.get(ENV_RUNNER_PROMPT, ""),
             transcripts_root=os.environ.get(ENV_TRANSCRIPTS_ROOT, ""),
-            public_url=os.environ.get(ENV_PUBLIC_URL, ""),
+            public_urls=PublicOrigins.entries(public_urls.split(","), ConfigError),
         )
 
     def to_toml(self) -> str:
         envs = ", ".join(f'"{e}"' for e in self.workspace_envs)
         gates = ", ".join(f'"{g}"' for g in self.gates)
+        # A lone origin stays a bare string, the shape the common single-origin deployment authors;
+        # several become a list. Both round-trip back through `load`.
+        public_url = (
+            "[" + ", ".join(f'"{u}"' for u in self.public_urls) + "]"
+            if len(self.public_urls) > 1
+            else f'"{self.public_url}"'
+        )
         settings = f'"{self.worker_settings_path}"' if self.worker_settings_path else '""'
         # `json.dumps` emits a valid TOML basic string: TOML shares JSON's escapes
         # (\n, \t, \", \\, \uXXXX), so a multi-line inline prompt round-trips intact.
@@ -396,11 +421,16 @@ class RunnerConfig:
             f"port = {self.port}\n"
             "\n# Reconciliation-loop seams.\n"
             f'hub_url = "{self.hub_url}"\n'
-            "\n# This runner's own browser-reachable base URL (issue #95); empty = no federation\n"
-            "# identity registered at the hub, so its human web surface stays unreachable via SSO.\n"
-            f'public_url = "{self.public_url}"\n'
+            "\n# The browser-reachable origins this runner answers on — one bare origin, or a list.\n"
+            "# Empty registers no federation identity, so the human web surface stays unreachable.\n"
+            "# The browser follows these, so a loopback-only value answers on this host alone; a\n"
+            "# non-loopback origin must be https fronted by a proxy. First is canonical. See the\n"
+            '# "Runner-side federation" section of the deployment guide before changing this.\n'
+            f"public_url = {public_url}\n"
             "\n# Reverse-proxy trust set (issue #130): proxy IPs/CIDRs whose X-Forwarded-Proto is\n"
             "# honored when minting the SSO session cookie's Secure flag. Empty = header ignored.\n"
+            "# Required for any https origin above, and the proxy must also pass the browser's\n"
+            "# original Host through — selection reads it, and nginx replaces it by default.\n"
             f"trusted_proxies = [{', '.join(f'"{p}"' for p in self.trusted_proxies)}]\n"
             "\n# Names the env var carrying this runner's hub bearer token (issue #86b);\n"
             "# the secret itself lives in the runtime env file, never here.\n"
@@ -529,7 +559,7 @@ class RunnerConfig:
             external_usage_sample_interval_seconds=usage.sample_interval_seconds,
             external_usage_credentials_path=usage.credentials_path,
             worker_env_passthrough=Table.of(raw.get("worker")).names("env_passthrough"),
-            public_url=str(raw.get("public_url", "")),
+            public_urls=PublicOrigins.entries(raw.get("public_url"), ConfigError),
             auth_superuser=auth.superuser,
             auth_hub_role_default=auth.hub_role_default,
             auth_users=auth.users,

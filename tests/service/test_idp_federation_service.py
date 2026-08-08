@@ -91,7 +91,7 @@ def _federated_runner(
     config = dataclasses.replace(
         config,
         runner_id=runner_id,
-        public_url=public_url,
+        public_urls=(public_url,),
         # A path that is never created — the sampler's missing-credentials soft failure
         # trips before any request is built (issue #218).
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),

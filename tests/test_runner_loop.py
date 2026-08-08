@@ -2274,3 +2274,31 @@ def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path):  #
     _chunk_id, submission = hub.completions[0]
     branches = sorted(a.branch_name or "" for a in submission.artifacts if a.kind is ArtifactKind.GIT_COMMIT)
     assert branches == ["feat/from-e1", "feat/from-e2"]
+
+
+@pytest.mark.unit
+def test_pull_registers_every_declared_redirect_uri(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    hub = FakeHub()
+    uris = (
+        "http://127.0.0.1:8431/api/auth/callback",
+        "https://tailnet.example:8431/api/auth/callback",
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        config=LoopConfig(
+            runner_id="r1",
+            workspace_id="ws1",
+            public_url="http://127.0.0.1:8431",
+            redirect_uris=uris,
+        ),
+    )
+
+    Pull(ctx).run()
+
+    assert hub.registered_redirect_uris == [uris]
+    assert hub.registered_urls == ["http://127.0.0.1:8431"]

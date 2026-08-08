@@ -648,12 +648,59 @@ re-fetching JWKS on an unknown `kid`, no restart needed. Under `mode = "oauth"`,
 ### Runner-side federation
 
 A runner that wants its own human web surface reachable via the hub's SSO bounce
-declares `public_url` in `blizzard-runner.toml` — its own browser-reachable base URL,
-from which the runner derives the one redirect URI it presents to the hub's IdP
-authorize endpoint (`<public_url>/api/auth/callback`). Empty (the fresh-scaffold
+declares `public_url` in `blizzard-runner.toml` — the browser-reachable base URL(s) it
+answers on, from which the runner derives the redirect URIs it presents to the hub's IdP
+authorize endpoint (`<public_url>/api/auth/callback` each). Empty (the fresh-scaffold
 default) means this runner registers no federation identity, so its human web surface
 stays unreachable via SSO — and, since there is no IdP to bounce to either way, that is
 also the correct state when the hub itself runs `auth.mode = "none"`.
+
+`public_url` takes **one URL or a list of them**. More than one matters because the hub
+delivers the federation token by making the *browser* POST to the redirect URI, so a
+redirect URI is followed by the browser rather than the runner, and so resolves in
+the network namespace of whichever device is holding it: a
+runner declaring only `http://127.0.0.1:8431` is reachable from a browser on its own host
+and nowhere else, since any other device follows that address to itself.
+
+Two constraints bound what is worth declaring. First, **only two origin classes can
+complete a bounce**: a loopback origin at either scheme, and a non-loopback origin only as
+`https`. A non-loopback plain-`http` origin is not merely insecure — the bounce cookies
+cannot be `Secure` there, browsers refuse `SameSite=None` without it, and the cross-site
+callback arrives cookie-less, so `http://192.168.1.5:8431` fails every time it is tried.
+Second, **each entry must equal the origin the browser shows, exactly** — scheme, host,
+and port — because selection compares it against the request's `Host`. A proxy terminating
+TLS on 443 makes the browser-visible origin `https://runner.example`, which a declared
+`https://runner.example:8431` does not match; the mismatch is silent, since the fallback
+lands on a registered origin and the hub raises nothing.
+
+`localhost` and `127.0.0.1` are also distinct origins to both the browser and the hub's
+exact-match guard, so each needs its own entry. Two spellings that a browser cannot tell
+apart — differing only in scheme, or in an explicit-versus-default port — are refused at
+load rather than silently resolving to whichever was declared first:
+
+```toml
+public_url = ["http://127.0.0.1:8431", "http://localhost:8431", "https://runner.example"]
+```
+
+Every declared origin is registered with the hub, which exact-matches the presented
+redirect URI against that registered set. The runner then selects among the declared
+origins per request, by the arriving `Host`; a request whose `Host` matches none falls
+back to the first declared origin, which is the canonical one the hub records as this
+runner's URL. Selection is membership in the declared set and never construction from the
+request, so an unrecognized or forged `Host` can only ever resolve to an origin the
+operator already declared — it is logged as a warning and falls back, never reflected into
+a redirect URI. A value that is not a URL or a list of them, an entry carrying a path,
+userinfo, or a port that is not a number, and two entries naming one browser origin all
+fail at config load rather than surfacing later as an opaque `unregistered redirect_uri`
+refusal from the hub.
+
+Registration happens on the runner's reconciliation tick, so a widened set reaches the
+hub on the next tick after a restart — a login attempted between the restart and that
+tick is refused as an unregistered redirect URI. Any `https` entry served through a
+TLS-terminating proxy also needs `trusted_proxies`, which is a hard requirement for that
+case rather than a refinement, and needs the proxy to preserve the browser's `Host`; both
+are covered under [Behind a TLS-terminating reverse
+proxy](#behind-a-tls-terminating-reverse-proxy) below.
 
 Runner-local role resolution is a separate `[auth]` table, living only on the runner —
 never in the hub store or its admin page:
@@ -688,6 +735,17 @@ proxy speaks HTTPS to the browser but plain HTTP to the daemon, so the daemon se
 HTTPS end to end), and every request arrives from the proxy's own IP (so one noisy
 client collapses the whole fleet into a single throttle bucket).
 
+For a **runner** whose `public_url` declares a proxied `https` origin, this is not a
+degradation but an outright failure of the SSO bounce, so `trusted_proxies` is a hard
+requirement there. The hub returns the federation token by a cross-site `form_post`, and
+the runner's bounce cookies only get `SameSite=None` (which browsers honor only alongside
+`Secure`) on an origin it believes is secure. Reading the scheme as `http` drops them to
+`SameSite=Lax`, the browser withholds them on that cross-site POST, and the callback fails
+its state check — surfacing as `bad or expired state`, which names nothing about the cause.
+A **loopback** origin is exempt: browsers treat loopback as potentially trustworthy
+whatever the scheme, which is why a `127.0.0.1` runner federates against a hosted hub with
+no proxy configuration at all.
+
 `trusted_proxies` — a top-level key in **both** `blizzard-hub.toml` and
 `blizzard-runner.toml` — lists the proxy addresses or CIDRs whose forwarded headers are
 trusted:
@@ -705,15 +763,27 @@ headers it carries — so a direct client cannot forge its scheme or spoof an
 `X-Forwarded-For` to dodge the throttle. Empty (the default) ignores both headers from
 every peer, byte-identical to a direct-exposure deployment.
 
-The proxy must set both headers. nginx:
+The proxy must set both headers, and in front of a **runner** it must additionally pass the
+browser's original `Host` through unchanged — per-origin callback selection reads that header
+and nothing else, so a proxy that replaces it makes every request look like it arrived on the
+proxy's own upstream address. nginx replaces it by default (`Host: $proxy_host`), which is why
+it is set explicitly here:
 
 ```nginx
+proxy_set_header Host              $host;
 proxy_set_header X-Forwarded-Proto $scheme;
 proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
 ```
 
-Caddy's `reverse_proxy` sets both automatically. Only `X-Forwarded-*` is honored —
-`Forwarded` (RFC 7239) and proxy-protocol framing are not consulted.
+Caddy's `reverse_proxy` and Tailscale's `tailscale serve` set all three automatically. Only
+`X-Forwarded-*` is honored — `Forwarded` (RFC 7239) and proxy-protocol framing are not
+consulted, and no `X-Forwarded-Host` is read, so a rewritten `Host` cannot be recovered.
+
+A runner whose `Host` is rewritten fails the way an undeclared origin does: the bounce falls
+back to the canonical origin, the hub accepts it as registered, and the browser is sent to
+whatever that origin names — its own machine, for a loopback canonical. The runner logs a
+warning naming the arriving `Host` and the declared set when that fallback fires, which is the
+signal to check this configuration.
 
 ## Produces-artifact enforcement
 

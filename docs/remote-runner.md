@@ -91,11 +91,13 @@ those steps.
 
 The runner's own machine panel is a separate, runner-local surface. Reaching
 it from a browser on another machine — and signing in through the hub's SSO —
-is deployment.md's "Runner-side federation": set `public_url`, and serve the
-runner over HTTPS (behind a proxy listed in `trusted_proxies`) — the SSO
-return trip is a cross-site POST, and the cookie that survives one must be
-`SameSite=None; Secure`, which a non-loopback runner can only mint on an HTTPS
-origin. A runner driven purely by the fleet needs none of this.
+is `docs/deployment.md` §Runner-side federation, which owns the whole
+procedure: which origins `public_url` must declare, why the browser rather than
+the hub is what follows them, and the two proxy settings an off-host origin
+needs. The distance-specific consequence this page owns is only that a runner
+reached from elsewhere needs that configuration at all — a runner driven purely
+by the fleet needs none of it, and neither does one whose panel is only ever
+opened on its own host.
 
 ## Next
 
