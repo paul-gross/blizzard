@@ -864,20 +864,6 @@ class RouteHistory:
         return max(candidates, key=lambda t: (t.minted_at, t.seq))
 
 
-def newest_live_route(
-    routes_created: list[RouteCreatedFact], routes_released: list[RouteReleasedFact]
-) -> RouteCreatedFact | None:
-    return RouteHistory(routes_created, routes_released).newest
-
-
-def newest_live_route_token(
-    routes_created: list[RouteCreatedFact],
-    routes_released: list[RouteReleasedFact],
-    route_tokens_minted: list[RouteTokenMintedFact],
-) -> RouteTokenMintedFact | None:
-    return RouteHistory(routes_created, routes_released, route_tokens_minted).newest_token
-
-
 @dataclass(frozen=True)
 class ChunkChange:
     """A ``chunk-changed`` frame's derived content (issue #212) — the current status
