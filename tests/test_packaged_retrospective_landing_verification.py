@@ -10,13 +10,13 @@ from __future__ import annotations
 import pytest
 
 from blizzard.hub.domain.graph import Executor, GraphDoc, NodeDoc
-from blizzard.hub.graphs import _GRAPHS_DIR, load_graph_doc
+from blizzard.hub.graphs import PACKAGED
 
 pytestmark = pytest.mark.unit
 
 
 def _load(graph_name: str) -> GraphDoc:
-    return load_graph_doc(_GRAPHS_DIR / graph_name / "graph.yaml")
+    return PACKAGED.named(graph_name).doc
 
 
 def _retrospective_node(doc: GraphDoc) -> NodeDoc:

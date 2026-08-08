@@ -42,7 +42,7 @@ from blizzard.hub.cli_views import (
 )
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.delivery.hub_node import ENV_MARKER_CALLBACK_URL, ENV_MARKER_TOKEN
-from blizzard.hub.graphs import inline_graph_yaml
+from blizzard.hub.graphs import GraphFile
 from blizzard.hub.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 
 # The runtime root the dir-taking verbs resolve, highest to lowest: explicit ``--dir``,
@@ -769,7 +769,7 @@ def graph_mint(path: str, as_json: bool, hub_url: str | None) -> None:
         definition_yaml = click.get_text_stream("stdin").read()
     else:
         try:
-            definition_yaml = inline_graph_yaml(Path(path))
+            definition_yaml = GraphFile(Path(path)).inlined_yaml
         except (yaml.YAMLError, OSError, ValueError) as exc:
             raise click.ClickException(f"failed to load {path}: {exc}") from exc
 

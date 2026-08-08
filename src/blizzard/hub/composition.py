@@ -63,7 +63,7 @@ from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.work import IReadChunkRepository
 from blizzard.hub.domain.work_closure import DeliveryClosureReconciler
 from blizzard.hub.events.broker import EventBroker
-from blizzard.hub.graphs import default_graph_yaml, load_default_graph_doc
+from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
@@ -237,8 +237,8 @@ def build_services(
         marker_authority=marker_authority,
         events=events,
         clock=clock,
-        default_graph_doc=load_default_graph_doc(),
-        default_graph_yaml=default_graph_yaml(),
+        default_graph_doc=PACKAGED.default.doc,
+        default_graph_yaml=PACKAGED.default.text,
         work_sources=work_sources,
         delivery_closure=DeliveryClosureReconciler(chunks=chunk_store, work_sources=work_sources, clock=clock),
         sessions=session_store,

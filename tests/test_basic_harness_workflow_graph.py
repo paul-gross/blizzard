@@ -11,15 +11,15 @@ import pytest
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.graph import Executor, SessionMode
 from blizzard.hub.domain.graph_validation import Validator
-from blizzard.hub.graphs import _GRAPHS_DIR, load_graph_doc, packaged_graph_paths
+from blizzard.hub.graphs import PACKAGED
 
 pytestmark = pytest.mark.unit
 
-_GRAPH_PATH = _GRAPHS_DIR / "basic-harness-workflow" / "graph.yaml"
+_GRAPH = PACKAGED.named("basic-harness-workflow")
 
 
 def _doc():  # type: ignore[no-untyped-def]
-    return load_graph_doc(_GRAPH_PATH)
+    return _GRAPH.doc
 
 
 def test_bas_hwf_validates_with_no_errors_or_warnings() -> None:
@@ -29,7 +29,7 @@ def test_bas_hwf_validates_with_no_errors_or_warnings() -> None:
 
 
 def test_bas_hwf_is_packaged() -> None:
-    assert _GRAPH_PATH in packaged_graph_paths()
+    assert _GRAPH.path in PACKAGED.paths
 
 
 def test_bas_hwf_shape_is_the_lightweight_no_pre_push_lane() -> None:

@@ -7,76 +7,95 @@ parser and validator run, deliberately outside the domain, which touches neither
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
 from blizzard.hub.domain.graph import GraphDoc
 
-_GRAPHS_DIR = Path(__file__).resolve().parent
-DEFAULT_GRAPH_PATH = _GRAPHS_DIR / "default" / "graph.yaml"
-
 # The prompt-carrying fields whose file references are inlined at load.
 _PROMPT_KEYS = ("prompt", "prompt_addendum")
 
 
-def default_graph_yaml() -> str:
-    """The raw default-graph YAML text (the ``POST /graphs`` body, un-inlined)."""
-    return DEFAULT_GRAPH_PATH.read_text()
+@dataclass(frozen=True)
+class Inliner:
+    """Prompt file references resolved against one directory and substituted in place."""
+
+    base: Path
+
+    def inline(self, node: object) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in _PROMPT_KEYS and isinstance(value, str) and self.is_ref(value):
+                    node[key] = (self.base / value).read_text()
+                else:
+                    self.inline(value)
+        elif isinstance(node, list):
+            for item in node:
+                self.inline(item)
+
+    @staticmethod
+    def is_ref(value: str) -> bool:
+        """A prompt value is a file reference (path), not already-inlined prose."""
+        return "\n" not in value and (value.startswith("./") or value.startswith("../") or value.endswith(".md"))
 
 
-def packaged_graph_paths() -> list[Path]:
-    """Every packaged graph's ``graph.yaml``, sorted by directory name (issue #146) so a report over
-    them reads the same way twice. The filename is the membership test, not a name blocklist that would
-    need maintaining: a directory carrying no ``graph.yaml`` is skipped by construction."""
-    return sorted(_GRAPHS_DIR.glob("*/graph.yaml"), key=lambda path: path.parent.name)
+@dataclass(frozen=True)
+class GraphFile:
+    """One graph definition file on disk. Every read below re-reads it; nothing is cached."""
+
+    path: Path
+
+    @property
+    def text(self) -> str:
+        """The raw YAML text (the ``POST /graphs`` body, un-inlined)."""
+        return self.path.read_text()
+
+    @property
+    def body(self) -> dict[str, object]:
+        """The definition mapping, with every prompt reference replaced by the referenced file's text
+        resolved relative to :attr:`path`. A missing referenced file raises :class:`FileNotFoundError`."""
+        raw = yaml.safe_load(self.text)
+        if not isinstance(raw, dict):
+            raise ValueError(f"{self.path} is not a graph-definition mapping")
+        Inliner(self.path.parent).inline(raw)
+        return raw
+
+    @property
+    def doc(self) -> GraphDoc:
+        return GraphDoc.of(self.body)
+
+    @property
+    def inlined_yaml(self) -> str:
+        """:attr:`body` re-serialized — what a mint taking raw ``definition_yaml``, which resolves no
+        file references of its own, needs (issue #123)."""
+        return yaml.safe_dump(self.body, sort_keys=False)
 
 
-def load_graph_doc(path: Path) -> GraphDoc:
-    """Load a graph definition file, inline its prompt references, and parse it.
+@dataclass(frozen=True)
+class PackagedGraphs:
+    """The graph set shipped in this package — one directory per graph."""
 
-    Inlining resolves every ``prompt`` / ``judgement.prompt`` / ``prompt_addendum`` file reference
-    relative to ``path`` and substitutes the file's text, so the parsed :class:`GraphDoc` carries prose,
-    never paths. A missing referenced file raises :class:`FileNotFoundError`."""
-    return GraphDoc.of(_load_and_inline(path))
+    root: Path
 
+    def named(self, name: str) -> GraphFile:
+        return GraphFile(self.root / name / "graph.yaml")
 
-def load_default_graph_doc() -> GraphDoc:
-    """Load and parse the packaged default graph."""
-    return load_graph_doc(DEFAULT_GRAPH_PATH)
+    @property
+    def default(self) -> GraphFile:
+        return self.named("default")
 
+    @property
+    def paths(self) -> list[Path]:
+        """Every packaged graph's ``graph.yaml``, sorted by directory name (issue #146) so a report over
+        them reads the same way twice. The filename is the membership test, not a name blocklist that would
+        need maintaining: a directory carrying no ``graph.yaml`` is skipped by construction."""
+        return sorted(self.root.glob("*/graph.yaml"), key=lambda path: path.parent.name)
 
-def inline_graph_yaml(path: Path) -> str:
-    """Load a graph definition file, inline its prompt references, and re-serialize.
-
-    Same inlining as :func:`load_graph_doc`, but returns YAML **text** rather than a parsed
-    :class:`GraphDoc` — what a mint taking raw ``definition_yaml``, which resolves no file references
-    of its own, needs (issue #123)."""
-    return yaml.safe_dump(_load_and_inline(path), sort_keys=False)
-
-
-def _load_and_inline(path: Path) -> dict[str, object]:
-    """Read ``path`` as a graph-definition mapping with prompt refs inlined, in place."""
-    raw = yaml.safe_load(path.read_text())
-    if not isinstance(raw, dict):
-        raise ValueError(f"{path} is not a graph-definition mapping")
-    _inline_prompts(raw, path.parent)
-    return raw
+    @property
+    def files(self) -> list[GraphFile]:
+        return [GraphFile(path) for path in self.paths]
 
 
-def _inline_prompts(node: object, base: Path) -> None:
-    """Recursively replace prompt file references with their text, in place."""
-    if isinstance(node, dict):
-        for key, value in node.items():
-            if key in _PROMPT_KEYS and isinstance(value, str) and _looks_like_ref(value):
-                node[key] = (base / value).read_text()
-            else:
-                _inline_prompts(value, base)
-    elif isinstance(node, list):
-        for item in node:
-            _inline_prompts(item, base)
-
-
-def _looks_like_ref(value: str) -> bool:
-    """A prompt value is a file reference (path), not already-inlined prose."""
-    return "\n" not in value and (value.startswith("./") or value.startswith("../") or value.endswith(".md"))
+PACKAGED = PackagedGraphs(Path(__file__).resolve().parent)

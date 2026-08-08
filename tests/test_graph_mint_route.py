@@ -8,7 +8,7 @@ import pytest
 
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.graph import ProducesSpec
-from blizzard.hub.graphs import default_graph_yaml
+from blizzard.hub.graphs import PACKAGED
 from tests.support import build_hub
 
 pytestmark = pytest.mark.component
@@ -81,7 +81,7 @@ def test_mint_malformed_yaml_is_422(tmp_path: Path) -> None:
 
 def test_mint_default_graph_yaml_validates_clean(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    resp = hub.client.post("/api/graphs", json={"definition_yaml": default_graph_yaml()})
+    resp = hub.client.post("/api/graphs", json={"definition_yaml": PACKAGED.default.text})
     assert resp.status_code == 201, resp.text
     assert resp.json()["name"] == "default-delivery"
 

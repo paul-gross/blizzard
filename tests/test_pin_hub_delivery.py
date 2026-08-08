@@ -18,7 +18,7 @@ from blizzard.hub.delivery.hub_node import UnconvergedDeliveryError
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.work import IWriteChunkRepository
-from blizzard.hub.graphs import _GRAPHS_DIR, inline_graph_yaml
+from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.graphs.scripts import land_common, land_pr_ci
 from tests.support import FakeHubCommandRunner, FakeHubWorkdir, HubHarness, build_hub, pointer_token, report_lease
 
@@ -127,7 +127,7 @@ def _writable(hub: HubHarness) -> IWriteChunkRepository:
 def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
     """Mint the packaged adv-dwf graph, ingest a chunk, repin it onto adv-dwf, and claim a
     route — the same sequence ``tests/test_delivery_conflict_routing.py`` uses."""
-    definition_yaml = inline_graph_yaml(_GRAPHS_DIR / "advanced-development-workflow" / "graph.yaml")
+    definition_yaml = PACKAGED.named("advanced-development-workflow").inlined_yaml
     minted = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert minted.status_code == 201, minted.text
     graph_id = minted.json()["graph_id"]

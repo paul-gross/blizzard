@@ -17,7 +17,7 @@ from blizzard.hub.domain.graph import (
     ProducesSpec,
 )
 from blizzard.hub.domain.graph_authoring import reify_graph
-from blizzard.hub.graphs import _GRAPHS_DIR, load_graph_doc
+from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.graphs.scripts import land_pr_ci
 
 pytestmark = pytest.mark.unit
@@ -30,7 +30,7 @@ def _clock() -> FixedClock:
 def _bas_dwf_doc() -> GraphDoc:
     """The packaged ``bas-dwf`` lane — the richest packaged fixture for reify assertions:
     a worker cycle with arrival addenda plus a hub-executed ``deliver`` node."""
-    return load_graph_doc(_GRAPHS_DIR / "basic-development-workflow" / "graph.yaml")
+    return PACKAGED.named("basic-development-workflow").doc
 
 
 def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
@@ -67,7 +67,7 @@ def test_adv_dwf_retrospective_carries_the_delivery_incomplete_choice() -> None:
     """#238 AC2: retrospective's judgement gains an authored `delivery-incomplete`
     choice routing to `resolve`, alongside `recorded -> done`; loading the packaged doc
     also proves the `resolve.from-retrospective.md` addendum resolves."""
-    doc = load_graph_doc(_GRAPHS_DIR / "advanced-development-workflow" / "graph.yaml")
+    doc = PACKAGED.named("advanced-development-workflow").doc
     graph = reify_graph(doc, _clock())
     retrospective = graph.node_by_name("retrospective")
     assert retrospective is not None
@@ -84,7 +84,7 @@ def test_adv_dwf_deliver_authors_the_conflict_edge() -> None:
     """#241 AC1: deliver's judgement gains an authored `conflict` choice routing to
     `resolve`, alongside `landed`/`failure`, so a `dirty` PR bounces through the normal
     retry/bounce/escalation ladder."""
-    doc = load_graph_doc(_GRAPHS_DIR / "advanced-development-workflow" / "graph.yaml")
+    doc = PACKAGED.named("advanced-development-workflow").doc
     graph = reify_graph(doc, _clock())
     deliver = graph.node_by_name("deliver")
     assert deliver is not None
@@ -103,7 +103,7 @@ def test_every_land_pr_ci_outcome_is_authored_on_the_shipped_deliver_node() -> N
     """#241 recurrence guard: `land_pr_ci` must not print an outcome the graph never
     authors a choice for. Reads the script's own outcome constants rather than
     hardcoding them; `_PENDING` is machinery-reserved and excluded."""
-    doc = load_graph_doc(_GRAPHS_DIR / "advanced-development-workflow" / "graph.yaml")
+    doc = PACKAGED.named("advanced-development-workflow").doc
     graph = reify_graph(doc, _clock())
     deliver = graph.node_by_name("deliver")
     assert deliver is not None

@@ -2,7 +2,7 @@
 
 The column stays JSON ``TEXT`` across D1 (no migration): a legacy row carries a plain
 ``list[str]``, a row minted since carries ``list[{name, kind}]``, and
-:func:`~blizzard.hub.store.internal.graph_store._produces_specs` normalizes both to
+:class:`~blizzard.hub.store.internal.graph_store.ProducesColumn` normalizes both to
 :class:`ProducesSpec`; this pins both directions plus the round trip."""
 
 from __future__ import annotations
@@ -13,18 +13,18 @@ import pytest
 
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.graph import ProducesSpec
-from blizzard.hub.store.internal.graph_store import _produces_spec_to_json, _produces_specs
+from blizzard.hub.store.internal.graph_store import PRODUCES
 
 pytestmark = pytest.mark.unit
 
 
 def test_produces_specs_reads_none_as_empty() -> None:
-    assert _produces_specs(None) == []
+    assert PRODUCES.decode(None) == []
 
 
 def test_produces_specs_normalizes_a_legacy_string_list_row_to_asset_specs() -> None:
     legacy = json.dumps(["review-findings", "review-diary"])
-    assert _produces_specs(legacy) == [
+    assert PRODUCES.decode(legacy) == [
         ProducesSpec(name="review-findings", kind=ArtifactKind.ASSET),
         ProducesSpec(name="review-diary", kind=ArtifactKind.ASSET),
     ]
@@ -32,13 +32,12 @@ def test_produces_specs_normalizes_a_legacy_string_list_row_to_asset_specs() -> 
 
 def test_produces_specs_reads_the_current_name_kind_mapping_row() -> None:
     current = json.dumps([{"name": "commit", "kind": "git_commit"}, {"name": "notes", "kind": "asset"}])
-    assert _produces_specs(current) == [
+    assert PRODUCES.decode(current) == [
         ProducesSpec(name="commit", kind=ArtifactKind.GIT_COMMIT),
         ProducesSpec(name="notes", kind=ArtifactKind.ASSET),
     ]
 
 
-def test_produces_spec_to_json_round_trips_through_produces_specs() -> None:
+def test_produces_encode_round_trips_through_decode() -> None:
     specs = [ProducesSpec(name="commit", kind=ArtifactKind.GIT_COMMIT), ProducesSpec(name="notes")]
-    dumped = json.dumps([_produces_spec_to_json(s) for s in specs])
-    assert _produces_specs(dumped) == specs
+    assert PRODUCES.decode(PRODUCES.encode(specs)) == specs

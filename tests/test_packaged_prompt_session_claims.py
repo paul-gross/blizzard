@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.hub.domain.graph import Executor, GraphDoc, NodeDoc, SessionMode
-from blizzard.hub.graphs import _GRAPHS_DIR, load_graph_doc
+from blizzard.hub.graphs import PACKAGED
 
 pytestmark = pytest.mark.unit
 
@@ -19,7 +19,7 @@ COLD_EYES = "cold eyes"
 
 def _packaged_graphs() -> list[tuple[str, GraphDoc]]:
     """(graph directory name, loaded+inlined GraphDoc) for every packaged graph."""
-    return [(path.parent.name, load_graph_doc(path)) for path in sorted(_GRAPHS_DIR.glob("*/graph.yaml"))]
+    return [(f.path.parent.name, f.doc) for f in PACKAGED.files]
 
 
 def _worker_nodes() -> list[tuple[str, NodeDoc]]:

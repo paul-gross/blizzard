@@ -11,19 +11,19 @@ import pytest
 
 from blizzard.hub.domain.graph import Executor, SessionMode
 from blizzard.hub.domain.graph_validation import Validator
-from blizzard.hub.graphs import default_graph_yaml, load_default_graph_doc, packaged_graph_paths
+from blizzard.hub.graphs import PACKAGED
 
 pytestmark = pytest.mark.unit
 
 
 def test_default_graph_validates_with_no_errors_or_warnings() -> None:
-    result = Validator.of(load_default_graph_doc()).result
+    result = Validator.of(PACKAGED.default.doc).result
     assert result.ok, result.errors
     assert result.warnings == []
 
 
 def test_default_graph_is_a_single_triage_router() -> None:
-    doc = load_default_graph_doc()
+    doc = PACKAGED.default.doc
     assert doc.name == "default-delivery"  # the ingest default pin resolves by this name
     assert doc.entry == "triage"
     assert [n.name for n in doc.nodes] == ["triage"]
@@ -31,7 +31,7 @@ def test_default_graph_is_a_single_triage_router() -> None:
 
 
 def test_default_graph_triage_routes_to_lanes_or_done() -> None:
-    triage = load_default_graph_doc().node("triage")
+    triage = PACKAGED.default.doc.node("triage")
     assert triage is not None and triage.judgement is not None
     routes = {c.name: c.to for c in triage.judgement.choices}
     assert routes == {
@@ -46,7 +46,7 @@ def test_default_graph_triage_routes_to_lanes_or_done() -> None:
 
 
 def test_default_graph_triage_is_a_fresh_advanced_tier_cold_read() -> None:
-    doc = load_default_graph_doc()
+    doc = PACKAGED.default.doc
     triage = doc.node("triage")
     assert triage is not None
     # Every entry is a fresh cold read: advanced tier preferred, frontier the fallback.
@@ -60,9 +60,7 @@ def test_default_graph_triage_is_a_fresh_advanced_tier_cold_read() -> None:
 def test_default_graph_lane_targets_are_packaged_and_land_at_their_entries() -> None:
     # Every migration target ships in the same wheel, and none declares a `triage`
     # node — so a migration name-matches nothing and lands at the target's entry.
-    from blizzard.hub.graphs import load_graph_doc
-
-    docs = {doc.name: doc for doc in (load_graph_doc(p) for p in packaged_graph_paths())}
+    docs = {doc.name: doc for doc in (f.doc for f in PACKAGED.files)}
     assert {"bas-dwf", "adv-dwf", "bas-hwf"} <= set(docs)
     assert docs["bas-dwf"].entry == "build"
     assert docs["adv-dwf"].entry == "plan"
@@ -73,16 +71,16 @@ def test_default_graph_lane_targets_are_packaged_and_land_at_their_entries() -> 
 
 
 def test_default_graph_reconciles_after_its_lane_targets() -> None:
-    # `packaged_graph_paths` walks in directory order, so every lane target is minted
+    # `PackagedGraphs.paths` walks in directory order, so every lane target is minted
     # before the graph whose choices name them.
-    order = [p.parent.name for p in packaged_graph_paths()]
+    order = [p.parent.name for p in PACKAGED.paths]
     assert order.index("default") > order.index("basic-development-workflow")
     assert order.index("default") > order.index("advanced-development-workflow")
     assert order.index("default") > order.index("basic-harness-workflow")
 
 
 def test_default_graph_prompts_are_inlined_not_paths() -> None:
-    triage = load_default_graph_doc().node("triage")
+    triage = PACKAGED.default.doc.node("triage")
     assert triage is not None
     assert triage.prompt is not None and not triage.prompt.startswith("./")
     assert triage.judgement is not None
@@ -90,4 +88,4 @@ def test_default_graph_prompts_are_inlined_not_paths() -> None:
 
 
 def test_default_graph_yaml_is_readable_text() -> None:
-    assert "entry: triage" in default_graph_yaml()
+    assert "entry: triage" in PACKAGED.default.text

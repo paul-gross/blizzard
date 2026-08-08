@@ -12,12 +12,12 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.graph import Executor, GraphDoc, NodeDoc
-from blizzard.hub.graphs import _GRAPHS_DIR, load_graph_doc
+from blizzard.hub.graphs import PACKAGED
 
 pytestmark = pytest.mark.unit
 
 _GRAPH_NAME = "advanced-development-workflow"
-_DOCKET_PATH = _GRAPHS_DIR / _GRAPH_NAME / "docket.md"
+_DOCKET_PATH = PACKAGED.root / _GRAPH_NAME / "docket.md"
 
 _SUPERSEDED_ABANDONED = "a superseded round's undisposed findings are abandoned by design"
 _UNDISPOSED_LOSES_IT = "leaving it undisposed loses it"
@@ -28,7 +28,7 @@ _DOCKET_POINTER = "../docket.md"
 
 
 def _load() -> GraphDoc:
-    return load_graph_doc(_GRAPHS_DIR / _GRAPH_NAME / "graph.yaml")
+    return PACKAGED.named(_GRAPH_NAME).doc
 
 
 def _node(doc: GraphDoc, name: str) -> NodeDoc:

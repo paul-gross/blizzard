@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import insert
 
-from blizzard.hub.graphs import _GRAPHS_DIR, inline_graph_yaml
+from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s
 from tests.support import HubHarness, build_hub, pointer_token, report_lease
 
@@ -25,7 +25,7 @@ def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
     ``PATCH /chunks/{id}`` (legal while the chunk is still ``not_ready``) before
     claiming a route, so every node id resolved off the mint response is the one the
     claimed chunk's pin actually recognizes."""
-    definition_yaml = inline_graph_yaml(_GRAPHS_DIR / "advanced-development-workflow" / "graph.yaml")
+    definition_yaml = PACKAGED.named("advanced-development-workflow").inlined_yaml
     minted = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert minted.status_code == 201, minted.text
     graph_id = minted.json()["graph_id"]

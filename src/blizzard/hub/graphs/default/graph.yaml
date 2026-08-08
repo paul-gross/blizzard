@@ -20,7 +20,7 @@
 # change. `harness` (issue #231) is the first choice to exercise that point since the
 # original two.
 #
-# The packaged set reconciles in directory order (`packaged_graph_paths`, issue #146):
+# The packaged set reconciles in directory order (`PackagedGraphs.paths`, issue #146):
 # `advanced-development-workflow`, `basic-development-workflow`, and
 # `basic-harness-workflow` all sort before `default`, so every migration target is
 # minted before the graph that names them and the late-binding mint warning never fires

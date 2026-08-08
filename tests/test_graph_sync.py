@@ -14,7 +14,7 @@ import pytest
 import yaml
 
 from blizzard.hub.graph_sync import GraphSyncStatus, reconcile_packaged_graphs
-from blizzard.hub.graphs import packaged_graph_paths
+from blizzard.hub.graphs import PACKAGED
 from tests.support import HubHarness, build_hub
 
 pytestmark = pytest.mark.component
@@ -168,7 +168,7 @@ def test_the_shipped_packaged_set_reconciles_and_then_reports_up_to_date(tmp_pat
     """The real wheel, twice — the property a deploy leans on, and the guard that every
     shipped graph validates rather than failing at the operator's deploy."""
     hub = build_hub(tmp_path)
-    paths = packaged_graph_paths()
+    paths = PACKAGED.paths
     assert paths, "the wheel ships at least one packaged graph"
 
     first = reconcile_packaged_graphs(hub.services.graph_mint, hub.services.graphs, paths=paths)

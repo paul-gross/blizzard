@@ -8,7 +8,9 @@ newest-fact-wins per ``graph_id`` (issue #101)."""
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Engine, insert, select
 
@@ -39,6 +41,199 @@ from blizzard.hub.store.schema import (
 )
 
 
+@dataclass(frozen=True)
+class ListColumn[T]:
+    """One JSON ``TEXT`` column holding a list — the shell each entry codec below fills in.
+
+    ``None`` — a fresh column default — reads as the empty list."""
+
+    def encode(self, items: list[T]) -> str:
+        return json.dumps([self.entry(item) for item in items])
+
+    def decode(self, value: str | None) -> list[T]:
+        return [self.of(raw) for raw in json.loads(value)] if value else []
+
+    def entry(self, item: T) -> Any:
+        raise NotImplementedError
+
+    def of(self, raw: Any) -> T:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class TextColumn(ListColumn[str]):
+    """A ``list[str]`` column — a node's ``checks``, a session's ``model``."""
+
+    def entry(self, item: str) -> Any:
+        return item
+
+    def of(self, raw: Any) -> str:
+        return str(raw)
+
+
+@dataclass(frozen=True)
+class ProducesColumn(ListColumn[ProducesSpec]):
+    """The ``graph_nodes.produces`` column (D1, issue #143).
+
+    Two encodings share it: the ``{name, kind}`` mapping this writes, and a bare string
+    normalized to an ``ASSET`` entry — read-side back-compat, so no migration is owed."""
+
+    def entry(self, item: ProducesSpec) -> Any:
+        return {"name": item.name, "kind": item.kind.value}
+
+    def of(self, raw: Any) -> ProducesSpec:
+        if isinstance(raw, str):
+            return ProducesSpec(name=str(raw), kind=ArtifactKind.ASSET)
+        return ProducesSpec(name=str(raw["name"]), kind=ArtifactKind(str(raw["kind"])))
+
+
+@dataclass(frozen=True)
+class RunColumn(ListColumn[RunStep]):
+    """The ``graph_nodes.run`` column — a hub command node's steps (#65)."""
+
+    def entry(self, item: RunStep) -> Any:
+        return {"command": item.command, "name": item.name, "produces": item.produces}
+
+    def of(self, raw: Any) -> RunStep:
+        return RunStep(command=str(raw["command"]), name=raw.get("name"), produces=raw.get("produces"))
+
+
+TEXTS = TextColumn()
+PRODUCES = ProducesColumn()
+RUN = RunColumn()
+
+
+@dataclass(frozen=True)
+class SessionRow:
+    def values(self, decl: SessionDecl, *, graph_id: str, ordinal: int) -> dict[str, Any]:
+        return {
+            "graph_id": graph_id,
+            "name": decl.name,
+            "ordinal": ordinal,
+            "model": TEXTS.encode(list(decl.model)),
+            "effort": decl.effort,
+            "rotate_max_context_tokens": decl.rotate.max_context_tokens if decl.rotate else None,
+            "rotate_max_transcript_bytes": decl.rotate.max_transcript_bytes if decl.rotate else None,
+            "rotate_max_invocations": decl.rotate.max_invocations if decl.rotate else None,
+        }
+
+    def of(self, row: Any) -> SessionDecl:
+        """Three null ``rotate_*`` columns hydrate ``rotate=None``, not an all-null
+        :class:`RotatePolicy`, so a round-tripped graph compares equal to the reified one."""
+        bounds = (row.rotate_max_context_tokens, row.rotate_max_transcript_bytes, row.rotate_max_invocations)
+        return SessionDecl(
+            name=row.name,
+            model=TEXTS.decode(row.model),
+            effort=row.effort,
+            rotate=RotatePolicy(*bounds) if any(b is not None for b in bounds) else None,
+        )
+
+
+@dataclass(frozen=True)
+class ChoiceRow:
+    def values(self, choice: Choice, *, node_id: str) -> dict[str, Any]:
+        return {
+            "choice_id": choice.choice_id,
+            "node_id": node_id,
+            "name": choice.name,
+            "description": choice.description,
+            "requires_checks": choice.requires_checks,
+        }
+
+    def of(self, row: Any) -> Choice:
+        return Choice(
+            choice_id=row.choice_id,
+            name=row.name,
+            description=row.description,
+            requires_checks=bool(row.requires_checks),
+        )
+
+
+@dataclass(frozen=True)
+class EdgeRow:
+    def values(self, edge: Edge) -> dict[str, Any]:
+        return {
+            "edge_id": f"{edge.from_node_id}:{edge.choice_id}",
+            "from_node_id": edge.from_node_id,
+            "choice_id": edge.choice_id,
+            "to_node_name": edge.to_node_name,
+            "prompt_addendum": edge.prompt_addendum,
+            "to_graph_model": edge.model,
+        }
+
+    def of(self, row: Any) -> Edge:
+        return Edge(
+            from_node_id=row.from_node_id,
+            choice_id=row.choice_id,
+            to_node_name=row.to_node_name,
+            prompt_addendum=row.prompt_addendum,
+            # The cross-graph target is re-derived from the raw ``to_node_name`` (#90),
+            # not a stored column; the per-choice model override is its own column.
+            target_graph=ChoiceTarget.of(row.to_node_name).graph,
+            model=row.to_graph_model,
+        )
+
+
+@dataclass(frozen=True)
+class NodeRow:
+    """An empty ``run`` stores NULL rather than ``[]``, which reads back empty either way."""
+
+    def values(self, node: Node, *, graph_id: str) -> dict[str, Any]:
+        return {
+            "node_id": node.node_id,
+            "graph_id": graph_id,
+            "name": node.name,
+            "executor": node.executor.value,
+            "prompt": node.prompt,
+            "judgement_prompt": node.judgement_prompt,
+            "session": node.session.value,
+            "session_source": node.session_source,
+            "judged_by": node.judged_by.value,
+            "retries_max": node.retries_max,
+            "retries_exhausted": node.retries_exhausted,
+            "mode": node.mode,
+            "produces": PRODUCES.encode(node.produces),
+            "checks": TEXTS.encode(list(node.checks)),
+            "checks_cwd": node.checks_cwd,
+            "checks_timeout": node.checks_timeout,
+            "bounce_cap": node.bounce_cap,
+            "run": RUN.encode(node.run) if node.run else None,
+            "poll_interval_seconds": node.poll_interval_seconds,
+            "poll_timeout_seconds": node.poll_timeout_seconds,
+        }
+
+    def of(self, row: Any, *, choices: list[Choice]) -> Node:
+        return Node(
+            node_id=row.node_id,
+            graph_id=row.graph_id,
+            name=row.name,
+            executor=Executor(row.executor),
+            prompt=row.prompt,
+            checks=TEXTS.decode(row.checks),
+            checks_cwd=row.checks_cwd,
+            checks_timeout=row.checks_timeout,
+            produces=PRODUCES.decode(row.produces),
+            session=SessionMode(row.session),
+            session_source=row.session_source,
+            judged_by=JudgedBy(row.judged_by),
+            retries_max=row.retries_max,
+            retries_exhausted=row.retries_exhausted,
+            mode=row.mode,
+            judgement_prompt=row.judgement_prompt,
+            bounce_cap=row.bounce_cap,
+            run=RUN.decode(row.run),
+            poll_interval_seconds=row.poll_interval_seconds,
+            poll_timeout_seconds=row.poll_timeout_seconds,
+            choices=choices,
+        )
+
+
+SESSIONS = SessionRow()
+CHOICES = ChoiceRow()
+EDGES = EdgeRow()
+NODES = NodeRow()
+
+
 class GraphStore:
     """Read-write graph adapter over the hub store engine."""
 
@@ -57,64 +252,14 @@ class GraphStore:
                 )
             )
             for ordinal, decl in enumerate(graph.sessions):
-                conn.execute(
-                    insert(graph_sessions).values(
-                        graph_id=graph.graph_id,
-                        name=decl.name,
-                        ordinal=ordinal,
-                        model=json.dumps(list(decl.model)),
-                        effort=decl.effort,
-                        rotate_max_context_tokens=decl.rotate.max_context_tokens if decl.rotate else None,
-                        rotate_max_transcript_bytes=decl.rotate.max_transcript_bytes if decl.rotate else None,
-                        rotate_max_invocations=decl.rotate.max_invocations if decl.rotate else None,
-                    )
-                )
+                values = SESSIONS.values(decl, graph_id=graph.graph_id, ordinal=ordinal)
+                conn.execute(insert(graph_sessions).values(values))
             for node in graph.nodes:
-                conn.execute(
-                    insert(graph_nodes).values(
-                        node_id=node.node_id,
-                        graph_id=graph.graph_id,
-                        name=node.name,
-                        executor=node.executor.value,
-                        prompt=node.prompt,
-                        judgement_prompt=node.judgement_prompt,
-                        session=node.session.value,
-                        session_source=node.session_source,
-                        judged_by=node.judged_by.value,
-                        retries_max=node.retries_max,
-                        retries_exhausted=node.retries_exhausted,
-                        mode=node.mode,
-                        produces=json.dumps([_produces_spec_to_json(p) for p in node.produces]),
-                        checks=json.dumps(list(node.checks)),
-                        checks_cwd=node.checks_cwd,
-                        checks_timeout=node.checks_timeout,
-                        bounce_cap=node.bounce_cap,
-                        run=json.dumps([_run_step_to_json(r) for r in node.run]) if node.run else None,
-                        poll_interval_seconds=node.poll_interval_seconds,
-                        poll_timeout_seconds=node.poll_timeout_seconds,
-                    )
-                )
+                conn.execute(insert(graph_nodes).values(NODES.values(node, graph_id=graph.graph_id)))
                 for choice in node.choices:
-                    conn.execute(
-                        insert(graph_choices).values(
-                            choice_id=choice.choice_id,
-                            node_id=node.node_id,
-                            name=choice.name,
-                            description=choice.description,
-                            requires_checks=choice.requires_checks,
-                        )
-                    )
+                    conn.execute(insert(graph_choices).values(CHOICES.values(choice, node_id=node.node_id)))
             for edge in graph.edges:
-                conn.execute(
-                    insert(graph_edges).values(
-                        edge_id=f"{edge.from_node_id}:{edge.choice_id}",
-                        from_node_id=edge.from_node_id,
-                        choice_id=edge.choice_id,
-                        to_node_name=edge.to_node_name,
-                        prompt_addendum=edge.prompt_addendum,
-                        to_graph_model=edge.model,
-                    )
-                )
+                conn.execute(insert(graph_edges).values(EDGES.values(edge)))
 
     def get(self, graph_id: str) -> Graph | None:
         with self._engine.connect() as conn:
@@ -216,54 +361,10 @@ class GraphStore:
         nodes: list[Node] = []
         for nr in node_rows:
             choice_rows = conn.execute(select(graph_choices).where(graph_choices.c.node_id == nr.node_id)).all()
-            nodes.append(
-                Node(
-                    node_id=nr.node_id,
-                    graph_id=nr.graph_id,
-                    name=nr.name,
-                    executor=Executor(nr.executor),
-                    prompt=nr.prompt,
-                    checks=_json_list(nr.checks),
-                    checks_cwd=nr.checks_cwd,
-                    checks_timeout=nr.checks_timeout,
-                    produces=_produces_specs(nr.produces),
-                    session=SessionMode(nr.session),
-                    session_source=nr.session_source,
-                    judged_by=JudgedBy(nr.judged_by),
-                    retries_max=nr.retries_max,
-                    retries_exhausted=nr.retries_exhausted,
-                    mode=nr.mode,
-                    judgement_prompt=nr.judgement_prompt,
-                    bounce_cap=nr.bounce_cap,
-                    run=_run_steps(nr.run),
-                    poll_interval_seconds=nr.poll_interval_seconds,
-                    poll_timeout_seconds=nr.poll_timeout_seconds,
-                    choices=[
-                        Choice(
-                            choice_id=c.choice_id,
-                            name=c.name,
-                            description=c.description,
-                            requires_checks=bool(c.requires_checks),
-                        )
-                        for c in choice_rows
-                    ],
-                )
-            )
+            nodes.append(NODES.of(nr, choices=[CHOICES.of(c) for c in choice_rows]))
         node_ids = {n.node_id for n in nodes}
         edge_rows = conn.execute(select(graph_edges).where(graph_edges.c.from_node_id.in_(node_ids))).all()
-        edges = [
-            Edge(
-                from_node_id=er.from_node_id,
-                choice_id=er.choice_id,
-                to_node_name=er.to_node_name,
-                prompt_addendum=er.prompt_addendum,
-                # The cross-graph target is re-derived from the raw ``to_node_name`` (#90),
-                # not a stored column; the per-choice model override is its own column.
-                target_graph=ChoiceTarget.of(er.to_node_name).graph,
-                model=er.to_graph_model,
-            )
-            for er in edge_rows
-        ]
+        edges = [EDGES.of(er) for er in edge_rows]
         session_rows = conn.execute(
             select(graph_sessions)
             .where(graph_sessions.c.graph_id == graph_row.graph_id)
@@ -276,64 +377,8 @@ class GraphStore:
             nodes=nodes,
             edges=edges,
             created_at=graph_row.created_at,
-            sessions=[_session_decl(sr) for sr in session_rows],
+            sessions=[SESSIONS.of(sr) for sr in session_rows],
         )
-
-
-def _session_decl(row) -> SessionDecl:  # type: ignore[no-untyped-def]
-    """Hydrate one ``graph_sessions`` row into a :class:`SessionDecl` (issue #144).
-
-    Three null ``rotate_*`` columns hydrate ``rotate=None``, not an all-null
-    :class:`RotatePolicy`, so a round-tripped graph compares equal to the reified one.
-    """
-    bounds = (row.rotate_max_context_tokens, row.rotate_max_transcript_bytes, row.rotate_max_invocations)
-    return SessionDecl(
-        name=row.name,
-        model=_json_list(row.model),
-        effort=row.effort,
-        rotate=RotatePolicy(*bounds) if any(b is not None for b in bounds) else None,
-    )
-
-
-def _run_step_to_json(step: RunStep) -> dict[str, str | None]:
-    return {"command": step.command, "name": step.name, "produces": step.produces}
-
-
-def _run_steps(value: str | None) -> list[RunStep]:
-    """Decode a JSON-encoded ``list[{command, name, produces}]`` ``run`` column."""
-    if not value:
-        return []
-    return [
-        RunStep(command=str(r["command"]), name=r.get("name"), produces=r.get("produces")) for r in json.loads(value)
-    ]
-
-
-def _json_list(value: str | None) -> list[str]:
-    """Decode a JSON-encoded ``list[str]`` node column (``checks``).
-
-    ``None`` — a fresh column default — reads as the empty list."""
-    return [str(x) for x in json.loads(value)] if value else []
-
-
-def _produces_spec_to_json(spec: ProducesSpec) -> dict[str, str]:
-    return {"name": spec.name, "kind": spec.kind.value}
-
-
-def _produces_specs(value: str | None) -> list[ProducesSpec]:
-    """Decode the JSON-encoded ``graph_nodes.produces`` column (D1, issue #143).
-
-    Two encodings share this ``TEXT`` column: the current ``list[{name, kind}]``, and a
-    bare ``list[str]`` normalized to ``ArtifactKind.ASSET`` entries. Normalizing on read
-    is the back-compat seam, so no migration is owed. ``None`` reads as empty."""
-    if not value:
-        return []
-    entries = json.loads(value)
-    return [
-        ProducesSpec(name=str(e), kind=ArtifactKind.ASSET)
-        if isinstance(e, str)
-        else ProducesSpec(name=str(e["name"]), kind=ArtifactKind(str(e["kind"])))
-        for e in entries
-    ]
 
 
 def _conforms_graph_store(x: GraphStore) -> IWriteGraphRepository:

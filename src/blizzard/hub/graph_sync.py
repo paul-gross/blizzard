@@ -16,7 +16,7 @@ import yaml
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.graph import GraphDoc, GraphParseError, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService, GraphValidationError
-from blizzard.hub.graphs import inline_graph_yaml, load_graph_doc, packaged_graph_paths
+from blizzard.hub.graphs import PACKAGED, GraphFile
 
 _log = get_logger("blizzard.hub.graph_sync")
 
@@ -49,10 +49,8 @@ def reconcile_packaged_graphs(
 
     Idempotent: a second run against an unchanged packaged set mints nothing. ``paths``
     overrides the packaged set, defaulting to
-    :func:`~blizzard.hub.graphs.packaged_graph_paths`."""
-    return [
-        _reconcile_one(mint_service, graphs, path) for path in (paths if paths is not None else packaged_graph_paths())
-    ]
+    :attr:`~blizzard.hub.graphs.PackagedGraphs.paths`."""
+    return [_reconcile_one(mint_service, graphs, path) for path in (paths if paths is not None else PACKAGED.paths)]
 
 
 def _reconcile_one(mint_service: GraphMintService, graphs: IReadGraphRepository, path: Path) -> GraphSyncOutcome:
@@ -61,8 +59,9 @@ def _reconcile_one(mint_service: GraphMintService, graphs: IReadGraphRepository,
     The load and the compare are separate ``try`` blocks: a graph that cannot be loaded
     has no authored name to report a validation failure under."""
     try:
-        doc = load_graph_doc(path)
-        definition_yaml = inline_graph_yaml(path)
+        packaged = GraphFile(path)
+        doc = packaged.doc
+        definition_yaml = packaged.inlined_yaml
     except (OSError, ValueError, yaml.YAMLError) as exc:
         # ValueError covers GraphParseError (its base) and the loader's "not a mapping".
         _log.warning("packaged graph failed to load", path=str(path), error=str(exc))
