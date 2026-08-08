@@ -63,7 +63,7 @@ def test_loopback_login_completes_and_exchanges(monkeypatch: pytest.MonkeyPatch)
     assert captured_exchange["code"] == "the-code"
     assert captured_exchange["redirect_uri"].startswith("http://127.0.0.1:")
     # The verifier the exchange sends must hash to the challenge the authorize URL carried.
-    assert cli_login.challenge_from_verifier(captured_exchange["code_verifier"])
+    assert cli_login.Pkce(captured_exchange["code_verifier"]).challenge
 
 
 def test_loopback_login_rejects_a_state_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:

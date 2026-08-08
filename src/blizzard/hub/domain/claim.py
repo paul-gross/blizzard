@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.hub.domain.enrollment import hash_token
+from blizzard.hub.domain.enrollment import TokenHash
 from blizzard.hub.domain.envelope import Envelope
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
@@ -168,7 +168,7 @@ class ClaimService:
         # Minted fresh per acquisition (issue #84a): the plaintext is returned once and
         # never stored — only its sha256 hash lands, in the same write as record_route.
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
-        route_id = self._chunks.record_route(route, token_hash=hash_token(route_token), at=now)
+        route_id = self._chunks.record_route(route, token_hash=TokenHash(route_token).hex, at=now)
         _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE.reached()
 
         node_id = (facts.current_node_id() if facts is not None else None) or graph.entry_node_id
@@ -191,5 +191,5 @@ class ClaimService:
         the prior one (``bzh:facts-not-status``); newest-fact-wins supersedes the old
         token, re-run idempotent. Takes an already-resolved route (``bzh:domain-takes-objects``)."""
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
-        self._chunks.record_route_token(route.chunk_id, token_hash=hash_token(route_token), at=self._clock.now())
+        self._chunks.record_route_token(route.chunk_id, token_hash=TokenHash(route_token).hex, at=self._clock.now())
         return route_token

@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
 from blizzard.runner.app import create_app
-from blizzard.runner.auth.session import RunnerSession, mint_session_cookie, verify_session_cookie
+from blizzard.runner.auth.session import RunnerSession, SessionCookie
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.git import SubprocessEnvGit
@@ -36,10 +36,10 @@ def test_a_session_minted_before_a_restart_is_refused_after_it() -> None:
     session = RunnerSession(username="alice", role=Role.ADMIN, issued_at=now, expires_at=now + timedelta(hours=8))
     before_restart = b"secret-of-the-first-process"
     after_restart = b"secret-of-the-second-process"
-    cookie = mint_session_cookie(session, secret=before_restart)
+    cookie = SessionCookie(before_restart).mint(session)
 
-    assert verify_session_cookie(cookie, secret=before_restart, now=now) == session
-    assert verify_session_cookie(cookie, secret=after_restart, now=now) is None
+    assert SessionCookie(before_restart).read(cookie, now=now) == session
+    assert SessionCookie(after_restart).read(cookie, now=now) is None
 
 
 # --- runner/environments/internal/git.py: the reset-on-acquire clean and origin read --

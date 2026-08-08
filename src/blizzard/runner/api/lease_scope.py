@@ -7,7 +7,7 @@ from fastapi.exceptions import HTTPException
 
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.domain.lease_auth import check_lease_token
+from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.store.repository import LeaseRecord
 
 
@@ -17,9 +17,7 @@ def authorized_lease(lease_id: str, request: Request) -> LeaseRecord:
     unauthorized caller never learns the fleet's hub-wiring state."""
     wiring = RunnerWiring.of(request)
     lease = wiring.active_lease(lease_id)
-    if not check_lease_token(
-        presented_token=presented_lease_token(request), stored_hash=wiring.reads().lease_token_hash(lease_id)
-    ):
+    if not LeaseToken(presented_lease_token(request), wiring.reads().lease_token_hash(lease_id)).valid:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=f"presented token does not authorize lease {lease_id}"
         )

@@ -17,7 +17,7 @@ from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Edge, Executor, Graph, JudgedBy, Node
-from blizzard.hub.domain.produces_auth import check_produces
+from blizzard.hub.domain.produces_auth import Produces
 from blizzard.hub.domain.route_auth import check_route_token
 from blizzard.hub.domain.work import (
     TERMINAL_STATUSES,
@@ -252,7 +252,7 @@ class ApplyService:
 
         # Produces-artifact backstop (issue #113) — ordered after every other rejection, so
         # it runs only on a submission genuinely about to be recorded.
-        produces_rejection = check_produces(from_node, submission.artifacts, mode=produces_mode)
+        produces_rejection = Produces(from_node, submission.artifacts).rejection(mode=produces_mode)
         if produces_rejection is not None:
             return ApplyResult.failure(produces_rejection)
 

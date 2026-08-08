@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.enrollment import hash_token
+from blizzard.hub.domain.enrollment import TokenHash
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.domain.takeover import (
@@ -414,7 +414,7 @@ def test_takeover_carries_the_lease_identity_env_and_reminting_its_token(tmp_pat
     token = opened.env["BLIZZARD_LEASE_TOKEN"]
     assert token
     stored = store.lease_token_hash("lease_1")
-    assert stored == hash_token(token)  # re-minted and recorded...
+    assert stored == TokenHash(token).hex  # re-minted and recorded...
     assert stored != "prior-token-hash"  # ...INVALIDATING the spawn's original token
     assert token not in opened.command  # env only — never a printable surface
 

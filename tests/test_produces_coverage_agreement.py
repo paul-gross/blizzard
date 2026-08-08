@@ -12,7 +12,7 @@ import pytest
 from blizzard.hub.config import PRODUCES_ENFORCE
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.graph import Executor, JudgedBy, Node, ProducesSpec, SessionMode
-from blizzard.hub.domain.produces_auth import check_produces
+from blizzard.hub.domain.produces_auth import Produces
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.wire.completion import SubmittedArtifact
 from blizzard.wire.graph import ProducesEntry
@@ -128,7 +128,7 @@ def test_hub_and_runner_agree_on_coverage(
 ) -> None:
     """One scenario, both predicates, same verdict — and the verdict is the expected one:
     two sides re-forked into the same wrong answer would still agree with each other."""
-    hub_rejects = check_produces(_node(produces=produces), artifacts, mode=PRODUCES_ENFORCE) is not None
+    hub_rejects = Produces(_node(produces=produces), artifacts).rejection(mode=PRODUCES_ENFORCE) is not None
     envelope = make_envelope(
         "ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], produces=_envelope_produces(produces)
     )

@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import blizzard.runner.api.hub_proxy as hub_proxy
-from blizzard.hub.domain.enrollment import hash_token
+from blizzard.hub.domain.enrollment import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.store.repository import NewLease
@@ -215,7 +215,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
     }
     fields.update(overrides)
     store.record_lease(NewLease(**fields))  # type: ignore[arg-type]
-    store.record_lease_token(str(fields["lease_id"]), hash_token(_TOKEN), _NOW)
+    store.record_lease_token(str(fields["lease_id"]), TokenHash(_TOKEN).hex, _NOW)
 
 
 def _stub_hub(monkeypatch: pytest.MonkeyPatch, response: _FakeHubResponse, seen: list[str] | None = None) -> None:
@@ -455,7 +455,7 @@ def test_a_workers_history_read_matches_the_transitions_the_hub_recorded(
             created_at=_NOW,
         )
     )
-    runner_store.record_lease_token("lease_1", hash_token(_TOKEN), _NOW)
+    runner_store.record_lease_token("lease_1", TokenHash(_TOKEN).hex, _NOW)
     runner_config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=_HUB_URL)
     with TestClient(create_app(runner_config, runner_store=runner_store)) as client:
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})

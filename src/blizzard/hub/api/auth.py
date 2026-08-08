@@ -16,7 +16,7 @@ from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from blizzard.hub.domain.enrollment import hash_token
+from blizzard.hub.domain.enrollment import TokenHash
 
 _log = get_logger("blizzard.hub.auth")
 
@@ -69,7 +69,7 @@ class RunnerAuth:
         token = presented_bearer(self.request)
         if token is None:
             return None
-        registration = self.services.registry.registration_for_token_hash(hash_token(token))
+        registration = self.services.registry.registration_for_token_hash(TokenHash(token).hex)
         if registration is None:
             return None
         return RunnerPrincipal(runner_id=registration.runner_id, workspace_id=registration.workspace_id)

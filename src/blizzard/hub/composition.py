@@ -29,7 +29,7 @@ from blizzard.hub.auth.internal.identity_repository import IdentityRepository
 from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
-from blizzard.hub.auth.oauth.internal.factory import build_oauth_registry
+from blizzard.hub.auth.oauth.internal.factory import ProviderEntry
 from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
 from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.sessions import IReadSessionRepository
@@ -200,7 +200,7 @@ def build_services(
     )
     # The provider-login seam (issue #92) — one registry entry per configured
     # ``[[auth.oauth.provider]]``, empty when no providers are configured.
-    oauth_registry = oauth_registry or build_oauth_registry(oauth_providers, http_client=oauth_http_client)
+    oauth_registry = oauth_registry or ProviderEntry.registry(oauth_providers, http_client=oauth_http_client)
     # The hub's IdP signing-key lifecycle (issue #95) — constructed only when a keys
     # directory is passed; `None` otherwise.
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None

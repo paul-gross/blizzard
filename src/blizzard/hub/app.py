@@ -38,7 +38,7 @@ from blizzard.hub.api.readiness import router as readiness_router
 from blizzard.hub.api.runners import router as runners_router
 from blizzard.hub.api.spend import router as spend_router
 from blizzard.hub.api.users import router as users_router
-from blizzard.hub.auth.bootstrap import ensure_superuser_bootstrap
+from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
 from blizzard.hub.domain.forge_status import AnnotationReconciler
@@ -197,7 +197,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
     if readiness.evaluate().ready:
         _check_provider_name_immutability(config, services)
-        ensure_superuser_bootstrap(email=config.auth.superuser, users=services.users, auth=services.auth)
+        Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
     return create_app(config, readiness=readiness, services=services)
 
 

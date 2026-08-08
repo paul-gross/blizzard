@@ -13,7 +13,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.enrollment import RunnerEnrollmentService, hash_token
+from blizzard.hub.domain.enrollment import RunnerEnrollmentService, TokenHash
 from blizzard.hub.domain.registry import IWriteRunnerRegistry, RunnerRegistration
 
 pytestmark = pytest.mark.unit
@@ -44,8 +44,8 @@ def _registration(runner_id: str = "runner-a") -> RunnerRegistration:
     )
 
 
-def test_hash_token_is_the_sha256_hex_digest() -> None:
-    assert hash_token("abc") == hashlib.sha256(b"abc").hexdigest()
+def test_token_hash_is_the_sha256_hex_digest() -> None:
+    assert TokenHash("abc").hex == hashlib.sha256(b"abc").hexdigest()
 
 
 def test_enroll_mints_a_urlsafe_token_and_stores_only_its_hash() -> None:
@@ -56,7 +56,7 @@ def test_enroll_mints_a_urlsafe_token_and_stores_only_its_hash() -> None:
     token = service.enroll(_registration())
 
     assert len(token) >= 32  # token_urlsafe(32) -> a 43-char string; no fixed-width promise, just "long"
-    assert registry.recorded == [("runner-a", hash_token(token), _T0)]
+    assert registry.recorded == [("runner-a", TokenHash(token).hex, _T0)]
     # The plaintext never lands in what was persisted.
     assert token not in (row[1] for row in registry.recorded)
 
@@ -84,7 +84,7 @@ def test_re_enroll_rotates_the_stored_hash() -> None:
 
     assert [row[0] for row in registry.recorded] == ["runner-a", "runner-a"]
     hashes = [row[1] for row in registry.recorded]
-    assert hashes == [hash_token(first_token), hash_token(second_token)]
+    assert hashes == [TokenHash(first_token).hex, TokenHash(second_token).hex]
     assert hashes[0] != hashes[1]
 
 

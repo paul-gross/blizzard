@@ -8,13 +8,14 @@ sliding-expiry write is delegated to the domain (``bzh:controller-read-only``).
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from fastapi import HTTPException, Request, status
 
 from blizzard.auth_core import Permission, Role, expand
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.deps import get_services
-from blizzard.hub.auth.hashing import hash_session_id
+from blizzard.hub.auth.hashing import SessionId
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE
@@ -32,11 +33,18 @@ IMPLICIT_OPERATOR = ResolvedIdentity(
 )
 
 
-def _presented_session_id(request: Request) -> str | None:
-    """The session id from the ``HttpOnly`` cookie or an ``Authorization: Bearer``
-    header (the CLI path, #96) — the cookie wins when both are present."""
-    cookie = request.cookies.get(_SESSION_COOKIE_NAME)
-    return cookie or presented_bearer(request)
+@dataclass(frozen=True)
+class PresentedSession:
+    """The session credential one request carries: the ``HttpOnly`` cookie or an
+    ``Authorization: Bearer`` header (the CLI path, #96) — the cookie wins."""
+
+    request: Request
+
+    @property
+    def id_hash(self) -> str | None:
+        """The digest to look the session up by, or ``None`` when none was presented."""
+        session_id = self.request.cookies.get(_SESSION_COOKIE_NAME) or presented_bearer(self.request)
+        return None if session_id is None else SessionId(session_id).hash
 
 
 def resolve_identity(request: Request, services: HubServices | None) -> ResolvedIdentity | None:
@@ -49,10 +57,10 @@ def resolve_identity(request: Request, services: HubServices | None) -> Resolved
     if mode == AUTH_MODE_NONE:
         return IMPLICIT_OPERATOR
     assert services is not None  # `require`/`me` already resolved services under oauth
-    session_id = _presented_session_id(request)
-    if session_id is None:
+    id_hash = PresentedSession(request).id_hash
+    if id_hash is None:
         return None
-    session = services.sessions.get_by_hash(hash_session_id(session_id))
+    session = services.sessions.get_by_hash(id_hash)
     if session is None:
         return None
     return services.auth.touch_session(session)

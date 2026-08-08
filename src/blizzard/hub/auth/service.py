@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import secrets
+from dataclasses import dataclass
 from datetime import timedelta
 
 from blizzard.auth_core import Role, expand
@@ -17,7 +18,7 @@ from blizzard.foundation.ids import USER_PREFIX, mint
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
 from blizzard.hub.auth.facts import AuthFactsService
-from blizzard.hub.auth.hashing import SESSION_ID_BYTES, hash_session_id
+from blizzard.hub.auth.hashing import SessionId
 from blizzard.hub.auth.identities import IWriteIdentityRepository
 from blizzard.hub.auth.models import (
     AuthStateEntry,
@@ -28,7 +29,7 @@ from blizzard.hub.auth.models import (
     SuperuserBootstrap,
     User,
 )
-from blizzard.hub.auth.pkce import verify_code_challenge
+from blizzard.hub.auth.pkce import Pkce
 from blizzard.hub.auth.sessions import IWriteSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IWriteSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IWriteUserRepository
@@ -78,12 +79,18 @@ CLI_CODE_TTL = timedelta(minutes=5)
 _SLUG_DISALLOWED = re.compile(r"[^a-z0-9-]+")
 
 
-def _slugify(handle: str) -> str:
-    """A username base from a provider handle — lowercase, disallowed chars collapsed
-    to ``-``, trimmed. Falls back to ``user`` for a handle that slugifies to nothing
-    (e.g. one made entirely of symbols)."""
-    slug = _SLUG_DISALLOWED.sub("-", handle.strip().lower()).strip("-")
-    return slug or "user"
+@dataclass(frozen=True)
+class Slug:
+    """A provider handle, reduced to the username base minting starts from."""
+
+    handle: str
+
+    @property
+    def text(self) -> str:
+        """Lowercase, disallowed chars collapsed to ``-``, trimmed — falling back to
+        ``user`` for a handle that slugifies to nothing (one made entirely of symbols)."""
+        slug = _SLUG_DISALLOWED.sub("-", self.handle.strip().lower()).strip("-")
+        return slug or "user"
 
 
 class AuthService:
@@ -139,10 +146,10 @@ class AuthService:
     def mint_session(self, user: User) -> tuple[str, Session]:
         """Mint a fresh session for ``user``; returns ``(plaintext_id, session)`` — only
         the hash is stored, so the plaintext is handed back exactly once (#92)."""
-        plaintext = secrets.token_urlsafe(SESSION_ID_BYTES)
+        plaintext = secrets.token_urlsafe(SessionId.BYTES)
         now = self._clock.now()
         session = Session(
-            id_hash=hash_session_id(plaintext),
+            id_hash=SessionId(plaintext).hash,
             user_id=user.user_id,
             created_at=now,
             expires_at=now + self._idle_ttl,
@@ -273,7 +280,7 @@ class AuthService:
             return None
         if entry.code_challenge is None or entry.user_id is None:
             return None
-        if not verify_code_challenge(code_verifier, entry.code_challenge):
+        if not Pkce(code_verifier).matches(entry.code_challenge):
             return None
         user = self._users.get(entry.user_id)
         if user is None:
@@ -284,7 +291,7 @@ class AuthService:
     def mint_username(self, handle: str) -> str:
         """A collision-free username from a provider ``handle`` — the slug, or the slug
         with a numeric suffix appended once a collision is found."""
-        base = _slugify(handle)
+        base = Slug(handle).text
         candidate = base
         suffix = 1
         while self._users.username_exists(candidate):

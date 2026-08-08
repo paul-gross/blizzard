@@ -36,38 +36,47 @@ class FederatedIdentity:
     role: str
 
 
-def validate_federation_token(
-    token: str, *, runner_id: str, jwks: JwksCache, jti_cache: IJtiCache
-) -> FederatedIdentity:
-    try:
-        header = jwt.get_unverified_header(token)
-    except jwt.PyJWTError as exc:
-        raise FederationTokenError(f"malformed token: {exc}") from exc
-    kid = header.get("kid")
-    key = jwks.key_for(kid) if kid else None
-    if key is None:
-        raise FederationTokenError(f"no JWKS key matches kid {kid!r}")
-    try:
-        claims = jwt.decode(
-            token,
-            key=key,  # type: ignore[arg-type]
-            algorithms=["RS256"],
-            audience=runner_id,
-            leeway=CLOCK_SKEW_LEEWAY_SECONDS,
-        )
-    except jwt.PyJWTError as exc:
-        raise FederationTokenError(f"token invalid: {exc}") from exc
+@dataclass(frozen=True)
+class FederationToken:
+    """One presented federation token, and everything it is judged against."""
 
-    jti = claims.get("jti")
-    sub = claims.get("sub")
-    username = claims.get("username")
-    role = claims.get("role")
-    if not jti or not sub or not username or not role:
-        raise FederationTokenError("token is missing a required claim")
+    raw: str
+    runner_id: str
+    jwks: JwksCache
+    jti_cache: IJtiCache
 
-    exp = claims.get("exp")
-    expires_at = datetime.fromtimestamp(exp, tz=UTC) if exp is not None else datetime.now(UTC)
-    if not jti_cache.check_and_record(jti, aud=runner_id, expires_at=expires_at):
-        raise FederationTokenError(f"jti {jti!r} already used (replay)")
+    def identity(self) -> FederatedIdentity:
+        """The claims, once signature, audience, expiry and single-use all hold —
+        raising :class:`FederationTokenError` otherwise."""
+        try:
+            header = jwt.get_unverified_header(self.raw)
+        except jwt.PyJWTError as exc:
+            raise FederationTokenError(f"malformed token: {exc}") from exc
+        kid = header.get("kid")
+        key = self.jwks.key_for(kid) if kid else None
+        if key is None:
+            raise FederationTokenError(f"no JWKS key matches kid {kid!r}")
+        try:
+            claims = jwt.decode(
+                self.raw,
+                key=key,  # type: ignore[arg-type]
+                algorithms=["RS256"],
+                audience=self.runner_id,
+                leeway=CLOCK_SKEW_LEEWAY_SECONDS,
+            )
+        except jwt.PyJWTError as exc:
+            raise FederationTokenError(f"token invalid: {exc}") from exc
 
-    return FederatedIdentity(user_id=str(sub), username=str(username), email=claims.get("email"), role=str(role))
+        jti = claims.get("jti")
+        sub = claims.get("sub")
+        username = claims.get("username")
+        role = claims.get("role")
+        if not jti or not sub or not username or not role:
+            raise FederationTokenError("token is missing a required claim")
+
+        exp = claims.get("exp")
+        expires_at = datetime.fromtimestamp(exp, tz=UTC) if exp is not None else datetime.now(UTC)
+        if not self.jti_cache.check_and_record(jti, aud=self.runner_id, expires_at=expires_at):
+            raise FederationTokenError(f"jti {jti!r} already used (replay)")
+
+        return FederatedIdentity(user_id=str(sub), username=str(username), email=claims.get("email"), role=str(role))

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.runner.domain.lease_auth import check_lease_token
+from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.store.repository import IWriteRunnerStore, LeaseRecord
 
 __all__ = ["AttachmentRejected", "AttachmentService"]
@@ -39,7 +39,7 @@ class AttachmentService:
         is already resolved by the caller (``bzh:domain-takes-objects``). Append-and-read-
         newest: a repeat call for the same ``(lease, name)`` is a correction, not an error."""
         stored_hash = self._store.lease_token_hash(lease.lease_id)
-        if not check_lease_token(presented_token=presented_token, stored_hash=stored_hash):
+        if not LeaseToken(presented_token, stored_hash).valid:
             raise AttachmentRejected(f"presented token does not authorize lease {lease.lease_id}")
         self._store.record_attachment(
             lease_id=lease.lease_id,

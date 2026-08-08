@@ -1,4 +1,4 @@
-"""``build_oauth_registry`` — provider construction, config validation, secret
+"""``ProviderEntry.registry`` — provider construction, config validation, secret
 resolution from the environment (unit tier, issue #92).
 """
 
@@ -7,7 +7,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from blizzard.hub.auth.oauth.internal.factory import build_oauth_registry
+from blizzard.hub.auth.oauth.internal.factory import ProviderEntry
 from blizzard.hub.auth.oauth.internal.github_provider import GithubProvider
 from blizzard.hub.auth.oauth.internal.oidc_provider import OidcProvider
 from blizzard.hub.config import ConfigError, OAuthProviderConfig
@@ -19,7 +19,7 @@ def _client() -> httpx.Client:
     return httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(404)))
 
 
-def test_build_oauth_registry_builds_a_conformer_per_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_provider_registry_builds_a_conformer_per_entry(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BZ_OAUTH_GITHUB_SECRET", "s1")
     monkeypatch.setenv("BZ_OAUTH_OIDC_SECRET", "s2")
     providers = (
@@ -39,7 +39,7 @@ def test_build_oauth_registry_builds_a_conformer_per_entry(monkeypatch: pytest.M
             issuer="https://issuer.example.com",
         ),
     )
-    registry = build_oauth_registry(providers, http_client=_client())
+    registry = ProviderEntry.registry(providers, http_client=_client())
 
     github = registry.get("github")
     oidc = registry.get("oidc-co")
@@ -48,7 +48,7 @@ def test_build_oauth_registry_builds_a_conformer_per_entry(monkeypatch: pytest.M
     assert {p.name for p in registry.list()} == {"github", "oidc-co"}
 
 
-def test_build_oauth_registry_rejects_an_unknown_type(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_provider_registry_rejects_an_unknown_type(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BZ_SECRET", "s")
     providers = (
         OAuthProviderConfig(
@@ -56,10 +56,10 @@ def test_build_oauth_registry_rejects_an_unknown_type(monkeypatch: pytest.Monkey
         ),
     )
     with pytest.raises(ConfigError, match="unknown type"):
-        build_oauth_registry(providers, http_client=_client())
+        ProviderEntry.registry(providers, http_client=_client())
 
 
-def test_build_oauth_registry_rejects_oidc_with_no_issuer(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_provider_registry_rejects_oidc_with_no_issuer(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BZ_SECRET", "s")
     providers = (
         OAuthProviderConfig(
@@ -67,10 +67,10 @@ def test_build_oauth_registry_rejects_oidc_with_no_issuer(monkeypatch: pytest.Mo
         ),
     )
     with pytest.raises(ConfigError, match="carries no issuer"):
-        build_oauth_registry(providers, http_client=_client())
+        ProviderEntry.registry(providers, http_client=_client())
 
 
-def test_build_oauth_registry_rejects_an_unset_secret_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_provider_registry_rejects_an_unset_secret_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("BZ_OAUTH_GITHUB_SECRET", raising=False)
     providers = (
         OAuthProviderConfig(
@@ -82,10 +82,10 @@ def test_build_oauth_registry_rejects_an_unset_secret_env(monkeypatch: pytest.Mo
         ),
     )
     with pytest.raises(ConfigError, match="BZ_OAUTH_GITHUB_SECRET"):
-        build_oauth_registry(providers, http_client=_client())
+        ProviderEntry.registry(providers, http_client=_client())
 
 
-def test_build_oauth_registry_is_empty_for_no_providers() -> None:
-    registry = build_oauth_registry((), http_client=_client())
+def test_provider_registry_is_empty_for_no_providers() -> None:
+    registry = ProviderEntry.registry((), http_client=_client())
     assert registry.list() == []
     assert registry.get("anything") is None

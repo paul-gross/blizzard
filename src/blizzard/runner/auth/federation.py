@@ -24,15 +24,9 @@ from blizzard.foundation.origin import Origin
 from blizzard.foundation.return_to import ReturnTo
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
-from blizzard.runner.auth.roles import resolve_local_role
-from blizzard.runner.auth.session import (
-    SESSION_COOKIE_NAME,
-    SESSION_TTL,
-    RunnerSession,
-    mint_session_cookie,
-    verify_session_cookie,
-)
-from blizzard.runner.auth.validate import FederationTokenError, validate_federation_token
+from blizzard.runner.auth.roles import LocalRole
+from blizzard.runner.auth.session import SESSION_COOKIE_NAME, SESSION_TTL, RunnerSession, SessionCookie
+from blizzard.runner.auth.validate import FederationToken, FederationTokenError
 from blizzard.runner.config import CALLBACK_PATH, RunnerConfig
 
 _log = get_logger("blizzard.runner.auth")
@@ -111,7 +105,7 @@ class HumanLane:
         if cookie is None:
             return None
         clock: IClock = self.request.app.state.clock
-        return verify_session_cookie(cookie, secret=self.request.app.state.session_secret, now=clock.now())
+        return SessionCookie(self.request.app.state.session_secret).read(cookie, now=clock.now())
 
     def demand_web(self) -> RunnerSession:
         """The served-web-app gate — the browser-navigated HTML surface mounted at ``/``."""
@@ -241,16 +235,16 @@ async def callback(request: Request) -> Response:
     jwks: JwksCache = request.app.state.jwks_cache
     jti_cache: IJtiCache = request.app.state.jti_cache
     try:
-        identity = validate_federation_token(token, runner_id=config.runner_id, jwks=jwks, jti_cache=jti_cache)
+        identity = FederationToken(token, runner_id=config.runner_id, jwks=jwks, jti_cache=jti_cache).identity()
     except FederationTokenError as exc:
         _log.warning("federation token refused", detail=str(exc))
         return bounce.refuse("token refused")
 
-    role = resolve_local_role(config, username=identity.username, hub_role=identity.role)
+    role = LocalRole(config, username=identity.username, hub_role=identity.role).role
     clock: IClock = request.app.state.clock
     now = clock.now()
     session = RunnerSession(username=identity.username, role=role, issued_at=now, expires_at=now + SESSION_TTL)
-    cookie_value = mint_session_cookie(session, secret=request.app.state.session_secret)
+    cookie_value = SessionCookie(request.app.state.session_secret).mint(session)
 
     response = RedirectResponse(bounce.return_to, status_code=303)
     bounce.clear(response)

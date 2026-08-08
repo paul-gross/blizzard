@@ -18,7 +18,7 @@ from sqlalchemy import Engine
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.artifacts import ArtifactKind
-from blizzard.hub.domain.enrollment import hash_token
+from blizzard.hub.domain.enrollment import TokenHash
 from blizzard.hub.domain.graph import SessionMode
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
@@ -270,7 +270,7 @@ def test_fill_mints_a_lease_capability_token_and_carries_its_plaintext_to_spawn(
     assert lease is not None
     _, preamble = harness.spawns[0]
     assert preamble.lease_token
-    assert store.lease_token_hash(lease.lease_id) == hash_token(preamble.lease_token)
+    assert store.lease_token_hash(lease.lease_id) == TokenHash(preamble.lease_token).hex
 
 
 @pytest.mark.unit

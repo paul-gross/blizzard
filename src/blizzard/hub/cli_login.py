@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 
-from blizzard.hub.auth.pkce import challenge_from_verifier
+from blizzard.hub.auth.pkce import Pkce
 
 _CLIENT_ID = "cli"
 _LOOPBACK_HOST = "127.0.0.1"
@@ -26,17 +26,6 @@ _EXCHANGE_TIMEOUT = 15.0
 
 class LoginError(Exception):
     """Any step of the login dance failed."""
-
-
-@dataclass(frozen=True)
-class Pkce:
-    verifier: str
-    challenge: str
-
-    @classmethod
-    def new(cls) -> Pkce:
-        verifier = secrets.token_urlsafe(48)
-        return cls(verifier, challenge_from_verifier(verifier))
 
 
 class Callback:

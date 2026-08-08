@@ -1,4 +1,4 @@
-"""``validate_federation_token`` — signature/``kid``, audience, expiry (±30s leeway),
+"""``FederationToken`` — signature/``kid``, audience, expiry (±30s leeway),
 and jti-replay checks (issue #95). Built against a locally-minted RSA keypair, mirroring
 ``tests/test_auth_oauth_providers.py``'s own JWKS-building convention — no network,
 no dependency on the hub's own ``SigningKeyService``."""
@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
 
 from blizzard.runner.auth.jwks_cache import JwksCache
-from blizzard.runner.auth.validate import FederationTokenError, validate_federation_token
+from blizzard.runner.auth.validate import FederationToken, FederationTokenError
 
 pytestmark = pytest.mark.unit
 
@@ -73,7 +73,7 @@ def _claims(**overrides: object) -> dict[str, object]:
 def test_a_valid_token_resolves_the_claimed_identity() -> None:
     private_key, jwk = _keypair()
     token = _sign(private_key, claims=_claims())
-    identity = validate_federation_token(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=_FakeJtiCache())
+    identity = FederationToken(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=_FakeJtiCache()).identity()
     assert identity.user_id == "usr_1"
     assert identity.username == "alice"
     assert identity.role == "contributor"
@@ -83,7 +83,7 @@ def test_a_token_minted_for_a_different_runner_is_rejected() -> None:
     private_key, jwk = _keypair()
     token = _sign(private_key, claims=_claims(aud="runner-b"))
     with pytest.raises(FederationTokenError):
-        validate_federation_token(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=_FakeJtiCache())
+        FederationToken(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=_FakeJtiCache()).identity()
 
 
 def test_a_token_signed_by_an_untrusted_key_is_rejected() -> None:
@@ -91,7 +91,7 @@ def test_a_token_signed_by_an_untrusted_key_is_rejected() -> None:
     _other_key, other_jwk = _keypair()  # the JWKS the runner fetches carries a DIFFERENT key under the same kid
     token = _sign(_signing_key, claims=_claims())
     with pytest.raises(FederationTokenError):
-        validate_federation_token(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(other_jwk), jti_cache=_FakeJtiCache())
+        FederationToken(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(other_jwk), jti_cache=_FakeJtiCache()).identity()
 
 
 def test_an_expired_token_past_the_leeway_is_rejected() -> None:
@@ -102,16 +102,16 @@ def test_an_expired_token_past_the_leeway_is_rejected() -> None:
         claims=_claims(iat=int(long_ago.timestamp()), exp=int((long_ago + timedelta(seconds=60)).timestamp())),
     )
     with pytest.raises(FederationTokenError):
-        validate_federation_token(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=_FakeJtiCache())
+        FederationToken(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=_FakeJtiCache()).identity()
 
 
 def test_a_replayed_jti_is_rejected() -> None:
     private_key, jwk = _keypair()
     token = _sign(private_key, claims=_claims())
     jti_cache = _FakeJtiCache()
-    validate_federation_token(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache)
+    FederationToken(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache).identity()
     with pytest.raises(FederationTokenError):
-        validate_federation_token(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache)
+        FederationToken(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(jwk), jti_cache=jti_cache).identity()
 
 
 def test_an_unknown_kid_is_rejected() -> None:
@@ -120,4 +120,4 @@ def test_an_unknown_kid_is_rejected() -> None:
     other_jwk["kid"] = "some-other-kid"
     token = _sign(private_key, claims=_claims())
     with pytest.raises(FederationTokenError):
-        validate_federation_token(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(other_jwk), jti_cache=_FakeJtiCache())
+        FederationToken(token, runner_id=_RUNNER_ID, jwks=_jwks_cache(other_jwk), jti_cache=_FakeJtiCache()).identity()

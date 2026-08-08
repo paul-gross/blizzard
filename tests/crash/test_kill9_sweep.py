@@ -22,7 +22,7 @@ from blizzard.foundation.crash import discover_crash_points
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.invariants import Invariants
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.enrollment import hash_token
+from blizzard.hub.domain.enrollment import TokenHash
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
@@ -563,7 +563,7 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
             created_at=_ATTACH_NOW,
         )
     )
-    store.record_lease_token("lease_attach", hash_token(_ATTACH_TOKEN), _ATTACH_NOW)
+    store.record_lease_token("lease_attach", TokenHash(_ATTACH_TOKEN).hex, _ATTACH_NOW)
     store.record_ask(
         lease_id="lease_attach",
         chunk_id="ch_attach",
@@ -679,7 +679,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
             created_at=_DECLARE_COMMIT_NOW,
         )
     )
-    store.record_lease_token("lease_declare_commit", hash_token(_DECLARE_COMMIT_TOKEN), _DECLARE_COMMIT_NOW)
+    store.record_lease_token("lease_declare_commit", TokenHash(_DECLARE_COMMIT_TOKEN).hex, _DECLARE_COMMIT_NOW)
     # The env this declaration resolves against — the declare edge reads the chunk's
     # bindings to decide which environment's manifest to check the repo against.
     store.record_binding(

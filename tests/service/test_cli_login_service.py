@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 
-from blizzard.hub.auth.pkce import challenge_from_verifier
+from blizzard.hub.auth.pkce import Pkce
 from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
 from tests.service.support import require_stub_idp, service_gate, stub_idp
@@ -31,7 +31,7 @@ _SECRET_ENV = "BZ_OAUTH_TEST_SECRET"
 _SECRET = "test-secret"
 _OOB_REDIRECT_URI = "urn:ietf:wg:oauth:2.0:oob"
 _VERIFIER = "a-fixed-service-test-verifier-with-plenty-of-entropy"
-_CHALLENGE = challenge_from_verifier(_VERIFIER)
+_CHALLENGE = Pkce(_VERIFIER).challenge
 
 
 @contextlib.contextmanager

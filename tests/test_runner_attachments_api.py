@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.enrollment import hash_token
+from blizzard.hub.domain.enrollment import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.attachments import AttachmentService
@@ -46,7 +46,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
     }
     fields.update(overrides)
     store.record_lease(NewLease(**fields))  # type: ignore[arg-type]
-    store.record_lease_token(str(fields["lease_id"]), hash_token(_TOKEN), _NOW)
+    store.record_lease_token(str(fields["lease_id"]), TokenHash(_TOKEN).hex, _NOW)
 
 
 @pytest.mark.component

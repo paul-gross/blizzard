@@ -10,18 +10,31 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import secrets
+from dataclasses import dataclass
+
+#: ``secrets.token_urlsafe`` byte count for a minted verifier — well inside RFC 7636 §4.1's
+#: 43..128 character range.
+_VERIFIER_BYTES = 48
 
 
-def challenge_from_verifier(code_verifier: str) -> str:
-    """The S256 ``code_challenge`` derived from a ``code_verifier`` —
-    ``BASE64URL-ENCODE(SHA256(code_verifier))`` with padding stripped, per RFC 7636 §4.2."""
-    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
-    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+@dataclass(frozen=True)
+class Pkce:
+    """One ``code_verifier`` and the ``code_challenge`` it must hash to."""
 
+    verifier: str
 
-def verify_code_challenge(code_verifier: str, code_challenge: str) -> bool:
-    """``True`` iff ``code_verifier`` hashes to the stored ``code_challenge`` — the
-    exchange route's own check, comparing digests (not raw secrets) so a
-    constant-time compare carries no extra weight either way, but is used regardless
-    (cheap, and the conventional shape for this kind of check)."""
-    return hmac.compare_digest(challenge_from_verifier(code_verifier), code_challenge)
+    @classmethod
+    def new(cls) -> Pkce:
+        return cls(secrets.token_urlsafe(_VERIFIER_BYTES))
+
+    @property
+    def challenge(self) -> str:
+        """``BASE64URL-ENCODE(SHA256(code_verifier))`` with padding stripped, per RFC 7636 §4.2."""
+        digest = hashlib.sha256(self.verifier.encode("ascii")).digest()
+        return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+    def matches(self, code_challenge: str) -> bool:
+        """The exchange route's own check. Comparing digests rather than raw secrets, a
+        constant-time compare carries no extra weight — but is used regardless."""
+        return hmac.compare_digest(self.challenge, code_challenge)

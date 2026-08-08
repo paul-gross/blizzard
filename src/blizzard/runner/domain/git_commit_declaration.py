@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.runner.domain.lease_auth import check_lease_token
+from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.store.repository import IWriteRunnerStore, LeaseRecord
 
@@ -61,7 +61,7 @@ class GitCommitDeclarationService:
         Append-and-read-newest (``bzh:facts-not-status``): a repeat call for the same ``(lease, env,
         repo)`` is a correction. The env is part of that key, so one env cannot overwrite another."""
         stored_hash = self._store.lease_token_hash(lease.lease_id)
-        if not check_lease_token(presented_token=presented_token, stored_hash=stored_hash):
+        if not LeaseToken(presented_token, stored_hash).valid:
             raise GitCommitDeclarationRejected(f"presented token does not authorize lease {lease.lease_id}")
         resolved_env = self._resolve_environment(lease, environment_id)
         known = [binding.name for binding in self._provider.repos(resolved_env)]

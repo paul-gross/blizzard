@@ -7,6 +7,8 @@ matching no verified user is an unclaimed intent, surfaced at every boot until c
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from blizzard.auth_core import Role
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.auth.models import SuperuserBootstrap, User
@@ -16,40 +18,47 @@ from blizzard.hub.auth.users import IReadUserRepository
 _log = get_logger("blizzard.hub.auth")
 
 
-def ensure_superuser_bootstrap(*, email: str | None, users: IReadUserRepository, auth: AuthService) -> None:
-    """Ensure ``email`` (``config.auth.superuser``) holds ``superuser``, demoting a
-    prior different target first — the one entry point ``build_hosted_app`` calls."""
-    current = auth.get_superuser_bootstrap()
+@dataclass(frozen=True)
+class Superuser:
+    """The configured ``auth.superuser`` intent, reconciled against the hub's own state."""
 
-    if current is not None and current.email != email:
-        _demote_previous(current, users=users, auth=auth)
-        current = None
+    email: str | None
+    users: IReadUserRepository
+    auth: AuthService
 
-    if email is None:
-        if current is not None:
-            auth.clear_superuser_bootstrap()
-        return
+    def ensure(self) -> None:
+        """Ensure ``email`` holds ``superuser``, demoting a prior different target first —
+        the one entry point ``build_hosted_app`` calls."""
+        current = self.auth.get_superuser_bootstrap()
 
-    user = users.get_by_email(email)
-    if user is not None:
-        if user.role is not Role.SUPERUSER:
-            auth.bootstrap_apply_role(user, Role.SUPERUSER)
-        auth.record_superuser_bootstrap(email=email, claimed_user_id=user.user_id)
-        return
+        if current is not None and current.email != self.email:
+            self._demote(current)
+            current = None
 
-    # No verified user holds `email` yet — pre-provision (or keep) the unclaimed
-    # intent and surface it: every boot while unclaimed, not just the first.
-    if current is None or current.claimed_user_id is not None:
-        auth.record_superuser_bootstrap(email=email, claimed_user_id=None)
-    _log.warning("superuser bootstrap unclaimed", email=email)
-    auth.report_superuser_bootstrap_unclaimed(email=email)
+        if self.email is None:
+            if current is not None:
+                self.auth.clear_superuser_bootstrap()
+            return
 
+        user = self.users.get_by_email(self.email)
+        if user is not None:
+            if user.role is not Role.SUPERUSER:
+                self.auth.bootstrap_apply_role(user, Role.SUPERUSER)
+            self.auth.record_superuser_bootstrap(email=self.email, claimed_user_id=user.user_id)
+            return
 
-def _demote_previous(previous: SuperuserBootstrap, *, users: IReadUserRepository, auth: AuthService) -> None:
-    """Demote the previous bootstrap target's claimed user to ``admin`` — only when it
-    is still ``superuser`` (a manual demotion in between is left alone, not re-applied)."""
-    if previous.claimed_user_id is None:
-        return
-    claimed_user: User | None = users.get(previous.claimed_user_id)
-    if claimed_user is not None and claimed_user.role is Role.SUPERUSER:
-        auth.bootstrap_apply_role(claimed_user, Role.ADMIN)
+        # No verified user holds `email` yet — pre-provision (or keep) the unclaimed
+        # intent and surface it: every boot while unclaimed, not just the first.
+        if current is None or current.claimed_user_id is not None:
+            self.auth.record_superuser_bootstrap(email=self.email, claimed_user_id=None)
+        _log.warning("superuser bootstrap unclaimed", email=self.email)
+        self.auth.report_superuser_bootstrap_unclaimed(email=self.email)
+
+    def _demote(self, previous: SuperuserBootstrap) -> None:
+        """Demote the previous target's claimed user to ``admin`` — only when it is still
+        ``superuser`` (a manual demotion in between is left alone, not re-applied)."""
+        if previous.claimed_user_id is None:
+            return
+        claimed_user: User | None = self.users.get(previous.claimed_user_id)
+        if claimed_user is not None and claimed_user.role is Role.SUPERUSER:
+            self.auth.bootstrap_apply_role(claimed_user, Role.ADMIN)

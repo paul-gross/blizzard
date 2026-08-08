@@ -1,7 +1,7 @@
-"""Produces-artifact authorization (unit tier) — ``check_produces``, node + artifacts
+"""Produces-artifact authorization (unit tier) — ``Produces``, node + artifacts
 only (issue #113 phase 5).
 
-A pure function of a :class:`Node` plus the submission's own artifact list
+A pure value over a :class:`Node` plus the submission's own artifact list
 (``bzh:domain-takes-objects``): no store, no HTTP, no clock.
 """
 
@@ -12,7 +12,7 @@ import pytest
 from blizzard.hub.config import PRODUCES_ENFORCE, PRODUCES_WARN
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.graph import Executor, JudgedBy, Node, ProducesSpec, SessionMode
-from blizzard.hub.domain.produces_auth import check_produces
+from blizzard.hub.domain.produces_auth import Produces
 from blizzard.wire.completion import SubmittedArtifact
 
 pytestmark = pytest.mark.unit
@@ -48,22 +48,22 @@ def _git_commit_artifact(name: str) -> SubmittedArtifact:
 def test_a_node_with_no_produces_is_a_clean_no_op() -> None:
     node = _node(produces=[])
 
-    assert check_produces(node, [], mode=PRODUCES_ENFORCE) is None
-    assert check_produces(node, [], mode=PRODUCES_WARN) is None
+    assert Produces(node, []).rejection(mode=PRODUCES_ENFORCE) is None
+    assert Produces(node, []).rejection(mode=PRODUCES_WARN) is None
 
 
 def test_every_produces_name_explicitly_attached_passes_under_both_modes() -> None:
     node = _node(produces=["notes", "diary"])
     artifacts = [_artifact("notes", attached=True), _artifact("diary", attached=True)]
 
-    assert check_produces(node, artifacts, mode=PRODUCES_ENFORCE) is None
-    assert check_produces(node, artifacts, mode=PRODUCES_WARN) is None
+    assert Produces(node, artifacts).rejection(mode=PRODUCES_ENFORCE) is None
+    assert Produces(node, artifacts).rejection(mode=PRODUCES_WARN) is None
 
 
 def test_a_missing_name_is_rejected_under_enforce() -> None:
     node = _node(produces=["notes"])
 
-    detail = check_produces(node, [], mode=PRODUCES_ENFORCE)
+    detail = Produces(node, []).rejection(mode=PRODUCES_ENFORCE)
 
     assert detail is not None
     assert "notes" in detail
@@ -76,7 +76,7 @@ def test_a_fallback_only_name_attached_false_is_rejected_under_enforce() -> None
     node = _node(produces=["notes"])
     artifacts = [_artifact("notes", attached=False)]
 
-    detail = check_produces(node, artifacts, mode=PRODUCES_ENFORCE)
+    detail = Produces(node, artifacts).rejection(mode=PRODUCES_ENFORCE)
 
     assert detail is not None
     assert "notes" in detail
@@ -86,7 +86,7 @@ def test_missing_names_are_all_named_in_the_rejection_detail() -> None:
     node = _node(produces=["notes", "diary", "summary"])
     artifacts = [_artifact("diary", attached=True), _artifact("summary", attached=False)]
 
-    detail = check_produces(node, artifacts, mode=PRODUCES_ENFORCE)
+    detail = Produces(node, artifacts).rejection(mode=PRODUCES_ENFORCE)
 
     assert detail is not None
     assert "notes" in detail
@@ -101,8 +101,8 @@ def test_a_git_commit_covered_produces_name_is_accepted_under_enforce() -> None:
     node = _node(produces=["backend"])
     artifacts = [_git_commit_artifact("backend")]
 
-    assert check_produces(node, artifacts, mode=PRODUCES_ENFORCE) is None
-    assert check_produces(node, artifacts, mode=PRODUCES_WARN) is None
+    assert Produces(node, artifacts).rejection(mode=PRODUCES_ENFORCE) is None
+    assert Produces(node, artifacts).rejection(mode=PRODUCES_WARN) is None
 
 
 def test_an_asset_fallback_name_is_still_rejected_even_alongside_a_covered_git_name() -> None:
@@ -111,7 +111,7 @@ def test_an_asset_fallback_name_is_still_rejected_even_alongside_a_covered_git_n
     node = _node(produces=["backend", "findings"])
     artifacts = [_git_commit_artifact("backend"), _artifact("findings", attached=False)]
 
-    detail = check_produces(node, artifacts, mode=PRODUCES_ENFORCE)
+    detail = Produces(node, artifacts).rejection(mode=PRODUCES_ENFORCE)
 
     assert detail is not None
     assert "findings" in detail
@@ -121,6 +121,6 @@ def test_an_asset_fallback_name_is_still_rejected_even_alongside_a_covered_git_n
 def test_warn_mode_never_rejects_regardless_of_failure() -> None:
     node = _node(produces=["notes"])
 
-    detail = check_produces(node, [], mode=PRODUCES_WARN)
+    detail = Produces(node, []).rejection(mode=PRODUCES_WARN)
 
     assert detail is None

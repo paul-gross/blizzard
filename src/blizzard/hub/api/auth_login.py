@@ -15,10 +15,9 @@ from pydantic import BaseModel
 
 from blizzard.foundation.origin import Origin
 from blizzard.foundation.return_to import ReturnTo
-from blizzard.hub.api.auth_session import _SESSION_COOKIE_NAME, _presented_session_id
+from blizzard.hub.api.auth_session import _SESSION_COOKIE_NAME, PresentedSession
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.facts import AuthFactsService
-from blizzard.hub.auth.hashing import hash_session_id
 from blizzard.hub.auth.oauth.provider import IOAuthProvider, OAuthExchangeError
 from blizzard.hub.auth.service import ABSOLUTE_MAX_AGE, PROVIDER_LOGIN_STATE_KIND
 from blizzard.hub.composition import HubServices
@@ -160,9 +159,9 @@ def logout(request: Request, response: Response) -> Response:
     mode = request.app.state.config.auth.mode
     if mode != AUTH_MODE_NONE:
         services = get_services(request)
-        session_id = _presented_session_id(request)
-        if session_id is not None:
-            session = services.sessions.get_by_hash(hash_session_id(session_id))
+        id_hash = PresentedSession(request).id_hash
+        if id_hash is not None:
+            session = services.sessions.get_by_hash(id_hash)
             if session is not None:
                 services.auth.revoke(session)
     response.delete_cookie(_SESSION_COOKIE_NAME)

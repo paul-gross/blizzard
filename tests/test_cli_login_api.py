@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.api.idp import CLI_OOB_REDIRECT_URI
-from blizzard.hub.auth.pkce import challenge_from_verifier
+from blizzard.hub.auth.pkce import Pkce
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH
 from tests.support import HubHarness, build_hub, seed_session, seed_user
 
@@ -22,7 +22,7 @@ pytestmark = pytest.mark.component
 
 _LOOPBACK_REDIRECT = "http://127.0.0.1:54321/callback"
 _VERIFIER = "a-fixed-test-verifier-with-enough-entropy-1234567890"
-_CHALLENGE = challenge_from_verifier(_VERIFIER)
+_CHALLENGE = Pkce(_VERIFIER).challenge
 
 
 def _login_as(hub: HubHarness, *, username: str = "alice", role: Role = Role.CONTRIBUTOR) -> None:

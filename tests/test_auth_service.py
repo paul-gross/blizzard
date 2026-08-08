@@ -14,7 +14,7 @@ import pytest
 from blizzard.auth_core import Role, expand
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.auth.facts import AuthFactsService
-from blizzard.hub.auth.hashing import hash_session_id
+from blizzard.hub.auth.hashing import SessionId
 from blizzard.hub.auth.models import (
     AuthFact,
     AuthStateEntry,
@@ -201,7 +201,7 @@ def test_mint_session_stores_only_the_hash_never_the_plaintext() -> None:
 
     plaintext, session = service.mint_session(user)
 
-    assert session.id_hash == hash_session_id(plaintext)
+    assert session.id_hash == SessionId(plaintext).hash
     assert session.id_hash != plaintext
     assert sessions.by_hash[session.id_hash] is session
 

@@ -7,6 +7,8 @@ identity is ever denied** — every branch resolves to a concrete :class:`Role`,
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from blizzard.auth_core import Role
 from blizzard.runner.config import RunnerConfig
 
@@ -15,17 +17,24 @@ from blizzard.runner.config import RunnerConfig
 MIRROR = "mirror"
 
 
-def resolve_local_role(config: RunnerConfig, *, username: str, hub_role: str) -> Role:
-    """The runner-local role a hub-federated ``username``/``hub_role`` pair resolves to.
+@dataclass(frozen=True)
+class LocalRole:
+    """A hub-federated ``username``/``hub_role`` pair, resolved against this runner's config.
 
-    ``hub_role`` is the JWT's own coarse ``role`` claim (a :class:`Role` value) — passed
-    as ``str`` here since it arrives off the wire as one (``runner/auth/validate.py``).
-    """
-    if config.auth_superuser is not None and username == config.auth_superuser:
-        return Role.SUPERUSER
-    overrides = dict(config.auth_users)
-    if username in overrides:
-        return Role(overrides[username])
-    if config.auth_hub_role_default == MIRROR:
-        return Role(hub_role)
-    return Role(config.auth_hub_role_default)
+    ``hub_role`` is the JWT's own coarse ``role`` claim (a :class:`Role` value) — held as
+    ``str`` here since it arrives off the wire as one (``runner/auth/validate.py``)."""
+
+    config: RunnerConfig
+    username: str
+    hub_role: str
+
+    @property
+    def role(self) -> Role:
+        if self.config.auth_superuser is not None and self.username == self.config.auth_superuser:
+            return Role.SUPERUSER
+        overrides = dict(self.config.auth_users)
+        if self.username in overrides:
+            return Role(overrides[self.username])
+        if self.config.auth_hub_role_default == MIRROR:
+            return Role(self.hub_role)
+        return Role(self.config.auth_hub_role_default)

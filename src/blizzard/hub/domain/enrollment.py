@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
@@ -21,13 +22,16 @@ _log = get_logger("blizzard.hub.enrollment")
 _TOKEN_BYTES = 32
 
 
-def hash_token(token: str) -> str:
-    """The sha256 hex digest a presented bearer token is compared against.
+@dataclass(frozen=True)
+class TokenHash:
+    """A fleet bearer token in plaintext — enrollment, route, or lease — and the digest
+    it is stored and compared as. One owner, so mint and resolve cannot drift."""
 
-    The single hashing function both the mint path (here) and the resolve path
-    (``hub/api/auth.py``'s ``require_runner_principal``) call, so the two can never
-    drift onto different digests of the same token."""
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+    plaintext: str
+
+    @property
+    def hex(self) -> str:
+        return hashlib.sha256(self.plaintext.encode("utf-8")).hexdigest()
 
 
 class RunnerEnrollmentService:
@@ -44,6 +48,6 @@ class RunnerEnrollmentService:
         rather than a bare id (``bzh:domain-takes-objects``) — the enroll endpoint
         resolves ``runner_id`` to its row (404 if unknown) before calling this."""
         token = secrets.token_urlsafe(_TOKEN_BYTES)
-        self._registry.set_token_hash(runner.runner_id, token_hash=hash_token(token), at=self._clock.now())
+        self._registry.set_token_hash(runner.runner_id, token_hash=TokenHash(token).hex, at=self._clock.now())
         _log.info("runner token enrolled", runner_id=runner.runner_id)
         return token

@@ -3,7 +3,7 @@ fact hold the chunk's **currently-live** acquisition?
 
 A plain function over already-loaded values (``bzh:domain-takes-objects``), not a service.
 ``route_token_mode`` is a **separate** rollout brake from ``runner_auth_mode``. Comparison is
-constant-time against the sha256 hex digest :func:`hash_token` produces, the same one the mint uses."""
+constant-time against the sha256 hex digest :class:`TokenHash` produces, the same one the mint uses."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import hmac
 
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.config import ROUTE_TOKEN_ENFORCE
-from blizzard.hub.domain.enrollment import hash_token
+from blizzard.hub.domain.enrollment import TokenHash
 from blizzard.hub.domain.work import ChunkFacts, RouteHistory
 
 _log = get_logger("blizzard.hub.route_auth")
@@ -32,7 +32,7 @@ def check_route_token(
     live_token = RouteHistory.of(facts).newest_token
     if live_token is None:
         detail: str | None = "chunk has no live route — nothing to authorize this write against"
-    elif presented_token is None or not hmac.compare_digest(hash_token(presented_token), live_token.token_hash):
+    elif presented_token is None or not hmac.compare_digest(TokenHash(presented_token).hex, live_token.token_hash):
         detail = "route token missing or does not match the chunk's live route"
     elif submission_runner_id != route_runner_id:
         detail = f"runner_id {submission_runner_id!r} does not hold the chunk's live route"

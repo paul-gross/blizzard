@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import blizzard.runner.api.hub_proxy as hub_proxy
-from blizzard.hub.domain.enrollment import hash_token
+from blizzard.hub.domain.enrollment import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.store.repository import NewLease
@@ -98,7 +98,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
     }
     fields.update(overrides)
     store.record_lease(NewLease(**fields))  # type: ignore[arg-type]
-    store.record_lease_token(str(fields["lease_id"]), hash_token(_TOKEN), _NOW)
+    store.record_lease_token(str(fields["lease_id"]), TokenHash(_TOKEN).hex, _NOW)
 
 
 def _stub_hub(monkeypatch: pytest.MonkeyPatch, response: _FakeHubResponse, seen: list[str] | None = None) -> None:

@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.artifacts import ArtifactKind
-from blizzard.hub.domain.enrollment import hash_token
+from blizzard.hub.domain.enrollment import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.attachments import AttachmentService
@@ -60,7 +60,7 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
             created_at=_NOW,
         )
     )
-    store.record_lease_token("lease_r", hash_token(_TOKEN), _NOW)
+    store.record_lease_token("lease_r", TokenHash(_TOKEN).hex, _NOW)
     store.record_spawn("lease_r", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 

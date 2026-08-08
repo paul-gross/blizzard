@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.enrollment import hash_token
+from blizzard.hub.domain.enrollment import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationService
@@ -48,7 +48,7 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
     }
     fields.update(overrides)
     store.record_lease(NewLease(**fields))  # type: ignore[arg-type]
-    store.record_lease_token(str(fields["lease_id"]), hash_token(_TOKEN), _NOW)
+    store.record_lease_token(str(fields["lease_id"]), TokenHash(_TOKEN).hex, _NOW)
     # A declaration resolves its environment from the chunk's bindings, so a lease
     # without one has nothing to declare against.
     store.record_binding(chunk_id=str(fields["chunk_id"]), environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
