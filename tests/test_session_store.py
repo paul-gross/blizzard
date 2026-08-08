@@ -11,23 +11,23 @@ import stat
 
 import pytest
 
-from blizzard.hub import session_store
+from blizzard.hub.session_store import SessionFile
 
 pytestmark = pytest.mark.unit
 
 
 def test_load_session_is_none_when_nothing_stored() -> None:
-    assert session_store.load_session("http://127.0.0.1:8421") is None
+    assert SessionFile.of().load("http://127.0.0.1:8421") is None
 
 
 def test_save_then_load_round_trips() -> None:
-    session_store.save_session("http://127.0.0.1:8421", "the-token")
-    assert session_store.load_session("http://127.0.0.1:8421") == "the-token"
+    SessionFile.of().save("http://127.0.0.1:8421", "the-token")
+    assert SessionFile.of().load("http://127.0.0.1:8421") == "the-token"
 
 
 def test_save_session_writes_owner_only_permissions() -> None:
-    session_store.save_session("http://127.0.0.1:8421", "the-token")
-    path = session_store._sessions_path()
+    SessionFile.of().save("http://127.0.0.1:8421", "the-token")
+    path = SessionFile.of().path
     file_mode = stat.S_IMODE(path.stat().st_mode)
     dir_mode = stat.S_IMODE(path.parent.stat().st_mode)
     assert file_mode == stat.S_IRUSR | stat.S_IWUSR
@@ -35,28 +35,28 @@ def test_save_session_writes_owner_only_permissions() -> None:
 
 
 def test_save_session_keys_by_hub_url_independently() -> None:
-    session_store.save_session("http://127.0.0.1:8421", "token-a")
-    session_store.save_session("http://127.0.0.1:9000", "token-b")
-    assert session_store.load_session("http://127.0.0.1:8421") == "token-a"
-    assert session_store.load_session("http://127.0.0.1:9000") == "token-b"
+    SessionFile.of().save("http://127.0.0.1:8421", "token-a")
+    SessionFile.of().save("http://127.0.0.1:9000", "token-b")
+    assert SessionFile.of().load("http://127.0.0.1:8421") == "token-a"
+    assert SessionFile.of().load("http://127.0.0.1:9000") == "token-b"
 
 
 def test_delete_session_removes_only_the_named_entry() -> None:
-    session_store.save_session("http://127.0.0.1:8421", "token-a")
-    session_store.save_session("http://127.0.0.1:9000", "token-b")
+    SessionFile.of().save("http://127.0.0.1:8421", "token-a")
+    SessionFile.of().save("http://127.0.0.1:9000", "token-b")
 
-    session_store.delete_session("http://127.0.0.1:8421")
+    SessionFile.of().delete("http://127.0.0.1:8421")
 
-    assert session_store.load_session("http://127.0.0.1:8421") is None
-    assert session_store.load_session("http://127.0.0.1:9000") == "token-b"
+    assert SessionFile.of().load("http://127.0.0.1:8421") is None
+    assert SessionFile.of().load("http://127.0.0.1:9000") == "token-b"
 
 
 def test_delete_session_is_a_no_op_when_nothing_is_stored() -> None:
-    session_store.delete_session("http://127.0.0.1:8421")  # must not raise
-    assert session_store.load_session("http://127.0.0.1:8421") is None
+    SessionFile.of().delete("http://127.0.0.1:8421")  # must not raise
+    assert SessionFile.of().load("http://127.0.0.1:8421") is None
 
 
 def test_delete_session_removes_the_file_once_the_last_entry_is_gone() -> None:
-    session_store.save_session("http://127.0.0.1:8421", "token-a")
-    session_store.delete_session("http://127.0.0.1:8421")
-    assert not session_store._sessions_path().is_file()
+    SessionFile.of().save("http://127.0.0.1:8421", "token-a")
+    SessionFile.of().delete("http://127.0.0.1:8421")
+    assert not SessionFile.of().path.is_file()

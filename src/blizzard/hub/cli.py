@@ -276,13 +276,15 @@ def login(hub_url: str | None, paste: bool, no_browser: bool) -> None:
     listener; ``--no-browser`` still runs the loopback flow, printing the URL."""
     cli = CliContext.of(hub_url)
     try:
-        if paste:
-            token = cli_login.paste_code_login(cli.hub_url, prompt_for_code=lambda: click.prompt("Paste the code"))
-        else:
-            token = cli_login.loopback_login(cli.hub_url, open_browser=not no_browser)
+        flow = (
+            cli_login.Login.paste_code(cli.hub_url, prompt_for_code=lambda: click.prompt("Paste the code"))
+            if paste
+            else cli_login.Login.loopback(cli.hub_url, open_browser=not no_browser)
+        )
+        token = flow.token()
     except cli_login.LoginError as exc:
         raise click.ClickException(f"login failed: {exc}") from exc
-    session_store.save_session(cli.hub_url, token)
+    session_store.SessionFile.of().save(cli.hub_url, token)
     click.echo(f"logged in to {cli.hub_url}")
 
 
@@ -296,7 +298,7 @@ def logout(hub_url: str | None) -> None:
     cli = CliContext.of(hub_url)
     with contextlib.suppress(click.ClickException):
         cli.send("post", "/api/auth/logout")
-    session_store.delete_session(cli.hub_url)
+    session_store.SessionFile.of().delete(cli.hub_url)
     click.echo(f"logged out of {cli.hub_url}")
 
 

@@ -161,5 +161,5 @@ class CliContext:
     def _headers(self) -> dict[str, str]:
         """The ``Authorization: Bearer`` header for this hub (issue #96) — empty when the
         local session store holds none, so every verb keeps working with no login."""
-        token = session_store.load_session(self.hub_url)
+        token = session_store.SessionFile.of().load(self.hub_url)
         return {"Authorization": f"Bearer {token}"} if token else {}

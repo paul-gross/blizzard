@@ -1,8 +1,7 @@
 """``blizzard.hub.cli_login`` — the loopback listener + paste-code mechanics (#96).
 
-No real hub: ``webbrowser.open``/``httpx.post`` are stubbed. The loopback case drives a
-real HTTP GET at the ephemeral port ``loopback_login`` binds, proving the listener
-itself, not just the seam around it.
+No real hub: ``webbrowser.open``/``httpx.post`` are stubbed.
+The loopback case drives a real HTTP GET at the ephemeral port ``Loopback`` binds, proving the listener itself, not just the seam around it.
 """
 
 from __future__ import annotations
@@ -58,7 +57,7 @@ def test_loopback_login_completes_and_exchanges(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(cli_login.webbrowser, "open", fake_open)
     monkeypatch.setattr(cli_login.httpx, "post", fake_post)
 
-    token = cli_login.loopback_login("http://hub.example")
+    token = cli_login.Login.loopback("http://hub.example").token()
 
     assert token == "the-session-token"
     assert captured_exchange["code"] == "the-code"
@@ -76,7 +75,7 @@ def test_loopback_login_rejects_a_state_mismatch(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(cli_login.webbrowser, "open", fake_open)
 
     with pytest.raises(cli_login.LoginError):
-        cli_login.loopback_login("http://hub.example")
+        cli_login.Login.loopback("http://hub.example").token()
 
 
 def test_loopback_login_surfaces_a_provider_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -88,14 +87,14 @@ def test_loopback_login_surfaces_a_provider_error(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(cli_login.webbrowser, "open", fake_open)
 
     with pytest.raises(cli_login.LoginError, match="access_denied"):
-        cli_login.loopback_login("http://hub.example")
+        cli_login.Login.loopback("http://hub.example").token()
 
 
 def test_loopback_login_times_out_when_no_browser_shows_up(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli_login.webbrowser, "open", lambda url: True)
 
     with pytest.raises(cli_login.LoginError, match="timed out"):
-        cli_login.loopback_login("http://hub.example", timeout=0.2)
+        cli_login.Login.loopback("http://hub.example", timeout=0.2).token()
 
 
 def test_loopback_login_rejects_the_exchange(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -111,7 +110,7 @@ def test_loopback_login_rejects_the_exchange(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(cli_login.httpx, "post", fake_post)
 
     with pytest.raises(cli_login.LoginError, match="rejected the login exchange"):
-        cli_login.loopback_login("http://hub.example")
+        cli_login.Login.loopback("http://hub.example").token()
 
 
 def test_paste_code_login_exchanges_the_pasted_code(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -123,7 +122,7 @@ def test_paste_code_login_exchanges_the_pasted_code(monkeypatch: pytest.MonkeyPa
 
     monkeypatch.setattr(cli_login.httpx, "post", fake_post)
 
-    token = cli_login.paste_code_login("http://hub.example", prompt_for_code=lambda: "pasted-code")
+    token = cli_login.Login.paste_code("http://hub.example", prompt_for_code=lambda: "pasted-code").token()
 
     assert token == "the-session-token"
     assert captured_exchange["code"] == "pasted-code"

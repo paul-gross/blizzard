@@ -1,14 +1,13 @@
-"""``blizzard hub login``'s local session-token store (issue #96).
-
-CLI-client state, not hub daemon state: the session bearer lands in one
-``sessions.json`` under the user config dir, keyed by hub base URL (more than one hub
-may be held at once), owner-only (``0600``; parent dir ``0700``)."""
+"""``blizzard hub login``'s local session-token store (issue #96) — CLI-client state, not
+hub daemon state: session bearers keyed by hub base URL under the user config dir,
+owner-only (``0600``; parent dir ``0700``)."""
 
 from __future__ import annotations
 
 import json
 import os
 import stat
+from dataclasses import dataclass
 from pathlib import Path
 
 import platformdirs
@@ -16,49 +15,45 @@ import platformdirs
 _APP_NAME = "blizzard"
 
 
-def _sessions_path() -> Path:
-    return Path(platformdirs.user_config_dir(_APP_NAME)) / "sessions.json"
+@dataclass(frozen=True)
+class SessionFile:
+    """The CLI's ``sessions.json`` — one session bearer per hub, so more than one may be held at once."""
 
+    path: Path
 
-def _load_all(path: Path) -> dict[str, str]:
-    if not path.is_file():
-        return {}
-    try:
-        data = json.loads(path.read_text())
-    except (OSError, ValueError):
-        return {}
-    return data if isinstance(data, dict) else {}
+    @classmethod
+    def of(cls) -> SessionFile:
+        return cls(Path(platformdirs.user_config_dir(_APP_NAME)) / "sessions.json")
 
+    def load(self, hub_url: str) -> str | None:
+        return self._all().get(hub_url)
 
-def _write_all(path: Path, sessions: dict[str, str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    os.chmod(path.parent, stat.S_IRWXU)
-    path.write_text(json.dumps(sessions))
-    os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+    def save(self, hub_url: str, token: str) -> None:
+        sessions = self._all()
+        sessions[hub_url] = token
+        self._write(sessions)
 
+    def delete(self, hub_url: str) -> None:
+        sessions = self._all()
+        if hub_url not in sessions:
+            return
+        del sessions[hub_url]
+        if sessions:
+            self._write(sessions)
+        else:
+            self.path.unlink(missing_ok=True)
 
-def load_session(hub_url: str) -> str | None:
-    """The stored session token for ``hub_url``, or ``None`` when none is stored."""
-    return _load_all(_sessions_path()).get(hub_url)
+    def _all(self) -> dict[str, str]:
+        if not self.path.is_file():
+            return {}
+        try:
+            data = json.loads(self.path.read_text())
+        except (OSError, ValueError):
+            return {}
+        return data if isinstance(data, dict) else {}
 
-
-def save_session(hub_url: str, token: str) -> None:
-    """Persist ``token`` for ``hub_url`` — owner-only permissions on both the file
-    (``0600``) and its parent directory (``0700``)."""
-    path = _sessions_path()
-    sessions = _load_all(path)
-    sessions[hub_url] = token
-    _write_all(path, sessions)
-
-
-def delete_session(hub_url: str) -> None:
-    """Remove the stored session for ``hub_url``, if any — a no-op when absent."""
-    path = _sessions_path()
-    sessions = _load_all(path)
-    if hub_url not in sessions:
-        return
-    del sessions[hub_url]
-    if sessions:
-        _write_all(path, sessions)
-    else:
-        path.unlink(missing_ok=True)
+    def _write(self, sessions: dict[str, str]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        os.chmod(self.path.parent, stat.S_IRWXU)
+        self.path.write_text(json.dumps(sessions))
+        os.chmod(self.path, stat.S_IRUSR | stat.S_IWUSR)
