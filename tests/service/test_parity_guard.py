@@ -28,6 +28,7 @@ _IHUBCLIENT_ENDPOINTS: dict[str, tuple[str, str]] = {
     "submit_completion": ("POST", "/api/fleet/chunks/{chunk_id}/completions"),
     "submit_decision": ("POST", "/api/fleet/chunks/{chunk_id}/decisions"),
     "push_facts": ("POST", "/api/fleet/events"),
+    "push_transcripts": ("POST", "/api/fleet/transcripts"),
     "get_envelope": ("GET", "/api/fleet/chunks/{chunk_id}/envelope"),
     "get_chunk": ("GET", "/api/fleet/chunks/{chunk_id}"),
     "hub_advance": ("POST", "/api/fleet/chunks/{chunk_id}/hub-advance"),

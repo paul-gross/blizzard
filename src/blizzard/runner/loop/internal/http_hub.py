@@ -27,6 +27,7 @@ from blizzard.wire.route import (
     RouteTokenRekeyResponse,
 )
 from blizzard.wire.runner import RunnerRegistrationRequest, RunnerView
+from blizzard.wire.transcript_outbound import TranscriptFactAck, TranscriptFactBatch
 
 _log = get_logger("blizzard.runner.hub")
 
@@ -72,6 +73,10 @@ class HttpHubClient:
     def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:
         resp = self._post(f"{_FLEET_API}/events", batch.model_dump(mode="json"))
         return RunnerFactAck.model_validate(resp.json())
+
+    def push_transcripts(self, batch: TranscriptFactBatch) -> TranscriptFactAck:
+        resp = self._post(f"{_FLEET_API}/transcripts", batch.model_dump(mode="json"))
+        return TranscriptFactAck.model_validate(resp.json())
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
         resp = self._get(f"{_FLEET_API}/chunks/{chunk_id}/envelope", not_found_as=ChunkNotFoundError)

@@ -24,6 +24,7 @@ from blizzard.wire.route import (
     RouteClaimTerminalDenial,
     RouteTokenRekeyResponse,
 )
+from blizzard.wire.transcript_outbound import TranscriptFactAck, TranscriptFactBatch
 
 
 class HubClientError(RuntimeError):
@@ -79,6 +80,12 @@ class IHubClient(Protocol):
 
     def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:
         """``POST /api/fleet/events`` — store-and-forward fact push, seq-idempotent."""
+        ...
+
+    def push_transcripts(self, batch: TranscriptFactBatch) -> TranscriptFactAck:
+        """``POST /api/fleet/transcripts`` — the transcript lane's own store-and-forward
+        push, seq-idempotent against its own high-water mark (D3, issue #246). Structurally
+        independent of :meth:`push_facts`: a wedged or slow transcript flush never blocks it."""
         ...
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:

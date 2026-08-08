@@ -48,6 +48,7 @@ from blizzard.wire.graph import ProducesEntry
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry, QueuePeekResponse
 from blizzard.wire.route import RouteClaim, RouteClaimResponse, RouteTokenRekeyResponse
+from blizzard.wire.transcript_outbound import TranscriptFact, TranscriptFactAck, TranscriptFactBatch
 
 
 def make_store(tmp_path_url: str) -> SqlAlchemyRunnerStore:
@@ -86,6 +87,10 @@ class FakeHub:
         # untracked here; nothing in `src/` calls this route (push_facts carries it instead).
         self.pushed: list[RunnerFact] = []
         self.high_water: dict[str, int] = {}
+        # The transcript lane's own push log and mark — structurally separate from the
+        # fact lane's above (D3, issue #246).
+        self.transcripts_pushed: list[TranscriptFact] = []
+        self.transcript_high_water: dict[str, int] = {}
         self.questions: dict[str, QuestionView] = {}
         self.delivered: list[tuple[str, QuestionView]] = []
         self.registered: list[tuple[str, str]] = []  # (runner_id, workspace_id)
@@ -137,6 +142,21 @@ class FakeHub:
             applied.append(fact.seq)
         self.high_water[batch.runner_id] = mark
         return RunnerFactAck(runner_id=batch.runner_id, high_water=mark, applied=applied, already_applied=already)
+
+    def push_transcripts(self, batch: TranscriptFactBatch) -> TranscriptFactAck:
+        if self.down:
+            raise HubClientError("fake hub is down")
+        mark = self.transcript_high_water.get(batch.runner_id, 0)
+        applied, already = [], []
+        for fact in sorted(batch.facts, key=lambda f: f.seq):
+            if fact.seq <= mark:
+                already.append(fact.seq)
+                continue
+            self.transcripts_pushed.append(fact)
+            mark = fact.seq
+            applied.append(fact.seq)
+        self.transcript_high_water[batch.runner_id] = mark
+        return TranscriptFactAck(runner_id=batch.runner_id, high_water=mark, applied=applied, already_applied=already)
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
         if chunk_id in self.not_found:

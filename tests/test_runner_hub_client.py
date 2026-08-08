@@ -13,6 +13,7 @@ from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.route import RouteClaim
+from blizzard.wire.transcript_outbound import TRANSCRIPT_DELTA, TranscriptFact, TranscriptFactBatch
 
 
 def _client(handler) -> HttpHubClient:  # type: ignore[no-untyped-def]
@@ -122,6 +123,22 @@ def test_submit_completion_returns_apply_response() -> None:
         "ch_1", CompletionSubmission(choice="pass", epoch=1, runner_id="r1", from_node_id="nd_build")
     )
     assert resp.outcome == "hub_node_taken"
+
+
+@pytest.mark.unit
+def test_push_transcripts_posts_to_its_own_route_not_events() -> None:
+    """The transcript lane posts to ``/transcripts``, never ``/events`` — D3's structural
+    separation, exercised at the wire (issue #246)."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/fleet/transcripts"
+        return httpx.Response(200, json={"runner_id": "r1", "high_water": 3, "applied": [3], "already_applied": []})
+
+    batch = TranscriptFactBatch(
+        runner_id="r1", facts=[TranscriptFact(seq=3, kind=TRANSCRIPT_DELTA, payload={"segment_id": "seg_1"})]
+    )
+    ack = _client(handler).push_transcripts(batch)
+    assert (ack.high_water, ack.applied) == (3, [3])
 
 
 @pytest.mark.unit
