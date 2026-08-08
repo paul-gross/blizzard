@@ -62,11 +62,15 @@ def _set_local_paused(*, paused: bool, by: str, directory: str, runner_url: str 
     if paused:
         click.echo(f"runner {view['runner_id']} is now locally paused — it starts no new workers")
         if view.get("hub_paused"):
-            click.echo("note: it is also paused at the hub — `blizzard hub resume` clears that one")
+            click.echo(
+                f"note: it is also paused at the hub — `blizzard hub runner resume {view['runner_id']}` clears that one"
+            )
         return
     click.echo(f"runner {view['runner_id']} is no longer locally paused")
     if view.get("hub_paused"):
-        click.echo("note: it stays paused at the hub — clear that with `blizzard hub resume`")
+        click.echo(
+            f"note: it stays paused at the hub — clear that with `blizzard hub runner resume {view['runner_id']}`"
+        )
 
 
 @click.group(invoke_without_command=True)
@@ -83,7 +87,10 @@ def init(directory: str) -> None:
     """Scaffold config + data dir + a migrated store under DIRECTORY. Idempotent.
 
     DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd."""
-    config = init_environment(Path(directory))
+    try:
+        config = init_environment(Path(directory))
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
     revision = migration_runner(config).current_revision()
     click.echo(f"runner runtime ready at {config.root} (store revision {revision})")
 
@@ -663,7 +670,7 @@ def start(directory: str, runner_url: str | None, by: str) -> None:
 
     The counterpart to ``blizzard runner pause``, and local in the same way. It clears only
     the local brake: a runner also paused at the hub stays paused until ``blizzard hub
-    resume <runner_id>`` clears that one too."""
+    runner resume <runner_id>`` clears that one too."""
     _set_local_paused(paused=False, by=by, directory=directory, runner_url=runner_url)
 
 

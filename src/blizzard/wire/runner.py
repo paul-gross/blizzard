@@ -73,7 +73,7 @@ class RunnerView(BaseModel):
     registered_at: str
     last_seen_at: str
     online: bool
-    hub_paused: bool  # the fleet paused it — `blizzard hub pause`, cleared by `hub resume`
+    hub_paused: bool  # the fleet paused it — `blizzard hub runner pause`, cleared by `hub runner resume`
     locally_paused: bool = False  # it paused itself — spawns nothing, `blizzard runner pause`/`start`
     # The local pause's own cause, populated only alongside a true `locally_paused`
     # (issue #61); `reason` is `None` for a manual pause.

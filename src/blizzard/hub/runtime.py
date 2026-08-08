@@ -9,9 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlalchemy.exc import OperationalError
+
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.migrations import MigrationRunner
-from blizzard.hub.config import CONFIG_FILENAME, HubConfig
+from blizzard.hub.config import CONFIG_FILENAME, ConfigError, HubConfig
 from blizzard.hub.store import MIGRATIONS_DIR, STORE_NAME
 
 MIGRATE_COMMAND = "blizzard hub migrate"
@@ -51,17 +53,23 @@ class Runtime:
         config whose db_url points outside the root is refused, not reconciled (issue #234).
         """
         root = self.root.resolve()
-        root.mkdir(parents=True, exist_ok=True)
+        try:
+            root.mkdir(parents=True, exist_ok=True)
 
-        config = HubConfig.scaffold(root)
-        config.data_dir.mkdir(parents=True, exist_ok=True)
-        if not config.config_path.exists():
-            config.config_path.write_text(config.to_toml())
-            _log.info("hub config scaffolded", path=str(config.config_path))
-        else:
-            config = self.loaded(root)
+            config = HubConfig.scaffold(root)
+            config.data_dir.mkdir(parents=True, exist_ok=True)
+            if not config.config_path.exists():
+                config.config_path.write_text(config.to_toml())
+                _log.info("hub config scaffolded", path=str(config.config_path))
+            else:
+                config = self.loaded(root)
+        except OSError as exc:
+            raise ConfigError(f"cannot write the hub runtime at {root}: {exc}") from exc
 
-        Migrations(config).runner.upgrade("head")
+        try:
+            Migrations(config).runner.upgrade("head")
+        except OperationalError as exc:
+            raise ConfigError(f"cannot open the hub store at {config.db_url}: {exc}") from exc
         _log.info("hub store migrated to head", root=str(root), db_url=config.db_url)
         return config
 

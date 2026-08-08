@@ -36,7 +36,7 @@ class PauseState:
     """The pause brake's two independent surfaces, plus their effective OR.
 
     Reported apart because they are cleared by different verbs
-    (``blizzard runner start`` vs. ``blizzard hub resume``)."""
+    (``blizzard runner start`` vs. ``blizzard hub runner resume``)."""
 
     local: bool
     hub: bool

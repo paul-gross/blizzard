@@ -18,7 +18,7 @@ import { injectLocalPauseMutation, injectRunnerStatusQuery } from './status.quer
  *
  * The toggle button flips only the **local** brake (`PATCH /api/runner`,
  * through the generated client — `bzh:generated-client`). The hub's own
- * brake (`hub_paused`) is out of scope here (`blizzard hub resume` clears
+ * brake (`hub_paused`) is out of scope here (`blizzard hub runner resume` clears
  * it, per the issue) and this control never implies it can touch it: when
  * `hub_paused` is set, a badge says so explicitly, regardless of what the
  * local toggle is doing — an operator whose local brake is off still sees
