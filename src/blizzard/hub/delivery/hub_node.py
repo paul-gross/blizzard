@@ -17,7 +17,7 @@ from blizzard.foundation.ids import ARTIFACT_PREFIX, TRANSITION_PREFIX, mint
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
-from blizzard.hub.delivery.repo_ref import parse_repo_ref
+from blizzard.hub.delivery.repo_ref import RepoRef
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.graph import (
@@ -155,7 +155,7 @@ class GitCommits:
         """How delivery addresses one repo: ``owner/name`` read from its origin (see
         :mod:`~blizzard.hub.delivery.repo_ref`), else the bare name for the script's
         configured-owner fallback to qualify."""
-        ref = parse_repo_ref(row.forge) if row.forge else None
+        ref = RepoRef.parse(row.forge) if row.forge else None
         return ref.qualified if ref else row.repo
 
 

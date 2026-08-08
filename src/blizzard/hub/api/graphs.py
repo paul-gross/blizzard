@@ -21,7 +21,7 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.graph import Graph, GraphDoc, GraphParseError, Mints, Node
 from blizzard.hub.domain.graph_authoring import GraphValidationError
-from blizzard.hub.graph_sync import GraphSyncStatus, reconcile_packaged_graphs
+from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
 from blizzard.wire.graph import (
     GraphChoiceView,
     GraphEdgeView,
@@ -141,7 +141,7 @@ def sync_graphs(services: Annotated[HubServices, Depends(get_services)]) -> Grap
     Idempotent, so it is safe to run unconditionally (issue #146). Registered above
     ``/graphs/{graph_id}`` so ``sync`` is not matched as a graph id. Always ``200``: a
     graph that fails to load is a ``failed`` report row, and ``ok`` carries the verdict."""
-    outcomes = reconcile_packaged_graphs(services.graph_mint, services.graphs)
+    outcomes = GraphReconciliation(services.graph_mint, services.graphs).outcomes()
     return GraphSyncResponse(
         ok=all(o.status is not GraphSyncStatus.FAILED for o in outcomes),
         entries=[

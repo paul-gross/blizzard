@@ -42,58 +42,61 @@ class GraphSyncOutcome:
     detail: str | None = None
 
 
-def reconcile_packaged_graphs(
-    mint_service: GraphMintService, graphs: IReadGraphRepository, *, paths: list[Path] | None = None
-) -> list[GraphSyncOutcome]:
-    """Reconcile every packaged graph against the store; mint only what changed.
+@dataclass(frozen=True)
+class GraphReconciliation:
+    """The packaged graph set reconciled against the store, one report row per graph."""
 
-    Idempotent: a second run against an unchanged packaged set mints nothing. ``paths``
-    overrides the packaged set, defaulting to
-    :attr:`~blizzard.hub.graphs.PackagedGraphs.paths`."""
-    return [_reconcile_one(mint_service, graphs, path) for path in (paths if paths is not None else PACKAGED.paths)]
+    mint_service: GraphMintService
+    graphs: IReadGraphRepository
+    #: Overrides the packaged set, defaulting to :attr:`~blizzard.hub.graphs.PackagedGraphs.paths`.
+    paths: list[Path] | None = None
 
+    def outcomes(self) -> list[GraphSyncOutcome]:
+        """Reconcile every packaged graph against the store; mint only what changed.
 
-def _reconcile_one(mint_service: GraphMintService, graphs: IReadGraphRepository, path: Path) -> GraphSyncOutcome:
-    """One packaged graph, with every failure mode folded into a report row.
+        Idempotent: a second run against an unchanged packaged set mints nothing."""
+        return [self._outcome(path) for path in (self.paths if self.paths is not None else PACKAGED.paths)]
 
-    The load and the compare are separate ``try`` blocks: a graph that cannot be loaded
-    has no authored name to report a validation failure under."""
-    try:
-        packaged = GraphFile(path)
-        doc = packaged.doc
-        definition_yaml = packaged.inlined_yaml
-    except (OSError, ValueError, yaml.YAMLError) as exc:
-        # ValueError covers GraphParseError (its base) and the loader's "not a mapping".
-        _log.warning("packaged graph failed to load", path=str(path), error=str(exc))
-        return GraphSyncOutcome(name=path.parent.name, status=GraphSyncStatus.FAILED, detail=str(exc))
+    def _outcome(self, path: Path) -> GraphSyncOutcome:
+        """One packaged graph, with every failure mode folded into a report row.
 
-    stored = graphs.newest_definition_yaml(doc.name)
-    try:
-        graph = mint_service.mint_if_changed(
-            doc, definition_yaml=definition_yaml, minted=_parse_stored(stored, doc.name)
-        )
-    except GraphValidationError as exc:
-        _log.warning("packaged graph failed validation", graph=doc.name, error=str(exc))
-        return GraphSyncOutcome(name=doc.name, status=GraphSyncStatus.FAILED, detail="; ".join(exc.result.errors))
+        The load and the compare are separate ``try`` blocks: a graph that cannot be loaded
+        has no authored name to report a validation failure under."""
+        try:
+            packaged = GraphFile(path)
+            doc = packaged.doc
+            definition_yaml = packaged.inlined_yaml
+        except (OSError, ValueError, yaml.YAMLError) as exc:
+            # ValueError covers GraphParseError (its base) and the loader's "not a mapping".
+            _log.warning("packaged graph failed to load", path=str(path), error=str(exc))
+            return GraphSyncOutcome(name=path.parent.name, status=GraphSyncStatus.FAILED, detail=str(exc))
 
-    if graph is None:
-        return GraphSyncOutcome(name=doc.name, status=GraphSyncStatus.UP_TO_DATE)
-    reason = "first of its name" if stored is None else "packaged definition differs from the newest mint"
-    _log.info("graph minted by reconciliation", graph=doc.name, graph_id=graph.graph_id, reason=reason)
-    return GraphSyncOutcome(name=doc.name, status=GraphSyncStatus.MINTED, graph_id=graph.graph_id, detail=reason)
+        stored = self.graphs.newest_definition_yaml(doc.name)
+        try:
+            graph = self.mint_service.mint_if_changed(
+                doc, definition_yaml=definition_yaml, minted=self._parsed(stored, doc.name)
+            )
+        except GraphValidationError as exc:
+            _log.warning("packaged graph failed validation", graph=doc.name, error=str(exc))
+            return GraphSyncOutcome(name=doc.name, status=GraphSyncStatus.FAILED, detail="; ".join(exc.result.errors))
 
+        if graph is None:
+            return GraphSyncOutcome(name=doc.name, status=GraphSyncStatus.UP_TO_DATE)
+        reason = "first of its name" if stored is None else "packaged definition differs from the newest mint"
+        _log.info("graph minted by reconciliation", graph=doc.name, graph_id=graph.graph_id, reason=reason)
+        return GraphSyncOutcome(name=doc.name, status=GraphSyncStatus.MINTED, graph_id=graph.graph_id, detail=reason)
 
-def _parse_stored(stored: str | None, name: str) -> GraphDoc | None:
-    """A stored definition re-parsed into an authoring doc, or ``None``.
+    def _parsed(self, stored: str | None, name: str) -> GraphDoc | None:
+        """A stored definition re-parsed into an authoring doc, or ``None``.
 
-    ``None`` means "nothing to compare against", which mints. It covers both the
-    never-minted name and the stored definition that no longer parses — that one stays in
-    the store, superseded rather than lost."""
-    if stored is None:
-        return None
-    try:
-        raw = yaml.safe_load(stored)
-        return GraphDoc.of(raw) if isinstance(raw, dict) else None
-    except (yaml.YAMLError, GraphParseError):
-        _log.warning("stored graph definition no longer parses; treating it as changed", graph=name)
-        return None
+        ``None`` means "nothing to compare against", which mints. It covers both the
+        never-minted name and the stored definition that no longer parses — that one stays in
+        the store, superseded rather than lost."""
+        if stored is None:
+            return None
+        try:
+            raw = yaml.safe_load(stored)
+            return GraphDoc.of(raw) if isinstance(raw, dict) else None
+        except (yaml.YAMLError, GraphParseError):
+            _log.warning("stored graph definition no longer parses; treating it as changed", graph=name)
+            return None

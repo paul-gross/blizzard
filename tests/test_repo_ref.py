@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.delivery.repo_ref import parse_repo_ref
+from blizzard.hub.delivery.repo_ref import RepoRef
 
 pytestmark = pytest.mark.unit
 
@@ -30,7 +30,7 @@ pytestmark = pytest.mark.unit
     ],
 )
 def test_parses_the_owner_and_name_an_origin_encodes(origin_url: str, host: str, owner: str, name: str) -> None:
-    ref = parse_repo_ref(origin_url)
+    ref = RepoRef.parse(origin_url)
 
     assert ref is not None
     assert (ref.host, ref.owner, ref.name) == (host, owner, name)
@@ -57,4 +57,4 @@ def test_returns_none_when_the_origin_names_no_owner(origin_url: str) -> None:
     """``None`` is a real answer, not a parse failure. Promoting a parent directory to an
     organization would invent a coordinate that resolves to nothing — strictly worse than
     deferring to the configured default."""
-    assert parse_repo_ref(origin_url) is None
+    assert RepoRef.parse(origin_url) is None

@@ -45,7 +45,7 @@ from blizzard.hub.domain.forge_status import AnnotationReconciler
 from blizzard.hub.domain.readiness import ReadinessService
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
-from blizzard.hub.work_sources.internal.factory import build_work_source_registry
+from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
@@ -169,7 +169,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
     owner = os.environ.get(ENV_FORGE_OWNER, DEFAULT_FORGE_OWNER)
-    work_source_registry = build_work_source_registry(config.work_sources)
+    work_source_registry = WorkSourceEntry.registry(config.work_sources)
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
 
     # The provider-login seam (issue #92) is built only under `oauth`: under `none`
@@ -196,25 +196,33 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
     if readiness.evaluate().ready:
-        _check_provider_name_immutability(config, services)
+        OrphanedProviders.of(config, services).check()
         Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
     return create_app(config, readiness=readiness, services=services)
 
 
-def _check_provider_name_immutability(config: HubConfig, services: HubServices) -> None:
-    """Fail boot with an actionable error when a stored identity names a provider
-    absent from ``[[auth.oauth.provider]]`` (issue #92) — a rename must not silently
-    orphan identities and re-mint duplicate users on the next login. Runs regardless of
-    ``auth.mode`` (an operator flipping back to ``none`` does not erase this guarantee)."""
-    configured = {provider.name for provider in config.auth.oauth_providers}
-    orphaned = services.identities.distinct_provider_names() - configured
-    if orphaned:
-        raise ConfigError(
-            "stored identities reference OAuth provider name(s) "
-            f"{sorted(orphaned)} absent from [[auth.oauth.provider]] — a provider name is "
-            "immutable once identities reference it; restore the entry (or its name) rather "
-            "than deleting/renaming it"
-        )
+@dataclass(frozen=True)
+class OrphanedProviders:
+    """Provider names stored identities reference that ``[[auth.oauth.provider]]`` no longer declares."""
+
+    names: frozenset[str]
+
+    @classmethod
+    def of(cls, config: HubConfig, services: HubServices) -> OrphanedProviders:
+        configured = {provider.name for provider in config.auth.oauth_providers}
+        return cls(frozenset(services.identities.distinct_provider_names() - configured))
+
+    def check(self) -> None:
+        """Fail boot with an actionable error (issue #92) — a rename must not silently orphan
+        identities and re-mint duplicate users on the next login. Checked regardless of
+        ``auth.mode``: an operator flipping back to ``none`` does not erase the guarantee."""
+        if self.names:
+            raise ConfigError(
+                "stored identities reference OAuth provider name(s) "
+                f"{sorted(self.names)} absent from [[auth.oauth.provider]] — a provider name is "
+                "immutable once identities reference it; restore the entry (or its name) rather "
+                "than deleting/renaming it"
+            )
 
 
 def create_app_for_export() -> FastAPI:

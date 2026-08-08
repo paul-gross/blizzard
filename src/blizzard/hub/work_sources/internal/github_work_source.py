@@ -8,6 +8,8 @@ and ``web_base`` and carrying its own credentialed client."""
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
+from typing import ClassVar
 
 import httpx
 
@@ -24,22 +26,32 @@ _log = get_logger("blizzard.hub.work_sources")
 _ISSUE_URL_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/:#]+)/(?P<repo>[^/:#]+)/issues/(?P<number>\d+)/?$")
 
 
-# Blizzard cyan, hex-without-hash as GitHub's label API spells colors.
-_LABEL_COLORS = {
-    WorkStatusMarker.INGESTED: "5cd1e5",
-    WorkStatusMarker.IN_PROGRESS: "2b6675",
-}
+@dataclass(frozen=True)
+class Label:
+    """One domain marker rendered as the GitHub label this adapter writes."""
 
+    marker: WorkStatusMarker
 
-def _label_name(marker: WorkStatusMarker) -> str:
-    """The rendered GitHub label for ``marker`` — ``blizzard:ingested`` /
-    ``blizzard:in-progress`` (the wire form dashes what the domain enum spells
-    with an underscore)."""
-    return f"blizzard:{marker.value.replace('_', '-')}"
+    #: Blizzard cyan, hex-without-hash as GitHub's label API spells colors.
+    COLORS: ClassVar[dict[WorkStatusMarker, str]] = {
+        WorkStatusMarker.INGESTED: "5cd1e5",
+        WorkStatusMarker.IN_PROGRESS: "2b6675",
+    }
 
+    @property
+    def name(self) -> str:
+        """``blizzard:ingested`` / ``blizzard:in-progress`` — the wire form dashes what
+        the domain enum spells with an underscore."""
+        return f"blizzard:{self.marker.value.replace('_', '-')}"
 
-def _other_marker(marker: WorkStatusMarker) -> WorkStatusMarker:
-    return WorkStatusMarker.IN_PROGRESS if marker is WorkStatusMarker.INGESTED else WorkStatusMarker.INGESTED
+    @property
+    def color(self) -> str:
+        return self.COLORS[self.marker]
+
+    @property
+    def excluded(self) -> Label:
+        other = WorkStatusMarker.IN_PROGRESS if self.marker is WorkStatusMarker.INGESTED else WorkStatusMarker.INGESTED
+        return Label(other)
 
 
 class GitHubWorkSource:
@@ -111,16 +123,14 @@ class GitHubWorkSource:
         if self._labels_bootstrapped:
             return
         for marker in WorkStatusMarker:
-            name = _label_name(marker)
+            label = Label(marker)
             try:
-                resp = self._client.post(
-                    f"/repos/{self._repo}/labels", json={"name": name, "color": _LABEL_COLORS[marker]}
-                )
+                resp = self._client.post(f"/repos/{self._repo}/labels", json={"name": label.name, "color": label.color})
                 if resp.status_code != 422:
                     resp.raise_for_status()
             except httpx.HTTPError as exc:
-                _log.error("label bootstrap failed", source=self._name, label=name, error=str(exc))
-                raise WorkAnnotateError(f"failed to bootstrap label {name!r} for {self._name}: {exc}") from exc
+                _log.error("label bootstrap failed", source=self._name, label=label.name, error=str(exc))
+                raise WorkAnnotateError(f"failed to bootstrap label {label.name!r} for {self._name}: {exc}") from exc
         self._labels_bootstrapped = True
 
     def set_status(self, pointer: WorkRef, marker: WorkStatusMarker) -> None:
@@ -128,9 +138,9 @@ class GitHubWorkSource:
         and idempotent, mirroring GitHub's own idempotent label add/remove."""
         self._ensure_labels_bootstrapped()
         try:
-            added = self._client.post(f"/repos/{self._repo}/issues/{pointer.ref}/labels", json=[_label_name(marker)])
+            added = self._client.post(f"/repos/{self._repo}/issues/{pointer.ref}/labels", json=[Label(marker).name])
             added.raise_for_status()
-            other = _label_name(_other_marker(marker))
+            other = Label(marker).excluded.name
             resp = self._client.delete(f"/repos/{self._repo}/issues/{pointer.ref}/labels/{other}")
             if resp.status_code != 404:
                 resp.raise_for_status()
@@ -144,7 +154,7 @@ class GitHubWorkSource:
         self._ensure_labels_bootstrapped()
         try:
             for marker in WorkStatusMarker:
-                resp = self._client.delete(f"/repos/{self._repo}/issues/{pointer.ref}/labels/{_label_name(marker)}")
+                resp = self._client.delete(f"/repos/{self._repo}/issues/{pointer.ref}/labels/{Label(marker).name}")
                 if resp.status_code != 404:
                     resp.raise_for_status()
         except httpx.HTTPError as exc:
@@ -162,7 +172,7 @@ class GitHubWorkSource:
             for marker in WorkStatusMarker:
                 url: str | None = f"/repos/{self._repo}/issues"
                 params: dict[str, str | int] | None = {
-                    "labels": _label_name(marker),
+                    "labels": Label(marker).name,
                     "state": "all",
                     "per_page": 100,
                 }

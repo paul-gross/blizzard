@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from blizzard.hub.graph_sync import GraphSyncStatus, reconcile_packaged_graphs
+from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
 from blizzard.hub.graphs import PACKAGED
 from tests.support import HubHarness, build_hub
 
@@ -49,7 +49,7 @@ def _packaged(tmp_path: Path, name: str, *, prompt: str = "do the work", body: s
 
 
 def _sync(hub: HubHarness, paths: list[Path]):  # type: ignore[no-untyped-def]
-    return reconcile_packaged_graphs(hub.services.graph_mint, hub.services.graphs, paths=paths)
+    return GraphReconciliation(hub.services.graph_mint, hub.services.graphs, paths).outcomes()
 
 
 def _statuses(outcomes) -> list[tuple[str, str]]:  # type: ignore[no-untyped-def]
@@ -171,8 +171,8 @@ def test_the_shipped_packaged_set_reconciles_and_then_reports_up_to_date(tmp_pat
     paths = PACKAGED.paths
     assert paths, "the wheel ships at least one packaged graph"
 
-    first = reconcile_packaged_graphs(hub.services.graph_mint, hub.services.graphs, paths=paths)
-    second = reconcile_packaged_graphs(hub.services.graph_mint, hub.services.graphs, paths=paths)
+    first = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, paths).outcomes()
+    second = GraphReconciliation(hub.services.graph_mint, hub.services.graphs, paths).outcomes()
 
     assert {o.status for o in first} == {GraphSyncStatus.MINTED}
     assert {o.status for o in second} == {GraphSyncStatus.UP_TO_DATE}
