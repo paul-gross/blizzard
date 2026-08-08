@@ -53,7 +53,7 @@ class RunnerRegistration:
     #: ``redirect_uri`` is exact-matched against. Empty for a runner that has registered none.
     redirect_uris: tuple[str, ...] = ()
     #: The newest reported external-subscription-usage sample (issue #218), raw — staleness is applied
-    #: at derive time (:func:`derive_external_subscription_usage`), not here.
+    #: at derive time (:meth:`ExternalSubscriptionUsageView.of`), not here.
     external_usage_sampled_at: datetime | None = None
     #: The sample's windows, parsed off the stored JSON array — empty when there is no sample.
     external_usage_windows: tuple[ExternalSubscriptionUsageWindow, ...] = ()
@@ -65,6 +65,14 @@ class RunnerLiveness:
 
     registration: RunnerRegistration
     online: bool
+
+    @classmethod
+    def of(cls, registration: RunnerRegistration, *, now: datetime, threshold: timedelta) -> RunnerLiveness:
+        """Online iff the runner was seen within ``threshold`` of ``now``.
+
+        Both operands are coerced UTC-aware via :func:`~blizzard.foundation.store.utc.as_utc`
+        (idempotent) rather than depending on unnamed adapter behavior (``bzh:domain-core``)."""
+        return cls(registration, (as_utc(now) - as_utc(registration.last_seen_at)) <= threshold)
 
 
 @dataclass(frozen=True)
@@ -82,39 +90,24 @@ class ExternalSubscriptionUsageWindow:
 
 @dataclass(frozen=True)
 class ExternalSubscriptionUsageView:
-    """One runner's external-subscription-usage sample, already past the staleness
-    gate — what :func:`derive_external_subscription_usage` returns on a hit."""
+    """One runner's external-subscription-usage sample, already past the staleness gate."""
 
     sampled_at: datetime
     windows: tuple[ExternalSubscriptionUsageWindow, ...]
 
+    @classmethod
+    def of(cls, registration: RunnerRegistration, *, now: datetime) -> ExternalSubscriptionUsageView | None:
+        """The renderable view (issue #218), or ``None`` — never a fabricated zero one.
 
-def derive_online(last_seen_at: datetime, now: datetime, *, threshold: timedelta) -> bool:
-    """True iff the runner was seen within ``threshold`` of ``now``.
-
-    Both operands are coerced UTC-aware via :func:`~blizzard.foundation.store.utc.as_utc` (idempotent):
-    a public pure function whose inputs are not guaranteed to come from the store keeps its own
-    defensive coercion rather than depending on unnamed adapter behavior (``bzh:domain-core``)."""
-    return (as_utc(now) - as_utc(last_seen_at)) <= threshold
-
-
-def derive_external_subscription_usage(
-    sampled_at: datetime | None,
-    windows: tuple[ExternalSubscriptionUsageWindow, ...],
-    *,
-    now: datetime,
-) -> ExternalSubscriptionUsageView | None:
-    """The renderable external-subscription-usage view, or ``None`` (issue #218).
-
-    ``None`` for a runner that has never sampled, or whose newest sample is older than
-    :data:`EXTERNAL_USAGE_STALE_AFTER` relative to ``now`` — never a fabricated zero view. Both operands
-    coerced via :func:`~blizzard.foundation.store.utc.as_utc`, as :func:`derive_online` does."""
-    if sampled_at is None:
-        return None
-    sampled_at = as_utc(sampled_at)
-    if (as_utc(now) - sampled_at) > EXTERNAL_USAGE_STALE_AFTER:
-        return None
-    return ExternalSubscriptionUsageView(sampled_at=sampled_at, windows=windows)
+        ``None`` for a runner that has never sampled, or whose newest sample is older than
+        :data:`EXTERNAL_USAGE_STALE_AFTER` relative to ``now``."""
+        sampled_at = registration.external_usage_sampled_at
+        if sampled_at is None:
+            return None
+        sampled_at = as_utc(sampled_at)
+        if (as_utc(now) - sampled_at) > EXTERNAL_USAGE_STALE_AFTER:
+            return None
+        return cls(sampled_at=sampled_at, windows=registration.external_usage_windows)
 
 
 class IReadRunnerRegistry(Protocol):
@@ -274,11 +267,11 @@ class FleetService:
         registration = self._registry.get_runner(runner_id)
         if registration is None:
             return None
-        return RunnerLiveness(registration=registration, online=self._online(registration))
+        return self._liveness(registration)
 
     def list_with_liveness(self) -> list[RunnerLiveness]:
         """Every registered runner with its derived liveness — the ``GET /runners`` view."""
-        return [RunnerLiveness(registration=r, online=self._online(r)) for r in self._registry.list_runners()]
+        return [self._liveness(r) for r in self._registry.list_runners()]
 
-    def _online(self, registration: RunnerRegistration) -> bool:
-        return derive_online(registration.last_seen_at, self._clock.now(), threshold=self._stale_after)
+    def _liveness(self, registration: RunnerRegistration) -> RunnerLiveness:
+        return RunnerLiveness.of(registration, now=self._clock.now(), threshold=self._stale_after)

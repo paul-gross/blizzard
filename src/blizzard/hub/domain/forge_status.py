@@ -8,31 +8,11 @@ written. No hub-side state, so a mid-sweep crash self-heals (``tests/test_forge_
 from __future__ import annotations
 
 from blizzard.foundation.logging import get_logger
-from blizzard.hub.domain.work import ChunkStatus, IReadChunkRepository, WorkRef
+from blizzard.hub.domain.work import IReadChunkRepository, WorkRef
 from blizzard.hub.work_sources.annotator import WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _log = get_logger("blizzard.hub.forge_status")
-
-# Precedence mirrors `derive_chunk_status`'s first-match-wins buckets, restated here as a
-# lookup exhaustive over `ChunkStatus` (`test_derive_marker_is_exhaustive`).
-_MARKER_BY_STATUS: dict[ChunkStatus, WorkStatusMarker | None] = {
-    ChunkStatus.NOT_READY: WorkStatusMarker.INGESTED,
-    ChunkStatus.READY: WorkStatusMarker.INGESTED,
-    ChunkStatus.RUNNING: WorkStatusMarker.IN_PROGRESS,
-    ChunkStatus.PAUSED: WorkStatusMarker.IN_PROGRESS,
-    ChunkStatus.WAITING_ON_HUMAN: WorkStatusMarker.IN_PROGRESS,
-    ChunkStatus.NEEDS_HUMAN: WorkStatusMarker.IN_PROGRESS,
-    ChunkStatus.DELIVERING: WorkStatusMarker.IN_PROGRESS,
-    ChunkStatus.STOPPED: None,
-    ChunkStatus.DONE: None,
-}
-
-
-def derive_marker(status: ChunkStatus) -> WorkStatusMarker | None:
-    """The forge marker a live chunk's derived ``status`` projects, or ``None``
-    for a terminal status / no live holder at all."""
-    return _MARKER_BY_STATUS[status]
 
 
 class AnnotationReconciler:
@@ -64,7 +44,7 @@ class AnnotationReconciler:
             source_refs: set[WorkRef] = {ref for ref in set(desired) | set(actual) if ref.source == name}
             considered += len(source_refs)
             for ref in source_refs:
-                desired_marker = derive_marker(desired[ref]) if ref in desired else None
+                desired_marker = WorkStatusMarker.of(desired[ref]) if ref in desired else None
                 actual_markers = actual.get(ref, frozenset())
                 try:
                     if desired_marker is None:

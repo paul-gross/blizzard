@@ -69,13 +69,17 @@ class ChunkUsageTotalView(BaseModel):
     cost_usd: float
     cost_partial: bool
 
-
-def _zero_usage_total() -> ChunkUsageTotalView:
-    """The all-zero, non-partial total — the default for a construction site that never
-    sets ``cost`` itself."""
-    return ChunkUsageTotalView(
-        input_tokens=0, output_tokens=0, cache_read_tokens=0, cache_create_tokens=0, cost_usd=0.0, cost_partial=False
-    )
+    @classmethod
+    def zero(cls) -> ChunkUsageTotalView:
+        """The default for a construction site that never sets ``cost`` itself."""
+        return cls(
+            input_tokens=0,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_create_tokens=0,
+            cost_usd=0.0,
+            cost_partial=False,
+        )
 
 
 class ChunkUsageView(BaseModel):
@@ -115,7 +119,7 @@ class ChunkSummary(BaseModel):
     # chunk counts them all, so a per-runner sum does not undercount.
     environment_count: int = 0
     # The chunk's derived usage/cost total (issue #59) — see ChunkUsageTotalView.
-    cost: ChunkUsageTotalView = Field(default_factory=_zero_usage_total)
+    cost: ChunkUsageTotalView = Field(default_factory=ChunkUsageTotalView.zero)
     # The chunk's derived completion instant (issue #173) — null for every non-terminal status.
     completed_at: str | None = None
 
@@ -357,7 +361,7 @@ class ChunkDetail(BaseModel):
     awaiting_external_merge: bool = False
     open_prs: list[PrView] = []
     # The chunk's derived usage/cost total (issue #59) — see ChunkUsageTotalView.
-    cost: ChunkUsageTotalView = Field(default_factory=_zero_usage_total)
+    cost: ChunkUsageTotalView = Field(default_factory=ChunkUsageTotalView.zero)
     # Per-node-step usage history, oldest first.
     usage: list[ChunkUsageView] = []
     # A hub command node's in-progress poll (#66) — non-None iff the newest transition enters a hub

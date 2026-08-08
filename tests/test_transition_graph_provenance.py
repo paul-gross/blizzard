@@ -17,7 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.api.chunk_views import ChunkHistoryView
 from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.domain.graph import Executor, Graph, GraphDoc
-from blizzard.hub.domain.graph_authoring import reify_graph
+from blizzard.hub.domain.graph_authoring import Reification
 from blizzard.hub.domain.work import ChunkFacts, TransitionFact
 from blizzard.hub.store import schema as s
 from tests.support import build_hub
@@ -51,7 +51,7 @@ def _two_node_graph(entry: str, other: str, *, other_executor: str) -> Graph:
             },
         }
     )
-    return reify_graph(doc, FixedClock(_T0))
+    return Reification.of(doc, FixedClock(_T0)).graph
 
 
 # Unit — per-graph name resolution in the history view

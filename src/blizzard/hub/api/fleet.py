@@ -102,52 +102,59 @@ class FleetRequest:
         )
 
 
-def _resolve_intended_migration_target(services: HubServices, chunk: Chunk) -> Graph | None:
-    """The chunk's standing migration intent's target, resolved by id (issue #124) — ``None`` when no
-    intent is set, the target was never minted, or it has since been retired. Resolved at the edge so
-    the apply service stays a pure taker-of-objects (``bzh:domain-takes-objects``); a retired target
-    folds into ``None``, leaving the intent set (pinned by
-    ``tests/test_intended_migration_apply.py::test_forced_target_retired_at_consult_is_skipped``)."""
-    intent = chunk.intended_migration
-    if intent is None:
-        return None
-    target = services.graphs.get(intent.graph_id)
-    if target is None or services.graphs.is_retired(target.graph_id):
-        return None
-    return target
+@dataclass(frozen=True)
+class MigrationTargets:
+    """The three graphs one completion's apply may be moved onto — each resolved at the edge so the apply
+    service stays a pure taker-of-objects (``bzh:domain-takes-objects``), and each **total**: an
+    unresolvable or retired target folds to ``None``, leaving apply's failure path the authoritative one."""
 
+    services: HubServices
+    chunk: Chunk
+    graph: Graph
+    submission: CompletionSubmission
+    follow_latest_default: bool
 
-def _resolve_follow_latest_target(
-    services: HubServices, chunk: Chunk, graph: Graph, *, hub_default: bool
-) -> Graph | None:
-    """The newer same-name mint a follow-latest chunk drifts to, or ``None`` (issue #164) — the policy
-    is a no-op when the chunk carries an explicit ``intended_migration`` (which wins outright), when the
-    effective policy resolves ``false`` (the graph's own tri-state, else ``hub_default``), or when the
-    name resolves to nothing or to a mint not strictly newer than the chunk's own. Resolved at the edge
-    so the apply service stays a taker-of-objects (``bzh:domain-takes-objects``)."""
-    if chunk.intended_migration is not None:
-        return None
-    if not FollowLatest.of(services.graphs.follow_latest(graph.graph_id), hub_default=hub_default).enabled:
-        return None
-    newest = services.graphs.get_enabled_by_name(graph.name)
-    if newest is None or not Mint.of(newest).newer_than(Mint.of(graph)):
-        return None
-    return newest
+    @property
+    def cross_graph(self) -> Graph | None:
+        """What a cross-graph migration edge (issue #90) names, resolved by name — ``None`` when the edge
+        is not cross-graph, names no enabled graph, or is missing outright (issue #101). Pinned by
+        ``tests/test_migration_apply.py::test_an_unresolvable_cross_graph_target_escalates_to_needs_human``."""
+        from_node = self.graph.node_by_id(self.submission.from_node_id)
+        if from_node is None:
+            return None
+        edge = self.graph.edge_for_choice(from_node.node_id, self.submission.choice)
+        if edge is None or edge.target_graph is None:
+            return None
+        return self.services.graphs.get_enabled_by_name(edge.target_graph)
 
+    @property
+    def intended(self) -> Graph | None:
+        """The chunk's standing migration intent (issue #124), resolved by id — ``None`` when none is set,
+        the target was never minted, or it has since been retired, which leaves the intent set (pinned by
+        ``tests/test_intended_migration_apply.py::test_forced_target_retired_at_consult_is_skipped``)."""
+        intent = self.chunk.intended_migration
+        if intent is None:
+            return None
+        target = self.services.graphs.get(intent.graph_id)
+        if target is None or self.services.graphs.is_retired(target.graph_id):
+            return None
+        return target
 
-def _resolve_cross_graph_target(services: HubServices, graph: Graph, submission: CompletionSubmission) -> Graph | None:
-    """The target graph a cross-graph migration edge (issue #90) names, resolved by name — ``None`` when
-    the edge is not cross-graph or its ``graph:<name>`` names no enabled graph. Deliberately **total**:
-    a missing node/edge/choice, or a retired target (issue #101), returns ``None`` rather than raising,
-    so the apply failure path stays the one authoritative one. Pinned by
-    ``tests/test_migration_apply.py::test_an_unresolvable_cross_graph_target_escalates_to_needs_human``."""
-    from_node = graph.node_by_id(submission.from_node_id)
-    if from_node is None:
-        return None
-    edge = graph.edge_for_choice(from_node.node_id, submission.choice)
-    if edge is None or edge.target_graph is None:
-        return None
-    return services.graphs.get_enabled_by_name(edge.target_graph)
+    @property
+    def follow_latest(self) -> Graph | None:
+        """The newer same-name mint a follow-latest chunk drifts to (issue #164) — ``None`` when an explicit
+        :attr:`intended` wins outright, when the effective policy resolves ``false`` (the graph's own
+        tri-state, else the hub default), or when the name resolves to nothing or to no newer mint."""
+        if self.chunk.intended_migration is not None:
+            return None
+        graphs = self.services.graphs
+        policy = FollowLatest.of(graphs.follow_latest(self.graph.graph_id), hub_default=self.follow_latest_default)
+        if not policy.enabled:
+            return None
+        newest = graphs.get_enabled_by_name(self.graph.name)
+        if newest is None or not Mint.of(newest).newer_than(Mint.of(self.graph)):
+            return None
+        return newest
 
 
 # Fleet-side counterparts — delegate to the shared rendering, never duplicate it.
@@ -268,7 +275,7 @@ def hub_advance(
         return HubAdvanceResponse(
             chunk_id=chunk_id, status=derived, ran=False, detail="not parked at a hub command node"
         )
-    prev_status = facts.status().value
+    change = chunk_events.ChunkChanged.of(services, chunk_id, prev_status=facts.status().value)
     epoch = facts.latest_epoch() or 0
     result = services.hub_node.run(chunk, graph, node, epoch=epoch)
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
@@ -276,9 +283,7 @@ def hub_advance(
     # `key` names the transition this call recorded — absent when the poll deferred or wrote a
     # poll-attempt fact instead, since there is no fresh `transitions` row to key on (issue #213).
     advance_key = f"transitions:{result.transition_id}" if result is not None and result.transition_id else None
-    chunk_events.publish_chunk_changed(
-        services, chunk_id, cause="hub-advanced", prev_status=prev_status, key=advance_key
-    )
+    change.publish(cause="hub-advanced", key=advance_key)
     if result is None:
         pending = facts.hub_node_pending()
         next_poll_at = pending.polled_at + PollPolicy.of(node).interval if pending is not None else None
@@ -314,7 +319,7 @@ def claim_route(
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
-    prev_status = chunk_events.snapshot_chunk_status(services, chunk.chunk_id)
+    change = chunk_events.ChunkChanged.before(services, chunk.chunk_id)
     try:
         result = services.claim.claim(
             chunk,
@@ -333,15 +338,8 @@ def claim_route(
         conflict = RouteClaimConflict(chunk_id=claim.chunk_id, held_by_runner_id=exc.held_by_runner_id)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
     # Hardcoded literal, not a derivation — a fresh claim always lands the chunk at
-    # `running` (see `chunk_events.publish_chunk_changed`'s docstring).
-    chunk_events.publish_chunk_changed(
-        services,
-        chunk.chunk_id,
-        cause="claimed",
-        prev_status=prev_status,
-        status="running",
-        key=f"route_created:{result.route_id}",
-    )
+    # `running` (see `chunk_events.ChunkChanged.publish`'s docstring).
+    change.publish(cause="claimed", status="running", key=f"route_created:{result.route_id}")
     services.events.publish_queue_changed()  # the claim removed the chunk from the ready queue
     return RouteClaimResponse(
         chunk_id=result.route.chunk_id,
@@ -386,24 +384,22 @@ def submit_completion(
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
-    target_graph = _resolve_cross_graph_target(services, graph, submission)
+    targets = MigrationTargets(services, chunk, graph, submission, follow_latest_default=fleet.follow_latest)
     # Must precede apply() below — after apply() this always answers True, silencing the
     # publish_queue_changed() fresh-migration check further down.
     already_migrated = services.chunks.accepted_migration(
         chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
     )
-    intended_target_graph = _resolve_intended_migration_target(services, chunk)
-    follow_latest_graph = _resolve_follow_latest_target(services, chunk, graph, hub_default=fleet.follow_latest)
-    prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services, chunk_id)
     result = services.apply.apply(
         chunk,
         graph,
         submission,
         route_token_mode=fleet.route_token_mode,
         produces_mode=fleet.produces_mode,
-        target_graph=target_graph,
-        intended_target_graph=intended_target_graph,
-        follow_latest_graph=follow_latest_graph,
+        target_graph=targets.cross_graph,
+        intended_target_graph=targets.intended,
+        follow_latest_graph=targets.follow_latest,
     )
     response = result.response
     fresh_migration = response.outcome is ApplyOutcome.MIGRATED and not already_migrated
@@ -416,7 +412,7 @@ def submit_completion(
         key = f"transitions:{result.transition_id}"
     else:
         key = None
-    chunk_events.publish_chunk_changed(services, chunk_id, cause=cause, prev_status=prev_status, key=key)
+    change.publish(cause=cause, key=key)
     if fresh_migration:
         services.events.publish_queue_changed()  # a fresh migration re-queued the chunk under the target graph
     # A completion landing on a human-judged node opens a graph gate: surface it.
@@ -439,10 +435,10 @@ def submit_decision(
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
-    prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services, chunk_id)
     result = services.decisions.submit(chunk, graph, submission, route_token_mode=fleet.route_token_mode)
     key = f"decisions:{result.decision_id}" if result.decision_id is not None else None
-    chunk_events.publish_chunk_changed(services, chunk_id, cause="decision-submitted", prev_status=prev_status, key=key)
+    change.publish(cause="decision-submitted", key=key)
     # The runner-config gate parked the chunk on an open decision: surface it.
     chunks_api.OpenDecision(services, chunk_id).publish()
     return result.response
@@ -474,16 +470,14 @@ def report_escalation(
     fleet.assert_owns(report.runner_id)
     if services.chunks.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services, chunk_id)
     escalation_id = services.runner_facts.record_escalation(
         chunk_id,
         epoch=report.epoch,
         takeover_command=report.takeover_command,
         wrapped_takeover_command=report.wrapped_takeover_command,
     )
-    chunk_events.publish_chunk_changed(
-        services, chunk_id, cause="escalated", prev_status=prev_status, key=f"escalations:{escalation_id}"
-    )
+    change.publish(cause="escalated", key=f"escalations:{escalation_id}")
     return {"chunk_id": chunk_id}
 
 

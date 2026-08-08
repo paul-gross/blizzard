@@ -21,7 +21,7 @@ from blizzard.hub.domain.graph import (
     SessionDecl,
     SessionMode,
 )
-from blizzard.hub.domain.graph_authoring import reify_graph
+from blizzard.hub.domain.graph_authoring import Reification
 from blizzard.hub.domain.graph_validation import Validator
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.schema import metadata
@@ -246,7 +246,7 @@ def test_a_declared_but_unreferenced_session_is_legal() -> None:
 
 def test_reify_carries_the_declarations_in_authored_order() -> None:
     doc = GraphDoc.of(_doc(sessions={"planning": {"effort": "high"}, "code": {}}))
-    graph = reify_graph(doc, FixedClock(datetime(2026, 1, 1, tzinfo=UTC)))
+    graph = Reification.of(doc, FixedClock(datetime(2026, 1, 1, tzinfo=UTC))).graph
     assert [s.name for s in graph.sessions] == ["planning", "code"]
     assert graph.session_by_name("planning") == SessionDecl(name="planning", effort="high")
     assert graph.session_by_name("nope") is None
@@ -254,7 +254,7 @@ def test_reify_carries_the_declarations_in_authored_order() -> None:
 
 def test_reify_carries_the_node_session_reference() -> None:
     doc = GraphDoc.of(_doc(sessions={"code": {}}, build_session="fresh:code"))
-    graph = reify_graph(doc, FixedClock(datetime(2026, 1, 1, tzinfo=UTC)))
+    graph = Reification.of(doc, FixedClock(datetime(2026, 1, 1, tzinfo=UTC))).graph
     build = graph.node_by_name("build")
     assert build is not None
     assert (build.session, build.session_source) == (SessionMode.FRESH, "code")
@@ -281,7 +281,7 @@ def test_mint_and_load_round_trip_the_declarations_identically() -> None:
         )
     )
     at = datetime(2026, 1, 1, tzinfo=UTC)
-    graph = reify_graph(doc, FixedClock(at))
+    graph = Reification.of(doc, FixedClock(at)).graph
     store = _store()
     store.mint(graph, definition_yaml=json.dumps(_doc()), at=at)
 
@@ -293,7 +293,7 @@ def test_mint_and_load_round_trip_the_declarations_identically() -> None:
 
 def test_a_graph_declaring_no_sessions_round_trips_to_an_empty_list() -> None:
     at = datetime(2026, 1, 1, tzinfo=UTC)
-    graph = reify_graph(GraphDoc.of(_doc()), FixedClock(at))
+    graph = Reification.of(GraphDoc.of(_doc()), FixedClock(at)).graph
     store = _store()
     store.mint(graph, definition_yaml="", at=at)
 

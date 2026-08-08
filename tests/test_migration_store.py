@@ -17,7 +17,7 @@ from sqlalchemy import select
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.graph import Executor, GraphDoc
-from blizzard.hub.domain.graph_authoring import reify_graph
+from blizzard.hub.domain.graph_authoring import Reification
 from blizzard.hub.domain.work import (
     ChunkFacts,
     ChunkStatus,
@@ -144,7 +144,7 @@ def test_a_null_landing_node_falls_through_to_none_the_schema_entry_allowance() 
 
 @unit
 def test_landing_node_is_name_match_else_entry() -> None:
-    graph = reify_graph(
+    graph = Reification.of(
         GraphDoc.of(
             {
                 "name": "triage",
@@ -162,7 +162,7 @@ def test_landing_node_is_name_match_else_entry() -> None:
             }
         ),
         FixedClock(_T0),
-    )
+    ).graph
     build = graph.node_by_name("build")
     assert build is not None
     assert MigrationFact.landing_node(graph, "build") == build.node_id  # name match

@@ -16,7 +16,7 @@ from blizzard.hub.domain.graph import (
     JudgedBy,
     ProducesSpec,
 )
-from blizzard.hub.domain.graph_authoring import reify_graph
+from blizzard.hub.domain.graph_authoring import Reification
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.graphs.scripts import land_pr_ci
 
@@ -35,7 +35,7 @@ def _bas_dwf_doc() -> GraphDoc:
 
 def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
     doc = _bas_dwf_doc()
-    graph = reify_graph(doc, _clock())
+    graph = Reification.of(doc, _clock()).graph
 
     assert graph.graph_id.startswith("gr_")
     build = graph.node_by_name("build")
@@ -68,7 +68,7 @@ def test_adv_dwf_retrospective_carries_the_delivery_incomplete_choice() -> None:
     choice routing to `resolve`, alongside `recorded -> done`; loading the packaged doc
     also proves the `resolve.from-retrospective.md` addendum resolves."""
     doc = PACKAGED.named("advanced-development-workflow").doc
-    graph = reify_graph(doc, _clock())
+    graph = Reification.of(doc, _clock()).graph
     retrospective = graph.node_by_name("retrospective")
     assert retrospective is not None
     assert {c.name for c in retrospective.choices} == {"recorded", "delivery-incomplete"}
@@ -85,7 +85,7 @@ def test_adv_dwf_deliver_authors_the_conflict_edge() -> None:
     `resolve`, alongside `landed`/`failure`, so a `dirty` PR bounces through the normal
     retry/bounce/escalation ladder."""
     doc = PACKAGED.named("advanced-development-workflow").doc
-    graph = reify_graph(doc, _clock())
+    graph = Reification.of(doc, _clock()).graph
     deliver = graph.node_by_name("deliver")
     assert deliver is not None
     assert {c.name for c in deliver.choices} == {"landed", "conflict", "failure"}
@@ -104,7 +104,7 @@ def test_every_land_pr_ci_outcome_is_authored_on_the_shipped_deliver_node() -> N
     authors a choice for. Reads the script's own outcome constants rather than
     hardcoding them; `_PENDING` is machinery-reserved and excluded."""
     doc = PACKAGED.named("advanced-development-workflow").doc
-    graph = reify_graph(doc, _clock())
+    graph = Reification.of(doc, _clock()).graph
     deliver = graph.node_by_name("deliver")
     assert deliver is not None
     authored = {c.name for c in deliver.choices}
@@ -116,7 +116,7 @@ def test_every_land_ff_outcome_is_authored_on_the_shipped_bas_dwf_deliver_node()
     """Sibling guard for `land_ff` (basic-development-workflow), cheap alongside the
     adv-dwf one above. `land_ff` prints only `landed`/`conflict` — no named constants to
     import here."""
-    graph = reify_graph(_bas_dwf_doc(), _clock())
+    graph = Reification.of(_bas_dwf_doc(), _clock()).graph
     deliver = graph.node_by_name("deliver")
     assert deliver is not None
     authored = {c.name for c in deliver.choices}
@@ -131,7 +131,7 @@ def test_reify_carries_an_authored_bounce_cap() -> None:
             "nodes": {"deliver": {"executor": "hub", "mode": "merge-to-main", "bounce_cap": 3}},
         }
     )
-    graph = reify_graph(doc, _clock())
+    graph = Reification.of(doc, _clock()).graph
     deliver = graph.node_by_name("deliver")
     assert deliver is not None
     assert deliver.bounce_cap == 3
@@ -154,7 +154,7 @@ def test_reify_carries_authored_poll_interval_and_timeout() -> None:
             },
         }
     )
-    graph = reify_graph(doc, _clock())
+    graph = Reification.of(doc, _clock()).graph
     merge = graph.node_by_name("merge")
     assert merge is not None
     assert merge.poll_interval_seconds == 15
@@ -177,7 +177,7 @@ def test_reify_defaults_poll_interval_and_timeout_to_none() -> None:
             },
         }
     )
-    graph = reify_graph(doc, _clock())
+    graph = Reification.of(doc, _clock()).graph
     merge = graph.node_by_name("merge")
     assert merge is not None
     assert merge.poll_interval_seconds is None
@@ -186,7 +186,7 @@ def test_reify_defaults_poll_interval_and_timeout_to_none() -> None:
 
 def test_reify_preserves_judgement_prompt_and_addendum() -> None:
     doc = _bas_dwf_doc()
-    graph = reify_graph(doc, _clock())
+    graph = Reification.of(doc, _clock()).graph
     build = graph.node_by_name("build")
     assert build is not None
     assert build.judgement_prompt  # inlined by the loader, carried onto the node
@@ -195,7 +195,7 @@ def test_reify_preserves_judgement_prompt_and_addendum() -> None:
 
 
 def test_edge_for_choice_resolves_by_name() -> None:
-    graph = reify_graph(_bas_dwf_doc(), _clock())
+    graph = Reification.of(_bas_dwf_doc(), _clock()).graph
     build = graph.node_by_name("build")
     assert build is not None
     edge = graph.edge_for_choice(build.node_id, "pass")
@@ -238,7 +238,7 @@ def test_parse_normalizes_a_mapping_produces_entry_with_no_kind_to_asset() -> No
 
 def test_parse_produces_both_forms_together_round_trip_through_reify() -> None:
     doc = GraphDoc.of(_produces_doc(["review-findings", {"name": "commit", "kind": "git_commit"}]))
-    graph = reify_graph(doc, _clock())
+    graph = Reification.of(doc, _clock()).graph
     build = graph.node_by_name("build")
     assert build is not None
     assert build.produces == [
@@ -277,7 +277,7 @@ def test_reify_carries_checks_gating_fields() -> None:
             },
         }
     )
-    graph = reify_graph(doc, _clock())
+    graph = Reification.of(doc, _clock()).graph
     build = graph.node_by_name("build")
     assert build is not None
     assert build.checks == ["mise run lint", "mise run test"]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.hub.api import chunk_events
+from blizzard.hub.api.chunk_events import ChunkChanged
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.facts import FactIngestResult
 from blizzard.hub.events.broker import ChunkChangeCause
@@ -39,18 +39,18 @@ class IngestBroadcast:
 
     services: HubServices
     batch: RunnerFactBatch
-    prev_statuses: dict[str, str | None]
+    changes: dict[str, ChunkChanged]
 
     @classmethod
     def before_ingest(cls, services: HubServices, batch: RunnerFactBatch) -> IngestBroadcast:
         """One pre-mutation snapshot per distinct chunk, reused across the batch — this is the
         hot path (issue #212)."""
-        prev_statuses: dict[str, str | None] = {}
+        changes: dict[str, ChunkChanged] = {}
         for fact in batch.facts:
             chunk_id = fact.payload.get("chunk_id")
-            if isinstance(chunk_id, str) and chunk_id not in prev_statuses:
-                prev_statuses[chunk_id] = chunk_events.snapshot_chunk_status(services, chunk_id)
-        return cls(services=services, batch=batch, prev_statuses=prev_statuses)
+            if isinstance(chunk_id, str) and chunk_id not in changes:
+                changes[chunk_id] = ChunkChanged.before(services, chunk_id)
+        return cls(services=services, batch=batch, changes=changes)
 
     def publish(self, result: FactIngestResult) -> None:
         applied = set(result.ack.applied)
@@ -101,13 +101,8 @@ class IngestBroadcast:
         question_id = fact.payload.get("question_id")
         if fact.kind == QUESTION_ASKED and isinstance(question_id, str):
             self.services.events.publish_question_asked(chunk_id, question_id, key=key)
-        chunk_events.publish_chunk_changed(
-            self.services,
-            chunk_id,
-            cause=_CAUSE_BY_FACT_KIND.get(fact.kind),
-            prev_status=self.prev_statuses.get(chunk_id),
-            key=key,
-        )
+        change = self.changes.get(chunk_id) or ChunkChanged.of(self.services, chunk_id, prev_status=None)
+        change.publish(cause=_CAUSE_BY_FACT_KIND.get(fact.kind), key=key)
 
     def _dedupe_key(self, fact: RunnerFact, row_id: int | None, chunk_id: str) -> str | None:
         """The stream key a lost-ack replay of this fact dedupes against."""

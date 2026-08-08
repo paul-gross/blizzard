@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.graph import ChoiceTarget, GraphDoc
-from blizzard.hub.domain.graph_authoring import reify_graph
+from blizzard.hub.domain.graph_authoring import Reification
 from blizzard.hub.domain.graph_validation import Validator
 from tests.support import build_hub
 
@@ -74,7 +74,7 @@ def test_cross_graph_target_parses_reifies_and_validates() -> None:
 
     assert Validator.of(doc).result.ok  # no same-graph-node error for a well-formed cross-graph target
 
-    graph = reify_graph(doc, FixedClock(_T0))
+    graph = Reification.of(doc, FixedClock(_T0)).graph
     edge = next(e for e in graph.edges if e.to_node_name == "graph:default-delivery")
     assert edge.target_graph == "default-delivery"
     # The target is recoverable from the raw persisted ``to_node_name`` alone.
@@ -104,7 +104,7 @@ def test_per_choice_model_override_parses_and_reifies() -> None:
     pass_choice = next(c for c in build.judgement.choices if c.name == "pass")
     assert pass_choice.model == "claude-sonnet-5"
 
-    graph = reify_graph(doc, FixedClock(_T0))
+    graph = Reification.of(doc, FixedClock(_T0)).graph
     edge = next(e for e in graph.edges if e.target_graph == "default-delivery")
     assert edge.model == "claude-sonnet-5"
 

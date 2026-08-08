@@ -1,6 +1,6 @@
 """The forge-status projection (issue #179) — derivation and the reconciler.
 
-``derive_marker`` is a pure, exhaustive function (unit tier); ``live_work_refs()`` and
+``WorkStatusMarker.of`` is a pure, exhaustive derivation (unit tier); ``live_work_refs()`` and
 ``AnnotationReconciler.sweep()`` are exercised against a real, migrated
 :class:`ChunkStore` with a :class:`FakeAnnotator` standing in for the forge (component
 tier), not the HTTP shaping ``tests/test_work_source.py`` already covers."""
@@ -11,26 +11,26 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.forge_status import AnnotationReconciler, derive_marker
+from blizzard.hub.domain.forge_status import AnnotationReconciler
 from blizzard.hub.domain.work import ChunkStatus, WorkRef
 from blizzard.hub.work_sources.annotator import WorkStatusMarker
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from tests.support import FakeAnnotator, FakeWorkSource, build_hub, ingest
 
-# --- derive_marker — pure, exhaustive over ChunkStatus ---
+# --- WorkStatusMarker.of — pure, exhaustive over ChunkStatus ---
 
 pytestmark = pytest.mark.unit
 
 
-def test_derive_marker_is_exhaustive_over_chunk_status() -> None:
+def test_marker_of_is_exhaustive_over_chunk_status() -> None:
     """Fails the moment a new `ChunkStatus` member is added and left unmapped."""
     for status in ChunkStatus:
-        derive_marker(status)
+        WorkStatusMarker.of(status)
 
 
 @pytest.mark.parametrize("status", [ChunkStatus.NOT_READY, ChunkStatus.READY])
-def test_derive_marker_maps_unclaimed_statuses_to_ingested(status: ChunkStatus) -> None:
-    assert derive_marker(status) is WorkStatusMarker.INGESTED
+def test_marker_of_maps_unclaimed_statuses_to_ingested(status: ChunkStatus) -> None:
+    assert WorkStatusMarker.of(status) is WorkStatusMarker.INGESTED
 
 
 @pytest.mark.parametrize(
@@ -43,13 +43,13 @@ def test_derive_marker_maps_unclaimed_statuses_to_ingested(status: ChunkStatus) 
         ChunkStatus.DELIVERING,
     ],
 )
-def test_derive_marker_maps_live_statuses_to_in_progress(status: ChunkStatus) -> None:
-    assert derive_marker(status) is WorkStatusMarker.IN_PROGRESS
+def test_marker_of_maps_live_statuses_to_in_progress(status: ChunkStatus) -> None:
+    assert WorkStatusMarker.of(status) is WorkStatusMarker.IN_PROGRESS
 
 
 @pytest.mark.parametrize("status", [ChunkStatus.STOPPED, ChunkStatus.DONE])
-def test_derive_marker_maps_terminal_statuses_to_none(status: ChunkStatus) -> None:
-    assert derive_marker(status) is None
+def test_marker_of_maps_terminal_statuses_to_none(status: ChunkStatus) -> None:
+    assert WorkStatusMarker.of(status) is None
 
 
 # --- IReadChunkRepository.live_work_refs() — real ChunkStore, real migrations ---

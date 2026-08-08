@@ -13,7 +13,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, mint
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
-from blizzard.hub.domain.graph import Graph
+from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.domain.route_auth import check_route_token
 from blizzard.hub.domain.work import (
     TERMINAL_STATUSES,
@@ -26,10 +26,6 @@ from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 
 
-def _failure(detail: str) -> DecisionSubmitResult:
-    return DecisionSubmitResult(response=ApplyResponse(outcome=ApplyOutcome.FAILURE, detail=detail))
-
-
 @dataclass(frozen=True)
 class DecisionSubmitResult:
     """:meth:`DecisionService.submit`'s own return — the wire :class:`ApplyResponse` plus
@@ -39,6 +35,10 @@ class DecisionSubmitResult:
 
     response: ApplyResponse
     decision_id: str | None = None
+
+    @classmethod
+    def failure(cls, detail: str) -> DecisionSubmitResult:
+        return cls(response=ApplyResponse(outcome=ApplyOutcome.FAILURE, detail=detail))
 
 
 @dataclass(frozen=True)
@@ -67,13 +67,13 @@ class DecisionService:
         """Runner-config gate: park the chunk on a decision instead of transitioning."""
         node = graph.node_by_id(submission.from_node_id)
         if node is None:
-            return _failure(f"no node {submission.from_node_id} in graph {graph.graph_id}")
+            return DecisionSubmitResult.failure(f"no node {submission.from_node_id} in graph {graph.graph_id}")
         if not node.choices:
-            return _failure(f"node {node.name} has no choices to gate")
+            return DecisionSubmitResult.failure(f"node {node.name} has no choices to gate")
 
         facts = self._chunks.load_facts(chunk.chunk_id)
         if facts is None:
-            return _failure(f"unknown chunk {chunk.chunk_id}")
+            return DecisionSubmitResult.failure(f"unknown chunk {chunk.chunk_id}")
 
         # Route-token authorization (issue #84b): ahead of the idempotent-replay probe and
         # the epoch fence, so a post-release zombie's replayed decision is rejected too.
@@ -86,7 +86,7 @@ class DecisionService:
             mode=route_token_mode,
         )
         if detail is not None:
-            return _failure(detail)
+            return DecisionSubmitResult.failure(detail)
 
         # Idempotent replay: a decision already open at this (node, epoch) — a
         # lost-ack re-submission — returns the parked outcome without a second row.
@@ -96,10 +96,10 @@ class DecisionService:
             )
 
         if facts.status() in TERMINAL_STATUSES:
-            return _failure("chunk is terminal")
+            return DecisionSubmitResult.failure("chunk is terminal")
         latest = facts.latest_epoch()
         if latest is not None and submission.epoch != latest:
-            return _failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
+            return DecisionSubmitResult.failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
 
         decision_id = mint(DECISION_PREFIX, self._clock)
         self._chunks.record_decision(
@@ -110,14 +110,29 @@ class DecisionService:
             epoch=submission.epoch,
             choices=[DecisionChoice(name=c.name, description=c.description) for c in node.choices],
             at=self._clock.now(),
-            artifacts=[
-                _artifact_row(chunk.chunk_id, node.node_id, node.name, submission.epoch, a, self._clock)
-                for a in submission.artifacts
-            ],
+            artifacts=[self._row(chunk, node, submission.epoch, a) for a in submission.artifacts],
         )
         return DecisionSubmitResult(
             response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`"),
             decision_id=decision_id,
+        )
+
+    def _row(self, chunk: Chunk, from_node: Node, epoch: int, artifact: SubmittedArtifact) -> ArtifactRow:
+        """Twin of :meth:`~blizzard.hub.domain.apply.ApplyService._row`; the shared owner would be
+        :class:`ArtifactRow`, which cannot import the wire type without a cycle."""
+        is_commit = artifact.kind is ArtifactKind.GIT_COMMIT
+        data = f"{artifact.branch_name}:{artifact.commit_hash}" if is_commit else (artifact.content or "")
+        return ArtifactRow(
+            kind=artifact.kind,
+            name=artifact.name,
+            data=data,
+            repo=artifact.repo if is_commit else None,
+            forge=artifact.forge if is_commit else None,
+            artifact_id=mint(ARTIFACT_PREFIX, self._clock),
+            chunk_id=chunk.chunk_id,
+            node_id=from_node.node_id,
+            node_name=from_node.name,
+            epoch=epoch,
         )
 
     def resolve(self, decision_id: str, *, choice: str, resolved_by: str) -> ResolutionResult | None:
@@ -158,23 +173,3 @@ class RequeueService:
         requeue_id = self._chunks.record_requeue(chunk_id, at=now)  # supersedes the escalation
         self._chunks.record_route_released(chunk_id, at=now)  # -> ready, re-leasable at its current node
         return requeue_id
-
-
-def _artifact_row(
-    chunk_id: str, node_id: str, node_name: str, epoch: int, artifact: SubmittedArtifact, clock: IClock
-) -> ArtifactRow:
-    """Compress a submitted artifact into its storage row (mirrors the apply path)."""
-    is_commit = artifact.kind is ArtifactKind.GIT_COMMIT
-    data = f"{artifact.branch_name}:{artifact.commit_hash}" if is_commit else (artifact.content or "")
-    return ArtifactRow(
-        kind=artifact.kind,
-        name=artifact.name,
-        data=data,
-        repo=artifact.repo if is_commit else None,
-        forge=artifact.forge if is_commit else None,
-        artifact_id=mint(ARTIFACT_PREFIX, clock),
-        chunk_id=chunk_id,
-        node_id=node_id,
-        node_name=node_name,
-        epoch=epoch,
-    )

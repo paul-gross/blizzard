@@ -30,7 +30,7 @@ from blizzard.hub.delivery.hub_node import (
 )
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.graph import HUB_PENDING_CHOICE, Executor, GraphDoc
-from blizzard.hub.domain.graph_authoring import reify_graph
+from blizzard.hub.domain.graph_authoring import Reification
 from blizzard.hub.domain.graph_validation import Validator
 from blizzard.hub.domain.work import (
     Chunk,
@@ -326,7 +326,7 @@ def test_poll_policy_honors_the_authored_override() -> None:
             "nodes": {"merge": _merge_with(poll_interval=15, poll_timeout=90)},
         }
     )
-    graph = reify_graph(doc, FixedClock(datetime(2026, 7, 17, tzinfo=UTC)))
+    graph = Reification.of(doc, FixedClock(datetime(2026, 7, 17, tzinfo=UTC))).graph
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None
     assert PollPolicy.of(merge_node).interval == timedelta(seconds=15)
@@ -402,7 +402,7 @@ def test_hubnode_after_poll_before_slot_release_crash_point_is_registered() -> N
 
 def _reified_merge_node():  # type: ignore[no-untyped-def]
     doc = GraphDoc.of({"name": "g", "entry": "build", "nodes": _yaml_nodes()})
-    graph = reify_graph(doc, FixedClock(datetime(2026, 7, 17, tzinfo=UTC)))
+    graph = Reification.of(doc, FixedClock(datetime(2026, 7, 17, tzinfo=UTC))).graph
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None
     return graph, merge_node

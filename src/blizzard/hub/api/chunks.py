@@ -119,7 +119,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
     # A freshly ingested chunk rests ``not_ready`` — visible on the board but not
     # in the ready queue, so no ``queue-changed`` fires until it is promoted.
-    chunk_events.publish_chunk_changed(services, chunk_id, cause="minted", prev_status=None, key=f"chunks:{chunk_id}")
+    chunk_events.ChunkChanged.of(services, chunk_id, prev_status=None).publish(cause="minted", key=f"chunks:{chunk_id}")
     return ChunkIngestResponse(chunk_id=chunk_id)
 
 
@@ -206,14 +206,12 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         requeue_id = services.requeue.requeue(chunk_id)
     except NotEscalated as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    chunk_events.publish_chunk_changed(
-        services, chunk_id, cause="requeued", prev_status=prev_status, key=f"requeues:{requeue_id}"
-    )
+    change.publish(cause="requeued", key=f"requeues:{requeue_id}")
     services.events.publish_queue_changed()  # requeue can re-admit the chunk to the queue
     return ChunkView.of(services, chunk).summary()
 
@@ -229,14 +227,12 @@ def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         released_id = services.detach.detach(chunk)
     except NotRouted as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    chunk_events.publish_chunk_changed(
-        services, chunk_id, cause="detached", prev_status=prev_status, key=f"route_released:{released_id}"
-    )
+    change.publish(cause="detached", key=f"route_released:{released_id}")
     services.events.publish_queue_changed()  # a detached chunk re-enters the ready queue
     return ChunkView.of(services, chunk).summary()
 
@@ -254,14 +250,12 @@ def pause_chunk(
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         pause_fact_id = services.pause.pause(chunk, by=request.by)
     except ChunkNotPausable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    chunk_events.publish_chunk_changed(
-        services, chunk_id, cause="paused", prev_status=prev_status, key=f"chunk_pause_facts:{pause_fact_id}"
-    )
+    change.publish(cause="paused", key=f"chunk_pause_facts:{pause_fact_id}")
     services.events.publish_queue_changed()  # a pause moves the chunk out of the ready queue (issue #46)
     return ChunkView.of(services, chunk).summary()
 
@@ -279,11 +273,9 @@ def resume_chunk(
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services, chunk_id)
     pause_fact_id = services.pause.resume(chunk, by=request.by)
-    chunk_events.publish_chunk_changed(
-        services, chunk_id, cause="resumed", prev_status=prev_status, key=f"chunk_pause_facts:{pause_fact_id}"
-    )
+    change.publish(cause="resumed", key=f"chunk_pause_facts:{pause_fact_id}")
     services.events.publish_queue_changed()  # a resume can re-admit the chunk to the queue (issue #46)
     return ChunkView.of(services, chunk).summary()
 
@@ -305,14 +297,12 @@ def stop_chunk(
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         stopped_id = services.stop.stop(chunk, by=request.by)
     except ChunkNotStoppable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    chunk_events.publish_chunk_changed(
-        services, chunk_id, cause="stopped", prev_status=prev_status, key=f"chunk_stopped:{stopped_id}"
-    )
+    change.publish(cause="stopped", key=f"chunk_stopped:{stopped_id}")
     services.events.publish_queue_changed()  # a stopped chunk is never offered for claim again
     return ChunkView.of(services, chunk).summary()
 
@@ -331,10 +321,10 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services, chunk_id)
     promoted_id = services.promote.promote(chunk_id)
     key = f"chunk_promoted:{promoted_id}" if promoted_id is not None else None
-    chunk_events.publish_chunk_changed(services, chunk_id, cause="promoted", prev_status=prev_status, key=key)
+    change.publish(cause="promoted", key=key)
     services.events.publish_queue_changed()  # a promoted chunk enters the ready queue
     return ChunkView.of(services, chunk).summary()
 
@@ -355,7 +345,7 @@ def patch_chunk(
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
+    change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         ChunkPatchBody(request, services).apply(chunk)
     except (
@@ -369,7 +359,7 @@ def patch_chunk(
 
     updated = services.chunks.get(chunk_id)
     assert updated is not None, "the chunk existed a moment ago and this edit does not delete chunks"
-    chunk_events.publish_chunk_changed(services, chunk_id, cause="edited", prev_status=prev_status)
+    change.publish(cause="edited")
     return ChunkPatchResponse(
         chunk_id=chunk_id,
         graph_id=updated.graph_id,

@@ -36,9 +36,19 @@ class QuestionService:
             epoch=fact.epoch,
             question=fact.question,
             options=fact.options,
-            asked_at=_parse(fact.asked_at, self._clock),
+            asked_at=self._asked_at(fact.asked_at),
         )
         _log.info("question landed", question_id=fact.question_id, chunk_id=fact.chunk_id)
+
+    def _asked_at(self, value: str) -> datetime:
+        """Read an ISO-8601 instant, falling back to now on a malformed stamp.
+
+        Coerces a naive result to UTC (``bzh:utc-instants``, issue #28); pinned by
+        ``tests/test_ask_answer.py``."""
+        try:
+            return as_utc(datetime.fromisoformat(value))
+        except ValueError:
+            return self._clock.now()
 
     def answer(self, question_id: str, *, answer: str, answered_by: str) -> AnswerOutcome:
         """Apply the answer first-write-wins; the CAS lives in the store."""
@@ -51,15 +61,3 @@ class QuestionService:
     def record_delivered(self, *, question_id: str, chunk_id: str) -> None:
         """Record an ``answer.delivered`` fact — the resume-with-answer ran (board detail)."""
         self._chunks.record_answer_delivered(question_id=question_id, chunk_id=chunk_id, at=self._clock.now())
-
-
-def _parse(value: str, clock: IClock) -> datetime:
-    """Read an ISO-8601 instant, falling back to now on a malformed stamp.
-
-    Coerces a naive result to UTC (``bzh:utc-instants``, issue #28); pinned by
-    ``tests/test_ask_answer.py``.
-    """
-    try:
-        return as_utc(datetime.fromisoformat(value))
-    except ValueError:
-        return clock.now()

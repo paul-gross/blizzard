@@ -6,6 +6,7 @@ is half-open — ``since`` inclusive, optional ``until`` exclusive (issue #183).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated
 
@@ -23,14 +24,29 @@ from blizzard.wire.fleet import FleetSpendView
 router = APIRouter(prefix="/api", tags=["spend"], dependencies=[Depends(reject_runner_principal)])
 
 
-def _parse_instant(value: str, *, field: str) -> datetime:
-    try:
-        return as_utc(datetime.fromisoformat(value))
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"{field} {value!r} is not a valid ISO-8601 instant",
-        ) from exc
+@dataclass(frozen=True)
+class SpendWindow:
+    """One ``GET /api/spend`` request's parsed window; a malformed edge is the 422 it names."""
+
+    since: datetime
+    until: datetime | None
+
+    @classmethod
+    def of(cls, since: str, until: str | None) -> SpendWindow:
+        return cls(
+            cls._instant(since, field="since"),
+            cls._instant(until, field="until") if until is not None else None,
+        )
+
+    @staticmethod
+    def _instant(value: str, *, field: str) -> datetime:
+        try:
+            return as_utc(datetime.fromisoformat(value))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{field} {value!r} is not a valid ISO-8601 instant",
+            ) from exc
 
 
 @router.get("/spend", response_model=FleetSpendView, dependencies=[Depends(require(FLEET_VIEW))])
@@ -40,9 +56,8 @@ def fleet_spend(
     """The fleet's total usage/cost since ``since`` (an ISO-8601 instant) — summed
     over every usage fact recorded at or after it, across every chunk. An optional
     ``until`` bounds the window's other edge, exclusive."""
-    cutoff = _parse_instant(since, field="since")
-    upper = _parse_instant(until, field="until") if until is not None else None
-    usage = UsageTotal.of(services.chunks.usage_since(cutoff, until=upper))
+    window = SpendWindow.of(since, until)
+    usage = UsageTotal.of(services.chunks.usage_since(window.since, until=window.until))
     return FleetSpendView(
         since=since,
         until=until,

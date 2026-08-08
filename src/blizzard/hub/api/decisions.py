@@ -72,9 +72,7 @@ def resolve_decision(
     (:func:`~blizzard.hub.api.auth_session.resolved_username`), never the request
     body's ``resolved_by`` field — a spoofed value there is silently ignored (issue #91)."""
     pre_decision = services.chunks.get_decision(decision_id)
-    prev_status = (
-        chunk_events.snapshot_chunk_status(services, pre_decision.chunk_id) if pre_decision is not None else None
-    )
+    change = chunk_events.ChunkChanged.before(services, pre_decision.chunk_id) if pre_decision is not None else None
     try:
         result = services.decisions.resolve(
             decision_id, choice=request.choice, resolved_by=resolved_username(http_request)
@@ -91,15 +89,10 @@ def resolve_decision(
         key = f"decision_resolutions:{decision_id}"
         services.events.publish_decision_resolved(decision.chunk_id, decision_id, key=key)
         # Hardcoded literal, not a derivation — a resolution always lands the chunk
-        # back at `running` (see `chunk_events.publish_chunk_changed`'s docstring).
-        chunk_events.publish_chunk_changed(
-            services,
-            decision.chunk_id,
-            cause="decision-resolved",
-            prev_status=prev_status,
-            status="running",
-            key=key,
-        )
+        # back at `running` (see `chunk_events.ChunkChanged.publish`'s docstring).
+        chunk_events.ChunkChanged.of(
+            services, decision.chunk_id, prev_status=change.prev_status if change is not None else None
+        ).publish(cause="decision-resolved", status="running", key=key)
     assert result.resolved and result.resolved_by
     return DecisionResolutionResponse(
         decision_id=decision_id,

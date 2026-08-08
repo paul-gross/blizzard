@@ -7,6 +7,7 @@ runner's bearer token is rejected rather than treated as anonymous-plus-credenti
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -33,22 +34,35 @@ from blizzard.wire.queue import (
 router = APIRouter(prefix="/api", tags=["queue"], dependencies=[Depends(reject_runner_principal)])
 
 
-def _entries(ready: list[Chunk]) -> list[QueuePeekEntry]:
-    return [
-        QueuePeekEntry(
-            chunk_id=chunk.chunk_id,
-            graph_id=chunk.graph_id,
-            position=position,
-            work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in chunk.work_refs],
+@dataclass(frozen=True)
+class ReadyQueue:
+    """The hub-ordered ready queue as every peek renders it — position is the order itself."""
+
+    chunks: list[Chunk]
+
+    @classmethod
+    def of(cls, services: HubServices) -> ReadyQueue:
+        return cls(services.queue.ordered_ready())
+
+    @property
+    def view(self) -> QueuePeekResponse:
+        return QueuePeekResponse(
+            entries=[
+                QueuePeekEntry(
+                    chunk_id=chunk.chunk_id,
+                    graph_id=chunk.graph_id,
+                    position=position,
+                    work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in chunk.work_refs],
+                )
+                for position, chunk in enumerate(self.chunks)
+            ]
         )
-        for position, chunk in enumerate(ready)
-    ]
 
 
 @router.get("/queue", response_model=QueuePeekResponse, dependencies=[Depends(require(FLEET_VIEW))])
 def get_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
     """The hub-ordered ready queue, read-only — honours reorder/replace + grouping."""
-    return QueuePeekResponse(entries=_entries(services.queue.ordered_ready()))
+    return ReadyQueue.of(services).view
 
 
 @router.put("/queue", response_model=QueuePeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])
@@ -72,7 +86,7 @@ def replace_queue(
     ordered.extend(chunk for chunk in ready if chunk.chunk_id not in named_ids)
     services.queue.replace_order(ordered)
     services.events.publish_queue_changed()
-    return QueuePeekResponse(entries=_entries(services.queue.ordered_ready()))
+    return ReadyQueue.of(services).view
 
 
 @router.post("/queue/position", response_model=QueuePeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])
@@ -103,7 +117,7 @@ def reposition_queue(
             )
     services.queue.reposition(chunk, after)
     services.events.publish_queue_changed()
-    return QueuePeekResponse(entries=_entries(services.queue.ordered_ready()))
+    return ReadyQueue.of(services).view
 
 
 @router.post(
@@ -119,7 +133,7 @@ def group_chunks(
     Accepts ``not_ready`` and ``ready`` participants alike (issue #141); 409 names the
     first chunk a runner holds, or one already finished.
     """
-    prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
+    before = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         result = services.group.group(chunk_id, request.merge_chunk_ids)
     except ChunkNotFound as exc:
@@ -131,8 +145,8 @@ def group_chunks(
     survivor = result.survivor
     services.events.publish_queue_changed()
     key = f"chunk_grouped:{result.grouped_id}" if result.grouped_id is not None else None
-    chunk_events.publish_chunk_changed(
-        services, survivor.chunk_id, cause="grouped", prev_status=prev_status, status=result.status.value, key=key
+    chunk_events.ChunkChanged.of(services, survivor.chunk_id, prev_status=before.prev_status).publish(
+        cause="grouped", status=result.status.value, key=key
     )
     return ChunkGroupResponse(
         chunk_id=survivor.chunk_id,

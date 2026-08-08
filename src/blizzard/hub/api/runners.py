@@ -7,8 +7,9 @@ Controllers stay read-only over the store (``bzh:controller-read-only``);
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, ClassVar
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -18,7 +19,8 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.registry import RunnerLiveness, derive_external_subscription_usage
+from blizzard.hub.domain.registry import ExternalSubscriptionUsageView as UsageSample
+from blizzard.hub.domain.registry import RunnerLiveness
 from blizzard.wire.runner import (
     ExternalSubscriptionUsageView,
     ExternalSubscriptionUsageWindowView,
@@ -27,13 +29,49 @@ from blizzard.wire.runner import (
     RunnerPauseRequest,
     RunnerView,
 )
+from blizzard.wire.sse import RunnerChangeKind
 
 router = APIRouter(prefix="/api", tags=["runners"], dependencies=[Depends(reject_runner_principal)])
 
 
+@dataclass(frozen=True)
+class RunnerBrake:
+    """One operator write of a runner's fleet pause brake. Which way the brake moves is
+    the subclass's, and is the only thing that differs between the two verbs."""
+
+    services: HubServices
+    runner_id: str
+    by: str
+
+    paused: ClassVar[bool]
+    kind: ClassVar[RunnerChangeKind]
+
+    def set(self) -> RunnerView:
+        """Write the fact, publish the frame, and read the runner back; 404 on an unknown one."""
+        fact_id = self.services.fleet.set_paused(self.runner_id, paused=self.paused, by=self.by)
+        if fact_id is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {self.runner_id}")
+        self.services.events.publish_runner_changed(
+            self.runner_id, kind=self.kind, by=self.by, key=f"runner_pause_facts:{fact_id}"
+        )
+        liveness = self.services.fleet.get_liveness(self.runner_id)
+        assert liveness is not None  # just set_paused succeeded, so the runner exists
+        return runner_view(liveness, now=self.services.clock.now())
+
+
+class Paused(RunnerBrake):
+    paused = True
+    kind = "paused"
+
+
+class Resumed(RunnerBrake):
+    paused = False
+    kind = "resumed"
+
+
 def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
     r = liveness.registration
-    usage = derive_external_subscription_usage(r.external_usage_sampled_at, r.external_usage_windows, now=now)
+    usage = UsageSample.of(r, now=now)
     return RunnerView(
         runner_id=r.runner_id,
         workspace_id=r.workspace_id,
@@ -105,7 +143,7 @@ def pause_runner(
     runner_id: str, request: RunnerPauseRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> RunnerView:
     """Set a runner's pause brake — no new claims; in-flight chunks run on."""
-    return _set_paused(runner_id, paused=True, by=request.by, services=services)
+    return Paused(services, runner_id, request.by).set()
 
 
 @router.post("/runners/{runner_id}/resume", response_model=RunnerView, dependencies=[Depends(require(RUNNER_PAUSE))])
@@ -113,16 +151,4 @@ def resume_runner(
     runner_id: str, request: RunnerPauseRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> RunnerView:
     """Clear a runner's pause brake — it resumes claiming on its next pull."""
-    return _set_paused(runner_id, paused=False, by=request.by, services=services)
-
-
-def _set_paused(runner_id: str, *, paused: bool, by: str, services: HubServices) -> RunnerView:
-    fact_id = services.fleet.set_paused(runner_id, paused=paused, by=by)
-    if fact_id is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
-    services.events.publish_runner_changed(
-        runner_id, kind="paused" if paused else "resumed", by=by, key=f"runner_pause_facts:{fact_id}"
-    )
-    liveness = services.fleet.get_liveness(runner_id)
-    assert liveness is not None  # just set_paused succeeded, so the runner exists
-    return runner_view(liveness, now=services.clock.now())
+    return Resumed(services, runner_id, request.by).set()
