@@ -1,4 +1,4 @@
-"""Fleet-summary bucket fold — ``derive_fleet_summary`` over derived statuses (issue #76).
+"""Fleet-summary bucket fold — ``FleetSummary.of`` over derived statuses (issue #76).
 
 A pure fold of each chunk's status to four buckets (``bzh:domain-takes-objects``):
 ``running`` unions ``delivering``, ``waiting`` unions ``paused``, terminal statuses count
@@ -9,17 +9,17 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.domain.work import ChunkStatus, FleetSummary, derive_fleet_summary
+from blizzard.hub.domain.work import ChunkStatus, FleetSummary
 
 pytestmark = pytest.mark.unit
 
 
 def test_empty_fleet_is_all_zeros() -> None:
-    assert derive_fleet_summary([]) == FleetSummary(ready=0, running=0, waiting=0, needs=0)
+    assert FleetSummary.of([]) == FleetSummary(ready=0, running=0, waiting=0, needs=0)
 
 
 def test_each_status_lands_in_its_bucket() -> None:
-    summary = derive_fleet_summary(
+    summary = FleetSummary.of(
         [
             ChunkStatus.READY,
             ChunkStatus.RUNNING,
@@ -33,24 +33,24 @@ def test_each_status_lands_in_its_bucket() -> None:
 def test_delivering_folds_into_running() -> None:
     # Live work in either shape — mid-node or entering the hub delivery node — is one
     # ``running`` pulse to the operator.
-    assert derive_fleet_summary([ChunkStatus.RUNNING, ChunkStatus.DELIVERING]).running == 2
+    assert FleetSummary.of([ChunkStatus.RUNNING, ChunkStatus.DELIVERING]).running == 2
 
 
 def test_paused_folds_into_waiting() -> None:
     # A paused chunk and a human-gated one both read as "waiting" on the strip.
-    summary = derive_fleet_summary([ChunkStatus.PAUSED, ChunkStatus.WAITING_ON_HUMAN])
+    summary = FleetSummary.of([ChunkStatus.PAUSED, ChunkStatus.WAITING_ON_HUMAN])
     assert summary.waiting == 2 and summary.running == 0
 
 
 def test_resting_and_terminal_statuses_count_toward_no_bucket() -> None:
     # The strip is a live-work pulse, not a fleet total: not_ready / stopped / done are
     # deliberately uncounted, so a fleet of only these folds to all-zeros.
-    summary = derive_fleet_summary([ChunkStatus.NOT_READY, ChunkStatus.STOPPED, ChunkStatus.DONE])
+    summary = FleetSummary.of([ChunkStatus.NOT_READY, ChunkStatus.STOPPED, ChunkStatus.DONE])
     assert summary == FleetSummary(ready=0, running=0, waiting=0, needs=0)
 
 
 def test_counts_accumulate_across_a_mixed_fleet() -> None:
-    summary = derive_fleet_summary(
+    summary = FleetSummary.of(
         [
             ChunkStatus.READY,
             ChunkStatus.READY,

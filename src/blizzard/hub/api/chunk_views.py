@@ -10,9 +10,9 @@ from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
-from blizzard.hub.delivery.hub_node import poll_interval_for
+from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact, from_row, store_key
-from blizzard.hub.domain.work import Chunk, ChunkFacts, holds_claim
+from blizzard.hub.domain.work import Chunk, ChunkFacts
 from blizzard.hub.work_sources.source import IWorkSource
 from blizzard.wire.chunk import (
     ArtifactView,
@@ -61,9 +61,8 @@ class ChunkView:
         every transition verb, from the same facts (``canon:one-owner``)."""
         node_id, node_name = self.current_node()
         status = self.facts.status()
-        # A finished chunk holds no claim (issue #140) — the rule is `holds_claim`'s. Asked
-        # before the read so a terminal chunk costs no `route_of` query at all.
-        route = self.services.chunks.route_of(self.chunk.chunk_id) if holds_claim(status) else None
+        # Asked before the read so a terminal chunk costs no `route_of` query at all (issue #140).
+        route = self.services.chunks.route_of(self.chunk.chunk_id) if status.holds_claim else None
         completed_at = self.facts.completed_at()
         return ChunkSummary(
             chunk_id=self.chunk.chunk_id,
@@ -187,7 +186,7 @@ class ChunkView:
         node = graph.node_by_id(pending.node_id) if graph is not None else None
         if node is None:
             return None
-        return PendingView(node_name=node.name, next_poll_at=iso_utc(pending.polled_at + poll_interval_for(node)))
+        return PendingView(node_name=node.name, next_poll_at=iso_utc(pending.polled_at + PollPolicy.of(node).interval))
 
     def intended_migration(self) -> IntendedMigrationView | None:
         """The chunk's standing migration intent as a view (issue #124), or ``None`` when no

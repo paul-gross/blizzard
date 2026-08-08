@@ -22,7 +22,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.work import ActivityRow, EventRow, derive_activity_feed, derive_event_feed
+from blizzard.hub.domain.work import ActivityFeed, ActivityRow, EventFeed, EventRow
 from blizzard.hub.events.broker import EventBroker
 from blizzard.wire.activity import ActivityResponse, ActivityView
 from blizzard.wire.events import EventsResponse, EventView
@@ -153,7 +153,7 @@ def list_events(
         escalations = [e for e in escalations if e.chunk_id == chunk_id]
     if since_utc is not None:
         escalations = [e for e in escalations if e.recorded_at >= since_utc]
-    feed = derive_event_feed(events, escalations)[:limit]
+    feed = EventFeed.of(events, escalations).rows[:limit]
     return EventsResponse(events=[_to_event_view(row) for row in feed])
 
 
@@ -197,7 +197,7 @@ def list_activity(
     chunk_changed = services.chunks.activity_facts_since(since_utc, limit=limit)
     events = services.chunks.list_events(since=since_utc, limit=limit)
     runner_changed = services.registry.list_pause_facts_since(since_utc, limit=limit)
-    feed = derive_activity_feed(chunk_changed, events, runner_changed, limit=limit)
+    feed = ActivityFeed.of(chunk_changed, events, runner_changed, limit=limit).rows
     return ActivityResponse(activity=[_to_activity_view(row) for row in feed])
 
 

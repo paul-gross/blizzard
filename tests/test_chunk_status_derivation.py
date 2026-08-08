@@ -23,10 +23,10 @@ from blizzard.hub.domain.work import (
     PrOpenedFact,
     QuestionFact,
     RouteCreatedFact,
+    RouteHistory,
     RouteReleasedFact,
     RouteTokenMintedFact,
     TransitionFact,
-    newest_live_route_token,
 )
 
 pytestmark = pytest.mark.unit
@@ -140,20 +140,20 @@ def test_same_instant_reclaim_still_derives_running() -> None:
 
 
 def test_unclaimed_chunk_has_no_live_token() -> None:
-    assert newest_live_route_token([], [], []) is None
+    assert RouteHistory().newest_token is None
 
 
 def test_live_route_with_no_token_facts_has_no_live_token() -> None:
     # Should not happen in practice (the hub mints the token atomically with the
     # route), but the derivation must not fabricate one.
     routes_created = [RouteCreatedFact(created_at=_at(1))]
-    assert newest_live_route_token(routes_created, [], []) is None
+    assert RouteHistory(routes_created).newest_token is None
 
 
 def test_freshly_claimed_route_has_its_own_live_token() -> None:
     routes_created = [RouteCreatedFact(created_at=_at(1), seq=1)]
     tokens = [RouteTokenMintedFact(token_hash="hash-a", minted_at=_at(1), seq=2)]
-    live = newest_live_route_token(routes_created, [], tokens)
+    live = RouteHistory(routes_created, [], tokens).newest_token
     assert live is not None
     assert live.token_hash == "hash-a"
 
@@ -162,7 +162,7 @@ def test_released_route_has_no_live_token() -> None:
     routes_created = [RouteCreatedFact(created_at=_at(1), seq=1)]
     routes_released = [RouteReleasedFact(released_at=_at(2), seq=3)]
     tokens = [RouteTokenMintedFact(token_hash="hash-a", minted_at=_at(1), seq=2)]
-    assert newest_live_route_token(routes_created, routes_released, tokens) is None
+    assert RouteHistory(routes_created, routes_released, tokens).newest_token is None
 
 
 def test_earlier_acquisitions_token_is_excluded_after_reclaim() -> None:
@@ -177,7 +177,7 @@ def test_earlier_acquisitions_token_is_excluded_after_reclaim() -> None:
         RouteTokenMintedFact(token_hash="hash-old", minted_at=_at(1), seq=2),  # first acquisition's
         RouteTokenMintedFact(token_hash="hash-new", minted_at=_at(3), seq=5),  # the reclaim's
     ]
-    live = newest_live_route_token(routes_created, routes_released, tokens)
+    live = RouteHistory(routes_created, routes_released, tokens).newest_token
     assert live is not None
     assert live.token_hash == "hash-new"
 
@@ -190,7 +190,7 @@ def test_a_rekey_fact_supersedes_the_original_token() -> None:
         RouteTokenMintedFact(token_hash="hash-original", minted_at=_at(1), seq=2),
         RouteTokenMintedFact(token_hash="hash-rekeyed", minted_at=_at(5), seq=6),
     ]
-    live = newest_live_route_token(routes_created, [], tokens)
+    live = RouteHistory(routes_created, [], tokens).newest_token
     assert live is not None
     assert live.token_hash == "hash-rekeyed"
 

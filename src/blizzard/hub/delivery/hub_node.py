@@ -33,7 +33,7 @@ from blizzard.hub.domain.work import (
     Chunk,
     HubNodePollFact,
     IWriteChunkRepository,
-    landed_repos_from_markers,
+    LandedRepos,
 )
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
@@ -81,25 +81,6 @@ class HubRunResult:
     transition_id: str | None = None
 
 
-@dataclass(frozen=True)
-class HubEnvInputs:
-    """The already-loaded domain inputs :func:`build_hub_env` assembles into an env."""
-
-    chunk: Chunk
-    node: Node
-    workdir: str
-    epoch: int
-    artifacts: list  # list[ArtifactRow] — untyped here to avoid a domain->storage import cycle
-    base_branch: str
-    marker_callback_url: str
-    forge_url: str | None = None
-    forge_token: str | None = None
-    forge_owner: str | None = None
-    feature_title: str | None = None
-    expects_git_commits: bool = True
-    marker_token: str = ""
-
-
 # The env-injection contract — documented here as the single source of truth a graph
 # author's `run:` script reads.
 ENV_CHUNK_ID = "BZ_HUB_CHUNK_ID"
@@ -119,24 +100,8 @@ ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirror
 # it can't be resolved
 ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
 # "1" when some node in this chunk's graph declares a `git_commit`-kind `produces:`, "0"
-# when none does — see `graph_declares_git_commit`.
+# when none does — see `Graph.declares_git_commit`.
 ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
-
-
-def graph_declares_git_commit(graph: Graph) -> bool:
-    """Whether any node in ``graph`` declares a ``git_commit``-kind ``produces:``.
-
-    The graph's own statement of intent, and the only thing that tells an empty delivery
-    set apart from a failed one."""
-    return any(spec.kind is ArtifactKind.GIT_COMMIT for node in graph.nodes for spec in node.produces)
-
-
-def _delivery_repo(row: ArtifactRow) -> str | None:
-    """How delivery addresses one repo: ``owner/name`` read from its origin (see
-    :mod:`~blizzard.hub.delivery.repo_ref`), else the bare name for the script's
-    configured-owner fallback to qualify."""
-    ref = parse_repo_ref(row.forge) if row.forge else None
-    return ref.qualified if ref else row.repo
 
 
 class UnconvergedDeliveryError(RuntimeError):
@@ -146,107 +111,146 @@ class UnconvergedDeliveryError(RuntimeError):
     other was checked against."""
 
 
-def _latest_commit_per_repo(rows: list[ArtifactRow]) -> list[ArtifactRow]:
-    """Every ``git_commit`` artifact resolved to one row per **repo**, newest epoch wins.
+@dataclass(frozen=True)
+class GitCommits:
+    """A chunk's ``git_commit`` artifacts resolved to one row per **repo**.
 
     Delivery's identity for a git pointer is the repo alone, so a rewritten branch
-    supersedes the orphaned one. A tie at one epoch resolves to the later row unless the
-    two name different branches, which raises :class:`UnconvergedDeliveryError`."""
-    latest: dict[str | None, ArtifactRow] = {}
-    for row in rows:
-        if row.kind is not ArtifactKind.GIT_COMMIT:
-            continue
-        current = latest.get(row.repo)
-        if current is None or row.epoch > current.epoch:
-            latest[row.repo] = row
-        elif row.epoch == current.epoch and row.data != current.data:
-            raise UnconvergedDeliveryError(
-                f"repo {row.repo!r} has two different branches declared at epoch {row.epoch} "
-                f"({current.data!r} and {row.data!r}) — the environments' work was never "
-                f"rolled up into one branch per repo, so there is no single thing to deliver"
-            )
-        elif row.epoch == current.epoch:
-            latest[row.repo] = row  # identical re-declaration: a correction, not a second unit
-    return list(latest.values())
+    supersedes the orphaned one."""
+
+    rows: list[ArtifactRow]
+
+    @classmethod
+    def of(cls, artifacts: list[ArtifactRow]) -> GitCommits:
+        """Newest epoch wins; a tie at one epoch resolves to the later row unless the two
+        name different branches, which raises :class:`UnconvergedDeliveryError`."""
+        latest: dict[str | None, ArtifactRow] = {}
+        for row in artifacts:
+            if row.kind is not ArtifactKind.GIT_COMMIT:
+                continue
+            current = latest.get(row.repo)
+            if current is None or row.epoch > current.epoch:
+                latest[row.repo] = row
+            elif row.epoch == current.epoch and row.data != current.data:
+                raise UnconvergedDeliveryError(
+                    f"repo {row.repo!r} has two different branches declared at epoch {row.epoch} "
+                    f"({current.data!r} and {row.data!r}) — the environments' work was never "
+                    f"rolled up into one branch per repo, so there is no single thing to deliver"
+                )
+            elif row.epoch == current.epoch:
+                latest[row.repo] = row  # identical re-declaration: a correction, not a second unit
+        return cls(list(latest.values()))
+
+    @property
+    def payload(self) -> list[dict[str, str | None]]:
+        """:data:`ENV_GIT_COMMITS`'s content, owner-qualified when the declaring repo's
+        origin encodes one, so a chunk spanning two owners addresses each correctly."""
+        return [
+            {"repo": self._repo(row), "branch": row.data.partition(":")[0], "commit": row.data.partition(":")[2]}
+            for row in self.rows
+        ]
+
+    @staticmethod
+    def _repo(row: ArtifactRow) -> str | None:
+        """How delivery addresses one repo: ``owner/name`` read from its origin (see
+        :mod:`~blizzard.hub.delivery.repo_ref`), else the bare name for the script's
+        configured-owner fallback to qualify."""
+        ref = parse_repo_ref(row.forge) if row.forge else None
+        return ref.qualified if ref else row.repo
 
 
-def build_hub_env(inputs: HubEnvInputs) -> dict[str, str]:
-    """Assemble a hub command node's injected env — pure, no I/O.
+@dataclass(frozen=True)
+class HubEnv:
+    """A hub command node's injected env, assembled from already-loaded domain inputs."""
 
-    **Never a model credential** (``bzh:deterministic-shell``): no key injected here may
-    grant access to an LLM or agent API. :data:`ENV_MARKER_TOKEN` is a delivery credential
-    scoped to this one node visit's marker writes."""
-    commits = [
-        {
-            # Owner-qualified when the declaring repo's origin encodes one, so a chunk
-            # spanning two owners addresses each correctly.
-            "repo": _delivery_repo(row),
-            "branch": row.data.partition(":")[0],
-            "commit": row.data.partition(":")[2],
+    chunk: Chunk
+    node: Node
+    workdir: str
+    epoch: int
+    artifacts: list  # list[ArtifactRow] — untyped here to avoid a domain->storage import cycle
+    base_branch: str
+    marker_callback_url: str
+    forge_url: str | None = None
+    forge_token: str | None = None
+    forge_owner: str | None = None
+    feature_title: str | None = None
+    expects_git_commits: bool = True
+    marker_token: str = ""
+
+    @property
+    def vars(self) -> dict[str, str]:
+        """The env-var mapping itself — pure, no I/O.
+
+        **Never a model credential** (``bzh:deterministic-shell``): no key injected here
+        may grant access to an LLM or agent API. :data:`ENV_MARKER_TOKEN` is a delivery
+        credential scoped to this one node visit's marker writes."""
+        names = sorted({row.name for row in self.artifacts if row.node_id == self.node.node_id})
+        env = {
+            ENV_CHUNK_ID: self.chunk.chunk_id,
+            ENV_WORKDIR: self.workdir,
+            ENV_NODE_ID: self.node.node_id,
+            ENV_NODE_NAME: self.node.name,
+            ENV_EPOCH: str(self.epoch),
+            ENV_BASE_BRANCH: self.base_branch,
+            ENV_GIT_COMMITS: json.dumps(GitCommits.of(self.artifacts).payload),
+            ENV_ARTIFACT_NAMES: json.dumps(names),
+            ENV_MARKER_CALLBACK_URL: self.marker_callback_url,
+            ENV_EXPECT_GIT_COMMITS: "1" if self.expects_git_commits else "0",
         }
-        for row in _latest_commit_per_repo(inputs.artifacts)
-    ]
-    names = sorted({row.name for row in inputs.artifacts if row.node_id == inputs.node.node_id})
-    env = {
-        ENV_CHUNK_ID: inputs.chunk.chunk_id,
-        ENV_WORKDIR: inputs.workdir,
-        ENV_NODE_ID: inputs.node.node_id,
-        ENV_NODE_NAME: inputs.node.name,
-        ENV_EPOCH: str(inputs.epoch),
-        ENV_BASE_BRANCH: inputs.base_branch,
-        ENV_GIT_COMMITS: json.dumps(commits),
-        ENV_ARTIFACT_NAMES: json.dumps(names),
-        ENV_MARKER_CALLBACK_URL: inputs.marker_callback_url,
-        ENV_EXPECT_GIT_COMMITS: "1" if inputs.expects_git_commits else "0",
-    }
-    if inputs.forge_url:
-        env[ENV_FORGE_URL] = inputs.forge_url
-    if inputs.forge_token:
-        env[ENV_FORGE_TOKEN] = inputs.forge_token
-    if inputs.forge_owner:
-        env[ENV_FORGE_OWNER] = inputs.forge_owner
-    if inputs.feature_title:
-        env[ENV_FEATURE_TITLE] = inputs.feature_title
-    if inputs.marker_token:
-        env[ENV_MARKER_TOKEN] = inputs.marker_token
-    return env
+        if self.forge_url:
+            env[ENV_FORGE_URL] = self.forge_url
+        if self.forge_token:
+            env[ENV_FORGE_TOKEN] = self.forge_token
+        if self.forge_owner:
+            env[ENV_FORGE_OWNER] = self.forge_owner
+        if self.feature_title:
+            env[ENV_FEATURE_TITLE] = self.feature_title
+        if self.marker_token:
+            env[ENV_MARKER_TOKEN] = self.marker_token
+        return env
 
 
-def _log_name(index: int, step_name: str | None, produces: str | None) -> str:
-    return f"hub-log.{step_name or produces or index}"
+@dataclass(frozen=True)
+class PollPolicy:
+    """A hub command node's pending-poll cadence and give-up bound (#66)."""
+
+    interval: timedelta = DEFAULT_POLL_INTERVAL
+    timeout: timedelta = DEFAULT_POLL_TIMEOUT
+
+    @classmethod
+    def of(cls, node: Node) -> PollPolicy:
+        """The node's own overrides, else the module defaults."""
+        return cls(
+            interval=(
+                timedelta(seconds=node.poll_interval_seconds)
+                if node.poll_interval_seconds is not None
+                else DEFAULT_POLL_INTERVAL
+            ),
+            timeout=(
+                timedelta(seconds=node.poll_timeout_seconds)
+                if node.poll_timeout_seconds is not None
+                else DEFAULT_POLL_TIMEOUT
+            ),
+        )
 
 
-def poll_interval_for(node: Node) -> timedelta:
-    """The cadence a hub command node's pending poll waits between attempts (#66) —
-    the node's own override, else :data:`DEFAULT_POLL_INTERVAL`. Pure; exported so a
-    caller surfacing "next poll at T" (the chunk-detail read) computes the same value
-    the executor gates on."""
-    if node.poll_interval_seconds is not None:
-        return timedelta(seconds=node.poll_interval_seconds)
-    return DEFAULT_POLL_INTERVAL
+@dataclass(frozen=True)
+class PrintedChoice:
+    """The choice a step explicitly selected, read off its stdout."""
 
+    name: str | None
 
-def poll_timeout_for(node: Node) -> timedelta:
-    """The bound a hub command node's pending poll gives up at (#66) — the node's own
-    override, else :data:`DEFAULT_POLL_TIMEOUT`. See :func:`poll_interval_for`."""
-    if node.poll_timeout_seconds is not None:
-        return timedelta(seconds=node.poll_timeout_seconds)
-    return DEFAULT_POLL_TIMEOUT
-
-
-def _printed_choice(stdout: str, known_names: frozenset[str]) -> str | None:
-    """The choice a step explicitly selected — its last non-blank stdout line, iff it
-    names one of the node's authored choices (#65's outcome-mapping vocabulary) or the
-    machinery-reserved ``pending`` outcome (#66), recognized regardless of whether the
-    node authors a matching choice — like ``success``/``failure``, it is never an
-    authored edge."""
-    lines = [line.strip() for line in stdout.splitlines() if line.strip()]
-    if not lines:
-        return None
-    last = lines[-1]
-    if last == HUB_PENDING_CHOICE or last in known_names:
-        return last
-    return None
+    @classmethod
+    def of(cls, stdout: str, known_names: frozenset[str]) -> PrintedChoice:
+        """The last non-blank stdout line, iff it names one of the node's authored choices
+        (#65's outcome-mapping vocabulary) or the machinery-reserved ``pending`` outcome
+        (#66), recognized regardless of whether the node authors a matching choice — like
+        ``success``/``failure``, it is never an authored edge."""
+        lines = [line.strip() for line in stdout.splitlines() if line.strip()]
+        if not lines:
+            return cls(None)
+        last = lines[-1]
+        return cls(last if last == HUB_PENDING_CHOICE or last in known_names else None)
 
 
 @dataclass(frozen=True)
@@ -288,6 +292,10 @@ class HubNodeExecutor:
         self._work_sources = work_sources
         self._slot_stale_after = slot_stale_after
 
+    @staticmethod
+    def _log_name(index: int, step_name: str | None, produces: str | None) -> str:
+        return f"hub-log.{step_name or produces or index}"
+
     def record_marker(
         self, chunk_id: str, *, node_id: str, node_name: str, epoch: int, name: str, content: str
     ) -> bool:
@@ -313,7 +321,7 @@ class HubNodeExecutor:
         now = self._clock.now()
         facts = self._chunks.load_facts(chunk.chunk_id)
         poll_history = facts.hub_node_poll_history(node_id=node.node_id, epoch=epoch) if facts is not None else []
-        if poll_history and now - poll_history[-1].polled_at < poll_interval_for(node):
+        if poll_history and now - poll_history[-1].polled_at < PollPolicy.of(node).interval:
             return None  # not yet due — never touches the fleet-wide slot
         slot_id = self._chunks.acquire_hub_exec_slot(
             chunk.chunk_id, node_id=node.node_id, at=now, stale_after=self._slot_stale_after
@@ -328,7 +336,7 @@ class HubNodeExecutor:
     def _run_locked(
         self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int, poll_history: list[HubNodePollFact]
     ) -> HubRunResult:
-        if poll_history and self._clock.now() - poll_history[0].polled_at >= poll_timeout_for(node):
+        if poll_history and self._clock.now() - poll_history[0].polled_at >= PollPolicy.of(node).timeout:
             # The bound is elapsed since the FIRST pending attempt of this visit: stop
             # polling, and never run the `run:` list again this call.
             return self._route_pending_timeout(chunk, graph, node, epoch=epoch)
@@ -339,23 +347,21 @@ class HubNodeExecutor:
         marker_token = self._marker_authority.issue(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
         try:
             try:
-                env = build_hub_env(
-                    HubEnvInputs(
-                        chunk=chunk,
-                        node=node,
-                        workdir=workdir,
-                        epoch=epoch,
-                        artifacts=artifacts,
-                        base_branch=self._base_branch,
-                        marker_callback_url=self._marker_callback_url(chunk.chunk_id, node.node_id, epoch),
-                        forge_url=self._forge_url,
-                        forge_token=self._forge_token,
-                        forge_owner=self._forge_owner,
-                        feature_title=self._resolve_feature_title(chunk),
-                        expects_git_commits=graph_declares_git_commit(graph),
-                        marker_token=marker_token,
-                    )
-                )
+                env = HubEnv(
+                    chunk=chunk,
+                    node=node,
+                    workdir=workdir,
+                    epoch=epoch,
+                    artifacts=artifacts,
+                    base_branch=self._base_branch,
+                    marker_callback_url=self._marker_callback_url(chunk.chunk_id, node.node_id, epoch),
+                    forge_url=self._forge_url,
+                    forge_token=self._forge_token,
+                    forge_owner=self._forge_owner,
+                    feature_title=self._resolve_feature_title(chunk),
+                    expects_git_commits=graph.declares_git_commit,
+                    marker_token=marker_token,
+                ).vars
             except UnconvergedDeliveryError as exc:
                 # Routed as a `failure` rather than allowed to escape, which would
                 # crash-loop the tick (tests/test_pin_hub_delivery.py).
@@ -364,7 +370,7 @@ class HubNodeExecutor:
                     node_id=node.node_id,
                     node_name=node.name,
                     epoch=epoch,
-                    name=_log_name(1, "unconverged-delivery", None),
+                    name=self._log_name(1, "unconverged-delivery", None),
                     content=f"[unconverged delivery]\n{exc}\n",
                     at=self._clock.now(),
                 )
@@ -384,14 +390,14 @@ class HubNodeExecutor:
                     node_id=node.node_id,
                     node_name=node.name,
                     epoch=epoch,
-                    name=_log_name(index, step.name, step.produces),
+                    name=self._log_name(index, step.name, step.produces),
                     content=f"$ {step.command}\n[exit {result.exit_code}]\n{result.stdout}{result.stderr}",
                     at=self._clock.now(),
                 )
                 if result.exit_code != 0:
-                    chosen = _printed_choice(result.stdout, choice_names) or HUB_DEFAULT_FAILURE_CHOICE
+                    chosen = PrintedChoice.of(result.stdout, choice_names).name or HUB_DEFAULT_FAILURE_CHOICE
                     break
-                printed = _printed_choice(result.stdout, choice_names)
+                printed = PrintedChoice.of(result.stdout, choice_names).name
                 if printed == HUB_PENDING_CHOICE:
                     # Pending (#66): NOT a step success — no marker, no transition, no
                     # edge lookup; the slot is released on the way out.
@@ -426,7 +432,7 @@ class HubNodeExecutor:
         now = self._clock.now()
         self._chunks.record_hub_node_poll(chunk.chunk_id, node_id=node.node_id, epoch=epoch, at=now)
         _CP_HUBNODE_AFTER_POLL_BEFORE_SLOT_RELEASE.reached()
-        next_poll_at = now + poll_interval_for(node)
+        next_poll_at = now + PollPolicy.of(node).interval
         return HubRunResult(
             outcome_choice=HUB_PENDING_CHOICE,
             to_node_name=node.name,
@@ -530,7 +536,11 @@ class HubNodeExecutor:
                 wrote_transition=False,
                 detail=detail,
             )
-        to_node_id = RESERVED_TERMINAL if edge.to_node_name == RESERVED_TERMINAL else _resolve(graph, edge.to_node_name)
+        if edge.to_node_name == RESERVED_TERMINAL:
+            to_node_id: str | None = RESERVED_TERMINAL
+        else:
+            target = graph.node_by_name(edge.to_node_name)
+            to_node_id = target.node_id if target is not None else None
         if to_node_id is None:
             return HubRunResult(
                 outcome_choice=choice,
@@ -544,7 +554,7 @@ class HubNodeExecutor:
         # the choice name — no outcome name is privileged (#67).
         if commits and to_node_id != RESERVED_TERMINAL:
             pending_repos = {c["repo"] for c in commits}
-            landed_now = landed_repos_from_markers(self._chunks.load_artifacts(chunk.chunk_id))
+            landed_now = LandedRepos.of(self._chunks.load_artifacts(chunk.chunk_id)).names
             if not pending_repos.issubset(landed_now):
                 now = self._clock.now()
                 detail = f"hub node `{node.name}` routed `{choice}` to `{edge.to_node_name}` — delivery incomplete"
@@ -621,8 +631,3 @@ class HubNodeExecutor:
             return ""
         base = self._marker_callback_base_url.rstrip("/")
         return f"{base}/api/chunks/{chunk_id}/hub-markers?node_id={node_id}&epoch={epoch}"
-
-
-def _resolve(graph: Graph, node_name: str) -> str | None:
-    node = graph.node_by_name(node_name)
-    return node.node_id if node is not None else None

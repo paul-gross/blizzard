@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy import insert, select
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.work import EscalationOpen, EventRow, derive_event_feed
+from blizzard.hub.domain.work import EscalationOpen, EventFeed, EventRow
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from tests.support import migrate_to, seed_chunk, seed_graph
@@ -149,7 +149,7 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
     assert opens[0].takeover_command == "cd a && resume"
 
 
-def test_derive_event_feed_sorts_severity_then_recency() -> None:
+def test_event_feed_sorts_severity_then_recency() -> None:
     events = [
         EventRow(
             id=1,
@@ -189,7 +189,7 @@ def test_derive_event_feed_sorts_severity_then_recency() -> None:
         ),
     ]
     escalations = [EscalationOpen(chunk_id="ch_z", recorded_at=_at(8), takeover_command="cd z")]
-    feed = derive_event_feed(events, escalations)
+    feed = EventFeed.of(events, escalations).rows
     # critical band first (crit-old at t2, then projected needs-human at t8 — but newest-first
     # within band => needs-human t8 before crit-old t2), then warning, then info.
     assert [e.message.split()[0] if e.kind == "k" else e.kind for e in feed][0:2] == ["needs-human", "crit-old"]
@@ -222,10 +222,10 @@ def test_a_severity_outside_the_vocabulary_sinks_below_info() -> None:
         for index, severity in enumerate(("info", "error"), start=1)
     ]
 
-    assert [e.severity for e in derive_event_feed(rows, [])] == ["info", "error"]
+    assert [e.severity for e in EventFeed.of(rows, []).rows] == ["info", "error"]
 
 
-def test_derive_event_feed_escalation_message_does_not_overclaim_resume() -> None:
+def test_event_feed_escalation_message_does_not_overclaim_resume() -> None:
     """The feed message points at the escalation without reproducing what it carries —
     neither a runner-composed resume command nor a hub-authored prose field may leak
     into the message; the two-branch wording keys only on whether the raw field is set."""
@@ -237,7 +237,7 @@ def test_derive_event_feed_escalation_message_does_not_overclaim_resume() -> Non
         chunk_id="ch_c", recorded_at=_at(3), takeover_command="cross-graph target `x` names no enabled graph — …"
     )
 
-    feed = derive_event_feed([], [runner_composed, hub_authored_empty, hub_authored_prose])
+    feed = EventFeed.of([], [runner_composed, hub_authored_empty, hub_authored_prose]).rows
     by_chunk = {e.chunk_id: e.message for e in feed}
 
     assert by_chunk["ch_a"] == "chunk ch_a needs a human — see the chunk's escalation for how to proceed"

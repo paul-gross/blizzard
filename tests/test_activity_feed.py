@@ -1,4 +1,4 @@
-"""``derive_activity_feed`` (unit tier) — the pure merge/sort/cap behind the board's
+"""``ActivityFeed`` (unit tier) — the pure merge/sort/cap behind the board's
 Event log page-load backfill (issue #213). Built from already-loaded
 :class:`ActivityRow`/:class:`EventRow` literals — no store; the per-source bounded reads
 are exercised at the component tier (``tests/test_activity_feed_store.py``).
@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.work import ActivityRow, EventRow, derive_activity_feed
+from blizzard.hub.domain.work import ActivityFeed, ActivityRow, EventRow
 
 pytestmark = pytest.mark.unit
 
@@ -45,16 +45,16 @@ def _runner_changed(key: str, *, at: datetime) -> ActivityRow:
 
 
 def test_empty_source_set_returns_empty_list() -> None:
-    assert derive_activity_feed([], [], [], limit=200) == []
+    assert ActivityFeed.of([], [], [], limit=200).rows == []
 
 
 def test_merges_all_three_sources() -> None:
-    feed = derive_activity_feed(
+    feed = ActivityFeed.of(
         [_chunk_changed("route_created:r1", at=_at(0))],
         [_event(1, at=_at(1))],
         [_runner_changed("runner_pause_facts:1", at=_at(2))],
         limit=200,
-    )
+    ).rows
     assert {row.type for row in feed} == {"chunk-changed", "event-logged", "runner-changed"}
     assert len(feed) == 3
 
@@ -62,26 +62,26 @@ def test_merges_all_three_sources() -> None:
 def test_sorts_by_at_descending() -> None:
     early = _chunk_changed("chunks:ch_1", at=_at(0))
     late = _chunk_changed("chunks:ch_2", at=_at(10))
-    feed = derive_activity_feed([early, late], [], [], limit=200)
+    feed = ActivityFeed.of([early, late], [], [], limit=200).rows
     assert [row.key for row in feed] == ["chunks:ch_2", "chunks:ch_1"]
 
 
 def test_ties_on_at_break_by_key_descending() -> None:
     same_instant_a = _chunk_changed("chunks:ch_a", at=_T0)
     same_instant_b = _chunk_changed("chunks:ch_b", at=_T0)
-    feed = derive_activity_feed([same_instant_a, same_instant_b], [], [], limit=200)
+    feed = ActivityFeed.of([same_instant_a, same_instant_b], [], [], limit=200).rows
     # "chunks:ch_b" > "chunks:ch_a" lexicographically — desc puts b first.
     assert [row.key for row in feed] == ["chunks:ch_b", "chunks:ch_a"]
 
 
 def test_caps_to_limit_keeping_the_newest() -> None:
     rows = [_chunk_changed(f"chunks:ch_{i}", at=_at(i)) for i in range(5)]
-    feed = derive_activity_feed(rows, [], [], limit=2)
+    feed = ActivityFeed.of(rows, [], [], limit=2).rows
     assert [row.key for row in feed] == ["chunks:ch_4", "chunks:ch_3"]
 
 
 def test_event_row_reshapes_into_an_event_logged_activity_row() -> None:
-    feed = derive_activity_feed([], [_event(7, at=_at(3))], [], limit=200)
+    feed = ActivityFeed.of([], [_event(7, at=_at(3))], [], limit=200).rows
     assert feed == [
         ActivityRow(
             type="event-logged",

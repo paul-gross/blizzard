@@ -254,7 +254,7 @@ route_created = Table(
     Column("runner_id", String, nullable=False),
     Column("workspace_id", String, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
-    # The monotonic route-event tiebreak (see work.newest_live_route) — a
+    # The monotonic route-event tiebreak (see work.RouteHistory) — a
     # per-chunk counter shared with route_released.seq, assigned in real write order.
     Column("seq", Integer, nullable=False),
 )

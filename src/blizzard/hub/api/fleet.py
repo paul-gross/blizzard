@@ -23,7 +23,7 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import HubConfig
-from blizzard.hub.delivery.hub_node import poll_interval_for
+from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.claim import ClaimConflict, ClaimDeniedPaused, ClaimDeniedTerminal
 from blizzard.hub.domain.envelope import addendum_for_transition, build_node_envelope
 from blizzard.hub.domain.graph import FollowLatest, Graph, Mint
@@ -281,7 +281,7 @@ def hub_advance(
     )
     if result is None:
         pending = facts.hub_node_pending()
-        next_poll_at = pending.polled_at + poll_interval_for(node) if pending is not None else None
+        next_poll_at = pending.polled_at + PollPolicy.of(node).interval if pending is not None else None
         # A future `next_poll_at` distinguishes "not yet due to poll" (#66) from a genuinely busy slot;
         # a pending node whose interval elapsed but lost the slot race falls through to the busy branch.
         if next_poll_at is not None and next_poll_at > services.clock.now():

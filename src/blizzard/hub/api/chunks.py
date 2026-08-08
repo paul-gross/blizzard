@@ -39,8 +39,8 @@ from blizzard.hub.domain.stop import ChunkNotStoppable
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
+    FleetSummary,
     WorkRef,
-    derive_fleet_summary,
 )
 from blizzard.hub.work_sources.source import WorkSourceError
 from blizzard.wire.chunk import (
@@ -131,7 +131,7 @@ def fleet_summary(services: HubServices) -> FleetSummaryView:
     Not a route of its own here. Derives each chunk's status the same way
     :func:`list_chunks` does, but returns only the four bucket integers, so the payload
     is a fixed four numbers regardless of fleet size."""
-    summary = derive_fleet_summary(
+    summary = FleetSummary.of(
         (services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)).status()
         for chunk in services.chunks.list_all()
     )

@@ -12,7 +12,7 @@ import hmac
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.config import ROUTE_TOKEN_ENFORCE
 from blizzard.hub.domain.enrollment import hash_token
-from blizzard.hub.domain.work import ChunkFacts, newest_live_route_token
+from blizzard.hub.domain.work import ChunkFacts, RouteHistory
 
 _log = get_logger("blizzard.hub.route_auth")
 
@@ -29,7 +29,7 @@ def check_route_token(
     (2) ``submission_runner_id`` matches the live route's runner. Never runs an epoch fence itself.
     Returns a failure detail to reject with under ``enforce``, or ``None`` to proceed — either the
     check passed, or ``mode`` is ``warn`` and the failure was only logged."""
-    live_token = newest_live_route_token(facts.routes_created, facts.routes_released, facts.route_tokens_minted)
+    live_token = RouteHistory.of(facts).newest_token
     if live_token is None:
         detail: str | None = "chunk has no live route — nothing to authorize this write against"
     elif presented_token is None or not hmac.compare_digest(hash_token(presented_token), live_token.token_hash):

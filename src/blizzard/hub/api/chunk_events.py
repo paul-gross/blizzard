@@ -8,7 +8,7 @@ so every emit site enriches the frame the same way.
 from __future__ import annotations
 
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.work import ChunkFacts, describe_chunk_change
+from blizzard.hub.domain.work import ChunkChange, ChunkFacts
 from blizzard.hub.events.broker import ChunkChangeCause
 
 
@@ -50,7 +50,7 @@ def publish_chunk_changed(
     route = services.chunks.route_of(chunk_id)
     runner_id = route.runner_id if route is not None else None
 
-    change = describe_chunk_change(
+    change = ChunkChange.of(
         chunk, graph, facts, prev_status=prev_status, runner_id=runner_id, cause=cause, from_graph=from_graph
     )
     services.events.publish_chunk_changed(

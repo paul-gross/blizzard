@@ -25,9 +25,9 @@ from blizzard.hub.domain.work import (
     ChunkFacts,
     DecisionChoice,
     IWriteChunkRepository,
+    MigrationFact,
     MigrationMode,
     MigrationSource,
-    landing_node,
 )
 from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, checks_gate_violated
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
@@ -337,7 +337,7 @@ class ApplyService:
                 )
             )
         submitted = submission.artifacts if artifacts is None else artifacts
-        landed_node_id = landing_node(target_graph, from_node.name)
+        landed_node_id = MigrationFact.landing_node(target_graph, from_node.name)
         return self._land_migration(
             chunk,
             from_node,
@@ -417,7 +417,7 @@ class ApplyService:
             from_node,
             submission,
             target_graph=follow_latest_graph,
-            landed_node_id=landing_node(follow_latest_graph, edge.to_node_name),
+            landed_node_id=MigrationFact.landing_node(follow_latest_graph, edge.to_node_name),
             choice_name=submission.choice,
             decision_id=submission.decision_id,
             model=None,

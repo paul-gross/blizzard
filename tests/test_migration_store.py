@@ -27,7 +27,6 @@ from blizzard.hub.domain.work import (
     MigrationMode,
     MigrationSource,
     TransitionFact,
-    landing_node,
 )
 from blizzard.hub.store import schema as s
 from tests.support import build_hub, pointer_token, report_lease
@@ -166,9 +165,9 @@ def test_landing_node_is_name_match_else_entry() -> None:
     )
     build = graph.node_by_name("build")
     assert build is not None
-    assert landing_node(graph, "build") == build.node_id  # name match
-    assert landing_node(graph, "no-such-node") == graph.entry_node_id  # entry fallback
-    assert landing_node(graph, None) == graph.entry_node_id
+    assert MigrationFact.landing_node(graph, "build") == build.node_id  # name match
+    assert MigrationFact.landing_node(graph, "no-such-node") == graph.entry_node_id  # entry fallback
+    assert MigrationFact.landing_node(graph, None) == graph.entry_node_id
 
 
 # --------------------------------------------------------------------------- #

@@ -47,13 +47,13 @@ from blizzard.hub.domain.work import (
     QuestionRow,
     RequeueFact,
     RouteCreatedFact,
+    RouteHistory,
     RouteReleasedFact,
     RouteTokenMintedFact,
     TransitionFact,
     UsageFact,
     WorkItemCloseOutcome,
     WorkRef,
-    newest_live_route,
 )
 from blizzard.hub.store import schema as s
 
@@ -345,10 +345,10 @@ class ChunkStore:
     def _route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
         """:meth:`route_of`'s query body, taking an already-open ``conn`` so a write
         transaction can resolve the same question inside its own commit (issue #118).
-        Delegates the tie-break to :func:`~blizzard.hub.domain.work.newest_live_route`,
+        Delegates the tie-break to :attr:`~blizzard.hub.domain.work.RouteHistory.newest`,
         so route liveness has exactly one answer at a same-instant tie (issue #41)."""
         # (created_at, seq) desc — must stay in lockstep with the key
-        # newest_live_route orders by; that function, not this query, owns it.
+        # `RouteHistory.newest` orders by; that property, not this query, owns it.
         created = conn.execute(
             select(s.route_created)
             .where(s.route_created.c.chunk_id == chunk_id)
@@ -364,7 +364,7 @@ class ChunkStore:
         ).first()
         routes_released = [RouteReleasedFact(released_at=released.released_at, seq=released.seq)] if released else []
         routes_created = [RouteCreatedFact(created_at=created.created_at, seq=created.seq)]
-        if newest_live_route(routes_created, routes_released) is None:
+        if RouteHistory(routes_created, routes_released).newest is None:
             return None
         env_ids = [
             e.environment_id

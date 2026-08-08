@@ -23,13 +23,10 @@ from blizzard.hub.delivery.hub_node import (
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_TIMEOUT,
     ENV_MARKER_TOKEN,
-    HubEnvInputs,
+    HubEnv,
+    PollPolicy,
+    PrintedChoice,
     UnconvergedDeliveryError,
-    _printed_choice,
-    build_hub_env,
-    graph_declares_git_commit,
-    poll_interval_for,
-    poll_timeout_for,
 )
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.graph import HUB_PENDING_CHOICE, Executor, GraphDoc
@@ -310,18 +307,18 @@ def test_poll_interval_and_timeout_are_valid_when_well_formed() -> None:
 def test_pending_is_recognized_regardless_of_authored_choice_names() -> None:
     """The reserved ``pending`` outcome (#66) is recognized on its last stdout line
     even when no choice named it — like ``success``/``failure``, never an authored edge."""
-    assert _printed_choice("doing work\npending", frozenset({"success", "failure"})) == HUB_PENDING_CHOICE
-    assert _printed_choice("pending", frozenset()) == HUB_PENDING_CHOICE
-    assert _printed_choice("unrelated-line", frozenset()) is None
+    assert PrintedChoice.of("doing work\npending", frozenset({"success", "failure"})).name == HUB_PENDING_CHOICE
+    assert PrintedChoice.of("pending", frozenset()).name == HUB_PENDING_CHOICE
+    assert PrintedChoice.of("unrelated-line", frozenset()).name is None
 
 
-def test_poll_interval_for_and_poll_timeout_for_default_when_unauthored() -> None:
+def test_poll_policy_defaults_when_unauthored() -> None:
     _, merge_node = _reified_merge_node()
-    assert poll_interval_for(merge_node) == DEFAULT_POLL_INTERVAL
-    assert poll_timeout_for(merge_node) == DEFAULT_POLL_TIMEOUT
+    assert PollPolicy.of(merge_node).interval == DEFAULT_POLL_INTERVAL
+    assert PollPolicy.of(merge_node).timeout == DEFAULT_POLL_TIMEOUT
 
 
-def test_poll_interval_for_and_poll_timeout_for_honor_the_authored_override() -> None:
+def test_poll_policy_honors_the_authored_override() -> None:
     doc = GraphDoc.of(
         {
             "name": "g",
@@ -332,8 +329,8 @@ def test_poll_interval_for_and_poll_timeout_for_honor_the_authored_override() ->
     graph = reify_graph(doc, FixedClock(datetime(2026, 7, 17, tzinfo=UTC)))
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None
-    assert poll_interval_for(merge_node) == timedelta(seconds=15)
-    assert poll_timeout_for(merge_node) == timedelta(seconds=90)
+    assert PollPolicy.of(merge_node).interval == timedelta(seconds=15)
+    assert PollPolicy.of(merge_node).timeout == timedelta(seconds=90)
 
 
 def _facts_at_hub_node(
@@ -430,19 +427,17 @@ def test_build_hub_env_carries_no_model_credential_and_the_documented_keys() -> 
         node_name="build",
         epoch=1,
     )
-    env = build_hub_env(
-        HubEnvInputs(
-            chunk=chunk,
-            node=merge_node,
-            workdir="/tmp/ch_x",
-            epoch=1,
-            artifacts=[artifact],
-            base_branch="main",
-            marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
-            forge_url="http://forge",
-            forge_token="tok",
-        )
-    )
+    env = HubEnv(
+        chunk=chunk,
+        node=merge_node,
+        workdir="/tmp/ch_x",
+        epoch=1,
+        artifacts=[artifact],
+        base_branch="main",
+        marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
+        forge_url="http://forge",
+        forge_token="tok",
+    ).vars
     assert env["BZ_HUB_CHUNK_ID"] == "ch_x"
     assert env["BZ_HUB_WORKDIR"] == "/tmp/ch_x"
     assert env["BZ_HUB_NODE_NAME"] == "merge"
@@ -493,17 +488,15 @@ def _commits_in(env: dict[str, str]) -> list[dict[str, str]]:
 def _env_with(artifacts: list[ArtifactRow]) -> dict[str, str]:
     _, merge_node = _reified_merge_node()
     chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
-    return build_hub_env(
-        HubEnvInputs(
-            chunk=chunk,
-            node=merge_node,
-            workdir="/tmp/ch_x",
-            epoch=9,
-            artifacts=artifacts,
-            base_branch="main",
-            marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
-        )
-    )
+    return HubEnv(
+        chunk=chunk,
+        node=merge_node,
+        workdir="/tmp/ch_x",
+        epoch=9,
+        artifacts=artifacts,
+        base_branch="main",
+        marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
+    ).vars
 
 
 def test_a_rebased_tip_supersedes_the_pre_rebase_commit_for_the_same_repo() -> None:
@@ -547,36 +540,32 @@ def test_build_hub_env_omits_the_marker_token_when_none_is_given() -> None:
     convention."""
     _, merge_node = _reified_merge_node()
     chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
-    env = build_hub_env(
-        HubEnvInputs(
-            chunk=chunk,
-            node=merge_node,
-            workdir="/tmp/ch_x",
-            epoch=1,
-            artifacts=[],
-            base_branch="main",
-            marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
-            marker_token="",
-        )
-    )
+    env = HubEnv(
+        chunk=chunk,
+        node=merge_node,
+        workdir="/tmp/ch_x",
+        epoch=1,
+        artifacts=[],
+        base_branch="main",
+        marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
+        marker_token="",
+    ).vars
     assert ENV_MARKER_TOKEN not in env
 
 
 def test_build_hub_env_carries_the_feature_title_when_given() -> None:
     _, merge_node = _reified_merge_node()
     chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
-    env = build_hub_env(
-        HubEnvInputs(
-            chunk=chunk,
-            node=merge_node,
-            workdir="/tmp/ch_x",
-            epoch=1,
-            artifacts=[],
-            base_branch="main",
-            marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
-            feature_title="Add rate limiting to the widget API",
-        )
-    )
+    env = HubEnv(
+        chunk=chunk,
+        node=merge_node,
+        workdir="/tmp/ch_x",
+        epoch=1,
+        artifacts=[],
+        base_branch="main",
+        marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
+        feature_title="Add rate limiting to the widget API",
+    ).vars
     assert env["BZ_HUB_FEATURE_TITLE"] == "Add rate limiting to the widget API"
 
 
@@ -1358,13 +1347,13 @@ def test_delivery_falls_back_to_the_bare_name_for_an_origin_that_names_no_owner(
     assert _commits_in(env) == [{"repo": "toy-api", "branch": "feat/x", "commit": "a" * 40}]
 
 
-def test_graph_declares_git_commit_reads_the_graphs_own_intent() -> None:
+def test_declares_git_commit_reads_the_graphs_own_intent() -> None:
     """The signal that tells a lost commit apart from one never promised. Read off the
     graph rather than the artifacts, so a code graph that produced nothing still counts
     as expecting something — which is the whole case being caught."""
     graph, _ = _reified_merge_node()
 
-    declares = graph_declares_git_commit(graph)
+    declares = graph.declares_git_commit
 
     assert declares is any(spec.kind is ArtifactKind.GIT_COMMIT for node in graph.nodes for spec in node.produces)
 
@@ -1377,15 +1366,13 @@ def test_the_env_carries_the_graphs_git_commit_expectation() -> None:
 def _env_for_expectation(*, expects: bool) -> dict[str, str]:
     _, merge_node = _reified_merge_node()
     chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
-    return build_hub_env(
-        HubEnvInputs(
-            chunk=chunk,
-            node=merge_node,
-            workdir="/tmp/ch_x",
-            epoch=1,
-            artifacts=[],
-            base_branch="main",
-            marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
-            expects_git_commits=expects,
-        )
-    )
+    return HubEnv(
+        chunk=chunk,
+        node=merge_node,
+        workdir="/tmp/ch_x",
+        epoch=1,
+        artifacts=[],
+        base_branch="main",
+        marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
+        expects_git_commits=expects,
+    ).vars

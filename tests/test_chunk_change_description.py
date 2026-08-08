@@ -1,4 +1,4 @@
-"""``describe_chunk_change`` (unit tier) — the pure derivation behind a ``chunk-changed``
+"""``ChunkChange.of`` (unit tier) — the pure derivation behind a ``chunk-changed``
 frame's prev/current node names and graph id (issue #212). Built straight from
 :class:`ChunkFacts` + :class:`Graph` literals — no store, no hub harness.
 """
@@ -12,12 +12,12 @@ import pytest
 from blizzard.hub.domain.graph import Executor, Graph, JudgedBy, Node, SessionMode
 from blizzard.hub.domain.work import (
     Chunk,
+    ChunkChange,
     ChunkFacts,
     ChunkStatus,
     RouteCreatedFact,
     TransitionFact,
     WorkRef,
-    describe_chunk_change,
 )
 
 pytestmark = pytest.mark.unit
@@ -59,9 +59,7 @@ def _chunk(graph_id: str = "gr_1") -> Chunk:
 
 def test_no_transitions_omits_prev_node_and_reads_entry_node() -> None:
     graph = _graph()
-    change = describe_chunk_change(
-        _chunk(), graph, ChunkFacts(minted=True), prev_status=None, runner_id=None, cause="minted"
-    )
+    change = ChunkChange.of(_chunk(), graph, ChunkFacts(minted=True), prev_status=None, runner_id=None, cause="minted")
     assert change.prev_node is None
     assert change.node == "build"  # graph.entry_node_id resolves to nd_a
     assert change.status == ChunkStatus.NOT_READY.value
@@ -85,9 +83,7 @@ def test_normal_transition_reports_from_and_to_node_names() -> None:
             )
         ],
     )
-    change = describe_chunk_change(
-        _chunk(), graph, facts, prev_status="running", runner_id="runner-a", cause="node-completed"
-    )
+    change = ChunkChange.of(_chunk(), graph, facts, prev_status="running", runner_id="runner-a", cause="node-completed")
     assert change.prev_node == "build"
     assert change.node == "review"
     assert change.runner_id == "runner-a"
@@ -114,7 +110,7 @@ def test_transition_from_a_different_graph_resolves_against_from_graph() -> None
             )
         ],
     )
-    change = describe_chunk_change(
+    change = ChunkChange.of(
         _chunk("gr_new"), new_graph, facts, prev_status=None, runner_id=None, cause="migrated", from_graph=old_graph
     )
     assert change.prev_node == "build"  # resolved against gr_old, not gr_new
@@ -136,6 +132,6 @@ def test_unresolvable_from_node_id_omits_prev_node_without_raising() -> None:
             )
         ],
     )
-    change = describe_chunk_change(_chunk(), graph, facts, prev_status=None, runner_id=None, cause="node-completed")
+    change = ChunkChange.of(_chunk(), graph, facts, prev_status=None, runner_id=None, cause="node-completed")
     assert change.prev_node is None
     assert change.node == "review"

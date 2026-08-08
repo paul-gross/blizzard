@@ -541,6 +541,13 @@ class Graph:
     # The graph-level named-session declarations (issue #144), in authored order.
     sessions: list[SessionDecl] = field(default_factory=list)
 
+    @property
+    def declares_git_commit(self) -> bool:
+        """Whether any node declares a ``git_commit``-kind ``produces:`` — the graph's own
+        statement of intent, and the only thing that tells an empty delivery set apart
+        from a failed one."""
+        return any(spec.kind is ArtifactKind.GIT_COMMIT for node in self.nodes for spec in node.produces)
+
     def session_by_name(self, name: str) -> SessionDecl | None:
         return next((s for s in self.sessions if s.name == name), None)
 

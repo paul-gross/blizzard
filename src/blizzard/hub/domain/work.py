@@ -31,18 +31,17 @@ class ChunkStatus(StrEnum):
     STOPPED = "stopped"
     DONE = "done"
 
+    @property
+    def holds_claim(self) -> bool:
+        """Whether a chunk at this status still holds the route it may be carrying (issue #140).
+        Terminal outranks route liveness: a terminal transition from a runner node stamps no
+        ``route.released``, so the raw route fact outlives it."""
+        return self not in TERMINAL_STATUSES
+
 
 # The two statuses a chunk never leaves — the one owner of "this chunk is finished",
 # defined beside the enum it folds rather than re-spelled per call site.
 TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
-
-
-def holds_claim(status: ChunkStatus) -> bool:
-    """Whether a chunk at ``status`` still holds the route it may be carrying (issue #140).
-    Terminal outranks route liveness, and this is the one place that says so for a
-    *route*: a terminal transition from a runner node stamps no ``route.released``, so
-    the raw route fact outlives it. Not consulted by :meth:`ChunkFacts._has_live_route`."""
-    return status not in TERMINAL_STATUSES
 
 
 # --- Domain objects ---------------------------------------------------------
@@ -286,6 +285,18 @@ class MigrationFact:
     landed_node_executor: Executor = Executor.RUNNER
     source: MigrationSource | None = None
 
+    @staticmethod
+    def landing_node(target_graph: Graph, from_node_name: str | None) -> str:
+        """The node a migration lands on in ``target_graph`` — name-match-else-entry (issue #90).
+
+        ``bzh:migration-not-transition``'s landing rule. A pure function of the passed-in
+        graph (``bzh:domain-takes-objects``)."""
+        if from_node_name is not None:
+            node = target_graph.node_by_name(from_node_name)
+            if node is not None:
+                return node.node_id
+        return target_graph.entry_node_id
+
 
 @dataclass(frozen=True)
 class RequeueFact:
@@ -327,7 +338,7 @@ class EventRow:
     """One ``event_log`` row — a durable, typed, severity-ranked operational fact (issue
     #125). ``chunk_id`` is ``None`` for a runner-scoped event; ``detail`` is the
     event-specific payload, already decoded from JSON. A negative ``id`` and a ``None``
-    ``runner_id`` mark a row :func:`derive_event_feed` synthesized rather than read."""
+    ``runner_id`` mark a row :class:`EventFeed` synthesized rather than read."""
 
     id: int
     recorded_at: datetime
@@ -343,9 +354,9 @@ class EventRow:
 
 @dataclass(frozen=True)
 class EscalationOpen:
-    """One fleet-wide **open** escalation — the input :func:`derive_event_feed` folds
-    into the unified event feed (issue #125). Carries its own ``chunk_id``, since the
-    read it comes from spans every chunk at once."""
+    """One fleet-wide **open** escalation — the input :class:`EventFeed` folds into the
+    unified event feed (issue #125). Carries its own ``chunk_id``, since the read it
+    comes from spans every chunk at once."""
 
     chunk_id: str
     recorded_at: datetime
@@ -358,15 +369,31 @@ DEFAULT_EVENT_LIST_LIMIT = 200
 _SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
 
 
-def derive_event_feed(events: list[EventRow], escalations: list[EscalationOpen]) -> list[EventRow]:
-    """Unify ``event_log`` rows with every currently-open escalation (issue #125).
+@dataclass(frozen=True)
+class EventFeed:
+    """``event_log`` rows unified with every currently-open escalation (issue #125).
 
-    Each open escalation projects into a synthetic ``EventRow`` carrying a **negative**
-    ``id`` — it is not an ``event_log`` row. The merged list sorts severity-then-recency:
-    critical before warning before info, newest ``recorded_at`` first within a band."""
-    projected = [
-        EventRow(
-            id=-(i + 1),
+    Sorted severity-then-recency: critical before warning before info, newest
+    ``recorded_at`` first within a band."""
+
+    rows: list[EventRow]
+
+    @classmethod
+    def of(cls, events: list[EventRow], escalations: list[EscalationOpen]) -> EventFeed:
+        projected = [cls._projected(i, esc) for i, esc in enumerate(escalations)]
+        merged = [*events, *projected]
+        return cls(
+            sorted(
+                merged, key=lambda e: (_SEVERITY_RANK.get(e.severity, len(_SEVERITY_RANK)), -e.recorded_at.timestamp())
+            )
+        )
+
+    @staticmethod
+    def _projected(index: int, esc: EscalationOpen) -> EventRow:
+        """One open escalation as a synthetic row carrying a **negative** ``id`` — it is
+        not an ``event_log`` row."""
+        return EventRow(
+            id=-(index + 1),
             recorded_at=esc.recorded_at,
             severity="critical",
             kind="needs-human",
@@ -383,12 +410,6 @@ def derive_event_feed(events: list[EventRow], escalations: list[EscalationOpen])
             ),
             detail=None,
         )
-        for i, esc in enumerate(escalations)
-    ]
-    merged = [*events, *projected]
-    return sorted(
-        merged, key=lambda e: (_SEVERITY_RANK.get(e.severity, len(_SEVERITY_RANK)), -e.recorded_at.timestamp())
-    )
 
 
 @dataclass(frozen=True)
@@ -418,34 +439,41 @@ class ActivityRow:
     reason: str | None = None
 
 
-def _event_row_to_activity(row: EventRow) -> ActivityRow:
-    """Reshape one already-loaded ``event_log`` row into the activity feed's common
-    row type (issue #213) — the ``event-logged`` half of :func:`derive_activity_feed`."""
-    return ActivityRow(
-        type="event-logged",
-        key=f"event_log:{row.id}",
-        at=row.recorded_at,
-        chunk_id=row.chunk_id,
-        runner_id=row.runner_id,
-        severity=row.severity,
-        kind=row.kind,
-    )
+@dataclass(frozen=True)
+class ActivityFeed:
+    """The activity feed's three already-bounded per-source reads, merged (issue #213).
 
+    Merge only: sorts by ``(at desc, key desc)`` — ``key`` breaking an exact-instant tie
+    — and caps to ``limit``."""
 
-def derive_activity_feed(
-    chunk_changed: Sequence[ActivityRow],
-    events: Sequence[EventRow],
-    runner_changed: Sequence[ActivityRow],
-    *,
-    limit: int,
-) -> list[ActivityRow]:
-    """Merge the activity feed's three already-bounded per-source reads into one feed
-    (issue #213). Each argument is already bounded by its own repository seam
-    (``bzh:repository-split``), so this only merges: sorts the union by ``(at desc, key
-    desc)`` — ``key`` breaking an exact-instant tie — and caps to ``limit``."""
-    merged = [*chunk_changed, *(_event_row_to_activity(e) for e in events), *runner_changed]
-    merged.sort(key=lambda row: (row.at, row.key), reverse=True)
-    return merged[:limit]
+    rows: list[ActivityRow]
+
+    @classmethod
+    def of(
+        cls,
+        chunk_changed: Sequence[ActivityRow],
+        events: Sequence[EventRow],
+        runner_changed: Sequence[ActivityRow],
+        *,
+        limit: int,
+    ) -> ActivityFeed:
+        merged = [*chunk_changed, *(cls._of_event(e) for e in events), *runner_changed]
+        merged.sort(key=lambda row: (row.at, row.key), reverse=True)
+        return cls(merged[:limit])
+
+    @staticmethod
+    def _of_event(row: EventRow) -> ActivityRow:
+        """One ``event_log`` row reshaped into the feed's common row type — its
+        ``event-logged`` half."""
+        return ActivityRow(
+            type="event-logged",
+            key=f"event_log:{row.id}",
+            at=row.recorded_at,
+            chunk_id=row.chunk_id,
+            runner_id=row.runner_id,
+            severity=row.severity,
+            kind=row.kind,
+        )
 
 
 @dataclass(frozen=True)
@@ -710,9 +738,14 @@ class ChunkFacts:
         """Paused derives from the newest pause fact, newest-fact-wins (issue #46)."""
         return self.open_pause() is not None
 
+    @property
+    def routes(self) -> RouteHistory:
+        """The chunk's route facts as the object that derives their liveness."""
+        return RouteHistory.of(self)
+
     def _has_live_route(self) -> bool:
-        """A ``route.created`` with no later ``route.released``. See :func:`newest_live_route`."""
-        return newest_live_route(self.routes_created, self.routes_released) is not None
+        """A ``route.created`` with no later ``route.released``."""
+        return self.routes.newest is not None
 
     def has_landed_repos(self, artifacts: Sequence[ArtifactRow] = ()) -> bool:
         """True iff any repo has landed for this chunk — informational, never a status (#63).
@@ -720,7 +753,7 @@ class ChunkFacts:
         ``artifacts`` carries the generic ``merged/<repo>`` marker convention (#67) — the
         current landing truth; the fact inputs are read alongside for back-compat, so a
         historical chunk still reads landed."""
-        return self.delivery_landed or bool(self.landed_repos) or bool(landed_repos_from_markers(artifacts))
+        return self.delivery_landed or bool(self.landed_repos) or bool(LandedRepos.of(artifacts).names)
 
     def bounce_count(self) -> int:
         """The chunk's total recorded delivery kick-backs (#64) — informational.
@@ -763,7 +796,7 @@ class ChunkFacts:
 
         Deliberately unfenced by epoch (unlike the status derivations): every recorded
         usage row is real spend, summed regardless of which epoch minted it."""
-        return _sum_usage(self.usage)
+        return UsageTotal.of(self.usage)
 
 
 # --- The derivation queries -----------------------------------------
@@ -772,44 +805,69 @@ class ChunkFacts:
 _MARKER_PREFIX = "merged/"
 
 
-def landed_repos_from_markers(artifacts: Sequence[ArtifactRow]) -> frozenset[str]:
+@dataclass(frozen=True)
+class LandedRepos:
     """Repos landed via a hub command node's ``merged/<repo>`` marker artifact (#67).
 
     No engine code names a "deliver" node, so a chunk's landed detail is read off its
     own node artifacts rather than a privileged fact family."""
-    return frozenset(
-        artifact.name.removeprefix(_MARKER_PREFIX) for artifact in artifacts if artifact.name.startswith(_MARKER_PREFIX)
-    )
+
+    names: frozenset[str]
+
+    @classmethod
+    def of(cls, artifacts: Sequence[ArtifactRow]) -> LandedRepos:
+        return cls(
+            frozenset(a.name.removeprefix(_MARKER_PREFIX) for a in artifacts if a.name.startswith(_MARKER_PREFIX))
+        )
 
 
-def landing_node(target_graph: Graph, from_node_name: str | None) -> str:
-    """The node a migration lands on in ``target_graph`` — name-match-else-entry (issue #90).
+@dataclass(frozen=True)
+class RouteHistory:
+    """A chunk's route facts and the liveness they derive (issue #41)."""
 
-    ``bzh:migration-not-transition``'s landing rule: match the name of the node the chunk
-    migrated *from*, or the target's entry node when no name matches. A pure function of
-    the passed-in graph (``bzh:domain-takes-objects``)."""
-    if from_node_name is not None:
-        node = target_graph.node_by_name(from_node_name)
-        if node is not None:
-            return node.node_id
-    return target_graph.entry_node_id
+    created: list[RouteCreatedFact] = field(default_factory=list)
+    released: list[RouteReleasedFact] = field(default_factory=list)
+    tokens_minted: list[RouteTokenMintedFact] = field(default_factory=list)
+
+    @classmethod
+    def of(cls, facts: ChunkFacts) -> RouteHistory:
+        return cls(facts.routes_created, facts.routes_released, facts.route_tokens_minted)
+
+    @property
+    def newest(self) -> RouteCreatedFact | None:
+        """The newest ``route.created`` fact still live, or ``None`` if released.
+
+        The single tie-break route liveness resolves against, ``(timestamp, seq)``, where
+        ``seq`` is a per-chunk counter assigned in real write order (pinned by
+        ``test_reclaimed_after_release_is_running_again``)."""
+        if not self.created:
+            return None
+        newest_created = max(self.created, key=lambda r: (r.created_at, r.seq))
+        key = (newest_created.created_at, newest_created.seq)
+        if any((rel.released_at, rel.seq) > key for rel in self.released):
+            return None
+        return newest_created
+
+    @property
+    def newest_token(self) -> RouteTokenMintedFact | None:
+        """The chunk's live route capability token, or ``None`` if unclaimed/released (issue #84a).
+
+        The newest one minted at or after :attr:`newest`'s own ``seq`` — that lower bound
+        alone scopes the search to the live acquisition. Newest-fact-wins is what makes a
+        re-key supersede the prior token with no revocation."""
+        live = self.newest
+        if live is None:
+            return None
+        candidates = [t for t in self.tokens_minted if t.seq >= live.seq]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda t: (t.minted_at, t.seq))
 
 
 def newest_live_route(
     routes_created: list[RouteCreatedFact], routes_released: list[RouteReleasedFact]
 ) -> RouteCreatedFact | None:
-    """The newest ``route.created`` fact still live, or ``None`` if released.
-
-    The single tie-break route liveness resolves against (issue #41). Ordered by
-    ``(timestamp, seq)``, where ``seq`` is a per-chunk counter assigned in real write
-    order (pinned by ``test_reclaimed_after_release_is_running_again``)."""
-    if not routes_created:
-        return None
-    newest_created = max(routes_created, key=lambda r: (r.created_at, r.seq))
-    key = (newest_created.created_at, newest_created.seq)
-    if any((rel.released_at, rel.seq) > key for rel in routes_released):
-        return None
-    return newest_created
+    return RouteHistory(routes_created, routes_released).newest
 
 
 def newest_live_route_token(
@@ -817,18 +875,7 @@ def newest_live_route_token(
     routes_released: list[RouteReleasedFact],
     route_tokens_minted: list[RouteTokenMintedFact],
 ) -> RouteTokenMintedFact | None:
-    """The chunk's live route capability token, or ``None`` if unclaimed/released (issue #84a).
-
-    The newest :class:`RouteTokenMintedFact` minted at or after :func:`newest_live_route`'s
-    own ``seq`` — that lower bound alone scopes the search to the live acquisition.
-    Newest-fact-wins is what makes a re-key supersede the prior token with no revocation."""
-    live = newest_live_route(routes_created, routes_released)
-    if live is None:
-        return None
-    candidates = [t for t in route_tokens_minted if t.seq >= live.seq]
-    if not candidates:
-        return None
-    return max(candidates, key=lambda t: (t.minted_at, t.seq))
+    return RouteHistory(routes_created, routes_released, route_tokens_minted).newest_token
 
 
 @dataclass(frozen=True)
@@ -836,7 +883,7 @@ class ChunkChange:
     """A ``chunk-changed`` frame's derived content (issue #212) — the current status
     (derived the same way every status read is, :meth:`ChunkFacts.status`), the
     prev/current node names, the graph id, and the caller-supplied prev-status/runner/cause
-    passed straight through. :func:`describe_chunk_change` builds one."""
+    passed straight through."""
 
     status: str
     prev_status: str | None
@@ -846,46 +893,47 @@ class ChunkChange:
     cause: str | None
     graph_id: str
 
+    @classmethod
+    def of(
+        cls,
+        chunk: Chunk,
+        graph: Graph,
+        facts: ChunkFacts,
+        *,
+        prev_status: str | None,
+        runner_id: str | None,
+        cause: str | None,
+        from_graph: Graph | None = None,
+    ) -> ChunkChange:
+        """Derive the frame's content from already-loaded objects
+        (``bzh:domain-takes-objects``) — no store, no ids resolved here. ``graph`` must be
+        the chunk's *post-mutation* pin. ``prev_node`` resolves against ``from_graph`` when
+        the newest transition's own ``graph_id`` differs, honoring the same
+        ``graph_id``-provenance ``ChunkFacts.transition_history`` does."""
+        assert chunk.graph_id == graph.graph_id, "graph must be the chunk's post-mutation pin"
 
-def describe_chunk_change(
-    chunk: Chunk,
-    graph: Graph,
-    facts: ChunkFacts,
-    *,
-    prev_status: str | None,
-    runner_id: str | None,
-    cause: str | None,
-    from_graph: Graph | None = None,
-) -> ChunkChange:
-    """Derive a ``chunk-changed`` frame's content from already-loaded objects
-    (``bzh:domain-takes-objects``) — no store, no ids resolved here. ``graph`` must be
-    the chunk's *post-mutation* pin. ``prev_node`` resolves against ``from_graph`` when
-    the newest transition's own ``graph_id`` differs, honoring the same
-    ``graph_id``-provenance ``ChunkFacts.transition_history`` does."""
-    assert chunk.graph_id == graph.graph_id, "graph must be the chunk's post-mutation pin"
+        current_id = facts.current_node_id() or graph.entry_node_id
+        current = graph.node_by_id(current_id)
+        node = current.name if current is not None else None
 
-    current_id = facts.current_node_id() or graph.entry_node_id
-    current = graph.node_by_id(current_id)
-    node = current.name if current is not None else None
+        prev_node: str | None = None
+        transition = facts.newest_transition()
+        if transition is not None and transition.from_node_id is not None:
+            target_graph = graph
+            if transition.graph_id is not None and transition.graph_id != graph.graph_id and from_graph is not None:
+                target_graph = from_graph
+            from_node = target_graph.node_by_id(transition.from_node_id)
+            prev_node = from_node.name if from_node is not None else None
 
-    prev_node: str | None = None
-    transition = facts.newest_transition()
-    if transition is not None and transition.from_node_id is not None:
-        target_graph = graph
-        if transition.graph_id is not None and transition.graph_id != graph.graph_id and from_graph is not None:
-            target_graph = from_graph
-        from_node = target_graph.node_by_id(transition.from_node_id)
-        prev_node = from_node.name if from_node is not None else None
-
-    return ChunkChange(
-        status=facts.status().value,
-        prev_status=prev_status,
-        node=node,
-        prev_node=prev_node,
-        runner_id=runner_id,
-        cause=cause,
-        graph_id=graph.graph_id,
-    )
+        return cls(
+            status=facts.status().value,
+            prev_status=prev_status,
+            node=node,
+            prev_node=prev_node,
+            runner_id=runner_id,
+            cause=cause,
+            graph_id=graph.graph_id,
+        )
 
 
 @dataclass(frozen=True)
@@ -902,28 +950,18 @@ class UsageTotal:
     cost_usd: float
     cost_partial: bool
 
-
-def _sum_usage(rows: list[UsageFact]) -> UsageTotal:
-    """Sum ``rows`` into one total — see :class:`UsageTotal` for the lower-bound +
-    PARTIAL contract this implements. Shared by :meth:`ChunkFacts.usage_total` (one
-    chunk's facts) and :func:`derive_fleet_usage` (an arbitrary set of rows, e.g.
-    fleet spend-since)."""
-    return UsageTotal(
-        input_tokens=sum(u.input_tokens for u in rows),
-        output_tokens=sum(u.output_tokens for u in rows),
-        cache_read_tokens=sum(u.cache_read_tokens for u in rows),
-        cache_create_tokens=sum(u.cache_create_tokens for u in rows),
-        cost_usd=sum(u.cost_usd for u in rows if u.cost_usd is not None),
-        cost_partial=any(u.cost_usd is None for u in rows),
-    )
-
-
-def derive_fleet_usage(rows: list[UsageFact]) -> UsageTotal:
-    """Sum usage facts across the whole fleet into one total (issue #60) — the fleet
-    spend-since read's derivation. Same summation as :meth:`ChunkFacts.usage_total`, over an
-    arbitrary set of rows (here: every usage fact at or after a cutoff instant,
-    :meth:`IReadChunkRepository.usage_since`) rather than one chunk's own facts."""
-    return _sum_usage(rows)
+    @classmethod
+    def of(cls, rows: list[UsageFact]) -> UsageTotal:
+        """Sum ``rows`` into one total — one chunk's own facts, or an arbitrary set
+        (the fleet spend-since window, issue #60)."""
+        return cls(
+            input_tokens=sum(u.input_tokens for u in rows),
+            output_tokens=sum(u.output_tokens for u in rows),
+            cache_read_tokens=sum(u.cache_read_tokens for u in rows),
+            cache_create_tokens=sum(u.cache_create_tokens for u in rows),
+            cost_usd=sum(u.cost_usd for u in rows if u.cost_usd is not None),
+            cost_partial=any(u.cost_usd is None for u in rows),
+        )
 
 
 @dataclass(frozen=True)
@@ -936,24 +974,22 @@ class FleetSummary:
     waiting: int = 0
     needs: int = 0
 
-
-def derive_fleet_summary(statuses: Iterable[ChunkStatus]) -> FleetSummary:
-    """Fold each chunk's derived status into the four buckets (issue #76).
-
-    The one canonical statement of the fold: ``ready`` counts ``ready``; ``running``
-    counts ``running`` + ``delivering``; ``waiting`` counts ``waiting_on_human`` +
-    ``paused``; ``needs`` counts ``needs_human``. Every other status counts toward none."""
-    ready = running = waiting = needs = 0
-    for st in statuses:
-        if st is ChunkStatus.READY:
-            ready += 1
-        elif st in (ChunkStatus.RUNNING, ChunkStatus.DELIVERING):
-            running += 1
-        elif st in (ChunkStatus.WAITING_ON_HUMAN, ChunkStatus.PAUSED):
-            waiting += 1
-        elif st is ChunkStatus.NEEDS_HUMAN:
-            needs += 1
-    return FleetSummary(ready=ready, running=running, waiting=waiting, needs=needs)
+    @classmethod
+    def of(cls, statuses: Iterable[ChunkStatus]) -> FleetSummary:
+        """The one canonical statement of the fold: ``ready`` counts ``ready``; ``running``
+        counts ``running`` + ``delivering``; ``waiting`` counts ``waiting_on_human`` +
+        ``paused``; ``needs`` counts ``needs_human``. Every other status counts toward none."""
+        ready = running = waiting = needs = 0
+        for st in statuses:
+            if st is ChunkStatus.READY:
+                ready += 1
+            elif st in (ChunkStatus.RUNNING, ChunkStatus.DELIVERING):
+                running += 1
+            elif st in (ChunkStatus.WAITING_ON_HUMAN, ChunkStatus.PAUSED):
+                waiting += 1
+            elif st is ChunkStatus.NEEDS_HUMAN:
+                needs += 1
+        return cls(ready=ready, running=running, waiting=waiting, needs=needs)
 
 
 # --- Question rows (the ask/answer rendezvous) -------------------------------
@@ -1095,7 +1131,7 @@ class IReadChunkRepository(Protocol):
         strictly before it — across every chunk (issue #60, issue #183). ``since`` is
         inclusive and ``until`` exclusive, so adjacent windows sharing a boundary instant
         neither double-count nor drop a fact at it. Omitting ``until`` is the original
-        open-ended tail. The caller derives the total via :func:`derive_fleet_usage`."""
+        open-ended tail. The caller derives the total via :meth:`UsageTotal.of`."""
         ...
 
     def list_events(
@@ -1111,7 +1147,7 @@ class IReadChunkRepository(Protocol):
         tiebreak), filtered by whichever of ``severity``/``runner_id``/``chunk_id``/
         ``since`` is given and bounded by ``limit`` — ``GET /api/events``'s own-table
         half (issue #125); the caller unifies it with :meth:`list_open_escalations` via
-        :func:`derive_event_feed`."""
+        :class:`EventFeed`."""
         ...
 
     def list_open_escalations(self) -> list[EscalationOpen]:
@@ -1162,7 +1198,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
     def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:
         """Append a fresh :class:`RouteTokenMintedFact` for the chunk's route — the re-key
         path (issue #84b). Never mutates the prior token fact (``bzh:facts-not-status``):
-        :func:`newest_live_route_token` supersedes it with no separate revocation step."""
+        :attr:`RouteHistory.newest_token` supersedes it with no separate revocation step."""
         ...
 
     def record_transition(
