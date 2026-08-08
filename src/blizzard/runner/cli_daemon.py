@@ -11,7 +11,7 @@ import click
 import httpx
 
 from blizzard.cli.param_rank import source_rank
-from blizzard.runner.config import socket_path_for
+from blizzard.runner.config import RunnerConfig
 
 # A machine-local round trip (issue #43), so a hook-scale budget rather than the hub-client one.
 LOCAL_CLIENT_TIMEOUT = 5.0
@@ -44,7 +44,7 @@ class RunnerDaemon:
         if url_rank > dir_rank and runner_url is not None:
             return cls(verb, httpx.Client(base_url=runner_url, timeout=LOCAL_CLIENT_TIMEOUT), runner_url)
 
-        sock = socket_path_for(Path(directory))
+        sock = RunnerConfig.socket_path_for(Path(directory))
         if not sock.exists():
             # No degraded read path — an absent socket is a daemon-not-running diagnostic,
             # never a reason to fall back to reading the store.

@@ -31,6 +31,21 @@ class TrustedProxies:
             return cls()
         return cls(tuple(ip_network(str(entry).strip(), strict=False) for entry in entries))
 
+    @classmethod
+    def entries(cls, raw: object, invalid: type[Exception]) -> tuple[str, ...]:
+        """Authored ``trusted_proxies`` entries, validated through :meth:`parse` so a malformed
+        one fails at config load and then carried verbatim — they round-trip to toml, and
+        building the networks is the composition root's job. ``invalid`` is the caller's
+        config-error type."""
+        if not isinstance(raw, (list, tuple)):
+            return ()
+        entries = tuple(str(entry).strip() for entry in raw)
+        try:
+            cls.parse(entries)
+        except ValueError as exc:
+            raise invalid(f"trusted_proxies entry is not a valid IP or CIDR: {exc}") from exc
+        return entries
+
     def _trusts(self, host: str | None) -> bool:
         """Whether ``host`` is one of the configured trusted proxies. A ``None`` peer or a non-IP
         token matches nothing."""

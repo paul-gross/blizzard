@@ -11,6 +11,7 @@ import os
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from blizzard.foundation.forwarded import TrustedProxies
 
@@ -64,18 +65,129 @@ DEFAULT_RUNNER_CEILING_WINDOW_HOURS = 24.0
 # How often the tick re-samples the harness's rate-limit windows (issue #218) — a
 # diagnostic, best-effort read, not a spend control.
 DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS = 300
-
-
-def socket_path_for(root: Path) -> Path:
-    """The local API's socket under a runtime dir — derivable from the path alone.
-
-    Deliberately not a method on the loaded config: this is what lets a local verb address
-    the daemon from ``--dir`` alone, without reading the toml or opening the store."""
-    return root / SOCKET_FILENAME
+DEFAULT_AUTH_HUB_ROLE = "mirror"
 
 
 class ConfigError(RuntimeError):
     """A runtime directory is missing its config — it was never initialized."""
+
+
+@dataclass(frozen=True)
+class Table:
+    """One parsed toml table, read through the coercions the config fields share.
+
+    A value that is not a table reads as empty, so an absent section and an absent key
+    behave alike."""
+
+    body: dict[str, Any]
+
+    @classmethod
+    def of(cls, value: object) -> Table:
+        return cls(value if isinstance(value, dict) else {})
+
+    def text(self, key: str) -> str | None:
+        value = self.body.get(key)
+        return None if value is None else str(value)
+
+    def word(self, key: str) -> str | None:
+        """A string read whose empty value counts as absent."""
+        value = self.body.get(key)
+        return str(value) if value else None
+
+    def real(self, key: str) -> float | None:
+        value = self.body.get(key)
+        return None if value is None else float(value)
+
+    def count(self, key: str, default: int) -> int:
+        value = self.body.get(key)
+        return default if value is None else int(value)
+
+    def names(self, key: str) -> tuple[str, ...]:
+        """Every entry at ``key`` as a string; an absent key is empty."""
+        value = self.body.get(key)
+        return () if value is None else tuple(str(entry) for entry in value)
+
+    def listed(self, key: str, default: tuple[str, ...]) -> tuple[str, ...]:
+        """Every entry at ``key`` as a string, falling back to ``default`` unless it is a list."""
+        value = self.body.get(key)
+        if not isinstance(value, (list, tuple)):
+            return default
+        return tuple(str(entry) for entry in value)
+
+    def pairs(self, key: str) -> tuple[tuple[str, str], ...]:
+        """The nested table at ``key`` as key/value pairs — a frozen dataclass field must
+        stay hashable. Absent, or present but empty, means none."""
+        nested = self.body.get(key)
+        if not isinstance(nested, dict):
+            return ()
+        return tuple((str(name), str(value)) for name, value in nested.items())
+
+
+@dataclass(frozen=True)
+class Spend:
+    """The ``[cost]`` table's spend controls (epic #57) — absent means uncapped."""
+
+    table: Table
+
+    @classmethod
+    def of(cls, raw: object) -> Spend:
+        return cls(Table.of(raw))
+
+    @property
+    def chunk_cap_usd(self) -> float | None:
+        return self.table.real("chunk_cap_usd")
+
+    @property
+    def ceiling_usd(self) -> float | None:
+        return self.table.real("runner_ceiling_usd")
+
+    @property
+    def window_hours(self) -> float:
+        """Defaulted whether or not a ceiling is set alongside it."""
+        hours = self.table.real("window_hours")
+        return DEFAULT_RUNNER_CEILING_WINDOW_HOURS if hours is None else hours
+
+
+@dataclass(frozen=True)
+class ExternalUsage:
+    """The ``[external_subscription_usage]`` table (issue #218)."""
+
+    table: Table
+
+    @classmethod
+    def of(cls, raw: object) -> ExternalUsage:
+        return cls(Table.of(raw))
+
+    @property
+    def sample_interval_seconds(self) -> int:
+        return self.table.count("sample_interval_seconds", DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS)
+
+    @property
+    def credentials_path(self) -> str | None:
+        return self.table.text("credentials_path")
+
+
+@dataclass(frozen=True)
+class Auth:
+    """The ``[auth]`` table (issue #95) — runner-local role resolution, keyed by hub username."""
+
+    table: Table
+
+    @classmethod
+    def of(cls, raw: object) -> Auth:
+        return cls(Table.of(raw))
+
+    @property
+    def superuser(self) -> str | None:
+        return self.table.word("superuser")
+
+    @property
+    def hub_role_default(self) -> str:
+        return self.table.word("hub_role_default") or DEFAULT_AUTH_HUB_ROLE
+
+    @property
+    def users(self) -> tuple[tuple[str, str], ...]:
+        return self.table.pairs("users")
 
 
 @dataclass(frozen=True)
@@ -140,7 +252,7 @@ class RunnerConfig:
     auth_superuser: str | None = None
     #: The fallback role for a hub identity with no `[auth.users]` override (issue #95) —
     #: `"mirror"` reproduces the hub's claim, a fixed role floors every unmatched identity.
-    auth_hub_role_default: str = "mirror"
+    auth_hub_role_default: str = DEFAULT_AUTH_HUB_ROLE
     #: Per-username role overrides (issue #95), keyed on the JWT's `username` claim only,
     #: never `email`, which is mutable and may be null.
     auth_users: tuple[tuple[str, str], ...] = ()
@@ -172,8 +284,14 @@ class RunnerConfig:
 
     @property
     def socket_path(self) -> Path:
-        """The local API's unix socket, under the state dir with the store."""
-        return socket_path_for(self.root)
+        return self.socket_path_for(self.root)
+
+    @staticmethod
+    def socket_path_for(root: Path) -> Path:
+        """The local API's unix socket, under the state dir with the store — derivable from
+        the path alone, so a local verb can address the daemon from ``--dir`` without
+        reading the toml or opening the store."""
+        return root / SOCKET_FILENAME
 
     @property
     def local_api_url(self) -> str:
@@ -243,9 +361,7 @@ class RunnerConfig:
             token_env=DEFAULT_TOKEN_ENV,
             hub_token=os.environ.get(DEFAULT_TOKEN_ENV, ""),
             workspace_root=os.environ.get(ENV_WORKSPACE_ROOT, ""),
-            workspace_envs=_as_env_tuple([e.strip() for e in envs.split(",") if e.strip()])
-            if envs
-            else DEFAULT_ENV_POOL,
+            workspace_envs=tuple(e.strip() for e in envs.split(",") if e.strip()) if envs else DEFAULT_ENV_POOL,
             harness_binary=os.environ.get(ENV_HARNESS_BINARY, DEFAULT_HARNESS_BINARY),
             harness_permission_mode=os.environ.get(ENV_HARNESS_PERMISSION_MODE, DEFAULT_HARNESS_PERMISSION_MODE)
             or None,
@@ -377,6 +493,9 @@ class RunnerConfig:
             raise ConfigError(f"{root} is not an initialized runner runtime (run `blizzard runner init {root}`)")
         raw = tomllib.loads(path.read_text())
         token_env = str(raw.get("token_env", DEFAULT_TOKEN_ENV))
+        spend = Spend.of(raw.get("cost"))
+        usage = ExternalUsage.of(raw.get("external_subscription_usage"))
+        auth = Auth.of(raw.get("auth"))
         return cls(
             root=root,
             db_url=str(raw["db_url"]),
@@ -388,7 +507,7 @@ class RunnerConfig:
             runner_id=str(raw.get("runner_id", DEFAULT_RUNNER_ID)),
             workspace_id=str(raw.get("workspace_id", DEFAULT_WORKSPACE_ID)),
             workspace_root=str(raw.get("workspace_root", "")),
-            workspace_envs=_as_env_tuple(raw.get("workspace_envs", DEFAULT_ENV_POOL)),
+            workspace_envs=Table.of(raw).listed("workspace_envs", DEFAULT_ENV_POOL),
             harness_binary=str(raw.get("harness_binary", DEFAULT_HARNESS_BINARY)),
             harness_permission_mode=(str(raw["harness_permission_mode"]) or None)
             if raw.get("harness_permission_mode")
@@ -404,132 +523,17 @@ class RunnerConfig:
             runner_prompt=str(raw.get("runner_prompt", "")),
             runner_prompt_file=str(raw.get("runner_prompt_file", "")),
             transcripts_root=str(raw.get("transcripts_root", "")),
-            chunk_cap_usd=_parse_chunk_cap_usd(raw.get("cost", {})),
-            runner_ceiling_usd=_parse_runner_ceiling_usd(raw.get("cost", {})),
-            runner_ceiling_window_hours=_parse_runner_ceiling_window_hours(raw.get("cost", {})),
-            external_usage_sample_interval_seconds=_parse_external_usage_sample_interval_seconds(
-                raw.get("external_subscription_usage", {})
-            ),
-            external_usage_credentials_path=_parse_external_usage_credentials_path(
-                raw.get("external_subscription_usage", {})
-            ),
-            worker_env_passthrough=_parse_worker_env_passthrough(raw.get("worker", {})),
+            chunk_cap_usd=spend.chunk_cap_usd,
+            runner_ceiling_usd=spend.ceiling_usd,
+            runner_ceiling_window_hours=spend.window_hours,
+            external_usage_sample_interval_seconds=usage.sample_interval_seconds,
+            external_usage_credentials_path=usage.credentials_path,
+            worker_env_passthrough=Table.of(raw.get("worker")).names("env_passthrough"),
             public_url=str(raw.get("public_url", "")),
-            auth_superuser=_parse_auth_superuser(raw.get("auth", {})),
-            auth_hub_role_default=_parse_auth_hub_role_default(raw.get("auth", {})),
-            auth_users=_parse_auth_users(raw.get("auth", {})),
-            model_aliases=_parse_aliases(raw.get("models", {})),
-            effort_aliases=_parse_aliases(raw.get("effort", {})),
-            trusted_proxies=_parse_trusted_proxies(raw.get("trusted_proxies", ())),
+            auth_superuser=auth.superuser,
+            auth_hub_role_default=auth.hub_role_default,
+            auth_users=auth.users,
+            model_aliases=Table.of(raw.get("models")).pairs("aliases"),
+            effort_aliases=Table.of(raw.get("effort")).pairs("aliases"),
+            trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
         )
-
-
-def _as_env_tuple(value: object) -> tuple[str, ...]:
-    if isinstance(value, (list, tuple)):
-        return tuple(str(v) for v in value)
-    return DEFAULT_ENV_POOL
-
-
-def _parse_chunk_cap_usd(cost: object) -> float | None:
-    """``[cost].chunk_cap_usd`` — absent (the table, or just this key) means no cap."""
-    if not isinstance(cost, dict) or cost.get("chunk_cap_usd") is None:
-        return None
-    return float(cost["chunk_cap_usd"])
-
-
-def _parse_runner_ceiling_usd(cost: object) -> float | None:
-    """``[cost].runner_ceiling_usd`` (issue #61b) — absent (the table, or just this key)
-    means no ceiling."""
-    if not isinstance(cost, dict) or cost.get("runner_ceiling_usd") is None:
-        return None
-    return float(cost["runner_ceiling_usd"])
-
-
-def _parse_runner_ceiling_window_hours(cost: object) -> float:
-    """``[cost].window_hours`` (issue #61b) — defaults to
-    :data:`DEFAULT_RUNNER_CEILING_WINDOW_HOURS` when absent (whether or not a ceiling is
-    set alongside it); meaningless while ``runner_ceiling_usd`` is ``None``."""
-    if not isinstance(cost, dict) or cost.get("window_hours") is None:
-        return DEFAULT_RUNNER_CEILING_WINDOW_HOURS
-    return float(cost["window_hours"])
-
-
-def _parse_external_usage_sample_interval_seconds(table: object) -> int:
-    """``[external_subscription_usage].sample_interval_seconds`` (issue #218) — defaults to
-    :data:`DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS` when the table (or just this
-    key) is absent."""
-    if not isinstance(table, dict) or table.get("sample_interval_seconds") is None:
-        return DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS
-    return int(table["sample_interval_seconds"])
-
-
-def _parse_external_usage_credentials_path(table: object) -> str | None:
-    """``[external_subscription_usage].credentials_path`` (issue #218) — absent (the table,
-    or just this key) means ``None``, which lets :class:`ClaudeCodeAdapter` fall back to its
-    own real-credential-store default."""
-    if not isinstance(table, dict) or table.get("credentials_path") is None:
-        return None
-    return str(table["credentials_path"])
-
-
-def _parse_worker_env_passthrough(worker: object) -> tuple[str, ...]:
-    """``[worker].env_passthrough`` (issue #88) — absent (the table, or just this key)
-    means no operator extension."""
-    if not isinstance(worker, dict) or worker.get("env_passthrough") is None:
-        return ()
-    return tuple(str(v) for v in worker["env_passthrough"])
-
-
-def _parse_trusted_proxies(raw: object) -> tuple[str, ...]:
-    """``trusted_proxies`` (issue #130) — validate each entry parses as an IP or CIDR
-    (via :meth:`TrustedProxies.parse`) so a malformed proxy fails at config load, then
-    carry the raw strings (they round-trip to toml; parsing into networks is the
-    composition root's job). Mirrors the hub's own ``_parse_trusted_proxies``."""
-    if not isinstance(raw, (list, tuple)):
-        return ()
-    entries = tuple(str(entry).strip() for entry in raw)
-    try:
-        TrustedProxies.parse(entries)
-    except ValueError as exc:
-        raise ConfigError(f"trusted_proxies entry is not a valid IP or CIDR: {exc}") from exc
-    return entries
-
-
-def _parse_auth_superuser(auth: object) -> str | None:
-    """``[auth].superuser`` (issue #95) — a hub **username**; absent means this runner
-    names no local sovereign."""
-    if not isinstance(auth, dict) or not auth.get("superuser"):
-        return None
-    return str(auth["superuser"])
-
-
-def _parse_auth_hub_role_default(auth: object) -> str:
-    """``[auth].hub_role_default`` (issue #95) — defaults to ``"mirror"`` when absent
-    (the table, or just this key)."""
-    if not isinstance(auth, dict) or not auth.get("hub_role_default"):
-        return "mirror"
-    return str(auth["hub_role_default"])
-
-
-def _parse_aliases(table: object) -> tuple[tuple[str, str], ...]:
-    """``[models.aliases]`` / ``[effort.aliases]`` (issue #144) — an alias-keyed table
-    projected into an immutable pair tuple (a frozen dataclass field must stay hashable).
-    Absent, or present but empty, means no override."""
-    if not isinstance(table, dict):
-        return ()
-    aliases = table.get("aliases")
-    if not isinstance(aliases, dict):
-        return ()
-    return tuple((str(alias), str(native)) for alias, native in aliases.items())
-
-
-def _parse_auth_users(auth: object) -> tuple[tuple[str, str], ...]:
-    """``[auth.users]`` (issue #95) — a hub-username-keyed table of per-user role
-    overrides, projected into an immutable pair tuple (a frozen dataclass field must stay
-    hashable). Absent (the table, or an empty one) means no override."""
-    if not isinstance(auth, dict):
-        return ()
-    users = auth.get("users")
-    if not isinstance(users, dict):
-        return ()
-    return tuple((str(username), str(role)) for username, role in users.items())
