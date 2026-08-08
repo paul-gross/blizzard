@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from blizzard.hub.domain.graph import Executor, JudgedBy, SessionMode
@@ -57,131 +58,189 @@ class IProcessProbe(Protocol):
     def kill(self, pid: int) -> None: ...
 
 
-def run_selftest_checks(
-    adapter: IHarnessAdapter, scratch_git: IScratchGit, process: IProcessProbe
-) -> list[SelfTestCheck]:
-    """Run the five adapter-drift checks against a single throwaway scratch repo."""
-    with scratch_git.new_scratch_repo() as repo:
-        session_id = f"selftest-{uuid.uuid4().hex[:12]}"
-        preamble = WorkerPreamble(
-            environments=[AcquiredEnvironment(environment_id="selftest", workdir=repo.workdir)],
+@dataclass(frozen=True)
+class Worker:
+    """A spawned selftest process, bounded on both waits so neither can wedge the canary."""
+
+    process: IProcessProbe
+    pid: int
+
+    def wait_for_exit(self, start_time: str) -> bool:
+        deadline = time.monotonic() + _EXIT_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            if not self.process.is_alive(self.pid, start_time):
+                return True
+            time.sleep(_EXIT_POLL_INTERVAL_SECONDS)
+        return not self.process.is_alive(self.pid, start_time)
+
+    def reap(self) -> None:
+        start_time = self.process.start_time(self.pid)
+        self.process.kill(self.pid)
+        if start_time is None:  # already gone
+            return
+        deadline = time.monotonic() + _REAP_TIMEOUT_SECONDS
+        while time.monotonic() < deadline and self.process.is_alive(self.pid, start_time):
+            time.sleep(_EXIT_POLL_INTERVAL_SECONDS)
+
+
+@dataclass(frozen=True)
+class Scratch:
+    """The throwaway repo a run is performed against, the seams its checks drive it
+    through, and the session id they drive it under."""
+
+    adapter: IHarnessAdapter
+    scratch_git: IScratchGit
+    process: IProcessProbe
+    workdir: str
+    session_id: str
+
+
+@dataclass(frozen=True)
+class Check:
+    """One adapter-drift check, reported as exactly one pass/fail result."""
+
+    scratch: Scratch
+
+    def run(self) -> SelfTestCheck:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class Spawn:
+    """The gate check: it alone yields the handle the rest are driven from, so it is built
+    rather than run, and a ``None`` handle skips them."""
+
+    result: SelfTestCheck
+    handle: WorkerHandle | None
+
+    @classmethod
+    def of(cls, scratch: Scratch) -> Spawn:
+        try:
+            handle = scratch.adapter.spawn(
+                cls._envelope(), cls._preamble(scratch.workdir), session_hint=scratch.session_id
+            )
+        except Exception as exc:  # the adapter is untrusted external-CLI surface
+            return cls(SelfTestCheck(SPAWN_SESSION_ID, False, f"spawn raised: {exc}"), None)
+        if handle.session_id != scratch.session_id:
+            detail = f"expected the pre-assigned session id {scratch.session_id!r}, got {handle.session_id!r}"
+            return cls(SelfTestCheck(SPAWN_SESSION_ID, False, detail), handle)
+        if not Worker(scratch.process, handle.pid).wait_for_exit(handle.process_start_time):
+            detail = f"worker pid {handle.pid} did not exit within {_EXIT_TIMEOUT_SECONDS}s (exit-is-done undetected)"
+            return cls(SelfTestCheck(SPAWN_SESSION_ID, False, detail), handle)
+        detail = f"spawned pid {handle.pid} honoring session id {handle.session_id!r}; exit-is-done detected"
+        return cls(SelfTestCheck(SPAWN_SESSION_ID, True, detail), handle)
+
+    @staticmethod
+    def _preamble(workdir: str) -> WorkerPreamble:
+        return WorkerPreamble(
+            environments=[AcquiredEnvironment(environment_id="selftest", workdir=workdir)],
             lease_id="selftest",
             local_api_url="",
         )
 
-        spawn_check, handle = _check_spawn(adapter, preamble, session_id, process)
-        checks = [spawn_check]
-        if handle is None:
-            skipped = "skipped — the spawn/session-id check failed first"
-            checks.append(SelfTestCheck(END_TO_END_EDIT_COMMIT, False, skipped))
-            checks.append(SelfTestCheck(VERDICT_ELICITATION, False, skipped))
-            checks.append(SelfTestCheck(AUTOMATED_RESUME, False, skipped))
-            checks.append(SelfTestCheck(RESUME_COMMAND, False, skipped))
+    @staticmethod
+    def _envelope() -> NodeEnvelope:
+        node = NodeConfig(
+            node_id="nd_selftest",
+            node_name="selftest",
+            executor=Executor.RUNNER,
+            session=SessionMode.FRESH,
+            judged_by=JudgedBy.WORKER,
+            retries_max=0,
+            produces=[],
+            choices=[EnvelopeChoice(name="pass", description="the trivial task succeeded")],
+        )
+        return NodeEnvelope(
+            chunk_id="ch_selftest",
+            graph_id="gr_selftest",
+            epoch=1,
+            node=node,
+            prompt=_TRIVIAL_TASK_PROMPT,
+            judgement_prompt=None,
+        )
+
+
+class Commit(Check):
+    def run(self) -> SelfTestCheck:
+        count = self.scratch.scratch_git.commit_count(self.scratch.workdir)
+        if count < 2:  # the baseline commit plus the worker's own edit
+            detail = f"only {count} commit(s) in the scratch repo — no edit landed"
+            return SelfTestCheck(END_TO_END_EDIT_COMMIT, False, detail)
+        return SelfTestCheck(END_TO_END_EDIT_COMMIT, True, f"{count - 1} new commit(s) landed in the scratch repo")
+
+
+class Judge(Check):
+    def run(self) -> SelfTestCheck:
+        scratch = self.scratch
+        try:
+            output = scratch.adapter.judge(scratch.workdir, scratch.session_id, _JUDGEMENT_PROMPT)
+        except Exception as exc:
+            return SelfTestCheck(VERDICT_ELICITATION, False, f"judge raised: {exc}")
+        choice = scratch.adapter.parse_verdict(output)
+        if choice is None:
+            return SelfTestCheck(VERDICT_ELICITATION, False, "judgement resume produced no parseable <Choice>")
+        return SelfTestCheck(VERDICT_ELICITATION, True, f"parsed verdict {choice!r}")
+
+
+class Resume(Check):
+    def run(self) -> SelfTestCheck:
+        scratch = self.scratch
+        try:
+            pid = scratch.adapter.resume_with_message(scratch.workdir, scratch.session_id, _RESUME_MESSAGE)
+        except Exception as exc:
+            return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message raised: {exc}")
+        if pid <= 0:
+            return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message returned a non-positive pid ({pid})")
+        # Reaped here so no live process outlives the scratch dir it is cwd'd into
+        # (tests/test_runner_selftest.py).
+        Worker(scratch.process, pid).reap()
+        return SelfTestCheck(AUTOMATED_RESUME, True, f"resumed session {scratch.session_id!r} as pid {pid}")
+
+
+class ResumeCommand(Check):
+    def run(self) -> SelfTestCheck:
+        scratch = self.scratch
+        try:
+            command = scratch.adapter.resume_command(scratch.workdir, scratch.session_id)
+        except Exception as exc:
+            return SelfTestCheck(RESUME_COMMAND, False, f"resume_command raised: {exc}")
+        if not command or scratch.session_id not in command or scratch.workdir not in command:
+            return SelfTestCheck(RESUME_COMMAND, False, f"resume command missing session/workdir: {command!r}")
+        return SelfTestCheck(RESUME_COMMAND, True, command)
+
+
+@dataclass(frozen=True)
+class SelfTest:
+    """The five adapter-drift checks against a single throwaway scratch repo."""
+
+    adapter: IHarnessAdapter
+    scratch_git: IScratchGit
+    process: IProcessProbe
+
+    def run(self) -> list[SelfTestCheck]:
+        with self.scratch_git.new_scratch_repo() as repo:
+            scratch = Scratch(
+                adapter=self.adapter,
+                scratch_git=self.scratch_git,
+                process=self.process,
+                workdir=repo.workdir,
+                session_id=f"selftest-{uuid.uuid4().hex[:12]}",
+            )
+            spawn = Spawn.of(scratch)
+            checks = [spawn.result]
+            if spawn.handle is None:
+                skipped = "skipped — the spawn/session-id check failed first"
+                checks.append(SelfTestCheck(END_TO_END_EDIT_COMMIT, False, skipped))
+                checks.append(SelfTestCheck(VERDICT_ELICITATION, False, skipped))
+                checks.append(SelfTestCheck(AUTOMATED_RESUME, False, skipped))
+                checks.append(SelfTestCheck(RESUME_COMMAND, False, skipped))
+                return checks
+
+            # The id the adapter actually returned, which a failed gate check may leave
+            # differing from the pre-assigned one.
+            spawned = replace(scratch, session_id=spawn.handle.session_id)
+            checks.append(Commit(spawned).run())
+            checks.append(Judge(spawned).run())
+            checks.append(Resume(spawned).run())
+            checks.append(ResumeCommand(spawned).run())
             return checks
-
-        checks.append(_check_commit(scratch_git, repo.workdir))
-        judge_check, _output = _check_judge(adapter, repo.workdir, handle.session_id)
-        checks.append(judge_check)
-        checks.append(_check_resume(adapter, repo.workdir, handle.session_id, process))
-        checks.append(_check_resume_command(adapter, repo.workdir, handle.session_id))
-        return checks
-
-
-def _envelope() -> NodeEnvelope:
-    node = NodeConfig(
-        node_id="nd_selftest",
-        node_name="selftest",
-        executor=Executor.RUNNER,
-        session=SessionMode.FRESH,
-        judged_by=JudgedBy.WORKER,
-        retries_max=0,
-        produces=[],
-        choices=[EnvelopeChoice(name="pass", description="the trivial task succeeded")],
-    )
-    return NodeEnvelope(
-        chunk_id="ch_selftest",
-        graph_id="gr_selftest",
-        epoch=1,
-        node=node,
-        prompt=_TRIVIAL_TASK_PROMPT,
-        judgement_prompt=None,
-    )
-
-
-def _check_spawn(
-    adapter: IHarnessAdapter, preamble: WorkerPreamble, session_id: str, process: IProcessProbe
-) -> tuple[SelfTestCheck, WorkerHandle | None]:
-    try:
-        handle = adapter.spawn(_envelope(), preamble, session_hint=session_id)
-    except Exception as exc:  # the adapter is untrusted external-CLI surface
-        return SelfTestCheck(SPAWN_SESSION_ID, False, f"spawn raised: {exc}"), None
-    if handle.session_id != session_id:
-        detail = f"expected the pre-assigned session id {session_id!r}, got {handle.session_id!r}"
-        return SelfTestCheck(SPAWN_SESSION_ID, False, detail), handle
-    if not _wait_for_exit(process, handle.pid, handle.process_start_time):
-        detail = f"worker pid {handle.pid} did not exit within {_EXIT_TIMEOUT_SECONDS}s (exit-is-done undetected)"
-        return SelfTestCheck(SPAWN_SESSION_ID, False, detail), handle
-    detail = f"spawned pid {handle.pid} honoring session id {handle.session_id!r}; exit-is-done detected"
-    return SelfTestCheck(SPAWN_SESSION_ID, True, detail), handle
-
-
-def _wait_for_exit(process: IProcessProbe, pid: int, start_time: str) -> bool:
-    deadline = time.monotonic() + _EXIT_TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
-        if not process.is_alive(pid, start_time):
-            return True
-        time.sleep(_EXIT_POLL_INTERVAL_SECONDS)
-    return not process.is_alive(pid, start_time)
-
-
-def _check_commit(scratch_git: IScratchGit, workdir: str) -> SelfTestCheck:
-    count = scratch_git.commit_count(workdir)
-    if count < 2:  # the baseline commit plus the worker's own edit
-        detail = f"only {count} commit(s) in the scratch repo — no edit landed"
-        return SelfTestCheck(END_TO_END_EDIT_COMMIT, False, detail)
-    return SelfTestCheck(END_TO_END_EDIT_COMMIT, True, f"{count - 1} new commit(s) landed in the scratch repo")
-
-
-def _check_judge(adapter: IHarnessAdapter, workdir: str, session_id: str) -> tuple[SelfTestCheck, str]:
-    try:
-        output = adapter.judge(workdir, session_id, _JUDGEMENT_PROMPT)
-    except Exception as exc:
-        return SelfTestCheck(VERDICT_ELICITATION, False, f"judge raised: {exc}"), ""
-    choice = adapter.parse_verdict(output)
-    if choice is None:
-        return SelfTestCheck(VERDICT_ELICITATION, False, "judgement resume produced no parseable <Choice>"), output
-    return SelfTestCheck(VERDICT_ELICITATION, True, f"parsed verdict {choice!r}"), output
-
-
-def _check_resume(adapter: IHarnessAdapter, workdir: str, session_id: str, process: IProcessProbe) -> SelfTestCheck:
-    try:
-        pid = adapter.resume_with_message(workdir, session_id, _RESUME_MESSAGE)
-    except Exception as exc:
-        return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message raised: {exc}")
-    if pid <= 0:
-        return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message returned a non-positive pid ({pid})")
-    # Reaped here so no live process outlives the scratch dir it is cwd'd into
-    # (tests/test_runner_selftest.py).
-    _reap(process, pid)
-    return SelfTestCheck(AUTOMATED_RESUME, True, f"resumed session {session_id!r} as pid {pid}")
-
-
-def _reap(process: IProcessProbe, pid: int) -> None:
-    """Kill the resumed process and wait (bounded) for it to actually exit."""
-    start_time = process.start_time(pid)
-    process.kill(pid)
-    if start_time is None:  # already gone
-        return
-    deadline = time.monotonic() + _REAP_TIMEOUT_SECONDS
-    while time.monotonic() < deadline and process.is_alive(pid, start_time):
-        time.sleep(_EXIT_POLL_INTERVAL_SECONDS)
-
-
-def _check_resume_command(adapter: IHarnessAdapter, workdir: str, session_id: str) -> SelfTestCheck:
-    try:
-        command = adapter.resume_command(workdir, session_id)
-    except Exception as exc:
-        return SelfTestCheck(RESUME_COMMAND, False, f"resume_command raised: {exc}")
-    if not command or session_id not in command or workdir not in command:
-        return SelfTestCheck(RESUME_COMMAND, False, f"resume command missing session/workdir: {command!r}")
-    return SelfTestCheck(RESUME_COMMAND, True, command)

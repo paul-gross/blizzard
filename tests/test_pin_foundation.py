@@ -17,7 +17,7 @@ from sqlalchemy import insert, inspect, text, update
 
 import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.foundation.store.invariants import check_hub_store, check_runner_store
+from blizzard.foundation.store.invariants import HubInvariants, RunnerInvariants
 from blizzard.hub.runtime import init_environment as init_hub
 from blizzard.hub.store import schema as hub
 from blizzard.runner.runtime import init_environment as init_runner
@@ -64,7 +64,7 @@ def test_an_open_pause_park_over_a_closed_lease_is_not_a_violation(tmp_path: Pat
                 lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="released", closed_at=_NOW
             )
         )
-    assert check_runner_store(engine) == []
+    assert RunnerInvariants(engine).run() == []
 
 
 @pytest.mark.component
@@ -84,7 +84,7 @@ def test_two_live_hub_exec_slots_are_a_violation(tmp_path: Path) -> None:
                     released_at=None,
                 )
             )
-    slugs = {v.invariant for v in check_hub_store(engine)}
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:one-live-exec-slot" in slugs
 
     # The release is itself a durable fact: recording it leaves exactly one live slot.
@@ -92,7 +92,7 @@ def test_two_live_hub_exec_slots_are_a_violation(tmp_path: Path) -> None:
         conn.execute(
             update(hub.hub_exec_slot).where(hub.hub_exec_slot.c.slot_id == "hes_ch_2").values(released_at=_NOW)
         )
-    assert check_hub_store(engine) == []
+    assert HubInvariants(engine).run() == []
 
 
 @pytest.mark.component

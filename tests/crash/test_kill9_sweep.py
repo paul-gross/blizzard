@@ -20,7 +20,7 @@ from sqlalchemy import Engine, select
 
 from blizzard.foundation.crash import discover_crash_points
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.foundation.store.invariants import check_invariants
+from blizzard.foundation.store.invariants import Invariants
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.enrollment import hash_token
 from blizzard.hub.store import schema as hub_schema
@@ -201,7 +201,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
 def _assert_invariants(runner_dir: Path, hub_dir: Path, *, when: str) -> None:
     runner_db = RunnerConfig.load(runner_dir).db_url
     hub_db = HubConfig.load(hub_dir).db_url
-    violations = check_invariants(runner_db_url=runner_db, hub_db_url=hub_db)
+    violations = Invariants(runner_db_url=runner_db, hub_db_url=hub_db).run()
     assert not violations, f"invariant violations {when}:\n" + "\n".join(str(v) for v in violations)
 
 
@@ -615,7 +615,7 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
             engine2.dispose()
 
         # The invariant checker is green over the durable runner facts right after the crash.
-        violations = check_invariants(runner_db_url=db_url)
+        violations = Invariants(runner_db_url=db_url).run()
         assert not violations, "invariant violations after the attach crash:\n" + "\n".join(str(v) for v in violations)
 
         # Restart the runner UNARMED; the attachment is still readable against the same store.
@@ -753,7 +753,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
             engine2.dispose()
 
         # The invariant checker is green over the durable runner facts right after the crash.
-        violations = check_invariants(runner_db_url=db_url)
+        violations = Invariants(runner_db_url=db_url).run()
         assert not violations, "invariant violations after the declare-commit crash:\n" + "\n".join(
             str(v) for v in violations
         )

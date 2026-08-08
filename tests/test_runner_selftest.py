@@ -31,7 +31,7 @@ from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapt
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.listeners import bind_listeners, unlink_socket
-from blizzard.runner.selftest.checks import run_selftest_checks
+from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.scratch_git import ScratchRepo
 from blizzard.runner.selftest.service import SelfTestService
@@ -462,14 +462,14 @@ def test_resume_check_reaps_the_resumed_pid_before_the_scratch_repo_is_torn_down
     probe = _RecordingProcessProbe()
     adapter = _FixedPidAdapter(spawn_pid=111, resume_pid=222)
 
-    checks = run_selftest_checks(adapter, SubprocessScratchGit(), probe)
+    checks = SelfTest(adapter, SubprocessScratchGit(), probe).run()
 
     by_name = {c.name: c for c in checks}
     # `_FixedPidAdapter` never actually edits/commits, so `end_to_end_edit_commit`
     # legitimately fails — irrelevant to what this test is proving.
     assert by_name["automated_resume"].passed is True, checks
     # The resumed pid `resume_with_message` handed back must be killed before
-    # `run_selftest_checks` returns and the scratch repo is torn down.
+    # `SelfTest.run` returns and the scratch repo is torn down.
     assert probe.killed == [222]
 
 

@@ -17,7 +17,7 @@ from alembic.operations import Operations
 from sqlalchemy import insert
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.foundation.store.invariants import check_hub_store, check_runner_store
+from blizzard.foundation.store.invariants import HubInvariants, RunnerInvariants
 from blizzard.hub.runtime import init_environment as init_hub
 from blizzard.hub.store import schema as hub
 from blizzard.runner.runtime import init_environment as init_runner
@@ -38,8 +38,8 @@ def _hub_engine(tmp_path: Path):
 
 
 def test_clean_stores_have_no_violations(tmp_path: Path) -> None:
-    assert check_runner_store(_runner_engine(tmp_path)) == []
-    assert check_hub_store(_hub_engine(tmp_path)) == []
+    assert RunnerInvariants(_runner_engine(tmp_path)).run() == []
+    assert HubInvariants(_hub_engine(tmp_path)).run() == []
 
 
 def test_two_live_leases_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
@@ -51,7 +51,7 @@ def test_two_live_leases_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
                     lease_id=lease_id, chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW
                 )
             )
-    slugs = {v.invariant for v in check_runner_store(engine)}
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
     assert "runner:one-live-lease-per-chunk" in slugs
     # Closing one lease clears the violation (facts-not-status: a closure is the fact).
     with engine.begin() as conn:
@@ -60,7 +60,7 @@ def test_two_live_leases_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
                 lease_id="lease_b", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=_NOW
             )
         )
-    assert check_runner_store(engine) == []
+    assert RunnerInvariants(engine).run() == []
 
 
 def test_env_bound_to_two_chunks_is_a_violation(tmp_path: Path) -> None:
@@ -72,7 +72,7 @@ def test_env_bound_to_two_chunks_is_a_violation(tmp_path: Path) -> None:
                     chunk_id=chunk_id, environment_id="env_shared", workdir="/w", bound_at=_NOW
                 )
             )
-    slugs = {v.invariant for v in check_runner_store(engine)}
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
     assert "runner:unique-env-binding" in slugs
 
 
@@ -85,7 +85,7 @@ def test_gapped_outbound_seq_is_a_violation(tmp_path: Path) -> None:
                     seq=seq, kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=_NOW
                 )
             )
-    slugs = {v.invariant for v in check_runner_store(engine)}
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
     assert "runner:gapless-outbound-seq" in slugs
 
 
@@ -115,7 +115,7 @@ def test_duplicate_usage_attribution_for_one_lease_generation_kind_is_a_violatio
     with engine.begin() as conn:
         for _ in range(2):  # two facts for the same (lease_1, generation 1, spawn)
             conn.execute(insert(runner.usage_facts).values(**_usage_row()))
-    slugs = {v.invariant for v in check_runner_store(engine)}
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
     assert "runner:usage-attributed-once" in slugs
 
 
@@ -127,7 +127,7 @@ def test_distinct_generation_or_kind_usage_rows_are_not_a_violation(tmp_path: Pa
         conn.execute(insert(runner.usage_facts).values(**_usage_row(generation=1, kind="spawn")))
         conn.execute(insert(runner.usage_facts).values(**_usage_row(generation=2, kind="resume")))
         conn.execute(insert(runner.usage_facts).values(**_usage_row(generation=1, kind="judge")))
-    assert check_runner_store(engine) == []
+    assert RunnerInvariants(engine).run() == []
 
 
 def test_duplicate_nudge_fact_for_one_lease_epoch_is_a_violation(tmp_path: Path) -> None:
@@ -138,7 +138,7 @@ def test_duplicate_nudge_fact_for_one_lease_epoch_is_a_violation(tmp_path: Path)
     with engine.begin() as conn:
         for _ in range(2):
             conn.execute(insert(runner.nudge_facts).values(lease_id="lease_1", epoch=1, nudged_at=_NOW))
-    slugs = {v.invariant for v in check_runner_store(engine)}
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
     assert "runner:nudge-at-most-once" in slugs
 
 
@@ -150,7 +150,7 @@ def test_distinct_lease_or_epoch_nudge_facts_are_not_a_violation(tmp_path: Path)
         conn.execute(insert(runner.nudge_facts).values(lease_id="lease_1", epoch=1, nudged_at=_NOW))
         conn.execute(insert(runner.nudge_facts).values(lease_id="lease_1", epoch=2, nudged_at=_NOW))
         conn.execute(insert(runner.nudge_facts).values(lease_id="lease_2", epoch=1, nudged_at=_NOW))
-    assert check_runner_store(engine) == []
+    assert RunnerInvariants(engine).run() == []
 
 
 def test_duplicate_repo_land_is_a_violation(tmp_path: Path) -> None:
@@ -162,7 +162,7 @@ def test_duplicate_repo_land_is_a_violation(tmp_path: Path) -> None:
                     chunk_id="ch_1", repo="toy-api", commit_hash="abc", landed_at=_NOW
                 )
             )
-    slugs = {v.invariant for v in check_hub_store(engine)}
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:per-repo-land-idempotent" in slugs
 
 
@@ -188,7 +188,7 @@ def test_duplicate_pr_opened_is_a_violation(tmp_path: Path) -> None:
                     opened_at=_NOW,
                 )
             )
-    slugs = {v.invariant for v in check_hub_store(engine)}
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:pr-opened-idempotent" in slugs
 
 
@@ -203,7 +203,7 @@ def test_duplicate_route_seq_across_tables_is_a_violation(tmp_path: Path) -> Non
         # Same chunk, same seq as the create above — the exact race #41's tiebreak
         # closed: two route writes both computed seq=1 for chunk ch_1.
         conn.execute(insert(hub.route_released).values(chunk_id="ch_1", released_at=_NOW, seq=1))
-    slugs = {v.invariant for v in check_hub_store(engine)}
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:route-seq-unique" in slugs
 
 
@@ -224,7 +224,7 @@ def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> 
                 recorded_at=_NOW,
             )
         )
-    slugs = {v.invariant for v in check_hub_store(engine)}
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:epoch-consistent-transitions" in slugs
 
 
@@ -251,7 +251,7 @@ def test_landed_fact_without_terminal_transition_is_a_two_state_violation(tmp_pa
             )
         )
         conn.execute(insert(hub.delivery_landed).values(chunk_id="ch_1", landed_at=_NOW))
-    slugs = {v.invariant for v in check_hub_store(engine)}
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:merge-queue-single-state" in slugs
 
 
@@ -279,7 +279,7 @@ def test_merged_into_post_merge_node_is_not_a_violation(tmp_path: Path) -> None:
         conn.execute(
             insert(hub.delivery_repo_landed).values(chunk_id="ch_1", repo="toy-api", commit_hash="abc", landed_at=_NOW)
         )
-    assert check_hub_store(engine) == []
+    assert HubInvariants(engine).run() == []
 
 
 def test_two_open_pause_parks_on_one_lease_is_a_violation(tmp_path: Path) -> None:
@@ -289,13 +289,13 @@ def test_two_open_pause_parks_on_one_lease_is_a_violation(tmp_path: Path) -> Non
     with engine.begin() as conn:
         for _ in range(2):  # the same standing pause parked twice — the dropped-guard shape
             conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
-    slugs = {v.invariant for v in check_runner_store(engine)}
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
     assert "runner:one-open-pause-park-per-lease" in slugs
 
     # Resuming the lease closes both parks (the resume is at/after each) — no violation.
     with engine.begin() as conn:
         conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=_NOW))
-    assert check_runner_store(engine) == []
+    assert RunnerInvariants(engine).run() == []
 
 
 def test_a_repause_on_one_lease_is_not_a_violation(tmp_path: Path) -> None:
@@ -309,7 +309,7 @@ def test_a_repause_on_one_lease_is_not_a_violation(tmp_path: Path) -> None:
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
         conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=t1))
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2))
-    assert check_runner_store(engine) == []
+    assert RunnerInvariants(engine).run() == []
 
 
 def test_open_pause_parks_on_different_leases_are_not_a_violation(tmp_path: Path) -> None:
@@ -318,7 +318,7 @@ def test_open_pause_parks_on_different_leases_are_not_a_violation(tmp_path: Path
     with engine.begin() as conn:
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_b", chunk_id="ch_2", parked_at=_NOW))
-    assert check_runner_store(engine) == []
+    assert RunnerInvariants(engine).run() == []
 
 
 def test_a_double_park_after_a_repause_is_still_a_violation(tmp_path: Path) -> None:
@@ -334,7 +334,7 @@ def test_a_double_park_after_a_repause_is_still_a_violation(tmp_path: Path) -> N
         # above the resume, on a lease that *does* carry a resume fact.
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2))
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2))
-    slugs = {v.invariant for v in check_runner_store(engine)}
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
     assert "runner:one-open-pause-park-per-lease" in slugs
 
 
@@ -400,7 +400,7 @@ def test_a_consistent_migration_is_not_a_violation(tmp_path: Path) -> None:
         _seed_migration(
             conn, to_graph="gr_triage", model_after="claude-x", pin_graph="gr_triage", pin_default_model=["claude-x"]
         )
-    assert check_hub_store(engine) == []
+    assert HubInvariants(engine).run() == []
 
 
 def test_a_migration_without_its_graph_repin_is_a_violation(tmp_path: Path) -> None:
@@ -409,7 +409,7 @@ def test_a_migration_without_its_graph_repin_is_a_violation(tmp_path: Path) -> N
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         _seed_migration(conn, to_graph="gr_triage", model_after=None, pin_graph="gr_src", pin_default_model=["m"])
-    slugs = {v.invariant for v in check_hub_store(engine)}
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:migration-pin-consistent" in slugs
 
 
@@ -420,7 +420,7 @@ def test_a_migration_without_its_model_repin_is_a_violation(tmp_path: Path) -> N
         _seed_migration(
             conn, to_graph="gr_triage", model_after="claude-x", pin_graph="gr_triage", pin_default_model=["stale"]
         )
-    slugs = {v.invariant for v in check_hub_store(engine)}
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:migration-pin-consistent" in slugs
 
 
@@ -437,7 +437,7 @@ def test_a_migration_whose_repin_survives_a_later_default_model_edit_is_not_a_vi
             pin_graph="gr_triage",
             pin_default_model=["claude-x", "a-fallback-the-operator-added"],
         )
-    assert check_hub_store(engine) == []
+    assert HubInvariants(engine).run() == []
 
 
 def test_a_migration_without_its_route_release_is_a_violation(tmp_path: Path) -> None:
@@ -454,7 +454,7 @@ def test_a_migration_without_its_route_release_is_a_violation(tmp_path: Path) ->
             pin_default_model=["m"],
             release_route=False,
         )
-    slugs = {v.invariant for v in check_hub_store(engine)}
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:migration-route-released" in slugs
 
 
@@ -473,7 +473,7 @@ def test_a_hub_landing_migration_retains_its_route_and_is_not_a_violation(tmp_pa
             release_route=False,
             landed_executor="hub",
         )
-    assert check_hub_store(engine) == []
+    assert HubInvariants(engine).run() == []
 
 
 def test_two_migrations_at_one_node_epoch_is_a_violation(tmp_path: Path) -> None:
@@ -497,5 +497,5 @@ def test_two_migrations_at_one_node_epoch_is_a_violation(tmp_path: Path) -> None
                     recorded_at=_NOW,
                 )
             )
-    slugs = {v.invariant for v in check_hub_store(engine)}
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:one-migration-per-node-epoch" in slugs

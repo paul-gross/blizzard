@@ -14,7 +14,7 @@ from dataclasses import replace
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import SELFTEST_PREFIX, mint
 from blizzard.runner.harness.adapter import IHarnessAdapter
-from blizzard.runner.selftest.checks import IProcessProbe, run_selftest_checks
+from blizzard.runner.selftest.checks import IProcessProbe, SelfTest
 from blizzard.runner.selftest.model import SelfTestCheck, SelfTestRun, SelfTestStatus
 from blizzard.runner.selftest.scratch_git import IScratchGit
 
@@ -89,7 +89,7 @@ class SelfTestService:
 
         def _run() -> None:
             try:
-                checks = run_selftest_checks(adapter, self._scratch_git, self._process)
+                checks = SelfTest(adapter, self._scratch_git, self._process).run()
             except Exception as exc:  # a checks-runner bug must still resolve the job, never wedge it
                 outcome.append(([], str(exc)))
                 return

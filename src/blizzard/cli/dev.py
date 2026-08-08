@@ -11,7 +11,7 @@ from pathlib import Path
 
 import click
 
-from blizzard.foundation.store.invariants import check_invariants
+from blizzard.foundation.store.invariants import Invariants
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.runner.config import RunnerConfig
 
@@ -48,7 +48,7 @@ def check_invariants_cmd(runner_dir: str | None, hub_dir: str | None, allow_exte
         raise click.ClickException(str(exc)) from exc
     hub_db = hub_config.db_url if hub_config is not None else None
 
-    violations = check_invariants(runner_db_url=runner_db, hub_db_url=hub_db)
+    violations = Invariants(runner_db_url=runner_db, hub_db_url=hub_db).run()
     if not violations:
         click.echo("invariants hold")
         return
