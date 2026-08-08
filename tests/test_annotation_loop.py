@@ -1,6 +1,6 @@
-"""Unit tests for the hub's sweep-loop background driver (``_run_sweep_loop``), shared
-by the forge-status annotation loop (issue #179) and the delivery closure loop (issue
-#216), and for ``_lifespan``'s closure-task-starting gate (issue #216).
+"""Unit tests for the hub's sweep-loop background driver (``Sweep``), shared by the
+forge-status annotation loop (issue #179) and the delivery closure loop (issue #216),
+and for ``_lifespan``'s closure-task-starting gate (issue #216).
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.app import _lifespan, _run_sweep_loop
+from blizzard.hub.app import Sweep, _lifespan
 from blizzard.hub.config import HubConfig
 
 pytestmark = pytest.mark.unit
@@ -39,7 +39,7 @@ async def test_loop_calls_sweep_once_per_interval_with_no_real_sleeping() -> Non
         shutdown.set()
 
     await asyncio.wait_for(
-        asyncio.gather(_run_sweep_loop(reconciler, 0, shutdown, logger_name="test"), _stop_once_three_sweeps_land()),
+        asyncio.gather(Sweep(reconciler, 0, shutdown, "test").run(), _stop_once_three_sweeps_land()),
         timeout=2.0,
     )
 
@@ -57,7 +57,7 @@ async def test_loop_survives_a_sweep_that_raises() -> None:
         shutdown.set()
 
     await asyncio.wait_for(
-        asyncio.gather(_run_sweep_loop(reconciler, 0, shutdown, logger_name="test"), _stop_once_two_sweeps_land()),
+        asyncio.gather(Sweep(reconciler, 0, shutdown, "test").run(), _stop_once_two_sweeps_land()),
         timeout=2.0,
     )
 
@@ -70,7 +70,7 @@ async def test_loop_returns_promptly_when_shutdown_fires_mid_wait() -> None:
     reconciler = _CountingReconciler()
     shutdown = asyncio.Event()
 
-    task = asyncio.ensure_future(_run_sweep_loop(reconciler, 3600, shutdown, logger_name="test"))
+    task = asyncio.ensure_future(Sweep(reconciler, 3600, shutdown, "test").run())
     await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
     assert reconciler.calls == 1
 
@@ -84,7 +84,7 @@ async def test_loop_returns_promptly_when_shutdown_fires_mid_wait() -> None:
 
 class _FakeWorkSources:
     """A minimal stand-in for ``IWorkSourceRegistry`` — only the two ``*_names()``
-    methods ``_lifespan`` consults to decide whether to start each loop."""
+    methods ``Sweep.all`` consults to decide whether to start each loop."""
 
     def __init__(self, *, annotating: tuple[str, ...] = (), closing: tuple[str, ...] = ()) -> None:
         self._annotating = annotating

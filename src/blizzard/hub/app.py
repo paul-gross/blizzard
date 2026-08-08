@@ -10,7 +10,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from dataclasses import dataclass
 from typing import Protocol
 
 from fastapi import FastAPI
@@ -48,65 +49,64 @@ from blizzard.hub.work_sources.internal.factory import build_work_source_registr
 
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
-# The owner segment qualifying a bare (worktree-name-only) delivery repo into the
-# forge's ``owner/name`` coordinate.
+# Qualifies a bare (worktree-name-only) delivery repo into the forge's ``owner/name`` coordinate.
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"
 DEFAULT_FORGE_OWNER = "blizzard"
-# The branch every PR/merge targets; a repo whose default branch differs sets this
-# so a PR's ``base`` resolves instead of 422-ing.
+# The branch every PR/merge targets, so a PR's ``base`` resolves instead of 422-ing.
 ENV_FORGE_BASE_BRANCH = "BZ_FORGE_BASE_BRANCH"
 DEFAULT_FORGE_BASE_BRANCH = "main"
 
 
 class _Sweepable(Protocol):
-    """The one capability :func:`_run_sweep_loop` needs — structural, so any
-    reconciler stands in with no inheritance."""
+    """The one capability :class:`Sweep` needs — structural, so any reconciler
+    stands in with no inheritance."""
 
     def sweep(self) -> None: ...
 
 
-async def _run_sweep_loop(
-    reconciler: _Sweepable, interval_seconds: int, shutdown: asyncio.Event, *, logger_name: str
-) -> None:
-    """A thin sleep-and-call wrapper around one steppable ``sweep()`` per interval
-    (``bzh:steppable-loop``). Races ``shutdown`` so it wakes immediately instead of
-    holding a graceful drain for up to the interval. A sweep that raises is logged
-    and swallowed — a bad tick must never kill the loop, only skip a cycle."""
-    log = get_logger(logger_name)
-    while not shutdown.is_set():
-        try:
-            await asyncio.to_thread(reconciler.sweep)
-        except Exception:
-            log.exception("sweep failed")
-        with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(shutdown.wait(), timeout=interval_seconds)
+@dataclass(frozen=True)
+class Sweep:
+    """One reconciler stepped once per interval until shutdown (``bzh:steppable-loop``)."""
+
+    reconciler: _Sweepable
+    interval_seconds: int
+    shutdown: asyncio.Event
+    logger_name: str
+
+    @classmethod
+    def all(cls, app: FastAPI) -> Iterator[Sweep]:
+        """Every sweep a work source has opted this app into — none on the store-free app."""
+        services: HubServices | None = app.state.services
+        if services is None:
+            return
+        interval = app.state.config.annotation_interval_seconds
+        if services.work_sources.annotating_names():
+            annotator = AnnotationReconciler(chunks=services.chunks, work_sources=services.work_sources)
+            yield cls(annotator, interval, app.state.shutdown, "blizzard.hub.forge_status")
+        if services.work_sources.closing_names():
+            yield cls(services.delivery_closure, interval, app.state.shutdown, "blizzard.hub.work_closure")
+
+    async def run(self) -> None:
+        """Call ``sweep()``, then wait out the interval. Races ``shutdown`` so it wakes
+        immediately instead of holding a graceful drain. A sweep that raises is logged and
+        swallowed — a bad tick must never kill the loop, only skip a cycle."""
+        log = get_logger(self.logger_name)
+        while not self.shutdown.is_set():
+            try:
+                await asyncio.to_thread(self.reconciler.sweep)
+            except Exception:
+                log.exception("sweep failed")
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self.shutdown.wait(), timeout=self.interval_seconds)
 
 
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message (issue #47)
-    and drive the sweep loops across the app's lifetime. Both tasks are created here —
-    not in :func:`build_hosted_app` — because this is the one place that runs for every
-    app the ``lifespan`` fires for; each starts only when a source has opted in."""
-    services: HubServices | None = app.state.services
-    tasks: list[asyncio.Task[None]] = []
-    if services is not None:
-        interval = app.state.config.annotation_interval_seconds
-        if services.work_sources.annotating_names():
-            annotator = AnnotationReconciler(chunks=services.chunks, work_sources=services.work_sources)
-            tasks.append(
-                asyncio.create_task(
-                    _run_sweep_loop(annotator, interval, app.state.shutdown, logger_name="blizzard.hub.forge_status")
-                )
-            )
-        if services.work_sources.closing_names():
-            tasks.append(
-                asyncio.create_task(
-                    _run_sweep_loop(
-                        services.delivery_closure, interval, app.state.shutdown, logger_name="blizzard.hub.work_closure"
-                    )
-                )
-            )
+    and drive the sweeps across the app's lifetime. The tasks are created here — not in
+    :func:`build_hosted_app` — because this is the one place that runs for every app the
+    ``lifespan`` fires for."""
+    tasks = [asyncio.create_task(sweep.run()) for sweep in Sweep.all(app)]
     yield
     app.state.shutdown.set()
     for task in tasks:

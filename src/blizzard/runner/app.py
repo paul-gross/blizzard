@@ -7,11 +7,13 @@ migrated database; the startup revision guard and the offline ``migrate`` verb o
 from __future__ import annotations
 
 import secrets
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 
 import httpx
-from fastapi import Depends, FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, Request, params
 from fastapi.responses import RedirectResponse
 
 from blizzard import __version__
@@ -79,6 +81,54 @@ from blizzard.runner.transcripts.service import LocalTranscriptService
 
 # The one coding-harness name a selftest may target today (issue #54).
 CLAUDE_CODE_HARNESS_NAME = "claude_code"
+
+
+@dataclass(frozen=True)
+class Lane:
+    """One tenant of the three-tenant partition (issue #95) — a router set and the gate it
+    mounts behind. Only the human web lane is session-gated, and that gate covers the served
+    shell as well as the JSON API it reads; the other two cannot be gated, being respectively
+    what *establishes* a session and what workers call over TCP where they cannot bounce."""
+
+    gate: Sequence[params.Depends] | None
+    routers: tuple[APIRouter, ...]
+
+    def mount(self, app: FastAPI) -> None:
+        for router in self.routers:
+            app.include_router(router, dependencies=self.gate)
+
+
+# Ungated, in mount order: liveness, the SSO bounce, then the worker hooks. `asks_router` is
+# the one mixed router — its POST is ungated, its GET carries the human gate at the route.
+_UNGATED = (
+    health_router,
+    readiness_router,
+    auth_router,
+    heartbeat_router,
+    session_end_router,
+    asks_router,
+    attachments_router,
+    git_commits_router,
+    artifacts_router,
+    history_router,
+    work_items_router,
+)
+# The human web lane: the local panel's own reads and writes (issue #51), the runner's own
+# pause brake reachable with the hub down (#43), and the pass-throughs proxied to the hub.
+_HUMAN = (
+    chunk_detail_router,
+    leases_router,
+    transcripts_router,
+    selftests_router,
+    fleet_summary_router,
+    workspace_prompt_router,
+    control_router,
+    environments_router,
+    escalations_router,
+    facts_router,
+    takeovers_router,
+    requeues_router,
+)
 
 
 def create_app(
@@ -152,8 +202,7 @@ def create_app(
     def _bounce_to_login(_: Request, exc: NeedsFederationBounce) -> RedirectResponse:
         return RedirectResponse(f"/api/auth/login?return_to={quote(exc.return_to, safe='')}")
 
-    # The three-tenant partition (issue #95): only the human web lane is session-gated,
-    # and it covers the served shell *and* the JSON API it reads.
+    # The served shell's half of the human web lane's gate — see :class:`Lane`.
     @app.middleware("http")
     async def _gate_web_surface(request: Request, call_next):  # type: ignore[no-untyped-def]
         if not request.url.path.startswith("/api"):
@@ -163,50 +212,9 @@ def create_app(
                 return RedirectResponse(f"/api/auth/login?return_to={quote(exc.return_to, safe='')}")
         return await call_next(request)
 
-    # Declared once, attached at each human router's `include_router` below.
-    human_api = [Depends(require_human_api)]
-
     # API routers first, so /api/* always wins over the web mount at /.
-    app.include_router(health_router)
-    app.include_router(readiness_router)
-    # The SSO federation bounce (issue #95) — public: it is what *establishes* a
-    # session, so it cannot itself be session-gated.
-    app.include_router(auth_router)
-    # Worker-hook lane (ungated): workers call these over TCP and cannot SSO-bounce.
-    app.include_router(heartbeat_router)
-    app.include_router(session_end_router)
-    # The one mixed router: its POST is ungated, its GET carries the human-lane gate
-    # at the route itself.
-    app.include_router(asks_router)
-    # Worker-hook lane, ungated: attach (issue #113), git-commit declarations (#143), the
-    # artifact read (#127), the chunk-history read (#237), and the work-item proxy.
-    app.include_router(attachments_router)
-    app.include_router(git_commits_router)
-    app.include_router(artifacts_router)
-    app.include_router(history_router)
-    app.include_router(work_items_router)
-    # Human web lane (gated under an oauth-mode hub): the panel's own reads/writes,
-    # starting with the chunk-detail dock's pass-through proxy (issue #185).
-    app.include_router(chunk_detail_router, dependencies=human_api)
-    app.include_router(leases_router, dependencies=human_api)
-    app.include_router(transcripts_router, dependencies=human_api)
-    app.include_router(selftests_router, dependencies=human_api)
-    # The fleet-summary pass-through (issue #76), forwarded to the hub.
-    app.include_router(fleet_summary_router, dependencies=human_api)
-    # The runtime workspace-prompt control (issue #17).
-    app.include_router(workspace_prompt_router, dependencies=human_api)
-    # The runner's own pause brake (issue #43) — reachable with the hub down. Also
-    # carries `GET /runner` (issue #51).
-    app.include_router(control_router, dependencies=human_api)
-    # The machine-local status view's remaining list routes (issue #51).
-    app.include_router(environments_router, dependencies=human_api)
-    app.include_router(escalations_router, dependencies=human_api)
-    # The local fact log: the outbound buffer read as a ledger, for the local panel.
-    app.include_router(facts_router, dependencies=human_api)
-    # The operator takeover (issue #52).
-    app.include_router(takeovers_router, dependencies=human_api)
-    # The operator requeue (issue #53).
-    app.include_router(requeues_router, dependencies=human_api)
+    Lane(None, _UNGATED).mount(app)
+    Lane([Depends(require_human_api)], _HUMAN).mount(app)
 
     # The runner-served web app: the human web lane the middleware above gates
     # (issue #95) — the only browser-facing surface this daemon serves.
@@ -227,7 +235,6 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
     runner_store = SqlAlchemyRunnerStore(engine)
-    # Bind the reference execution seams (winter workspace, Claude Code) from config.
     workspace_provider: IWorkspaceProvider = WinterWorkspaceProvider(
         workspace_root=config.workspace_root or str(config.root),
         env_pool=config.workspace_envs,
@@ -265,7 +272,6 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         hub_url=config.hub_url,
         env_pool=config.workspace_envs,
     )
-    # ``blizzard runner takeover``'s backing service (issue #52).
     takeover = TakeoverService(
         runner_store,
         SystemClock(),
@@ -274,14 +280,11 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         # The same derivation the spawn preamble uses, so the two agree.
         local_api_url=config.local_api_url,
     )
-    # ``blizzard runner requeue``'s backing service (issue #53).
     requeue = RequeueService(runner_store, SystemClock())
-    # ``blizzard runner attach``'s backing service (issue #113).
     attachments = AttachmentService(runner_store, SystemClock())
     # Takes the workspace provider too: a declaration is checked against the
     # environment's repo manifest, which is the provider's to declare (issue #143).
     git_commit_declarations = GitCommitDeclarationService(runner_store, SystemClock(), workspace_provider)
-    # The jti replay cache (issue #95, D4) — over the same engine as every seam above.
     jti_cache = JtiCacheRepository(engine)
     # The real, network-reaching hub client — only `host` wires one (issue #95).
     hub_http_client = httpx.Client(base_url=config.hub_url, timeout=5.0)
