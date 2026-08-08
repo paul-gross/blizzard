@@ -152,7 +152,7 @@ def test_an_over_long_feature_title_is_truncated_for_the_pr_title(monkeypatch: p
 
 
 # land_pr_ci self-heal routing (component tier): heal `behind`, wait out transient/
-# CI-not-green, bounce only a real `dirty` — the pure decision is `classify()`.
+# CI-not-green, bounce only a real `dirty` — the pure decision is `Route.decision`.
 
 
 def _forge_with_state(
@@ -730,8 +730,8 @@ def test_an_empty_callback_url_with_a_pending_repo_fails_instead_of_landing_sile
     assert "BZ_HUB_MARKER_CALLBACK_URL" in captured.err
 
 
-# land_pr_ci.classify_checks + render_findings (issue #232): a terminally-failed check
-# run must never be polled out to `poll_timeout` — pure, network-free functions.
+# land_pr_ci.Verdict + Findings (issue #232): a terminally-failed check run must
+# never be polled out to `poll_timeout` — pure, network-free objects.
 
 
 def _check_run(status: str, conclusion: str | None = None) -> dict[str, Any]:
@@ -746,17 +746,17 @@ def _check_run(status: str, conclusion: str | None = None) -> dict[str, Any]:
 
 
 @pytest.mark.parametrize("conclusion", ["failure", "timed_out", "cancelled", "action_required"])
-def test_classify_checks_is_failed_for_every_terminal_conclusion(conclusion: str) -> None:
-    assert land_pr_ci.classify_checks([_check_run("completed", conclusion)]) == land_pr_ci._FAILED
+def test_verdict_is_failed_for_every_terminal_conclusion(conclusion: str) -> None:
+    assert land_pr_ci.Verdict([_check_run("completed", conclusion)]).decision == land_pr_ci._FAILED
 
 
 @pytest.mark.parametrize("status", ["queued", "in_progress", "waiting", "requested"])
-def test_classify_checks_waits_for_every_non_terminal_status(status: str) -> None:
-    assert land_pr_ci.classify_checks([_check_run(status)]) == land_pr_ci._WAIT
+def test_verdict_waits_for_every_non_terminal_status(status: str) -> None:
+    assert land_pr_ci.Verdict([_check_run(status)]).decision == land_pr_ci._WAIT
 
 
-def test_classify_checks_waits_on_an_empty_list() -> None:
-    assert land_pr_ci.classify_checks([]) == land_pr_ci._WAIT
+def test_verdict_waits_on_an_empty_list() -> None:
+    assert land_pr_ci.Verdict([]).decision == land_pr_ci._WAIT
 
 
 @pytest.mark.parametrize(
@@ -770,16 +770,16 @@ def test_classify_checks_waits_on_an_empty_list() -> None:
     ],
     ids=["missing-status-and-conclusion", "missing-conclusion", "null-conclusion", "wrong-type", "non-dict-entry"],
 )
-def test_classify_checks_degrades_to_wait_on_a_malformed_payload_without_raising(check_runs: Any) -> None:
-    assert land_pr_ci.classify_checks(check_runs) == land_pr_ci._WAIT
+def test_verdict_degrades_to_wait_on_a_malformed_payload_without_raising(check_runs: Any) -> None:
+    assert land_pr_ci.Verdict(check_runs).decision == land_pr_ci._WAIT
 
 
-def test_classify_checks_fails_when_any_run_among_several_is_terminal() -> None:
+def test_verdict_fails_when_any_run_among_several_is_terminal() -> None:
     runs = [_check_run("completed", "success"), _check_run("in_progress"), _check_run("completed", "failure")]
-    assert land_pr_ci.classify_checks(runs) == land_pr_ci._FAILED
+    assert land_pr_ci.Verdict(runs).decision == land_pr_ci._FAILED
 
 
-def test_render_findings_names_repo_pr_and_each_failing_check() -> None:
+def test_findings_names_repo_pr_and_each_failing_check() -> None:
     records = [
         {
             "repo": _REPO,
@@ -792,7 +792,7 @@ def test_render_findings_names_repo_pr_and_each_failing_check() -> None:
         }
     ]
 
-    text = land_pr_ci.render_findings(records)
+    text = land_pr_ci.Findings(records).render()
 
     assert _REPO in text
     assert "42" in text
@@ -802,7 +802,7 @@ def test_render_findings_names_repo_pr_and_each_failing_check() -> None:
     assert "https://forge/build/1" in text
 
 
-def test_render_findings_names_a_broken_base_as_not_this_change() -> None:
+def test_findings_names_a_broken_base_as_not_this_change() -> None:
     records = [
         {
             "repo": _REPO,
@@ -815,12 +815,12 @@ def test_render_findings_names_a_broken_base_as_not_this_change() -> None:
         }
     ]
 
-    text = land_pr_ci.render_findings(records)
+    text = land_pr_ci.Findings(records).render()
 
     assert "not this change" in text
 
 
-def test_render_findings_omits_a_base_red_verdict_when_unknown() -> None:
+def test_findings_omits_a_base_red_verdict_when_unknown() -> None:
     records = [
         {
             "repo": _REPO,
@@ -833,12 +833,12 @@ def test_render_findings_omits_a_base_red_verdict_when_unknown() -> None:
         }
     ]
 
-    text = land_pr_ci.render_findings(records)
+    text = land_pr_ci.Findings(records).render()
 
     assert "base branch" not in text
 
 
-def test_render_findings_names_the_still_in_flight_checks_for_a_waiting_repo() -> None:
+def test_findings_names_the_still_in_flight_checks_for_a_waiting_repo() -> None:
     records = [
         {
             "repo": _REPO,
@@ -849,7 +849,7 @@ def test_render_findings_names_the_still_in_flight_checks_for_a_waiting_repo() -
         }
     ]
 
-    text = land_pr_ci.render_findings(records)
+    text = land_pr_ci.Findings(records).render()
 
     assert _REPO in text
     assert "7" in text
@@ -861,7 +861,7 @@ def test_render_findings_names_the_still_in_flight_checks_for_a_waiting_repo() -
     assert "conclusion" not in text.lower()
 
 
-def test_render_findings_joins_multiple_repos() -> None:
+def test_findings_joins_multiple_repos() -> None:
     records = [
         {
             "repo": "acme/widget",
@@ -879,7 +879,7 @@ def test_render_findings_joins_multiple_repos() -> None:
         },
     ]
 
-    text = land_pr_ci.render_findings(records)
+    text = land_pr_ci.Findings(records).render()
 
     assert "acme/widget" in text
     assert "acme/gadget" in text

@@ -1,9 +1,9 @@
 """What every land script is built from (issue #230).
 
 Pure stdlib, exactly like the scripts that import from here (``bzh:deterministic-shell``).
-:class:`LandRun` is one node visit — its injected env and its marker channel, which raises
-rather than let a script print ``landed`` over an unrecorded merge; :class:`PullRequest` is
-one repo's PR within that visit, and the sole owner of the forge's ``pulls`` routes."""
+:class:`LandRun` is one node visit — its :class:`ScriptEnv` and its marker channel, which
+raises rather than let a script print ``landed`` over an unrecorded merge; :class:`PullRequest`
+is one repo's PR within that visit, and the sole owner of the forge's ``pulls`` routes."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Callable
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 _HUB_USER = "blizzard-hub"
@@ -22,7 +22,6 @@ _HUB_USER = "blizzard-hub"
 # The mid-run marker callback's token header (issue #230) — a **delivery** credential,
 # restated rather than imported to keep this package pure stdlib.
 _MARKER_TOKEN_HEADER = "X-Blizzard-Marker-Token"
-_MARKER_CALLBACK_ENV = "BZ_HUB_MARKER_CALLBACK_URL"
 _ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
 
 _MARKER_PREFIX = "merged/"
@@ -51,61 +50,31 @@ _MARKER_WRITE_ATTEMPTS = 3
 _MARKER_RETRY_BACKOFF_SECONDS = 0.05
 
 
-def pr_title(feature_title: str, branch: str) -> str:
-    """The opened PR's title: the resolved feature title, or the branch name when none
-    resolved, truncated to :data:`_PR_TITLE_MAX`."""
-    title = feature_title or branch
-    if len(title) > _PR_TITLE_MAX:
-        title = title[: _PR_TITLE_MAX - 1].rstrip() + "…"
-    return title
+@dataclass(frozen=True)
+class ScriptEnv:
+    """The env a hub node injects (``bzh:hub-node-env-contract``) — a land script's only
+    channel in. A required var that is missing, or malformed JSON, exits non-zero with a
+    diagnostic naming it (``bzh:hub-node-run-shape``)."""
 
+    environ: Mapping[str, str] = field(default_factory=lambda: os.environ)
 
-def qualify_repo(repo: str, owner: str) -> str:
-    """``owner/name`` a forge route resolves."""
-    if "/" in repo or not owner:
-        return repo
-    return f"{owner}/{repo}"
+    def get(self, name: str, default: str = "") -> str:
+        return self.environ.get(name, default)
 
+    def require(self, name: str) -> str:
+        value = self.environ.get(name)
+        if value is None:
+            print(f"missing required environment variable {name}", file=sys.stderr)
+            raise SystemExit(1)
+        return value
 
-def refuse_empty_delivery(commits: list[dict[str, str]]) -> None:
-    """Exit non-zero when a delivery node is handed nothing to deliver **and the graph
-    promised something**.
-
-    Emptiness alone cannot tell a lost ``git_commit`` from a chunk that promised none, so
-    ``BZ_HUB_EXPECT_GIT_COMMITS`` decides; absent, it reads as "expected"."""
-    if commits:
-        return
-    if os.environ.get(_ENV_EXPECT_GIT_COMMITS, "1") == "0":
-        return  # a non-code chunk: no node ever promised a commit, so none is missing
-    print(
-        "no git commits to deliver: this chunk submitted no git_commit artifact, so there "
-        "is nothing to open a PR for. A delivery node reached with an empty commit set is "
-        "a failure, not a landing — check that the nodes before this one declared their "
-        "commits (`blizzard runner artifact commit`) and that each verified.",
-        file=sys.stderr,
-    )
-    raise SystemExit(1)
-
-
-def require_env(name: str) -> str:
-    """Read a required, injected environment variable — a missing var exits non-zero with
-    a diagnostic naming it (``bzh:hub-node-run-shape``)."""
-    value = os.environ.get(name)
-    if value is None:
-        print(f"missing required environment variable {name}", file=sys.stderr)
-        raise SystemExit(1)
-    return value
-
-
-def require_json_env(name: str) -> Any:
-    """:func:`require_env` plus ``json.loads`` — malformed JSON exits non-zero with a
-    diagnostic naming the offending variable."""
-    raw = require_env(name)
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as exc:
-        print(f"malformed JSON in environment variable {name}: {exc}", file=sys.stderr)
-        raise SystemExit(1) from exc
+    def require_json(self, name: str) -> Any:
+        raw = self.require(name)
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as exc:
+            print(f"malformed JSON in environment variable {name}: {exc}", file=sys.stderr)
+            raise SystemExit(1) from exc
 
 
 def forge_request(
@@ -163,7 +132,7 @@ class MarkerWriter:
         success; a connection error or 5xx retries a bounded number of times first."""
         if not self.callback_url:
             raise MarkerWriteError(
-                f"could not write marker {name!r}: no {_MARKER_CALLBACK_ENV} was configured for this run"
+                f"could not write marker {name!r}: no {_ENV_MARKER_CALLBACK_URL} was configured for this run"
             )
         headers = {_MARKER_TOKEN_HEADER: self.token} if self.token else None
         body = {"name": name, "content": content}
@@ -208,29 +177,31 @@ class LandRun:
     feature_title: str = ""
     #: The HTTP seam, resolved per call so :func:`forge_request` stays substitutable.
     request: Callable[..., tuple[int, Any]] | None = None
+    env: ScriptEnv = field(default_factory=ScriptEnv)
 
     @classmethod
-    def from_env(cls) -> LandRun:
+    def from_env(cls, env: ScriptEnv | None = None) -> LandRun:
         """Read the whole injected env (``bzh:hub-node-env-contract``); a missing required
         var exits non-zero naming it, before anything reaches the forge."""
-        forge_url = require_env(_ENV_FORGE_URL).rstrip("/")
-        token = os.environ.get(_ENV_FORGE_TOKEN)
-        owner = os.environ.get(_ENV_FORGE_OWNER, "")
-        base_branch = require_env(_ENV_BASE_BRANCH)
-        commits: list[dict[str, str]] = require_json_env(_ENV_GIT_COMMITS)
+        env = env or ScriptEnv()
+        # Required vars are read in table order, so the first one missing is the one named.
+        forge_url = env.require(_ENV_FORGE_URL).rstrip("/")
+        base_branch = env.require(_ENV_BASE_BRANCH)
+        commits: list[dict[str, str]] = env.require_json(_ENV_GIT_COMMITS)
         return cls(
             forge_url=forge_url,
             base_branch=base_branch,
             commits=commits,
-            already=set(json.loads(os.environ.get(_ENV_ARTIFACT_NAMES, "[]"))),
+            already=set(json.loads(env.get(_ENV_ARTIFACT_NAMES, "[]"))),
             markers=MarkerWriter(
-                callback_url=os.environ.get(_ENV_MARKER_CALLBACK_URL, ""),
-                token=os.environ.get(_ENV_MARKER_TOKEN, ""),
+                callback_url=env.get(_ENV_MARKER_CALLBACK_URL),
+                token=env.get(_ENV_MARKER_TOKEN),
                 request=forge_request,
             ),
-            owner=owner,
-            token=token,
-            feature_title=os.environ.get(_ENV_FEATURE_TITLE) or "",
+            owner=env.get(_ENV_FORGE_OWNER),
+            token=env.get(_ENV_FORGE_TOKEN),
+            feature_title=env.get(_ENV_FEATURE_TITLE),
+            env=env,
         )
 
     def api(self, method: str, path: str, body: dict[str, Any] | None = None) -> tuple[int, Any]:
@@ -240,12 +211,33 @@ class LandRun:
 
     def repo(self, bare_repo: str) -> str:
         """``bare_repo`` as the ``owner/name`` a forge route resolves."""
-        return qualify_repo(bare_repo, self.owner)
+        if "/" in bare_repo or not self.owner:
+            return bare_repo
+        return f"{self.owner}/{bare_repo}"
+
+    def pr_title(self, branch: str) -> str:
+        """A newly opened PR's title: :attr:`feature_title`, or ``branch`` when none
+        resolved, truncated to :data:`_PR_TITLE_MAX`."""
+        title = self.feature_title or branch
+        if len(title) > _PR_TITLE_MAX:
+            title = title[: _PR_TITLE_MAX - 1].rstrip() + "…"
+        return title
 
     def pending(self) -> list[dict[str, str]]:
-        """The repos still to land — those with no ``merged/<repo>`` marker yet. Exits
-        non-zero when the graph promised commits and this run was handed none."""
-        refuse_empty_delivery(self.commits)
+        """The repos still to land — those with no ``merged/<repo>`` marker yet.
+
+        Emptiness alone cannot tell a lost ``git_commit`` from a chunk that promised none,
+        so :data:`_ENV_EXPECT_GIT_COMMITS` decides; absent, it reads as "expected" and an
+        empty commit set exits non-zero."""
+        if not self.commits and self.env.get(_ENV_EXPECT_GIT_COMMITS, "1") != "0":
+            print(
+                "no git commits to deliver: this chunk submitted no git_commit artifact, so there "
+                "is nothing to open a PR for. A delivery node reached with an empty commit set is "
+                "a failure, not a landing — check that the nodes before this one declared their "
+                "commits (`blizzard runner artifact commit`) and that each verified.",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
         return [c for c in self.commits if f"{_MARKER_PREFIX}{c['repo']}" not in self.already]
 
     def pause_for_crash_window(self, *, marker_index: int, pending_count: int) -> None:
@@ -254,7 +246,7 @@ class LandRun:
         Inert unless :data:`_ENV_TEST_PAUSE_AFTER_FIRST_MARKER` names a positive number of
         seconds, and fires only after the FIRST marker of a genuinely multi-repo run, so a
         crash-recovery re-run never pauses."""
-        raw = os.environ.get(_ENV_TEST_PAUSE_AFTER_FIRST_MARKER)
+        raw = self.env.get(_ENV_TEST_PAUSE_AFTER_FIRST_MARKER)
         if not raw or marker_index != 1 or pending_count < 2:
             return
         seconds = float(raw)
@@ -301,7 +293,7 @@ class PullRequest:
                 "POST",
                 f"/repos/{repo}/pulls",
                 {
-                    "title": pr_title(run.feature_title, branch),
+                    "title": run.pr_title(branch),
                     "head": branch,
                     "base": run.base_branch,
                     "user": _HUB_USER,

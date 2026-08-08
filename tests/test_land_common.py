@@ -1,6 +1,6 @@
 """``land_common``'s shared helpers — unit tier (issue #230).
 
-Exercises ``require_env``, ``require_json_env``, and ``MarkerWriter`` directly, with
+Exercises ``ScriptEnv`` and ``MarkerWriter`` directly, with
 no forge or script involved, proving the shared durable-write and env-diagnostic
 behavior without re-deriving it through a whole ``main()`` per script."""
 
@@ -19,38 +19,38 @@ _CALLBACK_URL = "http://callback/hub-markers"
 _TOKEN = "test-marker-token"
 
 
-# -- require_env / require_json_env -------------------------------------------------
+# -- ScriptEnv ----------------------------------------------------------------------
 
 
-def test_require_env_returns_the_set_value(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_script_env_require_returns_the_set_value(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SOME_VAR", "a-value")
-    assert land_common.require_env("SOME_VAR") == "a-value"
+    assert land_common.ScriptEnv().require("SOME_VAR") == "a-value"
 
 
-def test_require_env_exits_non_zero_naming_the_missing_var(
+def test_script_env_require_exits_non_zero_naming_the_missing_var(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.delenv("SOME_VAR", raising=False)
 
     with pytest.raises(SystemExit) as exc:
-        land_common.require_env("SOME_VAR")
+        land_common.ScriptEnv().require("SOME_VAR")
 
     assert exc.value.code == 1
     assert "SOME_VAR" in capsys.readouterr().err
 
 
-def test_require_json_env_parses_valid_json(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_script_env_require_json_parses_valid_json(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SOME_JSON", '{"a": 1}')
-    assert land_common.require_json_env("SOME_JSON") == {"a": 1}
+    assert land_common.ScriptEnv().require_json("SOME_JSON") == {"a": 1}
 
 
-def test_require_json_env_exits_non_zero_naming_malformed_json(
+def test_script_env_require_json_exits_non_zero_naming_malformed_json(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setenv("SOME_JSON", "{not valid json")
 
     with pytest.raises(SystemExit) as exc:
-        land_common.require_json_env("SOME_JSON")
+        land_common.ScriptEnv().require_json("SOME_JSON")
 
     assert exc.value.code == 1
     assert "SOME_JSON" in capsys.readouterr().err
