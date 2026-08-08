@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.hub.domain.enrollment import hash_token
-from blizzard.hub.domain.envelope import build_node_envelope
+from blizzard.hub.domain.envelope import Envelope
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
 from blizzard.hub.domain.registry import IReadRunnerRegistry
@@ -175,13 +175,13 @@ class ClaimService:
         node = graph.node_by_id(node_id)
         if node is None:  # pragma: no cover - a pinned graph always resolves its own node
             raise ClaimConflict(held_by_runner_id=runner_id)
-        envelope = build_node_envelope(
+        envelope = Envelope(
             chunk=chunk,
             graph=graph,
             node=node,
             artifacts=self._chunks.load_artifacts(chunk.chunk_id),
             epoch=epoch,
-        )
+        ).wire
         return ClaimResult(route=route, envelope=envelope, route_token=route_token, route_id=route_id)
 
     def rekey(self, route: Route) -> str:

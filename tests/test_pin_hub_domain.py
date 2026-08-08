@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.hub.domain.envelope import build_node_envelope
+from blizzard.hub.domain.envelope import Envelope
 from blizzard.hub.domain.graph import Executor, FollowLatest, JudgedBy, Node, SessionMode
 from blizzard.hub.domain.work import Chunk, WorkRef
 
@@ -47,12 +47,12 @@ def _node() -> Node:
     )
 
 
-def test_build_node_envelope_requires_graph_explicitly() -> None:
+def test_envelope_requires_graph_explicitly() -> None:
     """``graph`` carries no default (issue #144): a caller that forgets it gets a
     ``TypeError``, never a silent fall-back to the pre-#144 "no declaration, no chunk
     default" envelope."""
     with pytest.raises(TypeError):
-        build_node_envelope(  # type: ignore[call-arg]
+        Envelope(  # type: ignore[call-arg]
             chunk=_chunk(),
             node=_node(),
             artifacts=[],

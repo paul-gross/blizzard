@@ -15,7 +15,7 @@ from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, MIGRATION_
 from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
-from blizzard.hub.domain.envelope import build_node_envelope
+from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Edge, Executor, Graph, JudgedBy, Node
 from blizzard.hub.domain.produces_auth import check_produces
 from blizzard.hub.domain.route_auth import check_route_token
@@ -30,7 +30,7 @@ from blizzard.hub.domain.work import (
     MigrationSource,
 )
 from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, checks_gate_violated
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 
 # The cross-graph migration crash window (issue #90, ``bzh:crash-point-registry``): the whole
 # migration is committed but its response is not; the replayed completion re-derives it.
@@ -51,36 +51,103 @@ class ApplyResult:
     transition_id: str | None = None
     migration_id: str | None = None
 
+    @classmethod
+    def failure(cls, detail: str) -> ApplyResult:
+        return cls(response=ApplyResponse(outcome=ApplyOutcome.FAILURE, detail=detail))
 
-def _failure(detail: str) -> ApplyResult:
-    return ApplyResult(response=ApplyResponse(outcome=ApplyOutcome.FAILURE, detail=detail))
+    @classmethod
+    def done(cls, transition_id: str | None) -> ApplyResult:
+        return cls(
+            response=ApplyResponse(outcome=ApplyOutcome.DONE, detail="chunk reached the terminal"),
+            transition_id=transition_id,
+        )
+
+    @classmethod
+    def advance(cls, envelope: NodeEnvelope, transition_id: str | None) -> ApplyResult:
+        return cls(
+            response=ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=envelope), transition_id=transition_id
+        )
+
+    @classmethod
+    def parked(cls, gate_node: Node, transition_id: str | None) -> ApplyResult:
+        return cls(
+            response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{gate_node.name}`"),
+            transition_id=transition_id,
+        )
+
+    @classmethod
+    def escalated(cls, target_graph_name: str | None) -> ApplyResult:
+        """An unresolved cross-graph target's park — ``FAILURE`` would requeue and supersede the
+        escalation this answers (issue #110)."""
+        return cls(
+            response=ApplyResponse(
+                outcome=ApplyOutcome.PARKED_AT_GATE,
+                detail=f"cross-graph target `{target_graph_name}` did not resolve; chunk escalated for a human",
+            )
+        )
+
+    @classmethod
+    def taken_over(cls, to_node: Node, transition_id: str | None) -> ApplyResult:
+        return cls(
+            response=ApplyResponse(
+                outcome=ApplyOutcome.HUB_NODE_TAKEN,
+                detail=f"hub node `{to_node.name}` took over; poll the chunk for the outcome",
+            ),
+            transition_id=transition_id,
+        )
+
+    @classmethod
+    def landed_on_hub(cls, landed_node: Node, migration_id: str | None) -> ApplyResult:
+        return cls(
+            response=ApplyResponse(
+                outcome=ApplyOutcome.HUB_NODE_TAKEN,
+                detail=f"migration landed on hub node `{landed_node.name}`; poll the chunk for the outcome",
+            ),
+            migration_id=migration_id,
+        )
+
+    @classmethod
+    def migrated(cls, from_node: Node, target_graph: Graph, migration_id: str | None) -> ApplyResult:
+        return cls(
+            response=ApplyResponse(
+                outcome=ApplyOutcome.MIGRATED,
+                detail=f"node `{from_node.name}` migrated the chunk to graph `{target_graph.name}`; re-queued",
+            ),
+            migration_id=migration_id,
+        )
+
+    @classmethod
+    def migrated_replay(cls) -> ApplyResult:
+        """A lost-ack re-flush of a **runner-landing** migration that already landed (issue #90).
+        Carries no node/graph detail: the migration re-pinned the graph, so the natural-key probe
+        alone (not a graph lookup) resolves the replay. No fresh fact, so no ``migration_id``."""
+        return cls(response=ApplyResponse(outcome=ApplyOutcome.MIGRATED, detail="chunk already migrated (replay)"))
+
+    @classmethod
+    def hub_node_taken_replay(cls) -> ApplyResult:
+        """A lost-ack re-flush of a completion whose migration landed on a **hub-executed** node
+        (issue #111). Distinct from :meth:`migrated_replay` because a hub landing **retained** the
+        route, which a ``MIGRATED`` reply would release (pinned by tests/test_migration_apply.py)."""
+        return cls(
+            response=ApplyResponse(
+                outcome=ApplyOutcome.HUB_NODE_TAKEN, detail="chunk migrated onto a hub node (replay)"
+            )
+        )
 
 
-def _migrated(from_node: Node, target_graph: Graph) -> ApplyResponse:
-    """The fresh ``MIGRATED`` apply-response (issue #90) — the chunk re-pinned + re-queued."""
-    return ApplyResponse(
-        outcome=ApplyOutcome.MIGRATED,
-        detail=f"node `{from_node.name}` migrated the chunk to graph `{target_graph.name}`; re-queued",
-    )
+@dataclass(frozen=True)
+class Destination:
+    """Where an edge routes inside its own graph: the reserved terminal, a node id, or ``None``
+    for a name no node there carries."""
 
+    node_id: str | None
 
-def _migrated_replay() -> ApplyResult:
-    """The replayed ``MIGRATED`` apply-response (issue #90) — a lost-ack re-flush of a
-    **runner-landing** migration that already landed. Carries no node/graph detail: the
-    migration re-pinned the graph, so the natural-key probe alone (not a graph lookup)
-    resolves the replay. No fresh fact was written this call, so no ``migration_id``."""
-    return ApplyResult(response=ApplyResponse(outcome=ApplyOutcome.MIGRATED, detail="chunk already migrated (replay)"))
-
-
-def _hub_node_taken_replay() -> ApplyResult:
-    """The replayed ``HUB_NODE_TAKEN`` apply-response (issue #111) — a lost-ack re-flush of a
-    completion whose migration landed on a **hub-executed** node.
-
-    Distinct from :func:`_migrated_replay` because a hub landing **retained** the route, which
-    a ``MIGRATED`` reply would release (pinned by tests/test_migration_apply.py)."""
-    return ApplyResult(
-        response=ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN, detail="chunk migrated onto a hub node (replay)")
-    )
+    @classmethod
+    def of(cls, graph: Graph, edge: Edge) -> Destination:
+        if edge.to_node_name == RESERVED_TERMINAL:
+            return cls(RESERVED_TERMINAL)
+        node = graph.node_by_name(edge.to_node_name)
+        return cls(node.node_id if node is not None else None)
 
 
 class ApplyService:
@@ -116,7 +183,7 @@ class ApplyService:
         holds no graph repo of its own (``bzh:domain-takes-objects``)."""
         facts = self._chunks.load_facts(chunk.chunk_id)
         if facts is None:
-            return _failure(f"unknown chunk {chunk.chunk_id}")
+            return ApplyResult.failure(f"unknown chunk {chunk.chunk_id}")
 
         # Probed by natural key ahead of the graph lookup and the route-token check (issues
         # #90, #108): a migration re-pins the graph and releases the route a replay presents.
@@ -134,8 +201,8 @@ class ApplyService:
                 None,
             )
             if replayed is not None and replayed.landed_node_executor is Executor.HUB:
-                return _hub_node_taken_replay()
-            return _migrated_replay()
+                return ApplyResult.hub_node_taken_replay()
+            return ApplyResult.migrated_replay()
 
         # Route-token authorization (issue #84b) — ordered ahead of the replay probe and the
         # epoch fence, so a post-release zombie's replay is rejected as a fresh one is.
@@ -145,7 +212,7 @@ class ApplyService:
 
         from_node = graph.node_by_id(submission.from_node_id)
         if from_node is None:
-            return _failure(f"no node {submission.from_node_id} in graph {graph.graph_id}")
+            return ApplyResult.failure(f"no node {submission.from_node_id} in graph {graph.graph_id}")
 
         # Idempotent replay first: a completion already applied at this (node, epoch)
         # returns its original outcome — even once the chunk is terminal.
@@ -163,35 +230,37 @@ class ApplyService:
             )
         # Only the resolving transition above may leave a gate node.
         if from_node.judged_by is JudgedBy.HUMAN:
-            return _failure(f"human signoff required: node `{from_node.name}` is a gate — resolve its decision")
+            return ApplyResult.failure(
+                f"human signoff required: node `{from_node.name}` is a gate — resolve its decision"
+            )
 
         if facts.status() in TERMINAL_STATUSES:
-            return _failure("chunk is terminal")
+            return ApplyResult.failure("chunk is terminal")
         latest = facts.latest_epoch()
         if latest is not None and submission.epoch != latest:
-            return _failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
+            return ApplyResult.failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
 
         edge = graph.edge_for_choice(from_node.node_id, submission.choice)
         if edge is None:
-            return _failure(f"node {from_node.name} has no choice `{submission.choice}`")
+            return ApplyResult.failure(f"node {from_node.name} has no choice `{submission.choice}`")
         # A cross-graph edge (issue #90) migrates the chunk rather than transitioning it.
         if edge.target_graph is not None:
             return self._apply_migration(chunk, from_node, submission, edge, target_graph)
-        to_node_id = RESERVED_TERMINAL if edge.to_node_name == RESERVED_TERMINAL else _resolve(graph, edge.to_node_name)
+        to_node_id = Destination.of(graph, edge).node_id
         if to_node_id is None:
-            return _failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
+            return ApplyResult.failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
 
         # Produces-artifact backstop (issue #113) — ordered after every other rejection, so
         # it runs only on a submission genuinely about to be recorded.
         produces_rejection = check_produces(from_node, submission.artifacts, mode=produces_mode)
         if produces_rejection is not None:
-            return _failure(produces_rejection)
+            return ApplyResult.failure(produces_rejection)
 
         # Checks gate backstop (issue #114) — the same shared predicate `checks_gate_violated`
         # both gates run, so the two cannot drift (`test_checks_gate_agreement.py`).
         selected = next((c for c in from_node.choices if c.name == submission.choice), None)
         if selected is not None and checks_gate_violated(selected.requires_checks, submission.check_results):
-            return _failure(f"choice `{submission.choice}` requires green checks but a check is red")
+            return ApplyResult.failure(f"choice `{submission.choice}` requires green checks but a check is red")
 
         # The transition-time consult (issue #124) — ordered after every rejection above and
         # before ``record_transition``, so a firing intent writes no transition row of its own.
@@ -241,31 +310,33 @@ class ApplyService:
         assert submission.decision_id is not None  # the caller dispatches only when set
         decision = self._chunks.get_decision(submission.decision_id)
         if decision is None or decision.chunk_id != chunk.chunk_id or decision.node_id != gate_node.node_id:
-            return _failure(f"decision {submission.decision_id} does not match node `{gate_node.name}`")
+            return ApplyResult.failure(f"decision {submission.decision_id} does not match node `{gate_node.name}`")
         if decision.resolved_choice is None:
-            return _failure(f"decision {submission.decision_id} is not yet resolved")
+            return ApplyResult.failure(f"decision {submission.decision_id} is not yet resolved")
         if submission.choice != decision.resolved_choice:
-            return _failure(f"choice `{submission.choice}` is not the resolved choice `{decision.resolved_choice}`")
+            return ApplyResult.failure(
+                f"choice `{submission.choice}` is not the resolved choice `{decision.resolved_choice}`"
+            )
 
         facts = self._chunks.load_facts(chunk.chunk_id)
         if facts is None:
-            return _failure(f"unknown chunk {chunk.chunk_id}")
+            return ApplyResult.failure(f"unknown chunk {chunk.chunk_id}")
         if facts.status() in TERMINAL_STATUSES:
-            return _failure("chunk is terminal")
+            return ApplyResult.failure("chunk is terminal")
         latest = facts.latest_epoch()
         if latest is not None and submission.epoch != latest:
-            return _failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
+            return ApplyResult.failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
 
         edge = graph.edge_for_choice(gate_node.node_id, submission.choice)
         if edge is None:
-            return _failure(f"gate `{gate_node.name}` has no choice `{submission.choice}`")
+            return ApplyResult.failure(f"gate `{gate_node.name}` has no choice `{submission.choice}`")
         # A resolved choice may itself target another graph (issue #90) — threading
         # ``decision_id`` through is what keeps the gate's decision from staying live.
         if edge.target_graph is not None:
             return self._apply_migration(chunk, gate_node, submission, edge, target_graph, artifacts=[])
-        to_node_id = RESERVED_TERMINAL if edge.to_node_name == RESERVED_TERMINAL else _resolve(graph, edge.to_node_name)
+        to_node_id = Destination.of(graph, edge).node_id
         if to_node_id is None:
-            return _failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
+            return ApplyResult.failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
 
         # The transition-time consult (issue #124) — see the sibling call in ``apply``;
         # ``decision_id`` threads through so the resolved decision derives closed.
@@ -330,12 +401,7 @@ class ApplyService:
                     at=self._clock.now(),
                     decision_id=submission.decision_id,
                 )
-            return ApplyResult(
-                response=ApplyResponse(
-                    outcome=ApplyOutcome.PARKED_AT_GATE,
-                    detail=f"cross-graph target `{edge.target_graph}` did not resolve; chunk escalated for a human",
-                )
-            )
+            return ApplyResult.escalated(edge.target_graph)
         submitted = submission.artifacts if artifacts is None else artifacts
         landed_node_id = MigrationFact.landing_node(target_graph, from_node.name)
         return self._land_migration(
@@ -469,14 +535,8 @@ class ApplyService:
         if lands_on_hub:
             assert landed_node is not None
             self._hub_node_executor.run(chunk, target_graph, landed_node, epoch=submission.epoch)
-            return ApplyResult(
-                response=ApplyResponse(
-                    outcome=ApplyOutcome.HUB_NODE_TAKEN,
-                    detail=f"migration landed on hub node `{landed_node.name}`; poll the chunk for the outcome",
-                ),
-                migration_id=migration_id,
-            )
-        return ApplyResult(response=_migrated(from_node, target_graph), migration_id=migration_id)
+            return ApplyResult.landed_on_hub(landed_node, migration_id)
+        return ApplyResult.migrated(from_node, target_graph, migration_id)
 
     def _respond(
         self,
@@ -494,47 +554,33 @@ class ApplyService:
         ``transitions.transition_id`` on a fresh apply, or ``None`` on a replay
         (``is_fresh_apply=False``); every branch below carries it straight through."""
         if to_node_id == RESERVED_TERMINAL:
-            return ApplyResult(
-                response=ApplyResponse(outcome=ApplyOutcome.DONE, detail="chunk reached the terminal"),
-                transition_id=transition_id,
-            )
+            return ApplyResult.done(transition_id)
         to_node = graph.node_by_id(to_node_id)
         if to_node is None:
-            return _failure(f"transition target {to_node_id} is not a node")
+            return ApplyResult.failure(f"transition target {to_node_id} is not a node")
 
         if to_node.executor is Executor.HUB:
             # Run on BOTH the fresh apply and the idempotent replay: the executor is itself
             # idempotent and resumable, so a re-flush RESUMES an interrupted run (#67).
             self._hub_node_executor.run(chunk, graph, to_node, epoch=submission.epoch)
-            return ApplyResult(
-                response=ApplyResponse(
-                    outcome=ApplyOutcome.HUB_NODE_TAKEN,
-                    detail=f"hub node `{to_node.name}` took over; poll the chunk for the outcome",
-                ),
-                transition_id=transition_id,
-            )
+            return ApplyResult.taken_over(to_node, transition_id)
         if to_node.judged_by is JudgedBy.HUMAN:
             # A transition INTO a human-judged node opens a graph gate: park on a decision
             # carrying the node's choice set. Only on the real apply, never a replay.
             if is_fresh_apply:
                 self._open_graph_gate_decision(chunk, to_node, epoch=submission.epoch)
-            return ApplyResult(
-                response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{to_node.name}`"),
-                transition_id=transition_id,
-            )
+            return ApplyResult.parked(to_node, transition_id)
 
-        addendum = edge.prompt_addendum if edge is not None else _addendum(graph, from_node, submission.choice)
-        envelope = build_node_envelope(
+        arrival = Arrival(edge) if edge is not None else Arrival.of_choice(graph, from_node, submission.choice)
+        envelope = Envelope(
             chunk=chunk,
             graph=graph,
             node=to_node,
             artifacts=self._chunks.load_artifacts(chunk.chunk_id),
             epoch=submission.epoch,
-            arrival_addendum=addendum,
+            arrival_addendum=arrival.addendum,
         )
-        return ApplyResult(
-            response=ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=envelope), transition_id=transition_id
-        )
+        return ApplyResult.advance(envelope.wire, transition_id)
 
     def _open_graph_gate_decision(self, chunk: Chunk, gate_node: Node, *, epoch: int) -> None:
         """Open the graph gate's decision on arrival — idempotent per (chunk, node, epoch).
@@ -566,7 +612,7 @@ class ApplyService:
             route_runner_id=route.runner_id if route is not None else None,
             mode=route_token_mode,
         )
-        return _failure(detail) if detail is not None else None
+        return ApplyResult.failure(detail) if detail is not None else None
 
     def _row(self, chunk: Chunk, from_node: Node, epoch: int, artifact: SubmittedArtifact) -> ArtifactRow:
         is_commit = artifact.kind is ArtifactKind.GIT_COMMIT
@@ -583,13 +629,3 @@ class ApplyService:
             node_name=from_node.name,
             epoch=epoch,
         )
-
-
-def _resolve(graph: Graph, node_name: str) -> str | None:
-    node = graph.node_by_name(node_name)
-    return node.node_id if node is not None else None
-
-
-def _addendum(graph: Graph, from_node: Node, choice: str) -> str | None:
-    edge = graph.edge_for_choice(from_node.node_id, choice)
-    return edge.prompt_addendum if edge is not None else None

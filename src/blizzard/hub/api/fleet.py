@@ -25,7 +25,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.claim import ClaimConflict, ClaimDeniedPaused, ClaimDeniedTerminal
-from blizzard.hub.domain.envelope import addendum_for_transition, build_node_envelope
+from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.graph import FollowLatest, Graph, Mint
 from blizzard.hub.domain.work import (
     Chunk,
@@ -234,14 +234,14 @@ def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
     node = graph.node_by_id(node_id)
     if node is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="chunk has no current runner node (terminal)")
-    return build_node_envelope(
+    return Envelope(
         chunk=chunk,
         graph=graph,
         node=node,
         artifacts=services.chunks.load_artifacts(chunk_id),
         epoch=facts.latest_epoch() or 0,
-        arrival_addendum=addendum_for_transition(graph, facts.newest_transition()),
-    )
+        arrival_addendum=Arrival.of_transition(graph, facts.newest_transition()).addendum,
+    ).wire
 
 
 @router.post("/chunks/{chunk_id}/hub-advance", response_model=HubAdvanceResponse)

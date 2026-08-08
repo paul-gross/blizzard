@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
-from blizzard.hub.domain.envelope import build_node_envelope, latest_artifacts_by_name
+from blizzard.hub.domain.envelope import Envelope, LatestArtifacts
 from blizzard.hub.domain.graph import (
     Choice,
     Executor,
@@ -60,8 +60,8 @@ def _node() -> Node:
 
 
 def _graph(*sessions: SessionDecl) -> Graph:
-    """The node's own graph — required by ``build_node_envelope`` since #144, since the
-    node's effective session declaration is resolved against its ``sessions:`` map."""
+    """The node's own graph — required since #144, since the node's effective session
+    declaration is resolved against its ``sessions:`` map."""
     return Graph(
         graph_id="gr_1",
         name="t",
@@ -82,16 +82,16 @@ def _chunk() -> Chunk:
     )
 
 
-def test_latest_artifacts_by_name_keeps_the_highest_epoch() -> None:
+def test_latest_artifacts_keeps_the_highest_epoch() -> None:
     rows = [_row("findings", 1), _row("findings", 3), _row("findings", 2), _row("other", 1)]
-    latest = {(r.node_name, r.name): r.epoch for r in latest_artifacts_by_name(rows)}
+    latest = {(r.node_name, r.name): r.epoch for r in LatestArtifacts.of(rows).rows}
     assert latest == {("build", "findings"): 3, ("build", "other"): 1}
 
 
 def test_envelope_carries_authored_judgement_prose_and_choice_set() -> None:
     # The envelope carries the judgement prompt verbatim and the choice set — never a
     # baked-in elicitation tail; that's the runner's to render.
-    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[_row("f", 1)], epoch=1)
+    env = Envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[_row("f", 1)], epoch=1).wire
     assert env.epoch == 1
     assert env.node.node_name == "build"
     assert env.node.checks == ["mise run test"]
@@ -107,20 +107,20 @@ def test_envelope_carries_session_source() -> None:
     # Mirrors target_graph beside the raw `to`: session_source is derived once at
     # parse and carried verbatim onto the envelope's NodeConfig (issue #115).
     node = replace(_node(), session_source="build")
-    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=node, artifacts=[], epoch=1)
+    env = Envelope(chunk=_chunk(), graph=_graph(), node=node, artifacts=[], epoch=1).wire
     assert env.node.session == SessionMode.RESUME
     assert env.node.session_source == "build"
 
 
 def test_envelope_session_source_defaults_to_none() -> None:
-    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1)
+    env = Envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1).wire
     assert env.node.session_source is None
 
 
 def test_arrival_addendum_appends_to_the_pre_prompt() -> None:
-    env = build_node_envelope(
+    env = Envelope(
         chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=2, arrival_addendum="the review found X"
-    )
+    ).wire
     assert env.prompt == "do the work\n\nthe review found X"
 
 
@@ -135,7 +135,7 @@ def test_required_artifacts_table_renders_name_and_kind_and_is_harness_inert() -
             ProducesSpec(name="commit", kind=ArtifactKind.GIT_COMMIT),
         ],
     )
-    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=node, artifacts=[], epoch=1)
+    env = Envelope(chunk=_chunk(), graph=_graph(), node=node, artifacts=[], epoch=1).wire
 
     assert env.prompt is not None
     assert env.prompt.startswith("do the work\n\n")
@@ -154,7 +154,7 @@ def test_required_artifacts_table_renders_name_and_kind_and_is_harness_inert() -
 
 def test_required_artifacts_table_is_empty_when_node_produces_nothing() -> None:
     # Mirrors `_node()`'s own `produces=[]`; this test names the reason explicitly.
-    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1)
+    env = Envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1).wire
     assert env.prompt == "do the work"
 
 
@@ -175,7 +175,7 @@ def test_hub_node_has_no_judgement_prompt() -> None:
         judgement_prompt=None,
         choices=[],
     )
-    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=hub_node, artifacts=[], epoch=1)
+    env = Envelope(chunk=_chunk(), graph=_graph(), node=hub_node, artifacts=[], epoch=1).wire
     assert env.judgement_prompt is None
     assert env.node.choices == []
 
@@ -189,7 +189,7 @@ def test_envelope_carries_checks_gating_fields() -> None:
         checks_timeout=300,
         choices=[Choice("cho_1", "pass", "it works", requires_checks=True), Choice("cho_2", "fail", "it does not")],
     )
-    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=node, artifacts=[], epoch=1)
+    env = Envelope(chunk=_chunk(), graph=_graph(), node=node, artifacts=[], epoch=1).wire
     assert env.node.checks_cwd == "blizzard"
     assert env.node.checks_timeout == 300
     by_name = {c.name: c for c in env.node.choices}
@@ -198,7 +198,7 @@ def test_envelope_carries_checks_gating_fields() -> None:
 
 
 def test_envelope_checks_gating_fields_default_off() -> None:
-    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1)
+    env = Envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1).wire
     assert env.node.checks_cwd is None
     assert env.node.checks_timeout is None
     assert all(not c.requires_checks for c in env.node.choices)
@@ -215,7 +215,7 @@ def test_a_declaration_only_node_carries_the_declaration() -> None:
     node = replace(_node(), session=SessionMode.FRESH, session_source="code")
     decl = SessionDecl(name="code", model=["blizzard:basic"], effort="medium", rotate=RotatePolicy(max_invocations=30))
 
-    env = build_node_envelope(chunk=_chunk(), graph=_graph(decl), node=node, artifacts=[], epoch=1)
+    env = Envelope(chunk=_chunk(), graph=_graph(decl), node=node, artifacts=[], epoch=1).wire
 
     assert env.node.session_name == "code"
     assert env.node.session_model == ["blizzard:basic"]
@@ -230,7 +230,7 @@ def test_a_chunk_default_only_node_carries_the_chunk_default_and_no_pool() -> No
     # but the chunk's defaults still reach it: the precedence rule's intended reach.
     chunk = _chunk_with_defaults(["blizzard:advanced"], "high")
 
-    env = build_node_envelope(chunk=chunk, graph=_graph(), node=_node(), artifacts=[], epoch=1)
+    env = Envelope(chunk=chunk, graph=_graph(), node=_node(), artifacts=[], epoch=1).wire
 
     assert env.node.session_name is None
     assert env.node.session_model == ["blizzard:advanced"]
@@ -245,7 +245,7 @@ def test_a_declaration_outranks_the_chunk_default_field_by_field() -> None:
     decl = SessionDecl(name="code", model=["blizzard:basic"])
     chunk = _chunk_with_defaults(["blizzard:advanced"], "high")
 
-    env = build_node_envelope(chunk=chunk, graph=_graph(decl), node=node, artifacts=[], epoch=1)
+    env = Envelope(chunk=chunk, graph=_graph(decl), node=node, artifacts=[], epoch=1).wire
 
     assert env.node.session_model == ["blizzard:basic"]  # the declaration wins
     assert env.node.session_effort == "high"  # the chunk default fills the gap
@@ -255,7 +255,7 @@ def test_a_declaration_with_neither_field_falls_all_the_way_to_the_chunk_default
     node = replace(_node(), session=SessionMode.FRESH, session_source="gate")
     chunk = _chunk_with_defaults(["blizzard:advanced"], "high")
 
-    env = build_node_envelope(chunk=chunk, graph=_graph(SessionDecl(name="gate")), node=node, artifacts=[], epoch=1)
+    env = Envelope(chunk=chunk, graph=_graph(SessionDecl(name="gate")), node=node, artifacts=[], epoch=1).wire
 
     assert env.node.session_name == "gate"  # still a pool member
     assert env.node.session_model == ["blizzard:advanced"]
@@ -264,7 +264,7 @@ def test_a_declaration_with_neither_field_falls_all_the_way_to_the_chunk_default
 
 def test_neither_a_declaration_nor_a_chunk_default_expresses_no_preference() -> None:
     # No declaration and no chunk default: the runner's own default applies.
-    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1)
+    env = Envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1).wire
 
     assert env.node.session_name is None
     assert env.node.session_model == []
@@ -278,7 +278,7 @@ def test_a_node_name_session_target_carries_no_pool_but_still_the_chunk_default(
     node = replace(_node(), session_source="build")
     chunk = _chunk_with_defaults(["blizzard:advanced"], "high")
 
-    env = build_node_envelope(chunk=chunk, graph=_graph(SessionDecl(name="code")), node=node, artifacts=[], epoch=1)
+    env = Envelope(chunk=chunk, graph=_graph(SessionDecl(name="code")), node=node, artifacts=[], epoch=1).wire
 
     assert env.node.session_source == "build"
     assert env.node.session_name is None
