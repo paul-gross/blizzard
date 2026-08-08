@@ -18,7 +18,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor
 from blizzard.hub.domain.work import ChunkFacts, RouteHistory
 from blizzard.hub.store import schema as hub
-from blizzard.hub.store.internal.chunk_store import ChunkStore, _deserialize_default_model
+from blizzard.hub.store.internal.chunk_store import DEFAULT_MODEL, ChunkStore
 from blizzard.runner.store import schema as runner
 
 
@@ -139,7 +139,7 @@ class OneOpenPauseParkPerLease(QueryCheck):
         return violations
 
     def _open_pause_parks(self) -> list[tuple[str, datetime]]:
-        """The plain-query mirror of the store adapter's ``_pause_park_is_open`` — same ``>=``
+        """The plain-query mirror of the store adapter's ``OPEN_PAUSE_PARK`` — same ``>=``
         (a same-instant resume is a resume) and same per-lease correlation."""
         resumes: dict[str, list[datetime]] = {}
         for lease_id, resumed_at in self.conn.execute(
@@ -430,7 +430,7 @@ class MigrationsAtomic(QueryCheck):
                 )
             # **Membership**, not equality against `[model_after]` (issue #144) — the list may
             # legitimately grow afterwards (pinned by tests/test_invariant_checker.py).
-            elif m.model_after is not None and m.model_after not in _deserialize_default_model(chunk.default_model):  # type: ignore[attr-defined]
+            elif m.model_after is not None and m.model_after not in DEFAULT_MODEL.decode(chunk.default_model):  # type: ignore[attr-defined]
                 violations.append(
                     Violation(
                         "hub:migration-pin-consistent",

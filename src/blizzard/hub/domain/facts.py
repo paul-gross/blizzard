@@ -39,6 +39,55 @@ _log = get_logger("blizzard.hub.facts")
 _ROUTE_TOKEN_GATED_KINDS = frozenset({LEASE_MINTED, ESCALATION_RECORDED, QUESTION_ASKED})
 
 
+@dataclass(frozen=True)
+class Payload:
+    """One pushed fact's body, read through the coercions the intake shares.
+
+    An absent key and an explicit ``null`` are distinct: :meth:`text` reads both as
+    ``None``, while :meth:`string`'s default only covers the absent one."""
+
+    body: dict[str, object]
+
+    def get(self, key: str, default: object = None) -> object:
+        return self.body.get(key, default)
+
+    def text(self, key: str) -> str | None:
+        value = self.body.get(key)
+        return str(value) if value is not None else None
+
+    def string(self, key: str, default: str = "") -> str:
+        return str(self.body.get(key, default))
+
+    def require_text(self, key: str) -> str:
+        return str(self.body[key])
+
+    def require_number(self, key: str) -> int:
+        return int(self.body[key])  # type: ignore[arg-type]
+
+    def amount(self, key: str) -> float | None:
+        """A usage fact's ``cost_usd`` — ``None`` stays ``None`` (no envelope), never fabricated."""
+        value = self.body.get(key)
+        return float(value) if value is not None else None  # type: ignore[arg-type]
+
+    def strings(self, key: str) -> list[str]:
+        return [str(item) for item in self.body.get(key, [])]  # type: ignore[union-attr]
+
+    def mapping(self, key: str) -> dict[str, object] | None:
+        value = self.body.get(key)
+        return value if isinstance(value, dict) else None
+
+    def instant(self, key: str, fallback: datetime) -> datetime:
+        """An ISO-8601 stamp, falling back on a malformed one and coerced to UTC
+        (``bzh:utc-instants``) — store-and-forward resends the naive stamp it buffered."""
+        value = self.body.get(key)
+        if isinstance(value, str):
+            try:
+                return as_utc(datetime.fromisoformat(value))
+            except ValueError:
+                return fallback
+        return fallback
+
+
 class RunnerFactsService:
     """Land runner-reported ``lease.minted`` / ``escalation.recorded`` facts."""
 
@@ -133,79 +182,79 @@ class FactIngestService:
         payload (``escalation.recorded``/``event.recorded``), else ``None``. ``(False,
         None)`` on an unknown kind or a route-token rejection."""
         now = self._clock.now()
+        fact = Payload(payload)
         if kind in _ROUTE_TOKEN_GATED_KINDS:
-            chunk_id = _opt(payload.get("chunk_id"))
-            if chunk_id is None or not self._route_token_ok(chunk_id, runner_id, payload, mode=route_token_mode):
+            chunk_id = fact.text("chunk_id")
+            if chunk_id is None or not self._route_token_ok(chunk_id, runner_id, fact, mode=route_token_mode):
                 return False, None
         if kind == LEASE_MINTED:
             self._chunks.record_lease(
-                str(payload["chunk_id"]),
-                epoch=int(payload["epoch"]),  # type: ignore[arg-type]
+                fact.require_text("chunk_id"),
+                epoch=fact.require_number("epoch"),
                 runner_id=runner_id,
                 at=now,
             )
             return True, None
         if kind == ESCALATION_RECORDED:
             escalation_id = self._chunks.record_escalation(
-                str(payload["chunk_id"]),
-                epoch=int(payload["epoch"]),  # type: ignore[arg-type]
-                takeover_command=str(payload.get("takeover_command", "")),
-                wrapped_takeover_command=str(payload.get("wrapped_takeover_command", "")),
+                fact.require_text("chunk_id"),
+                epoch=fact.require_number("epoch"),
+                takeover_command=fact.string("takeover_command"),
+                wrapped_takeover_command=fact.string("wrapped_takeover_command"),
                 at=now,
             )
             return True, escalation_id
         if kind == QUESTION_ASKED:
             # The runner authors the question_id so it can poll the answer back.
             self._chunks.record_question(
-                question_id=str(payload["question_id"]),
-                chunk_id=str(payload["chunk_id"]),
-                node_id=_opt(payload.get("node_id")),
-                session_id=_opt(payload.get("session_id")),
+                question_id=fact.require_text("question_id"),
+                chunk_id=fact.require_text("chunk_id"),
+                node_id=fact.text("node_id"),
+                session_id=fact.text("session_id"),
                 runner_id=runner_id,
-                epoch=int(payload["epoch"]),  # type: ignore[arg-type]
-                question=str(payload["question"]),
-                options=[str(o) for o in payload.get("options", [])],  # type: ignore[union-attr]
-                asked_at=_parse_at(payload.get("asked_at"), now),
+                epoch=fact.require_number("epoch"),
+                question=fact.require_text("question"),
+                options=fact.strings("options"),
+                asked_at=fact.instant("asked_at", now),
             )
             return True, None
         if kind == USAGE_RECORDED:
             # No epoch fence and no route-token gate: trailing-epoch spend is real and attributed to its
             # own epoch (issue #84b; pinned in tests/test_usage_facts_ingest.py, test_route_token_authz.py).
             self._chunks.record_usage(
-                str(payload["chunk_id"]),
-                node_id=str(payload["node_id"]),
-                epoch=int(payload["epoch"]),  # type: ignore[arg-type]
+                fact.require_text("chunk_id"),
+                node_id=fact.require_text("node_id"),
+                epoch=fact.require_number("epoch"),
                 runner_id=runner_id,
-                kind=str(payload["kind"]),
-                model=str(payload["model"]),
-                input_tokens=int(payload["input_tokens"]),  # type: ignore[arg-type]
-                output_tokens=int(payload["output_tokens"]),  # type: ignore[arg-type]
-                cache_read_tokens=int(payload["cache_read_tokens"]),  # type: ignore[arg-type]
-                cache_create_tokens=int(payload["cache_create_tokens"]),  # type: ignore[arg-type]
-                cost_usd=_opt_float(payload.get("cost_usd")),
+                kind=fact.require_text("kind"),
+                model=fact.require_text("model"),
+                input_tokens=fact.require_number("input_tokens"),
+                output_tokens=fact.require_number("output_tokens"),
+                cache_read_tokens=fact.require_number("cache_read_tokens"),
+                cache_create_tokens=fact.require_number("cache_create_tokens"),
+                cost_usd=fact.amount("cost_usd"),
                 at=now,
             )
             return True, None
         if kind == EVENT_RECORDED:
             # Neither epoch-fenced nor route-token-gated (issue #125): an event from a fenced-out or
             # dying worker is exactly the signal this log exists to surface. `chunk_id` is optional.
-            detail = payload.get("detail")
             event_id = self._chunks.record_event(
-                severity=str(payload["severity"]),
-                kind=str(payload["kind"]),
+                severity=fact.require_text("severity"),
+                kind=fact.require_text("kind"),
                 runner_id=runner_id,
-                chunk_id=_opt(payload.get("chunk_id")),
-                lease_id=_opt(payload.get("lease_id")),
-                node_name=_opt(payload.get("node_name")),
-                message=str(payload.get("message", "")),
-                detail=detail if isinstance(detail, dict) else None,
+                chunk_id=fact.text("chunk_id"),
+                lease_id=fact.text("lease_id"),
+                node_name=fact.text("node_name"),
+                message=fact.string("message"),
+                detail=fact.mapping("detail"),
                 at=now,
             )
             return True, event_id
         if kind == ANSWER_DELIVERED:
             # Records that the resume-with-answer ran; derives no status of its own.
             self._chunks.record_answer_delivered(
-                question_id=str(payload["question_id"]), chunk_id=str(payload["chunk_id"]), at=now
+                question_id=fact.require_text("question_id"), chunk_id=fact.require_text("chunk_id"), at=now
             )
             return True, None
         if kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED:
@@ -213,8 +262,8 @@ class FactIngestService:
             # (`bzh:facts-not-status`'s stated exception) — only the latest sample is of interest.
             self._fleet.record_external_usage(
                 runner_id,
-                sampled_at=_parse_at(payload.get("sampled_at"), now),
-                windows_json=json.dumps(payload.get("windows", [])),
+                sampled_at=fact.instant("sampled_at", now),
+                windows_json=json.dumps(fact.get("windows", [])),
                 at=now,
             )
             return True, None
@@ -224,15 +273,15 @@ class FactIngestService:
             local_pause_id = self._fleet.record_local_pause(
                 runner_id,
                 paused=kind == RUNNER_LOCALLY_PAUSED,
-                at=_parse_at(payload.get("at"), now),
-                by=str(payload.get("by", "operator")),
-                reason=_opt(payload.get("reason")),
+                at=fact.instant("at", now),
+                by=fact.string("by", "operator"),
+                reason=fact.text("reason"),
             )
             return True, local_pause_id
         _log.warning("unknown runner fact kind", kind=kind)
         return False, None
 
-    def _route_token_ok(self, chunk_id: str, runner_id: str, payload: dict[str, object], *, mode: str) -> bool:
+    def _route_token_ok(self, chunk_id: str, runner_id: str, fact: Payload, *, mode: str) -> bool:
         """Route-token authorization for a chunk-scoped, fence-advancing fact (issue
         #84b) — the buffered-push counterpart of ``apply.py``'s own check. A chunk the
         hub has never minted (``load_facts`` returns ``None``, e.g. a malformed/stale
@@ -242,7 +291,7 @@ class FactIngestService:
         route = self._chunks.route_of(chunk_id)
         detail = check_route_token(
             facts,
-            presented_token=_opt(payload.get("route_token")),
+            presented_token=fact.text("route_token"),
             submission_runner_id=runner_id,
             route_runner_id=route.runner_id if route is not None else None,
             mode=mode,
@@ -253,25 +302,3 @@ class FactIngestService:
             )
             return False
         return True
-
-
-def _opt(value: object) -> str | None:
-    return str(value) if value is not None else None
-
-
-def _opt_float(value: object) -> float | None:
-    """A usage fact's ``cost_usd`` — ``None`` stays ``None`` (no envelope), never fabricated."""
-    return float(value) if value is not None else None  # type: ignore[arg-type]
-
-
-def _parse_at(value: object, fallback: datetime) -> datetime:
-    """Read an ISO-8601 instant off a batched payload, falling back on a malformed stamp.
-
-    Coerces a naive result to UTC (``bzh:utc-instants``): a buffered payload can carry a naive stamp,
-    and store-and-forward resends what it already buffered rather than re-minting."""
-    if isinstance(value, str):
-        try:
-            return as_utc(datetime.fromisoformat(value))
-        except ValueError:
-            return fallback
-    return fallback

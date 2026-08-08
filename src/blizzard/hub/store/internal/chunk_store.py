@@ -8,6 +8,7 @@ derived. Timestamps arrive already stamped (``bzh:injected-clock``).
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from sqlalchemy import Connection, Engine, func, insert, select, update
@@ -64,61 +65,95 @@ _ROUTE_PREFIX = "route"
 _HUB_RUNNER_ID = "hub"
 
 
-def _serialize_intended_migration(intended: IntendedMigration | None) -> str | None:
-    """``chunks.intended_migration``'s wire shape — ``None`` writes ``NULL`` (issue #124)."""
-    if intended is None:
-        return None
-    return json.dumps({"mode": intended.mode.value, "graph_id": intended.graph_id, "node_name": intended.node_name})
+@dataclass(frozen=True)
+class MigrationColumn:
+    """``chunks.intended_migration``'s JSON shape — ``None`` writes and reads ``NULL`` (issue #124)."""
+
+    def encode(self, intended: IntendedMigration | None) -> str | None:
+        if intended is None:
+            return None
+        return json.dumps({"mode": intended.mode.value, "graph_id": intended.graph_id, "node_name": intended.node_name})
+
+    def decode(self, value: str | None) -> IntendedMigration | None:
+        if value is None:
+            return None
+        data = json.loads(value)
+        return IntendedMigration(
+            mode=MigrationMode(data["mode"]), graph_id=data["graph_id"], node_name=data["node_name"]
+        )
 
 
-def _deserialize_intended_migration(value: str | None) -> IntendedMigration | None:
-    """The counterpart read — ``NULL``/absent reads back as ``None`` (issue #124)."""
-    if value is None:
-        return None
-    data = json.loads(value)
-    return IntendedMigration(mode=MigrationMode(data["mode"]), graph_id=data["graph_id"], node_name=data["node_name"])
-
-
-def _serialize_default_model(preferences: list[str]) -> str | None:
+@dataclass(frozen=True)
+class ModelColumn:
     """``chunks.default_model``'s column shape — a JSON ``list[str]`` (issue #144).
 
     An empty preference list writes ``NULL`` rather than ``"[]"``, so "express no
-    preference" reads identically however the chunk reached it.
-    """
-    return json.dumps(list(preferences)) if preferences else None
+    preference" reads identically however the chunk reached it."""
+
+    def encode(self, preferences: list[str]) -> str | None:
+        return json.dumps(list(preferences)) if preferences else None
+
+    def decode(self, value: str | None) -> list[str]:
+        return [str(m) for m in json.loads(value)] if value else []
 
 
-def _deserialize_default_model(value: str | None) -> list[str]:
-    """The counterpart read — ``NULL``/absent reads back as the empty list (issue #144)."""
-    return [str(m) for m in json.loads(value)] if value else []
-
-
-def _question_select():  # type: ignore[no-untyped-def]
+@dataclass(frozen=True)
+class QuestionQuery:
     """A question row with its derived answer and delivery state, in one query.
 
     Both joins are **outer**. Deliveries pre-aggregate to the **earliest** instant per
-    question, since ``answer_deliveries`` is append-only with no per-question uniqueness.
-    """
-    earliest_delivery = (
-        select(
-            s.answer_deliveries.c.question_id.label("question_id"),
-            func.min(s.answer_deliveries.c.delivered_at).label("delivered_at"),
+    question, since ``answer_deliveries`` is append-only with no per-question uniqueness."""
+
+    @property
+    def select(self):  # type: ignore[no-untyped-def]
+        earliest_delivery = (
+            select(
+                s.answer_deliveries.c.question_id.label("question_id"),
+                func.min(s.answer_deliveries.c.delivered_at).label("delivered_at"),
+            )
+            .group_by(s.answer_deliveries.c.question_id)
+            .subquery()
         )
-        .group_by(s.answer_deliveries.c.question_id)
-        .subquery()
-    )
-    return (
-        select(
-            s.questions,
-            s.question_answers.c.answer,
-            s.question_answers.c.answered_by,
-            s.question_answers.c.answered_at,
-            earliest_delivery.c.delivered_at,
+        return (
+            select(
+                s.questions,
+                s.question_answers.c.answer,
+                s.question_answers.c.answered_by,
+                s.question_answers.c.answered_at,
+                earliest_delivery.c.delivered_at,
+            )
+            .select_from(s.questions)
+            .outerjoin(s.question_answers, s.question_answers.c.question_id == s.questions.c.question_id)
+            .outerjoin(earliest_delivery, earliest_delivery.c.question_id == s.questions.c.question_id)
         )
-        .select_from(s.questions)
-        .outerjoin(s.question_answers, s.question_answers.c.question_id == s.questions.c.question_id)
-        .outerjoin(earliest_delivery, earliest_delivery.c.question_id == s.questions.c.question_id)
-    )
+
+    def of(self, q) -> QuestionRow:  # type: ignore[no-untyped-def]
+        """One :attr:`select` row as its domain shape — every derived state read off the
+        joined columns, so the three question reads cannot disagree."""
+        return QuestionRow(
+            question_id=q.question_id,
+            chunk_id=q.chunk_id,
+            node_id=q.node_id,
+            session_id=q.session_id,
+            runner_id=q.runner_id,
+            epoch=q.epoch,
+            question=q.question,
+            options=json.loads(q.options) if q.options else [],
+            asked_at=q.asked_at,
+            # The outer joins leave these NULL when the row is absent; `answered_by` is the
+            # answer row's own non-nullable column, so its presence *is* the answer row's.
+            answered=q.answered_by is not None,
+            answer=q.answer,
+            answered_by=q.answered_by,
+            answered_at=q.answered_at,
+            delivered=q.delivered_at is not None,
+            delivered_at=q.delivered_at,
+        )
+
+
+INTENDED_MIGRATION = MigrationColumn()
+DEFAULT_MODEL = ModelColumn()
+QUESTIONS = QuestionQuery()
 
 
 class ChunkStore:
@@ -501,24 +536,24 @@ class ChunkStore:
 
     def get_question(self, question_id: str) -> QuestionRow | None:
         with self._engine.connect() as conn:
-            row = conn.execute(_question_select().where(s.questions.c.question_id == question_id)).one_or_none()
-            return self._question_row(row) if row is not None else None
+            row = conn.execute(QUESTIONS.select.where(s.questions.c.question_id == question_id)).one_or_none()
+            return QUESTIONS.of(row) if row is not None else None
 
     def list_open_questions(self) -> list[QuestionRow]:
         with self._engine.connect() as conn:
             rows = conn.execute(
-                _question_select()
-                .where(s.questions.c.question_id.not_in(select(s.question_answers.c.question_id)))
-                .order_by(s.questions.c.asked_at)
+                QUESTIONS.select.where(
+                    s.questions.c.question_id.not_in(select(s.question_answers.c.question_id))
+                ).order_by(s.questions.c.asked_at)
             ).all()
-            return [self._question_row(row) for row in rows]
+            return [QUESTIONS.of(row) for row in rows]
 
     def load_questions(self, chunk_id: str) -> list[QuestionRow]:
         with self._engine.connect() as conn:
             rows = conn.execute(
-                _question_select().where(s.questions.c.chunk_id == chunk_id).order_by(s.questions.c.asked_at)
+                QUESTIONS.select.where(s.questions.c.chunk_id == chunk_id).order_by(s.questions.c.asked_at)
             ).all()
-            return [self._question_row(row) for row in rows]
+            return [QUESTIONS.of(row) for row in rows]
 
     def get_decision(self, decision_id: str) -> DecisionRow | None:
         with self._engine.connect() as conn:
@@ -989,7 +1024,7 @@ class ChunkStore:
                     minted_at=chunk.minted_at,
                     # `chunks.model` is deliberately omitted (issue #144) — the insert
                     # leans on its `server_default`.
-                    default_model=_serialize_default_model(chunk.default_model),
+                    default_model=DEFAULT_MODEL.encode(chunk.default_model),
                     default_effort=chunk.default_effort,
                 )
             )
@@ -1540,7 +1575,7 @@ class ChunkStore:
             if model is not None:
                 # Written INLINE (issue #144): a second transactional write would split the
                 # durable fact from the pin it implies (`hub:migration-pin-consistent`).
-                values["default_model"] = _serialize_default_model([model])
+                values["default_model"] = DEFAULT_MODEL.encode([model])
             if clear_intent:
                 values["intended_migration"] = None
             conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(**values))
@@ -1658,7 +1693,7 @@ class ChunkStore:
                 update(s.chunks)
                 .where(s.chunks.c.chunk_id == chunk_id)
                 .values(
-                    default_model=_serialize_default_model(default_model),
+                    default_model=DEFAULT_MODEL.encode(default_model),
                     default_effort=default_effort,
                 )
             )
@@ -1672,7 +1707,7 @@ class ChunkStore:
             conn.execute(
                 update(s.chunks)
                 .where(s.chunks.c.chunk_id == chunk_id)
-                .values(intended_migration=_serialize_intended_migration(intended))
+                .values(intended_migration=INTENDED_MIGRATION.encode(intended))
             )
 
     # --- The generic hub command node (#65) ---------------------------------
@@ -1878,30 +1913,6 @@ class ChunkStore:
         ).scalar()
         return max(created_max or 0, released_max or 0, token_max or 0) + 1
 
-    @staticmethod
-    def _question_row(q) -> QuestionRow:  # type: ignore[no-untyped-def]
-        """One :func:`_question_select` row as its domain shape — every derived state read
-        off the joined columns, so the three question reads cannot disagree."""
-        return QuestionRow(
-            question_id=q.question_id,
-            chunk_id=q.chunk_id,
-            node_id=q.node_id,
-            session_id=q.session_id,
-            runner_id=q.runner_id,
-            epoch=q.epoch,
-            question=q.question,
-            options=json.loads(q.options) if q.options else [],
-            asked_at=q.asked_at,
-            # The outer joins leave these NULL when the row is absent; `answered_by` is the
-            # answer row's own non-nullable column, so its presence *is* the answer row's.
-            answered=q.answered_by is not None,
-            answer=q.answer,
-            answered_by=q.answered_by,
-            answered_at=q.answered_at,
-            delivered=q.delivered_at is not None,
-            delivered_at=q.delivered_at,
-        )
-
     def _chunk(self, conn, row) -> Chunk:  # type: ignore[no-untyped-def]
         pointers = [
             WorkRef(source=p.source, ref=p.ref)
@@ -1912,9 +1923,9 @@ class ChunkStore:
             graph_id=row.graph_id,
             work_refs=pointers,
             minted_at=row.minted_at,
-            default_model=_deserialize_default_model(row.default_model),
+            default_model=DEFAULT_MODEL.decode(row.default_model),
             default_effort=row.default_effort,
-            intended_migration=_deserialize_intended_migration(row.intended_migration),
+            intended_migration=INTENDED_MIGRATION.decode(row.intended_migration),
         )
 
     def _status(self, chunk_id: str) -> ChunkStatus:

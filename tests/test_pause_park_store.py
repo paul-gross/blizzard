@@ -1,6 +1,6 @@
 """The runner-side pause-park store — a separate table pair from park_facts (issue #46).
 
-``_pause_park_is_open`` must use a timestamp-correlated ``NOT EXISTS`` predicate, not a
+``OPEN_PAUSE_PARK`` must use a timestamp-correlated ``NOT EXISTS`` predicate, not a
 naive set-difference — the naive form reads a re-parked lease as still resumed. Also
 pins the three skip sites (REAP, ``mark_resume_intents``, ``mark_crash_resume_intents``)
 that derive from ``parked_lease_ids()``'s union."""
@@ -86,7 +86,7 @@ def test_same_instant_resume_wins_over_its_pause(tmp_path):  # type: ignore[no-u
 
 
 def test_a_resume_closes_only_its_own_leases_pause_park(tmp_path):  # type: ignore[no-untyped-def]
-    """The ``lease_id`` correlation in ``_pause_park_is_open`` is load-bearing — without
+    """The ``lease_id`` correlation in ``OPEN_PAUSE_PARK`` is load-bearing — without
     it, resuming one chunk would silently un-pause every paused chunk on the runner."""
     store = _store(tmp_path)
     store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW)

@@ -77,50 +77,50 @@ class ArtifactRow:
     node_name: str
     epoch: int
 
+    @classmethod
+    def of(cls, artifact: Artifact, *, node_name: str) -> ArtifactRow:
+        """Compress a typed artifact to its storage row (lossless)."""
+        common = {
+            "name": artifact.name,
+            "artifact_id": artifact.artifact_id,
+            "chunk_id": artifact.produced_by.chunk_id,
+            "node_id": artifact.produced_by.node_id,
+            "node_name": node_name,
+            "epoch": artifact.produced_by.epoch,
+        }
+        if isinstance(artifact, GitCommitArtifact):
+            return cls(
+                kind=ArtifactKind.GIT_COMMIT,
+                data=f"{artifact.branch_name}:{artifact.commit_hash}",
+                repo=artifact.repo,
+                forge=artifact.forge or None,
+                **common,
+            )
+        return cls(kind=ArtifactKind.ASSET, data=artifact.content, repo=None, forge=None, **common)
 
-def to_row(artifact: Artifact, *, node_name: str) -> ArtifactRow:
-    """Compress a typed artifact to its storage row (lossless)."""
-    common = {
-        "name": artifact.name,
-        "artifact_id": artifact.artifact_id,
-        "chunk_id": artifact.produced_by.chunk_id,
-        "node_id": artifact.produced_by.node_id,
-        "node_name": node_name,
-        "epoch": artifact.produced_by.epoch,
-    }
-    if isinstance(artifact, GitCommitArtifact):
-        return ArtifactRow(
-            kind=ArtifactKind.GIT_COMMIT,
-            data=f"{artifact.branch_name}:{artifact.commit_hash}",
-            repo=artifact.repo,
-            forge=artifact.forge or None,
-            **common,
-        )
-    return ArtifactRow(kind=ArtifactKind.ASSET, data=artifact.content, repo=None, forge=None, **common)
-
-
-def from_row(row: ArtifactRow) -> Artifact:
-    """Uncompress a storage row back to its typed artifact (lossless)."""
-    provenance = Provenance(chunk_id=row.chunk_id, node_id=row.node_id, epoch=row.epoch)
-    if row.kind is ArtifactKind.GIT_COMMIT:
-        branch_name, _, commit_hash = row.data.partition(":")
-        return GitCommitArtifact(
-            artifact_id=row.artifact_id,
-            name=row.name,
+    @property
+    def artifact(self) -> Artifact:
+        """Uncompress back to the typed artifact (lossless)."""
+        provenance = Provenance(chunk_id=self.chunk_id, node_id=self.node_id, epoch=self.epoch)
+        if self.kind is ArtifactKind.GIT_COMMIT:
+            branch_name, _, commit_hash = self.data.partition(":")
+            return GitCommitArtifact(
+                artifact_id=self.artifact_id,
+                name=self.name,
+                produced_by=provenance,
+                repo=self.repo or "",
+                branch_name=branch_name,
+                commit_hash=commit_hash,
+                forge=self.forge or "",
+            )
+        return AssetArtifact(
+            artifact_id=self.artifact_id,
+            name=self.name,
             produced_by=provenance,
-            repo=row.repo or "",
-            branch_name=branch_name,
-            commit_hash=commit_hash,
-            forge=row.forge or "",
+            content=self.data,
         )
-    return AssetArtifact(
-        artifact_id=row.artifact_id,
-        name=row.name,
-        produced_by=provenance,
-        content=row.data,
-    )
 
-
-def store_key(row: ArtifactRow) -> str:
-    """The chunk artifact-store key ``{node}.{artifact-name}.{epoch}``."""
-    return f"{row.node_name}.{row.name}.{row.epoch}"
+    @property
+    def store_key(self) -> str:
+        """The chunk artifact-store key ``{node}.{artifact-name}.{epoch}``."""
+        return f"{self.node_name}.{self.name}.{self.epoch}"

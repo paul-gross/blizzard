@@ -8,7 +8,9 @@ derived query realizes the facts-only invariant in SQL (``bzh:facts-not-status``
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Engine, and_, case, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -78,88 +80,80 @@ _log = get_logger("blizzard.runner.store")
 _ESCALATED_REASON = "escalated"
 
 
-def _binding_is_held():  # type: ignore[no-untyped-def]
-    """A binding is **held** iff no release for its ``(chunk, env)`` is at or after it.
+@dataclass(frozen=True)
+class Unsuperseded:
+    """A fact row stands while no superseding row exists — one correlated ``NOT EXISTS``.
 
-    Timestamp-correlated rather than a plain ``env_id NOT IN releases`` so a re-bind of the
-    same ``(chunk, env)`` is not masked forever (``bzh:facts-not-status``; pinned by
-    tests/test_pin_runner_store.py::test_a_rebind_after_a_release_reads_as_held)."""
-    return ~(
-        select(binding_releases.c.id)
-        .where(
-            (binding_releases.c.chunk_id == env_bindings.c.chunk_id)
-            & (binding_releases.c.environment_id == env_bindings.c.environment_id)
-            & (binding_releases.c.released_at >= env_bindings.c.bound_at)
-        )
-        .exists()
-    )
+    Correlated on the superseding row's own ordering column, an instant or an epoch, never
+    a bare key ``NOT IN``: a re-mark above an earlier close reads as open again."""
+
+    marker: Any
+    conditions: tuple[Any, ...]
+
+    @property
+    def clause(self):  # type: ignore[no-untyped-def]
+        return ~select(self.marker).where(*self.conditions).exists()
 
 
-def _intent_is_open():  # type: ignore[no-untyped-def]
-    """A resume-intent is **open** iff no clear for its lease is at or after the mark.
+@dataclass(frozen=True)
+class Unclosed:
+    """A row stands while no closing row names its id — a plain ``NOT IN``.
 
-    Timestamp-correlated exactly like :func:`_binding_is_held`, so a re-mark above an
-    earlier clear stays visible (pinned by
-    tests/test_runner_restart_resume.py::test_remark_across_two_restarts_reopens_the_intent)."""
-    return ~(
-        select(resume_clears.c.id)
-        .where(
-            (resume_clears.c.lease_id == resume_intents.c.lease_id)
-            & (resume_clears.c.cleared_at >= resume_intents.c.marked_at)
-        )
-        .exists()
-    )
+    Its key is a fresh ULID per open, so there is no re-open-under-the-same-key hazard for
+    the correlated form above to guard against."""
 
+    key: Any
+    closers: Any
 
-def _pause_park_is_open():  # type: ignore[no-untyped-def]
-    """A pause-park is open iff no resume for its lease is at or after the park instant.
-
-    Timestamp-correlated, so a second pause under one lease is not masked by the first
-    pause's resume (tests/test_pause_park_store.py)."""
-    return ~(
-        select(pause_park_resumes.c.id)
-        .where(
-            (pause_park_resumes.c.lease_id == pause_parks.c.lease_id)
-            & (pause_park_resumes.c.resumed_at >= pause_parks.c.parked_at)
-        )
-        .exists()
-    )
+    @property
+    def clause(self):  # type: ignore[no-untyped-def]
+        return self.key.not_in(select(self.closers))
 
 
-def _takeover_is_open():  # type: ignore[no-untyped-def]
-    """A takeover is **open** iff no end fact names its ``takeover_id``.
+# Pinned by tests/test_pin_runner_store.py::test_a_rebind_after_a_release_reads_as_held.
+HELD_BINDING = Unsuperseded(
+    binding_releases.c.id,
+    (
+        binding_releases.c.chunk_id == env_bindings.c.chunk_id,
+        binding_releases.c.environment_id == env_bindings.c.environment_id,
+        binding_releases.c.released_at >= env_bindings.c.bound_at,
+    ),
+)
 
-    A plain ``NOT IN`` rather than ``_pause_park_is_open``'s timestamp correlation:
-    ``takeover_id`` is a fresh ULID per open, so there is no re-open-under-the-same-key
-    hazard to mask."""
-    return takeovers.c.takeover_id.not_in(select(takeover_ends.c.takeover_id))
+# Pinned by tests/test_runner_restart_resume.py::test_remark_across_two_restarts_reopens_the_intent.
+OPEN_INTENT = Unsuperseded(
+    resume_clears.c.id,
+    (
+        resume_clears.c.lease_id == resume_intents.c.lease_id,
+        resume_clears.c.cleared_at >= resume_intents.c.marked_at,
+    ),
+)
 
+# A second pause under one lease is not masked by the first pause's resume.
+OPEN_PAUSE_PARK = Unsuperseded(
+    pause_park_resumes.c.id,
+    (
+        pause_park_resumes.c.lease_id == pause_parks.c.lease_id,
+        pause_park_resumes.c.resumed_at >= pause_parks.c.parked_at,
+    ),
+)
 
-def _escalation_not_superseded():  # type: ignore[no-untyped-def]
-    """An escalated ``lease_closures`` row not yet superseded by a later-epoch mint for
-    the same chunk — correlated against the outer ``leases``/``lease_closures`` join
-    (``open_escalations``'s and ``open_escalation_for_chunk``'s shared predicate)."""
-    later = leases.alias("later_escalation_leases")
-    return ~(
-        select(later.c.lease_id)
-        .where(later.c.chunk_id == leases.c.chunk_id)
-        .where(later.c.epoch > leases.c.epoch)
-        .exists()
-    )
+# Correlated against ``open_escalations``'s own outer ``leases``/``lease_closures`` join.
+_LATER_LEASE = leases.alias("later_escalation_leases")
+LIVE_ESCALATION = Unsuperseded(
+    _LATER_LEASE.c.lease_id,
+    (_LATER_LEASE.c.chunk_id == leases.c.chunk_id, _LATER_LEASE.c.epoch > leases.c.epoch),
+)
 
+# ``>=``: a mint at the mark's own instant is the spawn the mark itself triggered
+# (pinned by tests/test_pin_runner_store.py::test_a_same_instant_mint_consumes_its_requeue_mark).
+UNCONSUMED_REQUEUE = Unsuperseded(
+    leases.c.lease_id,
+    (leases.c.chunk_id == requeues.c.chunk_id, leases.c.created_at >= requeues.c.requeued_at),
+)
 
-def _requeue_not_consumed():  # type: ignore[no-untyped-def]
-    """A requeue mark not yet consumed by a later lease mint for the same chunk.
-
-    ``>=``, not ``>``: a mint at or after the mark is the spawn the mark itself triggered,
-    so it always counts as the mark's consumer (pinned by
-    tests/test_pin_runner_store.py::test_a_same_instant_mint_consumes_its_requeue_mark)."""
-    return ~(
-        select(leases.c.lease_id)
-        .where(leases.c.chunk_id == requeues.c.chunk_id)
-        .where(leases.c.created_at >= requeues.c.requeued_at)
-        .exists()
-    )
+OPEN_TAKEOVER = Unclosed(takeovers.c.takeover_id, takeover_ends.c.takeover_id)
+OPEN_LEASE = Unclosed(leases.c.lease_id, lease_closures.c.lease_id)
 
 
 class SqlAlchemyRunnerStore:
@@ -171,25 +165,21 @@ class SqlAlchemyRunnerStore:
     # --- reads --------------------------------------------------------------
 
     def list_active_leases(self) -> list[LeaseRecord]:
-        stmt = self._lease_select().where(leases.c.lease_id.not_in(select(lease_closures.c.lease_id)))
+        stmt = self._lease_select().where(OPEN_LEASE.clause)
         return [self._row_to_lease(r) for r in self._all(stmt)]
 
     def active_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
         stmt = (
             self._lease_select()
             .where(leases.c.chunk_id == chunk_id)
-            .where(leases.c.lease_id.not_in(select(lease_closures.c.lease_id)))
+            .where(OPEN_LEASE.clause)
             .order_by(leases.c.created_at.desc())
         )
         rows = self._all(stmt)
         return self._row_to_lease(rows[0]) if rows else None
 
     def active_lease(self, lease_id: str) -> LeaseRecord | None:
-        stmt = (
-            self._lease_select()
-            .where(leases.c.lease_id == lease_id)
-            .where(leases.c.lease_id.not_in(select(lease_closures.c.lease_id)))
-        )
+        stmt = self._lease_select().where(leases.c.lease_id == lease_id).where(OPEN_LEASE.clause)
         rows = self._all(stmt)
         return self._row_to_lease(rows[0]) if rows else None
 
@@ -311,14 +301,14 @@ class SqlAlchemyRunnerStore:
         return {str(r.lease_id) for r in self._all(stmt)}
 
     def held_environment_ids(self) -> list[str]:
-        stmt = select(env_bindings.c.environment_id).where(_binding_is_held()).distinct()
+        stmt = select(env_bindings.c.environment_id).where(HELD_BINDING.clause).distinct()
         return [str(r.environment_id) for r in self._all(stmt)]
 
     def bindings_for_chunk(self, chunk_id: str) -> list[EnvBindingRecord]:
         stmt = (
             select(env_bindings)
             .where(env_bindings.c.chunk_id == chunk_id)
-            .where(_binding_is_held())
+            .where(HELD_BINDING.clause)
             .order_by(env_bindings.c.bound_at)
         )
         return [
@@ -332,7 +322,7 @@ class SqlAlchemyRunnerStore:
         ]
 
     def live_tenure_chunk_ids(self) -> list[str]:
-        stmt = select(env_bindings.c.chunk_id).where(_binding_is_held()).distinct()
+        stmt = select(env_bindings.c.chunk_id).where(HELD_BINDING.clause).distinct()
         return [str(r.chunk_id) for r in self._all(stmt)]
 
     def attempt_count(self, chunk_id: str, node_id: str) -> int:
@@ -400,7 +390,7 @@ class SqlAlchemyRunnerStore:
         return {str(r.lease_id) for r in self._all(stmt)}
 
     def pause_parked_lease_ids(self) -> set[str]:
-        stmt = select(pause_parks.c.lease_id).where(_pause_park_is_open()).distinct()
+        stmt = select(pause_parks.c.lease_id).where(OPEN_PAUSE_PARK.clause).distinct()
         return {str(r.lease_id) for r in self._all(stmt)}
 
     def open_park(self, lease_id: str) -> ParkRecord | None:
@@ -433,7 +423,7 @@ class SqlAlchemyRunnerStore:
         return [self._row_to_ask(r) for r in self._all(stmt)]
 
     def held_bindings(self) -> list[EnvBindingRecord]:
-        stmt = select(env_bindings).where(_binding_is_held()).order_by(env_bindings.c.bound_at)
+        stmt = select(env_bindings).where(HELD_BINDING.clause).order_by(env_bindings.c.bound_at)
         return [
             EnvBindingRecord(
                 chunk_id=str(r.chunk_id),
@@ -445,14 +435,14 @@ class SqlAlchemyRunnerStore:
         ]
 
     def open_escalations(self) -> list[EscalationRecord]:
-        stmt = self._escalation_select().where(_escalation_not_superseded()).order_by(lease_closures.c.closed_at.desc())
+        stmt = self._escalation_select().where(LIVE_ESCALATION.clause).order_by(lease_closures.c.closed_at.desc())
         return [self._row_to_escalation(r) for r in self._all(stmt)]
 
     def open_escalation_for_chunk(self, chunk_id: str) -> EscalationRecord | None:
         stmt = (
             self._escalation_select()
             .where(lease_closures.c.chunk_id == chunk_id)
-            .where(_escalation_not_superseded())
+            .where(LIVE_ESCALATION.clause)
             .order_by(lease_closures.c.closed_at.desc())
         )
         rows = self._all(stmt)
@@ -462,22 +452,22 @@ class SqlAlchemyRunnerStore:
         stmt = (
             select(takeovers)
             .where(takeovers.c.chunk_id == chunk_id)
-            .where(_takeover_is_open())
+            .where(OPEN_TAKEOVER.clause)
             .order_by(takeovers.c.opened_at.desc())
         )
         rows = self._all(stmt)
         return self._row_to_takeover(rows[0]) if rows else None
 
     def open_takeover_chunk_ids(self) -> set[str]:
-        stmt = select(takeovers.c.chunk_id).where(_takeover_is_open()).distinct()
+        stmt = select(takeovers.c.chunk_id).where(OPEN_TAKEOVER.clause).distinct()
         return {str(r.chunk_id) for r in self._all(stmt)}
 
     def open_takeovers(self) -> list[TakeoverRecord]:
-        stmt = select(takeovers).where(_takeover_is_open()).order_by(takeovers.c.opened_at.desc())
+        stmt = select(takeovers).where(OPEN_TAKEOVER.clause).order_by(takeovers.c.opened_at.desc())
         return [self._row_to_takeover(r) for r in self._all(stmt)]
 
     def pending_requeue_chunk_ids(self) -> set[str]:
-        stmt = select(requeues.c.chunk_id).where(_requeue_not_consumed()).distinct()
+        stmt = select(requeues.c.chunk_id).where(UNCONSUMED_REQUEUE.clause).distinct()
         return {str(r.chunk_id) for r in self._all(stmt)}
 
     def hub_contact_at(self, runner_id: str) -> datetime | None:
@@ -584,7 +574,7 @@ class SqlAlchemyRunnerStore:
         return PreambleFingerprint(blizzard=str(rows[0].blizzard_digest), workspace=str(rows[0].workspace_digest))
 
     def resume_intent_lease_ids(self) -> set[str]:
-        stmt = select(resume_intents.c.lease_id).where(_intent_is_open()).distinct()
+        stmt = select(resume_intents.c.lease_id).where(OPEN_INTENT.clause).distinct()
         return {str(r.lease_id) for r in self._all(stmt)}
 
     def session_ended_lease_ids(self) -> set[str]:

@@ -11,7 +11,7 @@ from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
 from blizzard.hub.delivery.hub_node import PollPolicy
-from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact, from_row, store_key
+from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact
 from blizzard.hub.domain.work import Chunk, ChunkFacts
 from blizzard.hub.work_sources.source import IWorkSource
 from blizzard.wire.chunk import (
@@ -243,10 +243,10 @@ class ChunkView:
         web_base = self._branch_url_source()
         views: list[ArtifactView] = []
         for row in sorted(rows, key=lambda r: (r.node_name, r.name, r.epoch)):
-            artifact = from_row(row)
+            artifact = row.artifact
             attached = minted_at(row.artifact_id)
             common = {
-                "key": store_key(row),
+                "key": row.store_key,
                 "kind": row.kind.value,
                 "name": row.name,
                 "node_id": row.node_id,
