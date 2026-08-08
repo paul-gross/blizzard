@@ -12,6 +12,7 @@ import signal
 import subprocess
 import time
 import types
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 
@@ -298,14 +299,19 @@ def artifact_group() -> None:
     durable at once, visible only via ``staged``, published into the envelope on completion (#169)."""
 
 
-def _artifact_summary(artifact: dict) -> dict:
-    """One ``list``-view entry: every field but ``content``, which collapses to its
-    ``bytes`` length (``None`` when the artifact carries no content, i.e. ``git_commit``)
-    — issue #169's fix for a full-content ``list`` overflowing tool output."""
-    content = artifact.get("content")
-    summary = {k: v for k, v in artifact.items() if k != "content"}
-    summary["bytes"] = len(content.encode("utf-8")) if content is not None else None
-    return summary
+@dataclass(frozen=True)
+class ArtifactEntry:
+    """One ``list``-view entry (issue #169) — every field but ``content``, which collapses to
+    its ``bytes`` length (``None`` when the artifact carries none, i.e. ``git_commit``)."""
+
+    artifact: dict
+
+    @property
+    def summary(self) -> dict:
+        content = self.artifact.get("content")
+        summary = {k: v for k, v in self.artifact.items() if k != "content"}
+        summary["bytes"] = len(content.encode("utf-8")) if content is not None else None
+        return summary
 
 
 @artifact_group.command("list")
@@ -326,7 +332,7 @@ def artifact_list(content: bool) -> None:
     if content:
         click.echo(resp.text)
         return
-    click.echo(json.dumps([_artifact_summary(a) for a in resp.json()]))
+    click.echo(json.dumps([ArtifactEntry(a).summary for a in resp.json()]))
 
 
 @artifact_group.command("get")
@@ -415,18 +421,24 @@ def artifact_staged(content: bool) -> None:
     click.echo(json.dumps([{"name": a["name"], "bytes": len(a["content"].encode("utf-8"))} for a in staged]))
 
 
-def _session_label(escalation: dict) -> str:
-    """The parked session's identity, as a trailing clause — ``"  session=code (opus, high)"``.
+@dataclass(frozen=True)
+class SessionLabel:
+    """A parked session's identity as a trailing clause — ``"  session=code (opus, high)"``.
 
-    Empty when the escalation carries none of the three (issue #144): neither a bare-vocabulary session
-    nor one predating the stamps invents a value — a bare line reads as "not recorded"."""
-    pool = escalation.get("session_name")
-    config = ", ".join(str(v) for v in (escalation.get("model"), escalation.get("effort")) if v)
-    if not pool and not config:
-        return ""
-    if not pool:
-        return f"  session=({config})"
-    return f"  session={pool}" + (f" ({config})" if config else "")
+    Empty when the escalation carries none of the three (issue #144), so a bare line reads as
+    "not recorded" rather than inventing one."""
+
+    escalation: dict
+
+    @property
+    def text(self) -> str:
+        pool = self.escalation.get("session_name")
+        config = ", ".join(str(v) for v in (self.escalation.get("model"), self.escalation.get("effort")) if v)
+        if not pool and not config:
+            return ""
+        if not pool:
+            return f"  session=({config})"
+        return f"  session={pool}" + (f" ({config})" if config else "")
 
 
 @artifact_group.command("commit")
@@ -594,7 +606,9 @@ def status(directory: str, runner_url: str | None) -> None:
     escalations = escalations_resp.json().get("items", [])
     click.echo(f"\nescalations ({len(escalations)}):")
     for esc in escalations:
-        click.echo(f"  chunk {esc['chunk_id']}  node={esc['node_id']}  since {esc['closed_at']}{_session_label(esc)}")
+        click.echo(
+            f"  chunk {esc['chunk_id']}  node={esc['node_id']}  since {esc['closed_at']}{SessionLabel(esc).text}"
+        )
         click.echo(f"    resume: {esc['resume_command']}")
 
     takeovers = takeovers_resp.json().get("items", [])

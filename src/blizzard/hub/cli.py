@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from types import FrameType
 
@@ -51,19 +51,13 @@ ENV_HUB_DIR = "BZ_HUB_DIR"
 DEFAULT_DIR = "."
 
 
-def _hub_url_options(f: Callable[..., object]) -> Callable[..., object]:
-    """``--hub-url``, uniform across every operator verb."""
-    f = click.option(
-        "--hub-url", "hub_url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL})."
-    )(f)
-    return f
-
-
-def _json_option(f: Callable[..., object]) -> Callable[..., object]:
-    """``--json``, uniform across every read and write verb alike (issue #104)."""
-    return click.option("--json", "as_json", is_flag=True, default=False, help="Print the raw response body as JSON.")(
-        f
-    )
+# Uniform across every operator verb, reads and writes alike (issue #104).
+_hub_url_options = click.option(
+    "--hub-url", "hub_url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL})."
+)
+_json_option = click.option(
+    "--json", "as_json", is_flag=True, default=False, help="Print the raw response body as JSON."
+)
 
 
 # The since-the-beginning-of-time cutoff `hub status` passes ``GET /api/spend``
@@ -196,20 +190,24 @@ def status(as_json: bool, hub_url: str | None) -> None:
     )
 
 
-def _parse_pointer(token: str) -> str:
-    """The ingest token the CLI hands the hub.
+@dataclass(frozen=True)
+class Pointer:
+    """One ``ingest`` argument as typed. The CLI carries no pointer grammar of its own, so a
+    token travels through verbatim."""
 
-    The CLI carries no pointer grammar of its own; a token travels through verbatim.
-    The deprecated ``github:<rest>`` prefix warns on stderr and passes ``rest`` on its
-    own merits."""
-    if token.startswith("github:"):
-        rest = token[len("github:") :]
+    token: str
+
+    def resolved(self) -> str:
+        """The token the hub is handed — the deprecated ``github:<rest>`` prefix warns on
+        stderr and passes ``rest`` on its own merits."""
+        if not self.token.startswith("github:"):
+            return self.token
+        rest = self.token[len("github:") :]
         click.echo(
-            f"warning: the 'github:' pointer prefix is deprecated (in {token!r}) — resolving {rest!r} on its own",
+            f"warning: the 'github:' pointer prefix is deprecated (in {self.token!r}) — resolving {rest!r} on its own",
             err=True,
         )
         return rest
-    return token
 
 
 @hub.command("record-marker")
@@ -343,7 +341,7 @@ def chunk_ingest(pointers: tuple[str, ...], as_json: bool, hub_url: str | None) 
     work item URL; a batch mints one chunk carrying every pointer. 422 when no
     configured work source claims a token; 409 when a pointer is already held."""
     cli = CliContext.of(hub_url, as_json)
-    tokens = [_parse_pointer(p) for p in pointers]
+    tokens = [Pointer(p).resolved() for p in pointers]
     resp = cli.send("post", "/api/chunks", json_body={"tokens": tokens})
     if resp.status_code == httpx.codes.CONFLICT:
         conflict = resp.json()

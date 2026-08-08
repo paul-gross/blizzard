@@ -8,11 +8,23 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 
-def format_cost(cost_usd: float, cost_partial: bool) -> str:
-    """A derived cost total's terminal-legible form (issue #60) — always to the cent, with
-    a leading ``~`` when ``cost_partial``, i.e. a lower bound never presented as exact."""
-    amount = f"${cost_usd:.2f}"
-    return f"~{amount}" if cost_partial else amount
+@dataclass(frozen=True)
+class Cost:
+    """A derived cost total (issue #60) — always to the cent, with a leading ``~`` when
+    partial, i.e. a lower bound never presented as exact."""
+
+    cost_usd: float
+    partial: bool
+
+    @classmethod
+    def of(cls, cost: dict[str, Any] | None) -> Cost:
+        cost = cost or {}
+        return cls(cost.get("cost_usd", 0.0), cost.get("cost_partial", False))
+
+    @property
+    def rendered(self) -> str:
+        amount = f"${self.cost_usd:.2f}"
+        return f"~{amount}" if self.partial else amount
 
 
 @dataclass(frozen=True)
@@ -27,8 +39,7 @@ class ChunkRow:
         return name or self.row.get("current_node_id") or "-"
 
     def line(self) -> str:
-        cost = self.row.get("cost") or {}
-        rendered = format_cost(cost.get("cost_usd", 0.0), cost.get("cost_partial", False))
+        rendered = Cost.of(self.row.get("cost")).rendered
         return f"{self.row['chunk_id']}  {self.row['status']:<16} @ {self.node}  {rendered:>10}"
 
 
@@ -165,8 +176,7 @@ class ChunkDetail:
         route = body.get("route")
         if route:
             yield f"  runner: {route['runner_id']}  environments: {len(route.get('environment_ids', []))}"
-        cost = body.get("cost") or {}
-        yield f"  cost: {format_cost(cost.get('cost_usd', 0.0), cost.get('cost_partial', False))}"
+        yield f"  cost: {Cost.of(body.get('cost')).rendered}"
 
 
 @dataclass(frozen=True)
@@ -231,4 +241,4 @@ class FleetStatus:
         yield f"\nopen questions ({len(self.questions)}):"
         for question in self.questions:
             yield f"  {QuestionRow(question).line()}"
-        yield f"\nfleet spend (all time): {format_cost(self.spend['cost_usd'], self.spend['cost_partial'])}"
+        yield f"\nfleet spend (all time): {Cost(self.spend['cost_usd'], self.spend['cost_partial']).rendered}"

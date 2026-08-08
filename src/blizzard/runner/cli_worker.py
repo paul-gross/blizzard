@@ -21,6 +21,22 @@ WRITE_TIMEOUT = 5.0
 
 
 @dataclass(frozen=True)
+class Problem:
+    """A rejected call's response — the ``detail`` string its JSON body carries, or ``""``."""
+
+    response: httpx.Response
+
+    @property
+    def detail(self) -> str:
+        try:
+            body = self.response.json()
+        except ValueError:
+            return ""
+        detail = body.get("detail") if isinstance(body, dict) else None
+        return str(detail) if detail else ""
+
+
+@dataclass(frozen=True)
 class WorkerCall:
     """A spawned worker's ambient identity — the runner it reports to, and the lease it acts
     under (``""`` for a verb that names its own chunk instead).
@@ -99,19 +115,9 @@ class WorkerCall:
             return resp
         except httpx.HTTPStatusError as exc:
             named = rejected or failure
-            raise click.ClickException(f"{self.verb}: {named} ({_problem_detail(exc.response) or exc})") from exc
+            raise click.ClickException(f"{self.verb}: {named} ({Problem(exc.response).detail or exc})") from exc
         except httpx.HTTPError as exc:
             raise click.ClickException(f"{self.verb}: {failure} ({exc})") from exc
 
     def _headers(self) -> dict[str, str]:
         return {LEASE_TOKEN_HEADER: self.lease_token} if self.lease_token else {}
-
-
-def _problem_detail(response: httpx.Response) -> str:
-    """The ``detail`` string from a rejected call's JSON body, or ``""``."""
-    try:
-        body = response.json()
-    except ValueError:
-        return ""
-    detail = body.get("detail") if isinstance(body, dict) else None
-    return str(detail) if detail else ""
