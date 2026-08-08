@@ -1,7 +1,7 @@
 """The Claude Code JSONL → :class:`NormalizedTurn` normalizer (blizzard#245).
 
-Pure and stdlib-only (``bzh:domain-core``): :func:`normalize_lines` takes already-read lines,
-never a path. Main-conversation records are read in **file order**; the ``uuid``/``parentUuid``
+Pure and stdlib-only (``bzh:domain-core``): :meth:`NormalizedFile.of_lines` takes already-read
+lines, never a path. Main-conversation records are read in **file order**; the ``uuid``/``parentUuid``
 chain is consulted only to thread an inline sidechain, linked ``agent-id``, ``uuid-chain``,
 ``prompt-timestamp``, or unlinked."""
 
@@ -296,6 +296,11 @@ class NormalizedFile:
     harness_version: str | None
 
     @classmethod
+    def of_lines(cls, lines: list[str], *, is_sidechain_file: bool = False) -> NormalizedFile:
+        """One JSONL file's raw lines, collapsed."""
+        return cls.of(Record.parse(lines), is_sidechain_file=is_sidechain_file)
+
+    @classmethod
     def of(cls, records: list[Record], *, is_sidechain_file: bool = False) -> NormalizedFile:
         """``is_sidechain_file`` marks a sidecar file whose every record is one subagent's own
         conversation, so ``isSidechain`` no longer means "splice this elsewhere"."""
@@ -324,11 +329,6 @@ class NormalizedFile:
             discovered_agent_ids=frozenset(collapser.discovered_agent_ids),
             harness_version=harness_version,
         )
-
-
-def normalize_lines(lines: list[str], *, is_sidechain_file: bool = False) -> NormalizedFile:
-    """Collapse one JSONL file's raw lines into :class:`NormalizedFile`."""
-    return NormalizedFile.of(Record.parse(lines), is_sidechain_file=is_sidechain_file)
 
 
 class _TurnCollapser:

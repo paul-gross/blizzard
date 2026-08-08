@@ -8,7 +8,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
-from blizzard.runner.loop.spawn import Spawner, environments_for
+from blizzard.runner.loop.spawn import Environments, Spawner
 from blizzard.runner.store.repository import EnvBindingRecord
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionView
@@ -29,7 +29,9 @@ class HeldChunk:
         self, outcome: ApplyOutcome, next_envelope: NodeEnvelope | None, bindings: list[EnvBindingRecord]
     ) -> None:
         if outcome == ApplyOutcome.NEXT and next_envelope is not None:
-            Spawner(self.ctx).enter_node(self.chunk_id, next_envelope, environments_for(bindings), via="apply-response")
+            Spawner(self.ctx).enter_node(
+                self.chunk_id, next_envelope, Environments(bindings).acquired, via="apply-response"
+            )
         elif outcome == ApplyOutcome.HUB_NODE_TAKEN:
             _log.info("hub node took over — holding envs until terminal", chunk_id=self.chunk_id)
         elif outcome == ApplyOutcome.MIGRATED:
@@ -106,7 +108,7 @@ class HeldChunk:
         except HubClientError:
             return  # hub unreachable — the transition is durable at the hub; retry next tick
         _log.info("hub advanced held chunk into a fresh node — spawning", chunk_id=self.chunk_id)
-        Spawner(self.ctx).enter_node(self.chunk_id, envelope, environments_for(bindings), via="advance")
+        Spawner(self.ctx).enter_node(self.chunk_id, envelope, Environments(bindings).acquired, via="advance")
 
     def _resolve_gate(self, decision: DecisionView) -> None:
         """Record the resolving transition for a decided gate and continue in place.

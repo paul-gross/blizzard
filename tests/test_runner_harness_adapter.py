@@ -18,7 +18,7 @@ from structlog.testing import capture_logs
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
-from blizzard.runner.harness.env_allowlist import allowlisted_env
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.wire.envelope import NodeEnvelope
 from tests.conftest import _WORKER_IDENTITY_ENV
@@ -1116,7 +1116,7 @@ def test_the_base_allowlist_carries_no_anthropic_model_override(monkeypatch: pyt
     monkeypatch.setenv("ANTHROPIC_MODEL", "claude-haiku-4-5")
     monkeypatch.setenv("ANTHROPIC_DEFAULT_SONNET_MODEL", "claude-haiku-4-5")
 
-    env = allowlisted_env(())
+    env = AllowlistedEnv.of(()).variables
 
     assert not [name for name in env if name.startswith("ANTHROPIC_")]
 

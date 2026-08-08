@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from blizzard.runner.app import create_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.harness.worker_settings import SESSION_END_HOOK_COMMAND, worker_settings_document
+from blizzard.runner.harness.worker_settings import SESSION_END_HOOK_COMMAND, WorkerSettings
 from tests.runner_fakes import make_store
 
 
@@ -122,6 +122,6 @@ def test_session_end_verb_soft_fails_when_runner_unreachable(monkeypatch: pytest
 
 def test_worker_settings_wires_the_session_end_hook() -> None:
     """The settings file the adapter passes to ``claude -p`` fires the session-end verb on exit."""
-    hooks = worker_settings_document()["hooks"]
+    hooks = WorkerSettings.of().document["hooks"]
     commands = [h["command"] for entry in hooks["SessionEnd"] for h in entry["hooks"]]
     assert commands == [SESSION_END_HOOK_COMMAND] == ["blizzard runner session-end"]

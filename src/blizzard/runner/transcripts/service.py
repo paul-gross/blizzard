@@ -7,7 +7,7 @@ its lease and a closed lease's transcript must stay readable."""
 
 from __future__ import annotations
 
-from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
+from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.store.repository import IReadRunnerStore
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository, Transcript
 
@@ -41,5 +41,5 @@ class LocalTranscriptService:
         # A closed lease's bindings are already released, so `bindings_for_chunk` returns `[]` and the
         # hint is legitimately `None`; the primary by-session-id lookup does not need it.
         fallback_workdir = bindings[0].workdir if bindings else None
-        spawn_cwd = resolve_spawn_cwd(self._workspace_root, fallback_workdir)
+        spawn_cwd = SpawnCwd(self._workspace_root, fallback_workdir).path
         return self._transcripts.read_turns(lease.session_id, spawn_cwd=spawn_cwd)

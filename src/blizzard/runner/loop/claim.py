@@ -15,7 +15,7 @@ from blizzard.runner.environments.provider import (
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.loop.spawn import Spawner, environments_for
+from blizzard.runner.loop.spawn import Environments, Spawner
 from blizzard.runner.store.repository import EnvBindingRecord
 from blizzard.wire.envelope import NodeEnvelope
 from blizzard.wire.queue import QueuePeekEntry
@@ -230,7 +230,7 @@ class InterruptedClaims:
         if envelope is None:
             return
         _log.info("adopting interrupted claim — spawning current node", chunk_id=chunk_id)
-        Spawner(self.ctx).spawn(chunk_id, envelope, environments_for(bindings), via="adopt")
+        Spawner(self.ctx).spawn(chunk_id, envelope, Environments(bindings).acquired, via="adopt")
 
     def _resume_requeued(self, chunk_id: str) -> None:
         """Spawn a fresh attempt at the chunk's current node — its local hold is cleared (#53).
@@ -246,7 +246,7 @@ class InterruptedClaims:
         if envelope is None:
             return
         _log.info("resuming requeued chunk — spawning current node", chunk_id=chunk_id)
-        Spawner(self.ctx).spawn(chunk_id, envelope, environments_for(bindings), via="requeue-resume")
+        Spawner(self.ctx).spawn(chunk_id, envelope, Environments(bindings).acquired, via="requeue-resume")
 
     def _reclaim(self, chunk_id: str, bindings: list[EnvBindingRecord]) -> None:
         """Complete a claim whose hub POST never landed — claim now, reusing the held binding.
@@ -254,7 +254,7 @@ class InterruptedClaims:
         The environment was bound but the claim never landed, so the chunk still reads ``ready``.
         The route is claimed with the environment already held rather than re-acquired; a lost
         race releases the binding."""
-        envs = environments_for(bindings)
+        envs = Environments(bindings).acquired
         claim = RouteClaim(
             chunk_id=chunk_id,
             runner_id=self.ctx.config.runner_id,

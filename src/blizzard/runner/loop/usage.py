@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.runner.harness.adapter import IHarnessAdapter
-from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
+from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
@@ -71,7 +71,7 @@ class UsageRecorder:
         if lease.session_id is None or self.transcripts is None:
             return None
         fallback_workdir = bindings[0].workdir if bindings else None
-        spawn_cwd = resolve_spawn_cwd(self.workspace_root, fallback_workdir)
+        spawn_cwd = SpawnCwd(self.workspace_root, fallback_workdir).path
         lines = self.transcripts.read_raw_lines(lease.session_id, spawn_cwd=spawn_cwd)
         if not lines:
             return None

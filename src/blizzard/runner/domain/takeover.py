@@ -30,18 +30,24 @@ __all__ = [
     "LiveWorkerConflict",
     "OpenedTakeover",
     "SubmissionPending",
+    "TakeoverCommand",
     "TakeoverService",
-    "wrapped_takeover_command",
 ]
 
 
-def wrapped_takeover_command(chunk_id: str, runner_dir: str) -> str:
-    """The ``blizzard runner takeover`` CLI invocation an escalation composes when it
-    can — composed here so the form lives beside the concept it names rather than inline
-    at each call site. Both operands are shell-quoted: a hub-minted chunk id
-    never needs it (``foundation/ids.py`` grammar), but the composed string is pasted
-    into a shell, so neither operand rides unquoted on that assumption."""
-    return f"blizzard runner takeover {shlex.quote(chunk_id)} --dir {shlex.quote(runner_dir)}"
+@dataclass(frozen=True)
+class TakeoverCommand:
+    """The ``blizzard runner takeover`` CLI invocation an escalation composes when it can —
+    composed here so the form lives beside the concept it names rather than inline at each
+    call site. Both operands are shell-quoted: a hub-minted chunk id never needs it
+    (``foundation/ids.py`` grammar), but the composed string is pasted into a shell."""
+
+    chunk_id: str
+    runner_dir: str
+
+    @property
+    def wrapped(self) -> str:
+        return f"blizzard runner takeover {shlex.quote(self.chunk_id)} --dir {shlex.quote(self.runner_dir)}"
 
 
 class TakeoverError(Exception):

@@ -8,11 +8,11 @@ from datetime import datetime
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.takeover import wrapped_takeover_command
+from blizzard.runner.domain.takeover import TakeoverCommand
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.loop.spawn import Spawner, environments_for
+from blizzard.runner.loop.spawn import Environments, Spawner
 from blizzard.runner.store.repository import LeaseRecord
 from blizzard.wire.facts import EVENT_RECORDED
 
@@ -130,7 +130,7 @@ class Attempt:
         except HubClientError:
             return  # the closed attempt is durable; FILL/ADVANCE re-drives next tick
         _log.info("requeuing at node", chunk_id=lease.chunk_id, node=lease.node_name)
-        Spawner(self.ctx).spawn(lease.chunk_id, envelope, environments_for(bindings), via="requeue")
+        Spawner(self.ctx).spawn(lease.chunk_id, envelope, Environments(bindings).acquired, via="requeue")
 
     def escalate(self, *, reason: str = "retries exhausted") -> None:
         """Park the chunk needs-human at the hub, envs held for takeover."""
@@ -147,7 +147,7 @@ class Attempt:
             # Wrapped-vs-raw rules: `blizzard-context:/domain/humans.md` §Escalation.
             # `bindings` is checked explicitly above — an empty one is not provably unreachable.
             if self.ctx.config.runner_dir:
-                wrapped = wrapped_takeover_command(lease.chunk_id, self.ctx.config.runner_dir)
+                wrapped = TakeoverCommand(lease.chunk_id, self.ctx.config.runner_dir).wrapped
         OutboundFacts(self.ctx).escalation(lease, takeover=takeover, wrapped_takeover=wrapped, at=self.ctx.clock.now())
         _log.info(f"escalated to needs-human — {reason}", chunk_id=lease.chunk_id, takeover=takeover, wrapped=wrapped)
 

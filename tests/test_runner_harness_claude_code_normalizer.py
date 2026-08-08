@@ -1,6 +1,6 @@
 """``harness/internal/claude_code_normalizer.py`` (blizzard#245).
 
-Unit tier: :func:`normalize_lines` takes an iterable of strings and needs no
+Unit tier: :meth:`NormalizedFile.of_lines` takes an iterable of strings and needs no
 filesystem — thinking turns, structured tool input, sidechain assembly and its
 record-level link routes, version stamps, and the widened control skip list."""
 
@@ -11,7 +11,7 @@ import json
 import pytest
 
 from blizzard.runner.harness.internal import claude_code_normalizer as normalizer_module
-from blizzard.runner.harness.internal.claude_code_normalizer import Record, Run, normalize_lines
+from blizzard.runner.harness.internal.claude_code_normalizer import NormalizedFile, Record, Run
 from tests import transcript_fixtures as fx
 
 # --- Record collapse — env/asst/tool ---
@@ -25,7 +25,7 @@ def test_collapses_env_asst_and_tool_with_matched_output() -> None:
         fx.assistant_tool_use("t1", "Bash", {"command": "ls"}),
         fx.tool_result("t1", "file1\nfile2"),
     ]
-    result = normalize_lines(lines)
+    result = NormalizedFile.of_lines(lines)
 
     assert [t.kind for t in result.turns] == ["env", "asst", "tool"]
     assert result.turns[0].text == "build the thing"
@@ -47,7 +47,7 @@ def test_one_assistant_record_yields_one_asst_and_n_tool_turns() -> None:
         {"type": "tool_use", "id": "t2", "name": "Read", "input": {"path": "b.py"}},
     ]
     line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
-    result = normalize_lines([line])
+    result = NormalizedFile.of_lines([line])
 
     assert [t.kind for t in result.turns] == ["asst", "tool", "tool"]
     assert result.turns[1].tool is not None and result.turns[1].tool.name == "Read"
@@ -56,13 +56,13 @@ def test_one_assistant_record_yields_one_asst_and_n_tool_turns() -> None:
 
 @pytest.mark.unit
 def test_unmatched_tool_result_is_dropped() -> None:
-    result = normalize_lines([fx.tool_result("no-such-id", "orphaned output")])
+    result = NormalizedFile.of_lines([fx.tool_result("no-such-id", "orphaned output")])
     assert result.turns == []
 
 
 @pytest.mark.unit
 def test_tool_turn_with_no_result_keeps_output_none() -> None:
-    result = normalize_lines([fx.assistant_tool_use("t1", "Bash", {"command": "sleep 100"})])
+    result = NormalizedFile.of_lines([fx.assistant_tool_use("t1", "Bash", {"command": "sleep 100"})])
     assert len(result.turns) == 1
     assert result.turns[0].kind == "tool"
     tool = result.turns[0].tool
@@ -72,7 +72,7 @@ def test_tool_turn_with_no_result_keeps_output_none() -> None:
 
 @pytest.mark.unit
 def test_is_meta_record_is_filtered() -> None:
-    assert normalize_lines([fx.meta_record()]).turns == []
+    assert NormalizedFile.of_lines([fx.meta_record()]).turns == []
 
 
 @pytest.mark.unit
@@ -92,24 +92,24 @@ def test_is_meta_record_is_filtered() -> None:
     ],
 )
 def test_control_records_are_filtered(record_type: str) -> None:
-    assert normalize_lines([fx.control_record(record_type)]).turns == []
+    assert NormalizedFile.of_lines([fx.control_record(record_type)]).turns == []
 
 
 @pytest.mark.unit
 def test_system_record_is_filtered() -> None:
-    assert normalize_lines([fx.control_record("system")]).turns == []
+    assert NormalizedFile.of_lines([fx.control_record("system")]).turns == []
 
 
 @pytest.mark.unit
 def test_ansi_escapes_are_stripped_from_text() -> None:
-    result = normalize_lines([fx.ansi_text("hello")])
+    result = NormalizedFile.of_lines([fx.ansi_text("hello")])
     assert result.turns[0].text == "hello"
     assert "\x1b" not in result.turns[0].text
 
 
 @pytest.mark.unit
 def test_private_mode_ansi_escapes_are_stripped_from_text() -> None:
-    result = normalize_lines([fx.ansi_private_mode_text("hello")])
+    result = NormalizedFile.of_lines([fx.ansi_private_mode_text("hello")])
     assert result.turns[0].text == "hello"
     assert "\x1b" not in result.turns[0].text
 
@@ -117,7 +117,7 @@ def test_private_mode_ansi_escapes_are_stripped_from_text() -> None:
 @pytest.mark.unit
 def test_malformed_and_truncated_records_degrade_to_fewer_turns_not_a_raise() -> None:
     lines = [fx.user_env("build the thing"), fx.truncated_line(), "not even json", "42", "null"]
-    result = normalize_lines(lines)  # must not raise
+    result = NormalizedFile.of_lines(lines)  # must not raise
     assert len(result.turns) == 1
     assert result.turns[0].text == "build the thing"
 
@@ -125,7 +125,7 @@ def test_malformed_and_truncated_records_degrade_to_fewer_turns_not_a_raise() ->
 @pytest.mark.unit
 def test_max_block_chars_caps_a_turn(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(normalizer_module, "MAX_BLOCK_CHARS", 10)
-    result = normalize_lines([fx.assistant_text("x" * 50)])
+    result = NormalizedFile.of_lines([fx.assistant_text("x" * 50)])
 
     assert len(result.turns[0].text) == 10
     assert result.turns[0].truncated is True  # block-level
@@ -137,7 +137,7 @@ def test_max_block_chars_caps_a_turn(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.unit
 def test_redacted_thinking_is_the_expected_shape() -> None:
     """The corpus-normal case: empty `thinking` + a `signature` — presence, not prose."""
-    result = normalize_lines([fx.thinking_block(text="", signature="sig-abc")])
+    result = NormalizedFile.of_lines([fx.thinking_block(text="", signature="sig-abc")])
 
     assert len(result.turns) == 1
     assert result.turns[0].kind == "thinking"
@@ -147,7 +147,7 @@ def test_redacted_thinking_is_the_expected_shape() -> None:
 
 @pytest.mark.unit
 def test_present_thinking_text_is_not_flagged_redacted() -> None:
-    result = normalize_lines([fx.thinking_block(text="reasoning about the fix", signature=None)])
+    result = NormalizedFile.of_lines([fx.thinking_block(text="reasoning about the fix", signature=None)])
 
     assert result.turns[0].kind == "thinking"
     assert result.turns[0].thinking_redacted is False
@@ -159,7 +159,7 @@ def test_present_thinking_text_is_not_flagged_redacted() -> None:
 
 @pytest.mark.unit
 def test_tool_input_survives_as_a_mapping_never_a_json_string() -> None:
-    result = normalize_lines([fx.assistant_tool_use("t1", "Read", {"path": "a.py", "limit": 10})])
+    result = NormalizedFile.of_lines([fx.assistant_tool_use("t1", "Read", {"path": "a.py", "limit": 10})])
 
     tool = result.turns[0].tool
     assert tool is not None
@@ -181,7 +181,7 @@ def test_non_object_tool_input_is_kept_unparsed_not_coerced() -> None:
             "uuid": "a1",
         }
     )
-    result = normalize_lines([line])
+    result = NormalizedFile.of_lines([line])
 
     tool = result.turns[0].tool
     assert tool is not None
@@ -196,7 +196,7 @@ def test_list_valued_tool_input_is_shaped_other_with_its_json_form_preserved() -
     never coerced; its `json.dumps` form is held verbatim on `input_unparsed`."""
     content = [{"type": "tool_use", "id": "t1", "name": "Weird", "input": [1, "two", True]}]
     line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
-    result = normalize_lines([line])
+    result = NormalizedFile.of_lines([line])
 
     tool = result.turns[0].tool
     assert tool is not None
@@ -216,7 +216,7 @@ def test_absent_tool_input_is_shaped_absent_not_object() -> None:
             "uuid": "a1",
         }
     )
-    result = normalize_lines([line])
+    result = NormalizedFile.of_lines([line])
 
     tool = result.turns[0].tool
     assert tool is not None
@@ -234,13 +234,13 @@ def test_harness_version_is_the_last_seen_record_version() -> None:
         fx.versioned(fx.user_env("hi"), version="2.1.209"),
         fx.versioned(fx.assistant_text("hello"), version="2.1.220"),
     ]
-    result = normalize_lines(lines)
+    result = NormalizedFile.of_lines(lines)
     assert result.harness_version == "2.1.220"
 
 
 @pytest.mark.unit
 def test_harness_version_is_none_when_no_record_carries_one() -> None:
-    result = normalize_lines([fx.user_env("hi")])
+    result = NormalizedFile.of_lines([fx.user_env("hi")])
     assert result.harness_version is None
 
 
@@ -256,7 +256,7 @@ def test_agent_id_join_candidate_surfaces_for_a_tool_result_carrying_agent_id() 
         fx.assistant_tool_use("t1", "Task", {"subagent_type": "explorer", "prompt": "find X"}),
         fx.tool_result("t1", "subagent finished", agent_id="agent-abc"),
     ]
-    result = normalize_lines(lines)
+    result = NormalizedFile.of_lines(lines)
 
     assert len(result.turns) == 1
     assert result.agent_id_by_tool_turn == {0: "agent-abc"}
@@ -287,7 +287,7 @@ def test_agent_id_is_not_attributed_when_one_record_resolves_two_tool_results() 
             }
         ),
     ]
-    result = normalize_lines(lines)
+    result = NormalizedFile.of_lines(lines)
 
     assert result.agent_id_by_tool_turn == {}
     assert result.discovered_agent_ids == frozenset({"agent-ambiguous"})
@@ -302,9 +302,9 @@ def test_agent_id_is_not_attributed_when_one_record_resolves_two_tool_results() 
 @pytest.mark.unit
 def test_agent_id_is_a_discovered_candidate_even_when_its_tool_use_is_not_in_these_lines() -> None:
     """F1: `discovered_agent_ids` must not share `agent_id_by_tool_turn`'s limitation
-    of needing a matching `tool_use` in the same `normalize_lines` call."""
+    of needing a matching `tool_use` in the same `of_lines` call."""
     lines = [fx.tool_result("t1", "spawned", agent_id="agent-abc")]  # no matching tool_use in these lines
-    result = normalize_lines(lines)
+    result = NormalizedFile.of_lines(lines)
 
     assert result.agent_id_by_tool_turn == {}
     assert result.discovered_agent_ids == frozenset({"agent-abc"})
@@ -323,7 +323,7 @@ def test_uuid_chain_route_nests_the_inline_sidechain_under_its_spawning_tool_cal
         fx.sidechain_run_record("Starting exploration", uuid="sc1", parent_uuid="spawn-1", ts="2026-07-16T10:00:01Z"),
         fx.sidechain_run_record("Found X", uuid="sc2", parent_uuid="sc1", ts="2026-07-16T10:00:02Z"),
     ]
-    result = normalize_lines(lines)
+    result = NormalizedFile.of_lines(lines)
 
     assert result.unlinked_sidechains == []
     tool_turn = next(t for t in result.turns if t.kind == "tool")
@@ -346,7 +346,7 @@ def test_uuid_chain_route_falls_through_on_an_ambiguous_multi_tool_record() -> N
         {"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "spawn-1"}
     )
     lines = [spawn_line, fx.sidechain_run_record("chatter", uuid="sc1", parent_uuid="spawn-1")]
-    result = normalize_lines(lines)
+    result = NormalizedFile.of_lines(lines)
 
     assert len(result.unlinked_sidechains) == 1
     assert result.unlinked_sidechains[0].link == "unlinked"
@@ -367,7 +367,7 @@ def test_prompt_timestamp_route_resolves_when_the_uuid_chain_does_not() -> None:
         ),
         fx.sidechain_run_record("working...", uuid="sc4", parent_uuid="sc3", ts="2026-07-16T10:00:06Z"),
     ]
-    result = normalize_lines(lines)
+    result = NormalizedFile.of_lines(lines)
 
     assert result.unlinked_sidechains == []
     tool_turn = next(t for t in result.turns if t.kind == "tool")
@@ -386,7 +386,7 @@ def test_prompt_timestamp_route_ignores_a_call_after_the_sidechain_started() -> 
             "explore Y", uuid="sc5", parent_uuid="no-such-parent", role="user", ts="2026-07-16T10:00:00Z"
         ),
     ]
-    result = normalize_lines(lines)
+    result = NormalizedFile.of_lines(lines)
 
     assert len(result.unlinked_sidechains) == 1
     assert result.unlinked_sidechains[0].link == "unlinked"
@@ -408,7 +408,7 @@ def test_prompt_timestamp_route_skips_an_already_claimed_candidate() -> None:
         ),
         fx.sidechain_run_record("run2 reply", uuid="run2-reply", parent_uuid="run2-root", ts="2026-07-16T10:00:01Z"),
     ]
-    result = normalize_lines(lines)
+    result = NormalizedFile.of_lines(lines)
 
     claimed_tool_turns = [t for t in result.turns if t.kind == "tool" and t.sidechain is not None]
     assert len(claimed_tool_turns) == 1
@@ -435,7 +435,7 @@ def test_prompt_timestamp_route_treats_a_candidate_with_no_timestamp_as_a_non_ma
     del record["timestamp"]
     lines[0] = json.dumps(record)
 
-    result = normalize_lines(lines)
+    result = NormalizedFile.of_lines(lines)
 
     assert len(result.unlinked_sidechains) == 1
     assert result.unlinked_sidechains[0].link == "unlinked"
@@ -450,7 +450,7 @@ def test_prompt_timestamp_route_tolerates_an_offset_less_candidate_timestamp() -
         fx.sidechain_run_record("find X", uuid="run-root", parent_uuid="orphan", role="user", ts="2026-07-16T10:00:00"),
     ]
 
-    result = normalize_lines(lines)
+    result = NormalizedFile.of_lines(lines)
 
     claimed_tool_turns = [t for t in result.turns if t.kind == "tool" and t.sidechain is not None]
     assert len(claimed_tool_turns) == 1
@@ -464,7 +464,7 @@ def test_unresolvable_inline_sidechain_surfaces_unlinked_not_among_top_level_tur
     """An isSidechain record with no route to resolve its parent yields zero
     top-level turns, but surfaces as data on `unlinked_sidechains` rather than being
     dropped silently."""
-    result = normalize_lines([fx.sidechain_record()])
+    result = NormalizedFile.of_lines([fx.sidechain_record()])
 
     assert result.turns == []
     assert len(result.unlinked_sidechains) == 1
@@ -518,7 +518,7 @@ def test_sidecar_file_records_normalize_as_their_own_main_conversation() -> None
         fx.sidecar_record("subagent starting", role="user", agent_id="agent-abc"),
         fx.sidecar_record("subagent done", role="assistant", agent_id="agent-abc"),
     ]
-    result = normalize_lines(lines, is_sidechain_file=True)
+    result = NormalizedFile.of_lines(lines, is_sidechain_file=True)
 
     assert [t.kind for t in result.turns] == ["env", "asst"]
     assert result.unlinked_sidechains == []

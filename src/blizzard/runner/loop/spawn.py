@@ -12,8 +12,8 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.lease_auth import mint_lease_token
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
-from blizzard.runner.harness.preamble import RenderedPreamble, render_worker_preamble
-from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
+from blizzard.runner.harness.preamble import Preamble
+from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.store.repository import EnvBindingRecord, LeaseRecord, NewLease
@@ -26,9 +26,15 @@ _CP_AFTER_MINT = crashpoint("spawn.after-lease-mint.before-spawn", "lease minted
 _CP_AFTER_SPAWN = crashpoint("spawn.after-spawn", "worker spawned; pid recorded")
 
 
-def environments_for(bindings: list[EnvBindingRecord]) -> list[AcquiredEnvironment]:
-    """This chunk's held environments, as the spawn primitives want them."""
-    return [AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in bindings]
+@dataclass(frozen=True)
+class Environments:
+    """A chunk's held env bindings, as the spawn primitives want them."""
+
+    bindings: list[EnvBindingRecord]
+
+    @property
+    def acquired(self) -> list[AcquiredEnvironment]:
+        return [AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in self.bindings]
 
 
 @dataclass(frozen=True)
@@ -127,7 +133,7 @@ class Spawner:
         resume_from = self.ctx.sessions.resume_target(
             chunk_id,
             envelope.node,
-            resolve_spawn_cwd(self.ctx.config.workspace_root, environments[0].workdir if environments else None),
+            SpawnCwd(self.ctx.config.workspace_root, environments[0].workdir if environments else None).path,
         )
         self.spawn(chunk_id, envelope, environments, via=via, resume_from=resume_from)
 
@@ -147,7 +153,7 @@ class Spawner:
         lease_token, token_hash = mint_lease_token()
         self.ctx.store.record_lease_token(lease.lease_id, token_hash, self.ctx.clock.now())
         return WorkerPreamble(
-            environments=environments_for(bindings),
+            environments=Environments(bindings).acquired,
             lease_id=lease.lease_id,
             local_api_url=self.ctx.config.local_api_url,
             lease_token=lease_token,
@@ -187,13 +193,13 @@ class Spawner:
 
     def _render(
         self, chunk_id: str, lease_id: str, environments: list[AcquiredEnvironment], *, resume_from: str | None
-    ) -> RenderedPreamble:
+    ) -> Preamble:
         # The store's runtime override when set, else the static config prompt — read here so a
         # replace applies to the next spawn with no restart.
         override = self.ctx.store.workspace_prompt_override(self.ctx.config.workspace_id)
         # `prior` is read ONLY when this spawn resumes a session (issue #149), so a fresh one can
         # never elide prose it has never seen; nothing recorded reads `None` and renders in full.
-        return render_worker_preamble(
+        return Preamble.of(
             runner_prompt=self.ctx.config.runner_prompt,
             workspace_prompt=override if override is not None else self.ctx.config.workspace_prompt,
             environments=environments,
@@ -204,7 +210,7 @@ class Spawner:
         )
 
     def _worker_preamble(
-        self, lease: MintedLease, environments: list[AcquiredEnvironment], rendered: RenderedPreamble
+        self, lease: MintedLease, environments: list[AcquiredEnvironment], rendered: Preamble
     ) -> WorkerPreamble:
         generation = self.generation(lease.lease_id)
         return WorkerPreamble(

@@ -3,17 +3,18 @@
 Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the ``claude``
 non-interactive CLI. ``--permission-mode`` and ``--settings`` are per-invocation, not
 session-sticky, so each is reasserted on every resume — except where a synchronous invocation
-must not fire a ``SessionEnd`` hook. Every child env comes from :func:`_allowlisted_env`."""
+must not fire a ``SessionEnd`` hook. Every child env comes from :class:`AllowlistedEnv`."""
 
 from __future__ import annotations
 
 import contextlib
 import json
 import subprocess
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import IO
+from typing import IO, Any
 
 import httpx
 
@@ -27,9 +28,9 @@ from blizzard.runner.harness.adapter import (
     WorkerHandle,
     WorkerPreamble,
 )
-from blizzard.runner.harness.env_allowlist import allowlisted_env
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot, ExternalSubscriptionUsageWindow
-from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
+from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
@@ -38,11 +39,6 @@ _log = get_logger("blizzard.runner.harness")
 
 _CHOICE_OPEN = "<Choice>"
 _CHOICE_CLOSE = "</Choice>"
-
-# Imported rather than re-declared, so the seams building a child env from it cannot
-# drift (`bzh:worker-env-allowlist`, `bzh:one-owner`).
-_allowlisted_env = allowlisted_env
-
 
 # The model a worker runs on when nothing expressed a preference, pinned so a spawn never
 # inherits the operator's ambient default.
@@ -86,23 +82,47 @@ _USAGE_WINDOW_SPECS: tuple[tuple[str, str, int], ...] = (
 )
 
 
-def _result_envelope(output: str) -> dict[str, object] | None:
-    """The last JSON-object line carrying a ``result`` key, else ``None``.
+@dataclass(frozen=True)
+class ResultEnvelope:
+    """A worker invocation's final ``--output-format json`` envelope.
 
-    A killed worker's stdout can carry partial or non-JSON lines ahead of (or instead of)
-    the final envelope, so the scan runs in reverse and skips anything that fails to parse
-    as a ``result``-bearing object."""
-    for line in reversed(output.splitlines()):
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            envelope = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(envelope, dict) and "result" in envelope:
-            return envelope
-    return None
+    A killed worker's stdout can carry partial or non-JSON lines ahead of (or instead of) the
+    final envelope, so :meth:`of` scans in reverse and skips anything that fails to parse."""
+
+    fields: Mapping[str, Any]
+
+    @classmethod
+    def of(cls, output: str) -> ResultEnvelope | None:
+        for raw_line in reversed(output.splitlines()):
+            line = raw_line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                decoded = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(decoded, dict) and "result" in decoded:
+                return cls(decoded)
+        return None
+
+    @property
+    def result(self) -> str:
+        return str(self.fields["result"])
+
+    @property
+    def usage(self) -> Mapping[str, Any] | None:
+        usage = self.fields.get("usage")
+        return usage if isinstance(usage, dict) else None
+
+    @property
+    def model(self) -> str | None:
+        model = self.fields.get("model")
+        return model if isinstance(model, str) and model else None
+
+    @property
+    def cost_usd(self) -> float | None:
+        cost = self.fields.get("total_cost_usd")
+        return float(cost) if isinstance(cost, int | float) else None
 
 
 @contextlib.contextmanager
@@ -229,9 +249,9 @@ class ClaudeCodeAdapter:
         # A resume reuses the original session id in place — forking is opt-in and never
         # passed here — so `session_hint` is irrelevant on that path (issue #115).
         session_id = resume_from or session_hint or ""
-        # The rule's one owner is `resolve_spawn_cwd` (issue #29). `environments` was
-        # checked non-empty above, so the fallback is always a real workdir here.
-        workdir = resolve_spawn_cwd(preamble.workspace_root, preamble.environments[0].workdir)
+        # The rule's one owner is `SpawnCwd` (issue #29). `environments` was checked
+        # non-empty above, so the fallback is always a real workdir here.
+        workdir = SpawnCwd(preamble.workspace_root, preamble.environments[0].workdir).path
         cmd = [self._binary, "-p", "--output-format", "json"]
         # `--model` at MINT ONLY, since a resume restores the session's own; `--effort` on
         # EVERY invocation, since it is not sticky the same way (issue #144).
@@ -295,7 +315,7 @@ class ClaudeCodeAdapter:
         env = (
             self.identity_env(preamble, chunk_id, session_id)
             if preamble is not None
-            else _allowlisted_env(self._env_passthrough)
+            else AllowlistedEnv.of(self._env_passthrough).variables
         )
         result = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True, env=env)
         _log.info("judgement resume", pid_returncode=result.returncode, session_id=session_id, cwd=workdir)
@@ -328,7 +348,7 @@ class ClaudeCodeAdapter:
         env = (
             self.identity_env(preamble, chunk_id, session_id)
             if preamble is not None
-            else _allowlisted_env(self._env_passthrough)
+            else AllowlistedEnv.of(self._env_passthrough).variables
         )
         # Injected per-lease file (epic #57), mirroring `spawn`'s `preamble.stdout_path`.
         with _stdout_target(stdout_path) as stdout_file:
@@ -371,22 +391,18 @@ class ClaudeCodeAdapter:
         return text[close + len(_CHOICE_CLOSE) :].strip()
 
     def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
-        envelope = _result_envelope(output)
-        if envelope is None:
+        envelope = ResultEnvelope.of(output)
+        if envelope is None or envelope.usage is None:
             return None
-        usage = envelope.get("usage")
-        if not isinstance(usage, dict):
-            return None
-        cost = envelope.get("total_cost_usd")
-        reported = envelope.get("model")
+        usage = envelope.usage
         return UsageSample(
             kind=kind,
-            model=str(reported) if isinstance(reported, str) and reported else (model or self._model),
+            model=envelope.model or model or self._model,
             input_tokens=int(usage.get("input_tokens") or 0),
             output_tokens=int(usage.get("output_tokens") or 0),
             cache_read_tokens=int(usage.get("cache_read_input_tokens") or 0),
             cache_create_tokens=int(usage.get("cache_creation_input_tokens") or 0),
-            cost_usd=float(cost) if isinstance(cost, int | float) else None,
+            cost_usd=envelope.cost_usd,
         )
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
@@ -579,8 +595,8 @@ class ClaudeCodeAdapter:
     @staticmethod
     def _result_text(output: str) -> str:
         """The assistant's final message: the ``result`` field of the JSON envelope, else raw."""
-        envelope = _result_envelope(output)
-        return str(envelope["result"]) if envelope is not None else output
+        envelope = ResultEnvelope.of(output)
+        return envelope.result if envelope is not None else output
 
     def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
         """The child env carrying this lease's worker identity: the allowlist plus the
@@ -588,7 +604,7 @@ class ClaudeCodeAdapter:
         this lease. ``spawn``, ``resume_with_message``, and a takeover (via the seam,
         issue #258) all build from this, so a daemon resume is as fully identified as a
         fresh one — ``--resume`` does not inherit the original spawn env."""
-        env = _allowlisted_env(self._env_passthrough)
+        env = AllowlistedEnv.of(self._env_passthrough).variables
         env["BLIZZARD_ENV_IDS"] = ",".join(e.environment_id for e in preamble.environments)
         env["BLIZZARD_ENV_WORKDIRS"] = ",".join(e.workdir for e in preamble.environments)
         env["BLIZZARD_SESSION_ID"] = session_id

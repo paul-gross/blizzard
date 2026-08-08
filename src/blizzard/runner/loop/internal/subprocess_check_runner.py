@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.harness.env_allowlist import allowlisted_env
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
 
 _log = get_logger("blizzard.runner.checks")
@@ -21,12 +22,33 @@ _log = get_logger("blizzard.runner.checks")
 _TAIL_MAX_CHARS = 4000
 
 
-def _tail(text: str) -> str:
-    """The last :data:`_TAIL_MAX_CHARS` characters of ``text``, prefixed with an elision
-    marker when truncated so a reader sees the output was clipped."""
-    if len(text) <= _TAIL_MAX_CHARS:
-        return text
-    return "…(output truncated)…\n" + text[-_TAIL_MAX_CHARS:]
+@dataclass(frozen=True)
+class CheckOutput:
+    """A check's combined stdout+stderr, plus whatever ``note`` the caller appends to it."""
+
+    text: str
+
+    @classmethod
+    def of(cls, stdout: bytes | str | None, stderr: bytes | str | None, *, note: str = "") -> CheckOutput:
+        return cls(cls._decoded(stdout) + cls._decoded(stderr) + note)
+
+    @property
+    def tail(self) -> str:
+        """The last :data:`_TAIL_MAX_CHARS` characters, prefixed with an elision marker when
+        truncated so a reader sees the output was clipped."""
+        if len(self.text) <= _TAIL_MAX_CHARS:
+            return self.text
+        return "…(output truncated)…\n" + self.text[-_TAIL_MAX_CHARS:]
+
+    @staticmethod
+    def _decoded(stream: bytes | str | None) -> str:
+        """``subprocess.TimeoutExpired`` carries the partial output as ``bytes`` (or ``None``)
+        even under ``text=True``; normalize either to ``str``."""
+        if stream is None:
+            return ""
+        if isinstance(stream, bytes):
+            return stream.decode("utf-8", errors="replace")
+        return stream
 
 
 class SubprocessCheckRunner:
@@ -38,7 +60,7 @@ class SubprocessCheckRunner:
         self._env_passthrough = tuple(env_passthrough)
 
     def run(self, command: str, cwd: str, timeout: int) -> CheckOutcome:
-        env = allowlisted_env(self._env_passthrough)
+        env = AllowlistedEnv.of(self._env_passthrough).variables
         try:
             result = subprocess.run(
                 command,
@@ -51,24 +73,13 @@ class SubprocessCheckRunner:
             )
         except subprocess.TimeoutExpired as exc:
             # A timeout is a red check, never a raise — a hung check cannot wedge the tick.
-            captured = _decode(exc.stdout) + _decode(exc.stderr)
+            captured = CheckOutput.of(exc.stdout, exc.stderr, note=f"\n[timed out after {timeout}s]")
             _log.warning("check timed out", command=command, cwd=cwd, timeout=timeout)
-            return CheckOutcome(passed=False, output_tail=_tail(captured + f"\n[timed out after {timeout}s]"))
-        combined = (result.stdout or "") + (result.stderr or "")
+            return CheckOutcome(passed=False, output_tail=captured.tail)
         passed = result.returncode == 0
         if not passed:
             _log.info("check failed", command=command, cwd=cwd, returncode=result.returncode)
-        return CheckOutcome(passed=passed, output_tail=_tail(combined))
-
-
-def _decode(stream: bytes | str | None) -> str:
-    """``subprocess.TimeoutExpired`` carries the partial output as ``bytes`` (or ``None``)
-    even under ``text=True``; normalize either to ``str``."""
-    if stream is None:
-        return ""
-    if isinstance(stream, bytes):
-        return stream.decode("utf-8", errors="replace")
-    return stream
+        return CheckOutcome(passed=passed, output_tail=CheckOutput.of(result.stdout, result.stderr).tail)
 
 
 def _conforms_check_runner(x: SubprocessCheckRunner) -> ICheckRunner:

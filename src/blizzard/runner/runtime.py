@@ -12,7 +12,7 @@ from pathlib import Path
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner.config import CONFIG_FILENAME, WORKER_SETTINGS_FILENAME, RunnerConfig
-from blizzard.runner.harness.worker_settings import worker_settings_json
+from blizzard.runner.harness.worker_settings import WorkerSettings
 from blizzard.runner.store import MIGRATIONS_DIR, STORE_NAME
 
 MIGRATE_COMMAND = "blizzard runner migrate"
@@ -61,7 +61,7 @@ class Runtime:
 
         # Written idempotently: the content is versioned with the runner, so re-running
         # `init` refreshes it to head.
-        (root / WORKER_SETTINGS_FILENAME).write_text(worker_settings_json())
+        (root / WORKER_SETTINGS_FILENAME).write_text(WorkerSettings.of().json)
 
         Migrations(config).runner.upgrade("head")
         _log.info("runner store migrated to head", root=str(root), db_url=config.db_url)

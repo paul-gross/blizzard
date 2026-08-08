@@ -328,7 +328,7 @@ def test_read_forward_a_narrow_non_ceiling_budget_never_force_consumes(tmp_path:
 def test_read_forward_a_live_appended_partial_line_within_the_budget_waits(tmp_path: Path) -> None:
     """The companion case: the window reaches the file's own current end, short of
     budget, with no newline — the ordinary live-appended trailing fragment. Must make
-    zero progress, not force-consume a fragment `normalize_lines` can't parse."""
+    zero progress, not force-consume a fragment `of_lines` can't parse."""
     path = tmp_path / "partial.jsonl"
     path.write_bytes(b"x" * 5)  # shorter than the budget below, still no newline
 

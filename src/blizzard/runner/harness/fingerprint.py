@@ -3,7 +3,7 @@
 A dependency-free leaf, deliberately: this type is named in store-protocol signatures,
 and a protocol module should not acquire file I/O just by being imported. *How* the
 digests are computed is owned by
-:func:`~blizzard.runner.harness.preamble.render_worker_preamble`."""
+:class:`~blizzard.runner.harness.preamble.Preamble`."""
 
 from __future__ import annotations
 

@@ -19,8 +19,8 @@ from blizzard.runner.harness.preamble import (
     RESUME_UPDATED_NOTICE,
     RESUME_WORKSPACE_UNCHANGED,
     RESUME_WORKSPACE_WITHDRAWN,
+    Preamble,
     PreambleFingerprint,
-    render_worker_preamble,
 )
 
 
@@ -31,7 +31,7 @@ def _render(
     runner_prompt: str = "",
     prior: PreambleFingerprint | None = None,
 ) -> str:
-    return render_worker_preamble(
+    return Preamble.of(
         runner_prompt=runner_prompt,
         workspace_prompt=workspace_prompt,
         environments=envs,
@@ -48,7 +48,7 @@ def _fingerprint(
     *,
     runner_prompt: str = "",
 ) -> PreambleFingerprint:
-    return render_worker_preamble(
+    return Preamble.of(
         runner_prompt=runner_prompt,
         workspace_prompt=workspace_prompt,
         environments=envs,
@@ -290,7 +290,7 @@ def test_resume_still_carries_this_attempts_freshly_minted_lease_id() -> None:
     this spawn's lease id and no trace of the previous attempt's."""
     prior = _fingerprint("prose", _ENVS, runner_prompt="Blizzard prose.")
 
-    out = render_worker_preamble(
+    out = Preamble.of(
         runner_prompt="Blizzard prose.",
         workspace_prompt="prose",
         environments=_ENVS,
@@ -342,7 +342,7 @@ def test_fingerprint_digests_the_resolved_layers_not_the_raw_inputs() -> None:
 def test_fingerprint_is_the_same_whether_the_render_elided_or_not() -> None:
     """The elided path must record the digest of the prose the session *holds*, not of
     the banner it just emitted, or the next comparison would find a false mismatch."""
-    fresh = render_worker_preamble(
+    fresh = Preamble.of(
         runner_prompt="Blizzard prose.",
         workspace_prompt="prose",
         environments=_ENVS,
@@ -350,7 +350,7 @@ def test_fingerprint_is_the_same_whether_the_render_elided_or_not() -> None:
         runner_id="runner-local",
         chunk_id="ch_1",
     )
-    elided = render_worker_preamble(
+    elided = Preamble.of(
         runner_prompt="Blizzard prose.",
         workspace_prompt="prose",
         environments=_ENVS,

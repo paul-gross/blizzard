@@ -11,7 +11,7 @@ import json
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from blizzard.runner.harness.internal.claude_code_normalizer import NORMALIZER_VERSION, NormalizedFile, normalize_lines
+from blizzard.runner.harness.internal.claude_code_normalizer import NORMALIZER_VERSION, NormalizedFile
 from blizzard.runner.harness.transcript import (
     IHarnessTranscriptSource,
     NormalizedTurn,
@@ -179,7 +179,7 @@ class _SidecarJoin:
             self.hit_budget = self.hit_budget or read.hit_budget
             self.truncated = self.truncated or read.truncated
             self.offsets[agent_id] = read.next_offset
-            self._attach(agent_id, normalize_lines(read.lines, is_sidechain_file=True).turns)
+            self._attach(agent_id, NormalizedFile.of_lines(read.lines, is_sidechain_file=True).turns)
 
     def _skip(self, agent_id: str, path: Path) -> None:
         if self._cold:
@@ -301,7 +301,7 @@ class ClaudeCodeTranscriptSource:
             self._errors.from_io(exc, f"transcript unreadable: {session_id}", session_id=session_id)
             return self._unavailable(session_id, "unreadable")
 
-        normalized = normalize_lines(main_read.lines)
+        normalized = NormalizedFile.of_lines(main_read.lines)
         sidecars = _SidecarJoin(
             self._errors,
             session_id=session_id,

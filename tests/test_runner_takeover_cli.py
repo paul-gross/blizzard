@@ -19,7 +19,7 @@ import blizzard.runner.cli as runner_cli
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.takeover import wrapped_takeover_command
+from blizzard.runner.domain.takeover import TakeoverCommand
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import NewLease
 from tests.test_runner_status_cli import _init_runner, _serve_local_api
@@ -172,7 +172,7 @@ def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path, monkeypatc
 
 @pytest.mark.unit
 def test_takeover_cli_still_declares_the_dir_flag_and_a_chunk_id_argument() -> None:
-    """Pins the CLI-flag shape ``wrapped_takeover_command`` hard-codes against the
+    """Pins the CLI-flag shape ``TakeoverCommand`` hard-codes against the
     REAL Click command object, not the composed string — a rename of ``--dir`` or the
     chunk id here would silently break the board command while other tests stay green."""
     takeover_cmd = runner_group.commands["takeover"]
@@ -186,10 +186,10 @@ def test_takeover_cli_still_declares_the_dir_flag_and_a_chunk_id_argument() -> N
 
 @pytest.mark.unit
 def test_composed_wrapped_command_parses_through_the_real_takeover_grammar() -> None:
-    """``wrapped_takeover_command`` composes the string the board renders; this parses
+    """``TakeoverCommand`` composes the string the board renders; this parses
     that exact string through the REAL Click command's own argument parsing, so a
     coordinated edit the grammar rejects fails here even if string-equality tests pass."""
-    composed = wrapped_takeover_command("ch_1", "/var/lib/blizzard/runner dir")
+    composed = TakeoverCommand("ch_1", "/var/lib/blizzard/runner dir").wrapped
     argv = shlex.split(composed)
     assert argv[:3] == ["blizzard", "runner", "takeover"]
 

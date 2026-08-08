@@ -6,11 +6,19 @@ lease. Stdlib-only (``bzh:domain-core``)."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 
-def resolve_spawn_cwd(workspace_root: str, fallback_workdir: str | None) -> str | None:
+
+@dataclass(frozen=True)
+class SpawnCwd:
     """The cwd a worker was spawned into: ``workspace_root`` if set, else the fallback.
 
-    ``workspace_root`` empty (``BZ_WORKSPACE_ROOT`` unset) means the spawn cwd *is*
-    the fallback, which is itself ``None`` when the caller has none to supply.
-    """
-    return workspace_root or fallback_workdir
+    An empty ``workspace_root`` (``BZ_WORKSPACE_ROOT`` unset) means the spawn cwd *is* the
+    fallback, itself ``None`` when the caller has none to supply."""
+
+    workspace_root: str
+    fallback_workdir: str | None
+
+    @property
+    def path(self) -> str | None:
+        return self.workspace_root or self.fallback_workdir

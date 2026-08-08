@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 # SAFETY: `ANTHROPIC_MODEL` and family must stay absent — here and in `[worker]
 # env_passthrough` — they override the model a resumed session restores (issue #144).
@@ -18,13 +19,21 @@ BASE_ALLOWLIST_VARS: tuple[str, ...] = ("PATH", "HOME", "USER", "LANG", "TERM", 
 LOCALE_PREFIX = "LC_"
 
 
-def allowlisted_env(passthrough: Sequence[str]) -> dict[str, str]:
+@dataclass(frozen=True)
+class AllowlistedEnv:
     """The child env built from the base allowlist + ``LC_*`` + the operator's passthrough.
 
-    Never a full ``os.environ`` copy (``bzh:worker-env-allowlist``) — see the module
-    docstring. The one function every runner-side subprocess env construction builds from.
-    """
-    names = set(BASE_ALLOWLIST_VARS) | set(passthrough)
-    env = {name: os.environ[name] for name in names if name in os.environ}
-    env.update((k, v) for k, v in os.environ.items() if k.startswith(LOCALE_PREFIX))
-    return env
+    Never a full ``os.environ`` copy (``bzh:worker-env-allowlist``) — see the module docstring."""
+
+    passthrough: tuple[str, ...]
+
+    @classmethod
+    def of(cls, passthrough: Sequence[str]) -> AllowlistedEnv:
+        return cls(tuple(passthrough))
+
+    @property
+    def variables(self) -> dict[str, str]:
+        names = set(BASE_ALLOWLIST_VARS) | set(self.passthrough)
+        env = {name: os.environ[name] for name in names if name in os.environ}
+        env.update((k, v) for k, v in os.environ.items() if k.startswith(LOCALE_PREFIX))
+        return env
