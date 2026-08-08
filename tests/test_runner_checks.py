@@ -371,18 +371,18 @@ def test_advance_injects_the_check_results_into_the_judgement_prompt(tmp_path: P
 
 @pytest.mark.unit
 def test_checks_gate_violated_predicate() -> None:
-    from blizzard.wire.completion import CheckResult, checks_gate_violated
+    from blizzard.wire.completion import CheckResult, ChecksGate
 
     green = [CheckResult(command="a", passed=True), CheckResult(command="b", passed=True)]
     red = [CheckResult(command="a", passed=True), CheckResult(command="b", passed=False)]
     # Ungated: never violated, whatever the checks say.
-    assert checks_gate_violated(False, red) is False
-    assert checks_gate_violated(False, green) is False
+    assert ChecksGate(False, red).violated is False
+    assert ChecksGate(False, green).violated is False
     # Gated: violated iff any check is red.
-    assert checks_gate_violated(True, green) is False
-    assert checks_gate_violated(True, red) is True
+    assert ChecksGate(True, green).violated is False
+    assert ChecksGate(True, red).violated is True
     # Gated with no results is vacuously satisfied (the validator forbids this shape anyway).
-    assert checks_gate_violated(True, []) is False
+    assert ChecksGate(True, []).violated is False
 
 
 @pytest.mark.component

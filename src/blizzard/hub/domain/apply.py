@@ -29,7 +29,7 @@ from blizzard.hub.domain.work import (
     MigrationMode,
     MigrationSource,
 )
-from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, checks_gate_violated
+from blizzard.wire.completion import ChecksGate, CompletionSubmission, SubmittedArtifact
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 
 # The cross-graph migration crash window (issue #90, ``bzh:crash-point-registry``): the whole
@@ -256,10 +256,10 @@ class ApplyService:
         if produces_rejection is not None:
             return ApplyResult.failure(produces_rejection)
 
-        # Checks gate backstop (issue #114) — the same shared predicate `checks_gate_violated`
+        # Checks gate backstop (issue #114) — the same shared predicate `ChecksGate.violated`
         # both gates run, so the two cannot drift (`test_checks_gate_agreement.py`).
         selected = next((c for c in from_node.choices if c.name == submission.choice), None)
-        if selected is not None and checks_gate_violated(selected.requires_checks, submission.check_results):
+        if selected is not None and ChecksGate(selected.requires_checks, submission.check_results).violated:
             return ApplyResult.failure(f"choice `{submission.choice}` requires green checks but a check is red")
 
         # The transition-time consult (issue #124) — ordered after every rejection above and

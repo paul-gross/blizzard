@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.hub.domain.artifacts import ArtifactKind
-from blizzard.wire.completion import SubmittedArtifact, produces_coverage
+from blizzard.wire.completion import Coverage, SubmittedArtifact
 from blizzard.wire.envelope import NodeEnvelope
 from blizzard.wire.graph import ProducesEntry
 
@@ -19,14 +19,14 @@ class ProducesReconciler:
     def missing(self, git_artifacts: list[SubmittedArtifact], attachments: dict[str, str]) -> list[ProducesEntry]:
         """Every spec this attempt does not yet cover (issue #143), in declaration order.
 
-        Evaluated by the shared ``produces_coverage`` predicate, so this and the upstream
+        Evaluated by the shared :class:`Coverage` predicate, so this and the upstream
         backstop cannot drift apart.
         """
         attached = [
             SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content=content, attached=True)
             for name, content in attachments.items()
         ]
-        return produces_coverage(self.envelope.node.produces, git_artifacts + attached)
+        return Coverage(git_artifacts + attached).unmet(self.envelope.node.produces)
 
     def nudge_message(self, missing: list[ProducesEntry]) -> str:
         """The nudge resume's message (issues #113, #143): one line per unmet spec, naming

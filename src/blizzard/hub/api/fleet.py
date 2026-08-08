@@ -205,7 +205,7 @@ def resume_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
 def fleet_summary(services: Annotated[HubServices, Depends(get_services)]) -> FleetSummaryView:
     """The fleet-pulse counts (issue #76), read with a runner's own bearer token. Fleet-router-only:
     this read has no anonymous counterpart."""
-    return chunks_api.fleet_summary(services)
+    return chunks_api.FleetPulse(services).view()
 
 
 @router.get("/questions/{question_id}", response_model=QuestionView)
@@ -420,7 +420,7 @@ def submit_completion(
     if fresh_migration:
         services.events.publish_queue_changed()  # a fresh migration re-queued the chunk under the target graph
     # A completion landing on a human-judged node opens a graph gate: surface it.
-    chunks_api.publish_open_decision(services, chunk_id)
+    chunks_api.OpenDecision(services, chunk_id).publish()
     return response
 
 
@@ -444,7 +444,7 @@ def submit_decision(
     key = f"decisions:{result.decision_id}" if result.decision_id is not None else None
     chunk_events.publish_chunk_changed(services, chunk_id, cause="decision-submitted", prev_status=prev_status, key=key)
     # The runner-config gate parked the chunk on an open decision: surface it.
-    chunks_api.publish_open_decision(services, chunk_id)
+    chunks_api.OpenDecision(services, chunk_id).publish()
     return result.response
 
 

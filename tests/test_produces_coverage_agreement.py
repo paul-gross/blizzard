@@ -1,6 +1,6 @@
 """The hub backstop and the runner nudge agree on produces-coverage (issues #113, #143).
 
-Both must call the one shared :func:`~blizzard.wire.completion.produces_coverage` rather
+Both must call the one shared :class:`~blizzard.wire.completion.Coverage` rather
 than each re-derive "covered" inline. Drives both predicates over one scenario matrix and
 asserts they agree on the expected verdict.
 """
@@ -137,7 +137,7 @@ def test_hub_and_runner_agree_on_coverage(
     assert hub_rejects == runner_nudges, (
         f"produces-coverage drift: the hub backstop {'rejects' if hub_rejects else 'accepts'} this "
         f"submission while the runner {'would nudge' if runner_nudges else 'is satisfied'} — the two "
-        f"must share `produces_coverage`, so a worker that satisfies the runner is never "
+        f"must share `Coverage`, so a worker that satisfies the runner is never "
         f"fenced out by the hub (issue #143)."
     )
     assert hub_rejects is not all_covered

@@ -97,7 +97,7 @@ def test_missing_names_are_all_named_in_the_rejection_detail() -> None:
 def test_a_git_commit_covered_produces_name_is_accepted_under_enforce() -> None:
     """A `produces:` name legitimately covered by a pushed git commit carries
     `attached=False` on its `GIT_COMMIT` `SubmittedArtifact` — must not be rejected as
-    an unattached name (`~blizzard.wire.completion.satisfied_produces_names`)."""
+    an unattached name (`~blizzard.wire.completion.Coverage.satisfied_names`)."""
     node = _node(produces=["backend"])
     artifacts = [_git_commit_artifact("backend")]
 

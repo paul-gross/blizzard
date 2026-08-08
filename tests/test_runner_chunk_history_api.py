@@ -1,6 +1,6 @@
-"""``GET /api/leases/{id}/history`` and its pure projection ``history_rows`` (issue #237).
+"""``GET /api/leases/{id}/history`` and its pure projection ``ChunkHistoryView.rows`` (issue #237).
 
-Unit tier: ``history_rows`` over a fixture ``ChunkHistoryView`` — a bounced attempt
+Unit tier: ``ChunkHistoryView.rows`` over a fixture — a bounced attempt
 that produced no artifact still becomes a row, a migration becomes its own row, and
 everything merges oldest-first. Component tier: exercised over a real store via
 ``TestClient``, the hub reached through a stubbed ``httpx.get``."""
@@ -19,7 +19,7 @@ from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import BounceView, MigrationView, TransitionView
-from blizzard.wire.history import ChunkHistoryView, history_rows
+from blizzard.wire.history import ChunkHistoryView
 from tests.runner_fakes import make_store
 from tests.support import build_hub, pointer_token, report_lease
 
@@ -92,7 +92,7 @@ _DETAIL: dict[str, object] = {
 @pytest.mark.unit
 def test_history_rows_merges_all_three_kinds_oldest_first() -> None:
     detail = ChunkHistoryView.model_validate(_DETAIL)
-    rows = history_rows(detail)
+    rows = detail.rows()
     assert [r.recorded_at for r in rows] == [
         "2026-07-21T09:00:00+00:00",
         "2026-07-21T10:00:00+00:00",
@@ -111,7 +111,7 @@ def test_a_bounced_attempt_with_no_artifact_is_still_a_row() -> None:
         migrations=[],
         bounces=[BounceView(cause="conflict", envelope="{}", recorded_at="2026-07-21T11:00:00+00:00")],
     )
-    rows = history_rows(detail)
+    rows = detail.rows()
     assert len(rows) == 1
     assert rows[0].kind == "bounce"
     assert rows[0].cause == "conflict"
@@ -139,7 +139,7 @@ def test_a_migration_becomes_its_own_row_with_a_graph_hop_label() -> None:
             )
         ],
     )
-    rows = history_rows(detail)
+    rows = detail.rows()
     assert len(rows) == 1
     assert rows[0].kind == "migration"
     assert rows[0].from_node == "triage-graph/triage"
@@ -167,7 +167,7 @@ def test_a_transition_row_carries_epoch_and_choice() -> None:
             )
         ],
     )
-    rows = history_rows(detail)
+    rows = detail.rows()
     assert len(rows) == 1
     row = rows[0]
     assert row.kind == "transition"
@@ -462,7 +462,7 @@ def test_a_workers_history_read_matches_the_transitions_the_hub_recorded(
     assert resp.status_code == 200, resp.text
     worker_rows = resp.json()
 
-    expected = [row.model_dump() for row in history_rows(ChunkHistoryView.model_validate(hub_detail))]
+    expected = [row.model_dump() for row in ChunkHistoryView.model_validate(hub_detail).rows()]
     assert worker_rows == expected
     assert len(worker_rows) == 4
     assert [r["kind"] for r in worker_rows] == ["transition", "transition", "transition", "transition"]

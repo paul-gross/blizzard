@@ -1,6 +1,6 @@
 """The hub backstop and the runner gate agree on the checks gate (component tier, issue #114).
 
-Both sides call the one shared predicate ``checks_gate_violated`` rather than each
+Both sides call the one shared predicate ``ChecksGate.violated`` rather than each
 re-derive "is a gated choice red?" inline; this drives both real decision sites over
 one scenario matrix and asserts they reach the same verdict."""
 
@@ -170,7 +170,7 @@ def test_hub_and_runner_agree_on_the_checks_gate(
     assert hub_rejects == runner_fails, (
         f"checks-gate drift: the hub backstop {'rejects' if hub_rejects else 'accepts'} this "
         f"submission while the runner {'fences' if runner_fails else 'accepts'} it — the two must "
-        f"share `checks_gate_violated` so a worker the runner fences is never let through by the hub."
+        f"share `ChecksGate` so a worker the runner fences is never let through by the hub."
     )
     assert hub_rejects is expected_reject
     assert runner_fails is expected_reject

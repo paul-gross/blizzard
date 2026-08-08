@@ -7,6 +7,7 @@ stored column. The work-item read is a pass-through whose contents are never sto
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -37,7 +38,6 @@ from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.pause import ChunkNotPausable
 from blizzard.hub.domain.stop import ChunkNotStoppable
 from blizzard.hub.domain.work import (
-    Chunk,
     ChunkFacts,
     FleetSummary,
     WorkRef,
@@ -63,11 +63,20 @@ from blizzard.wire.fleet import FleetSummaryView
 router = APIRouter(prefix="/api", tags=["chunks"], dependencies=[Depends(reject_runner_principal)])
 
 
-def publish_open_decision(services: HubServices, chunk_id: str) -> None:
-    """Emit ``decision-opened`` if the chunk now carries a live, unresolved gate (issue #87)."""
-    decision = services.chunks.decision_for_chunk(chunk_id)
-    if decision is not None and not decision.resolved and not decision.transitioned:
-        services.events.publish_decision_opened(chunk_id, decision.decision_id, key=f"decisions:{decision.decision_id}")
+@dataclass(frozen=True)
+class OpenDecision:
+    """A chunk's graph gate as the board must hear about it (issue #87)."""
+
+    services: HubServices
+    chunk_id: str
+
+    def publish(self) -> None:
+        """Emit ``decision-opened`` if the chunk now carries a live, unresolved gate."""
+        decision = self.services.chunks.decision_for_chunk(self.chunk_id)
+        if decision is not None and not decision.resolved and not decision.transitioned:
+            self.services.events.publish_decision_opened(
+                self.chunk_id, decision.decision_id, key=f"decisions:{decision.decision_id}"
+            )
 
 
 @router.post(
@@ -114,33 +123,33 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
     return ChunkIngestResponse(chunk_id=chunk_id)
 
 
-def _summary_view(services: HubServices, chunk: Chunk, *, names: GraphNames | None = None) -> ChunkSummary:
-    return ChunkView.of(services, chunk, names).summary()
-
-
 @router.get("/chunks", response_model=list[ChunkSummary], dependencies=[Depends(require(FLEET_VIEW))])
 def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list[ChunkSummary]:
     """The fleet chunk list — derived status per chunk."""
     names = GraphNames(services.graphs.get)
-    return [_summary_view(services, chunk, names=names) for chunk in services.chunks.list_all()]
+    return [ChunkView.of(services, chunk, names).summary() for chunk in services.chunks.list_all()]
 
 
-def fleet_summary(services: HubServices) -> FleetSummaryView:
-    """Fold every chunk's derived status into the four fleet-summary counts (issue #76).
+@dataclass(frozen=True)
+class FleetPulse:
+    """Every chunk's derived status folded to the four fleet-summary counts (issue #76)."""
 
-    Not a route of its own here. Derives each chunk's status the same way
-    :func:`list_chunks` does, but returns only the four bucket integers, so the payload
-    is a fixed four numbers regardless of fleet size."""
-    summary = FleetSummary.of(
-        (services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)).status()
-        for chunk in services.chunks.list_all()
-    )
-    return FleetSummaryView(
-        ready=summary.ready,
-        running=summary.running,
-        waiting=summary.waiting,
-        needs=summary.needs,
-    )
+    services: HubServices
+
+    def view(self) -> FleetSummaryView:
+        """Not a route of its own here. Derives each chunk's status the same way
+        :func:`list_chunks` does, but yields only the four bucket integers, so the payload
+        is a fixed four numbers regardless of fleet size."""
+        summary = FleetSummary.of(
+            (self.services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)).status()
+            for chunk in self.services.chunks.list_all()
+        )
+        return FleetSummaryView(
+            ready=summary.ready,
+            running=summary.running,
+            waiting=summary.waiting,
+            needs=summary.needs,
+        )
 
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail, dependencies=[Depends(require(FLEET_VIEW))])
@@ -206,7 +215,7 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
         services, chunk_id, cause="requeued", prev_status=prev_status, key=f"requeues:{requeue_id}"
     )
     services.events.publish_queue_changed()  # requeue can re-admit the chunk to the queue
-    return _summary_view(services, chunk)
+    return ChunkView.of(services, chunk).summary()
 
 
 @router.post(
@@ -229,7 +238,7 @@ def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
         services, chunk_id, cause="detached", prev_status=prev_status, key=f"route_released:{released_id}"
     )
     services.events.publish_queue_changed()  # a detached chunk re-enters the ready queue
-    return _summary_view(services, chunk)
+    return ChunkView.of(services, chunk).summary()
 
 
 @router.post(
@@ -254,7 +263,7 @@ def pause_chunk(
         services, chunk_id, cause="paused", prev_status=prev_status, key=f"chunk_pause_facts:{pause_fact_id}"
     )
     services.events.publish_queue_changed()  # a pause moves the chunk out of the ready queue (issue #46)
-    return _summary_view(services, chunk)
+    return ChunkView.of(services, chunk).summary()
 
 
 @router.post(
@@ -276,7 +285,7 @@ def resume_chunk(
         services, chunk_id, cause="resumed", prev_status=prev_status, key=f"chunk_pause_facts:{pause_fact_id}"
     )
     services.events.publish_queue_changed()  # a resume can re-admit the chunk to the queue (issue #46)
-    return _summary_view(services, chunk)
+    return ChunkView.of(services, chunk).summary()
 
 
 @router.post(
@@ -305,7 +314,7 @@ def stop_chunk(
         services, chunk_id, cause="stopped", prev_status=prev_status, key=f"chunk_stopped:{stopped_id}"
     )
     services.events.publish_queue_changed()  # a stopped chunk is never offered for claim again
-    return _summary_view(services, chunk)
+    return ChunkView.of(services, chunk).summary()
 
 
 @router.post(
@@ -327,7 +336,7 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     key = f"chunk_promoted:{promoted_id}" if promoted_id is not None else None
     chunk_events.publish_chunk_changed(services, chunk_id, cause="promoted", prev_status=prev_status, key=key)
     services.events.publish_queue_changed()  # a promoted chunk enters the ready queue
-    return _summary_view(services, chunk)
+    return ChunkView.of(services, chunk).summary()
 
 
 @router.patch(

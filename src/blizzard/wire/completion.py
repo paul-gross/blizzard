@@ -8,6 +8,7 @@ write**. A stale epoch is rejected and the artifacts never enter the store.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
 from pydantic import BaseModel
@@ -33,16 +34,9 @@ class SubmittedArtifact(BaseModel):
     attached: bool = False
 
 
-def satisfied_produces_names(artifacts: list[SubmittedArtifact]) -> set[str]:
-    """The ``produces:`` names this artifact list explicitly satisfies — an artifact with
-    ``attached=True``, or a ``GIT_COMMIT`` artifact (issue #113). A name present only as
-    the judgement-assessment fallback is excluded (``test_produces_coverage_agreement``)."""
-    return {a.name for a in artifacts if a.attached or a.kind == ArtifactKind.GIT_COMMIT}
-
-
 class _ProducesLike(Protocol):
-    """Structural shape both ``produces:`` spec types share, so
-    :func:`produces_coverage` is generic over either."""
+    """Structural shape both ``produces:`` spec types share, so :meth:`Coverage.unmet` is
+    generic over either."""
 
     @property
     def name(self) -> str: ...
@@ -50,22 +44,33 @@ class _ProducesLike(Protocol):
     def kind(self) -> ArtifactKind: ...
 
 
-def produces_coverage[P: _ProducesLike](specs: Sequence[P], artifacts: list[SubmittedArtifact]) -> list[P]:
-    """The ``produces:`` specs this artifact list does **not** cover (issue #143, D2).
+@dataclass(frozen=True)
+class Coverage:
+    artifacts: list[SubmittedArtifact]
 
-    An ``asset`` spec is met by an artifact of **its own name** in
-    :func:`satisfied_produces_names`; a ``git_commit`` spec is met by **any**
-    ``GIT_COMMIT``-kind artifact — a *kind* match, not a name match."""
-    covered_names = satisfied_produces_names(artifacts)
-    has_git_commit = any(a.kind == ArtifactKind.GIT_COMMIT for a in artifacts)
-    unmet: list[P] = []
-    for spec in specs:
-        if spec.kind == ArtifactKind.GIT_COMMIT:
-            if not has_git_commit:
+    @property
+    def satisfied_names(self) -> set[str]:
+        """The ``produces:`` names these artifacts explicitly satisfy — an artifact with
+        ``attached=True``, or a ``GIT_COMMIT`` artifact (issue #113). A name present only as
+        the judgement-assessment fallback is excluded (``test_produces_coverage_agreement``)."""
+        return {a.name for a in self.artifacts if a.attached or a.kind == ArtifactKind.GIT_COMMIT}
+
+    def unmet[P: _ProducesLike](self, specs: Sequence[P]) -> list[P]:
+        """The ``produces:`` specs these artifacts do **not** cover (issue #143, D2).
+
+        An ``asset`` spec is met by an artifact of **its own name** in
+        :attr:`satisfied_names`; a ``git_commit`` spec is met by **any**
+        ``GIT_COMMIT``-kind artifact — a *kind* match, not a name match."""
+        covered_names = self.satisfied_names
+        has_git_commit = any(a.kind == ArtifactKind.GIT_COMMIT for a in self.artifacts)
+        unmet: list[P] = []
+        for spec in specs:
+            if spec.kind == ArtifactKind.GIT_COMMIT:
+                if not has_git_commit:
+                    unmet.append(spec)
+            elif spec.name not in covered_names:
                 unmet.append(spec)
-        elif spec.name not in covered_names:
-            unmet.append(spec)
-    return unmet
+        return unmet
 
 
 class CheckResult(BaseModel):
@@ -79,19 +84,25 @@ class CheckResult(BaseModel):
 
 
 class _HasPassed(Protocol):
-    """The one field :func:`checks_gate_violated` reads, so it is generic over both
-    check-result shapes without either importing the other's type."""
+    """The one field :class:`ChecksGate` reads, so it is generic over both check-result
+    shapes without either importing the other's type."""
 
     @property
     def passed(self) -> bool: ...
 
 
-def checks_gate_violated(requires_checks: bool, check_results: Sequence[_HasPassed]) -> bool:
-    """``True`` iff a ``requires_checks`` choice is being taken while any check is red
-    (issue #114) — the one shared home for the predicate, guarded by
-    ``tests/test_checks_gate_agreement.py``. An ungated choice is never violated; a node
-    with no checks records none, so the gate is vacuously satisfied."""
-    return requires_checks and any(not r.passed for r in check_results)
+@dataclass(frozen=True)
+class ChecksGate:
+    requires_checks: bool
+    check_results: Sequence[_HasPassed]
+
+    @property
+    def violated(self) -> bool:
+        """``True`` iff a ``requires_checks`` choice is being taken while any check is red
+        (issue #114) — the one shared home for the predicate, guarded by
+        ``tests/test_checks_gate_agreement.py``. An ungated choice is never violated; a node
+        with no checks records none, so the gate is vacuously satisfied."""
+        return self.requires_checks and any(not r.passed for r in self.check_results)
 
 
 class CompletionSubmission(BaseModel):

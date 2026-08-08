@@ -11,7 +11,7 @@ from fastapi import APIRouter, Request
 
 from blizzard.runner.api.hub_proxy import HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
-from blizzard.wire.history import ChunkHistoryView, HistoryRowView, history_rows
+from blizzard.wire.history import ChunkHistoryView, HistoryRowView
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
@@ -25,4 +25,4 @@ def get_history(lease_id: str, request: Request) -> list[HistoryRowView]:
     gap in the history."""
     lease = authorized_lease(lease_id, request)
     upstream = HubProxy.of(request, "history").get(f"/api/fleet/chunks/{lease.chunk_id}", chunk_id=lease.chunk_id)
-    return history_rows(ChunkHistoryView.model_validate(upstream.json()))
+    return ChunkHistoryView.model_validate(upstream.json()).rows()

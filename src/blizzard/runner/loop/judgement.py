@@ -17,7 +17,7 @@ from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.store.repository import CheckResultRecord, EnvBindingRecord, LeaseRecord
-from blizzard.wire.completion import CheckResult, CompletionSubmission, SubmittedArtifact, checks_gate_violated
+from blizzard.wire.completion import CheckResult, ChecksGate, CompletionSubmission, SubmittedArtifact
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import NodeEnvelope
 
@@ -212,7 +212,7 @@ class Judgement:
         """The checks gate (issue #114), evaluated BEFORE the nudge so it judges the exact
         checks the worker was shown — gate and worker can never diverge on "the tree"."""
         selected = next((c for c in self.envelope.node.choices if c.name == choice), None)
-        if selected is None or not checks_gate_violated(selected.requires_checks, checks):
+        if selected is None or not ChecksGate(selected.requires_checks, checks).violated:
             return False
         _log.warning(
             "requires_checks choice selected with a red check — failing attempt",
