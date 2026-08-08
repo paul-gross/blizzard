@@ -22,6 +22,7 @@ from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
+from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.web import mount_web_app
 from blizzard.hub.api.auth_login import router as auth_login_router
 from blizzard.hub.api.chunks import router as chunks_router
@@ -42,7 +43,6 @@ from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
 from blizzard.hub.domain.forge_status import AnnotationReconciler
-from blizzard.hub.domain.readiness import ReadinessService
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
