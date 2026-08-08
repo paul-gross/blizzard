@@ -43,8 +43,11 @@ def test_advanced_retrospective_states_all_three_verification_legs_and_the_gate_
     assert "delivery-incomplete" in prompt, "no pointer to the routing choice on a discrepancy"
 
 
-def test_basic_retrospective_states_the_sha_and_work_item_legs_and_the_gate_check() -> None:
-    prompt = _retrospective_node(_load("basic-development-workflow")).prompt or ""
+@pytest.mark.parametrize("graph_name", ["basic-development-workflow", "basic-harness-workflow"])
+def test_fast_forward_lane_retrospective_states_its_legs_and_the_gate_check(graph_name: str) -> None:
+    """Both fast-forward lanes share one shape: no PR-merge leg, no resolve node. The
+    harness lane was rewritten alongside the other two and was pinned by nothing."""
+    prompt = _retrospective_node(_load(graph_name)).prompt or ""
     assert "Landing Verification" in prompt
     assert "merge-base --is-ancestor" in prompt, "sha-reachable-from-base leg missing"
     assert "work-items" in prompt, "work-item-closed leg missing"

@@ -8,12 +8,17 @@ Run `blizzard runner artifact list` first. The `git_commit` artifacts name the b
 
 A `review-findings` asset from an earlier round means this change has been here before. This pass is a full cold read of the change **as it now stands**, not a delta over what changed since. Re-report anything still wrong.
 
-A `review-finding-refutes` asset holds findings the build declined rather than fixed, with its arguments. Read it **before** you review, and give every entry an explicit answer — silence is not acceptance:
+A `review-finding-refutes` asset holds findings the build declined rather than fixed, with its arguments. The newest one is the whole record — read that and **do not go looking for an older epoch**, which is shadowed by design. The build restates every refutation still standing in its newest submission, so what you are handed is complete.
 
-- **Accept it** when the argument holds: the finding was wrong, rested on a false premise, or asked for work this change's scale does not warrant. Do not raise it again, this round or later. Record in your findings that you accepted it, naming the anchor and why.
-- **Reject it** when the argument does not hold. Re-raise the finding and **answer the argument**, rather than restating the original finding.
+Give every entry an explicit answer — silence is not acceptance:
+
+- An entry already marked **`accepted`** stays accepted. Do not re-adjudicate it or raise that finding again; carry it into your own findings as still-accepted, naming the anchor, so the record survives.
+- **Accept** an `open` entry when the argument holds: the finding was wrong, rested on a false premise, or asked for work this change's scale does not warrant. Do not raise it again. Record in your findings that you accepted it, naming the anchor and why.
+- **Reject** it when the argument does not hold. Re-raise the finding and **answer the argument**, rather than restating the original finding.
 
 Match a refutation to a finding by its **anchor**, not its id — a fresh cold pass renumbers, so the anchor is the only stable handle. A finding whose refutation you accept is resolved, exactly as if it had been fixed, and does not block `pass`. A refutation is a claim you adjudicate, never a veto.
+
+If the asset carries no recognizable entries — build status rather than refutations, which is what the completion fallback submits when the build declared nothing — read it as "nothing refuted" and move on.
 
 ## Review
 
@@ -22,5 +27,7 @@ Judge the change across correctness, architecture, and design quality. If this w
 ## Submit
 
 Submit your findings as the node's `review-findings` asset before you declare done: run `blizzard runner artifact create --name review-findings` with the content on stdin — what you checked, what passed, and every blocking issue. For a short verdict, pipe it directly: `echo "..." | blizzard runner artifact create --name review-findings`. For a longer writeup, use a heredoc so the full text reaches stdin intact.
+
+**Anchor every finding at a file and line** (`<repo>/<path>:<line>`, or `<repo>/<path>::<symbol>`). The anchor is the only stable handle the build can refute against and the only one you can match a refutation to on a later pass — a finding that names no location can be neither acted on nor answered.
 
 On a `fail`, that asset is carried back into the build node's envelope, so make each finding specific and actionable.

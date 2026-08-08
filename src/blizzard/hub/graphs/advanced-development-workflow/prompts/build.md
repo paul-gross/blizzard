@@ -1,6 +1,6 @@
 # Build (advanced-development-workflow)
 
-You are working a chunk's **build** node-step. The approved plan is in the envelope as the `plan` asset — read it with `blizzard runner artifact get plan --content` — and implement its phases **in order**. A phase starts only after the previous one is complete, and each phase's change stays scoped to that phase. Do not reorder or parallelize phases.
+You are working a chunk's **build** node-step. The approved plan is in the envelope as the `plan` asset — read it with `blizzard runner artifact get plan --content` — and implement it. Where the plan is phased, implement its phases **in order**: a phase starts only after the previous one is complete, each phase's change stays scoped to that phase, and you neither reorder nor parallelize them. Where it is not phased — a small change earns a small plan — implement it as written.
 
 ## Start from what is actually there
 
@@ -30,8 +30,12 @@ If no `plan` asset is in the envelope, do not stall. Implement the work items' i
 
    The hub stores the reference, never the code, and it only learns of your push once you declare it. An undeclared push does not count. Re-declaring a tip you already declared is harmless, so declare again rather than assuming an earlier attempt got there.
 
-5. **Drafts and notes are out of the way** — outside the repos' working trees and outside the environment root, which nothing sweeps.
+5. **Drafts and notes go somewhere disposable.** Write them under a path that is outside every repository working tree *and* outside the workspace directory the fleet spawned you in — both are git working trees, and nothing sweeps a loose file in either. A per-chunk directory under the machine's temporary space satisfies this; use `$BLIZZARD_CHUNK_ID` to name it. If this workspace declares a scratch location of its own, prefer that.
 
-6. **The refutation channel is submitted.** Run `blizzard runner artifact create --name review-finding-refutes` with the content on stdin. On a first build there is nothing to refute — submit one line saying so. When you are re-entering after review found blocking issues, this is where findings you decline rather than fix are argued; see [../docket.md](../docket.md) and the re-entry addendum.
+6. **The refutation channel is submitted, and it is cumulative.** Run `blizzard runner artifact create --name review-finding-refutes` with the content on stdin.
+
+   This asset is **replaced, not appended to** — the reviewer sees only your newest submission and never looks for an older one. So restate **every refutation still standing**, including any a reviewer already accepted in an earlier round, each marked `open` or `accepted`. Read your own previous submission first (`blizzard runner artifact get review-finding-refutes --content`) and carry it forward.
+
+   A round where you fixed everything is exactly where this goes wrong: submitting a bare "nothing to refute" drops the refutations still standing, and the reviewer's next cold pass re-raises those findings. Only write "nothing to refute" when nothing is standing — on a first build, or once every refuted finding is fixed or withdrawn.
 
 A green build or type-check is not the bar. The verify node closes your work against runtime behavior next.

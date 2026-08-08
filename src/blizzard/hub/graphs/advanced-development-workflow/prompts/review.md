@@ -12,12 +12,17 @@ A `review-finding-refutes` asset holds findings the build declined rather than f
 
 ## Adjudicate the refutations first
 
-Every entry in `review-finding-refutes` gets an explicit answer from you. There is no third option — silence is not acceptance, and an unanswered refutation is still an open finding.
+The newest `review-finding-refutes` asset is the whole record. Read that one and **do not go looking for an older epoch** — an older submission is shadowed by design and carries no standing. The build is required to restate every refutation still standing in its newest submission, so what you are handed is complete by construction.
 
-- **Accept it** when the argument holds: the finding was wrong, rested on a false premise, or asked for work this change's scale does not warrant. Do not raise that finding again, this round or any later one. Say in your `review-findings` asset that you accepted it, naming the anchor and why.
-- **Reject it** when the argument does not hold. Re-raise the finding and **answer the argument** — do not simply restate the original finding.
+Every entry gets an explicit answer from you. There is no third option — silence is not acceptance, and an unanswered refutation is still an open finding.
+
+- An entry already marked **`accepted`** was adjudicated in an earlier round. It stays accepted: do not re-adjudicate it and do not raise that finding again. Carry it into your own `review-findings` asset as still-accepted, naming the anchor, so the record survives.
+- **Accept** an `open` entry when the argument holds: the finding was wrong, rested on a false premise, or asked for work this change's scale does not warrant. Do not raise that finding again. Say in your `review-findings` asset that you accepted it, naming the anchor and why.
+- **Reject** it when the argument does not hold. Re-raise the finding and **answer the argument** — do not simply restate the original finding.
 
 Match a refutation to a finding by its **anchor**, not its id: your ids restart at `F1` every submission, so the anchor is the only stable handle across a fresh cold pass.
+
+If the asset carries no recognizable entries — a paragraph of build status rather than refutations, which is what the completion fallback submits when the build declared nothing — read it as "nothing refuted", record that reading, and move on. It is not an error for you to resolve.
 
 This step is what keeps a cold read from re-discovering the same declined finding every round. A refutation is a claim you adjudicate, never a veto.
 

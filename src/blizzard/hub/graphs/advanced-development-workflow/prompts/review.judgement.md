@@ -6,4 +6,12 @@ A finding whose refutation you accepted is **resolved**, exactly as if it had be
 
 Select `pass` if the work meets the plan and the item's intent with no blocking issue on any axis — the chunk proceeds to the pre-push integration step. Select `fail` if any blocking issue remains; your findings ride back into the build node.
 
+**Converge or escalate.** Before selecting `fail`, read the round history with `blizzard runner chunk history`. Nothing bounds this loop mechanically — a judged `fail` does not consume the node's retry budget — so the bound is yours to apply. Do not bounce the work again when any of these holds:
+
+- your blocking-finding count has not gone down from the previous round, or
+- this is the third or later review round, or
+- you are rejecting a refutation you already rejected in an earlier round, and neither side's argument has changed.
+
+Raise it with `blizzard runner ask` instead, naming the round history, the findings still unresolved, and the refutations still in dispute. A finding count that will not shrink, or an argument neither side will move on, means the work needs a human decision — not another round.
+
 Alongside your verdict, submit this node's **retrospective** as its `retrospective` asset: run `blizzard runner artifact create --name retrospective` with a few honest lines on stdin — what went well, what didn't, and what the next node (or the next run) should know. The terminal retrospective node synthesizes these.

@@ -32,8 +32,12 @@ Then continue from what you find. Work that is already done and correct is done 
 
 5. **The work meets the item's intent**, validated as far as this node can — there is no verify node behind you. Harness work is validated by reading it back as the agent who will receive it: does the rule say what it means, does the routing land, does the instruction survive being followed literally?
 
-6. **Drafts and notes are out of the way** — outside the repos' working trees and outside the environment root, which nothing sweeps.
+6. **Drafts and notes go somewhere disposable.** Write them under a path that is outside every repository working tree *and* outside the workspace directory the fleet spawned you in — both are git working trees, and nothing sweeps a loose file in either. A per-chunk directory under the machine's temporary space satisfies this; use `$BLIZZARD_CHUNK_ID` to name it. If this workspace declares a scratch location of its own, prefer that.
 
-7. **The refutation channel is submitted.** Run `blizzard runner artifact create --name review-finding-refutes` with the content on stdin. On a first build there is nothing to refute — submit one line saying so. When you are re-entering after review found blocking issues, this is where findings you decline rather than fix are argued; see the re-entry addendum.
+7. **The refutation channel is submitted, and it is cumulative.** Run `blizzard runner artifact create --name review-finding-refutes` with the content on stdin.
+
+   This asset is **replaced, not appended to** — the reviewer sees only your newest submission and never looks for an older one. So restate **every refutation still standing**, including any a reviewer already accepted in an earlier round, each marked `open` or `accepted`. Read your own previous submission first (`blizzard runner artifact get review-finding-refutes --content`) and carry it forward.
+
+   A round where you fixed everything is exactly where this goes wrong: submitting a bare "nothing to refute" drops the refutations still standing, and the reviewer's next cold pass re-raises those findings. Only write "nothing to refute" when nothing is standing.
 
 When all of that holds, declare done; the runner resumes you with the judgement prompt to elicit your verdict.

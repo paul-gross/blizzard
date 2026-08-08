@@ -535,6 +535,28 @@ shipped text (`src/blizzard/runner/harness/prompts/blizzard_preamble.md`) before
 layer 2, so your prose adds deployment-specific policy rather than re-establishing framing
 the worker already has.
 
+#### What the packaged graphs delegate to layer 2
+
+`workspace_prompt` is unset by default, and the packaged graphs still work without it —
+their prompts state each duty as an outcome a worker can satisfy on its own. But two of
+those duties are ones a workspace usually has a specific, better answer for, and the
+prompts defer to it by name ("if this workspace declares one, prefer that"). Authoring
+layer 2 is how you supply that answer:
+
+- **Getting onto the feature branch.** The build prompts require that no push from a
+  leased environment can reach the base branch, and leave *how* to the workspace. If your
+  workspace has a command that points every repo's upstream at the feature branch in one
+  step, name it — a worker doing this per-repo by hand is the slower, more error-prone
+  path, not a different outcome.
+- **Where scratch files go.** The prompts require drafts to land outside every repository
+  working tree and outside the workspace directory the worker was spawned in, and fall
+  back to a per-chunk directory in the machine's temporary space. If your workspace owns a
+  scratch area that something actually sweeps, name it.
+
+Neither is a safety gap when layer 2 is absent — the prompts are self-sufficient — but a
+deployment that has better answers and does not state them leaves workers taking the
+generic path.
+
 #### What a resumed spawn gets instead
 
 Layers 1 and 2 are *standing* prose — a session that already received them still holds

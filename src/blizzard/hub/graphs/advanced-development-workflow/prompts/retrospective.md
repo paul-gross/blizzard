@@ -4,7 +4,7 @@ You are working a chunk's **retrospective** node-step. Deliver *reported* that t
 
 ## Start from what is actually there
 
-This may be your first visit or your second — a chunk that found a discrepancy goes out to `resolve` and comes back here. Read `blizzard runner chunk history` to see which: it gives you the chunk's transitions, migrations, and bounces, oldest-first, including any bounced attempt that produced no artifact. If a `retrospective` asset from an earlier visit exists, read it; the discrepancy it named is what you are checking has been repaired.
+This may be your first visit or your second — a chunk that found a discrepancy goes out to `resolve` and comes back here. Read `blizzard runner chunk history` to see which: it gives you the chunk's transitions, migrations, and bounces, oldest-first, including any bounced attempt that produced no artifact. If a `retrospective` asset from an earlier visit exists, read it — `blizzard runner artifact get retrospective --node retrospective --content`. The `--node` is required, not optional: every node in this graph produces a `retrospective`, and the bare form exits non-zero naming the candidates rather than picking one. The discrepancy that asset named is what you are checking has been repaired.
 
 Then read the chunk's asset trail: each node's own `retrospective` asset — the per-node diary you are synthesizing — plus the plan, the plan-review and review findings, the verification report, and the pre-push summary.
 
@@ -15,14 +15,14 @@ Start from `blizzard runner artifact get delivery-findings --node deliver --cont
 Fetch in each repo's own worktree first. The worktree's view of the base branch was last refreshed when the environment was acquired and never since, while the merge itself happened on the forge, not in this worktree. Then check three things:
 
 1. **The landed sha is reachable from base.** `blizzard runner artifact list` returns one `git_commit` entry per repo per node that declared one — `build`, plus `pre-push` or `resolve` again if either rewrote the branch. Take the **newest `epoch`** entry per repo, the same "latest wins" rule delivery itself uses. An older, superseded declaration for that repo is expected to be unreachable after a rewrite and is not a discrepancy. Test reachability with `git merge-base --is-ancestor <sha> origin/<base>` in that repo's own worktree — `origin/master` unless the repo records another — where exit 0 means reachable. Use that predicate specifically; comparing branch tips or reading log output answers a different question.
-2. **That repo's PR is merged** — read it on the forge, from inside the worktree.
+2. **That repo's PR is merged** — read its merge state on the forge (`gh pr view --json state,mergedAt`), from inside that repo's worktree so the query targets the right forge.
 3. **The chunk's originating work item is closed.** `blizzard runner work-items <chunk-id>` gives you each work ref's `web_url`. The work item carries no closed/open field, so ask the forge directly for the issue's `state`. A forge-side "closes on merge" convention is opportunistic, never guaranteed — some sources honor no such convention at all — so an open item here is recorded as a finding. It is never on its own a reason to select `delivery-incomplete`; only legs 1 and 2 are.
 
 Record the result in the retrospective asset's **Landing Verification** section whatever the outcome. A clean landing states that it checked out clean, not just that it landed.
 
 If leg 1 or leg 2 fails for any repo — that repo's newest declared sha not reachable from base, or its PR unmerged — submit the retrospective asset now with the **Landing Verification** section naming the specific discrepancy. The remaining sections can wait; they belong to the visit that actually closes the chunk. Your judgement then takes `delivery-incomplete` instead of `recorded`.
 
-Separately, check whether the landing turned the base branch's own gate red. Query the gate **by the PR's merge commit**, per repo — not by branch, which would answer a different question. This is never a reason to route backward — the code is on base and stays there — but a completed red run is a real finding. Record it and file a follow-up issue for it as its disposition, using the filing convention [../docket.md](../docket.md) owns.
+Separately, check whether the landing turned the base branch's own gate red. Query the gate **by the PR's merge commit**, per repo — not by branch, which would answer a different question. The merge commit is not in your envelope: read it off the PR itself (`gh pr view --json mergeCommit`), since nothing else you hold identifies it. This is never a reason to route backward — the code is on base and stays there — but a completed red run is a real finding. Record it and file a follow-up issue for it as its disposition, using the filing convention [../docket.md](../docket.md) owns.
 
 ## Fold the findings docket
 

@@ -77,7 +77,7 @@ nodes:
       prompt: ./prompts/plan.judgement.md
       choices:
         drafted:
-          description: The plan and its ordered phases are written and ready for the gate.
+          description: The plan is written and ready for the gate, with its phases ordered when the work's scale called for phases.
           to: plan-review
     retries:
       max: 2
@@ -122,7 +122,7 @@ nodes:
       prompt: ./prompts/build.judgement.md
       choices:
         pass:
-          description: Every phase is implemented in order, committed and pushed.
+          description: The plan is fully implemented — every phase in order where it is phased — committed and pushed.
           to: verify
         fail:
           description: The work does not yet meet the plan; the failure output is attached.
@@ -145,7 +145,7 @@ nodes:
       prompt: ./prompts/verify.judgement.md
       choices:
         pass:
-          description: The change verified end to end through declared matrix methods.
+          description: The change verified end to end through verification methods the project declares.
           to: review
         fail:
           description: Verification surfaced failures the finale could not close, recorded in the verification-report asset.

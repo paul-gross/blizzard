@@ -44,13 +44,27 @@ usual work: `plan` submits `plan-finding-refutes`, `build` submits `review-findi
 cold pass restarts at `F1` — so a refutation carrying only an id cannot be matched against the next
 round's renumbering. The id records which round was answered; the anchor is what the reviewer keys on.
 
-The gate that re-reviews reads this asset **before** re-reviewing and must resolve every entry explicitly
-— accept it and not re-raise, or reject it and re-raise with an answer to the argument. Silence is not
-acceptance: an unanswered refutation is still an open finding. Refuting is a claim to be adjudicated, never
-a veto, and a refutation the gate accepts still needs a disposition below (`accepted-wont-fix`).
+**The newest submission is the entire record.** Reads resolve to the newest entry per node and name, so a
+later submission does not add to the earlier one — it replaces it. Every submission therefore restates
+**every refutation still standing**, including ones a gate already accepted in an earlier round, each
+marked with the round it was first raised in and its outcome so far (`open` or `accepted`). Drop an entry
+only when the finding it answers is genuinely dead: fixed, or withdrawn by the gate.
 
-Submit the asset even when nothing was refuted — one line saying so. An explicit "nothing to refute" tells
-the gate the channel was considered; an absent asset is ambiguous.
+The gate reads **only** the newest submission and never goes looking for an older one — an older epoch is
+shadowed by design and carries no standing. It must resolve every entry explicitly: accept it and not
+re-raise, or reject it and re-raise with an answer to the argument. An entry already marked `accepted`
+stays accepted — do not re-adjudicate it. Silence is not acceptance: an unanswered refutation is still an
+open finding. Refuting is a claim to be adjudicated, never a veto, and a refutation the gate accepts still
+needs a disposition below (`accepted-wont-fix`).
+
+Submit the asset on every completion, even when nothing was refuted — one line saying so. An explicit
+"nothing to refute" tells the gate the channel was considered; an absent asset is ambiguous. Take care
+that a round which fixed everything does not submit a bare "nothing to refute" while earlier refutations
+are still standing: that submission would drop them, and the finding would return on the next cold pass.
+
+A refutes asset that carries no recognizable entries — in practice the judgement assessment submitted by
+the completion fallback when the worker declared nothing — is read as "nothing refuted". The gate records
+that reading and proceeds; it is not an error to adjudicate.
 
 There is deliberately **no refutation channel for verification**. A failed verification method is a
 mechanical fact, not a judgement to argue with; the answer is to fix the change or fix the method.

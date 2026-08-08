@@ -13,12 +13,17 @@ Run `blizzard runner artifact list` first, then read what you find.
 
 ## Adjudicate the refutations first
 
-Every entry in `plan-finding-refutes` gets an explicit answer from you. There is no third option — silence is not acceptance, and an unanswered refutation is still an open finding.
+The newest `plan-finding-refutes` asset is the whole record. Read that one and **do not go looking for an older epoch** — an older submission is shadowed by design and carries no standing. The plan node is required to restate every refutation still standing in its newest submission, so what you are handed is complete by construction.
 
-- **Accept it** when the argument holds: the finding was wrong, rested on a false premise, or asked for detail this change's scale does not warrant. Do not raise that finding again, this round or any later one. Say in your `plan-findings` asset that you accepted it, naming the anchor and why.
-- **Reject it** when the argument does not hold. Re-raise the finding and **answer the argument** — do not simply restate the original finding, which is what made the last round cost nothing.
+Every entry gets an explicit answer from you. There is no third option — silence is not acceptance, and an unanswered refutation is still an open finding.
+
+- An entry already marked **`accepted`** was adjudicated in an earlier round. It stays accepted: do not re-adjudicate it and do not raise that finding again. Carry it into your own `plan-findings` asset as still-accepted, naming the anchor, so the record survives.
+- **Accept** an `open` entry when the argument holds: the finding was wrong, rested on a false premise, or asked for detail this change's scale does not warrant. Do not raise that finding again. Say in your `plan-findings` asset that you accepted it, naming the anchor and why.
+- **Reject** it when the argument does not hold. Re-raise the finding and **answer the argument** — do not simply restate the original finding, which is what made the last round cost nothing.
 
 Match a refutation to a finding by its **anchor**, not its id: your ids restart at `F1` every submission, so the anchor is the only stable handle across rounds.
+
+If the asset carries no recognizable entries — a paragraph of drafting status rather than refutations, which is what the completion fallback submits when the plan node declared nothing — read it as "nothing refuted", record that reading, and move on.
 
 A refutation is a claim you adjudicate, never a veto. But a well-argued one that you reject without engaging its evidence is how a plan ends up bouncing on a finding that was never sound.
 
@@ -41,6 +46,6 @@ A defect confined to the plan's own apparatus — an acceptance criterion's word
 
 ## Submit
 
-Keep drafts and notes out of the repos' working trees and out of the environment root; nothing sweeps loose files there.
+Keep drafts and notes somewhere disposable: a path outside every repository working tree *and* outside the workspace directory the fleet spawned you in — both are git working trees, and nothing sweeps a loose file in either. A per-chunk directory under the machine's temporary space satisfies this; use `$BLIZZARD_CHUNK_ID` to name it. If this workspace declares a scratch location of its own, prefer that.
 
 Submit your findings as the node's `plan-findings` asset before you declare done: run `blizzard runner artifact create --name plan-findings` with the content on stdin — what you checked, what passed, and every finding, docket-formatted per [../docket.md](../docket.md): a stable id, a severity (`blocking` for must-fix, `should-fix` for the apparatus-only defects above), and a `file:line` or `file::symbol` anchor. Record should-fix findings too, not just blocking ones — a finding you let ride forward only reaches a disposition if it is written down.
