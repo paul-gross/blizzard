@@ -159,9 +159,7 @@ export type CapacitiesView = {
  * ChunkHeaderView
  *
  * A chunk-detail header aggregate (issue #185) — identity, work-item links, live state, and the
- * pause fact, projected down from :class:`ChunkDetail` without its transition/artifact history.
- * Pydantic's default ``extra="ignore"`` lets it validate straight off a ``ChunkDetail`` payload,
- * keeping this module's :class:`EscalationView` out of the runner's own OpenAPI schema.
+ * pause fact, without the transition/artifact history the hub's own chunk aggregate carries.
  */
 export type ChunkHeaderView = {
     /**
@@ -240,8 +238,7 @@ export type ChunkSummary = {
  * ChunkUsageTotalView
  *
  * A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) — never a
- * stored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``; see
- * :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of it.
+ * stored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``.
  */
 export type ChunkUsageTotalView = {
     /**
@@ -611,8 +608,7 @@ export type HistoryRowView = {
  *
  * Hub reachability (derived, not probed) plus the outbound backlog depth.
  *
- * ``endpoint`` is the configured hub base URL (``RunnerConfig.hub_url``) —
- * connectivity facts, not a probe.
+ * ``endpoint`` is the configured hub base URL — connectivity facts, not a probe.
  */
 export type HubConnectivityView = {
     /**

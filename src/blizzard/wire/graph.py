@@ -43,10 +43,7 @@ class GraphValidationReport(BaseModel):
 
 
 class ProducesEntry(BaseModel):
-    """One node's ``produces:`` expectation, kind-carrying (D1, issue #143).
-
-    The wire counterpart of :class:`~blizzard.hub.domain.graph.ProducesSpec`, so every
-    surface carrying a ``produces:`` entry carries the same kind-carrying shape."""
+    """One node's ``produces:`` expectation, kind-carrying (D1, issue #143)."""
 
     name: str
     kind: ArtifactKind = ArtifactKind.ASSET

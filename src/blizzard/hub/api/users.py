@@ -50,11 +50,11 @@ def assign_role(
     services: Annotated[HubServices, Depends(get_services)],
     actor: Annotated[ResolvedIdentity, Depends(require(USER_MANAGE))],
 ) -> UserView:
-    """Assign ``user_id`` a new role; ``AuthService.assign_role`` enforces every rule
-    (self-change, ``superuser`` grant/revoke, ``superuser`` not assignable — see its own
-    docstring) and records the ``user_role_changed`` fact on a real change. Takes effect
-    on the subject's next request with no re-login (``resolve_identity`` reads
-    ``users.role`` live on every resolve, issue #91)."""
+    """Assign ``user_id`` a new role. Three refusals, each a 403: changing your own role;
+    any change touching ``superuser``, which is bootstrap-only; and granting or revoking
+    ``admin`` as anyone but a ``superuser``. A no-op change is accepted and records
+    nothing. A real one records a ``user_role_changed`` fact and takes effect on the
+    subject's next request, with no re-login (issue #91)."""
     try:
         to_role = Role(body.role)
     except ValueError as exc:

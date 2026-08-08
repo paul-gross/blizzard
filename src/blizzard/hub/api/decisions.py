@@ -68,8 +68,7 @@ def resolve_decision(
 ) -> object:
     """Resolve an open decision, first-write-wins CAS.
 
-    ``resolved_by`` is taken from the resolved session identity
-    (:func:`~blizzard.hub.api.auth_session.resolved_username`), never the request
+    ``resolved_by`` is taken from the authenticated session identity, never the request
     body's ``resolved_by`` field — a spoofed value there is silently ignored (issue #91)."""
     pre_decision = services.chunks.get_decision(decision_id)
     change = chunk_events.ChunkChanged.before(services, pre_decision.chunk_id) if pre_decision is not None else None

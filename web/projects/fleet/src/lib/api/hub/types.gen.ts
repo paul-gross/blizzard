@@ -395,8 +395,7 @@ export type ChunkGroupResponse = {
  *
  * Ingest by source-native token — specific items always, batch fine. Each token is resolved against
  * the configured work sources' own grammar: ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
- * Tokens only; no pre-resolved ``{source, ref}`` shape travels alongside them (pinned by
- * tests/test_pin_wire.py::test_chunk_ingest_accepts_source_native_tokens_only).
+ * Tokens only; no pre-resolved ``{source, ref}`` shape travels alongside them.
  */
 export type ChunkIngestRequest = {
     /**
@@ -423,7 +422,7 @@ export type ChunkIngestResponse = {
  * The multi-field ``PATCH /chunks/{id}`` body (issue #124) — every field independently optional,
  * applied all-or-nothing. ``graph_id``/``model`` mean "leave unchanged" whether omitted or explicitly
  * ``null``. ``intended_migration`` *is* nullable, so omitted ("leave unchanged") stays distinguishable
- * from explicit ``null`` ("clear it") via ``model_fields_set``, never this field's own value.
+ * from explicit ``null`` ("clear it") by the key's presence in the body, never by its value.
  */
 export type ChunkPatchRequest = {
     /**
@@ -555,8 +554,7 @@ export type ChunkSummary = {
  * ChunkUsageTotalView
  *
  * A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) — never a
- * stored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``; see
- * :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of it.
+ * stored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``.
  */
 export type ChunkUsageTotalView = {
     /**
@@ -589,7 +587,7 @@ export type ChunkUsageTotalView = {
  * ChunkUsageView
  *
  * One node-step's usage/cost telemetry (issue #59) — one harness invocation's tokens-by-class and
- * cost, oldest first on :class:`ChunkDetail`. ``cost_usd`` is ``None`` exactly when no result envelope
+ * cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no result envelope
  * existed for this invocation — never fabricated.
  */
 export type ChunkUsageView = {
@@ -1069,7 +1067,7 @@ export type ExternalSubscriptionUsageWindowView = {
  *
  * The fleet's usage/cost total since ``since`` and, when the caller bounded the
  * window, strictly before ``until`` (``None`` for the open-ended tail). ``cost_partial``
- * marks ``cost_usd`` as a lower bound — see :class:`~blizzard.hub.domain.work.UsageTotal`.
+ * marks ``cost_usd`` as a lower bound.
  */
 export type FleetSpendView = {
     /**
@@ -1532,7 +1530,7 @@ export type HubMarkerResponse = {
 /**
  * IntendedMigrationPatch
  *
- * The intended-migration value a :class:`ChunkPatchRequest` carries (issue #124). ``to_graph`` is a
+ * The intended-migration value a ``ChunkPatchRequest`` carries (issue #124). ``to_graph`` is a
  * graph id, or a name resolved server-side to the newest enabled graph of that name at request time —
  * the resolved **id** is stored. ``node`` present selects ``forced``, absent selects ``auto``; there
  * is no separate ``mode`` field, so "node supplied under auto" is unrepresentable.
@@ -1575,7 +1573,7 @@ export type IntendedMigrationView = {
 /**
  * JudgedBy
  *
- * Who renders a node's exit judgement — the structural gate marker.
+ * Who issues a node's exit judgement — the structural gate marker.
  */
 export type JudgedBy = 'worker' | 'human';
 
@@ -1598,7 +1596,7 @@ export type LeaseMintReport = {
 /**
  * MeResponse
  *
- * The resolved identity's wire view — the board's own-identity read.
+ * The resolved identity's wire view.
  */
 export type MeResponse = {
     /**
@@ -1626,7 +1624,7 @@ export type MeResponse = {
 /**
  * MigrationMode
  *
- * How a chunk's :class:`IntendedMigration` fires at its next transition (issue #124).
+ * How a chunk's intended migration fires at its next transition (issue #124).
  *
  * ``AUTO`` fires only when the transition's own destination node name also exists on
  * the target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``.
@@ -1866,9 +1864,6 @@ export type PrView = {
  * ProducesEntry
  *
  * One node's ``produces:`` expectation, kind-carrying (D1, issue #143).
- *
- * The wire counterpart of :class:`~blizzard.hub.domain.graph.ProducesSpec`, so every
- * surface carrying a ``produces:`` entry carries the same kind-carrying shape.
  */
 export type ProducesEntry = {
     kind?: ArtifactKind;
@@ -3082,7 +3077,7 @@ export type WorkRefView = {
 /**
  * RotatePolicyView
  *
- * The declared session's rotation bounds (issue #144), carried on :class:`NodeConfig`.
+ * The declared session's rotation bounds (issue #144), carried on ``NodeConfig``.
  * ``max_invocations`` counts **harness invocations** — spawn, resume, judge, nudge — not node-steps,
  * of which one burns two or three.
  */

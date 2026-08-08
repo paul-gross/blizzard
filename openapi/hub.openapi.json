@@ -713,7 +713,7 @@
         "type": "object"
       },
       "ChunkIngestRequest": {
-        "description": "Ingest by source-native token \u2014 specific items always, batch fine. Each token is resolved against\nthe configured work sources' own grammar: ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.\nTokens only; no pre-resolved ``{source, ref}`` shape travels alongside them (pinned by\ntests/test_pin_wire.py::test_chunk_ingest_accepts_source_native_tokens_only).",
+        "description": "Ingest by source-native token \u2014 specific items always, batch fine. Each token is resolved against\nthe configured work sources' own grammar: ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.\nTokens only; no pre-resolved ``{source, ref}`` shape travels alongside them.",
         "properties": {
           "tokens": {
             "items": {
@@ -744,7 +744,7 @@
         "type": "object"
       },
       "ChunkPatchRequest": {
-        "description": "The multi-field ``PATCH /chunks/{id}`` body (issue #124) \u2014 every field independently optional,\napplied all-or-nothing. ``graph_id``/``model`` mean \"leave unchanged\" whether omitted or explicitly\n``null``. ``intended_migration`` *is* nullable, so omitted (\"leave unchanged\") stays distinguishable\nfrom explicit ``null`` (\"clear it\") via ``model_fields_set``, never this field's own value.",
+        "description": "The multi-field ``PATCH /chunks/{id}`` body (issue #124) \u2014 every field independently optional,\napplied all-or-nothing. ``graph_id``/``model`` mean \"leave unchanged\" whether omitted or explicitly\n``null``. ``intended_migration`` *is* nullable, so omitted (\"leave unchanged\") stays distinguishable\nfrom explicit ``null`` (\"clear it\") by the key's presence in the body, never by its value.",
         "properties": {
           "default_effort": {
             "anyOf": [
@@ -988,7 +988,7 @@
         "type": "object"
       },
       "ChunkUsageTotalView": {
-        "description": "A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) \u2014 never a\nstored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``; see\n:class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of it.",
+        "description": "A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) \u2014 never a\nstored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -1027,7 +1027,7 @@
         "type": "object"
       },
       "ChunkUsageView": {
-        "description": "One node-step's usage/cost telemetry (issue #59) \u2014 one harness invocation's tokens-by-class and\ncost, oldest first on :class:`ChunkDetail`. ``cost_usd`` is ``None`` exactly when no result envelope\nexisted for this invocation \u2014 never fabricated.",
+        "description": "One node-step's usage/cost telemetry (issue #59) \u2014 one harness invocation's tokens-by-class and\ncost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no result envelope\nexisted for this invocation \u2014 never fabricated.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -1702,7 +1702,7 @@
         "type": "object"
       },
       "FleetSpendView": {
-        "description": "The fleet's usage/cost total since ``since`` and, when the caller bounded the\nwindow, strictly before ``until`` (``None`` for the open-ended tail). ``cost_partial``\nmarks ``cost_usd`` as a lower bound \u2014 see :class:`~blizzard.hub.domain.work.UsageTotal`.",
+        "description": "The fleet's usage/cost total since ``since`` and, when the caller bounded the\nwindow, strictly before ``until`` (``None`` for the open-ended tail). ``cost_partial``\nmarks ``cost_usd`` as a lower bound.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -2376,7 +2376,7 @@
         "type": "object"
       },
       "IntendedMigrationPatch": {
-        "description": "The intended-migration value a :class:`ChunkPatchRequest` carries (issue #124). ``to_graph`` is a\ngraph id, or a name resolved server-side to the newest enabled graph of that name at request time \u2014\nthe resolved **id** is stored. ``node`` present selects ``forced``, absent selects ``auto``; there\nis no separate ``mode`` field, so \"node supplied under auto\" is unrepresentable.",
+        "description": "The intended-migration value a ``ChunkPatchRequest`` carries (issue #124). ``to_graph`` is a\ngraph id, or a name resolved server-side to the newest enabled graph of that name at request time \u2014\nthe resolved **id** is stored. ``node`` present selects ``forced``, absent selects ``auto``; there\nis no separate ``mode`` field, so \"node supplied under auto\" is unrepresentable.",
         "properties": {
           "node": {
             "anyOf": [
@@ -2441,7 +2441,7 @@
         "type": "object"
       },
       "JudgedBy": {
-        "description": "Who renders a node's exit judgement \u2014 the structural gate marker.",
+        "description": "Who issues a node's exit judgement \u2014 the structural gate marker.",
         "enum": [
           "worker",
           "human"
@@ -2469,7 +2469,7 @@
         "type": "object"
       },
       "MeResponse": {
-        "description": "The resolved identity's wire view \u2014 the board's own-identity read.",
+        "description": "The resolved identity's wire view.",
         "properties": {
           "display_name": {
             "title": "Display Name",
@@ -2506,7 +2506,7 @@
         "type": "object"
       },
       "MigrationMode": {
-        "description": "How a chunk's :class:`IntendedMigration` fires at its next transition (issue #124).\n\n``AUTO`` fires only when the transition's own destination node name also exists on\nthe target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``.",
+        "description": "How a chunk's intended migration fires at its next transition (issue #124).\n\n``AUTO`` fires only when the transition's own destination node name also exists on\nthe target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``.",
         "enum": [
           "auto",
           "forced"
@@ -2937,7 +2937,7 @@
         "type": "object"
       },
       "ProducesEntry": {
-        "description": "One node's ``produces:`` expectation, kind-carrying (D1, issue #143).\n\nThe wire counterpart of :class:`~blizzard.hub.domain.graph.ProducesSpec`, so every\nsurface carrying a ``produces:`` entry carries the same kind-carrying shape.",
+        "description": "One node's ``produces:`` expectation, kind-carrying (D1, issue #143).",
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/ArtifactKind",
@@ -4755,7 +4755,7 @@
         "type": "object"
       },
       "blizzard__wire__envelope__RotatePolicyView": {
-        "description": "The declared session's rotation bounds (issue #144), carried on :class:`NodeConfig`.\n``max_invocations`` counts **harness invocations** \u2014 spawn, resume, judge, nudge \u2014 not node-steps,\nof which one burns two or three.",
+        "description": "The declared session's rotation bounds (issue #144), carried on ``NodeConfig``.\n``max_invocations`` counts **harness invocations** \u2014 spawn, resume, judge, nudge \u2014 not node-steps,\nof which one burns two or three.",
         "properties": {
           "max_context_tokens": {
             "anyOf": [
@@ -4844,7 +4844,7 @@
   "paths": {
     "/api/activity": {
       "get": {
-        "description": "The activity backfill (issue #213) \u2014 the three already-bounded per-source activity reads merged,\nsorted newest-first, and capped.\n\n``since`` defaults to 24h before the injected clock's own ``now()``, never ``datetime.now()``. A\ntz-naive ``since`` is coerced to UTC so it never raises against the store's aware timestamps.",
+        "description": "The activity backfill (issue #213) \u2014 the three already-bounded per-source activity reads merged,\nsorted newest-first, and capped.\n\n``since`` defaults to 24h before the server's current time. A tz-naive ``since`` is coerced to\nUTC so it never raises against the store's aware timestamps.",
         "operationId": "list_activity_api_activity_get",
         "parameters": [
           {
@@ -5361,7 +5361,7 @@
         ]
       },
       "patch": {
-        "description": "Apply the body's fields in one all-or-nothing edit (issue #124).\n\n404 only when the chunk is unknown; :class:`ChunkPatchBody` and ``EditService.edit``\nown every other refusal.",
+        "description": "Apply the body's fields in one all-or-nothing edit (issue #124).\n\n404 for an unknown chunk or an unresolvable graph, 422 for a blank value, 409 for a\nrefused edit.",
         "operationId": "patch_chunk_api_chunks__chunk_id__patch",
         "parameters": [
           {
@@ -6030,7 +6030,7 @@
     },
     "/api/decisions/{decision_id}/resolutions": {
       "post": {
-        "description": "Resolve an open decision, first-write-wins CAS.\n\n``resolved_by`` is taken from the resolved session identity\n(:func:`~blizzard.hub.api.auth_session.resolved_username`), never the request\nbody's ``resolved_by`` field \u2014 a spoofed value there is silently ignored (issue #91).",
+        "description": "Resolve an open decision, first-write-wins CAS.\n\n``resolved_by`` is taken from the authenticated session identity, never the request\nbody's ``resolved_by`` field \u2014 a spoofed value there is silently ignored (issue #91).",
         "operationId": "resolve_decision_api_decisions__decision_id__resolutions_post",
         "parameters": [
           {
@@ -6194,7 +6194,7 @@
     },
     "/api/fleet/chunks/{chunk_id}": {
       "get": {
-        "description": "The runner's chunk-status poll \u2014 the same aggregate as the board's own read.",
+        "description": "The runner's chunk-status poll \u2014 the same aggregate as ``GET /api/chunks/{chunk_id}``.",
         "operationId": "get_chunk_api_fleet_chunks__chunk_id__get",
         "parameters": [
           {
@@ -6443,7 +6443,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/hub-advance": {
       "post": {
-        "description": "Drive a chunk parked at a generic hub command node one step (#65), running\n:class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` once under the fleet-wide serialization\nslot. ``ran=False`` is never an error: a different chunk holds the slot, or (#66) the node reported\n``pending`` and ``poll_interval`` has not elapsed, or the chunk is not parked at a hub command node\nat all \u2014 ``detail`` names which. The request declares no ``runner_id`` to confine against.",
+        "description": "Drive a chunk parked at a generic hub command node one step (#65), running that node's\nhub-side command once under the fleet-wide serialization\nslot. ``ran=False`` is never an error: a different chunk holds the slot, or (#66) the node reported\n``pending`` and ``poll_interval`` has not elapsed, or the chunk is not parked at a hub command node\nat all \u2014 ``detail`` names which. The request declares no ``runner_id`` to confine against.",
         "operationId": "hub_advance_api_fleet_chunks__chunk_id__hub_advance_post",
         "parameters": [
           {
@@ -6630,7 +6630,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/resume": {
       "post": {
-        "description": "Resume the chunk with a runner's own bearer token (issue #185) \u2014 see :func:`pause_chunk`.",
+        "description": "Resume the chunk with a runner's own bearer token (issue #185). Takes no body, so the\nresume is always recorded as ``operator``.",
         "operationId": "resume_chunk_api_fleet_chunks__chunk_id__resume_post",
         "parameters": [
           {
@@ -6673,7 +6673,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/route-token": {
       "post": {
-        "description": "Rotate the chunk's live route capability token (issue #84b) \u2014 the lost-plaintext recovery for a\nclaim whose response was never read back. Confined to the live route's own runner via\n:func:`~blizzard.hub.api.auth.assert_owns`; this route presents no chunk-scoped ``route_token`` of\nits own, which is exactly what it is minting.",
+        "description": "Rotate the chunk's live route capability token (issue #84b) \u2014 the lost-plaintext recovery for a\nclaim whose response was never read back. Confined to the live route's own runner; this route\npresents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting.",
         "operationId": "rekey_route_token_api_fleet_chunks__chunk_id__route_token_post",
         "parameters": [
           {
@@ -6716,7 +6716,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/work-items": {
       "get": {
-        "description": "The chunk's work items, read with a runner's own bearer token \u2014 the same rendering as the\nanonymous operator route.",
+        "description": "The chunk's work items, read with a runner's own bearer token \u2014 the same view as\n``GET /api/chunks/{chunk_id}/work-items``.",
         "operationId": "get_work_items_api_fleet_chunks__chunk_id__work_items_get",
         "parameters": [
           {
@@ -6759,7 +6759,7 @@
     },
     "/api/fleet/events": {
       "post": {
-        "description": "Land runner-minted facts \u2014 ``FactIngestService.ingest`` owns the seq high-water idempotence,\n:class:`IngestBroadcast` what each freshly-applied fact re-broadcasts on the SSE stream.",
+        "description": "Land runner-minted facts \u2014 idempotent on the batch's per-runner ``seq`` high-water mark,\nwith each freshly-applied fact re-broadcast on the SSE stream.",
         "operationId": "ingest_runner_facts_api_fleet_events_post",
         "requestBody": {
           "content": {
@@ -6844,7 +6844,7 @@
     },
     "/api/fleet/queue/peek": {
       "get": {
-        "description": "The runner's FILL read \u2014 the same ready queue as the board's own peek.",
+        "description": "The runner's FILL read \u2014 the same ready queue as ``GET /api/queue``.",
         "operationId": "peek_queue_api_fleet_queue_peek_get",
         "responses": {
           "200": {
@@ -7500,7 +7500,7 @@
     },
     "/api/questions/{question_id}/answers": {
       "post": {
-        "description": "Answer a question first-write-wins; 409 carries the winning answer.\n\n``answered_by`` is taken from the resolved session identity\n(:func:`~blizzard.hub.api.auth_session.resolved_username`), never the request\nbody's ``answered_by`` field \u2014 a spoofed value there is silently ignored (issue #91).",
+        "description": "Answer a question first-write-wins; 409 carries the winning answer.\n\n``answered_by`` is taken from the authenticated session identity, never the request\nbody's ``answered_by`` field \u2014 a spoofed value there is silently ignored (issue #91).",
         "operationId": "answer_question_api_questions__question_id__answers_post",
         "parameters": [
           {
@@ -7977,7 +7977,7 @@
     },
     "/api/users/{user_id}/role": {
       "post": {
-        "description": "Assign ``user_id`` a new role; ``AuthService.assign_role`` enforces every rule\n(self-change, ``superuser`` grant/revoke, ``superuser`` not assignable \u2014 see its own\ndocstring) and records the ``user_role_changed`` fact on a real change. Takes effect\non the subject's next request with no re-login (``resolve_identity`` reads\n``users.role`` live on every resolve, issue #91).",
+        "description": "Assign ``user_id`` a new role. Three refusals, each a 403: changing your own role;\nany change touching ``superuser``, which is bootstrap-only; and granting or revoking\n``admin`` as anyone but a ``superuser``. A no-op change is accepted and records\nnothing. A real one records a ``user_role_changed`` fact and takes effect on the\nsubject's next request, with no re-login (issue #91).",
         "operationId": "assign_role_api_users__user_id__role_post",
         "parameters": [
           {

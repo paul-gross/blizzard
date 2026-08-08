@@ -15,24 +15,22 @@ router = APIRouter(prefix="/api", tags=["runner"])
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkHeaderView)
 def get_chunk(chunk_id: str, request: Request) -> ChunkHeaderView:
-    """Forward a chunk's detail read to the hub — the chunk-detail dock's header subject.
-
-    The upstream aggregate is validated down to :class:`ChunkHeaderView`, keeping the
-    transition/artifact history out of this route's own schema entirely."""
+    """Forward a chunk's detail read to the hub — the header aggregate only, with the
+    upstream transition/artifact history dropped rather than served."""
     upstream = HubProxy.of(request, "chunk-detail").get(f"/api/fleet/chunks/{chunk_id}")
     return ChunkHeaderView.model_validate(upstream.json())
 
 
 @router.post("/chunks/{chunk_id}/pause", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
 def pause_chunk(chunk_id: str, request: Request) -> ChunkSummary:
-    """Forward the chunk-detail dock's Pause to the hub — kills the active worker, keeps
-    the claim (issue #46). ``409`` when the chunk is not in a pausable state."""
+    """Forward a chunk pause to the hub — kills the active worker, keeps the claim
+    (issue #46). ``409`` when the chunk is not in a pausable state."""
     upstream = HubProxy.of(request, "chunk-detail").post(f"/api/fleet/chunks/{chunk_id}/pause")
     return ChunkSummary.model_validate(upstream.json())
 
 
 @router.post("/chunks/{chunk_id}/resume", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
 def resume_chunk(chunk_id: str, request: Request) -> ChunkSummary:
-    """Forward the chunk-detail dock's Resume to the hub — idempotent, never refused."""
+    """Forward a chunk resume to the hub — idempotent, never refused."""
     upstream = HubProxy.of(request, "chunk-detail").post(f"/api/fleet/chunks/{chunk_id}/resume")
     return ChunkSummary.model_validate(upstream.json())

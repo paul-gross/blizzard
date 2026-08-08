@@ -41,7 +41,7 @@ class EnvelopeChoice(BaseModel):
 
 
 class RotatePolicyView(BaseModel):
-    """The declared session's rotation bounds (issue #144), carried on :class:`NodeConfig`.
+    """The declared session's rotation bounds (issue #144), carried on ``NodeConfig``.
     ``max_invocations`` counts **harness invocations** — spawn, resume, judge, nudge — not node-steps,
     of which one burns two or three."""
 

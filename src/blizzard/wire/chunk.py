@@ -36,8 +36,7 @@ class WorkRefView(BaseModel):
 class ChunkIngestRequest(BaseModel):
     """Ingest by source-native token — specific items always, batch fine. Each token is resolved against
     the configured work sources' own grammar: ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
-    Tokens only; no pre-resolved ``{source, ref}`` shape travels alongside them (pinned by
-    tests/test_pin_wire.py::test_chunk_ingest_accepts_source_native_tokens_only)."""
+    Tokens only; no pre-resolved ``{source, ref}`` shape travels alongside them."""
 
     tokens: list[str]
 
@@ -59,8 +58,7 @@ class ChunkIngestConflict(BaseModel):
 
 class ChunkUsageTotalView(BaseModel):
     """A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) — never a
-    stored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``; see
-    :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of it."""
+    stored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``."""
 
     input_tokens: int
     output_tokens: int
@@ -84,7 +82,7 @@ class ChunkUsageTotalView(BaseModel):
 
 class ChunkUsageView(BaseModel):
     """One node-step's usage/cost telemetry (issue #59) — one harness invocation's tokens-by-class and
-    cost, oldest first on :class:`ChunkDetail`. ``cost_usd`` is ``None`` exactly when no result envelope
+    cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no result envelope
     existed for this invocation — never fabricated."""
 
     node_id: str
@@ -192,7 +190,7 @@ class IntendedMigrationView(BaseModel):
 
 
 class IntendedMigrationPatch(BaseModel):
-    """The intended-migration value a :class:`ChunkPatchRequest` carries (issue #124). ``to_graph`` is a
+    """The intended-migration value a ``ChunkPatchRequest`` carries (issue #124). ``to_graph`` is a
     graph id, or a name resolved server-side to the newest enabled graph of that name at request time —
     the resolved **id** is stored. ``node`` present selects ``forced``, absent selects ``auto``; there
     is no separate ``mode`` field, so "node supplied under auto" is unrepresentable."""
@@ -291,7 +289,7 @@ class ChunkPatchRequest(BaseModel):
     """The multi-field ``PATCH /chunks/{id}`` body (issue #124) — every field independently optional,
     applied all-or-nothing. ``graph_id``/``model`` mean "leave unchanged" whether omitted or explicitly
     ``null``. ``intended_migration`` *is* nullable, so omitted ("leave unchanged") stays distinguishable
-    from explicit ``null`` ("clear it") via ``model_fields_set``, never this field's own value."""
+    from explicit ``null`` ("clear it") by the key's presence in the body, never by its value."""
 
     graph_id: str | None = None
     default_model: list[str] | None = None
@@ -375,11 +373,11 @@ class ChunkDetail(BaseModel):
     bounces: list[BounceView] = []
 
 
+# Pydantic's default ``extra="ignore"`` lets this validate straight off a ``ChunkDetail``
+# payload, which keeps ``EscalationView`` out of the runner's own OpenAPI schema.
 class ChunkHeaderView(BaseModel):
     """A chunk-detail header aggregate (issue #185) — identity, work-item links, live state, and the
-    pause fact, projected down from :class:`ChunkDetail` without its transition/artifact history.
-    Pydantic's default ``extra="ignore"`` lets it validate straight off a ``ChunkDetail`` payload,
-    keeping this module's :class:`EscalationView` out of the runner's own OpenAPI schema."""
+    pause fact, without the transition/artifact history the hub's own chunk aggregate carries."""
 
     chunk_id: str
     status: ChunkStatus

@@ -13,7 +13,7 @@ from pydantic import BaseModel
 class FleetSpendView(BaseModel):
     """The fleet's usage/cost total since ``since`` and, when the caller bounded the
     window, strictly before ``until`` (``None`` for the open-ended tail). ``cost_partial``
-    marks ``cost_usd`` as a lower bound — see :class:`~blizzard.hub.domain.work.UsageTotal`."""
+    marks ``cost_usd`` as a lower bound."""
 
     since: str
     until: str | None = None

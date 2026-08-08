@@ -164,20 +164,20 @@ class MigrationTargets:
 
 @router.get("/queue/peek", response_model=QueuePeekResponse)
 def peek_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
-    """The runner's FILL read — the same ready queue as the board's own peek."""
+    """The runner's FILL read — the same ready queue as ``GET /api/queue``."""
     return queue_api.get_queue(services)
 
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail)
 def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkDetail:
-    """The runner's chunk-status poll — the same aggregate as the board's own read."""
+    """The runner's chunk-status poll — the same aggregate as ``GET /api/chunks/{chunk_id}``."""
     return chunks_api.get_chunk(chunk_id, services)
 
 
 @router.get("/chunks/{chunk_id}/work-items", response_model=WorkItemsView)
 def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkItemsView:
-    """The chunk's work items, read with a runner's own bearer token — the same rendering as the
-    anonymous operator route."""
+    """The chunk's work items, read with a runner's own bearer token — the same view as
+    ``GET /api/chunks/{chunk_id}/work-items``."""
     return chunks_api.get_work_items(chunk_id, services)
 
 
@@ -206,7 +206,8 @@ def pause_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_serv
 
 @router.post("/chunks/{chunk_id}/resume", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
 def resume_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
-    """Resume the chunk with a runner's own bearer token (issue #185) — see :func:`pause_chunk`."""
+    """Resume the chunk with a runner's own bearer token (issue #185). Takes no body, so the
+    resume is always recorded as ``operator``."""
     return chunks_api.resume_chunk(chunk_id, ChunkPauseRequest(), services)
 
 
@@ -258,8 +259,8 @@ def hub_advance(
     chunk_id: str,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> HubAdvanceResponse:
-    """Drive a chunk parked at a generic hub command node one step (#65), running
-    :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` once under the fleet-wide serialization
+    """Drive a chunk parked at a generic hub command node one step (#65), running that node's
+    hub-side command once under the fleet-wide serialization
     slot. ``ran=False`` is never an error: a different chunk holds the slot, or (#66) the node reported
     ``pending`` and ``poll_interval`` has not elapsed, or the chunk is not parked at a hub command node
     at all — ``detail`` names which. The request declares no ``runner_id`` to confine against."""
@@ -360,9 +361,8 @@ def rekey_route_token(
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RouteTokenRekeyResponse:
     """Rotate the chunk's live route capability token (issue #84b) — the lost-plaintext recovery for a
-    claim whose response was never read back. Confined to the live route's own runner via
-    :func:`~blizzard.hub.api.auth.assert_owns`; this route presents no chunk-scoped ``route_token`` of
-    its own, which is exactly what it is minting."""
+    claim whose response was never read back. Confined to the live route's own runner; this route
+    presents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting."""
     route = services.chunks.route_of(chunk_id)
     if route is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"chunk {chunk_id} has no live route")
@@ -489,8 +489,8 @@ def ingest_runner_facts(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RunnerFactAck:
-    """Land runner-minted facts — ``FactIngestService.ingest`` owns the seq high-water idempotence,
-    :class:`IngestBroadcast` what each freshly-applied fact re-broadcasts on the SSE stream."""
+    """Land runner-minted facts — idempotent on the batch's per-runner ``seq`` high-water mark,
+    with each freshly-applied fact re-broadcast on the SSE stream."""
     fleet.assert_owns(batch.runner_id)
     broadcast = IngestBroadcast.before_ingest(services, batch)
     result = services.facts.ingest(batch, route_token_mode=fleet.route_token_mode)

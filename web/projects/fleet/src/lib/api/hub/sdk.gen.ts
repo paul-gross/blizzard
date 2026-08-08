@@ -24,8 +24,8 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  * The activity backfill (issue #213) — the three already-bounded per-source activity reads merged,
  * sorted newest-first, and capped.
  *
- * ``since`` defaults to 24h before the injected clock's own ``now()``, never ``datetime.now()``. A
- * tz-naive ``since`` is coerced to UTC so it never raises against the store's aware timestamps.
+ * ``since`` defaults to 24h before the server's current time. A tz-naive ``since`` is coerced to
+ * UTC so it never raises against the store's aware timestamps.
  */
 export const listActivityApiActivityGet = <ThrowOnError extends boolean = false>(options?: Options<ListActivityApiActivityGetData, ThrowOnError>): RequestResult<ListActivityApiActivityGetResponses, ListActivityApiActivityGetErrors, ThrowOnError> => (options?.client ?? client).get<ListActivityApiActivityGetResponses, ListActivityApiActivityGetErrors, ThrowOnError>({ url: '/api/activity', ...options });
 
@@ -120,8 +120,8 @@ export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false
  *
  * Apply the body's fields in one all-or-nothing edit (issue #124).
  *
- * 404 only when the chunk is unknown; :class:`ChunkPatchBody` and ``EditService.edit``
- * own every other refusal.
+ * 404 for an unknown chunk or an unresolvable graph, 422 for a blank value, 409 for a
+ * refused edit.
  */
 export const patchChunkApiChunksChunkIdPatch = <ThrowOnError extends boolean = false>(options: Options<PatchChunkApiChunksChunkIdPatchData, ThrowOnError>): RequestResult<PatchChunkApiChunksChunkIdPatchResponses, PatchChunkApiChunksChunkIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchChunkApiChunksChunkIdPatchResponses, PatchChunkApiChunksChunkIdPatchErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}',
@@ -283,8 +283,7 @@ export const listDecisionsApiDecisionsGet = <ThrowOnError extends boolean = fals
  *
  * Resolve an open decision, first-write-wins CAS.
  *
- * ``resolved_by`` is taken from the resolved session identity
- * (:func:`~blizzard.hub.api.auth_session.resolved_username`), never the request
+ * ``resolved_by`` is taken from the authenticated session identity, never the request
  * body's ``resolved_by`` field — a spoofed value there is silently ignored (issue #91).
  */
 export const resolveDecisionApiDecisionsDecisionIdResolutionsPost = <ThrowOnError extends boolean = false>(options: Options<ResolveDecisionApiDecisionsDecisionIdResolutionsPostData, ThrowOnError>): RequestResult<ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses, ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors, ThrowOnError> => (options.client ?? client).post<ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses, ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors, ThrowOnError>({
@@ -310,7 +309,7 @@ export const listEventsApiEventsGet = <ThrowOnError extends boolean = false>(opt
 /**
  * Get Chunk
  *
- * The runner's chunk-status poll — the same aggregate as the board's own read.
+ * The runner's chunk-status poll — the same aggregate as ``GET /api/chunks/{chunk_id}``.
  */
 export const getChunkApiFleetChunksChunkIdGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkApiFleetChunksChunkIdGetData, ThrowOnError>): RequestResult<GetChunkApiFleetChunksChunkIdGetResponses, GetChunkApiFleetChunksChunkIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkApiFleetChunksChunkIdGetResponses, GetChunkApiFleetChunksChunkIdGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}', ...options });
 
@@ -366,8 +365,8 @@ export const reportEscalationApiFleetChunksChunkIdEscalationsPost = <ThrowOnErro
 /**
  * Hub Advance
  *
- * Drive a chunk parked at a generic hub command node one step (#65), running
- * :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` once under the fleet-wide serialization
+ * Drive a chunk parked at a generic hub command node one step (#65), running that node's
+ * hub-side command once under the fleet-wide serialization
  * slot. ``ran=False`` is never an error: a different chunk holds the slot, or (#66) the node reported
  * ``pending`` and ``poll_interval`` has not elapsed, or the chunk is not parked at a hub command node
  * at all — ``detail`` names which. The request declares no ``runner_id`` to confine against.
@@ -408,7 +407,8 @@ export const fleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGet = <Th
 /**
  * Resume Chunk
  *
- * Resume the chunk with a runner's own bearer token (issue #185) — see :func:`pause_chunk`.
+ * Resume the chunk with a runner's own bearer token (issue #185). Takes no body, so the
+ * resume is always recorded as ``operator``.
  */
 export const resumeChunkApiFleetChunksChunkIdResumePost = <ThrowOnError extends boolean = false>(options: Options<ResumeChunkApiFleetChunksChunkIdResumePostData, ThrowOnError>): RequestResult<ResumeChunkApiFleetChunksChunkIdResumePostResponses, ResumeChunkApiFleetChunksChunkIdResumePostErrors, ThrowOnError> => (options.client ?? client).post<ResumeChunkApiFleetChunksChunkIdResumePostResponses, ResumeChunkApiFleetChunksChunkIdResumePostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/resume', ...options });
 
@@ -416,25 +416,24 @@ export const resumeChunkApiFleetChunksChunkIdResumePost = <ThrowOnError extends 
  * Rekey Route Token
  *
  * Rotate the chunk's live route capability token (issue #84b) — the lost-plaintext recovery for a
- * claim whose response was never read back. Confined to the live route's own runner via
- * :func:`~blizzard.hub.api.auth.assert_owns`; this route presents no chunk-scoped ``route_token`` of
- * its own, which is exactly what it is minting.
+ * claim whose response was never read back. Confined to the live route's own runner; this route
+ * presents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting.
  */
 export const rekeyRouteTokenApiFleetChunksChunkIdRouteTokenPost = <ThrowOnError extends boolean = false>(options: Options<RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostData, ThrowOnError>): RequestResult<RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors, ThrowOnError> => (options.client ?? client).post<RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/route-token', ...options });
 
 /**
  * Get Work Items
  *
- * The chunk's work items, read with a runner's own bearer token — the same rendering as the
- * anonymous operator route.
+ * The chunk's work items, read with a runner's own bearer token — the same view as
+ * ``GET /api/chunks/{chunk_id}/work-items``.
  */
 export const getWorkItemsApiFleetChunksChunkIdWorkItemsGet = <ThrowOnError extends boolean = false>(options: Options<GetWorkItemsApiFleetChunksChunkIdWorkItemsGetData, ThrowOnError>): RequestResult<GetWorkItemsApiFleetChunksChunkIdWorkItemsGetResponses, GetWorkItemsApiFleetChunksChunkIdWorkItemsGetErrors, ThrowOnError> => (options.client ?? client).get<GetWorkItemsApiFleetChunksChunkIdWorkItemsGetResponses, GetWorkItemsApiFleetChunksChunkIdWorkItemsGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/work-items', ...options });
 
 /**
  * Ingest Runner Facts
  *
- * Land runner-minted facts — ``FactIngestService.ingest`` owns the seq high-water idempotence,
- * :class:`IngestBroadcast` what each freshly-applied fact re-broadcasts on the SSE stream.
+ * Land runner-minted facts — idempotent on the batch's per-runner ``seq`` high-water mark,
+ * with each freshly-applied fact re-broadcast on the SSE stream.
  */
 export const ingestRunnerFactsApiFleetEventsPost = <ThrowOnError extends boolean = false>(options: Options<IngestRunnerFactsApiFleetEventsPostData, ThrowOnError>): RequestResult<IngestRunnerFactsApiFleetEventsPostResponses, IngestRunnerFactsApiFleetEventsPostErrors, ThrowOnError> => (options.client ?? client).post<IngestRunnerFactsApiFleetEventsPostResponses, IngestRunnerFactsApiFleetEventsPostErrors, ThrowOnError>({
     url: '/api/fleet/events',
@@ -455,7 +454,7 @@ export const getQuestionApiFleetQuestionsQuestionIdGet = <ThrowOnError extends b
 /**
  * Peek Queue
  *
- * The runner's FILL read — the same ready queue as the board's own peek.
+ * The runner's FILL read — the same ready queue as ``GET /api/queue``.
  */
 export const peekQueueApiFleetQueuePeekGet = <ThrowOnError extends boolean = false>(options?: Options<PeekQueueApiFleetQueuePeekGetData, ThrowOnError>): RequestResult<PeekQueueApiFleetQueuePeekGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<PeekQueueApiFleetQueuePeekGetResponses, unknown, ThrowOnError>({ url: '/api/fleet/queue/peek', ...options });
 
@@ -654,8 +653,7 @@ export const askQuestionApiQuestionsPost = <ThrowOnError extends boolean = false
  *
  * Answer a question first-write-wins; 409 carries the winning answer.
  *
- * ``answered_by`` is taken from the resolved session identity
- * (:func:`~blizzard.hub.api.auth_session.resolved_username`), never the request
+ * ``answered_by`` is taken from the authenticated session identity, never the request
  * body's ``answered_by`` field — a spoofed value there is silently ignored (issue #91).
  */
 export const answerQuestionApiQuestionsQuestionIdAnswersPost = <ThrowOnError extends boolean = false>(options: Options<AnswerQuestionApiQuestionsQuestionIdAnswersPostData, ThrowOnError>): RequestResult<AnswerQuestionApiQuestionsQuestionIdAnswersPostResponses, AnswerQuestionApiQuestionsQuestionIdAnswersPostErrors, ThrowOnError> => (options.client ?? client).post<AnswerQuestionApiQuestionsQuestionIdAnswersPostResponses, AnswerQuestionApiQuestionsQuestionIdAnswersPostErrors, ThrowOnError>({
@@ -788,11 +786,11 @@ export const listUsersApiUsersGet = <ThrowOnError extends boolean = false>(optio
 /**
  * Assign Role
  *
- * Assign ``user_id`` a new role; ``AuthService.assign_role`` enforces every rule
- * (self-change, ``superuser`` grant/revoke, ``superuser`` not assignable — see its own
- * docstring) and records the ``user_role_changed`` fact on a real change. Takes effect
- * on the subject's next request with no re-login (``resolve_identity`` reads
- * ``users.role`` live on every resolve, issue #91).
+ * Assign ``user_id`` a new role. Three refusals, each a 403: changing your own role;
+ * any change touching ``superuser``, which is bootstrap-only; and granting or revoking
+ * ``admin`` as anyone but a ``superuser``. A no-op change is accepted and records
+ * nothing. A real one records a ``user_role_changed`` fact and takes effect on the
+ * subject's next request, with no re-login (issue #91).
  */
 export const assignRoleApiUsersUserIdRolePost = <ThrowOnError extends boolean = false>(options: Options<AssignRoleApiUsersUserIdRolePostData, ThrowOnError>): RequestResult<AssignRoleApiUsersUserIdRolePostResponses, AssignRoleApiUsersUserIdRolePostErrors, ThrowOnError> => (options.client ?? client).post<AssignRoleApiUsersUserIdRolePostResponses, AssignRoleApiUsersUserIdRolePostErrors, ThrowOnError>({
     url: '/api/users/{user_id}/role',

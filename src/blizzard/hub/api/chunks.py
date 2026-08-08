@@ -340,8 +340,8 @@ def patch_chunk(
 ) -> ChunkPatchResponse:
     """Apply the body's fields in one all-or-nothing edit (issue #124).
 
-    404 only when the chunk is unknown; :class:`ChunkPatchBody` and ``EditService.edit``
-    own every other refusal."""
+    404 for an unknown chunk or an unresolvable graph, 422 for a blank value, 409 for a
+    refused edit."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")

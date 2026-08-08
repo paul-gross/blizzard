@@ -198,7 +198,7 @@
         "type": "object"
       },
       "ChunkHeaderView": {
-        "description": "A chunk-detail header aggregate (issue #185) \u2014 identity, work-item links, live state, and the\npause fact, projected down from :class:`ChunkDetail` without its transition/artifact history.\nPydantic's default ``extra=\"ignore\"`` lets it validate straight off a ``ChunkDetail`` payload,\nkeeping this module's :class:`EscalationView` out of the runner's own OpenAPI schema.",
+        "description": "A chunk-detail header aggregate (issue #185) \u2014 identity, work-item links, live state, and the\npause fact, without the transition/artifact history the hub's own chunk aggregate carries.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -353,7 +353,7 @@
         "type": "object"
       },
       "ChunkUsageTotalView": {
-        "description": "A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) \u2014 never a\nstored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``; see\n:class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of it.",
+        "description": "A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) \u2014 never a\nstored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -917,7 +917,7 @@
         "type": "object"
       },
       "HubConnectivityView": {
-        "description": "Hub reachability (derived, not probed) plus the outbound backlog depth.\n\n``endpoint`` is the configured hub base URL (``RunnerConfig.hub_url``) \u2014\nconnectivity facts, not a probe.",
+        "description": "Hub reachability (derived, not probed) plus the outbound backlog depth.\n\n``endpoint`` is the configured hub base URL \u2014 connectivity facts, not a probe.",
         "properties": {
           "buffer_depth": {
             "title": "Buffer Depth",
@@ -2061,7 +2061,7 @@
     },
     "/api/chunks/{chunk_id}": {
       "get": {
-        "description": "Forward a chunk's detail read to the hub \u2014 the chunk-detail dock's header subject.\n\nThe upstream aggregate is validated down to :class:`ChunkHeaderView`, keeping the\ntransition/artifact history out of this route's own schema entirely.",
+        "description": "Forward a chunk's detail read to the hub \u2014 the header aggregate only, with the\nupstream transition/artifact history dropped rather than served.",
         "operationId": "get_chunk_api_chunks__chunk_id__get",
         "parameters": [
           {
@@ -2104,7 +2104,7 @@
     },
     "/api/chunks/{chunk_id}/pause": {
       "post": {
-        "description": "Forward the chunk-detail dock's Pause to the hub \u2014 kills the active worker, keeps\nthe claim (issue #46). ``409`` when the chunk is not in a pausable state.",
+        "description": "Forward a chunk pause to the hub \u2014 kills the active worker, keeps the claim\n(issue #46). ``409`` when the chunk is not in a pausable state.",
         "operationId": "pause_chunk_api_chunks__chunk_id__pause_post",
         "parameters": [
           {
@@ -2234,7 +2234,7 @@
     },
     "/api/chunks/{chunk_id}/resume": {
       "post": {
-        "description": "Forward the chunk-detail dock's Resume to the hub \u2014 idempotent, never refused.",
+        "description": "Forward a chunk resume to the hub \u2014 idempotent, never refused.",
         "operationId": "resume_chunk_api_chunks__chunk_id__resume_post",
         "parameters": [
           {

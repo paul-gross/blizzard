@@ -220,8 +220,8 @@ def list_activity(
     """The activity backfill (issue #213) — the three already-bounded per-source activity reads merged,
     sorted newest-first, and capped.
 
-    ``since`` defaults to 24h before the injected clock's own ``now()``, never ``datetime.now()``. A
-    tz-naive ``since`` is coerced to UTC so it never raises against the store's aware timestamps."""
+    ``since`` defaults to 24h before the server's current time. A tz-naive ``since`` is coerced to
+    UTC so it never raises against the store's aware timestamps."""
     since_utc = as_utc(since) if since is not None else services.clock.now() - timedelta(hours=24)
     chunk_changed = services.chunks.activity_facts_since(since_utc, limit=limit)
     events = services.chunks.list_events(since=since_utc, limit=limit)

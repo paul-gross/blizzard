@@ -60,7 +60,7 @@ class Executor(StrEnum):
 
 
 class JudgedBy(StrEnum):
-    """Who renders a node's exit judgement — the structural gate marker."""
+    """Who issues a node's exit judgement — the structural gate marker."""
 
     WORKER = "worker"
     HUMAN = "human"

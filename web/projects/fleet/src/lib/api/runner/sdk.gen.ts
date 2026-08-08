@@ -63,18 +63,16 @@ export const readSessionApiAuthSessionGet = <ThrowOnError extends boolean = fals
 /**
  * Get Chunk
  *
- * Forward a chunk's detail read to the hub — the chunk-detail dock's header subject.
- *
- * The upstream aggregate is validated down to :class:`ChunkHeaderView`, keeping the
- * transition/artifact history out of this route's own schema entirely.
+ * Forward a chunk's detail read to the hub — the header aggregate only, with the
+ * upstream transition/artifact history dropped rather than served.
  */
 export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkApiChunksChunkIdGetData, ThrowOnError>): RequestResult<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}', ...options });
 
 /**
  * Pause Chunk
  *
- * Forward the chunk-detail dock's Pause to the hub — kills the active worker, keeps
- * the claim (issue #46). ``409`` when the chunk is not in a pausable state.
+ * Forward a chunk pause to the hub — kills the active worker, keeps the claim
+ * (issue #46). ``409`` when the chunk is not in a pausable state.
  */
 export const pauseChunkApiChunksChunkIdPausePost = <ThrowOnError extends boolean = false>(options: Options<PauseChunkApiChunksChunkIdPausePostData, ThrowOnError>): RequestResult<PauseChunkApiChunksChunkIdPausePostResponses, PauseChunkApiChunksChunkIdPausePostErrors, ThrowOnError> => (options.client ?? client).post<PauseChunkApiChunksChunkIdPausePostResponses, PauseChunkApiChunksChunkIdPausePostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/pause', ...options });
 
@@ -100,7 +98,7 @@ export const requeueChunkApiChunksChunkIdRequeuesPost = <ThrowOnError extends bo
 /**
  * Resume Chunk
  *
- * Forward the chunk-detail dock's Resume to the hub — idempotent, never refused.
+ * Forward a chunk resume to the hub — idempotent, never refused.
  */
 export const resumeChunkApiChunksChunkIdResumePost = <ThrowOnError extends boolean = false>(options: Options<ResumeChunkApiChunksChunkIdResumePostData, ThrowOnError>): RequestResult<ResumeChunkApiChunksChunkIdResumePostResponses, ResumeChunkApiChunksChunkIdResumePostErrors, ThrowOnError> => (options.client ?? client).post<ResumeChunkApiChunksChunkIdResumePostResponses, ResumeChunkApiChunksChunkIdResumePostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/resume', ...options });
 

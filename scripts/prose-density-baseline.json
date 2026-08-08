@@ -794,8 +794,8 @@
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
-   "docstrings": 13,
-   "total": 102
+   "docstrings": 12,
+   "total": 101
   },
   "blizzard/hub/api/deps.py": {
    "comments": 0,
@@ -849,8 +849,8 @@
   },
   "blizzard/hub/api/questions.py": {
    "comments": 3,
-   "docstrings": 14,
-   "total": 109
+   "docstrings": 13,
+   "total": 108
   },
   "blizzard/hub/api/queue.py": {
    "comments": 2,
@@ -879,8 +879,8 @@
   },
   "blizzard/hub/api/users.py": {
    "comments": 0,
-   "docstrings": 12,
-   "total": 69
+   "docstrings": 11,
+   "total": 68
   },
   "blizzard/hub/app.py": {
    "comments": 14,
@@ -1674,8 +1674,8 @@
   },
   "blizzard/runner/api/chunk_detail.py": {
    "comments": 0,
-   "docstrings": 11,
-   "total": 38
+   "docstrings": 9,
+   "total": 36
   },
   "blizzard/runner/api/control.py": {
    "comments": 6,
@@ -2403,9 +2403,9 @@
    "total": 31
   },
   "blizzard/wire/chunk.py": {
-   "comments": 29,
-   "docstrings": 88,
-   "total": 413
+   "comments": 31,
+   "docstrings": 84,
+   "total": 411
   },
   "blizzard/wire/completion.py": {
    "comments": 13,
@@ -2444,8 +2444,8 @@
   },
   "blizzard/wire/graph.py": {
    "comments": 6,
-   "docstrings": 44,
-   "total": 174
+   "docstrings": 41,
+   "total": 171
   },
   "blizzard/wire/history.py": {
    "comments": 0,
@@ -2484,8 +2484,8 @@
   },
   "blizzard/wire/runner_status.py": {
    "comments": 2,
-   "docstrings": 28,
-   "total": 139
+   "docstrings": 27,
+   "total": 138
   },
   "blizzard/wire/sse.py": {
    "comments": 8,
@@ -3373,6 +3373,11 @@
    "comments": 35,
    "docstrings": 16,
    "total": 490
+  },
+  "test_openapi_descriptions.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "total": 55
   },
   "test_openapi_export.py": {
    "comments": 0,

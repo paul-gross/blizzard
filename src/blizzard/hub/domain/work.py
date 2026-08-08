@@ -80,7 +80,7 @@ class ClosableWorkRef:
 
 
 class MigrationMode(StrEnum):
-    """How a chunk's :class:`IntendedMigration` fires at its next transition (issue #124).
+    """How a chunk's intended migration fires at its next transition (issue #124).
 
     ``AUTO`` fires only when the transition's own destination node name also exists on
     the target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``."""

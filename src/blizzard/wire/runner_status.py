@@ -27,8 +27,7 @@ class CapacitiesView(BaseModel):
 class HubConnectivityView(BaseModel):
     """Hub reachability (derived, not probed) plus the outbound backlog depth.
 
-    ``endpoint`` is the configured hub base URL (``RunnerConfig.hub_url``) —
-    connectivity facts, not a probe."""
+    ``endpoint`` is the configured hub base URL — connectivity facts, not a probe."""
 
     endpoint: str
     reachable: bool

@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api", tags=["auth"])
 
 
 class MeResponse(BaseModel):
-    """The resolved identity's wire view — the board's own-identity read."""
+    """The resolved identity's wire view."""
 
     user_id: str
     username: str

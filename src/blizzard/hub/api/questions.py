@@ -73,8 +73,7 @@ def answer_question(
 ) -> object:
     """Answer a question first-write-wins; 409 carries the winning answer.
 
-    ``answered_by`` is taken from the resolved session identity
-    (:func:`~blizzard.hub.api.auth_session.resolved_username`), never the request
+    ``answered_by`` is taken from the authenticated session identity, never the request
     body's ``answered_by`` field — a spoofed value there is silently ignored (issue #91)."""
     pre_answer = services.chunks.get_question(question_id)
     if pre_answer is None:
