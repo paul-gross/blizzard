@@ -15,12 +15,14 @@ from typing import Any
 from sqlalchemy import Engine, and_, case, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
+from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.store.repository import (
     AskRecord,
     BufferedFact,
+    BufferedTranscriptDelta,
     CheckResultRecord,
     ClosedLeaseRecord,
     EnvBindingRecord,
@@ -34,6 +36,7 @@ from blizzard.runner.store.repository import (
     PoolHead,
     RunnerStoreError,
     TakeoverRecord,
+    TranscriptSegmentRecord,
     UsageTotals,
 )
 from blizzard.runner.store.schema import (
@@ -68,6 +71,8 @@ from blizzard.runner.store.schema import (
     session_preamble_facts,
     takeover_ends,
     takeovers,
+    transcript_outbound_buffer,
+    transcript_segments,
     usage_facts,
     workspace_prompt,
 )
@@ -368,6 +373,35 @@ class SqlAlchemyRunnerStore:
                 lease_id=str(r.lease_id) if r.lease_id is not None else None,
                 created_at=r.created_at,
                 acked_at=r.acked_at,
+            )
+            for r in self._all(stmt)
+        ]
+
+    def transcript_segment(self, segment_id: str) -> TranscriptSegmentRecord | None:
+        rows = self._all(select(transcript_segments).where(transcript_segments.c.segment_id == segment_id))
+        return self._row_to_transcript_segment(rows[0]) if rows else None
+
+    def open_transcript_segments(self) -> list[TranscriptSegmentRecord]:
+        stmt = (
+            select(transcript_segments)
+            .where(transcript_segments.c.finalized_at.is_(None))
+            .order_by(transcript_segments.c.segment_id)
+        )
+        return [self._row_to_transcript_segment(r) for r in self._all(stmt)]
+
+    def pending_transcript_outbound(self) -> list[BufferedTranscriptDelta]:
+        stmt = (
+            select(transcript_outbound_buffer)
+            .where(transcript_outbound_buffer.c.acked_at.is_(None))
+            .order_by(transcript_outbound_buffer.c.seq)
+        )
+        return [
+            BufferedTranscriptDelta(
+                seq=int(r.seq),
+                segment_id=str(r.segment_id),
+                chunk_id=str(r.chunk_id),
+                payload=str(r.payload),
+                created_at=r.created_at,
             )
             for r in self._all(stmt)
         ]
@@ -675,6 +709,37 @@ class SqlAlchemyRunnerStore:
             # One transaction with the in-place pid rewrite: the spawn generation and the process
             # it describes are one fact, and a crash between them would leave the two disagreeing.
             conn.execute(lease_spawns.insert().values(lease_id=lease_id, spawned_at=spawned_at))
+            generation = int(
+                conn.execute(
+                    select(func.count()).select_from(lease_spawns).where(lease_spawns.c.lease_id == lease_id)
+                ).scalar_one()
+            )
+            # Every start path that reaches this transaction (fresh spawn, pooled rotation,
+            # dormant resume) is a spawn generation and so a segment boundary (issue #246, D1) —
+            # stamping it here, rather than at the three call sites, is what makes a fourth start
+            # path structurally unable to miss it.
+            context_row = conn.execute(
+                select(leases.c.chunk_id, leases.c.epoch, lease_context.c.node_id)
+                .select_from(leases.join(lease_context, leases.c.lease_id == lease_context.c.lease_id))
+                .where(leases.c.lease_id == lease_id)
+            ).one()
+            conn.execute(
+                transcript_segments.insert().values(
+                    segment_id=Id.mint_at(SEGMENT_PREFIX, spawned_at).value,
+                    chunk_id=str(context_row.chunk_id),
+                    node_id=str(context_row.node_id),
+                    epoch=int(context_row.epoch),
+                    generation=generation,
+                    lease_id=lease_id,
+                    session_id=session_id,
+                    cursor=None,
+                    shipped_bytes=0,
+                    shipped_turns=0,
+                    truncated_reason=None,
+                    finalized_at=None,
+                    stamped_at=spawned_at,
+                )
+            )
         _log.info("worker spawned", lease_id=lease_id, pid=pid, session_id=session_id)
 
     def record_daemon_liveness(self, *, runner_id: str, alive_at: datetime) -> None:
@@ -759,6 +824,54 @@ class SqlAlchemyRunnerStore:
     def ack_outbound(self, seq: int, *, acked_at: datetime) -> None:
         with self._begin() as conn:
             conn.execute(outbound_buffer.update().where(outbound_buffer.c.seq == seq).values(acked_at=acked_at))
+
+    def advance_transcript_segment(
+        self, segment_id: str, *, cursor: str | None, shipped_bytes: int, shipped_turns: int
+    ) -> None:
+        with self._begin() as conn:
+            conn.execute(
+                transcript_segments.update()
+                .where(transcript_segments.c.segment_id == segment_id)
+                .values(cursor=cursor, shipped_bytes=shipped_bytes, shipped_turns=shipped_turns)
+            )
+
+    def truncate_transcript_segment(self, segment_id: str, *, reason: str) -> None:
+        with self._begin() as conn:
+            # `IS NULL` guard: a segment already truncated keeps its first reason.
+            conn.execute(
+                transcript_segments.update()
+                .where(transcript_segments.c.segment_id == segment_id)
+                .where(transcript_segments.c.truncated_reason.is_(None))
+                .values(truncated_reason=reason)
+            )
+        _log.warning("transcript segment truncated", segment_id=segment_id, reason=reason)
+
+    def finalize_transcript_segment(self, segment_id: str, *, finalized_at: datetime) -> None:
+        with self._begin() as conn:
+            conn.execute(
+                transcript_segments.update()
+                .where(transcript_segments.c.segment_id == segment_id)
+                .values(finalized_at=finalized_at)
+            )
+        _log.info("transcript segment finalized", segment_id=segment_id)
+
+    def enqueue_transcript_outbound(self, *, segment_id: str, chunk_id: str, payload: str, created_at: datetime) -> int:
+        with self._begin() as conn:
+            result = conn.execute(
+                transcript_outbound_buffer.insert().values(
+                    segment_id=segment_id, chunk_id=chunk_id, payload=payload, created_at=created_at
+                )
+            )
+        key = result.inserted_primary_key
+        return int(key[0]) if key is not None else 0
+
+    def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:
+        with self._begin() as conn:
+            conn.execute(
+                transcript_outbound_buffer.update()
+                .where(transcript_outbound_buffer.c.seq == seq)
+                .values(acked_at=acked_at)
+            )
 
     def record_ask(
         self,
@@ -1144,6 +1257,24 @@ class SqlAlchemyRunnerStore:
         _log.info("external subscription usage attempt recorded", sampled=payload is not None)
 
     # --- plumbing -----------------------------------------------------------
+
+    @staticmethod
+    def _row_to_transcript_segment(r) -> TranscriptSegmentRecord:  # type: ignore[no-untyped-def]
+        return TranscriptSegmentRecord(
+            segment_id=str(r.segment_id),
+            chunk_id=str(r.chunk_id),
+            node_id=str(r.node_id),
+            epoch=int(r.epoch),
+            generation=int(r.generation),
+            lease_id=str(r.lease_id),
+            session_id=str(r.session_id),
+            cursor=str(r.cursor) if r.cursor is not None else None,
+            shipped_bytes=int(r.shipped_bytes),
+            shipped_turns=int(r.shipped_turns),
+            truncated_reason=str(r.truncated_reason) if r.truncated_reason is not None else None,
+            finalized_at=r.finalized_at,
+            stamped_at=r.stamped_at,
+        )
 
     @staticmethod
     def _row_to_ask(r) -> AskRecord:  # type: ignore[no-untyped-def]

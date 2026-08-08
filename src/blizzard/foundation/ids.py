@@ -34,6 +34,7 @@ SELFTEST_PREFIX = "self"
 HUB_EXEC_SLOT_PREFIX = "hes"
 MIGRATION_PREFIX = "mg"  # a chunk_migrations fact (issue #90)
 USER_PREFIX = "usr"  # a hub-local user (issue #91)
+SEGMENT_PREFIX = "seg"  # a transcript segment, the hub's idempotence key (issue #246)
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,14 @@ class Id:
 
     @classmethod
     def mint(cls, prefix: str, clock: IClock) -> Id:
-        millis = int(clock.now().timestamp() * 1000)
+        return cls.mint_at(prefix, clock.now())
+
+    @classmethod
+    def mint_at(cls, prefix: str, at: datetime) -> Id:
+        """Mint an id timestamped at ``at`` rather than an injected clock's ``now()`` — for a
+        caller that already holds a stamped instant (e.g. a store method passed one in,
+        ``bzh:injected-clock``) rather than a live clock of its own."""
+        millis = int(at.timestamp() * 1000)
         randomness = int.from_bytes(os.urandom(10), "big")
         return cls(prefix, cls._encode(millis, _TIME_CHARS) + cls._encode(randomness, _RAND_CHARS))
 

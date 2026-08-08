@@ -449,3 +449,43 @@ external_usage_samples = Table(
     Column("sampled_at", UtcDateTime, nullable=False),
     Column("payload", Text, nullable=True),  # NULL = this attempt sampled nothing
 )
+
+# --- Transcript segments (the segment ledger — issue #246, D2) ---------------
+# One row per segment, stamped inside `record_spawn`'s own transaction (D1) and then
+# mutated in place as the pump advances it — a mutable ledger like `leases`, not an
+# append-only fact table. Keyed `(chunk_id, node_id, epoch, generation)`; `segment_id` is
+# the runner-minted `seg_<ulid>` carried on the wire as the hub's idempotence key.
+
+transcript_segments = Table(
+    "transcript_segments",
+    metadata,
+    Column("segment_id", String, primary_key=True),  # seg_<ulid>
+    Column("chunk_id", String, nullable=False),
+    Column("node_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("generation", Integer, nullable=False),  # this lease's spawn ordinal (1 = initial spawn)
+    Column("lease_id", String, nullable=False),
+    Column("session_id", String, nullable=False),
+    Column("cursor", String, nullable=True),  # opaque TranscriptPosition.token; NULL = unread from the start
+    Column("shipped_bytes", Integer, nullable=False),
+    Column("shipped_turns", Integer, nullable=False),
+    Column("truncated_reason", String, nullable=True),  # NULL = not truncated (D4)
+    Column("finalized_at", UtcDateTime, nullable=True),  # NULL = still open; set by step close
+    Column("stamped_at", UtcDateTime, nullable=False),
+)
+
+# --- Transcript outbound buffer (the lane's own store-and-forward — D3) ------
+# A second FIFO drain, structurally independent of `outbound_buffer`'s: its own
+# autoincrementing per-runner sequence, so a wedged transcript flush can never delay the
+# fact lane's.
+
+transcript_outbound_buffer = Table(
+    "transcript_outbound_buffer",
+    metadata,
+    Column("seq", Integer, primary_key=True, autoincrement=True),  # per-runner monotonic, own sequence
+    Column("segment_id", String, nullable=False),
+    Column("chunk_id", String, nullable=False),
+    Column("payload", Text, nullable=False),  # the JSON body posted to the transcript ingest route
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("acked_at", UtcDateTime, nullable=True),  # NULL = pending; set when the hub acks the seq
+)

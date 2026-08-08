@@ -126,6 +126,41 @@ class OutboundFactRecord:
 
 
 @dataclass(frozen=True)
+class TranscriptSegmentRecord:
+    """One row of the transcript segment ledger (issue #246, D2) — a mutable ledger like
+    :class:`LeaseRecord`, not an append-only fact. ``cursor`` is the opaque forward-read
+    token (``None`` = unread from the start); ``truncated_reason`` is ``None`` while the
+    segment's caps have not been breached (D4); ``finalized_at`` is ``None`` while the
+    segment is still live."""
+
+    segment_id: str
+    chunk_id: str
+    node_id: str
+    epoch: int
+    generation: int
+    lease_id: str
+    session_id: str
+    cursor: str | None
+    shipped_bytes: int
+    shipped_turns: int
+    truncated_reason: str | None
+    finalized_at: datetime | None
+    stamped_at: datetime
+
+
+@dataclass(frozen=True)
+class BufferedTranscriptDelta:
+    """One pending transcript delta in the lane's own store-and-forward buffer (D3) — the
+    transcript-lane counterpart to :class:`BufferedFact`."""
+
+    seq: int
+    segment_id: str
+    chunk_id: str
+    payload: str
+    created_at: datetime
+
+
+@dataclass(frozen=True)
 class AskRecord:
     """The worker's local open-ask fact.
 
@@ -349,6 +384,18 @@ class IReadRunnerStore(Protocol):
 
     def recent_outbound(self, limit: int) -> list[OutboundFactRecord]:
         """The newest ``limit`` outbound facts, acked or not, newest first — the local fact log."""
+        ...
+
+    def transcript_segment(self, segment_id: str) -> TranscriptSegmentRecord | None:
+        """The segment by id, or ``None`` — the pump and drain's per-segment read (issue #246)."""
+        ...
+
+    def open_transcript_segments(self) -> list[TranscriptSegmentRecord]:
+        """Segments with no final marker yet — the pump's per-tick work list (issue #246)."""
+        ...
+
+    def pending_transcript_outbound(self) -> list[BufferedTranscriptDelta]:
+        """The unacked transcript buffer, FIFO by seq — the drain's own lane (D3)."""
         ...
 
     def unforwarded_ask(self, lease_id: str) -> AskRecord | None:
@@ -641,6 +688,32 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def ack_outbound(self, seq: int, *, acked_at: datetime) -> None:
         """Mark a buffered fact delivered — a semantic rejection acks too."""
+        ...
+
+    def advance_transcript_segment(
+        self, segment_id: str, *, cursor: str | None, shipped_bytes: int, shipped_turns: int
+    ) -> None:
+        """Move a segment's forward-read cursor and cumulative shipped counts (issue #246).
+
+        ``shipped_bytes``/``shipped_turns`` are the segment's new totals, not a delta — the
+        pump's own running sum."""
+        ...
+
+    def truncate_transcript_segment(self, segment_id: str, *, reason: str) -> None:
+        """Mark a segment truncated — the per-chunk 64 MB budget breached (D4). Idempotent:
+        a segment already truncated keeps its first reason."""
+        ...
+
+    def finalize_transcript_segment(self, segment_id: str, *, finalized_at: datetime) -> None:
+        """Stamp a segment's final marker — shipped for good by its step's close (issue #246)."""
+        ...
+
+    def enqueue_transcript_outbound(self, *, segment_id: str, chunk_id: str, payload: str, created_at: datetime) -> int:
+        """Append a transcript delta to the lane's own buffer; return its seq (D3)."""
+        ...
+
+    def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:
+        """Mark a buffered transcript delta delivered — the transcript drain's own ack (D3)."""
         ...
 
     def record_ask(

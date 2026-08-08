@@ -558,3 +558,92 @@ def test_session_preamble_fingerprint_is_scoped_per_session(tmp_path):  # type: 
     store.record_session_preamble("sess_2", fingerprint=PreambleFingerprint(blizzard="a2", workspace="w2"), at=_NOW)
     assert store.session_preamble_fingerprint("sess_1") == PreambleFingerprint(blizzard="a1", workspace="w1")
     assert store.session_preamble_fingerprint("sess_2") == PreambleFingerprint(blizzard="a2", workspace="w2")
+
+
+# --- transcript segment ledger (issue #246, D1/D2) ---------------------------
+
+
+@pytest.mark.unit
+def test_record_spawn_stamps_a_segment_keyed_by_chunk_node_epoch_generation(tmp_path):  # type: ignore[no-untyped-def]
+    """A fresh spawn is generation 1; a resume under the same lease is generation 2 — both
+    keyed on the lease's own (chunk, node, epoch), read back from ``lease_context``/``leases``
+    inside ``record_spawn``'s own transaction (D1/D2)."""
+    store = _store(tmp_path)
+    _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+
+    open_segments = store.open_transcript_segments()
+    assert len(open_segments) == 1
+    first = open_segments[0]
+    assert (first.chunk_id, first.node_id, first.epoch, first.generation) == ("ch_1", "nd_build", 1, 1)
+    assert first.lease_id == "lease_1"
+    assert first.session_id == "sess-a"
+    assert first.segment_id.startswith("seg_")
+    assert (first.cursor, first.shipped_bytes, first.shipped_turns) == (None, 0, 0)
+    assert (first.truncated_reason, first.finalized_at) == (None, None)
+    assert store.transcript_segment(first.segment_id) == first
+
+    store.record_spawn(
+        "lease_1", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW + timedelta(minutes=1)
+    )
+    segments_by_generation = sorted(store.open_transcript_segments(), key=lambda s: s.generation)
+    assert [s.generation for s in segments_by_generation] == [1, 2]
+    assert segments_by_generation[1].segment_id != first.segment_id
+
+
+@pytest.mark.unit
+def test_record_spawn_stamps_one_segment_per_lease_at_its_own_epoch(tmp_path):  # type: ignore[no-untyped-def]
+    """Two leases (e.g. two retries at fresh epochs) each stamp their own generation-1
+    segment — the epoch is part of the key, so the two are never confused."""
+    store = _store(tmp_path)
+    _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
+    _mint(store, chunk="ch_1", node="nd_build", epoch=2, lease="lease_2")
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-b", spawned_at=_NOW)
+
+    by_lease = {s.lease_id: s for s in store.open_transcript_segments()}
+    assert by_lease["lease_1"].epoch == 1
+    assert by_lease["lease_2"].epoch == 2
+    assert by_lease["lease_1"].generation == by_lease["lease_2"].generation == 1
+
+
+@pytest.mark.unit
+def test_transcript_segment_advance_truncate_and_finalize(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    segment_id = store.open_transcript_segments()[0].segment_id
+
+    store.advance_transcript_segment(segment_id, cursor="tok-1", shipped_bytes=100, shipped_turns=3)
+    advanced = store.transcript_segment(segment_id)
+    assert advanced is not None
+    assert (advanced.cursor, advanced.shipped_bytes, advanced.shipped_turns) == ("tok-1", 100, 3)
+
+    store.truncate_transcript_segment(segment_id, reason="chunk_budget_exceeded")
+    # A second truncation call keeps the first reason rather than overwriting it.
+    store.truncate_transcript_segment(segment_id, reason="different_reason")
+    assert store.transcript_segment(segment_id).truncated_reason == "chunk_budget_exceeded"  # type: ignore[union-attr]
+
+    assert len(store.open_transcript_segments()) == 1
+    store.finalize_transcript_segment(segment_id, finalized_at=_NOW)
+    assert store.open_transcript_segments() == []
+    assert store.transcript_segment(segment_id).finalized_at == _NOW  # type: ignore[union-attr]
+
+
+@pytest.mark.unit
+def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_path):  # type: ignore[no-untyped-def]
+    """The transcript lane's sequence is independent of the fact lane's ``outbound_buffer``
+    (D3) — a fact-lane enqueue does not perturb the transcript lane's own numbering."""
+    store = _store(tmp_path)
+    store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
+
+    t1 = store.enqueue_transcript_outbound(segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW)
+    t2 = store.enqueue_transcript_outbound(segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW)
+    assert t2 == t1 + 1  # gapless — the fact-lane enqueue above minted no transcript-lane seq
+    assert [d.seq for d in store.pending_transcript_outbound()] == [t1, t2]
+    assert store.pending_transcript_outbound()[0].segment_id == "seg_1"
+
+    store.ack_transcript_outbound(t1, acked_at=_NOW)
+    assert [d.seq for d in store.pending_transcript_outbound()] == [t2]
+    # The fact lane's own buffer is untouched by the transcript lane's ack.
+    assert len(store.pending_outbound()) == 1
