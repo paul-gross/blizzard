@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import TAKEOVER_PREFIX, mint
-from blizzard.runner.domain.lease_auth import mint_lease_token
+from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerPreamble
 from blizzard.runner.loop.process import IProcessProbe
@@ -167,7 +167,7 @@ class TakeoverService:
         )
         # A resume inherits no spawn env, so identity must be handed over (issue #258).
         # The token plaintext is never persisted, so it is re-minted, invalidating the prior.
-        lease_token, token_hash = mint_lease_token()
+        lease_token, token_hash = LeaseToken.mint()
         self._store.record_lease_token(reference.lease_id, token_hash, now)
         preamble = WorkerPreamble(
             environments=[AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in bindings],

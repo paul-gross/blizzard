@@ -9,7 +9,7 @@ from datetime import datetime
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, mint
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.lease_auth import mint_lease_token
+from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
 from blizzard.runner.harness.preamble import Preamble
@@ -150,7 +150,7 @@ class Spawner:
 
         A resume inherits none of the spawn env, so the identity is re-supplied. Only the
         token's hash is ever persisted, so the token itself is **re-minted** here."""
-        lease_token, token_hash = mint_lease_token()
+        lease_token, token_hash = LeaseToken.mint()
         self.ctx.store.record_lease_token(lease.lease_id, token_hash, self.ctx.clock.now())
         return WorkerPreamble(
             environments=Environments(bindings).acquired,
@@ -186,7 +186,7 @@ class Spawner:
         )
         # A per-lease capability token (issue #113): only its hash is stashed durably, the
         # plaintext carried forward to the spawn preamble alone and never persisted.
-        token, token_hash = mint_lease_token()
+        token, token_hash = LeaseToken.mint()
         self.ctx.store.record_lease_token(lease_id, token_hash, at)
         OutboundFacts(self.ctx).lease_minted(chunk_id, lease_id, epoch=epoch, at=at)
         return MintedLease(lease_id=lease_id, epoch=epoch, token=token, model=model, effort=effort)

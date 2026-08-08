@@ -16,7 +16,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.registry import FleetService
-from blizzard.hub.domain.route_auth import check_route_token
+from blizzard.hub.domain.route_auth import RouteToken
 from blizzard.hub.domain.work import ChunkFacts, IWriteChunkRepository
 from blizzard.wire.facts import (
     ANSWER_DELIVERED,
@@ -286,16 +286,15 @@ class FactIngestService:
         #84b) — the buffered-push counterpart of ``apply.py``'s own check. A chunk the
         hub has never minted (``load_facts`` returns ``None``, e.g. a malformed/stale
         payload) falls back to an empty :class:`ChunkFacts`, which
-        :func:`check_route_token` already rejects as having no live route."""
+        :class:`RouteToken` already rejects as having no live route."""
         facts = self._chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
         route = self._chunks.route_of(chunk_id)
-        detail = check_route_token(
-            facts,
-            presented_token=fact.text("route_token"),
+        detail = RouteToken(
+            facts=facts,
+            presented=fact.text("route_token"),
             submission_runner_id=runner_id,
             route_runner_id=route.runner_id if route is not None else None,
-            mode=mode,
-        )
+        ).rejection(mode=mode)
         if detail is not None:
             _log.warning(
                 "route token check rejected buffered fact", chunk_id=chunk_id, runner_id=runner_id, detail=detail

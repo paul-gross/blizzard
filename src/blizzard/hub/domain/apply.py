@@ -18,7 +18,7 @@ from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Edge, Executor, Graph, JudgedBy, Node
 from blizzard.hub.domain.produces_auth import Produces
-from blizzard.hub.domain.route_auth import check_route_token
+from blizzard.hub.domain.route_auth import RouteToken
 from blizzard.hub.domain.work import (
     TERMINAL_STATUSES,
     Chunk,
@@ -605,13 +605,12 @@ class ApplyService:
         self, chunk: Chunk, facts: ChunkFacts, submission: CompletionSubmission, *, route_token_mode: str
     ) -> ApplyResult | None:
         route = self._chunks.route_of(chunk.chunk_id)
-        detail = check_route_token(
-            facts,
-            presented_token=submission.route_token,
+        detail = RouteToken(
+            facts=facts,
+            presented=submission.route_token,
             submission_runner_id=submission.runner_id,
             route_runner_id=route.runner_id if route is not None else None,
-            mode=route_token_mode,
-        )
+        ).rejection(mode=route_token_mode)
         return ApplyResult.failure(detail) if detail is not None else None
 
     def _row(self, chunk: Chunk, from_node: Node, epoch: int, artifact: SubmittedArtifact) -> ArtifactRow:

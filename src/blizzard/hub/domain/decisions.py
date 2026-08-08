@@ -14,7 +14,7 @@ from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, mint
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.graph import Graph, Node
-from blizzard.hub.domain.route_auth import check_route_token
+from blizzard.hub.domain.route_auth import RouteToken
 from blizzard.hub.domain.work import (
     TERMINAL_STATUSES,
     Chunk,
@@ -78,13 +78,12 @@ class DecisionService:
         # Route-token authorization (issue #84b): ahead of the idempotent-replay probe and
         # the epoch fence, so a post-release zombie's replayed decision is rejected too.
         route = self._chunks.route_of(chunk.chunk_id)
-        detail = check_route_token(
-            facts,
-            presented_token=submission.route_token,
+        detail = RouteToken(
+            facts=facts,
+            presented=submission.route_token,
             submission_runner_id=submission.runner_id,
             route_runner_id=route.runner_id if route is not None else None,
-            mode=route_token_mode,
-        )
+        ).rejection(mode=route_token_mode)
         if detail is not None:
             return DecisionSubmitResult.failure(detail)
 
