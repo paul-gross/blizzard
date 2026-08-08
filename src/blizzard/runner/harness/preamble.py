@@ -85,7 +85,7 @@ class Preamble:
             ("lease id", lease_id),
         ]
         for env in environments:
-            rows.append(("winter environment name", env.environment_id))
+            rows.append(("environment name", env.environment_id))
             rows.append(("environment workdir", env.workdir))
 
         table_lines = ["| Field | Value |", "|-------|-------|"]

@@ -27,6 +27,34 @@ F1 — should-fix — blizzard/src/blizzard/hub/runner.py:142
   worker still escalates on its next transient failure.
 ```
 
+## Refutation record
+
+A finding can be answered two ways: **fixed**, or **refuted**. A refutation says the finding should not be
+acted on at all — it is factually wrong, rests on a false premise, or demands work the change's scale does
+not warrant. It is not "I would rather not."
+
+The node responding to a docket records its refutations in a dedicated asset, submitted alongside its
+usual work: `plan` submits `plan-finding-refutes`, `build` submits `review-finding-refutes`. Each entry:
+
+- **anchor** — the finding's `<repo>/<path>:<line>` or `<repo>/<path>::<symbol>`, copied verbatim.
+- **cited id** — `<node>:<id>` from the round being answered, e.g. `review:F2`.
+- **the argument** — why the finding is wrong, with evidence: the code, the command, the fact it missed.
+
+**The anchor is what matches, not the id.** Ids are stable only within one asset submission, and a fresh
+cold pass restarts at `F1` — so a refutation carrying only an id cannot be matched against the next
+round's renumbering. The id records which round was answered; the anchor is what the reviewer keys on.
+
+The gate that re-reviews reads this asset **before** re-reviewing and must resolve every entry explicitly
+— accept it and not re-raise, or reject it and re-raise with an answer to the argument. Silence is not
+acceptance: an unanswered refutation is still an open finding. Refuting is a claim to be adjudicated, never
+a veto, and a refutation the gate accepts still needs a disposition below (`accepted-wont-fix`).
+
+Submit the asset even when nothing was refuted — one line saying so. An explicit "nothing to refute" tells
+the gate the channel was considered; an absent asset is ambiguous.
+
+There is deliberately **no refutation channel for verification**. A failed verification method is a
+mechanical fact, not a judgement to argue with; the answer is to fix the change or fix the method.
+
 ## Disposition record
 
 A node re-entering to address a docket — `build` from `build.from-review.md`, `plan` from

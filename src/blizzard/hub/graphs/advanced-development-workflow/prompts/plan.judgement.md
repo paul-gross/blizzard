@@ -1,6 +1,6 @@
 # Plan — judgement
 
-Assess the plan you just authored: every planned change maps to a verification method (or schedules building one), the phases are ordered and independently verifiable, the plan conforms to the architecture guidance, and every owed surface is a phase.
+Assess the plan you just authored. Every planned change maps to a verification method, or schedules building one. The plan conforms to the architecture guidance. Every owed surface is planned. Where the plan is phased, the phases are ordered and independently verifiable.
 
 Select `drafted` when the plan is complete and ready for the cold plan-review gate.
 

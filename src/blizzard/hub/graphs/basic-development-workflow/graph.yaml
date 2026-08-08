@@ -77,6 +77,11 @@ nodes:
       # are deliberately fresh, so bare `resume` would otherwise hand build their
       # cold-read session instead of its own)
     produces:
+      # The refutation channel (see prompts/build.from-review.md): review findings the
+      # build declines rather than fixes, with the argument. `review` is a fresh cold read
+      # every pass, so without this it re-raises a deliberately declined finding forever;
+      # it now must accept or reject each refutation explicitly.
+      - review-finding-refutes
       - {name: commit, kind: git_commit}  # the pushed branch(es); kind-matched, not name-matched
     judgement:
       prompt: ./prompts/build.judgement.md

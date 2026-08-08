@@ -67,7 +67,7 @@ _TABLE = (
     "| runner id | `runner-local` |\n"
     "| chunk id | `ch_1` |\n"
     "| lease id | `lease_1` |\n"
-    "| winter environment name | `r1` |\n"
+    "| environment name | `r1` |\n"
     "| environment workdir | `/ws/r1` |"
 )
 
@@ -88,7 +88,7 @@ def test_single_env_table_carries_identity_and_the_one_env() -> None:
     assert "| chunk id | `ch_1` |" in out
     assert "| lease id | `lease_1` |" in out
     # The single environment appears as a name/workdir pair.
-    assert "| winter environment name | `r1` |" in out
+    assert "| environment name | `r1` |" in out
     assert "| environment workdir | `/ws/r1` |" in out
 
 
@@ -99,12 +99,12 @@ def test_multi_env_table_names_every_held_environment() -> None:
         [AcquiredEnvironment("r1", "/ws/r1"), AcquiredEnvironment("r2", "/ws/r2")],
     )
     # Both held environments appear — never just the first (issue #17).
-    assert "| winter environment name | `r1` |" in out
+    assert "| environment name | `r1` |" in out
     assert "| environment workdir | `/ws/r1` |" in out
-    assert "| winter environment name | `r2` |" in out
+    assert "| environment name | `r2` |" in out
     assert "| environment workdir | `/ws/r2` |" in out
     # One row-pair per env: two name rows, two workdir rows.
-    assert out.count("| winter environment name |") == 2
+    assert out.count("| environment name |") == 2
     assert out.count("| environment workdir |") == 2
 
 
@@ -117,7 +117,7 @@ def test_empty_workspace_prompt_omits_that_layer() -> None:
         "| runner id | `runner-local` |\n"
         "| chunk id | `ch_1` |\n"
         "| lease id | `lease_1` |\n"
-        "| winter environment name | `r1` |\n"
+        "| environment name | `r1` |\n"
         "| environment workdir | `/ws/r1` |"
     )
 
@@ -164,7 +164,7 @@ def test_runner_prompt_layers_ahead_of_workspace_prompt_ahead_of_table() -> None
         "| runner id | `runner-local` |\n"
         "| chunk id | `ch_1` |\n"
         "| lease id | `lease_1` |\n"
-        "| winter environment name | `r1` |\n"
+        "| environment name | `r1` |\n"
         "| environment workdir | `/ws/r1` |"
     )
 
@@ -303,7 +303,7 @@ def test_resume_still_carries_this_attempts_freshly_minted_lease_id() -> None:
     assert "| lease id | `lease_this_attempt` |" in out
     assert "lease_1" not in out
     # The whole table, not just the lease row.
-    assert "| winter environment name | `r1` |" in out
+    assert "| environment name | `r1` |" in out
     assert "| environment workdir | `/ws/r1` |" in out
 
 

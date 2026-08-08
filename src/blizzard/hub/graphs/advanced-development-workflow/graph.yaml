@@ -1,8 +1,8 @@
 # The advanced-development-workflow graph — plan -> plan-review -> build -> verify ->
 # review -> pre-push -> deliver, on one single linear track.
 #
-# Modeled on the winter-workflow `glacier` skill: adopt-or-produce a plan gated on the
-# verifiability matrix and architecture guidance, build the phases strictly in order,
+# The heavyweight lane: adopt-or-produce a plan gated on the project's declared
+# verification methods and architecture guidance, build the phases strictly in order,
 # close the build with the verify finale, cold multi-axes review, then a pre-push
 # rebase: rebase every ahead repo onto the current base branch, resolve conflicts
 # inside the rebase, run lint plus judgement-scoped unit tests, and triage severity —
@@ -20,8 +20,8 @@ entry: plan
 # Named session pools (issue #144). Three lineages, each with its own capability tier:
 #
 #   planning  the plan node's own long-running context, on the advanced tier — authoring
-#             a plan against the verifiability matrix and architecture guidance is the
-#             judgement-heaviest work this graph does.
+#             a plan against the project's declared verification methods and architecture
+#             guidance is the judgement-heaviest work this graph does.
 #   code      the mechanical build lineage — build -> verify -> pre-push -> resolve — on
 #             the basic tier and BOUNDED, since it is the one lineage that can accumulate
 #             indefinitely across a review-fail loop.
@@ -65,6 +65,13 @@ nodes:
       # instead of its own prior drafting context
     produces:
       - plan
+      # The refutation channel (see prompts/plan.from-plan-review.md): findings from a
+      # prior plan-review round the plan declines rather than fixes, with the argument.
+      # plan-review reads it before re-reviewing and must accept or reject each one
+      # explicitly, so a declined finding stops costing a round every pass. Declared even
+      # on a first draft, where it is one line saying nothing was refuted — an explicit
+      # "nothing to refute" tells the gate the channel was considered; silence doesn't.
+      - plan-finding-refutes
       - retrospective
     judgement:
       prompt: ./prompts/plan.judgement.md
@@ -105,6 +112,11 @@ nodes:
       # those ran last instead of its own coding context
     produces:
       - retrospective
+      # The refutation channel (see prompts/build.from-review.md), mirroring plan's:
+      # review findings the build declines rather than fixes, with the argument. `review`
+      # is a fresh cold read every pass, so without this it re-raises a deliberately
+      # declined finding forever; it now must accept or reject each refutation explicitly.
+      - review-finding-refutes
       - {name: commit, kind: git_commit}  # the pushed branch(es); kind-matched, not name-matched
     judgement:
       prompt: ./prompts/build.judgement.md

@@ -904,7 +904,7 @@ def test_fresh_spawn_sends_all_three_layers_and_records_a_fingerprint(tmp_path):
             "| runner id | `r1` |\n"
             "| chunk id | `ch_1` |\n"
             "| lease id | " + f"`{store.active_lease_for_chunk('ch_1').lease_id}` |\n"  # type: ignore[union-attr]
-            "| winter environment name | `e1` |\n"
+            "| environment name | `e1` |\n"
             "| environment workdir | `/ws/e1` |"
         )
     )
@@ -2107,7 +2107,7 @@ def test_spawn_prefixes_static_workspace_prompt_and_sets_workspace_root(tmp_path
     # Layer 1 (the baked blizzard preamble, since runner_prompt is unset) leads,
     # followed by the static workspace prompt (issue #103).
     assert preamble.prompt_prefix.startswith(f"{DEFAULT_BLIZZARD_PREAMBLE}\n\nSTATIC-PROMPT\n\n")
-    assert "| winter environment name | `e1` |" in preamble.prompt_prefix
+    assert "| environment name | `e1` |" in preamble.prompt_prefix
 
 
 @pytest.mark.unit
