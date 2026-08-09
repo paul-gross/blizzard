@@ -516,7 +516,7 @@ export const fleetSummaryApiFleetSummaryGet = <ThrowOnError extends boolean = fa
  * Ingest Transcript Segments
  *
  * Land the runner's batched transcript records — the transcript lane's own
- * store-and-forward push (D7), distinct from :func:`ingest_runner_facts`'s fact lane.
+ * store-and-forward push (D7), distinct from the fact lane at ``POST /api/fleet/events``.
  */
 export const ingestTranscriptSegmentsApiFleetTranscriptsPost = <ThrowOnError extends boolean = false>(options: Options<IngestTranscriptSegmentsApiFleetTranscriptsPostData, ThrowOnError>): RequestResult<IngestTranscriptSegmentsApiFleetTranscriptsPostResponses, IngestTranscriptSegmentsApiFleetTranscriptsPostErrors, ThrowOnError> => (options.client ?? client).post<IngestTranscriptSegmentsApiFleetTranscriptsPostResponses, IngestTranscriptSegmentsApiFleetTranscriptsPostErrors, ThrowOnError>({
     url: '/api/fleet/transcripts',

@@ -2437,9 +2437,9 @@ export type SessionMode = 'resume' | 'fresh';
 /**
  * SidechainSegmentView
  *
- * A subagent's private conversation, nested under its spawning tool call — mirrors
- * :class:`~blizzard.runner.harness.transcript.SidechainConversation`. Recursive: a
- * sidechain turn may itself carry a tool call whose own sidechain nests further.
+ * A subagent's private conversation, nested under the tool call that spawned it.
+ * Recursive: a sidechain turn may itself carry a tool call whose own sidechain nests
+ * further.
  */
 export type SidechainSegmentViewInput = {
     /**
@@ -2463,9 +2463,9 @@ export type SidechainSegmentViewInput = {
 /**
  * SidechainSegmentView
  *
- * A subagent's private conversation, nested under its spawning tool call — mirrors
- * :class:`~blizzard.runner.harness.transcript.SidechainConversation`. Recursive: a
- * sidechain turn may itself carry a tool call whose own sidechain nests further.
+ * A subagent's private conversation, nested under the tool call that spawned it.
+ * Recursive: a sidechain turn may itself carry a tool call whose own sidechain nests
+ * further.
  */
 export type SidechainSegmentViewOutput = {
     /**
@@ -2526,7 +2526,7 @@ export type SubmittedArtifact = {
 /**
  * ToolCallSegmentView
  *
- * A tool invocation, structured — mirrors :class:`~blizzard.runner.harness.transcript.ToolCall`.
+ * A tool invocation, structured: what was called, with what input, and what came back.
  */
 export type ToolCallSegmentView = {
     /**
@@ -2639,8 +2639,8 @@ export type TranscriptSegmentContentView = {
  * TranscriptSegmentIndexEntry
  *
  * One segment's metadata row (D12) — byte counts and completion state, never turn
- * content. ``truncated`` surfaces D5's per-segment cap-rejection mark now rather than
- * deferring the board (#248) into a route reshape (plan-review F2).
+ * content. ``truncated`` marks a segment the per-segment cap rejected part of (D5), so a
+ * consumer can tell an incomplete segment from a short one without fetching it.
  */
 export type TranscriptSegmentIndexEntry = {
     /**
@@ -2818,10 +2818,8 @@ export type TransitionView = {
 /**
  * TurnSegmentView
  *
- * One normalized turn, carried in full — mirrors
- * :class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is
- * **segment-relative**, minted by the producer (D9) — never the batch-local, unstable
- * ``NormalizedTurn.index``.
+ * One normalized turn, carried in full. ``index`` is **segment-relative** and minted
+ * by the producer (D9), so it is stable across the batches a segment arrives in.
  */
 export type TurnSegmentViewInput = {
     /**
@@ -2855,10 +2853,8 @@ export type TurnSegmentViewInput = {
 /**
  * TurnSegmentView
  *
- * One normalized turn, carried in full — mirrors
- * :class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is
- * **segment-relative**, minted by the producer (D9) — never the batch-local, unstable
- * ``NormalizedTurn.index``.
+ * One normalized turn, carried in full. ``index`` is **segment-relative** and minted
+ * by the producer (D9), so it is stable across the batches a segment arrives in.
  */
 export type TurnSegmentViewOutput = {
     /**

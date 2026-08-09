@@ -3742,7 +3742,7 @@
         "type": "string"
       },
       "SidechainSegmentView-Input": {
-        "description": "A subagent's private conversation, nested under its spawning tool call \u2014 mirrors\n:class:`~blizzard.runner.harness.transcript.SidechainConversation`. Recursive: a\nsidechain turn may itself carry a tool call whose own sidechain nests further.",
+        "description": "A subagent's private conversation, nested under the tool call that spawned it.\nRecursive: a sidechain turn may itself carry a tool call whose own sidechain nests\nfurther.",
         "properties": {
           "agent_id": {
             "anyOf": [
@@ -3788,7 +3788,7 @@
         "type": "object"
       },
       "SidechainSegmentView-Output": {
-        "description": "A subagent's private conversation, nested under its spawning tool call \u2014 mirrors\n:class:`~blizzard.runner.harness.transcript.SidechainConversation`. Recursive: a\nsidechain turn may itself carry a tool call whose own sidechain nests further.",
+        "description": "A subagent's private conversation, nested under the tool call that spawned it.\nRecursive: a sidechain turn may itself carry a tool call whose own sidechain nests\nfurther.",
         "properties": {
           "agent_id": {
             "anyOf": [
@@ -3912,7 +3912,7 @@
         "type": "object"
       },
       "ToolCallSegmentView": {
-        "description": "A tool invocation, structured \u2014 mirrors :class:`~blizzard.runner.harness.transcript.ToolCall`.",
+        "description": "A tool invocation, structured: what was called, with what input, and what came back.",
         "properties": {
           "input": {
             "additionalProperties": true,
@@ -4075,7 +4075,7 @@
         "type": "object"
       },
       "TranscriptSegmentIndexEntry": {
-        "description": "One segment's metadata row (D12) \u2014 byte counts and completion state, never turn\ncontent. ``truncated`` surfaces D5's per-segment cap-rejection mark now rather than\ndeferring the board (#248) into a route reshape (plan-review F2).",
+        "description": "One segment's metadata row (D12) \u2014 byte counts and completion state, never turn\ncontent. ``truncated`` marks a segment the per-segment cap rejected part of (D5), so a\nconsumer can tell an incomplete segment from a short one without fetching it.",
         "properties": {
           "byte_count": {
             "title": "Byte Count",
@@ -4344,7 +4344,7 @@
         "type": "object"
       },
       "TurnSegmentView-Input": {
-        "description": "One normalized turn, carried in full \u2014 mirrors\n:class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is\n**segment-relative**, minted by the producer (D9) \u2014 never the batch-local, unstable\n``NormalizedTurn.index``.",
+        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and minted\nby the producer (D9), so it is stable across the batches a segment arrives in.",
         "properties": {
           "index": {
             "title": "Index",
@@ -4412,7 +4412,7 @@
         "type": "object"
       },
       "TurnSegmentView-Output": {
-        "description": "One normalized turn, carried in full \u2014 mirrors\n:class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is\n**segment-relative**, minted by the producer (D9) \u2014 never the batch-local, unstable\n``NormalizedTurn.index``.",
+        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and minted\nby the producer (D9), so it is stable across the batches a segment arrives in.",
         "properties": {
           "index": {
             "title": "Index",
@@ -7051,7 +7051,7 @@
     },
     "/api/fleet/transcripts": {
       "post": {
-        "description": "Land the runner's batched transcript records \u2014 the transcript lane's own\nstore-and-forward push (D7), distinct from :func:`ingest_runner_facts`'s fact lane.",
+        "description": "Land the runner's batched transcript records \u2014 the transcript lane's own\nstore-and-forward push (D7), distinct from the fact lane at ``POST /api/fleet/events``.",
         "operationId": "ingest_transcript_segments_api_fleet_transcripts_post",
         "requestBody": {
           "content": {

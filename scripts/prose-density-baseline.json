@@ -2504,8 +2504,8 @@
   },
   "blizzard/wire/transcript_segment.py": {
    "comments": 1,
-   "docstrings": 31,
-   "total": 130
+   "docstrings": 29,
+   "total": 128
   },
   "blizzard/wire/user.py": {
    "comments": 0,

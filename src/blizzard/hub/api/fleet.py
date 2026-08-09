@@ -505,7 +505,7 @@ def ingest_transcript_segments(
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> TranscriptSegmentAck:
     """Land the runner's batched transcript records — the transcript lane's own
-    store-and-forward push (D7), distinct from :func:`ingest_runner_facts`'s fact lane."""
+    store-and-forward push (D7), distinct from the fact lane at ``POST /api/fleet/events``."""
     fleet.assert_owns(batch.runner_id)
     records = [
         (record.seq, transcripts_api.to_domain_record(record, runner_id=batch.runner_id)) for record in batch.records

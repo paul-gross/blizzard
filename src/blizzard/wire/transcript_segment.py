@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 
 class ToolCallSegmentView(BaseModel):
-    """A tool invocation, structured — mirrors :class:`~blizzard.runner.harness.transcript.ToolCall`."""
+    """A tool invocation, structured: what was called, with what input, and what came back."""
 
     name: str
     input: dict[str, object]
@@ -23,9 +23,9 @@ class ToolCallSegmentView(BaseModel):
 
 
 class SidechainSegmentView(BaseModel):
-    """A subagent's private conversation, nested under its spawning tool call — mirrors
-    :class:`~blizzard.runner.harness.transcript.SidechainConversation`. Recursive: a
-    sidechain turn may itself carry a tool call whose own sidechain nests further."""
+    """A subagent's private conversation, nested under the tool call that spawned it.
+    Recursive: a sidechain turn may itself carry a tool call whose own sidechain nests
+    further."""
 
     agent_id: str | None
     agent_type: str | None
@@ -34,10 +34,8 @@ class SidechainSegmentView(BaseModel):
 
 
 class TurnSegmentView(BaseModel):
-    """One normalized turn, carried in full — mirrors
-    :class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is
-    **segment-relative**, minted by the producer (D9) — never the batch-local, unstable
-    ``NormalizedTurn.index``."""
+    """One normalized turn, carried in full. ``index`` is **segment-relative** and minted
+    by the producer (D9), so it is stable across the batches a segment arrives in."""
 
     index: int
     kind: str  # env | asst | tool | thinking
@@ -95,8 +93,8 @@ class TranscriptSegmentAck(BaseModel):
 
 class TranscriptSegmentIndexEntry(BaseModel):
     """One segment's metadata row (D12) — byte counts and completion state, never turn
-    content. ``truncated`` surfaces D5's per-segment cap-rejection mark now rather than
-    deferring the board (#248) into a route reshape (plan-review F2)."""
+    content. ``truncated`` marks a segment the per-segment cap rejected part of (D5), so a
+    consumer can tell an incomplete segment from a short one without fetching it."""
 
     segment_id: str
     node_id: str
