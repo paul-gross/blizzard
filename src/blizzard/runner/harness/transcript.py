@@ -14,8 +14,8 @@ from typing import Any, Literal, Protocol
 
 import structlog
 
-#: The normalized turn vocabulary
-#: (:data:`~blizzard.runner.transcripts.repository.TurnKind` carries no thinking kind).
+#: The normalized turn vocabulary — :data:`~blizzard.runner.transcripts.repository.TurnKind`
+#: carries every one of these, plus its own ``"sidechain"`` (blizzard#248 D2).
 NormalizedTurnKind = Literal["env", "asst", "tool", "thinking"]
 
 #: How a sidechain's attachment to its spawning tool call resolved — an open, harness-native label.

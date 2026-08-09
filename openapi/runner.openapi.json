@@ -1474,6 +1474,52 @@
         "title": "SessionEndResponse",
         "type": "object"
       },
+      "SidechainSegmentView": {
+        "description": "A subagent's private conversation, nested under its spawning tool call \u2014 mirrors\n:class:`~blizzard.runner.harness.transcript.SidechainConversation`. Recursive: a\nsidechain turn may itself carry a tool call whose own sidechain nests further.",
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "agent_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Type"
+          },
+          "link": {
+            "title": "Link",
+            "type": "string"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/TurnSegmentView"
+            },
+            "title": "Turns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agent_id",
+          "agent_type",
+          "link",
+          "turns"
+        ],
+        "title": "SidechainSegmentView",
+        "type": "object"
+      },
       "StagedAttachment": {
         "description": "One of the lease's currently staged (not-yet-published) submissions \u2014\n``GET /api/leases/{lease_id}/attachments`` (issue #169).",
         "properties": {
@@ -1556,6 +1602,72 @@
         "title": "TakeoverRequest",
         "type": "object"
       },
+      "ToolCallSegmentView": {
+        "description": "A tool invocation, structured \u2014 mirrors :class:`~blizzard.runner.harness.transcript.ToolCall`.",
+        "properties": {
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "input_shape": {
+            "title": "Input Shape",
+            "type": "string"
+          },
+          "input_unparsed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Unparsed"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output"
+          },
+          "output_truncated": {
+            "title": "Output Truncated",
+            "type": "boolean"
+          },
+          "tool_use_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Use Id"
+          }
+        },
+        "required": [
+          "name",
+          "input",
+          "input_unparsed",
+          "input_shape",
+          "tool_use_id",
+          "output",
+          "output_truncated"
+        ],
+        "title": "ToolCallSegmentView",
+        "type": "object"
+      },
       "TranscriptResponse": {
         "description": "A lease's parsed transcript \u2014 always 200 when the lease exists.",
         "properties": {
@@ -1602,7 +1714,7 @@
           "turns": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/TurnView"
+              "$ref": "#/components/schemas/TurnSegmentView"
             },
             "title": "Turns",
             "type": "array"
@@ -1617,25 +1729,34 @@
         "title": "TranscriptResponse",
         "type": "object"
       },
-      "TurnView": {
-        "description": "One collapsed conversation turn on the wire.",
+      "TurnSegmentView": {
+        "description": "One normalized turn, carried in full \u2014 mirrors\n:class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is\n**segment-relative**, minted by the producer (D9) \u2014 never the batch-local, unstable\n``NormalizedTurn.index``.",
         "properties": {
           "index": {
             "title": "Index",
             "type": "integer"
           },
           "kind": {
-            "enum": [
-              "env",
-              "asst",
-              "tool"
-            ],
             "title": "Kind",
             "type": "string"
+          },
+          "sidechain": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SidechainSegmentView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "text": {
             "title": "Text",
             "type": "string"
+          },
+          "thinking_redacted": {
+            "title": "Thinking Redacted",
+            "type": "boolean"
           },
           "timestamp": {
             "anyOf": [
@@ -1648,38 +1769,15 @@
             ],
             "title": "Timestamp"
           },
-          "tool_input": {
+          "tool": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/ToolCallSegmentView"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Tool Input"
-          },
-          "tool_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tool Name"
-          },
-          "tool_output": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tool Output"
+            ]
           },
           "truncated": {
             "title": "Truncated",
@@ -1691,12 +1789,12 @@
           "kind",
           "timestamp",
           "text",
-          "tool_name",
-          "tool_input",
-          "tool_output",
+          "tool",
+          "thinking_redacted",
+          "sidechain",
           "truncated"
         ],
-        "title": "TurnView",
+        "title": "TurnSegmentView",
         "type": "object"
       },
       "ValidationError": {

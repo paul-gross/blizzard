@@ -988,6 +988,32 @@ export type SessionEndResponse = {
 };
 
 /**
+ * SidechainSegmentView
+ *
+ * A subagent's private conversation, nested under its spawning tool call — mirrors
+ * :class:`~blizzard.runner.harness.transcript.SidechainConversation`. Recursive: a
+ * sidechain turn may itself carry a tool call whose own sidechain nests further.
+ */
+export type SidechainSegmentView = {
+    /**
+     * Agent Id
+     */
+    agent_id: string | null;
+    /**
+     * Agent Type
+     */
+    agent_type: string | null;
+    /**
+     * Link
+     */
+    link: string;
+    /**
+     * Turns
+     */
+    turns: Array<TurnSegmentView>;
+};
+
+/**
  * StagedAttachment
  *
  * One of the lease's currently staged (not-yet-published) submissions —
@@ -1062,6 +1088,44 @@ export type TakeoverRequest = {
 };
 
 /**
+ * ToolCallSegmentView
+ *
+ * A tool invocation, structured — mirrors :class:`~blizzard.runner.harness.transcript.ToolCall`.
+ */
+export type ToolCallSegmentView = {
+    /**
+     * Input
+     */
+    input: {
+        [key: string]: unknown;
+    };
+    /**
+     * Input Shape
+     */
+    input_shape: string;
+    /**
+     * Input Unparsed
+     */
+    input_unparsed: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Output
+     */
+    output: string | null;
+    /**
+     * Output Truncated
+     */
+    output_truncated: boolean;
+    /**
+     * Tool Use Id
+     */
+    tool_use_id: string | null;
+};
+
+/**
  * TranscriptResponse
  *
  * A lease's parsed transcript — always 200 when the lease exists.
@@ -1090,15 +1154,18 @@ export type TranscriptResponse = {
     /**
      * Turns
      */
-    turns?: Array<TurnView>;
+    turns?: Array<TurnSegmentView>;
 };
 
 /**
- * TurnView
+ * TurnSegmentView
  *
- * One collapsed conversation turn on the wire.
+ * One normalized turn, carried in full — mirrors
+ * :class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is
+ * **segment-relative**, minted by the producer (D9) — never the batch-local, unstable
+ * ``NormalizedTurn.index``.
  */
-export type TurnView = {
+export type TurnSegmentView = {
     /**
      * Index
      */
@@ -1106,27 +1173,21 @@ export type TurnView = {
     /**
      * Kind
      */
-    kind: 'env' | 'asst' | 'tool';
+    kind: string;
+    sidechain: SidechainSegmentView | null;
     /**
      * Text
      */
     text: string;
     /**
+     * Thinking Redacted
+     */
+    thinking_redacted: boolean;
+    /**
      * Timestamp
      */
     timestamp: string | null;
-    /**
-     * Tool Input
-     */
-    tool_input: string | null;
-    /**
-     * Tool Name
-     */
-    tool_name: string | null;
-    /**
-     * Tool Output
-     */
-    tool_output: string | null;
+    tool: ToolCallSegmentView | null;
     /**
      * Truncated
      */

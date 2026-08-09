@@ -1,14 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { formatAbsolute, formatLocalClockWithDay, KitAsyncState, type LocalClockWithDay, type runnerApi } from 'fleet';
+import { KitAsyncState, TranscriptViewer, type runnerApi } from 'fleet';
 
 import { injectTranscriptQuery } from './transcript.query';
 
 /**
- * The right pane's content (issue #29 slice C) — one lease's parsed transcript,
- * turn by turn, driven by {@link injectTranscriptQuery}. Standalone, `OnPush`,
- * self-contained: `local-panel.ts` only ever passes it {@link leaseId} and never
- * branches on the read itself — every degraded/empty case below is this
- * component's own concern.
+ * The right pane's content (issue #29 slice C) — one lease's parsed transcript, driven
+ * by {@link injectTranscriptQuery}. Standalone, `OnPush`, self-contained: `local-panel.ts`
+ * only ever passes it {@link leaseId} and never branches on the read itself — every
+ * degraded/empty case below is this component's own concern. Turn rendering itself is
+ * `fleet`'s shared {@link TranscriptViewer} (blizzard#248 D3/D4) — this component is now
+ * only the container: it owns the query and maps it onto one of the states below, the
+ * pattern the hub's Transcripts tab (blizzard#248 Phase 2) reuses rather than reinvents.
  *
  * Eight read states, kept visually and testably distinct (`data-testid` per row)
  * so an operator, or a test, can never mistake one for another — each is a real
@@ -30,8 +32,8 @@ import { injectTranscriptQuery } from './transcript.query';
  *   (or an unresolved read the earlier branches didn't already catch); the
  *   `@default` fallback the not-found case used to also catch, given its own
  *   row so the two are never mistaken for each other.
- * - **turns** — the parsed list, plus a truncation banner when the server
- *   capped the read (truncation must be visible, never silent).
+ * - **turns** — {@link TranscriptViewer}'s rendered list, plus a truncation banner
+ *   when the server capped the read (truncation must be visible, never silent).
  *
  * `spawning`/`not_found` are deliberately **not** colored as errors: training an
  * operator to see red for a normal lifecycle state teaches them to ignore red.
@@ -40,7 +42,7 @@ import { injectTranscriptQuery } from './transcript.query';
 @Component({
   selector: 'local-transcript-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState],
+  imports: [KitAsyncState, TranscriptViewer],
   template: `
     @if (leaseId() === null) {
       <fleet-kit-async-state state="empty" emptyText="SELECT AN AGENT" emptyTestid="transcript-empty" />
@@ -77,48 +79,11 @@ import { injectTranscriptQuery } from './transcript.query';
         }
       }
     } @else {
-      <div class="turns" data-testid="transcript-turns">
+      <div data-testid="transcript-turns">
         @if (transcript()?.truncated) {
           <p class="banner" data-testid="transcript-truncated">TRUNCATED — SHOWING THE MOST RECENT TURNS</p>
         }
-        @for (turn of transcript()?.turns ?? []; track turn.index) {
-          <div class="turn" [class]="'k-' + turn.kind" data-testid="transcript-turn">
-            <span class="t" [attr.title]="turnClockInfo(turn.timestamp) ? turnAbsolute(turn.timestamp) : null">
-              @if (turnClockInfo(turn.timestamp); as info) {
-                @if (info.day) {
-                  <span class="day">{{ info.day }}</span>
-                }
-                <span class="time">{{ info.time }}</span>
-              } @else {
-                <span class="time">—</span>
-              }
-            </span>
-            <span class="g"><span class="tick"></span></span>
-            <span class="b">
-              @switch (turn.kind) {
-                @case ('tool') {
-                  <details class="tool-call">
-                    <summary class="tc-head">
-                      <span class="tc-name">{{ turn.tool_name }} <b>{{ turn.tool_input }}</b></span>
-                    </summary>
-                    <div class="tc-out">{{ turn.tool_output ?? 'running…' }}</div>
-                  </details>
-                }
-                @case ('env') {
-                  <div class="who">env</div>
-                  <div class="tx">{{ turn.text }}</div>
-                }
-                @default {
-                  <div class="who">assistant</div>
-                  <div class="tx">{{ turn.text }}</div>
-                }
-              }
-              @if (turn.truncated) {
-                <div class="trunc-note">⋯ truncated</div>
-              }
-            </span>
-          </div>
-        }
+        <fleet-transcript-viewer [turns]="transcript()?.turns ?? []" />
       </div>
     }
   `,
@@ -129,7 +94,6 @@ import { injectTranscriptQuery } from './transcript.query';
       position: relative;
       font-family: var(--mono);
       font-size: var(--fs-base);
-      font-variant-numeric: tabular-nums;
     }
     .banner {
       color: var(--amber-hi);
@@ -138,116 +102,6 @@ import { injectTranscriptQuery } from './transcript.query';
       padding: 5px 8px;
       border-bottom: 1px solid var(--line);
       background: var(--overlay-25);
-    }
-    .turns {
-      padding: 4px 0 12px;
-    }
-    .turn {
-      display: grid;
-      grid-template-columns: 64px 16px 1fr;
-      gap: 8px;
-      padding: 4px 10px 4px 8px;
-      border-bottom: 1px solid var(--line);
-    }
-    .turn .t {
-      display: flex;
-      flex-direction: column;
-      color: var(--label-dim);
-      font-size: var(--fs-label);
-      padding-top: 2px;
-    }
-    .turn .t .day {
-      font-size: 0.9em;
-    }
-    .turn .g {
-      position: relative;
-    }
-    .turn .g::before {
-      content: '';
-      position: absolute;
-      left: 6px;
-      top: 0;
-      bottom: -1px;
-      width: 1px;
-      background: var(--line);
-    }
-    .turn .g .tick {
-      position: absolute;
-      left: 3px;
-      top: 5px;
-      width: 7px;
-      height: 7px;
-      background: var(--panel-deep);
-      border: 1px solid var(--label-dim);
-      z-index: 1;
-    }
-    .turn.k-tool .g .tick {
-      background: var(--green-dim);
-      border-color: var(--green);
-    }
-    .turn.k-env .g .tick {
-      background: var(--cyan-dim);
-      border-color: var(--cyan);
-    }
-    .turn .b {
-      min-width: 0;
-      font-size: var(--fs-sm);
-      line-height: 1.55;
-    }
-    .turn .who {
-      font-size: var(--fs-label);
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      color: var(--label);
-      margin-bottom: 1px;
-    }
-    .turn.k-env .who {
-      color: var(--cyan);
-    }
-    .turn .tx {
-      color: var(--text);
-      white-space: pre-wrap;
-    }
-    .turn.k-env .tx {
-      color: var(--label);
-      font-size: var(--fs-sm);
-    }
-    .trunc-note {
-      color: var(--amber-dim);
-      font-size: var(--fs-label);
-      margin-top: 2px;
-    }
-    .tool-call {
-      border: 1px solid var(--line);
-      border-left: 2px solid var(--green-dim);
-      background: var(--overlay-30);
-      padding: 2px 6px;
-    }
-    .tool-call .tc-head {
-      cursor: pointer;
-      list-style: none;
-    }
-    .tool-call .tc-head::-webkit-details-marker {
-      display: none;
-    }
-    .tool-call .tc-name {
-      color: var(--green);
-      font-size: var(--fs-sm);
-    }
-    .tool-call .tc-name b {
-      color: var(--amber);
-      font-weight: normal;
-    }
-    .tool-call .tc-out {
-      margin-top: 3px;
-      padding: 3px 6px;
-      background: #000;
-      border: 1px solid var(--line);
-      color: var(--label);
-      font-size: var(--fs-xs);
-      white-space: pre-wrap;
-      max-height: 200px;
-      overflow-y: auto;
     }
   `,
 })
@@ -258,28 +112,4 @@ export class TranscriptPanel {
   protected readonly transcriptQuery = injectTranscriptQuery(this.leaseId);
 
   protected readonly transcript = computed<runnerApi.TranscriptResponse | undefined>(() => this.transcriptQuery.data());
-
-  /**
-   * A turn's browser-local `HH:MM:SS` plus day context, or `null` when
-   * absent/unparsable — the template's time cell falls back to `—`.
-   *
-   * This is the panel's only *absolute* time-of-day rendering (`agent-row.ts`
-   * deliberately renders *relative* ages instead, to sidestep clock questions
-   * entirely — `bzh:utc-instants`). Rendered in the viewer's own local zone
-   * rather than a fixed UTC label (issue #136): the wire and the runner store
-   * stay UTC end to end (`bzh:utc-instants`), but an operator reading a
-   * transcript wants the clock on their own wall, not the server's — this is
-   * display decoration over that UTC instant, not a reinterpretation of it.
-   * The parse/day-boundary logic itself is `fleet`'s shared
-   * {@link formatLocalClockWithDay} (issue #136).
-   */
-  protected turnClockInfo(iso: string | null): LocalClockWithDay | null {
-    return formatLocalClockWithDay(iso);
-  }
-
-  /** {@link turnClockInfo}'s full local date + time, for the stamp's hover tooltip
-   * (issue #175). */
-  protected turnAbsolute(iso: string | null): string {
-    return formatAbsolute(iso);
-  }
 }

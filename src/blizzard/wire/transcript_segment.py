@@ -2,8 +2,9 @@
 projection of #245's normalized turn model onto shipped, hub-stored content.
 
 A record is one shipped **turn-range slice** of a segment (D1). ``seq`` is the lane's
-high-water sequence (D7); ``(segment_id, turn_range_start)`` is the natural key a
-re-offer under a fresh seq dedupes against (D8). ``wire/transcript.py`` is untouched."""
+high-water sequence (D7); ``(segment_id, turn_range_start)`` is the natural key a re-offer
+under a fresh seq dedupes against (D8). ``wire/transcript.py`` imports ``TurnSegmentView``
+too, as the runner's own lease-transcript shape (blizzard#248 D1)."""
 
 from __future__ import annotations
 

@@ -59,9 +59,11 @@ def test_collapses_env_asst_and_tool_with_matched_output(tmp_path: Path) -> None
     assert [t.kind for t in transcript.turns] == ["env", "asst", "tool"]
     assert transcript.turns[0].text == "build the thing"
     assert transcript.turns[1].text == "Sure, I'll start."
-    assert transcript.turns[2].tool_name == "Bash"
-    assert transcript.turns[2].tool_input == json.dumps({"command": "ls"})
-    assert transcript.turns[2].tool_output == "file1\nfile2"
+    tool = transcript.turns[2].tool
+    assert tool is not None
+    assert tool.name == "Bash"
+    assert tool.input == {"command": "ls"}
+    assert tool.output == "file1\nfile2"
     assert transcript.truncated is False
     assert [t.index for t in transcript.turns] == [0, 1, 2]
 
@@ -78,8 +80,8 @@ def test_one_assistant_record_yields_one_asst_and_n_tool_turns(tmp_path: Path) -
     transcript = _read(tmp_path)
 
     assert [t.kind for t in transcript.turns] == ["asst", "tool", "tool"]
-    assert transcript.turns[1].tool_name == "Read"
-    assert transcript.turns[2].tool_name == "Read"
+    assert transcript.turns[1].tool is not None and transcript.turns[1].tool.name == "Read"
+    assert transcript.turns[2].tool is not None and transcript.turns[2].tool.name == "Read"
 
 
 @pytest.mark.component
@@ -95,7 +97,8 @@ def test_tool_turn_with_no_result_keeps_output_none(tmp_path: Path) -> None:
 
     assert len(transcript.turns) == 1
     assert transcript.turns[0].kind == "tool"
-    assert transcript.turns[0].tool_output is None  # renders "running…" — the live steady state
+    assert transcript.turns[0].tool is not None
+    assert transcript.turns[0].tool.output is None  # renders "running…" — the live steady state
 
 
 @pytest.mark.component
@@ -106,30 +109,44 @@ def test_is_meta_record_is_filtered(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_is_sidechain_record_is_filtered(tmp_path: Path) -> None:
-    """The panel's zero-turn outcome for an ``isSidechain`` record — pinned at this
-    layer; the normalizer's own surfacing of it as an unlinked conversation is pinned
-    in ``tests/test_runner_harness_claude_code_normalizer.py``."""
+    """An unresolvable ``isSidechain`` record surfaces as its own top-level ``"sidechain"``
+    turn (blizzard#248 D2/D7) — the unlinked routing itself is pinned in
+    ``test_runner_harness_claude_code_normalizer.py``."""
     _write(tmp_path, [fx.sidechain_record()])
-    assert _read(tmp_path).turns == []
-
-
-@pytest.mark.component
-def test_a_thinking_turn_produces_zero_panel_turns_not_an_empty_asst_turn(tmp_path: Path) -> None:
-    """A thinking block contributes no panel turn at all: without the projection's own
-    `kind != "thinking"` filter it would fall through to an empty `asst` turn — a
-    visible regression on the panel contract this projection holds constant."""
-    _write(tmp_path, [fx.user_env("hello"), fx.thinking_block()])
     transcript = _read(tmp_path)
 
-    assert [t.kind for t in transcript.turns] == ["env"]
-    assert [t.text for t in transcript.turns] == ["hello"]
+    assert [t.kind for t in transcript.turns] == ["sidechain"]
+    assert transcript.turns[0].sidechain is not None
+    assert transcript.turns[0].sidechain.link == "unlinked"
+    assert [t.text for t in transcript.turns[0].sidechain.turns] == ["subagent chatter"]
 
 
 @pytest.mark.component
-def test_a_sidecar_backed_sidechain_produces_zero_extra_panel_turns(tmp_path: Path) -> None:
-    """A *resolved* sidechain (link route 1, via a real sidecar file) still
-    contributes nothing beyond its own spawning tool turn — the projection drops the
-    nested conversation exactly like the unresolved case above."""
+def test_a_thinking_turn_carries_through_as_its_own_kind(tmp_path: Path) -> None:
+    """A thinking block is now a panel turn in its own right (blizzard#248 D2) —
+    previously the projection's own ``kind != "thinking"`` filter dropped it entirely."""
+    _write(tmp_path, [fx.user_env("hello"), fx.thinking_block(text="pondering", signature=None)])
+    transcript = _read(tmp_path)
+
+    assert [t.kind for t in transcript.turns] == ["env", "thinking"]
+    assert transcript.turns[1].text == "pondering"
+    assert transcript.turns[1].thinking_redacted is False
+
+
+@pytest.mark.component
+def test_a_redacted_thinking_turn_carries_presence_not_prose(tmp_path: Path) -> None:
+    _write(tmp_path, [fx.thinking_block()])
+    transcript = _read(tmp_path)
+
+    assert transcript.turns[0].kind == "thinking"
+    assert transcript.turns[0].text == ""
+    assert transcript.turns[0].thinking_redacted is True
+
+
+@pytest.mark.component
+def test_a_sidecar_backed_sidechain_nests_under_its_spawning_tool_turn(tmp_path: Path) -> None:
+    """A *resolved* sidechain (link route 1, via a real sidecar file) nests under its
+    spawning tool turn (blizzard#248 D2/D6) — it no longer vanishes."""
     _write(
         tmp_path,
         [
@@ -144,7 +161,12 @@ def test_a_sidecar_backed_sidechain_produces_zero_extra_panel_turns(tmp_path: Pa
 
     transcript = _read(tmp_path)
 
-    assert [t.kind for t in transcript.turns] == ["tool"]  # the spawning call, nothing nested
+    assert [t.kind for t in transcript.turns] == ["tool"]  # the spawning call, nothing else top-level
+    sidechain = transcript.turns[0].sidechain
+    assert sidechain is not None
+    assert sidechain.link != "unlinked"
+    assert [t.text for t in sidechain.turns] == ["starting"]
+    assert sidechain.turns[0].index == 0  # indexes independently from the outer turn list
 
 
 @pytest.mark.component
@@ -197,8 +219,8 @@ def test_truncated_final_line_is_dropped_silently(tmp_path: Path) -> None:
     assert transcript.turns[0].text == "build the thing"
 
 
-# Caps — MAX_TURNS moved here; MAX_BLOCK_CHARS (text) stays in the normalizer;
-# MAX_BLOCK_CHARS (tool input) is this module's own, re-materialization-time cap.
+# Caps — MAX_TURNS moved here; MAX_BLOCK_CHARS (text) stays in the normalizer; the tool-input
+# MAX_BLOCK_CHARS below applies only once a serialized input would exceed it (blizzard#248 D2).
 
 
 @pytest.mark.component
@@ -229,58 +251,38 @@ def test_max_block_chars_caps_assistant_text_without_flagging_file_level_truncat
 
 
 @pytest.mark.component
-def test_max_block_chars_caps_a_serialized_tool_input_and_flags_truncated(
+def test_max_block_chars_degrades_an_oversized_tool_input_to_a_capped_raw_string(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Load-bearing: the assistant-text ``MAX_BLOCK_CHARS`` case doesn't cover a
-    re-materialized tool-input string — this is that missing case."""
+    """Load-bearing: the assistant-text ``MAX_BLOCK_CHARS`` case doesn't cover an
+    oversized structured tool input — this is that missing case. Below the cap, input
+    stays structured (the next test); only over it does this degrade to a raw string."""
     monkeypatch.setattr(projection_module, "MAX_BLOCK_CHARS", 10)
     _write(tmp_path, [fx.assistant_tool_use("t1", "Bash", {"command": "x" * 50})])
     transcript = _read(tmp_path)
 
+    tool = transcript.turns[0].tool
     assert transcript.turns[0].kind == "tool"
-    assert transcript.turns[0].tool_input is not None
-    assert len(transcript.turns[0].tool_input) == 10
+    assert tool is not None
+    assert tool.input_shape == "other"
+    assert tool.input == {}
+    assert tool.input_unparsed is not None
+    assert len(tool.input_unparsed) == 10
     assert transcript.turns[0].truncated is True
 
 
 @pytest.mark.component
-def test_absent_tool_input_serializes_to_empty_string_not_json_null(tmp_path: Path) -> None:
-    """The wire contract renders a missing/``null`` ``input`` as ``""`` — never
-    ``json.dumps({})``, which the normalizer's own fallback alone would produce."""
-    content = [{"type": "tool_use", "id": "t1", "name": "Bash"}]  # no `input` key at all
-    line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
-    _write(tmp_path, [line])
+def test_a_tool_inputs_structure_carries_through_untouched_below_the_cap(tmp_path: Path) -> None:
+    """The wire's structured ``input`` (blizzard#248 D1) — the projection no longer
+    re-materializes it to a JSON string; rendering is the viewer's job."""
+    _write(tmp_path, [fx.assistant_tool_use("t1", "Bash", {"command": "ls"})])
     transcript = _read(tmp_path)
 
-    assert transcript.turns[0].kind == "tool"
-    assert transcript.turns[0].tool_input == ""
-
-
-@pytest.mark.component
-def test_bare_string_tool_input_that_parses_as_json_is_still_requoted(tmp_path: Path) -> None:
-    """A bare string ``input`` is re-quoted on the way back out, matching the wire
-    contract's blanket ``json.dumps(raw_input)``, even when it parses as JSON itself."""
-    content = [{"type": "tool_use", "id": "t1", "name": "Weird", "input": "123"}]
-    line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
-    _write(tmp_path, [line])
-    transcript = _read(tmp_path)
-
-    assert transcript.turns[0].kind == "tool"
-    assert transcript.turns[0].tool_input == json.dumps("123")
-
-
-@pytest.mark.component
-def test_list_valued_tool_input_round_trips_byte_identical_with_the_wire_contract(tmp_path: Path) -> None:
-    """The fourth `ToolInputShape` (`"other"`: a list, number, or bool `input`) —
-    re-materialized byte-identical with the wire contract's blanket `json.dumps(raw_input)`."""
-    content = [{"type": "tool_use", "id": "t1", "name": "Weird", "input": [1, "two", True]}]
-    line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
-    _write(tmp_path, [line])
-    transcript = _read(tmp_path)
-
-    assert transcript.turns[0].kind == "tool"
-    assert transcript.turns[0].tool_input == json.dumps([1, "two", True])
+    tool = transcript.turns[0].tool
+    assert tool is not None
+    assert tool.input_shape == "object"
+    assert tool.input == {"command": "ls"}
+    assert transcript.turns[0].truncated is False
 
 
 # --------------------------------------------------------------------------- #
@@ -304,15 +306,15 @@ def _scripted_batch(*, truncated: bool, sidechain_truncated: bool) -> Transcript
 
 
 @pytest.mark.unit
-def test_a_sidechain_only_truncation_never_reaches_the_panels_truncated_flag() -> None:
-    """The whole reason ``sidechain_truncated`` is a field of its own: since this
-    projection discards every sidechain, a sidecar-only truncation cuts nothing the
-    panel renders and must not raise its TRUNCATED banner."""
+def test_a_sidechain_only_truncation_now_reaches_the_panels_truncated_flag() -> None:
+    """Inverted by blizzard#248 D2: this projection now carries every sidechain through,
+    so a sidecar-only read-budget truncation cuts content the panel renders and must
+    raise its TRUNCATED banner — the opposite of when sidechains were discarded."""
     source = FakeTranscriptSource({"sess-1": _scripted_batch(truncated=False, sidechain_truncated=True)})
 
     transcript = ProjectedTranscriptRepository(source).read_turns("sess-1", spawn_cwd=None)
 
-    assert transcript.truncated is False
+    assert transcript.truncated is True
 
 
 @pytest.mark.unit

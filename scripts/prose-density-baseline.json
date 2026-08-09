@@ -1235,7 +1235,7 @@
   "blizzard/hub/domain/transcripts.py": {
    "comments": 11,
    "docstrings": 27,
-   "total": 195
+   "total": 209
   },
   "blizzard/hub/domain/work.py": {
    "comments": 44,
@@ -1330,7 +1330,7 @@
   "blizzard/hub/store/internal/transcript_segment_store.py": {
    "comments": 6,
    "docstrings": 6,
-   "total": 190
+   "total": 227
   },
   "blizzard/hub/store/migrations/__init__.py": {
    "comments": 0,
@@ -1770,7 +1770,7 @@
   "blizzard/runner/api/transcripts.py": {
    "comments": 0,
    "docstrings": 7,
-   "total": 52
+   "total": 74
   },
   "blizzard/runner/api/wiring.py": {
    "comments": 0,
@@ -2363,14 +2363,14 @@
    "total": 3
   },
   "blizzard/runner/transcripts/internal/projected_transcript_repository.py": {
-   "comments": 10,
-   "docstrings": 12,
-   "total": 116
+   "comments": 5,
+   "docstrings": 17,
+   "total": 150
   },
   "blizzard/runner/transcripts/repository.py": {
    "comments": 4,
-   "docstrings": 23,
-   "total": 66
+   "docstrings": 31,
+   "total": 96
   },
   "blizzard/runner/transcripts/service.py": {
    "comments": 4,
@@ -2499,13 +2499,13 @@
   },
   "blizzard/wire/transcript.py": {
    "comments": 0,
-   "docstrings": 6,
-   "total": 34
+   "docstrings": 7,
+   "total": 24
   },
   "blizzard/wire/transcript_segment.py": {
    "comments": 1,
-   "docstrings": 31,
-   "total": 130
+   "docstrings": 32,
+   "total": 131
   },
   "blizzard/wire/user.py": {
    "comments": 0,
@@ -2742,7 +2742,7 @@
   "service/test_transcript_segments_service.py": {
    "comments": 2,
    "docstrings": 4,
-   "total": 78
+   "total": 112
   },
   "service/test_usage_service.py": {
    "comments": 19,
@@ -3466,8 +3466,8 @@
   },
   "test_pin_wire.py": {
    "comments": 2,
-   "docstrings": 26,
-   "total": 87
+   "docstrings": 29,
+   "total": 100
   },
   "test_pkce.py": {
    "comments": 0,
@@ -3846,8 +3846,8 @@
   },
   "test_runner_transcripts.py": {
    "comments": 13,
-   "docstrings": 29,
-   "total": 327
+   "docstrings": 24,
+   "total": 329
   },
   "test_runner_transcripts_api.py": {
    "comments": 9,
@@ -3940,19 +3940,19 @@
    "total": 105
   },
   "test_transcript_ingest_service.py": {
-   "comments": 10,
+   "comments": 9,
    "docstrings": 8,
-   "total": 290
+   "total": 356
   },
   "test_transcript_segment_store.py": {
    "comments": 5,
    "docstrings": 4,
-   "total": 132
+   "total": 174
   },
   "test_transcript_segments_api.py": {
-   "comments": 4,
+   "comments": 5,
    "docstrings": 2,
-   "total": 214
+   "total": 270
   },
   "test_transcript_segments_migration.py": {
    "comments": 1,
@@ -4041,8 +4041,8 @@
   },
   "transcript_fixtures.py": {
    "comments": 0,
-   "docstrings": 32,
-   "total": 167
+   "docstrings": 30,
+   "total": 166
   }
  }
 }
