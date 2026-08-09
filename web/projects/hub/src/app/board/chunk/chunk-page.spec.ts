@@ -409,4 +409,58 @@ describe('Mobile chunk drill-down', () => {
       `/board/chunk/${CHUNK_ID}`,
     );
   });
+
+  // --- The Transcripts tab (blizzard#248 Phase 2) ---------------------------
+
+  it('shows the Transcripts tab option and switches to it, fetching the segment index', async () => {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments: [] };
+      return DETAIL;
+    });
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
+    await settle(harness.fixture);
+
+    let el = harness.fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="tab-transcripts"]')).not.toBeNull();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="tab-transcripts"]')?.click();
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
+    expect(el.querySelector('[data-testid="chunk-transcripts-tab"], [data-testid="transcripts-empty"]')).not.toBeNull();
+  });
+
+  it('hides the Transcripts tab option for an identity without transcript:read', async () => {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return { ...OPERATOR_ME_RESPONSE, permissions: [] };
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      return DETAIL;
+    });
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    expect(el.querySelector('[data-testid="tab-transcripts"]')).toBeNull();
+  });
+
+  it('still renders the Transcripts tab’s content on a held deep link, without the tab option in the strip', async () => {
+    // A deep link `?tab=transcripts` bypasses the tab strip entirely (the `@switch`
+    // renders off the URL, not off which options are visible) — the backend's own 403
+    // is what actually gates a viewer-role identity, not this client-side hide (D9).
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return { ...OPERATOR_ME_RESPONSE, permissions: [] };
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return stubError(403, { detail: 'forbidden' });
+      return DETAIL;
+    });
+    const el = await open(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
+
+    expect(el.querySelector('[data-testid="tab-transcripts"]')).toBeNull();
+    expect(el.querySelector('[data-testid="transcripts-forbidden"]')?.textContent).toContain('NO PERMISSION');
+  });
 });

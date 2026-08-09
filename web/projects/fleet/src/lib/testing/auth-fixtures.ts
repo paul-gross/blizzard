@@ -24,5 +24,6 @@ export const OPERATOR_ME_RESPONSE: MeResponse = {
     'runner:pause',
     'graph:edit',
     'user:manage',
+    'transcript:read',
   ],
 };

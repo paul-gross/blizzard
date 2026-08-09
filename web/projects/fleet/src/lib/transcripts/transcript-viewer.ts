@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import { formatAbsolute, formatLocalClockWithDay, type LocalClockWithDay } from '../when';
 import type { TranscriptSidechain, TranscriptTool, TranscriptTurn } from './transcript-turn';
@@ -75,7 +75,14 @@ import type { TranscriptSidechain, TranscriptTool, TranscriptTurn } from './tran
               @case ('sidechain') {
                 @if (turn.sidechain; as sidechain) {
                   <div class="sidechain" data-testid="transcript-sidechain-standalone">
-                    <div class="sc-head">{{ sidechainLabel(sidechain) }}</div>
+                    <button
+                      type="button"
+                      class="sc-head sc-open"
+                      data-testid="transcript-sidechain-open"
+                      (click)="openStandalone.emit(turn)"
+                    >
+                      {{ sidechainLabel(sidechain) }} · open standalone
+                    </button>
                     <fleet-transcript-viewer [turns]="sidechain.turns" />
                   </div>
                 }
@@ -260,11 +267,30 @@ import type { TranscriptSidechain, TranscriptTool, TranscriptTurn } from './tran
       text-transform: uppercase;
       margin-bottom: 2px;
     }
+    .sidechain .sc-open {
+      display: block;
+      background: transparent;
+      border: none;
+      padding: 0;
+      font-family: inherit;
+      cursor: pointer;
+      text-align: left;
+    }
+    .sidechain .sc-open:hover {
+      color: var(--cyan);
+    }
   `,
 })
 export class TranscriptViewer {
   /** The turns to render, in order — this component never fetches or filters them. */
   readonly turns = input.required<readonly TranscriptTurn[]>();
+
+  /** Emitted with an unlinked sidechain's own top-level ``"sidechain"`` turn when the
+   * operator asks to view it standalone (blizzard#248 D7). This component always
+   * renders the sidechain inline too — a container with no standalone concept (the
+   * runner's local panel) needs no listener at all; the hub's Transcripts tab is the
+   * one that turns this into a URL-held selection. */
+  readonly openStandalone = output<TranscriptTurn>();
 
   protected inputPreview(tool: TranscriptTool | null): string {
     if (tool === null) return '';

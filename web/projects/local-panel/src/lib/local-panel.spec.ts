@@ -854,7 +854,7 @@ describe('LocalPanel', () => {
       expect(el.querySelector('[data-testid="local-panel-mobile-tab-bar"]')).not.toBeNull();
       const machine = el.querySelector('[data-testid="tab-machine"]');
       const asks = el.querySelector('[data-testid="tab-asks-runner"]');
-      const transcripts = el.querySelector('[data-testid="tab-transcripts"]');
+      const transcripts = el.querySelector('[data-testid="tab-transcripts-runner"]');
       expect(machine?.textContent).toContain('Machine');
       expect(machine?.classList.contains('on')).toBe(true);
       expect(asks?.hasAttribute('disabled')).toBe(true);

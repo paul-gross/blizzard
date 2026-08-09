@@ -192,6 +192,26 @@ describe('TranscriptViewer', () => {
     expect(standalone?.textContent).toContain('subagent chatter');
   });
 
+  it('emits openStandalone with the sidechain turn when its header is clicked (D7)', async () => {
+    const turn: TranscriptTurn = {
+      index: 3,
+      kind: 'sidechain',
+      timestamp: null,
+      text: '',
+      tool: null,
+      thinking_redacted: false,
+      sidechain: { agent_id: null, agent_type: null, link: 'unlinked', turns: [] },
+      truncated: false,
+    };
+    const { el, fixture } = await render([turn]);
+    const emitted: TranscriptTurn[] = [];
+    fixture.componentInstance.openStandalone.subscribe((t) => emitted.push(t));
+
+    (el.querySelector('[data-testid="transcript-sidechain-open"]') as HTMLButtonElement).click();
+
+    expect(emitted).toEqual([turn]);
+  });
+
   it('shows the truncation note on a turn that lost content', async () => {
     const { el } = await render([
       {

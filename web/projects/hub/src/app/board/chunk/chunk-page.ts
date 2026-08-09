@@ -28,6 +28,7 @@ import {
 import { ChunkArtifactsTab } from './chunk-artifacts-tab';
 import { type ChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-selection';
 import { ChunkGeneralTab } from './chunk-general-tab';
+import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
 /**
  * The chunk detail page (`/board/chunk/:chunkId`, issue #160) — reached from
@@ -38,11 +39,12 @@ import { ChunkGeneralTab } from './chunk-general-tab';
  * entirely in the tab bodies' own CSS rather than a second viewport-scoped
  * page.
  *
- * Two tabs, selected through {@link injectChunkDetailSelection} (`?tab`, so
+ * Three tabs, selected through {@link injectChunkDetailSelection} (`?tab`, so
  * the choice is a URL-held state of this one page, not a different page):
  * **General** — {@link ChunkGeneralTab}, everything this page showed before it
- * grew a second tab — and **Artifacts**. A route makes either deep-linkable
- * and back-button-navigable for free.
+ * grew a second tab — **Artifacts**, and **Transcripts** (blizzard#248 Phase 2),
+ * hidden from the strip without `transcript:read` ({@link canReadTranscripts}).
+ * A route makes any of the three deep-linkable and back-button-navigable for free.
  *
  * This container keeps the back bar, the shared action-error/outcome
  * channels, the identity header, the tab strip, and the queries and three
@@ -58,15 +60,17 @@ import { ChunkGeneralTab } from './chunk-general-tab';
  * {@link ChunkFacts} exposes all write through the same mutations the desktop
  * container uses.
  */
-const TAB_OPTIONS: readonly KitTabOption[] = [
+const BASE_TAB_OPTIONS: readonly KitTabOption[] = [
   { value: 'general', label: 'General', testid: 'tab-general' },
   { value: 'artifacts', label: 'Artifacts', testid: 'tab-artifacts' },
 ];
 
+const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Transcripts', testid: 'tab-transcripts' };
+
 @Component({
   selector: 'app-chunk-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifactsTab, ChunkGeneralTab, KitAsyncState, KitBackBar, KitBadge, KitTabs, RouterLink],
+  imports: [ChunkArtifactsTab, ChunkGeneralTab, ChunkTranscriptsTab, KitAsyncState, KitBackBar, KitBadge, KitTabs, RouterLink],
   template: `
     <div class="cp">
       <a class="back-row" routerLink="/board" [queryParams]="{ chunk: chunkId() }" data-testid="mobile-chunk-back">
@@ -84,7 +88,7 @@ const TAB_OPTIONS: readonly KitTabOption[] = [
             <span class="cid" data-testid="mobile-chunk-ref">{{ shortId() }}</span>
             <fleet-kit-badge [tone]="tone()" variant="soft" data-testid="mobile-chunk-status">{{ d.status }}</fleet-kit-badge>
           </header>
-          <fleet-kit-tabs [options]="tabOptions" [activeValue]="tab()" (choose)="onChooseTab($event)" />
+          <fleet-kit-tabs [options]="tabOptions()" [activeValue]="tab()" (choose)="onChooseTab($event)" />
           @switch (tab()) {
             @case ('general') {
               <app-chunk-general-tab
@@ -103,6 +107,19 @@ const TAB_OPTIONS: readonly KitTabOption[] = [
                 [artifacts]="d.artifacts ?? []"
                 [selectedKey]="selection.artifactKey()"
                 (pickArtifact)="onSelectArtifact($event)"
+              />
+            }
+            @case ('transcripts') {
+              <app-chunk-transcripts-tab
+                [chunkId]="chunkId() ?? ''"
+                [history]="d.history ?? []"
+                [currentNodeId]="d.current_node_id"
+                [currentNodeName]="d.current_node_name ?? null"
+                [latestEpoch]="d.latest_epoch"
+                [segmentId]="selection.transcriptSegment()"
+                [sidechainTurnIndex]="selection.transcriptSidechain()"
+                (pickSegment)="onSelectTranscriptSegment($event)"
+                (pickSidechain)="onSelectTranscriptSidechain($event)"
               />
             }
           }
@@ -200,6 +217,10 @@ const TAB_OPTIONS: readonly KitTabOption[] = [
       flex: 1;
       min-height: 0;
     }
+    app-chunk-transcripts-tab {
+      flex: 1;
+      min-height: 0;
+    }
     /* Positioned and height-bearing so KitAsyncState's absolutely centered
        status line has a box to center in. */
     .rest {
@@ -223,7 +244,6 @@ export class ChunkPage {
 
   protected readonly selection = injectChunkDetailSelection();
 
-  protected readonly tabOptions = TAB_OPTIONS;
   protected readonly tab = this.selection.tab;
 
   protected onChooseTab(tab: string): void {
@@ -235,6 +255,19 @@ export class ChunkPage {
    * its own selection state. */
   protected onSelectArtifact(key: string): void {
     this.selection.select('artifacts', key);
+  }
+
+  /** A segment picked in the Transcripts tab writes its id back to the URL —
+   * {@link ChunkTranscriptsTab} is a pure function of that param, never its own
+   * selection state (blizzard#248 D8). */
+  protected onSelectTranscriptSegment(segmentId: string | null): void {
+    this.selection.selectTranscriptSegment(segmentId);
+  }
+
+  /** An unlinked sidechain opened standalone in the Transcripts tab writes its turn
+   * index back to the URL, so it is deep-linkable (blizzard#248 D7). */
+  protected onSelectTranscriptSidechain(turnIndex: string | null): void {
+    this.selection.selectTranscriptSidechain(turnIndex);
   }
 
   private readonly detailQuery = injectHubChunkDetailQuery(() => this.chunkId());
@@ -253,6 +286,17 @@ export class ChunkPage {
 
   /** Whether the current identity may resolve an open gate decision (`gate:resolve`). */
   protected readonly canResolve = computed(() => hasPermission(this.meQuery.data(), 'gate:resolve'));
+
+  /** Whether the current identity may read a chunk's stored transcript segments
+   * (`transcript:read`, blizzard#248 D9) — the Transcripts tab's own *option* is
+   * hidden from the strip without it. A deep link still reaches
+   * {@link ChunkTranscriptsTab}, which renders the backend's 403 as its own state
+   * rather than relying on this client-side check to be the only gate. */
+  protected readonly canReadTranscripts = computed(() => hasPermission(this.meQuery.data(), 'transcript:read'));
+
+  protected readonly tabOptions = computed<readonly KitTabOption[]>(() =>
+    this.canReadTranscripts() ? [...BASE_TAB_OPTIONS, TRANSCRIPTS_TAB_OPTION] : BASE_TAB_OPTIONS,
+  );
 
   /** The chunk aggregate, or `undefined` while the first read is in flight. */
   protected readonly detail = computed(() => this.detailQuery.data());

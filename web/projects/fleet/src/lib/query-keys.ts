@@ -46,3 +46,13 @@ export function hubChunkWorkItemsKey(chunkId: string | null): readonly unknown[]
 export function hubGraphKey(graphId: string | null): readonly unknown[] {
   return ['hub', 'graph', graphId];
 }
+
+/** One chunk's transcript-segment index (blizzard#248), keyed by id. */
+export function hubChunkTranscriptsKey(chunkId: string | null): readonly unknown[] {
+  return ['hub', 'chunk', chunkId, 'transcripts'];
+}
+
+/** One segment's decompressed turns (blizzard#248), keyed by chunk and segment id. */
+export function hubChunkTranscriptSegmentKey(chunkId: string | null, segmentId: string | null): readonly unknown[] {
+  return ['hub', 'chunk', chunkId, 'transcripts', segmentId];
+}
