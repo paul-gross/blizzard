@@ -101,13 +101,12 @@ describe('LocalInfo last-flush/tick ticking (issue #178)', () => {
     vi.restoreAllMocks();
   });
 
-  // Real setInterval, mocked Date.now — settle() needs a real macrotask to
-  // resolve the stubbed query, so fake timers (which would also freeze that
-  // macrotask) aren't usable here; the interval is instead let run for real.
-  it(
-    're-renders last flush and tick at least once a second with no new data',
-    { timeout: 10_000 },
-    async () => {
+  // `shouldAdvanceTime` keeps settle()'s macrotask resolvable while the ticking
+  // interval is driven by advanceTimersByTimeAsync — the wait is a jump, not a
+  // real second spent in the gating job.
+  it('re-renders last flush and tick at least once a second with no new data', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
       const dateNow = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-16T12:00:00.000Z'));
       const { fixture, stub: s } = await render(() => COUNTS);
       stub = s;
@@ -116,11 +115,13 @@ describe('LocalInfo last-flush/tick ticking (issue #178)', () => {
       expect(el.querySelector('.tick')?.textContent).toContain('-15s');
 
       dateNow.mockReturnValue(Date.parse('2026-07-16T12:01:00.000Z'));
-      await new Promise((resolve) => setTimeout(resolve, 1100));
+      await vi.advanceTimersByTimeAsync(1_100);
       fixture.detectChanges();
 
       expect(el.querySelector('[data-testid="hub-last-flush"]')?.textContent).toContain('-1m');
       expect(el.querySelector('.tick')?.textContent).toContain('-1m');
-    },
-  );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

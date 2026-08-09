@@ -108,8 +108,11 @@ def test_state_spawning_wins_over_an_ancient_heartbeat() -> None:
 
 @pytest.mark.unit
 def test_state_closed_when_closure_fact_exists() -> None:
+    """Closed outranks exited: the process is gone, which derives ``exited`` on its own, and
+    the closure fact still wins. The pid-reuse case below is the same precedence against a
+    *live* pid."""
     lease = _lease_record()
-    assert LeaseActivity(lease, closed=True, parked=False, alive=True, stale=False).state == "closed"
+    assert LeaseActivity(lease, closed=True, parked=False, alive=False, stale=False).state == "closed"
 
 
 @pytest.mark.unit

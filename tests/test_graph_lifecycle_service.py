@@ -74,13 +74,16 @@ def test_retire_twice_is_a_harmless_no_op() -> None:
 
 
 def test_enable_is_idempotent_on_a_never_retired_graph() -> None:
+    """Idempotent by repetition, like retire: enabling a graph that was never retired
+    appends another ``retired=False`` fact rather than short-circuiting on the read."""
     clock = FixedClock(instant=_T0)
     repo = _FakeGraphRepo()
     service = GraphLifecycleService(graphs=_as_write_repo(repo), clock=clock)
 
     service.enable(_GRAPH, by="operator")
+    service.enable(_GRAPH, by="operator")
 
-    assert repo.recorded == [("gr_1", False, "operator", _T0)]
+    assert repo.recorded == [("gr_1", False, "operator", _T0), ("gr_1", False, "operator", _T0)]
 
 
 def test_set_by_is_carried_onto_the_recorded_fact() -> None:

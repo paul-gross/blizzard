@@ -46,7 +46,8 @@ echo "OK: committed OpenAPI specs match the exporter."
 
 # --- Frontend: eslint + vitest + structural gate + generated-client drift ---
 # $WEB_DIR is the Angular workspace with `npm run lint` (eslint), `npm run test`
-# (vitest), `npm run structural-gate` (chrome-duplication + max-lines sweep),
+# (vitest), `npm run structural-gate` (chrome-duplication, max-lines,
+# empty-state, and real-timer sweeps),
 # and `npm run generate:client` (openapi-ts codegen of the committed client).
 # Guarded so a checkout without $WEB_DIR is still a green no-op.
 if [ -f "$WEB_DIR/package.json" ]; then
@@ -73,7 +74,7 @@ if [ -f "$WEB_DIR/package.json" ]; then
   step "vitest ($WEB_DIR)"
   ( cd "$WEB_DIR" && npm run test )
 
-  step "structural gate ($WEB_DIR): retired chrome-class sweep (web:structural-gate)"
+  step "structural gate ($WEB_DIR): chrome, max-lines, empty-state, real-timer (web:structural-gate)"
   ( cd "$WEB_DIR" && npm run structural-gate )
 
   step "generated-client drift ($WEB_DIR): openapi-ts codegen + git diff"

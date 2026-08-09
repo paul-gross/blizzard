@@ -383,12 +383,6 @@ def test_every_question_read_derives_delivery_the_same_way(tmp_path: Path) -> No
     assert [still_open[0]["delivered"], on_detail["delivered"], poll["delivered"]] == [True, True, True]
 
 
-def test_answer_unknown_question_is_404(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    resp = hub.client.post("/api/questions/qn_missing/answers", json={"answer": "x"})
-    assert resp.status_code == 404
-
-
 def test_question_on_unknown_chunk_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     resp = hub.client.post(

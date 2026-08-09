@@ -111,28 +111,34 @@ describe('injectTranscriptQuery', () => {
 
   it('never polls — no second request without a lease-id change', async () => {
     // Real-time transcript refresh is out of scope for this issue; unlike the
-    // leases query's 5s floor, this must sit still.
-    stub = stubRequestClient(runnerClient, (method, path) =>
-      method === 'GET' && path === '/api/leases/L-903/transcript' ? TRANSCRIPT : {},
-    );
-    await TestBed.configureTestingModule({
-      imports: [TranscriptQueryHost],
-      providers: [
-        provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      ],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(TranscriptQueryHost);
-    fixture.componentInstance.leaseId.set('L-903');
-    await settle(fixture);
-    expect(stub.forRoute('/api/leases/L-903/transcript', 'GET')).toHaveLength(1);
+    // leases query's 5s floor, this must sit still. Driven on fake timers past
+    // several multiples of that floor: a real 20ms wait cannot distinguish
+    // `refetchInterval: false` from any interval a poll would plausibly use.
+    vi.useFakeTimers();
+    try {
+      stub = stubRequestClient(runnerClient, (method, path) =>
+        method === 'GET' && path === '/api/leases/L-903/transcript' ? TRANSCRIPT : {},
+      );
+      await TestBed.configureTestingModule({
+        imports: [TranscriptQueryHost],
+        providers: [
+          provideZonelessChangeDetection(),
+          provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        ],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(TranscriptQueryHost);
+      fixture.componentInstance.leaseId.set('L-903');
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(stub.forRoute('/api/leases/L-903/transcript', 'GET')).toHaveLength(1);
 
-    // Give a poll-shaped window plenty of time to fire, then confirm it didn't.
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    fixture.detectChanges();
-    await fixture.whenStable();
+      await vi.advanceTimersByTimeAsync(30_000);
+      fixture.detectChanges();
 
-    expect(stub.forRoute('/api/leases/L-903/transcript', 'GET')).toHaveLength(1);
+      expect(stub.forRoute('/api/leases/L-903/transcript', 'GET')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('surfaces a 503 as an error', async () => {

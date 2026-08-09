@@ -157,6 +157,21 @@ describe('DemoDirector', () => {
     }
   }
 
+  /** How long the running tour takes to move the router off its current URL — the observed
+   * cadence a "it stayed put" assertion is then sized against. Floored at the configured
+   * artifact interval rather than at 1ms: a scheduling hiccup that observes an immediate
+   * move would otherwise shrink the window to nothing and let the assertion pass vacuously. */
+  async function moveMs(router: Router, timeoutMs = 8000): Promise<number> {
+    const from = router.url;
+    const started = Date.now();
+    for (;;) {
+      if (router.url !== from) return Math.max(Date.now() - started, FAST_ARTIFACT_INTERVAL_MS);
+      if (Date.now() - started > timeoutMs) throw new Error(`the tour never moved off ${from}`);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+
+  const FAST_ARTIFACT_INTERVAL_MS = 150;
   const FAST = 'demo_swap_chunk_interval=2&demo_board_scroll=0.05&demo_artifact_interval=0.15&demo_reload_after=0';
 
   it('does nothing at all without ?demo', async () => {
@@ -246,9 +261,14 @@ describe('DemoDirector', () => {
     const router = await run(`?demo=true&${FAST}`);
     await trail(router, (urls) => urls.some((url) => url.startsWith('/board/chunk/')));
 
+    // A "did not move" claim is worth only the window it is made over, so the
+    // window is derived from the running tour's own measured cadence rather than
+    // guessed: a fixed 400ms passed with `stop()` deleted entirely.
+    const cadenceMs = await moveMs(router);
+
     director.stop();
     const parked = router.url;
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await new Promise((resolve) => setTimeout(resolve, cadenceMs * 4));
 
     expect(router.url).toBe(parked);
   });

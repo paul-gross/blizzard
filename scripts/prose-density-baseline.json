@@ -2792,7 +2792,7 @@
   "test_ask_answer.py": {
    "comments": 23,
    "docstrings": 24,
-   "total": 405
+   "total": 399
   },
   "test_ask_park_resume.py": {
    "comments": 35,
@@ -3156,8 +3156,8 @@
   },
   "test_graph_lifecycle_service.py": {
    "comments": 0,
-   "docstrings": 9,
-   "total": 104
+   "docstrings": 11,
+   "total": 107
   },
   "test_graph_mint_route.py": {
    "comments": 1,
@@ -3373,6 +3373,11 @@
    "comments": 35,
    "docstrings": 16,
    "total": 490
+  },
+  "test_no_duplicate_test_bodies.py": {
+   "comments": 2,
+   "docstrings": 10,
+   "total": 77
   },
   "test_openapi_descriptions.py": {
    "comments": 0,
@@ -3731,8 +3736,8 @@
   },
   "test_runner_leases_domain.py": {
    "comments": 30,
-   "docstrings": 41,
-   "total": 428
+   "docstrings": 43,
+   "total": 430
   },
   "test_runner_listeners.py": {
    "comments": 2,
