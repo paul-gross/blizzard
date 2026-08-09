@@ -757,12 +757,8 @@ event_log = Table(
 Index("ix_event_log_recorded_at", event_log.c.recorded_at)
 
 # --- Transcript segments (blizzard#247, epic:transcripts) ----------------------
-# A row is one shipped record, not one segment (D1): append-only, segment identity plus
-# the version stamps ride each row alongside that record's own turn range. A cap
-# rejection (D5) lands here contentless, carrying its reason and byte count — that is
-# what makes a flood consume its own daily budget and truncation visible even when the
-# segment's *first* record is the one rejected. The natural key (D8) is what keeps a
-# re-offer under a fresh lane sequence from duplicating stored content.
+# A row is one shipped record, not one segment (D1) — append-only; a cap rejection (D5)
+# lands contentless. The natural key (D8) dedupes a re-offer under a fresh lane sequence.
 
 transcript_segments = Table(
     "transcript_segments",
@@ -780,8 +776,7 @@ transcript_segments = Table(
     # transition, since a tail may land after the step's completion (product plan).
     Column("final", Boolean, nullable=False),
     # A cap rejection (D5/D6): no content, no codec; `rejection_reason` is non-null iff
-    # `rejected` — a contract-mismatch rejection writes no row at all (D6, mirrors
-    # `hub/domain/facts.py`'s own high-water-frozen rejection).
+    # `rejected`.
     Column("rejected", Boolean, nullable=False),
     Column("rejection_reason", String, nullable=True),
     # Raw, uncompressed turn bytes as received (D4) — the budget currency for both caps,
@@ -791,9 +786,8 @@ transcript_segments = Table(
     Column("content", LargeBinary, nullable=True),  # compressed turns JSON; null iff rejected
     Column("normalizer_version", String, nullable=False),
     Column("harness_version", String, nullable=True),
-    # Hub-stamped receipt instant (plan-review F1) — the rolling 24h daily-rate window
-    # (D3) anchors here, never on a runner-supplied instant, since a rogue runner is
-    # exactly this cap's threat model.
+    # Hub-stamped receipt instant (plan-review F1) — the D3 rolling 24h window anchors
+    # here, never on a runner-supplied instant.
     Column("received_at", UtcDateTime, nullable=False),
     UniqueConstraint("segment_id", "turn_range_start", name="uq_transcript_segments_segment_turn_start"),
 )
@@ -803,8 +797,7 @@ Index("ix_transcript_segments_runner_received_at", transcript_segments.c.runner_
 Index("ix_transcript_segments_segment_id", transcript_segments.c.segment_id)
 
 # --- Transcript lane high-water mark (D7 — own table, not runner_high_water) --------
-# `runner_high_water` is primary-keyed on `runner_id` alone and belongs to the fact
-# lane; a second lane sharing it would collide.
+# `runner_high_water` belongs to the fact lane; a second lane sharing it would collide.
 
 transcript_high_water = Table(
     "transcript_high_water",

@@ -2,9 +2,8 @@
 plus the wire<->domain rendering the fleet router's ingest route shares.
 
 The discovery route (D12) returns segment metadata and byte counts only — never turn
-content — so a caller must already hold a ``segment_id`` (from this same route) before
-the content route answers anything. Gated on :data:`~blizzard.auth_core.TRANSCRIPT_READ`
-(D11), not ``fleet:view``: a transcript carries everything a worker saw."""
+content — so a caller must hold a ``segment_id`` from it before the content route
+answers anything. Gated on :data:`~blizzard.auth_core.TRANSCRIPT_READ` (D11)."""
 
 from __future__ import annotations
 

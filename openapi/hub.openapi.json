@@ -3978,7 +3978,7 @@
         "type": "object"
       },
       "TranscriptSegmentAck": {
-        "description": "The hub's per-batch acknowledgement against the transcript lane's high-water mark.\n\n``capped`` is D6's cap-rejection class: acknowledged and content-dropped, with the\nlane's high-water advancing past it \u2014 a durable decision that must not\nre-adjudicate on replay. Unlike the fact lane (``hub/domain/facts.py``), no\ncontract-mismatch rejection exists here: every field is already wire-validated.",
+        "description": "The hub's per-batch acknowledgement against the transcript lane's high-water mark.\n\n``capped`` is D6's cap-rejection class \u2014 acknowledged, content-dropped, and the\nhigh-water advances past it, a durable decision that must not re-adjudicate on replay.",
         "properties": {
           "already_applied": {
             "default": [],

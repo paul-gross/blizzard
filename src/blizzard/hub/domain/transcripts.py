@@ -2,11 +2,8 @@
 its store Protocol pair.
 
 :class:`TranscriptIngestService` is the batched store-and-forward push, idempotent
-against the transcript lane's own high-water mark (D7) plus the natural-key dedupe (D8)
-a rebuilt runner buffer or a backfill needs. It adjudicates three independent caps —
-per-record, per-chunk, per-runner-daily — recording a cap rejection contentless in the
-same table (D5) while a contract mismatch writes no row and freezes the high-water (D6),
-mirroring ``hub/domain/facts.py``'s own rejection split."""
+against the lane's own high-water mark (D7) plus the natural-key dedupe (D8), and
+adjudicating three independent caps (D5/D6)."""
 
 from __future__ import annotations
 
@@ -19,9 +16,8 @@ from blizzard.foundation.logging import get_logger
 
 _log = get_logger("blizzard.hub.transcripts")
 
-#: A single record's raw-turn-bytes ceiling — comfortably above the epic's measured p99
-#: whole-session size (≈3.3 MB, ``blizzard-product:/plans/transcripts.md``), since one
-#: shipped record may carry most of a segment.
+#: A single record's raw-turn-bytes ceiling — above the epic's measured p99 whole-session
+#: size (≈3.3 MB), since one shipped record may carry most of a segment.
 RECORD_MAX_BYTES = 4 * 1024 * 1024
 
 #: Per-chunk transcript budget (product plan: "fifty p90 sessions' worth of conversation").
@@ -150,9 +146,8 @@ class TranscriptIngestService:
             if seq <= mark:
                 already.append(seq)
                 continue
-            # Every reachable outcome advances the mark (D6): unlike the fact lane, no
-            # contract-mismatch rejection exists for a transcript record — every field is
-            # already wire-validated, and a cap rejection is itself a durable decision.
+            # Every reachable outcome advances the mark (D6) — no contract-mismatch
+            # rejection exists here, unlike the fact lane; every field is wire-validated.
             mark = seq
             if self._apply(record, at=now):
                 applied.append(seq)
@@ -190,9 +185,8 @@ class TranscriptIngestService:
     def _reject_reason(self, record: SegmentRecord, *, byte_count: int, at: datetime) -> str | None:
         if byte_count > RECORD_MAX_BYTES:
             return REJECTED_RECORD_TOO_LARGE
-        # D4: caps count uncompressed turn bytes as received; stored bytes count toward
-        # both caps, rejected bytes toward the daily rate only (Phase 2 AC) — so the
-        # chunk-budget check reads only what is already *stored*, before this record.
+        # D4: only already-*stored* bytes count toward the chunk budget — a rejection
+        # counts toward the daily rate only (Phase 2 AC).
         if self._store.chunk_stored_bytes(record.chunk_id) + byte_count > CHUNK_BUDGET_MAX_BYTES:
             return REJECTED_CHUNK_BUDGET_EXCEEDED
         since = at - timedelta(hours=24)

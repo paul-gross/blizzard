@@ -2571,10 +2571,8 @@ export type ToolCallSegmentView = {
  *
  * The hub's per-batch acknowledgement against the transcript lane's high-water mark.
  *
- * ``capped`` is D6's cap-rejection class: acknowledged and content-dropped, with the
- * lane's high-water advancing past it — a durable decision that must not
- * re-adjudicate on replay. Unlike the fact lane (``hub/domain/facts.py``), no
- * contract-mismatch rejection exists here: every field is already wire-validated.
+ * ``capped`` is D6's cap-rejection class — acknowledged, content-dropped, and the
+ * high-water advances past it, a durable decision that must not re-adjudicate on replay.
  */
 export type TranscriptSegmentAck = {
     /**

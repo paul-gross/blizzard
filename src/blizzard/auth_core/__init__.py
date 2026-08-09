@@ -44,9 +44,8 @@ GRAPH_EDIT = Permission("graph:edit")
 #: Administer users and their roles (#94). Held by ``admin``+ (pinned by
 #: tests/test_auth_core.py::test_user_manage_is_admin_and_above).
 USER_MANAGE = Permission("user:manage")
-#: Read a chunk's stored transcript segments (blizzard#247, D11) — the operator role,
-#: not the board-wide ``fleet:view`` a ``guest`` already holds: a transcript carries
-#: everything a worker saw, not just the fleet's state.
+#: Read a chunk's stored transcript segments (blizzard#247, D11) — above ``fleet:view``,
+#: since a transcript carries everything a worker saw, not just the fleet's state.
 TRANSCRIPT_READ = Permission("transcript:read")
 
 #: ``guest`` — read everything, mutate nothing.

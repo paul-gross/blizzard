@@ -113,9 +113,7 @@ def test_a_tail_record_ingested_after_completion_reads_back_in_turn_range_order(
     service = TranscriptIngestService(store=store, clock=hub.clock)
 
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
-    # The tail lands in a later batch — as if shipped after the node-step's own
-    # completion already landed on the fact lane (product plan: "the hub never infers a
-    # segment's completeness from a transition").
+    # The tail lands in a later batch — the hub never infers completeness from a transition.
     service.ingest("r1", [_record(2, turn_range_start=1, turn_range_end=1, final=True)])
 
     records = store.records_for_segment("sg_1")

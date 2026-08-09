@@ -645,8 +645,10 @@ superuser at a time, and this is the *only* way a user becomes (or stops being)
 A hub-local user carries one of five roles, a total order —
 `pending < guest < contributor < admin < superuser`. A freshly-logged-in identity
 lands as `pending`: the lobby, holding no permissions at all beyond the public self
-routes (`GET /api/me`, login, logout) — no board read, no writes. `guest` reads
-everything (the board, chunks, graphs, events) and mutates nothing. An `admin`
+routes (`GET /api/me`, login, logout) — no board read, no writes. `guest` reads the
+fleet's state (the board, chunks, graphs, events) and mutates nothing, but not a
+chunk's stored transcript segments — those need `contributor`+ (`transcript:read`),
+since a transcript carries everything a worker saw. An `admin`
 (promoted from the admin page, `POST /api/users/{id}/role`, gated on `user:manage`)
 can move a subject freely among `pending`/`guest`/`contributor`, but only a
 `superuser` actor may grant or revoke `admin` itself, and `superuser` is never

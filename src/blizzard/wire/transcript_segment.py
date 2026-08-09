@@ -1,12 +1,9 @@
 """Transcript segment wire bodies (blizzard#247, ``epic:transcripts``) — the first wire
 projection of #245's normalized turn model onto shipped, hub-stored content.
 
-A record is one shipped **turn-range slice** of a segment (D1), never a whole segment at
-once. ``seq`` is the transcript lane's own per-runner high-water sequence (D7) — the
-replay guard; ``(segment_id, turn_range_start)`` is the natural key a re-offer under a
-*fresh* seq still dedupes against (D8). ``wire/transcript.py`` (the runner panel's older,
-narrower ``TurnView``) is untouched — this module's turn views carry the full #245
-vocabulary (structured tool calls, thinking, nested sidechains)."""
+A record is one shipped **turn-range slice** of a segment (D1). ``seq`` is the lane's
+high-water sequence (D7); ``(segment_id, turn_range_start)`` is the natural key a
+re-offer under a fresh seq dedupes against (D8). ``wire/transcript.py`` is untouched."""
 
 from __future__ import annotations
 
@@ -86,10 +83,8 @@ class TranscriptSegmentBatch(BaseModel):
 class TranscriptSegmentAck(BaseModel):
     """The hub's per-batch acknowledgement against the transcript lane's high-water mark.
 
-    ``capped`` is D6's cap-rejection class: acknowledged and content-dropped, with the
-    lane's high-water advancing past it — a durable decision that must not
-    re-adjudicate on replay. Unlike the fact lane (``hub/domain/facts.py``), no
-    contract-mismatch rejection exists here: every field is already wire-validated."""
+    ``capped`` is D6's cap-rejection class — acknowledged, content-dropped, and the
+    high-water advances past it, a durable decision that must not re-adjudicate on replay."""
 
     runner_id: str
     high_water: int

@@ -91,6 +91,16 @@ def test_runner_pause_and_graph_edit_are_admin_and_above() -> None:
         assert GRAPH_EDIT not in expand(role)
 
 
+def test_transcript_read_is_contributor_and_above() -> None:
+    """``transcript:read`` is held by ``contributor``+ (blizzard#247, D11) — not by
+    ``guest``, which holds every other read: a transcript carries everything a worker
+    saw, not just the fleet's state."""
+    for role in (Role.CONTRIBUTOR, Role.ADMIN, Role.SUPERUSER):
+        assert TRANSCRIPT_READ in expand(role)
+    for role in (Role.PENDING, Role.GUEST):
+        assert TRANSCRIPT_READ not in expand(role)
+
+
 def test_operating_write_permissions_are_contributor_and_above() -> None:
     operating = {CHUNK_INGEST, CHUNK_CONTROL, QUESTION_ANSWER, GATE_RESOLVE, QUEUE_REORDER}
     for role in (Role.CONTRIBUTOR, Role.ADMIN, Role.SUPERUSER):

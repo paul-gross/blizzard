@@ -8,7 +8,7 @@ restore for both store backends.
 
 | Path | Volume | What it is | Back up? |
 |---|---|---|---|
-| The store — the whole `postgres-data` volume (the compose deployment's default) *or* `data/hub.db` (only if you moved `BZ_HUB_DB_URL` back to sqlite) | `postgres-data` / `hub-data` | Every chunk, fact, question, and graph the board reads. The only irreplaceable state. | **Yes** |
+| The store — the whole `postgres-data` volume (the compose deployment's default) *or* `data/hub.db` (only if you moved `BZ_HUB_DB_URL` back to sqlite) | `postgres-data` / `hub-data` | Every chunk, fact, question, graph, and stored transcript segment the board reads. The only irreplaceable state. | **Yes** |
 | `data/auth/signing-keys/` | `hub-data` | The IdP RSA keypair(s) + `meta.json` (`src/blizzard/hub/auth/signing.py`) — only populated once `auth.mode = "oauth"` is configured. Losing it invalidates every live session and forces a re-login fleet-wide (a runner's JWKS cache re-fetches on an unknown `kid`, but the key itself doesn't come back). | **Yes**, once OAuth login is configured |
 | `blizzard-hub.toml` | bind-mounted from `packaging/docker/blizzard-hub.toml` | The deployment's config. In the **compose** deployment this file is git-tracked source, not volume state — already "backed up" by being in version control. (The colocated wheel/systemd deployment writes it directly into the runtime dir instead — back it up there.) | Already versioned (compose) / **Yes** (systemd) |
 | `data/hub_workdirs/` | `hub-data` | Scratch git clones a hub command node uses mid-delivery (`config.data_dir / "hub_workdirs"`, `src/blizzard/hub/app.py`). | **No — reclaimable.** Re-cloned from the delivery forge on next use; carries no state the store doesn't already have a record of. |
