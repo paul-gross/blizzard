@@ -456,9 +456,9 @@
    "total": 94
   },
   "blizzard_mock/mock_hub/api/deps.py": {
-   "comments": 2,
+   "comments": 3,
    "docstrings": 14,
-   "total": 121
+   "total": 123
   },
   "blizzard_mock/mock_hub/api/middleware.py": {
    "comments": 4,
@@ -468,7 +468,7 @@
   "blizzard_mock/mock_hub/api/routes.py": {
    "comments": 7,
    "docstrings": 8,
-   "total": 202
+   "total": 208
   },
   "blizzard_mock/mock_hub/app.py": {
    "comments": 0,
@@ -506,19 +506,19 @@
    "total": 191
   },
   "blizzard_mock/mock_hub/domain/service.py": {
-   "comments": 24,
-   "docstrings": 70,
-   "total": 648
+   "comments": 30,
+   "docstrings": 74,
+   "total": 687
   },
   "blizzard_mock/mock_hub/domain/state.py": {
-   "comments": 4,
-   "docstrings": 12,
-   "total": 70
+   "comments": 6,
+   "docstrings": 21,
+   "total": 95
   },
   "blizzard_mock/mock_hub/domain/wire.py": {
-   "comments": 14,
+   "comments": 16,
    "docstrings": 13,
-   "total": 210
+   "total": 226
   },
   "blizzard_mock/mock_hub/internal/__init__.py": {
    "comments": 0,
@@ -528,7 +528,7 @@
   "blizzard_mock/mock_hub/internal/state_store.py": {
    "comments": 0,
    "docstrings": 6,
-   "total": 69
+   "total": 82
   },
   "blizzard_mock/mock_runner/__init__.py": {
    "comments": 0,
@@ -543,7 +543,7 @@
   "blizzard_mock/mock_runner/api/routes.py": {
    "comments": 0,
    "docstrings": 13,
-   "total": 199
+   "total": 201
   },
   "blizzard_mock/mock_runner/app.py": {
    "comments": 0,
@@ -583,7 +583,7 @@
   "blizzard_mock/mock_runner/domain/service.py": {
    "comments": 20,
    "docstrings": 42,
-   "total": 368
+   "total": 369
   },
   "blizzard_mock/mock_runner/internal/__init__.py": {
    "comments": 0,
@@ -879,8 +879,8 @@
   },
   "blizzard/hub/api/users.py": {
    "comments": 0,
-   "docstrings": 11,
-   "total": 68
+   "docstrings": 12,
+   "total": 69
   },
   "blizzard/hub/app.py": {
    "comments": 14,
@@ -1235,7 +1235,7 @@
   "blizzard/hub/domain/transcripts.py": {
    "comments": 11,
    "docstrings": 27,
-   "total": 195
+   "total": 209
   },
   "blizzard/hub/domain/work.py": {
    "comments": 44,
@@ -1330,7 +1330,7 @@
   "blizzard/hub/store/internal/transcript_segment_store.py": {
    "comments": 6,
    "docstrings": 6,
-   "total": 190
+   "total": 227
   },
   "blizzard/hub/store/migrations/__init__.py": {
    "comments": 0,
@@ -2118,9 +2118,9 @@
    "total": 225
   },
   "blizzard/runner/loop/steps.py": {
-   "comments": 42,
+   "comments": 43,
    "docstrings": 65,
-   "total": 443
+   "total": 445
   },
   "blizzard/runner/loop/tick.py": {
    "comments": 4,
@@ -2742,7 +2742,7 @@
   "service/test_transcript_segments_service.py": {
    "comments": 2,
    "docstrings": 4,
-   "total": 78
+   "total": 112
   },
   "service/test_usage_service.py": {
    "comments": 19,
@@ -2970,9 +2970,9 @@
    "total": 1152
   },
   "test_config_keys_reach_a_gating_tier.py": {
-   "comments": 1,
+   "comments": 3,
    "docstrings": 5,
-   "total": 47
+   "total": 55
   },
   "test_container_image.py": {
    "comments": 0,
@@ -3386,8 +3386,8 @@
   },
   "test_openapi_descriptions.py": {
    "comments": 0,
-   "docstrings": 7,
-   "total": 55
+   "docstrings": 19,
+   "total": 100
   },
   "test_openapi_export.py": {
    "comments": 0,
@@ -3661,8 +3661,8 @@
   },
   "test_runner_crash_resume.py": {
    "comments": 41,
-   "docstrings": 28,
-   "total": 320
+   "docstrings": 29,
+   "total": 321
   },
   "test_runner_detach.py": {
    "comments": 77,
@@ -3741,8 +3741,8 @@
   },
   "test_runner_leases_domain.py": {
    "comments": 30,
-   "docstrings": 43,
-   "total": 430
+   "docstrings": 44,
+   "total": 431
   },
   "test_runner_listeners.py": {
    "comments": 2,
@@ -3955,19 +3955,19 @@
    "total": 105
   },
   "test_transcript_ingest_service.py": {
-   "comments": 10,
+   "comments": 9,
    "docstrings": 8,
-   "total": 290
+   "total": 356
   },
   "test_transcript_segment_store.py": {
    "comments": 5,
    "docstrings": 4,
-   "total": 132
+   "total": 174
   },
   "test_transcript_segments_api.py": {
-   "comments": 4,
+   "comments": 5,
    "docstrings": 2,
-   "total": 214
+   "total": 270
   },
   "test_transcript_segments_migration.py": {
    "comments": 1,
@@ -4003,6 +4003,11 @@
    "comments": 6,
    "docstrings": 5,
    "total": 83
+  },
+  "test_web_test_targets.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "total": 30
   },
   "test_wire_timestamps.py": {
    "comments": 1,
