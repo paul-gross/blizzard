@@ -1,9 +1,13 @@
-"""The tick driver — one pass of CEILING → REAP → RESUME → PULL → FILL → ADVANCE → SAMPLE.
+"""The tick driver — one pass of CEILING → REAP → RESUME → PULL → FILL → ADVANCE →
+TRANSCRIPT DRAIN → SAMPLE.
 
 ``tick`` composes the steps in order — the single synchronous pass both the CLI
 verb and the periodic daemon driver call. The order is load-bearing: the spend ceiling
 brakes the same tick it fires in; startup recovery *is* REAP running early; RESUME
-precedes ADVANCE, which would otherwise read a killed-mid-work worker as done."""
+precedes ADVANCE, which would otherwise read a killed-mid-work worker as done.
+TranscriptDrain sits after every fact-lane step (D3, issue #246) — never chained to
+PULL's own drain — so a wedged or slow transcript flush delays nothing fleet-truth-bearing;
+it precedes SAMPLE only because that step's own docstring claims *last*."""
 
 from __future__ import annotations
 
@@ -18,6 +22,7 @@ from blizzard.runner.loop.steps import (
     Resume,
     SpendCeiling,
 )
+from blizzard.runner.loop.transcript_drain import TranscriptDrain
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -35,6 +40,8 @@ def tick(ctx: LoopContext) -> None:
     Pull(ctx).run()
     Fill(ctx).run()
     Advance(ctx).run()
+    # After every fact-lane step (D3, issue #246) — see the module docstring.
+    TranscriptDrain(ctx).run()
     # Last (issue #218) — see the module docstring.
     ExternalUsageSample(ctx).run()
     _log.debug("tick end", runner_id=ctx.config.runner_id)
