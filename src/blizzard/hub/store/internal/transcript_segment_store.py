@@ -14,6 +14,7 @@ from sqlalchemy import Engine, func, insert, select
 
 from blizzard.hub.domain.transcripts import (
     IWriteTranscriptSegments,
+    NaturalKeyState,
     SegmentIndexRow,
     SegmentRecord,
     SegmentRecordContent,
@@ -41,11 +42,14 @@ class TranscriptSegmentStore:
             for segment_id, group in itertools.groupby(rows, key=lambda r: r.segment_id)
         ]
 
-    def records_for_segment(self, segment_id: str) -> list[SegmentRecordContent]:
+    def records_for_segment(self, chunk_id: str, segment_id: str) -> list[SegmentRecordContent]:
         with self._engine.connect() as conn:
             rows = conn.execute(
                 select(s.transcript_segments)
-                .where(s.transcript_segments.c.segment_id == segment_id)
+                .where(
+                    s.transcript_segments.c.chunk_id == chunk_id,
+                    s.transcript_segments.c.segment_id == segment_id,
+                )
                 .order_by(s.transcript_segments.c.turn_range_start)
             ).all()
         return [
@@ -66,15 +70,17 @@ class TranscriptSegmentStore:
             ).one_or_none()
             return row.seq if row is not None else 0
 
-    def natural_key_exists(self, segment_id: str, turn_range_start: int) -> bool:
+    def natural_key_state(self, segment_id: str, turn_range_start: int) -> NaturalKeyState:
         with self._engine.connect() as conn:
             row = conn.execute(
-                select(s.transcript_segments.c.id).where(
+                select(s.transcript_segments.c.rejected).where(
                     s.transcript_segments.c.segment_id == segment_id,
                     s.transcript_segments.c.turn_range_start == turn_range_start,
                 )
             ).one_or_none()
-            return row is not None
+        if row is None:
+            return "absent"
+        return "rejected" if row.rejected else "accepted"
 
     def chunk_stored_bytes(self, chunk_id: str) -> int:
         with self._engine.connect() as conn:
@@ -138,6 +144,37 @@ class TranscriptSegmentStore:
                     content=None,
                     received_at=at,
                 )
+            )
+
+    def update_to_accepted(self, record: SegmentRecord, *, byte_count: int, codec: str, at: datetime) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(
+                s.transcript_segments.update()
+                .where(
+                    s.transcript_segments.c.segment_id == record.segment_id,
+                    s.transcript_segments.c.turn_range_start == record.turn_range_start,
+                    s.transcript_segments.c.rejected.is_(True),
+                )
+                .values(
+                    rejected=False,
+                    rejection_reason=None,
+                    byte_count=byte_count,
+                    codec=codec,
+                    content=self._compress(record.turns_json, codec),
+                    received_at=at,
+                )
+            )
+
+    def update_still_rejected(self, record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(
+                s.transcript_segments.update()
+                .where(
+                    s.transcript_segments.c.segment_id == record.segment_id,
+                    s.transcript_segments.c.turn_range_start == record.turn_range_start,
+                    s.transcript_segments.c.rejected.is_(True),
+                )
+                .values(rejection_reason=reason, byte_count=byte_count, received_at=at)
             )
 
     # --- helpers ------------------------------------------------------------

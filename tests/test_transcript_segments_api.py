@@ -53,8 +53,8 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _ingest_chunk(hub, headers: dict[str, str] | None = None) -> str:  # type: ignore[no-untyped-def]
-    resp = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}, headers=headers)
+def _ingest_chunk(hub, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:  # type: ignore[no-untyped-def]
+    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token]}, headers=headers)
     assert resp.status_code == 201, resp.text
     return str(resp.json()["chunk_id"])
 
@@ -174,6 +174,27 @@ def test_get_segment_is_200_at_contributor_and_returns_decompressed_turns(tmp_pa
     assert body["final"] is True
     assert body["truncated"] is False
     assert [t["text"] for t in body["turns"]] == ["hi"]
+
+
+def test_get_segment_404s_when_the_segment_belongs_to_a_different_chunk(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
+    token = seed_session(hub, contributor)
+    owning_chunk = _ingest_chunk(hub, headers=_cookie(token))
+    other_chunk = _ingest_chunk(hub, headers=_cookie(token), pointer_token="default:2")
+    hub.client.post(
+        "/api/fleet/transcripts",
+        json={
+            "runner_id": "r1",
+            "records": [_record(owning_chunk, seq=1, turn_range_start=0, turn_range_end=0, final=True)],
+        },
+    )
+
+    resp = hub.client.get(f"/api/chunks/{other_chunk}/transcripts/sg_1", headers=_cookie(token))
+
+    assert resp.status_code == 404
+    same_chunk = hub.client.get(f"/api/chunks/{owning_chunk}/transcripts/sg_1", headers=_cookie(token))
+    assert same_chunk.status_code == 200
 
 
 # --- truncation (D5/D6), the operator's only signal turns are missing --------------

@@ -83,7 +83,7 @@ def test_turn_content_round_trips_through_the_codec(tmp_path: Path) -> None:
 
     store.insert_accepted(record, byte_count=len(record.turns_json.encode("utf-8")), codec="zlib", at=_NOW)
 
-    [content] = store.records_for_segment("sg_1")
+    [content] = store.records_for_segment("ch_1", "sg_1")
     assert content.turns_json == record.turns_json
     with engine.connect() as conn:
         row = conn.execute(select(s.transcript_segments.c.codec)).one()
@@ -121,12 +121,54 @@ def test_the_natural_key_is_enforced_by_the_schema(tmp_path: Path) -> None:
         store.insert_accepted(record, byte_count=10, codec="zlib", at=_NOW)
 
 
-def test_natural_key_exists_reads_true_only_for_a_stored_pair(tmp_path: Path) -> None:
+def test_natural_key_state_is_absent_then_accepted_for_a_stored_pair(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptSegmentStore(engine)
-    assert store.natural_key_exists("sg_1", 0) is False
+    assert store.natural_key_state("sg_1", 0) == "absent"
 
     store.insert_accepted(_record(), byte_count=10, codec="zlib", at=_NOW)
 
-    assert store.natural_key_exists("sg_1", 0) is True
-    assert store.natural_key_exists("sg_1", 5) is False
+    assert store.natural_key_state("sg_1", 0) == "accepted"
+    assert store.natural_key_state("sg_1", 5) == "absent"
+
+
+def test_natural_key_state_is_rejected_for_a_cap_rejected_pair(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(engine)
+    store.insert_rejected(_record(), byte_count=999, reason="record_too_large", at=_NOW)
+
+    assert store.natural_key_state("sg_1", 0) == "rejected"
+
+
+def test_update_to_accepted_transitions_a_rejected_row_in_place(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(engine)
+    record = _record()
+    store.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
+
+    store.update_to_accepted(record, byte_count=10, codec="zlib", at=_NOW)
+
+    assert store.natural_key_state("sg_1", 0) == "accepted"
+    [content] = store.records_for_segment("ch_1", "sg_1")
+    assert content.rejected is False
+    assert content.turns_json == record.turns_json
+    with engine.connect() as conn:
+        rows = conn.execute(select(s.transcript_segments)).all()
+    assert len(rows) == 1
+
+
+def test_update_still_rejected_refreshes_the_row_without_storing_content(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(engine)
+    record = _record()
+    store.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
+    later = _NOW.replace(hour=12)
+
+    store.update_still_rejected(record, byte_count=1200, reason="record_too_large", at=later)
+
+    with engine.connect() as conn:
+        rows = conn.execute(select(s.transcript_segments)).all()
+    assert len(rows) == 1
+    assert rows[0].content is None
+    assert rows[0].byte_count == 1200
+    assert rows[0].received_at == later

@@ -14,6 +14,7 @@ from blizzard.hub.domain.transcripts import (
     REJECTED_CHUNK_BUDGET_EXCEEDED,
     REJECTED_RECORD_TOO_LARGE,
     IWriteTranscriptSegments,
+    NaturalKeyState,
     SegmentIndexRow,
     SegmentRecord,
     SegmentRecordContent,
@@ -105,9 +106,47 @@ def test_a_re_offer_under_a_fresh_seq_dedupes_against_the_natural_key(tmp_path: 
 
     assert result.applied == [7]
     assert result.high_water == 7
-    [content] = store.records_for_segment("sg_1")  # still one row, not two
+    [content] = store.records_for_segment("ch_1", "sg_1")  # still one row, not two
     assert content.turn_range_start == 0
     assert store.chunk_stored_bytes("ch_1") == len(_record(1, turn_range_start=0, turn_range_end=0)[1].turns_json)
+
+
+def test_a_re_offer_of_a_previously_rejected_record_is_re_adjudicated_not_falsely_applied(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    store = TranscriptSegmentStore(hub.engine)
+    service = TranscriptIngestService(store=store, clock=hub.clock)
+    big = "x" * (RECORD_MAX_BYTES + 1)
+    service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json=big)])
+    [entry] = store.segments_for_chunk("ch_1")
+    assert entry.truncated is True
+
+    result = service.ingest("r1", [_record(99, turn_range_start=0, turn_range_end=0)])
+
+    assert result.applied == [99]
+    assert result.capped == []
+    [content] = store.records_for_segment("ch_1", "sg_1")
+    assert content.rejected is False
+    assert content.turns_json == _record(99, turn_range_start=0, turn_range_end=0)[1].turns_json
+    [entry] = store.segments_for_chunk("ch_1")
+    assert entry.truncated is False
+
+
+def test_a_re_offer_of_a_still_over_cap_record_stays_capped_not_applied(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    store = TranscriptSegmentStore(hub.engine)
+    service = TranscriptIngestService(store=store, clock=hub.clock)
+    big = "x" * (RECORD_MAX_BYTES + 1)
+    service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json=big)])
+
+    result = service.ingest("r1", [_record(2, turn_range_start=0, turn_range_end=0, turns_json=big)])
+
+    assert result.capped == [2]
+    assert result.applied == []
+    [content] = store.records_for_segment("ch_1", "sg_1")
+    assert content.rejected is True
+    assert content.turns_json == "[]"
 
 
 def test_a_tail_record_ingested_after_completion_reads_back_in_turn_range_order(tmp_path: Path) -> None:
@@ -119,7 +158,7 @@ def test_a_tail_record_ingested_after_completion_reads_back_in_turn_range_order(
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
     service.ingest("r1", [_record(2, turn_range_start=1, turn_range_end=1, final=True)])
 
-    records = store.records_for_segment("sg_1")
+    records = store.records_for_segment("ch_1", "sg_1")
     assert [r.turn_range_start for r in records] == [0, 1]
     assert records[-1].final is True
 
@@ -230,7 +269,7 @@ class _FakeTranscriptStore:
     def segments_for_chunk(self, chunk_id: str) -> list[SegmentIndexRow]:
         raise NotImplementedError
 
-    def records_for_segment(self, segment_id: str) -> list[SegmentRecordContent]:
+    def records_for_segment(self, chunk_id: str, segment_id: str) -> list[SegmentRecordContent]:
         raise NotImplementedError
 
     def high_water(self, runner_id: str) -> int:
@@ -239,8 +278,13 @@ class _FakeTranscriptStore:
     def set_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
         pass
 
-    def natural_key_exists(self, segment_id: str, turn_range_start: int) -> bool:
-        return False
+    def natural_key_state(self, segment_id: str, turn_range_start: int) -> NaturalKeyState:
+        key = (segment_id, turn_range_start)
+        if any((r.segment_id, r.turn_range_start) == key for r, _ in self.accepted):
+            return "accepted"
+        if any((r.segment_id, r.turn_range_start) == key for r, _, _ in self.rejected):
+            return "rejected"
+        return "absent"
 
     def chunk_stored_bytes(self, chunk_id: str) -> int:
         return self.chunk_bytes
@@ -256,6 +300,19 @@ class _FakeTranscriptStore:
     def insert_rejected(self, record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> None:
         self.rejected.append((record, byte_count, reason))
         self.runner_bytes += byte_count  # rejected bytes count toward the daily rate only (Phase 2 AC)
+
+    def update_to_accepted(self, record: SegmentRecord, *, byte_count: int, codec: str, at: datetime) -> None:
+        key = (record.segment_id, record.turn_range_start)
+        self.rejected = [r for r in self.rejected if (r[0].segment_id, r[0].turn_range_start) != key]
+        self.accepted.append((record, byte_count))
+        self.chunk_bytes += byte_count
+        self.runner_bytes += byte_count
+
+    def update_still_rejected(self, record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> None:
+        key = (record.segment_id, record.turn_range_start)
+        self.rejected = [r for r in self.rejected if (r[0].segment_id, r[0].turn_range_start) != key]
+        self.rejected.append((record, byte_count, reason))
+        self.runner_bytes += byte_count
 
 
 def _conforms_fake_transcript_store(x: _FakeTranscriptStore) -> IWriteTranscriptSegments:

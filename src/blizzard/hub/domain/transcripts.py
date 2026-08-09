@@ -9,12 +9,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Protocol
+from typing import Literal, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 
 _log = get_logger("blizzard.hub.transcripts")
+
+#: A natural-key lookup's outcome (D8) — ``"rejected"`` re-adjudicates, never applies
+#: outright (review:F1).
+NaturalKeyState = Literal["absent", "accepted", "rejected"]
 
 #: A single record's raw-turn-bytes ceiling — above the epic's measured p99 whole-session
 #: size (≈3.3 MB), since one shipped record may carry most of a segment.
@@ -91,7 +95,7 @@ class IReadTranscriptSegments(Protocol):
 
     def segments_for_chunk(self, chunk_id: str) -> list[SegmentIndexRow]: ...
 
-    def records_for_segment(self, segment_id: str) -> list[SegmentRecordContent]: ...
+    def records_for_segment(self, chunk_id: str, segment_id: str) -> list[SegmentRecordContent]: ...
 
 
 class IWriteTranscriptSegments(IReadTranscriptSegments, Protocol):
@@ -101,7 +105,7 @@ class IWriteTranscriptSegments(IReadTranscriptSegments, Protocol):
 
     def set_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None: ...
 
-    def natural_key_exists(self, segment_id: str, turn_range_start: int) -> bool: ...
+    def natural_key_state(self, segment_id: str, turn_range_start: int) -> NaturalKeyState: ...
 
     def chunk_stored_bytes(self, chunk_id: str) -> int: ...
 
@@ -110,6 +114,10 @@ class IWriteTranscriptSegments(IReadTranscriptSegments, Protocol):
     def insert_accepted(self, record: SegmentRecord, *, byte_count: int, codec: str, at: datetime) -> None: ...
 
     def insert_rejected(self, record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> None: ...
+
+    def update_to_accepted(self, record: SegmentRecord, *, byte_count: int, codec: str, at: datetime) -> None: ...
+
+    def update_still_rejected(self, record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -168,13 +176,19 @@ class TranscriptIngestService:
 
     def _apply(self, record: SegmentRecord, *, at: datetime) -> bool:
         """``True`` stored, ``False`` cap-rejected — both advance the high-water (D6)."""
-        if self._store.natural_key_exists(record.segment_id, record.turn_range_start):
-            # A re-offer under a fresh lane sequence (a rebuilt buffer, a backfill) —
-            # already stored; treated as applied so the caller's seq still advances.
+        state = self._store.natural_key_state(record.segment_id, record.turn_range_start)
+        if state == "accepted":
             return True
 
         byte_count = len(record.turns_json.encode("utf-8"))
         reason = self._reject_reason(record, byte_count=byte_count, at=at)
+        if state == "rejected":
+            if reason is not None:
+                self._store.update_still_rejected(record, byte_count=byte_count, reason=reason, at=at)
+                return False
+            self._store.update_to_accepted(record, byte_count=byte_count, codec="zlib", at=at)
+            return True
+
         if reason is not None:
             self._store.insert_rejected(record, byte_count=byte_count, reason=reason, at=at)
             return False

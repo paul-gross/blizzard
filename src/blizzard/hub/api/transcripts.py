@@ -130,7 +130,7 @@ def get_transcript_segment(
     turn-range order — the lazy per-segment content read (D12)."""
     if services.chunks.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    records = services.transcripts.records_for_segment(segment_id)
+    records = services.transcripts.records_for_segment(chunk_id, segment_id)
     if not records:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown segment {segment_id}")
     return _content_view(segment_id, records)
