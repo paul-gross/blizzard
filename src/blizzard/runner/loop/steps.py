@@ -219,9 +219,11 @@ class ResumeIntents:
             if lease.lease_id in ended:
                 continue  # declared done (SessionEnd fired) — ADVANCE judges it (exit-is-done)
             if lease.pid is not None and process.is_alive(lease.pid, lease.process_start_time or ""):
-                continue  # orphaned-but-alive — re-adopted via its live heartbeat, never re-spawned
+                continue  # orphaned-but-alive — REAP re-adopts it, or expires it if the beat went stale
             if Liveness.of(self.store, lease).stale(crashed_at):
-                continue  # stalled at crash time — reaped & retried per the node's budget, unchanged
+                # Its process is already gone (the test above), so REAP passes it over and ADVANCE
+                # claims it: a verdict elicited from the dead session, a retry consumed only if none is.
+                continue
             yield lease
 
     def _mark(self, leases: Iterator[LeaseRecord], *, now: datetime) -> int:

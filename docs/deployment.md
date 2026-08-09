@@ -469,9 +469,9 @@ A graph's `sessions:` map names each session lineage's **capability tier** rathe
 model — `blizzard:frontier`, `blizzard:advanced`, `blizzard:basic` — and a chunk's
 `default_model` uses the same vocabulary. The hub never interprets either: the mapping
 from a tier to a model *this* runner's harness understands lives in
-`blizzard-runner.toml`, which is what keeps a graph harness-agnostic. A codex runner maps
-the same three tiers to its own models and skips `opus` wherever a preference list names
-it.
+`blizzard-runner.toml`, which is what keeps a graph harness-agnostic. A runner on a second
+harness would map the same three tiers to that harness's own models and skip `opus`
+wherever a preference list names it — Claude Code is the only adapter that ships today.
 
 ```toml
 [models.aliases]
@@ -502,7 +502,10 @@ A session's **model** is applied when the session is minted and on no resume aft
 That rests on the harness restoring a resumed session's own model, which all three target
 harnesses do — and which each one has a configuration that **defeats**. A deployment that
 trips one runs its mechanical lineage on the wrong model with every test tier still green,
-so these are requirements, not preferences:
+so these are requirements, not preferences.
+
+Only the first binds a deployment you can run today; Claude Code is the one adapter that
+ships, and the other two are the obligation an adapter for that harness would inherit:
 
 - **Claude Code** — a worker must never see the `ANTHROPIC_MODEL` family of variables.
   They are absent from the base allowlist by construction; do not add one through
@@ -1258,8 +1261,10 @@ window_hours = 24.0
 - **Runner ceiling (`runner_ceiling_usd`, `window_hours`).** Checked at each tick: when this
   runner's spend over the trailing `window_hours` crosses the ceiling, the runner's **local
   pause brake** engages (the same brake `runner pause` sets — every spawn site suppressed, no
-  retries consumed, live workers left to finish) and an escalation records the ceiling and the
-  spend. The window is a rolling last-N-hours sum; **it does not auto-unpause** when the window
+  retries consumed, live workers left to finish), carrying the ceiling and the spend as the
+  pause's own recorded reason. Unlike the per-chunk cap, it raises no escalation: the ceiling
+  is runner-scoped, so there is no one chunk to park.
+  The window is a rolling last-N-hours sum; **it does not auto-unpause** when the window
   later rolls the spend back under the ceiling. Clearing the brake is always an explicit
   operator decision, never automatic — `blizzard runner start` at the CLI, or the runner
   panel's Resume control, exactly as for a hand-issued pause. `GET /api/runners` and
@@ -1270,8 +1275,10 @@ window_hours = 24.0
   the session transcript but its **cost is genuinely unknown** — so an absent-cost row
   contributes its tokens but **$0** to the cost sum, making the total a lower bound, flagged
   **PARTIAL** wherever it is shown (a `~` marker on the board and in `hub status`). Both caps
-  trip on this lower bound and surface PARTIAL in the escalation, so an operator knows the true
-  spend may be higher — a cap never silently under-counts a crash-heavy chunk into looking cheap.
+  trip on this lower bound and surface PARTIAL, each on its own carrier — the per-chunk cap in
+  the escalation it raises, the runner ceiling in the reason recorded on the pause — so an
+  operator knows the true spend may be higher, and a cap never silently under-counts a
+  crash-heavy chunk into looking cheap.
 
 See `blizzard hub status` for the per-chunk cost column, the fleet total, and a paused runner's
 ceiling reason; the board's chunk cards and detail dock show the same figures live.
@@ -1292,10 +1299,11 @@ behavior**.
 sample_interval_seconds = 300
 ```
 
-- **Claude-Code-only, today.** Only the Claude Code adapter has a subscription concept to
-  sample; the Codex and OpenCode adapters report no sample at all. On the board this shows
-  up as the usage block simply being absent for a runner on one of those harnesses — never
-  a fabricated zero or empty reading.
+- **Claude-Code-only, today.** Claude Code is the only harness adapter that ships, and the
+  only one with a subscription concept to sample. The seam's contract already covers a
+  harness that has none — it reports no sample rather than a figure — and a runner with no
+  sample renders as the usage block simply being absent on the board, never a fabricated
+  zero or empty reading.
 - **Advisory only.** The sampled utilization never throttles or backpressures claiming,
   scheduling, or spawning in any way — it is a read for a human, not an input to the
   runner's own decisions. Nothing about cost caps, the spend kill-switch, or work claiming
@@ -1416,29 +1424,55 @@ re-attached — both wait, exactly where the crash or the shutdown left them, fo
 first tick after `runner start` clears the brake. Nothing described below is lost in
 the meantime, only deferred.
 
-- **Supervisor.** The runner's first tick after any restart is **REAP**. It reaps
-  the leases the crash stranded (their workers are gone), re-reads its environment
-  bindings from its store, and each chunk becomes leasable again at its
-  last-recorded node — never re-run from the start. Facts are the only truth,
-  so a restart reads exactly the state a clean shutdown would have left.
+- **Supervisor.** The runner's first tick after any restart is **REAP**, and it expires
+  narrowly: a lease minted but never spawned, and a worker still alive but stalled past
+  the liveness window. A session-bearing lease whose process is simply gone is *not*
+  reaped — that one is either ADVANCE's (the worker declared done on the way out) or
+  RESUME's (the paragraph below owns it). What REAP does expire becomes leasable again at
+  its last-recorded node, never re-run from the start, against environment bindings
+  re-read from the store. Facts are the only truth, so a restart reads exactly the state
+  a clean shutdown would have left.
 - **Hub.** A completion re-flushed after a hub crash is applied idempotently
   behind the epoch fence, and a per-repo land already recorded is skipped
   on redelivery — so a crash mid-delivery lands the chunk exactly once, not twice.
 
 A **graceful** restart does one better than reaping. Because the SIGTERM lets the
-supervisor run a shutdown pass before it exits, it marks every in-flight lease with
-a durable *resume-intent* instead of leaving its workers to be reaped. The
+supervisor run a shutdown pass before it exits, it marks the in-flight leases with
+a durable *resume-intent* — without probing their health, since it knows they were
+running a moment ago, where the crash path has to infer that after the fact. The
 first tick after the restart then **RESUMEs** each marked session in place — the same
 lease, epoch, and session, only the process id rewritten and no retry consumed — so a
 `systemctl restart` (for example, to adopt a freshly-merged runner wheel) continues
 each agent mid-thought rather than reaping and re-running it from the top —
 **provided the chunk isn't under a standing operator pause** (issue #46; see "Four
-verbs, two axes" above). If it is, the RESUME path re-parks it instead of respawning
-it, the same way it would if the pause had landed on a live tick; the pause fact, not
-the restart, decides. An ungraceful `kill -9` skips the marking, so its workers fall
-back to the reap path above; and a crash *during* the re-attach itself degrades to
-that same reap path — the resume is bounded by the crash-point sweep's recovery, no
-stronger.
+verbs, two axes" above). A pause the runner has already parked on locally is not marked
+at all and simply stays parked, ADVANCE lifting it when the pause clears; a pause
+recorded only at the hub is discovered by RESUME's own re-attach read, which re-parks
+the lease instead of respawning it. Either way the pause fact, not the restart, decides.
+An ungraceful `kill -9` skips the *shutdown* marking, but not the
+resume: the next start marks the sessions the crash orphaned before the loop begins
+(`marked N crash-interrupted lease(s) for restart-resume`), so the same RESUME re-attaches
+them. What it costs is precision, not the context.
+
+Both paths mark only a lease that is **live work with a session to re-attach to** — never
+one still unspawned, dormant on a question or an operator pause, or holding a buffered
+completion awaiting flush. Those three are not exclusions from resume so much as leases
+with nothing to resume: each is already owned by the step that parked it. On top of that
+floor the crash path drops three more, inferring after the fact what the shutdown path
+observed directly — and none of the three lands in the same place:
+
+| Excluded because | What happens instead |
+|------------------|----------------------|
+| the spawn recorded a session-end | exit-is-done: ADVANCE judges the completed work, no re-attach needed |
+| the process is still alive | REAP decides on the heartbeat, not the crash: still beating, it is re-adopted untouched and never re-spawned; already past the one-hour liveness window — which any outage longer than an hour guarantees, since heartbeats reach the downed runner's own API — it is reaped and retried like any stalled worker |
+| the heartbeat was already stale at the crash | its process is gone by construction (that is the test above it), so REAP passes it over and **ADVANCE** claims it: the verdict is elicited from the dead session, and a retry is consumed only if none can be — a failed attempt recorded via ADVANCE, not a reap |
+
+Rows one and three therefore converge on ADVANCE, reached by different routes: the first
+declared itself done, the third merely exited. ADVANCE consults no session-end fact — the
+exit, not the declaration, is what routes a lease to it.
+
+And a crash *during* the re-attach itself degrades to the reap path — the resume is bounded
+by the crash-point sweep's recovery, no stronger.
 
 `runner pause`, then `systemctl restart` to adopt a new wheel, is a plausible
 maintenance sequence — but a runner paused *before* the restart stays paused after it

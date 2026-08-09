@@ -103,8 +103,9 @@ def test_skips_worker_that_declared_done(tmp_path):  # type: ignore[no-untyped-d
 
 @pytest.mark.unit
 def test_skips_stalled_worker(tmp_path):  # type: ignore[no-untyped-def]
-    """A worker already stalled at crash time (stale heartbeat) is left to reap+retry —
-    the gap the classifier judges is the worker's own idleness, with no outage in it."""
+    """A worker already stalled at crash time (stale heartbeat) is not marked — the gap the
+    classifier judges is the worker's own idleness, with no outage in it. Where an unmarked
+    lease then goes is the loop's business, not this unit's; ``marked`` is all that is pinned."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # last tool call, two hours before the crash
