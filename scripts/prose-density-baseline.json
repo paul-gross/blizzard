@@ -2701,8 +2701,8 @@
   },
   "service/support.py": {
    "comments": 6,
-   "docstrings": 35,
-   "total": 326
+   "docstrings": 38,
+   "total": 367
   },
   "service/test_auth_login_service.py": {
    "comments": 2,
@@ -2750,14 +2750,14 @@
    "total": 122
   },
   "service/test_runner_service.py": {
-   "comments": 23,
-   "docstrings": 15,
-   "total": 303
+   "comments": 30,
+   "docstrings": 20,
+   "total": 415
   },
   "service/test_transcript_segments_service.py": {
    "comments": 3,
    "docstrings": 7,
-   "total": 172
+   "total": 149
   },
   "service/test_usage_service.py": {
    "comments": 19,

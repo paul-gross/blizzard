@@ -19,6 +19,7 @@ from tests.service.support import (
     require_mock_fleet,
     require_winter_source,
     service_gate,
+    transcript_segment_record,
 )
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -40,31 +41,7 @@ def _ingest(forge, hub, title: str) -> str:  # type: ignore[no-untyped-def]
 
 
 def _record(chunk_id: str, *, seq: int) -> dict:
-    return {
-        "seq": seq,
-        "segment_id": "sg_1",
-        "chunk_id": chunk_id,
-        "node_id": "nd_build",
-        "epoch": 1,
-        "spawn_generation": 1,
-        "turn_range_start": 0,
-        "turn_range_end": 0,
-        "final": True,
-        "normalizer_version": "v1",
-        "harness_version": "claude-code-1.0",
-        "turns": [
-            {
-                "index": 0,
-                "kind": "asst",
-                "timestamp": None,
-                "text": "hi",
-                "tool": None,
-                "thinking_redacted": False,
-                "sidechain": None,
-                "truncated": False,
-            }
-        ],
-    }
+    return transcript_segment_record(chunk_id, seq=seq)
 
 
 def test_ingest_and_read_back_round_trip_over_the_wire(tmp_path: Path) -> None:

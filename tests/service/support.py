@@ -155,6 +155,47 @@ BUILD_SCRIPT = (
 JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
 
+def transcript_segment_turn(index: int, kind: str, text: str) -> dict:
+    """One ``TurnSegmentView`` as the wire carries it, at its defaults."""
+    return {
+        "index": index,
+        "kind": kind,
+        "timestamp": None,
+        "text": text,
+        "tool": None,
+        "thinking_redacted": False,
+        "sidechain": None,
+        "truncated": False,
+    }
+
+
+def transcript_segment_record(
+    chunk_id: str,
+    *,
+    seq: int,
+    node_id: str = "nd_build",
+    epoch: int = 1,
+    turns: list[dict] | None = None,
+) -> dict:
+    """One final ``TranscriptSegmentRecord`` on ``(chunk_id, node_id, epoch)``'s lane —
+    a single ``asst`` turn unless ``turns`` says otherwise."""
+    carried = turns if turns is not None else [transcript_segment_turn(0, "asst", "hi")]
+    return {
+        "seq": seq,
+        "segment_id": "sg_1",
+        "chunk_id": chunk_id,
+        "node_id": node_id,
+        "epoch": epoch,
+        "spawn_generation": 1,
+        "turn_range_start": carried[0]["index"],
+        "turn_range_end": carried[-1]["index"],
+        "final": True,
+        "normalizer_version": "v1",
+        "harness_version": "claude-code-1.0",
+        "turns": carried,
+    }
+
+
 def mock_hub_chunk_spec(work_ref: str) -> dict:
     """A scripted build -> deliver chunk the mock hub serves to a real runner."""
     return {
