@@ -60,7 +60,7 @@ from blizzard.hub.domain.questions import QuestionService
 from blizzard.hub.domain.queue import GroupService, QueueService
 from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry
 from blizzard.hub.domain.stop import StopService
-from blizzard.hub.domain.transcripts import IReadTranscriptSegments
+from blizzard.hub.domain.transcripts import IReadTranscriptSegments, TranscriptIngestService
 from blizzard.hub.domain.work import IReadChunkRepository
 from blizzard.hub.domain.work_closure import DeliveryClosureReconciler
 from blizzard.hub.events.broker import EventBroker
@@ -89,6 +89,9 @@ class HubServices:
     stop: StopService
     edit: EditService
     facts: FactIngestService
+    #: The transcript lane's ingest policy (blizzard#247) — the write side; ``transcripts``
+    #: above is the same store's read Protocol.
+    transcript_ingest: TranscriptIngestService
     graph_mint: GraphMintService
     graph_lifecycle: GraphLifecycleService
     runner_facts: RunnerFactsService
@@ -230,6 +233,7 @@ def build_services(
         stop=StopService(chunks=chunk_store, clock=clock),
         edit=EditService(chunks=chunk_store, graphs=graph_store, claim_lock=claim_lock),
         facts=FactIngestService(chunks=chunk_store, fleet=fleet, clock=clock),
+        transcript_ingest=TranscriptIngestService(store=transcript_store, clock=clock),
         graph_mint=GraphMintService(graphs=graph_store, clock=clock),
         graph_lifecycle=GraphLifecycleService(graphs=graph_store, clock=clock),
         runner_facts=RunnerFactsService(chunks=chunk_store, clock=clock),
