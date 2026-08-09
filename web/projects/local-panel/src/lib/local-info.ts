@@ -183,7 +183,7 @@ import { injectRunnerFleetSummaryQuery, injectRunnerStatusQuery } from './status
       inset: auto 0 -1px 0;
       padding: 2px 6px;
       background: var(--red-dim);
-      color: #ffd9dd;
+      color: var(--red-wash-text);
       font-size: var(--fs-label);
       letter-spacing: 0.08em;
     }

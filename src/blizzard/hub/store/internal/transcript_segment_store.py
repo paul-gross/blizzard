@@ -65,9 +65,9 @@ class TranscriptSegmentStore:
 
     def runner_id_for_lease(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
         """The single ``runner_id`` on a lease's stored segments (D2) — asserted, not
-        assumed (review F7): a ``LIMIT 1`` with no ``ORDER BY`` would silently 403 the
-        legitimate owner should two runners' rows ever share one key, so a violation
-        raises here instead of picking an arbitrary row."""
+        assumed: a ``LIMIT 1`` with no ``ORDER BY`` would silently 403 the legitimate
+        owner should two runners' rows ever share one key, so a violation raises here
+        instead of picking an arbitrary row."""
         with self._engine.connect() as conn:
             rows = conn.execute(
                 select(s.transcript_segments.c.runner_id)

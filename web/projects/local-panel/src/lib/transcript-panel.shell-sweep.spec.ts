@@ -13,10 +13,9 @@ const TRANSCRIPT_ROUTE = '/api/leases/L-903/transcript';
  * A closed lease's archived read (blizzard#249): the archived badge and a
  * dropped-turns count both in view — the combination narrow width is the
  * only tier that can judge, since the transcript panel is reachable from the
- * mobile chunk-detail screen (`data-testid="detail-transcript"`,
- * `local-panel-mobile.spec.ts:171`). No turns beyond the two banners: turn
- * row wrapping is the pre-existing (unchanged by this phase) `.tc-name`
- * rendering this sweep does not exist to re-prove.
+ * mobile chunk-detail screen (`data-testid="detail-transcript"`). No turns
+ * beyond the two banners: turn row wrapping is the pre-existing (unchanged by
+ * this phase) `.tc-name` rendering this sweep does not exist to re-prove.
  */
 const ARCHIVED_TRANSCRIPT = {
   lease_id: 'L-903',
@@ -44,6 +43,23 @@ const HUB_UNREACHABLE_TRANSCRIPT = {
   turns: [],
 };
 
+/** Every page-error/unhandled-rejection listener a case in this sweep needs, shared so
+ * both cases apply the same rigor rather than one asserting it and the other not. */
+function trackPageErrors() {
+  const errors: string[] = [];
+  const onError = (e: ErrorEvent) => errors.push(e.message);
+  const onRejection = (e: PromiseRejectionEvent) => errors.push(String(e.reason));
+  window.addEventListener('error', onError);
+  window.addEventListener('unhandledrejection', onRejection);
+  return {
+    errors,
+    stop: () => {
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    },
+  };
+}
+
 async function render(body: unknown) {
   const stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === TRANSCRIPT_ROUTE ? body : {}));
   await TestBed.configureTestingModule({
@@ -67,11 +83,7 @@ const WIDTHS = [390, 320];
 describe('transcript panel shell sweep (web:shell-sweep, blizzard#249)', () => {
   for (const width of WIDTHS) {
     it(`renders the archived badge and dropped-turns count with no horizontal overflow at width ${width}`, async () => {
-      const pageErrors: string[] = [];
-      const onError = (e: ErrorEvent) => pageErrors.push(e.message);
-      const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
-      window.addEventListener('error', onError);
-      window.addEventListener('unhandledrejection', onRejection);
+      const { errors: pageErrors, stop: stopTrackingPageErrors } = trackPageErrors();
 
       const { fixture, stub } = await render(ARCHIVED_TRANSCRIPT);
       const root = fixture.nativeElement as HTMLElement;
@@ -103,14 +115,15 @@ describe('transcript panel shell sweep (web:shell-sweep, blizzard#249)', () => {
       } finally {
         root.remove();
         stub.restore();
-        window.removeEventListener('error', onError);
-        window.removeEventListener('unhandledrejection', onRejection);
+        stopTrackingPageErrors();
       }
 
       expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
     });
 
     it(`renders the hub-unreachable banner with no horizontal overflow at width ${width}`, async () => {
+      const { errors: pageErrors, stop: stopTrackingPageErrors } = trackPageErrors();
+
       const { fixture, stub } = await render(HUB_UNREACHABLE_TRANSCRIPT);
       const root = fixture.nativeElement as HTMLElement;
       document.body.appendChild(root);
@@ -130,7 +143,10 @@ describe('transcript panel shell sweep (web:shell-sweep, blizzard#249)', () => {
       } finally {
         root.remove();
         stub.restore();
+        stopTrackingPageErrors();
       }
+
+      expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
     });
   }
 });

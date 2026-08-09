@@ -1,9 +1,10 @@
-"""httpx adapter for the archived-transcript seam (blizzard#249, D4).
+"""httpx adapter for the archived-transcript seam (blizzard#249, D4). See also
+``runner/loop/internal/http_hub.py``, the runner's other outbound hub adapter.
 
 All httpx and pydantic-wire usage is confined here: the hub's transcript-segments read is
-fetched, validated, and translated into an :class:`ArchivedTranscript` — never raised past
-this boundary. Modeled on ``runner/loop/internal/http_hub.py``, but that adapter raises
-``HubClientError``; this one returns ``status="unreachable"`` instead."""
+fetched, validated, and translated into an :class:`ArchivedTranscript` — every outcome
+reaches the caller as a value (``status="unreachable"`` on a transport failure); nothing
+in this module ever raises past this boundary."""
 
 from __future__ import annotations
 
@@ -11,8 +12,8 @@ import httpx
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript, IReadArchivedTranscriptRepository
-from blizzard.runner.transcripts.internal.projected_transcript_repository import MAX_TURNS
 from blizzard.runner.transcripts.internal.segment_projection import select_turns, to_turn
+from blizzard.runner.transcripts.repository import MAX_TURNS
 from blizzard.wire.transcript_segment import LeaseTranscriptView
 
 _log = get_logger("blizzard.runner.transcripts.archived")
@@ -43,7 +44,12 @@ class HttpArchivedTranscriptRepository:
             return _UNREACHABLE
         if resp.status_code in (httpx.codes.UNAUTHORIZED, httpx.codes.FORBIDDEN):
             # A refusal is a definite answer, not a transport failure (D1) — the caller
-            # falls back to local exactly like "holds nothing" would.
+            # falls back to local exactly like "holds nothing" would. Logged like every
+            # other non-success branch here, so an unexpected refusal (a stale token, a
+            # lease shipped under a prior runner_id) is not entirely silent.
+            _log.error(
+                "hub refused archived transcript read", chunk_id=chunk_id, node_id=node_id, status=resp.status_code
+            )
             return _REFUSED
         if not resp.is_success:
             _log.error(
@@ -60,19 +66,21 @@ class HttpArchivedTranscriptRepository:
             _log.error("malformed archived transcript body", chunk_id=chunk_id, node_id=node_id, error=str(exc))
             return _UNREACHABLE
         if not view.turns:
-            # All-cap-rejected still carries no turns, but `view.truncated` says so (F3).
+            # All-cap-rejected still carries no turns, but `view.truncated` says so.
             if not view.truncated:
                 return _EMPTY
             return ArchivedTranscript(status="found", turns=[], truncated=True, dropped=0)
-        kept, dropped_before = select_turns(view.turns)
+        kept, trailing = select_turns(view.turns)
         turns_truncated = len(kept) > MAX_TURNS
         capped = kept[-MAX_TURNS:] if turns_truncated else kept
-        # Count drops only over the turns that survive the cap (review F4) — a drop
-        # attached to a turn the cap itself discarded is not part of what's rendered.
-        dropped = sum(dropped_before[-MAX_TURNS:]) if turns_truncated else sum(dropped_before)
+        # Every drop attached to a kept survivor of the cap, plus the trailing drops after
+        # the last kept turn overall — always in the rendered window, since nothing comes
+        # after them for the cap to discard (fixes under-counting when nothing survives:
+        # `capped` is then `[]` and `trailing` alone carries the whole count).
+        dropped = sum(count for _, count in capped) + trailing
         return ArchivedTranscript(
             status="found",
-            turns=[to_turn(t, i) for i, t in enumerate(capped)],
+            turns=[to_turn(t, i) for i, (t, _) in enumerate(capped)],
             truncated=turns_truncated or view.truncated,
             dropped=dropped,
         )

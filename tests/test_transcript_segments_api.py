@@ -11,6 +11,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.domain import transcripts as transcripts_domain
 from tests.support import build_hub, seed_session, seed_user
+from tests.test_fleet_auth import _enroll, _register
 
 pytestmark = pytest.mark.component
 
@@ -51,17 +52,6 @@ def _cookie(token: str) -> dict[str, str]:
 
 def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
-
-
-def _register(hub, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> None:  # type: ignore[no-untyped-def]
-    resp = hub.client.post("/api/fleet/runners", json={"runner_id": runner_id, "workspace_id": workspace_id})
-    assert resp.status_code == 201, resp.text
-
-
-def _enroll(hub, runner_id: str = "runner-a") -> str:  # type: ignore[no-untyped-def]
-    resp = hub.client.post(f"/api/runners/{runner_id}/enrollments")
-    assert resp.status_code == 201, resp.text
-    return str(resp.json()["token"])
 
 
 def _seed_enrolled(hub, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:  # type: ignore[no-untyped-def]
@@ -329,8 +319,8 @@ def test_lease_transcript_read_is_403_for_a_runner_asking_for_another_runners_se
 
 
 def test_lease_transcript_read_403_does_not_leak_the_owning_runners_id(tmp_path: Path) -> None:
-    """review F6: the response body must not turn any enrolled runner into a fleet-wide
-    ownership oracle — it can learn a lease is owned by someone else, never by whom."""
+    """The response body must not turn any enrolled runner into a fleet-wide ownership
+    oracle — it can learn a lease is owned by someone else, never by whom."""
     hub = build_hub(tmp_path)  # warn, the default
     chunk_id = _ingest_chunk(hub)
     hub.client.post(
@@ -347,3 +337,51 @@ def test_lease_transcript_read_403_does_not_leak_the_owning_runners_id(tmp_path:
 
     assert resp.status_code == 403
     assert "r1" not in resp.text
+
+
+def test_lease_transcript_read_401s_before_the_store_is_ever_read(tmp_path: Path) -> None:
+    """An unauthenticated caller must never reach ``runner_id_for_lease`` at all — pinned
+    against a lease whose stored segments violate the fencing-epoch invariant that query
+    depends on, so a store read reaching it would raise. The 401 refusal must still win,
+    proving auth is checked before the store is touched, not after."""
+    hub = build_hub(tmp_path)  # warn, the default
+    chunk_id = _ingest_chunk(hub)
+    hub.client.post(
+        "/api/fleet/transcripts",
+        json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
+    )
+    hub.client.post(
+        "/api/fleet/transcripts",
+        json={"runner_id": "r2", "records": [_record(chunk_id, seq=1, turn_range_start=1, turn_range_end=1)]},
+    )
+
+    resp = hub.client.get(
+        f"/api/fleet/chunks/{chunk_id}/transcript-segments", params={"node_id": "nd_build", "epoch": 1}
+    )
+
+    assert resp.status_code == 401
+
+
+def test_lease_transcript_read_500s_cleanly_on_a_fencing_invariant_violation(tmp_path: Path) -> None:
+    """Past the auth gate, a genuine fencing-epoch violation (two runners' segments under
+    one lease key) must surface as a definite 500 — the store's ``RuntimeError`` caught
+    and logged at the route, not an unhandled exception."""
+    hub = build_hub(tmp_path)  # warn, the default
+    chunk_id = _ingest_chunk(hub)
+    hub.client.post(
+        "/api/fleet/transcripts",
+        json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
+    )
+    hub.client.post(
+        "/api/fleet/transcripts",
+        json={"runner_id": "r2", "records": [_record(chunk_id, seq=1, turn_range_start=1, turn_range_end=1)]},
+    )
+    token = _seed_enrolled(hub, "runner-c", "ws-c")
+
+    resp = hub.client.get(
+        f"/api/fleet/chunks/{chunk_id}/transcript-segments",
+        params={"node_id": "nd_build", "epoch": 1},
+        headers=_bearer(token),
+    )
+
+    assert resp.status_code == 500

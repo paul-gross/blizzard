@@ -24,9 +24,8 @@ import { injectTranscriptQuery } from './transcript.query';
  *   lease whose hub could not be asked *and* whose local file cannot answer
  *   either. Checked ahead of the `reason` switch below, whatever `reason` the
  *   failed local read carried, because "the hub could not be asked" must never
- *   read as the routine `not_found` case — follows `local-info.ts`'s
- *   visible-degrade precedent (a dimmed last-known view plus a banner), not
- *   `chunk-title.query.ts`'s silent-degrade one. **Not** the same as a closed
+ *   read as the routine `not_found` case (visible-degrade precedent:
+ *   `local-info.ts`, not `chunk-title.query.ts`). **Not** the same as a closed
  *   lease whose hub is unreachable but whose *local* file still answers — D1
  *   folds that case into a quiet local fallback (the service leaves
  *   `hub_unreachable` `false`), so it renders as plain turns below, same as
@@ -108,7 +107,11 @@ import { injectTranscriptQuery } from './transcript.query';
           <p class="banner archived" data-testid="transcript-archived-badge">ARCHIVED — SERVED FROM HUB</p>
         }
         @if (transcript()?.truncated) {
-          <p class="banner" data-testid="transcript-truncated">TRUNCATED — SHOWING THE MOST RECENT TURNS</p>
+          <!-- Direction-agnostic on purpose: the local path's own recency cap drops the
+               oldest turns, while a closed lease's hub-side cap-rejection signal (folded
+               into this same flag, D1) drops the newest — one banner text cannot name
+               which end was lost without being wrong for the other case. -->
+          <p class="banner" data-testid="transcript-truncated">TRUNCATED — SOME TURNS NOT SHOWN</p>
         }
         @if ((transcript()?.dropped_turns ?? 0) > 0) {
           <p class="banner dropped" data-testid="transcript-dropped-turns">
@@ -184,14 +187,15 @@ import { injectTranscriptQuery } from './transcript.query';
       color: var(--amber-dim);
     }
     /* The hub-unreachable state (blizzard#249 D1) — local-info.ts's visible-degrade
-       banner precedent (.fleet-strip.stale::after), not KitAsyncState's default
-       centered/nowrap status line: this message is long enough that nowrap would
-       push it past a narrow phone's viewport rather than wrapping. */
+       banner precedent (.fleet-strip.stale::after): a filled red-background wash, not
+       KitAsyncState's error variant, which is plain red text with no background —
+       too subtle for a state this deliberately prominent (closer in spirit to "we
+       don't know" than to a routine status line). */
     .degrade-banner {
       margin: 0;
       padding: 8px 10px;
       background: var(--red-dim);
-      color: #ffd9dd;
+      color: var(--red-wash-text);
       font-size: var(--fs-sm);
       letter-spacing: 0.08em;
     }

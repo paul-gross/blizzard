@@ -112,8 +112,8 @@ def test_200_with_turns_for_an_active_lease(tmp_path: Path) -> None:
         "tool_output": None,
         "truncated": False,
     }
-    # An open lease's response is not byte-identical with `master`: it gains a
-    # provenance of "local" and a dropped-turn count of zero, and nothing else.
+    # An open lease's response always carries a provenance of "local" and a
+    # dropped-turn count of zero, in addition to the turns pinned above.
     assert body["provenance"] == "local"
     assert body["hub_unreachable"] is False
     assert body["dropped_turns"] == 0

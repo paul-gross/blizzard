@@ -117,8 +117,8 @@ def _demand_lease_owner(principal: RunnerPrincipal | None, owning_runner_id: str
     if principal is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="no resolvable runner token")
     if owning_runner_id is not None and owning_runner_id != principal.runner_id:
-        # The owning runner's id stays out of the response (review F6) — logged
-        # server-side instead, where an operator, not another runner, can see it.
+        # The owning runner's id stays out of the response — logged server-side instead,
+        # where an operator, not another runner, can see it.
         _log.warning(
             "lease-transcript ownership mismatch",
             owning_runner_id=owning_runner_id,
@@ -551,7 +551,27 @@ def get_lease_transcript_segments(
     epoch)``, confined against the ``runner_id`` already on those rows regardless of
     ``runner_auth_mode`` — this route's own always-raising ownership check, not the
     router's mode-gated one."""
-    owner = services.transcripts.runner_id_for_lease(chunk_id, node_id, epoch)
+    if principal is None:
+        # Refused before any store read, not after (an unauthenticated caller must never
+        # reach `runner_id_for_lease` at all, default `runner_auth_mode` or not).
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="no resolvable runner token")
+    try:
+        owner = services.transcripts.runner_id_for_lease(chunk_id, node_id, epoch)
+    except RuntimeError as exc:
+        # `runner_id_for_lease` raises when the fencing-epoch invariant it depends on was
+        # violated — an integrity bug elsewhere, never a caller error. Not a failure mode
+        # `IReadTranscriptSegments` declares, so it is logged with full context here
+        # before surfacing as a definite 500, rather than an unhandled exception with none.
+        _log.error(
+            "lease-transcript fencing invariant violated",
+            chunk_id=chunk_id,
+            node_id=node_id,
+            epoch=epoch,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="lease segments in an inconsistent state"
+        ) from exc
     principal = _demand_lease_owner(principal, owner)
     records = services.transcripts.records_for_lease(chunk_id, node_id, epoch, principal.runner_id)
     return transcripts_api.lease_content_view(chunk_id, node_id, epoch, records)

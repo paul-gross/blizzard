@@ -11,6 +11,23 @@ let stub: RequestClientStub | undefined;
 
 afterEach(() => stub?.restore());
 
+/** The common shape the archived/dropped/hub-unreachable block below shares, varied by
+ * one or two fields per case rather than each repeating the whole ten-field body. */
+function archivedBody(overrides: Record<string, unknown> = {}) {
+  return {
+    lease_id: 'L-903',
+    session_id: 'sess-77',
+    available: true,
+    reason: null,
+    truncated: false,
+    provenance: 'local',
+    hub_unreachable: false,
+    dropped_turns: 0,
+    turns: [],
+    ...overrides,
+  };
+}
+
 async function render(
   leaseId: string | null,
   route: (method: string, path: string) => unknown,
@@ -313,9 +330,7 @@ describe('TranscriptPanel', () => {
 
   it('shows the truncation banner when the server capped the read', async () => {
     const { el } = await render('L-903', (method, path) =>
-      method === 'GET' && path === '/api/leases/L-903/transcript'
-        ? { lease_id: 'L-903', session_id: 'sess-77', available: true, reason: null, truncated: true, turns: [] }
-        : {},
+      method === 'GET' && path === '/api/leases/L-903/transcript' ? archivedBody({ truncated: true }) : {},
     );
 
     expect(el.querySelector('[data-testid="transcript-truncated"]')?.textContent).toContain('TRUNCATED');
@@ -323,19 +338,7 @@ describe('TranscriptPanel', () => {
 
   it('shows the archived badge for turns served from the hub, and not for a plain local read (blizzard#249)', async () => {
     const { el } = await render('L-903', (method, path) =>
-      method === 'GET' && path === '/api/leases/L-903/transcript'
-        ? {
-            lease_id: 'L-903',
-            session_id: 'sess-77',
-            available: true,
-            reason: null,
-            truncated: false,
-            provenance: 'archived',
-            hub_unreachable: false,
-            dropped_turns: 0,
-            turns: [],
-          }
-        : {},
+      method === 'GET' && path === '/api/leases/L-903/transcript' ? archivedBody({ provenance: 'archived' }) : {},
     );
 
     expect(el.querySelector('[data-testid="transcript-archived-badge"]')?.textContent).toContain('ARCHIVED');
@@ -343,9 +346,7 @@ describe('TranscriptPanel', () => {
 
   it('shows no archived badge for a plain local read', async () => {
     const { el } = await render('L-903', (method, path) =>
-      method === 'GET' && path === '/api/leases/L-903/transcript'
-        ? { lease_id: 'L-903', session_id: 'sess-77', available: true, reason: null, truncated: false, turns: [] }
-        : {},
+      method === 'GET' && path === '/api/leases/L-903/transcript' ? archivedBody() : {},
     );
 
     expect(el.querySelector('[data-testid="transcript-archived-badge"]')).toBeNull();
@@ -354,17 +355,7 @@ describe('TranscriptPanel', () => {
   it('shows a dropped-turns count when the hub→panel projection drops turns', async () => {
     const { el } = await render('L-903', (method, path) =>
       method === 'GET' && path === '/api/leases/L-903/transcript'
-        ? {
-            lease_id: 'L-903',
-            session_id: 'sess-77',
-            available: true,
-            reason: null,
-            truncated: false,
-            provenance: 'archived',
-            hub_unreachable: false,
-            dropped_turns: 4,
-            turns: [],
-          }
+        ? archivedBody({ provenance: 'archived', dropped_turns: 4 })
         : {},
     );
 
@@ -376,17 +367,7 @@ describe('TranscriptPanel', () => {
   it('renders no dropped-turns note when the count is zero (every local read, and a hub read that drops nothing)', async () => {
     const { el } = await render('L-903', (method, path) =>
       method === 'GET' && path === '/api/leases/L-903/transcript'
-        ? {
-            lease_id: 'L-903',
-            session_id: 'sess-77',
-            available: true,
-            reason: null,
-            truncated: false,
-            provenance: 'archived',
-            hub_unreachable: false,
-            dropped_turns: 0,
-            turns: [],
-          }
+        ? archivedBody({ provenance: 'archived', dropped_turns: 0 })
         : {},
     );
 
@@ -396,17 +377,7 @@ describe('TranscriptPanel', () => {
   it('shows a distinct hub-unreachable state when the hub could not be asked and local cannot answer either (blizzard#249 D1)', async () => {
     const { el } = await render('L-903', (method, path) =>
       method === 'GET' && path === '/api/leases/L-903/transcript'
-        ? {
-            lease_id: 'L-903',
-            session_id: 'sess-77',
-            available: false,
-            reason: 'not_found',
-            truncated: false,
-            provenance: 'local',
-            hub_unreachable: true,
-            dropped_turns: 0,
-            turns: [],
-          }
+        ? archivedBody({ available: false, reason: 'not_found', hub_unreachable: true })
         : {},
     );
 
@@ -417,21 +388,12 @@ describe('TranscriptPanel', () => {
   });
 
   it('falls back to a plain local turns read, with no hub-unreachable banner, when the hub is unreachable but local still answers (D1\'s quiet-fallback cell)', async () => {
-    // Per the runner service (`transcripts/service.py:96`), `hub_unreachable` is set only
-    // when the local read *also* fails — a closed lease whose hub is down but whose local
-    // file still answers resolves with `hub_unreachable: false`, indistinguishable on the
-    // wire from any other local read. This pins that the panel renders it exactly that way.
+    // `TranscriptResponse.hub_unreachable`'s own doc (`wire/transcript.py`) states when
+    // it's set; this pins that the panel renders the unset case as a plain local turns
+    // read, indistinguishable from any other local read, with no hub-unreachable banner.
     const { el } = await render('L-903', (method, path) =>
       method === 'GET' && path === '/api/leases/L-903/transcript'
-        ? {
-            lease_id: 'L-903',
-            session_id: 'sess-77',
-            available: true,
-            reason: null,
-            truncated: false,
-            provenance: 'local',
-            hub_unreachable: false,
-            dropped_turns: 0,
+        ? archivedBody({
             turns: [
               {
                 index: 0,
@@ -444,7 +406,7 @@ describe('TranscriptPanel', () => {
                 truncated: false,
               },
             ],
-          }
+          })
         : {},
     );
 

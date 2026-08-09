@@ -228,6 +228,34 @@ def test_a_closed_lease_with_no_hub_segments_falls_back_to_local(tmp_path: Path)
 
 
 @pytest.mark.unit
+def test_a_closed_lease_the_hub_holds_only_cap_rejected_records_falls_back_to_local(tmp_path: Path) -> None:
+    """The adapter answers ``status="found", turns=[], truncated=True`` for a lease
+    whose hub records were all cap-rejected — the hub answered, but has nothing
+    renderable. Home selection must not let that empty "found" win unconditionally over
+    an available local transcript."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _closed_lease(store)
+    local = FakeTranscriptRepository(
+        {
+            "sess-a": Transcript(
+                session_id="sess-a", available=True, reason=None, turns=[_local_turn("from local")], truncated=False
+            )
+        }
+    )
+    archived = FakeArchivedTranscriptRepository(
+        {_KEY: ArchivedTranscript(status="found", turns=[], truncated=True, dropped=0)}
+    )
+
+    resolved = _service(store, local=local, archived=archived).for_lease("lease_1")
+
+    assert resolved is not None
+    assert resolved.provenance == "local"
+    assert [t.text for t in resolved.transcript.turns] == ["from local"]
+    assert resolved.hub_unreachable is False
+    assert resolved.dropped == 0
+
+
+@pytest.mark.unit
 def test_a_closed_lease_the_hub_refuses_falls_back_to_local(tmp_path: Path) -> None:
     """A refusal is a definite answer, not a transport failure (D1) — resolved to local
     exactly like "holds nothing", never the hub-unreachable state."""

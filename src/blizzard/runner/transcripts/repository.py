@@ -20,8 +20,19 @@ TurnKind = Literal["env", "asst", "tool"]
 TranscriptUnavailable = Literal["spawning", "not_found", "unreadable"]
 
 #: Which side answered a resolved transcript (D1) — the wire's ``provenance`` field,
-#: co-located with its siblings above rather than in ``transcripts/service.py`` (F8).
+#: co-located with its siblings above rather than in ``transcripts/service.py``.
 TranscriptProvenance = Literal["local", "archived"]
+
+#: Keep only the most recent this-many turns (post-projection) — bounds the panel
+#: payload to the newest, most relevant conversation on a long-running session. Shared by
+#: both the local-file and hub-archived projections, so it lives beside the read model
+#: both depend on rather than in either transport's own ``internal/`` module.
+MAX_TURNS = 1000
+
+#: Cap a tool call's *serialized* input at this many characters — shared by both
+#: projections; a re-materialization-time cap, distinct from the harness normalizer's own
+#: text-block cap (``claude_code_normalizer.MAX_BLOCK_CHARS``).
+MAX_BLOCK_CHARS = 1024 * 1024
 
 
 @dataclass(frozen=True)

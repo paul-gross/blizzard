@@ -26,6 +26,9 @@
   --cyan-dim: #2b6675;
   --red: #f05c6c;
   --red-dim: #7a3540;
+  /* Text color for a `--red-dim` background wash (a degrade banner over a filled
+   * panel) — `--red` itself reads too dim against `--red-dim` to stay legible. */
+  --red-wash-text: #ffd9dd;
   --green: #4fc57e;
   --green-dim: #2b5c40;
   --label: #5c7089;

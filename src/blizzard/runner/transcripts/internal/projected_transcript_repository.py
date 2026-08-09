@@ -11,15 +11,14 @@ import json
 from dataclasses import dataclass
 
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NormalizedTurn, ToolCall
-from blizzard.runner.transcripts.repository import IReadTranscriptRepository, Transcript, Turn, TurnKind
-
-#: Keep only the most recent this-many turns (post-projection) — bounds the panel
-#: payload to the newest, most relevant conversation on a long-running session.
-MAX_TURNS = 1000
-
-#: Cap a tool call's *serialized* input at this many characters — the normalizer's own
-#: cap is a different layer, before re-materialization.
-MAX_BLOCK_CHARS = 1024 * 1024
+from blizzard.runner.transcripts.repository import (
+    MAX_BLOCK_CHARS,
+    MAX_TURNS,
+    IReadTranscriptRepository,
+    Transcript,
+    Turn,
+    TurnKind,
+)
 
 
 @dataclass(frozen=True)

@@ -146,8 +146,8 @@ def test_empty_turns_is_the_hub_holds_nothing_outcome() -> None:
 
 @pytest.mark.unit
 def test_all_cap_rejected_records_read_as_found_and_truncated_not_empty() -> None:
-    """review F3: the hub's own truncation signal on an otherwise-empty lease must not
-    collapse into the same outcome as a lease it holds nothing for."""
+    """The hub's own truncation signal on an otherwise-empty lease must not collapse
+    into the same outcome as a lease it holds nothing for."""
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -170,8 +170,8 @@ def test_all_cap_rejected_records_read_as_found_and_truncated_not_empty() -> Non
 
 @pytest.mark.unit
 def test_dropped_turns_counts_only_the_surviving_window(monkeypatch: pytest.MonkeyPatch) -> None:
-    """review F4: a thinking turn dropped ahead of a window the recency cap discards
-    entirely must not inflate the count for the window actually rendered."""
+    """A thinking turn dropped ahead of a window the recency cap discards entirely must
+    not inflate the count for the window actually rendered."""
     monkeypatch.setattr(adapter_module, "MAX_TURNS", 2)
 
     def turn(index: int, kind: str, text: str = "") -> dict[str, object]:

@@ -17,10 +17,10 @@ from blizzard.runner.transcripts.repository import IReadTranscriptRepository, Tr
 
 @dataclass(frozen=True)
 class ResolvedTranscript:
-    """A lease's transcript, resolved to a home per Decision 1. ``hub_unreachable`` is
-    ``True`` only when a closed lease's hub could not be asked *and* local cannot answer
-    either; ``dropped`` counts turns the hub→panel projection (D5) dropped, always zero on
-    a local read — its own pre-existing narrowing predates this change, unreported."""
+    """A lease's transcript, resolved to a home per Decision 1. ``hub_unreachable`` and
+    ``dropped`` carry straight onto their wire-field namesakes
+    (``wire.transcript.TranscriptResponse``, the fields' own doc home); ``dropped`` is
+    always zero on a local read — the local path's own narrowing is unreported."""
 
     transcript: Transcript
     provenance: TranscriptProvenance
@@ -63,9 +63,16 @@ class TranscriptService:
             return ResolvedTranscript(transcript=local, provenance="local", hub_unreachable=False, dropped=0)
 
         # Closed: the hub's segment index is the ack, so ask it first (D1). A refusal or
-        # an empty index is a definite answer, resolved to local like "holds nothing".
+        # an empty index is a definite answer, resolved to local like "holds nothing" — and
+        # so is a "found" index whose only records were all cap-rejected: the hub answered,
+        # but has nothing renderable, so an available local transcript still wins rather
+        # than an empty archived view winning unconditionally. The hub's own truncation
+        # signal on that empty read is not propagated onto the local fallback: it describes
+        # the archive's own newest-end loss, the opposite direction from the local path's
+        # oldest-end recency cap, so folding the two into one flag would misdescribe
+        # whichever one the panel ends up rendering.
         archived = self._archived.read_turns(chunk_id=lease.chunk_id, node_id=lease.node_id, epoch=lease.epoch)
-        if archived.status == "found":
+        if archived.status == "found" and archived.turns:
             transcript = Transcript(
                 session_id=lease.session_id,
                 available=True,
