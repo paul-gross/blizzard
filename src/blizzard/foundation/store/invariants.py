@@ -20,7 +20,6 @@ from blizzard.hub.domain.work import ChunkFacts, RouteHistory
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.internal.chunk_store import DEFAULT_MODEL, ChunkStore
 from blizzard.runner.store import schema as runner
-from blizzard.wire.transcript_outbound import TRANSCRIPT_FINAL
 
 
 @dataclass(frozen=True)
@@ -145,9 +144,11 @@ class GaplessTranscriptOutboundSeq(QueryCheck):
 
 
 class TranscriptSegmentFinalizedExactlyOnce(QueryCheck):
-    """A finalized segment (`finalized_at` set) has exactly one `transcript.final` marker
-    buffered for it — the lane's promise that a step's segments are final by step close,
-    landed exactly once, never zero and never duplicated (issue #246)."""
+    """A finalized segment (`finalized_at` set) has exactly one final marker buffered for
+    it — the lane's promise that a step's segments are final by step close, landed exactly
+    once, never zero and never duplicated (issue #246). Unconditional: a segment always has
+    a `normalizer_version` to declare (real once read, else the source seam's own "never
+    ran" sentinel), so this holds regardless of `[transcripts] ship` or whether a pump ever ran."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
@@ -163,7 +164,7 @@ class TranscriptSegmentFinalizedExactlyOnce(QueryCheck):
             row[0]
             for row in self.conn.execute(
                 select(runner.transcript_outbound_buffer.c.segment_id).where(
-                    runner.transcript_outbound_buffer.c.kind == TRANSCRIPT_FINAL
+                    runner.transcript_outbound_buffer.c.final.is_(True)
                 )
             )
         )
@@ -173,7 +174,7 @@ class TranscriptSegmentFinalizedExactlyOnce(QueryCheck):
                 violations.append(
                     Violation(
                         "runner:transcript-segment-finalized-exactly-once",
-                        f"segment {segment_id} is finalized but has {n} transcript.final markers buffered",
+                        f"segment {segment_id} is finalized but has {n} final markers buffered",
                     )
                 )
         return violations

@@ -13,7 +13,7 @@ from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.route import RouteClaim
-from blizzard.wire.transcript_outbound import TRANSCRIPT_DELTA, TranscriptFact, TranscriptFactBatch
+from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 
 
 def _client(handler) -> HttpHubClient:  # type: ignore[no-untyped-def]
@@ -134,8 +134,24 @@ def test_push_transcripts_posts_to_its_own_route_not_events() -> None:
         assert request.url.path == "/api/fleet/transcripts"
         return httpx.Response(200, json={"runner_id": "r1", "high_water": 3, "applied": [3], "already_applied": []})
 
-    batch = TranscriptFactBatch(
-        runner_id="r1", facts=[TranscriptFact(seq=3, kind=TRANSCRIPT_DELTA, payload={"segment_id": "seg_1"})]
+    batch = TranscriptSegmentBatch(
+        runner_id="r1",
+        records=[
+            TranscriptSegmentRecord(
+                seq=3,
+                segment_id="seg_1",
+                chunk_id="ch_1",
+                node_id="nd_build",
+                epoch=1,
+                spawn_generation=1,
+                turn_range_start=0,
+                turn_range_end=0,
+                final=False,
+                normalizer_version="v1",
+                harness_version=None,
+                turns=[],
+            )
+        ],
     )
     ack = _client(handler).push_transcripts(batch)
     assert (ack.high_water, ack.applied) == (3, [3])

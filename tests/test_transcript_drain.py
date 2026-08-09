@@ -1,8 +1,9 @@
-"""The transcript lane's drain (component tier, issue #246) — break-on-error, ack-on-rejected,
+"""The transcript lane's drain (component tier, issue #246) — break-on-error, ack-on-capped,
 ack-on-already-applied, and the per-run bound."""
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -66,13 +67,30 @@ def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
 
 
 def _enqueue_delta(ctx, segment_id: str, *, cursor: str) -> int:  # type: ignore[no-untyped-def]
+    payload = json.dumps(
+        {
+            "segment_id": segment_id,
+            "chunk_id": "ch_1",
+            "node_id": "nd_build",
+            "epoch": 1,
+            "spawn_generation": 1,
+            "turn_range_start": 0,
+            "turn_range_end": 0,
+            "final": False,
+            "normalizer_version": "fake/1",
+            "harness_version": None,
+            "turns": [],
+        }
+    )
     return ctx.store.record_transcript_delta(
         segment_id=segment_id,
         chunk_id="ch_1",
         cursor=cursor,
         shipped_bytes=1,
         shipped_turns=1,
-        payload="{}",
+        normalizer_version="fake/1",
+        harness_version=None,
+        payload=payload,
         created_at=_NOW,
     )
 
@@ -86,7 +104,7 @@ def test_drain_delivers_pending_records_in_fifo_order_and_acks_them() -> None:
 
     TranscriptDrain(ctx).run()
 
-    assert [f.payload for f in hub.transcripts_pushed] == [{}, {}]
+    assert [r.segment_id for r in hub.transcripts_pushed] == [segment_id, segment_id]
     assert ctx.store.pending_transcript_outbound() == []
 
 
@@ -109,15 +127,15 @@ def test_drain_stops_on_a_transport_failure_and_retries_the_backlog_next_tick() 
     assert ctx.store.pending_transcript_outbound() == []
 
 
-def test_drain_acks_a_hub_rejected_record_rather_than_wedging_the_fifo() -> None:
-    """review F8: a contract rejection (unknown kind, over-cap record) is not idempotency —
-    the drain must still ack it and move on, never retry it forever."""
+def test_drain_acks_a_hub_capped_record_rather_than_wedging_the_fifo() -> None:
+    """review F8: a cap rejection (blizzard#247's oversized/over-budget/over-rate reject) is
+    not idempotency — the drain must still ack it and move on, never retry it forever."""
     hub = FakeHub()
     ctx = _ctx(hub)
     segment_id = _spawn_one_segment(ctx)
-    rejected_seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    capped_seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
     ok_seq = _enqueue_delta(ctx, segment_id, cursor="pos-2")
-    hub.reject_transcript_seqs = {rejected_seq}
+    hub.reject_transcript_seqs = {capped_seq}
 
     TranscriptDrain(ctx).run()
 

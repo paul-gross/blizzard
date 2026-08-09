@@ -1,6 +1,7 @@
 """The transcript lane's per-tick pump (issue #246) — advances each live segment's
 forward-read cursor through ``IHarnessTranscriptSource.turns_since`` and enqueues its
-delta atomically with the cursor write (D3). ``run()`` no-ops while
+record atomically with the cursor write (D3), shaped as one of blizzard#247's
+turn-range ``TranscriptSegmentRecord`` slices. ``run()`` no-ops while
 ``ctx.config.transcripts_ship`` is ``False`` (D5); the lane around it does not — a segment
 still stamps and finalizes with a marker on every closure regardless of ``ship``. Wired into
 ``tick`` by :class:`~blizzard.runner.loop.transcript_drain.TranscriptDrain`."""
@@ -17,8 +18,12 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import NormalizedTurn, SidechainConversation, ToolCall, TranscriptPosition
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.store.repository import TranscriptSegmentRecord
-from blizzard.wire.transcript_outbound import TRANSCRIPT_RECORD_MAX_BYTES
+from blizzard.runner.store.repository import TranscriptSegmentLedgerRow
+
+#: The runner's own per-record cap (D4) — the well-behaved-case half of #247's two-sided
+#: enforcement; the hub's own independent 4 MB `RECORD_MAX_BYTES` (`hub/domain/transcripts.py`)
+#: is the rogue-case backstop and deliberately a different number.
+TRANSCRIPT_RECORD_MAX_BYTES = 1024 * 1024
 
 #: The per-chunk budget (D4) — measured as the sum of `shipped_bytes` across the chunk's
 #: segments, the only quantity the runner controls and the hub bills against.
@@ -34,7 +39,7 @@ _CHUNK_BUDGET_EXCEEDED = "chunk_budget_exceeded"
 @dataclass(frozen=True)
 class TranscriptPump:
     """Advances every live segment one tick's worth forward — the lane's only producer
-    of transcript deltas."""
+    of transcript records."""
 
     ctx: LoopContext
 
@@ -62,7 +67,7 @@ class TranscriptPump:
             if segment.lease_id == lease_id:
                 self._pump_one(segment)
 
-    def _pump_one(self, segment: TranscriptSegmentRecord) -> None:
+    def _pump_one(self, segment: TranscriptSegmentLedgerRow) -> None:
         if segment.shipping_stopped_reason is not None:
             return  # permanently stopped past the per-chunk budget (D4) — review F1
         budget_before = self.ctx.store.chunk_transcript_shipped_bytes(segment.chunk_id)
@@ -80,64 +85,64 @@ class TranscriptPump:
             return  # source unavailable this tick — retry from the same cursor next time
         new_cursor = batch.next_position.token if batch.next_position is not None else segment.cursor
         # A subagent conversation whose parent turn is outside the window surfaces here, not
-        # in `batch.turns` — never silently dropped, so its count rides whatever ships next.
+        # in `batch.turns` — never silently dropped, so it always reaches an operator-visible
+        # warning even though (unlike a truncation) it claims no turn range on the wire lane.
         dropped_sidechains = len(batch.unlinked_sidechains)
 
         if not batch.turns:
-            if dropped_sidechains == 0:
-                # A window can move the read position with no turn produced (e.g. control
-                # records the normalizer drops) — persist the advance, or every later tick re-reads it.
-                if new_cursor != segment.cursor:
-                    assert new_cursor is not None
-                    self.ctx.store.advance_transcript_cursor(segment.segment_id, cursor=new_cursor)
-                return
-            # No turn landed, but an unlinked sidechain did — record the loss explicitly
-            # rather than advancing the cursor with no trace of it at all.
-            payload = json.dumps(
-                {"segment_id": segment.segment_id, "turns": [], "unlinked_sidechains_dropped": dropped_sidechains}
-            )
-            self.ctx.store.record_transcript_delta(
-                segment_id=segment.segment_id,
-                chunk_id=segment.chunk_id,
-                cursor=new_cursor,
-                shipped_bytes=segment.shipped_bytes + len(payload.encode("utf-8")),
-                shipped_turns=segment.shipped_turns,
-                payload=payload,
-                created_at=self.ctx.clock.now(),
-            )
+            if new_cursor != segment.cursor:
+                assert new_cursor is not None
+                self.ctx.store.advance_transcript_cursor(
+                    segment.segment_id,
+                    cursor=new_cursor,
+                    normalizer_version=batch.normalizer_version,
+                    harness_version=batch.harness_version,
+                )
+            if dropped_sidechains:
+                self._warn_sidechains_dropped(segment, dropped_sidechains)
             return
 
-        delta: dict[str, Any] = {"segment_id": segment.segment_id, "turns": [_turn_wire(t) for t in batch.turns]}
-        if dropped_sidechains:
-            delta["unlinked_sidechains_dropped"] = dropped_sidechains
-        payload = json.dumps(delta)
+        turn_range_start = segment.shipped_turns
+        record: dict[str, Any] = {
+            "segment_id": segment.segment_id,
+            "chunk_id": segment.chunk_id,
+            "node_id": segment.node_id,
+            "epoch": segment.epoch,
+            "spawn_generation": segment.generation,
+            "turn_range_start": turn_range_start,
+            "turn_range_end": turn_range_start + len(batch.turns) - 1,
+            "final": False,
+            "normalizer_version": batch.normalizer_version,
+            "harness_version": batch.harness_version,
+            "turns": [_turn_wire(t, turn_range_start + i) for i, t in enumerate(batch.turns)],
+        }
+        payload = json.dumps(record)
         record_truncated = False
         if len(payload.encode("utf-8")) > TRANSCRIPT_RECORD_MAX_BYTES:
-            delta = _shrink_to_cap(delta)
-            payload = json.dumps(delta)
+            record = _shrink_to_cap(record)
+            payload = json.dumps(record)
             record_truncated = True
 
         if len(payload.encode("utf-8")) > TRANSCRIPT_RECORD_MAX_BYTES:
-            # Structural overhead alone still exceeds the cap (review F2) — ship a small
-            # marker instead of an over-cap body the hub would reject-but-ack anyway.
-            unshippable: dict[str, Any] = {
-                "segment_id": segment.segment_id,
-                "turns": [],
-                "turns_dropped": len(batch.turns),
-            }
-            if dropped_sidechains:
-                unshippable["unlinked_sidechains_dropped"] = dropped_sidechains
-            payload = json.dumps(unshippable)
+            # Structural overhead alone still exceeds the cap (review F2) — ship an empty
+            # slice over the same claimed range instead of an over-cap body the hub would
+            # reject-but-ack anyway; the range stays gapless even though its content is lost.
+            record["turns"] = []
+            payload = json.dumps(record)
             self.ctx.store.record_transcript_delta(
                 segment_id=segment.segment_id,
                 chunk_id=segment.chunk_id,
                 cursor=new_cursor,
                 shipped_bytes=segment.shipped_bytes + len(payload.encode("utf-8")),
-                shipped_turns=segment.shipped_turns,
+                shipped_turns=segment.shipped_turns + len(batch.turns),
+                normalizer_version=batch.normalizer_version,
+                harness_version=batch.harness_version,
                 payload=payload,
                 created_at=self.ctx.clock.now(),
             )
             self._mark_record_truncated(segment, _RECORD_UNSHIPPABLE)
+            if dropped_sidechains:
+                self._warn_sidechains_dropped(segment, dropped_sidechains)
             return
 
         delta_bytes = len(payload.encode("utf-8"))
@@ -151,33 +156,55 @@ class TranscriptPump:
             cursor=new_cursor,
             shipped_bytes=segment.shipped_bytes + delta_bytes,
             shipped_turns=segment.shipped_turns + len(batch.turns),
+            normalizer_version=batch.normalizer_version,
+            harness_version=batch.harness_version,
             payload=payload,
             created_at=self.ctx.clock.now(),
         )
         if record_truncated:
             self._mark_record_truncated(segment, _RECORD_CAP_EXCEEDED)
+        if dropped_sidechains:
+            self._warn_sidechains_dropped(segment, dropped_sidechains)
 
-    def _stop_shipping(self, segment: TranscriptSegmentRecord, reason: str) -> None:
+    def _stop_shipping(self, segment: TranscriptSegmentLedgerRow, reason: str) -> None:
         changed = self.ctx.store.stop_transcript_segment_shipping(segment.segment_id, reason=reason)
         if changed:
             self._warn(segment, reason)
 
-    def _mark_record_truncated(self, segment: TranscriptSegmentRecord, reason: str) -> None:
+    def _mark_record_truncated(self, segment: TranscriptSegmentLedgerRow, reason: str) -> None:
         # `_RECORD_CAP_EXCEEDED` never latches, so this can be reached every tick — gate on
         # the store's first-occurrence guard so the fact lane warns once per segment, not once per tick.
         changed = self.ctx.store.mark_transcript_record_truncated(segment.segment_id, reason=reason)
         if changed:
             self._warn(segment, reason)
 
-    def _warn(self, segment: TranscriptSegmentRecord, reason: str) -> None:
+    def _warn(self, segment: TranscriptSegmentLedgerRow, reason: str) -> None:
         OutboundFacts(self.ctx).transcript_truncated(
             chunk_id=segment.chunk_id, segment_id=segment.segment_id, reason=reason, at=self.ctx.clock.now()
         )
 
+    def _warn_sidechains_dropped(self, segment: TranscriptSegmentLedgerRow, count: int) -> None:
+        # Never latching (unlike truncation, this claims no turn range on the wire lane at
+        # all) — every occurrence is its own fact-lane warning, one per pump call that hits it.
+        OutboundFacts(self.ctx).event(
+            chunk_id=segment.chunk_id,
+            lease_id=None,
+            at=self.ctx.clock.now(),
+            payload={
+                "severity": "warning",
+                "kind": "transcript-sidechain-dropped",
+                "chunk_id": segment.chunk_id,
+                "lease_id": None,
+                "node_name": None,
+                "message": f"transcript segment {segment.segment_id} dropped {count} unlinked sidechain(s)",
+                "detail": {"segment_id": segment.segment_id, "count": count},
+            },
+        )
 
-def _turn_wire(turn: NormalizedTurn) -> dict[str, Any]:
+
+def _turn_wire(turn: NormalizedTurn, index: int) -> dict[str, Any]:
     return {
-        "index": turn.index,
+        "index": index,
         "kind": turn.kind,
         "timestamp": iso_utc(turn.timestamp) if turn.timestamp is not None else None,
         "text": turn.text,
@@ -201,11 +228,14 @@ def _tool_wire(tool: ToolCall) -> dict[str, Any]:
 
 
 def _sidechain_wire(sidechain: SidechainConversation) -> dict[str, Any]:
+    # Sidechain turns carry no wire-level index of their own — blizzard#247's
+    # TurnSegmentView.index is a segment-relative offset among the *linked* turn stream;
+    # a sidechain's own turns are addressed by position within `turns`, not by index.
     return {
         "agent_id": sidechain.agent_id,
         "agent_type": sidechain.agent_type,
         "link": sidechain.link,
-        "turns": [_turn_wire(t) for t in sidechain.turns],
+        "turns": [_turn_wire(t, i) for i, t in enumerate(sidechain.turns)],
     }
 
 
@@ -221,13 +251,13 @@ def _flat_turns(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return flat
 
 
-def _shrink_candidates(delta: dict[str, Any]) -> list[tuple[dict[str, Any], str]]:
+def _shrink_candidates(record: dict[str, Any]) -> list[tuple[dict[str, Any], str]]:
     """Every shrinkable ``(holder, field)`` pair still carrying text: a turn's own ``text``
     (top-level or nested under a sidechain) and its tool call's ``output`` (review F2 — the
     ordinary case for a Claude Code transcript, where the oversized content is tool output,
     not the turn's own text)."""
     candidates: list[tuple[dict[str, Any], str]] = []
-    for turn in _flat_turns(delta["turns"]):
+    for turn in _flat_turns(record["turns"]):
         if turn.get("text"):
             candidates.append((turn, "text"))
         tool = turn.get("tool")
@@ -245,17 +275,17 @@ _SHRINK_MAX_PASSES = 20
 _SHRINK_OVERCUT = 1.15
 
 
-def _shrink_to_cap(delta: dict[str, Any]) -> dict[str, Any]:
+def _shrink_to_cap(record: dict[str, Any]) -> dict[str, Any]:
     """Shrink turn text and tool-output fields in place — including nested sidechain turns —
-    until the serialized delta fits the per-record cap (D4). Never drops a turn: every
+    until the serialized record fits the per-record cap (D4). Never drops a turn: every
     shrinkable field is cut proportionally to its share of the overshoot, not just the single
     largest one, so a batch with many oversized fields converges in a few passes (a
     still-over-cap result is the caller's own :data:`_RECORD_UNSHIPPABLE`)."""
     for _ in range(_SHRINK_MAX_PASSES):
-        size = len(json.dumps(delta).encode("utf-8"))
+        size = len(json.dumps(record).encode("utf-8"))
         if size <= TRANSCRIPT_RECORD_MAX_BYTES:
             break
-        candidates = _shrink_candidates(delta)
+        candidates = _shrink_candidates(record)
         shrinkable = sum(len(holder[field]) for holder, field in candidates)
         if not candidates or shrinkable == 0:
             break  # nothing left to shrink; the cap stays exceeded by structure alone
@@ -267,4 +297,4 @@ def _shrink_to_cap(delta: dict[str, Any]) -> dict[str, Any]:
             if new_len < len(text):
                 holder[field] = text[:new_len]
                 holder["output_truncated" if field == "output" else "truncated"] = True
-    return delta
+    return record

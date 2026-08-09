@@ -15,7 +15,7 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import HubClientError
 from blizzard.runner.loop.transcript_pump import TranscriptPump
 from blizzard.runner.store.repository import BufferedTranscriptDelta
-from blizzard.wire.transcript_outbound import TranscriptFact, TranscriptFactBatch
+from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -52,19 +52,17 @@ class TranscriptDrain:
                 break  # transport failure — stop; retry the backlog next tick
 
     def _deliver(self, delta: BufferedTranscriptDelta) -> bool:
-        batch = TranscriptFactBatch(
-            runner_id=self.ctx.config.runner_id,
-            facts=[TranscriptFact(seq=delta.seq, kind=delta.kind, payload=json.loads(delta.payload))],
-        )
+        record = TranscriptSegmentRecord.model_validate({"seq": delta.seq, **json.loads(delta.payload)})
+        batch = TranscriptSegmentBatch(runner_id=self.ctx.config.runner_id, records=[record])
         _CP_BEFORE_SUBMIT.reached()
         try:
             ack = self.ctx.hub.push_transcripts(batch)
         except HubClientError:
             return False  # hub unreachable — stays buffered, retried next tick; the fact lane is unaffected
         _CP_AFTER_SUBMIT.reached()  # hub applied it; a crash here is the lost-ack replay
-        if delta.seq in ack.rejected:
-            # A contract rejection is not idempotency — surface it, but do not wedge the FIFO
-            # drain on a fact the hub will never accept: ack and move on.
-            _log.error("hub rejected buffered transcript fact", seq=delta.seq, kind=delta.kind)
+        if delta.seq in ack.capped:
+            # A cap rejection is not idempotency — surface it, but do not wedge the FIFO
+            # drain on a record the hub will never store in full: ack and move on (D6, D4).
+            _log.error("hub capped buffered transcript record", seq=delta.seq, segment_id=delta.segment_id)
         self.ctx.store.ack_transcript_outbound(delta.seq, acked_at=self.ctx.clock.now())
         return True

@@ -1324,35 +1324,41 @@ Claude Code), rendered only when a runner has a non-stale sample to show.
 
 Alongside the fact lane (`lease.minted`, completions, and the rest), the runner carries a
 second, structurally independent outbound lane for transcript content: normalized turns
-read from the harness's own session transcript, batched and pushed to the hub over their
-own route, buffering through a hub outage exactly like the fact lane's own store-and-forward
-does. A wedged or slow transcript flush never delays a completion or a gate decision — the
-two lanes share nothing but the runner process.
+read from the harness's own session transcript, sliced into turn-range records and pushed
+to the hub over their own route, buffering through a hub outage exactly like the fact
+lane's own store-and-forward does. A wedged or slow transcript flush never delays a
+completion or a gate decision — the two lanes share nothing but the runner process. The
+hub stores what it accepts, compressed at rest, behind an operator-only read API
+(blizzard#247) — this is a durable transcript, not a discard sink.
 
 ```toml
 [transcripts]
-# Ship transcript DELTAS to the hub. Off by default: with no [transcripts] table (or
-# `ship` omitted), the runner reads no session content and enqueues no delta. The switch
-# gates deltas alone — every open segment still ships its own final marker at lease
-# closure regardless, the same unconditional close-out the fact lane's own facts get.
+# Ship transcript records to the hub. Off by default: with no [transcripts] table (or
+# `ship` omitted), the runner reads no session content and enqueues no record. The switch
+# gates non-final records alone — every open segment still ships its own final record at
+# lease closure regardless (the same unconditional close-out the fact lane's own facts
+# get), *unless* that segment never once had a successful read to learn its normalizer
+# version from — with nothing to declare, it ships no wire footprint at all.
 ship = false
 ```
 
-- **Off by default, and the content is discarded hub-side either way, today.** The hub's
-  ingest route accepts and acknowledges the lane's facts, but stores none of them — no
-  transcript content is retained anywhere until a later release lands the real segment
-  store. Turning `ship` on today buys the lane's own crash-correctness and lane-independence
-  proof, not a durable transcript a human or the board can read back.
-- **Capped, and truncation is never silent.** A single buffered record is capped at 1 MB —
-  an oversized turn's own text, its tool output, and any nested sidechain turn are shrunk in
-  place rather than dropped, so the runner's read position still advances past it. A record
-  still over cap once nothing is left to shrink — structural overhead alone — ships instead
-  as a turnless marker naming how many turns it dropped, never as an over-cap body. A chunk's
-  cumulative shipped bytes are capped at 64 MB — past it, the runner stops shipping that
-  chunk's content but still ships every segment's final marker. Each of those outcomes is
+- **Capped at both ends, independently.** The runner enforces its own 1 MB per-record cap
+  and 64 MB per-chunk budget as the well-behaved case (D4): an oversized turn's own text,
+  its tool output, and any nested sidechain turn are shrunk in place rather than dropped, so
+  the runner's read position still advances past it. A record still over cap once nothing is
+  left to shrink — structural overhead alone — ships instead as an empty-turns slice over
+  the same claimed range, never as an over-cap body. Past the 64 MB chunk budget, the runner
+  stops shipping that chunk's content but still ships every open segment's final record. The
+  hub enforces its own, independent caps as the rogue case — 4 MB/record, 64 MB/chunk,
+  2 GB/runner/day — rejecting an over-cap record but still acknowledging it, so a misbehaving
+  runner wastes its own budget without wedging its lane. Every runner-side outcome above is
   recorded on the segment and surfaced as a `warning` operational event (see
   [the event log](#operational-visibility--the-event-log) below), the same way a captured
   command failure is.
+- **Reads are operator-only.** A transcript holds everything a worker saw; reading one back
+  (`GET /api/chunks/{id}/transcripts` and its per-segment content route) requires the
+  `transcript:read` permission, `contributor` role and above — a runner's own fleet-plane
+  token can push to the ingest route but can never read one back.
 
 ## Operational visibility — the event log
 

@@ -6,6 +6,7 @@ assert the SQL derivations the loop relies on, against a real tmp sqlite store.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -614,6 +615,8 @@ def test_record_spawn_carries_the_cursor_forward_and_closes_the_prior_segment_on
         cursor="tok-1",
         shipped_bytes=100,
         shipped_turns=3,
+        normalizer_version="v1",
+        harness_version=None,
         payload="{}",
         created_at=_NOW,
     )
@@ -640,7 +643,7 @@ def test_record_spawn_carries_the_cursor_forward_and_closes_the_prior_segment_on
     # gen1's own delta (set up above) plus gen1's own final marker, minted at the resume
     # boundary — nothing for gen2 yet, it has not pumped anything.
     assert {d.segment_id for d in pending} == {gen1.segment_id}
-    assert [d.kind for d in pending] == ["transcript.delta", "transcript.final"]
+    assert [d.final for d in pending] == [False, True]
 
     # The chunk-budget sum counts each segment's own contribution exactly once — no double
     # count from carrying the cursor forward, no loss from starting gen2's counters at zero.
@@ -662,6 +665,8 @@ def test_record_spawn_carries_the_cursor_forward_on_a_cross_lease_resume(tmp_pat
         cursor="tok-1",
         shipped_bytes=100,
         shipped_turns=3,
+        normalizer_version="v1",
+        harness_version=None,
         payload="{}",
         created_at=_NOW,
     )
@@ -716,6 +721,8 @@ def test_transcript_segment_delta_stop_shipping_and_record_truncated(tmp_path): 
         cursor="tok-1",
         shipped_bytes=100,
         shipped_turns=3,
+        normalizer_version="v1",
+        harness_version=None,
         payload="{}",
         created_at=_NOW,
     )
@@ -763,6 +770,8 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
         cursor="tok-1",
         shipped_bytes=1,
         shipped_turns=1,
+        normalizer_version="v1",
+        harness_version=None,
         payload="{}",
         created_at=_NOW,
     )
@@ -772,6 +781,8 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
         cursor="tok-2",
         shipped_bytes=2,
         shipped_turns=1,
+        normalizer_version="v1",
+        harness_version=None,
         payload="{}",
         created_at=_NOW,
     )
@@ -804,7 +815,7 @@ def test_ack_transcript_outbound_keeps_a_final_marker_row_acked_not_deleted(tmp_
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
     marker = store.pending_transcript_outbound()
     assert len(marker) == 1
-    assert marker[0].kind == "transcript.final"
+    assert marker[0].final is True
 
     store.ack_transcript_outbound(marker[0].seq, acked_at=_NOW)
 
@@ -844,7 +855,7 @@ def test_record_closure_finalizes_every_open_segment_and_marks_it_atomically(tmp
 
     pending = store.pending_transcript_outbound()
     assert {d.segment_id for d in pending} == segment_ids
-    assert all(d.kind == "transcript.final" for d in pending)
+    assert all(d.final for d in pending)
     # The fact lane's own buffer carries no marker — D3's structural separation.
     assert store.pending_outbound() == []
 
@@ -858,3 +869,27 @@ def test_record_closure_is_a_no_op_for_a_lease_with_no_segments(tmp_path):  # ty
     _mint(store, lease="lease_1")
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
     assert store.pending_transcript_outbound() == []
+
+
+@pytest.mark.unit
+def test_record_closure_ships_a_final_marker_even_when_no_pump_ever_ran(tmp_path):  # type: ignore[no-untyped-def]
+    """A normalizer version is a static per-harness constant, not something a read is
+    needed to learn — closure ships a real, valid final record even for a segment that
+    never had a single pump tick (e.g. `[transcripts] ship = false` the whole time), using
+    the source seam's own "never ran" sentinel version. This is what lets the crash sweep
+    reach `transcript.before-submit`/`.after-submit.before-ack` with `ship` at its default."""
+    store = _store(tmp_path)
+    _mint(store, lease="lease_1")
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    segment_id = store.open_transcript_segments()[0].segment_id
+
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+
+    marker = store.pending_transcript_outbound()
+    assert len(marker) == 1
+    assert marker[0].final is True
+    body = json.loads(marker[0].payload)
+    assert body["normalizer_version"] == ""  # the sentinel, never learned from a real read
+    segment = store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.finalized_at == _NOW

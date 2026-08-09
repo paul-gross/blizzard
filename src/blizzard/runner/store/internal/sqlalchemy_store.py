@@ -36,7 +36,7 @@ from blizzard.runner.store.repository import (
     PoolHead,
     RunnerStoreError,
     TakeoverRecord,
-    TranscriptSegmentRecord,
+    TranscriptSegmentLedgerRow,
     UsageTotals,
 )
 from blizzard.runner.store.schema import (
@@ -77,13 +77,17 @@ from blizzard.runner.store.schema import (
     workspace_prompt,
 )
 from blizzard.wire.facts import USAGE_RECORDED
-from blizzard.wire.transcript_outbound import TRANSCRIPT_DELTA, TRANSCRIPT_FINAL
 
 _log = get_logger("blizzard.runner.store")
 
 # The caller-owned closure reason this store reads back to derive "open escalation"
 # (issue #51).
 _ESCALATED_REASON = "escalated"
+
+# A fresh segment's placeholder, before its first successful pump read — mirrors
+# `runner/harness/transcript.py`'s own `_NO_NORMALIZER_VERSION` sentinel convention
+# (restated, not imported: the store never depends on the harness seam, issue #246).
+_NO_NORMALIZER_VERSION = ""
 
 
 @dataclass(frozen=True)
@@ -160,6 +164,39 @@ UNCONSUMED_REQUEUE = Unsuperseded(
 
 OPEN_TAKEOVER = Unclosed(takeovers.c.takeover_id, takeover_ends.c.takeover_id)
 OPEN_LEASE = Unclosed(leases.c.lease_id, lease_closures.c.lease_id)
+
+
+def _enqueue_transcript_final(conn, segment, *, at: datetime) -> None:  # type: ignore[no-untyped-def]
+    """Enqueue the wire-shaped final record closing ``segment`` out (issue #246, blizzard#247's
+    shape) — an empty range starting where shipping left off. Ships unconditionally, on
+    every closure regardless of ``[transcripts] ship`` or whether a pump ever ran: a
+    normalizer version is a static per-harness constant, not something a read is needed to
+    learn, so ``segment.normalizer_version`` already has one to declare (the source seam's
+    own "never ran" sentinel if no read ever happened, the real one otherwise)."""
+    payload = json.dumps(
+        {
+            "segment_id": str(segment.segment_id),
+            "chunk_id": str(segment.chunk_id),
+            "node_id": str(segment.node_id),
+            "epoch": int(segment.epoch),
+            "spawn_generation": int(segment.generation),
+            "turn_range_start": int(segment.shipped_turns),
+            "turn_range_end": int(segment.shipped_turns) - 1,
+            "final": True,
+            "normalizer_version": str(segment.normalizer_version),
+            "harness_version": str(segment.harness_version) if segment.harness_version is not None else None,
+            "turns": [],
+        }
+    )
+    conn.execute(
+        transcript_outbound_buffer.insert().values(
+            segment_id=str(segment.segment_id),
+            chunk_id=str(segment.chunk_id),
+            final=True,
+            payload=payload,
+            created_at=at,
+        )
+    )
 
 
 class SqlAlchemyRunnerStore:
@@ -378,11 +415,11 @@ class SqlAlchemyRunnerStore:
             for r in self._all(stmt)
         ]
 
-    def transcript_segment(self, segment_id: str) -> TranscriptSegmentRecord | None:
+    def transcript_segment(self, segment_id: str) -> TranscriptSegmentLedgerRow | None:
         rows = self._all(select(transcript_segments).where(transcript_segments.c.segment_id == segment_id))
         return self._row_to_transcript_segment(rows[0]) if rows else None
 
-    def open_transcript_segments(self) -> list[TranscriptSegmentRecord]:
+    def open_transcript_segments(self) -> list[TranscriptSegmentLedgerRow]:
         stmt = (
             select(transcript_segments)
             .where(transcript_segments.c.finalized_at.is_(None))
@@ -408,7 +445,7 @@ class SqlAlchemyRunnerStore:
         return [
             BufferedTranscriptDelta(
                 seq=int(r.seq),
-                kind=str(r.kind),
+                final=bool(r.final),
                 segment_id=str(r.segment_id),
                 chunk_id=str(r.chunk_id),
                 payload=str(r.payload),
@@ -735,10 +772,7 @@ class SqlAlchemyRunnerStore:
             # A resumed session: close the prior segment, carrying its cursor forward. Scoped
             # by chunk + session, not lease — an ordinary resume mints a fresh lease.
             prior_open_segment = conn.execute(
-                select(
-                    transcript_segments.c.segment_id,
-                    transcript_segments.c.cursor,
-                )
+                select(transcript_segments)
                 .where(transcript_segments.c.chunk_id == context_row.chunk_id)
                 .where(transcript_segments.c.session_id == session_id)
                 .where(transcript_segments.c.finalized_at.is_(None))
@@ -751,15 +785,7 @@ class SqlAlchemyRunnerStore:
                     .where(transcript_segments.c.segment_id == prior_open_segment.segment_id)
                     .values(finalized_at=spawned_at)
                 )
-                conn.execute(
-                    transcript_outbound_buffer.insert().values(
-                        kind=TRANSCRIPT_FINAL,
-                        segment_id=prior_open_segment.segment_id,
-                        chunk_id=str(context_row.chunk_id),
-                        payload=json.dumps({"segment_id": str(prior_open_segment.segment_id)}),
-                        created_at=spawned_at,
-                    )
-                )
+                _enqueue_transcript_final(conn, prior_open_segment, at=spawned_at)
             conn.execute(
                 transcript_segments.insert().values(
                     segment_id=Id.mint_at(SEGMENT_PREFIX, spawned_at).value,
@@ -772,6 +798,8 @@ class SqlAlchemyRunnerStore:
                     cursor=carried_cursor,
                     shipped_bytes=0,
                     shipped_turns=0,
+                    normalizer_version=_NO_NORMALIZER_VERSION,
+                    harness_version=None,
                     truncated_reason=None,
                     shipping_stopped_reason=None,
                     finalized_at=None,
@@ -838,35 +866,24 @@ class SqlAlchemyRunnerStore:
                 )
             # Segments are final by step close (issue #246) — finalized atomically here, on
             # the transcript lane's OWN buffer (D3), never `outbound_buffer` above.
-            open_segment_ids = [
-                str(r.segment_id)
-                for r in conn.execute(
-                    select(transcript_segments.c.segment_id)
-                    .where(transcript_segments.c.lease_id == lease_id)
-                    .where(transcript_segments.c.finalized_at.is_(None))
-                )
-            ]
-            for segment_id in open_segment_ids:
+            open_segments = conn.execute(
+                select(transcript_segments)
+                .where(transcript_segments.c.lease_id == lease_id)
+                .where(transcript_segments.c.finalized_at.is_(None))
+            ).all()
+            for segment in open_segments:
                 conn.execute(
                     transcript_segments.update()
-                    .where(transcript_segments.c.segment_id == segment_id)
+                    .where(transcript_segments.c.segment_id == segment.segment_id)
                     .values(finalized_at=closed_at)
                 )
-                conn.execute(
-                    transcript_outbound_buffer.insert().values(
-                        kind=TRANSCRIPT_FINAL,
-                        segment_id=segment_id,
-                        chunk_id=chunk_id,
-                        payload=json.dumps({"segment_id": segment_id}),
-                        created_at=closed_at,
-                    )
-                )
+                _enqueue_transcript_final(conn, segment, at=closed_at)
         _log.info(
             "lease closed",
             lease_id=lease_id,
             chunk_id=chunk_id,
             reason=reason,
-            transcript_segments_finalized=len(open_segment_ids),
+            transcript_segments_finalized=len(open_segments),
         )
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
@@ -925,17 +942,18 @@ class SqlAlchemyRunnerStore:
 
     def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:
         with self._begin() as conn:
-            # Delta rows are pruned outright (up to 1 MB each, nothing reads an acked one);
-            # final markers stay, acked in place — their row is the exactly-once receipt.
+            # Non-final rows are pruned outright (up to the record cap each, nothing reads
+            # an acked one); final markers stay, acked in place — their row is the
+            # exactly-once receipt.
             conn.execute(
                 transcript_outbound_buffer.delete()
                 .where(transcript_outbound_buffer.c.seq == seq)
-                .where(transcript_outbound_buffer.c.kind == TRANSCRIPT_DELTA)
+                .where(transcript_outbound_buffer.c.final.is_(False))
             )
             conn.execute(
                 transcript_outbound_buffer.update()
                 .where(transcript_outbound_buffer.c.seq == seq)
-                .where(transcript_outbound_buffer.c.kind == TRANSCRIPT_FINAL)
+                .where(transcript_outbound_buffer.c.final.is_(True))
                 .values(acked_at=acked_at)
             )
 
@@ -947,6 +965,8 @@ class SqlAlchemyRunnerStore:
         cursor: str | None,
         shipped_bytes: int,
         shipped_turns: int,
+        normalizer_version: str,
+        harness_version: str | None,
         payload: str,
         created_at: datetime,
     ) -> int:
@@ -954,13 +974,19 @@ class SqlAlchemyRunnerStore:
             conn.execute(
                 transcript_segments.update()
                 .where(transcript_segments.c.segment_id == segment_id)
-                .values(cursor=cursor, shipped_bytes=shipped_bytes, shipped_turns=shipped_turns)
+                .values(
+                    cursor=cursor,
+                    shipped_bytes=shipped_bytes,
+                    shipped_turns=shipped_turns,
+                    normalizer_version=normalizer_version,
+                    harness_version=harness_version,
+                )
             )
             result = conn.execute(
                 transcript_outbound_buffer.insert().values(
-                    kind=TRANSCRIPT_DELTA,
                     segment_id=segment_id,
                     chunk_id=chunk_id,
+                    final=False,
                     payload=payload,
                     created_at=created_at,
                 )
@@ -968,10 +994,14 @@ class SqlAlchemyRunnerStore:
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
 
-    def advance_transcript_cursor(self, segment_id: str, *, cursor: str) -> None:
+    def advance_transcript_cursor(
+        self, segment_id: str, *, cursor: str, normalizer_version: str, harness_version: str | None
+    ) -> None:
         with self._begin() as conn:
             conn.execute(
-                transcript_segments.update().where(transcript_segments.c.segment_id == segment_id).values(cursor=cursor)
+                transcript_segments.update()
+                .where(transcript_segments.c.segment_id == segment_id)
+                .values(cursor=cursor, normalizer_version=normalizer_version, harness_version=harness_version)
             )
 
     def record_ask(
@@ -1360,8 +1390,8 @@ class SqlAlchemyRunnerStore:
     # --- plumbing -----------------------------------------------------------
 
     @staticmethod
-    def _row_to_transcript_segment(r) -> TranscriptSegmentRecord:  # type: ignore[no-untyped-def]
-        return TranscriptSegmentRecord(
+    def _row_to_transcript_segment(r) -> TranscriptSegmentLedgerRow:  # type: ignore[no-untyped-def]
+        return TranscriptSegmentLedgerRow(
             segment_id=str(r.segment_id),
             chunk_id=str(r.chunk_id),
             node_id=str(r.node_id),
@@ -1372,6 +1402,8 @@ class SqlAlchemyRunnerStore:
             cursor=str(r.cursor) if r.cursor is not None else None,
             shipped_bytes=int(r.shipped_bytes),
             shipped_turns=int(r.shipped_turns),
+            normalizer_version=str(r.normalizer_version),
+            harness_version=str(r.harness_version) if r.harness_version is not None else None,
             truncated_reason=str(r.truncated_reason) if r.truncated_reason is not None else None,
             shipping_stopped_reason=str(r.shipping_stopped_reason) if r.shipping_stopped_reason is not None else None,
             finalized_at=r.finalized_at,

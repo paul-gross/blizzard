@@ -96,7 +96,7 @@ def test_gapped_transcript_outbound_seq_is_a_violation(tmp_path: Path) -> None:
         for seq in (1, 2, 4):  # 3 is missing — a hole in the FIFO buffer
             conn.execute(
                 insert(runner.transcript_outbound_buffer).values(
-                    seq=seq, kind="transcript.delta", segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+                    seq=seq, final=False, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
                 )
             )
     slugs = {v.invariant for v in RunnerInvariants(engine).run()}
@@ -117,6 +117,10 @@ def _segment_row(**overrides: object) -> dict:
         "cursor": None,
         "shipped_bytes": 0,
         "shipped_turns": 0,
+        # The source seam's own "never ran" sentinel (`""`) — a real spawn always has SOME
+        # normalizer_version to declare, never `None` (issue #246).
+        "normalizer_version": "",
+        "harness_version": None,
         "truncated_reason": None,
         "shipping_stopped_reason": None,
         "finalized_at": None,
@@ -142,7 +146,7 @@ def test_finalized_segment_with_a_duplicated_final_marker_is_a_violation(tmp_pat
             conn.execute(
                 insert(runner.transcript_outbound_buffer).values(
                     seq=seq,
-                    kind="transcript.final",
+                    final=True,
                     segment_id="seg_1",
                     chunk_id="ch_1",
                     payload="{}",
@@ -159,7 +163,7 @@ def test_finalized_segment_with_exactly_one_final_marker_is_not_a_violation(tmp_
         conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=_NOW)))
         conn.execute(
             insert(runner.transcript_outbound_buffer).values(
-                seq=1, kind="transcript.final", segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+                seq=1, final=True, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
             )
         )
     slugs = {v.invariant for v in RunnerInvariants(engine).run()}

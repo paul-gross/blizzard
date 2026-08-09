@@ -126,11 +126,17 @@ class OutboundFactRecord:
 
 
 @dataclass(frozen=True)
-class TranscriptSegmentRecord:
+class TranscriptSegmentLedgerRow:
     """One row of the transcript segment ledger (issue #246, D2) — a mutable ledger like
-    :class:`LeaseRecord`. ``truncated_reason`` (transient) and ``shipping_stopped_reason``
-    (latching — the only field :class:`TranscriptPump`'s guard reads) are deliberately two
-    fields, not one (review F1); all four plus ``cursor``/``finalized_at`` start ``None``."""
+    :class:`LeaseRecord`. Named apart from the wire's own
+    :class:`blizzard.wire.transcript_segment.TranscriptSegmentRecord` (blizzard#247), which
+    this is not — this is the runner's own local ledger state, never shipped as-is.
+    ``normalizer_version`` starts at the harness source seam's own "never ran" sentinel
+    (``""``) and updates to the real one on this segment's first successful pump read —
+    never ``None``, since a closure must always have one to declare on its final record
+    regardless of ``ship`` or whether any read ever happened. ``truncated_reason``
+    (transient) and ``shipping_stopped_reason`` (latching — the only field
+    :class:`TranscriptPump`'s guard reads) are deliberately two fields, not one (review F1)."""
 
     segment_id: str
     chunk_id: str
@@ -142,6 +148,8 @@ class TranscriptSegmentRecord:
     cursor: str | None
     shipped_bytes: int
     shipped_turns: int
+    normalizer_version: str
+    harness_version: str | None
     truncated_reason: str | None
     shipping_stopped_reason: str | None
     finalized_at: datetime | None
@@ -150,14 +158,16 @@ class TranscriptSegmentRecord:
 
 @dataclass(frozen=True)
 class BufferedTranscriptDelta:
-    """One pending fact in the transcript lane's own store-and-forward buffer (D3) — the
-    transcript-lane counterpart to :class:`BufferedFact`. ``kind`` is
-    ``transcript.delta`` or ``transcript.final`` (:mod:`blizzard.wire.transcript_outbound`)."""
+    """One pending record in the transcript lane's own store-and-forward buffer (D3) — the
+    transcript-lane counterpart to :class:`BufferedFact`. ``payload`` is a
+    :class:`blizzard.wire.transcript_segment.TranscriptSegmentRecord`'s fields (minus
+    ``seq``/``runner_id``) as JSON; ``final`` mirrors the payload's own ``final`` flag and
+    drives this row's own ack-time keep-vs-delete (issue #246)."""
 
     seq: int
-    kind: str
     segment_id: str
     chunk_id: str
+    final: bool
     payload: str
     created_at: datetime
 
@@ -388,11 +398,11 @@ class IReadRunnerStore(Protocol):
         """The newest ``limit`` outbound facts, acked or not, newest first — the local fact log."""
         ...
 
-    def transcript_segment(self, segment_id: str) -> TranscriptSegmentRecord | None:
+    def transcript_segment(self, segment_id: str) -> TranscriptSegmentLedgerRow | None:
         """The segment by id, or ``None`` — the pump and drain's per-segment read (issue #246)."""
         ...
 
-    def open_transcript_segments(self) -> list[TranscriptSegmentRecord]:
+    def open_transcript_segments(self) -> list[TranscriptSegmentLedgerRow]:
         """Segments with no final marker yet — the pump's per-tick work list (issue #246)."""
         ...
 
@@ -723,20 +733,27 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         cursor: str | None,
         shipped_bytes: int,
         shipped_turns: int,
+        normalizer_version: str,
+        harness_version: str | None,
         payload: str,
         created_at: datetime,
     ) -> int:
-        """Advance a segment's cursor/shipped counts and enqueue its delta — ONE
-        transaction (issue #246): a crash between the two would either re-read
-        already-shipped turns or ship a delta the cursor never advanced past. Returns the
-        buffered delta's seq."""
+        """Advance a segment's cursor/shipped counts/version stamp and enqueue its record —
+        ONE transaction (issue #246): a crash between them would either re-read
+        already-shipped turns or ship a record the cursor never advanced past.
+        ``normalizer_version``/``harness_version`` persist onto the segment row (not just
+        the payload) so a later closure can build a #247-shaped final record without the
+        harness seam. Returns the buffered record's seq."""
         ...
 
-    def advance_transcript_cursor(self, segment_id: str, *, cursor: str) -> None:
-        """Advance a segment's read cursor with nothing to enqueue — a window that moved
-        the source's read position but produced no turn (e.g. a run of control records),
-        which still must not be re-read next tick. Unlike :meth:`record_transcript_delta`,
-        no outbound row: there is no delta to ship, only progress to remember."""
+    def advance_transcript_cursor(
+        self, segment_id: str, *, cursor: str, normalizer_version: str, harness_version: str | None
+    ) -> None:
+        """Advance a segment's read cursor (and version stamp) with nothing to enqueue — a
+        window that moved the source's read position but produced no turn (e.g. a run of
+        control records), which still must not be re-read next tick. Unlike
+        :meth:`record_transcript_delta`, no outbound row: there is no record to ship, only
+        progress to remember."""
         ...
 
     def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:
