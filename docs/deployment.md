@@ -1331,8 +1331,10 @@ two lanes share nothing but the runner process.
 
 ```toml
 [transcripts]
-# Ship transcript deltas to the hub. Off by default: with no [transcripts] table (or
-# `ship` omitted), the runner reads nothing and enqueues nothing for this lane.
+# Ship transcript DELTAS to the hub. Off by default: with no [transcripts] table (or
+# `ship` omitted), the runner reads no session content and enqueues no delta. The switch
+# gates deltas alone — every open segment still ships its own final marker at lease
+# closure regardless, the same unconditional close-out the fact lane's own facts get.
 ship = false
 ```
 

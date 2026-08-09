@@ -91,6 +91,9 @@ class FakeHub:
         # fact lane's above (D3, issue #246).
         self.transcripts_pushed: list[TranscriptFact] = []
         self.transcript_high_water: dict[str, int] = {}
+        # Seqs to reject-but-ack, scripted (review F8) — the real ingest service's own
+        # unknown-kind/over-cap rejection, which no fake could otherwise surface to a test.
+        self.reject_transcript_seqs: set[int] = set()
         self.questions: dict[str, QuestionView] = {}
         self.delivered: list[tuple[str, QuestionView]] = []
         self.registered: list[tuple[str, str]] = []  # (runner_id, workspace_id)
@@ -147,16 +150,23 @@ class FakeHub:
         if self.down:
             raise HubClientError("fake hub is down")
         mark = self.transcript_high_water.get(batch.runner_id, 0)
-        applied, already = [], []
+        applied, already, rejected = [], [], []
         for fact in sorted(batch.facts, key=lambda f: f.seq):
             if fact.seq <= mark:
                 already.append(fact.seq)
+                continue
+            if fact.seq in self.reject_transcript_seqs:
+                # Reject-but-ack: the mark does not advance past it, but the drain acks
+                # it locally regardless (real `TranscriptIngestService._apply` semantics).
+                rejected.append(fact.seq)
                 continue
             self.transcripts_pushed.append(fact)
             mark = fact.seq
             applied.append(fact.seq)
         self.transcript_high_water[batch.runner_id] = mark
-        return TranscriptFactAck(runner_id=batch.runner_id, high_water=mark, applied=applied, already_applied=already)
+        return TranscriptFactAck(
+            runner_id=batch.runner_id, high_water=mark, applied=applied, already_applied=already, rejected=rejected
+        )
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
         if chunk_id in self.not_found:

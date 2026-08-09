@@ -128,8 +128,9 @@ class OutboundFactRecord:
 @dataclass(frozen=True)
 class TranscriptSegmentRecord:
     """One row of the transcript segment ledger (issue #246, D2) — a mutable ledger like
-    :class:`LeaseRecord`, not an append-only fact. ``cursor``/``truncated_reason``/
-    ``finalized_at`` are ``None`` while unread-from-start / uncapped (D4) / still live."""
+    :class:`LeaseRecord`. ``truncated_reason`` (transient) and ``shipping_stopped_reason``
+    (latching — the only field :class:`TranscriptPump`'s guard reads) are deliberately two
+    fields, not one (review F1); all four plus ``cursor``/``finalized_at`` start ``None``."""
 
     segment_id: str
     chunk_id: str
@@ -142,6 +143,7 @@ class TranscriptSegmentRecord:
     shipped_bytes: int
     shipped_turns: int
     truncated_reason: str | None
+    shipping_stopped_reason: str | None
     finalized_at: datetime | None
     stamped_at: datetime
 
@@ -695,28 +697,16 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Mark a buffered fact delivered — a semantic rejection acks too."""
         ...
 
-    def advance_transcript_segment(
-        self, segment_id: str, *, cursor: str | None, shipped_bytes: int, shipped_turns: int
-    ) -> None:
-        """Move a segment's forward-read cursor and cumulative shipped counts (issue #246).
-
-        ``shipped_bytes``/``shipped_turns`` are the segment's new totals, not a delta — the
-        pump's own running sum."""
+    def mark_transcript_record_truncated(self, segment_id: str, *, reason: str) -> None:
+        """Note that one shipped record was shrunk in place (D4's per-record 1 MB cap) —
+        informational only, never latching: the segment keeps pumping next tick. Idempotent:
+        a segment with a reason already recorded keeps its first one."""
         ...
 
-    def truncate_transcript_segment(self, segment_id: str, *, reason: str) -> None:
-        """Mark a segment truncated — the per-chunk 64 MB budget breached (D4). Idempotent:
-        a segment already truncated keeps its first reason."""
-        ...
-
-    def finalize_transcript_segment(self, segment_id: str, *, finalized_at: datetime) -> None:
-        """Stamp a segment's final marker — shipped for good by its step's close (issue #246)."""
-        ...
-
-    def enqueue_transcript_outbound(
-        self, *, kind: str, segment_id: str, chunk_id: str, payload: str, created_at: datetime
-    ) -> int:
-        """Append a fact to the transcript lane's own buffer; return its seq (D3)."""
+    def stop_transcript_segment_shipping(self, segment_id: str, *, reason: str) -> None:
+        """Permanently stop shipping this segment's content — the per-chunk 64 MB budget
+        breached (D4). The only field :class:`TranscriptPump`'s guard reads (review F1);
+        idempotent, keeps its first reason."""
         ...
 
     def record_transcript_delta(

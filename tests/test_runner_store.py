@@ -565,9 +565,9 @@ def test_session_preamble_fingerprint_is_scoped_per_session(tmp_path):  # type: 
 
 @pytest.mark.unit
 def test_record_spawn_stamps_a_segment_keyed_by_chunk_node_epoch_generation(tmp_path):  # type: ignore[no-untyped-def]
-    """A fresh spawn is generation 1; a resume under the same lease is generation 2 — both
-    keyed on the lease's own (chunk, node, epoch), read back from ``lease_context``/``leases``
-    inside ``record_spawn``'s own transaction (D1/D2)."""
+    """A fresh spawn is generation 1, keyed on the lease's own (chunk, node, epoch), read
+    back inside ``record_spawn``'s own transaction (D1/D2). A rotation to a genuinely NEW
+    session_id leaves the prior generation open — see the resume test below for the other case."""
     store = _store(tmp_path)
     _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
     store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
@@ -580,15 +580,69 @@ def test_record_spawn_stamps_a_segment_keyed_by_chunk_node_epoch_generation(tmp_
     assert first.session_id == "sess-a"
     assert first.segment_id.startswith("seg_")
     assert (first.cursor, first.shipped_bytes, first.shipped_turns) == (None, 0, 0)
-    assert (first.truncated_reason, first.finalized_at) == (None, None)
+    assert (first.truncated_reason, first.shipping_stopped_reason, first.finalized_at) == (None, None, None)
     assert store.transcript_segment(first.segment_id) == first
 
+    # A rotation mints a genuinely different session_id — the prior segment stays open,
+    # unmerged, until this lease's eventual closure finalizes it (D3).
     store.record_spawn(
-        "lease_1", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW + timedelta(minutes=1)
+        "lease_1", pid=2, process_start_time="2", session_id="sess-b", spawned_at=_NOW + timedelta(minutes=1)
     )
     segments_by_generation = sorted(store.open_transcript_segments(), key=lambda s: s.generation)
     assert [s.generation for s in segments_by_generation] == [1, 2]
     assert segments_by_generation[1].segment_id != first.segment_id
+    assert segments_by_generation[1].session_id == "sess-b"
+    assert segments_by_generation[1].cursor is None  # a genuinely new session, nothing to carry forward
+
+
+@pytest.mark.unit
+def test_record_spawn_carries_the_cursor_forward_and_closes_the_prior_segment_on_a_same_session_resume(
+    tmp_path,  # type: ignore[no-untyped-def]
+):
+    """review F3: a pooled resume reuses the SAME session_id under a new generation, which
+    would otherwise leave two open segments double-shipping one session. ``record_spawn``
+    instead finalizes the outgoing segment and carries its cursor into the new one."""
+    store = _store(tmp_path)
+    _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    gen1 = store.open_transcript_segments()[0]
+    store.record_transcript_delta(
+        segment_id=gen1.segment_id,
+        chunk_id="ch_1",
+        cursor="tok-1",
+        shipped_bytes=100,
+        shipped_turns=3,
+        payload="{}",
+        created_at=_NOW,
+    )
+
+    store.record_spawn(
+        "lease_1", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW + timedelta(minutes=1)
+    )
+
+    open_segments = store.open_transcript_segments()
+    assert len(open_segments) == 1  # gen1 closed out at the boundary; only gen2 stays open
+    gen2 = open_segments[0]
+    assert gen2.generation == 2
+    assert gen2.segment_id != gen1.segment_id
+    assert gen2.session_id == "sess-a"
+    assert gen2.cursor == "tok-1"  # carried forward — gen2 picks up where gen1 left off
+    assert (gen2.shipped_bytes, gen2.shipped_turns) == (0, 0)  # its OWN counters start fresh
+
+    finalized_gen1 = store.transcript_segment(gen1.segment_id)
+    assert finalized_gen1 is not None
+    assert finalized_gen1.finalized_at == _NOW + timedelta(minutes=1)
+    assert finalized_gen1.cursor == "tok-1"  # gen1's own row is untouched otherwise
+
+    pending = store.pending_transcript_outbound()
+    # gen1's own delta (set up above) plus gen1's own final marker, minted at the resume
+    # boundary — nothing for gen2 yet, it has not pumped anything.
+    assert {d.segment_id for d in pending} == {gen1.segment_id}
+    assert [d.kind for d in pending] == ["transcript.delta", "transcript.final"]
+
+    # The chunk-budget sum counts each segment's own contribution exactly once — no double
+    # count from carrying the cursor forward, no loss from starting gen2's counters at zero.
+    assert store.chunk_transcript_shipped_bytes("ch_1") == 100
 
 
 @pytest.mark.unit
@@ -608,26 +662,50 @@ def test_record_spawn_stamps_one_segment_per_lease_at_its_own_epoch(tmp_path):  
 
 
 @pytest.mark.unit
-def test_transcript_segment_advance_truncate_and_finalize(tmp_path):  # type: ignore[no-untyped-def]
+def test_transcript_segment_delta_stop_shipping_and_record_truncated(tmp_path):  # type: ignore[no-untyped-def]
+    """The two never-silent reasons (D4) land on two DISTINCT fields (review F1) — a
+    segment stays open after ``mark_transcript_record_truncated``, closed off only via
+    the production finalize path, ``record_closure``, regardless of either reason."""
     store = _store(tmp_path)
     _mint(store)
     store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
     segment_id = store.open_transcript_segments()[0].segment_id
 
-    store.advance_transcript_segment(segment_id, cursor="tok-1", shipped_bytes=100, shipped_turns=3)
+    store.record_transcript_delta(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor="tok-1",
+        shipped_bytes=100,
+        shipped_turns=3,
+        payload="{}",
+        created_at=_NOW,
+    )
     advanced = store.transcript_segment(segment_id)
     assert advanced is not None
     assert (advanced.cursor, advanced.shipped_bytes, advanced.shipped_turns) == ("tok-1", 100, 3)
 
-    store.truncate_transcript_segment(segment_id, reason="chunk_budget_exceeded")
-    # A second truncation call keeps the first reason rather than overwriting it.
-    store.truncate_transcript_segment(segment_id, reason="different_reason")
-    assert store.transcript_segment(segment_id).truncated_reason == "chunk_budget_exceeded"  # type: ignore[union-attr]
-
+    store.mark_transcript_record_truncated(segment_id, reason="record_cap_exceeded")
+    # A second call keeps the first reason rather than overwriting it.
+    store.mark_transcript_record_truncated(segment_id, reason="different_reason")
+    marked = store.transcript_segment(segment_id)
+    assert marked is not None
+    assert marked.truncated_reason == "record_cap_exceeded"
+    assert marked.shipping_stopped_reason is None  # informational only — still open, still pumpable
     assert len(store.open_transcript_segments()) == 1
-    store.finalize_transcript_segment(segment_id, finalized_at=_NOW)
+
+    store.stop_transcript_segment_shipping(segment_id, reason="chunk_budget_exceeded")
+    store.stop_transcript_segment_shipping(segment_id, reason="different_reason")
+    stopped = store.transcript_segment(segment_id)
+    assert stopped is not None
+    assert stopped.shipping_stopped_reason == "chunk_budget_exceeded"
+    assert stopped.truncated_reason == "record_cap_exceeded"  # untouched by the stop-shipping latch
+    assert len(store.open_transcript_segments()) == 1  # stopping shipping does not finalize
+
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
     assert store.open_transcript_segments() == []
-    assert store.transcript_segment(segment_id).finalized_at == _NOW  # type: ignore[union-attr]
+    finalized = store.transcript_segment(segment_id)
+    assert finalized is not None
+    assert finalized.finalized_at == _NOW  # truncated/stopped does not mean unfinalized
 
 
 @pytest.mark.unit
@@ -635,17 +713,32 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
     """The transcript lane's sequence is independent of the fact lane's ``outbound_buffer``
     (D3) — a fact-lane enqueue does not perturb the transcript lane's own numbering."""
     store = _store(tmp_path)
+    _mint(store)
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    segment_id = store.open_transcript_segments()[0].segment_id
     store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
 
-    t1 = store.enqueue_transcript_outbound(
-        kind="transcript.delta", segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+    t1 = store.record_transcript_delta(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor="tok-1",
+        shipped_bytes=1,
+        shipped_turns=1,
+        payload="{}",
+        created_at=_NOW,
     )
-    t2 = store.enqueue_transcript_outbound(
-        kind="transcript.delta", segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+    t2 = store.record_transcript_delta(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor="tok-2",
+        shipped_bytes=2,
+        shipped_turns=1,
+        payload="{}",
+        created_at=_NOW,
     )
     assert t2 == t1 + 1  # gapless — the fact-lane enqueue above minted no transcript-lane seq
     assert [d.seq for d in store.pending_transcript_outbound()] == [t1, t2]
-    assert store.pending_transcript_outbound()[0].segment_id == "seg_1"
+    assert store.pending_transcript_outbound()[0].segment_id == segment_id
 
     store.ack_transcript_outbound(t1, acked_at=_NOW)
     assert [d.seq for d in store.pending_transcript_outbound()] == [t2]
@@ -656,15 +749,16 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
 @pytest.mark.unit
 def test_record_closure_finalizes_every_open_segment_and_marks_it_atomically(tmp_path):  # type: ignore[no-untyped-def]
     """A step's segments are final by step close (issue #246): every open segment for the
-    closing lease is finalized and its marker enqueued, atomically, on its own buffer."""
+    closing lease is finalized and its marker enqueued atomically. Two DIFFERENT
+    session_ids (a rotation, not a resume) so both genuinely stay open until closure."""
     store = _store(tmp_path)
     _mint(store, lease="lease_1")
     store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
     store.record_spawn(
-        "lease_1", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW + timedelta(minutes=1)
+        "lease_1", pid=2, process_start_time="2", session_id="sess-b", spawned_at=_NOW + timedelta(minutes=1)
     )
     segment_ids = {s.segment_id for s in store.open_transcript_segments()}
-    assert len(segment_ids) == 2  # two generations, both still open
+    assert len(segment_ids) == 2  # two generations (two different sessions), both still open
 
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
 

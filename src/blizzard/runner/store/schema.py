@@ -457,7 +457,7 @@ transcript_segments = Table(
     "transcript_segments",
     metadata,
     Column("segment_id", String, primary_key=True),  # seg_<ulid>
-    Column("chunk_id", String, nullable=False),
+    Column("chunk_id", String, nullable=False, index=True),
     Column("node_id", String, nullable=False),
     Column("epoch", Integer, nullable=False),
     Column("generation", Integer, nullable=False),  # this lease's spawn ordinal (1 = initial spawn)
@@ -466,7 +466,9 @@ transcript_segments = Table(
     Column("cursor", String, nullable=True),  # opaque TranscriptPosition.token; NULL = unread from the start
     Column("shipped_bytes", Integer, nullable=False),
     Column("shipped_turns", Integer, nullable=False),
-    Column("truncated_reason", String, nullable=True),  # NULL = not truncated (D4)
+    # Two fields, not one (review F1): `truncated_reason` never latches; `shipping_stopped_reason` does.
+    Column("truncated_reason", String, nullable=True),  # NULL = no record ever shrunk
+    Column("shipping_stopped_reason", String, nullable=True),  # NULL = still shipping (D4)
     Column("finalized_at", UtcDateTime, nullable=True),  # NULL = still open; set by step close
     Column("stamped_at", UtcDateTime, nullable=False),
 )

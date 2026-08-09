@@ -232,6 +232,21 @@ def test_transcripts_ship_parses_from_a_hand_written_transcripts_table(tmp_path:
 
 
 @pytest.mark.unit
+def test_transcripts_ship_rejects_a_non_boolean_typo_rather_than_coercing_it(tmp_path: Path) -> None:
+    """review F10, blizzard#246: ``bool("false")`` is truthy — a typo'd string on the one
+    switch gating the entire lane must not silently turn it ON."""
+    from blizzard.runner.config import ConfigError
+
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[transcripts]\nship = "false"\n'
+    )
+    with pytest.raises(ConfigError, match="ship"):
+        RunnerConfig.load(root)
+
+
+@pytest.mark.unit
 def test_chunk_cap_usd_defaults_absent(tmp_path: Path) -> None:
     # No `[cost]` table at all on a fresh scaffold — absent means no cap (issue #61a).
     assert RunnerConfig.scaffold(tmp_path).chunk_cap_usd is None

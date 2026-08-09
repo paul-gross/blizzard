@@ -118,6 +118,7 @@ def _segment_row(**overrides: object) -> dict:
         "shipped_bytes": 0,
         "shipped_turns": 0,
         "truncated_reason": None,
+        "shipping_stopped_reason": None,
         "finalized_at": None,
         "stamped_at": _NOW,
     }

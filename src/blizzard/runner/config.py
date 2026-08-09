@@ -108,8 +108,17 @@ class Table:
         return default if value is None else int(value)
 
     def boolean(self, key: str, default: bool) -> bool:
+        """A real TOML boolean, or ``default`` when ``key`` is absent.
+
+        Rejects, rather than coerces, anything else (review F10, blizzard#246) — ``bool()``
+        on a non-empty string is truthy regardless of its text, so a typo'd
+        ``ship = "false"`` would otherwise silently turn a switch on."""
         value = self.body.get(key)
-        return default if value is None else bool(value)
+        if value is None:
+            return default
+        if not isinstance(value, bool):
+            raise ConfigError(f"{key!r} must be a boolean, got {value!r}")
+        return value
 
     def names(self, key: str) -> tuple[str, ...]:
         """Every entry at ``key`` as a string; an absent key is empty."""

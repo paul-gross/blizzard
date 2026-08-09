@@ -1,7 +1,9 @@
 """The transcript lane's per-tick pump (issue #246) — advances each live segment's
 forward-read cursor through ``IHarnessTranscriptSource.turns_since`` and enqueues its
 delta atomically with the cursor write (D3). A no-op while ``ctx.config.transcripts_ship``
-is ``False`` (D5): the whole lane costs nothing when shipping is off."""
+is ``False`` (D5): the whole lane costs nothing when shipping is off. Wired into ``tick``
+by :class:`~blizzard.runner.loop.transcript_drain.TranscriptDrain`, which calls
+:meth:`TranscriptPump.run` before draining what it just enqueued."""
 
 from __future__ import annotations
 
@@ -21,16 +23,17 @@ from blizzard.wire.transcript_outbound import TRANSCRIPT_RECORD_MAX_BYTES
 #: segments, the only quantity the runner controls and the hub bills against.
 CHUNK_TRANSCRIPT_MAX_BYTES = 64 * 1024 * 1024
 
-#: Reject-but-truncate reasons (D4) — recorded on the segment, never silent.
+#: Never-silent reasons (D4, review F1) — the first two are transient (``mark_transcript_
+#: record_truncated``); only ``_CHUNK_BUDGET_EXCEEDED`` latches ``stop_transcript_segment_shipping``.
 _RECORD_CAP_EXCEEDED = "record_cap_exceeded"
+_RECORD_UNSHIPPABLE = "record_unshippable"
 _CHUNK_BUDGET_EXCEEDED = "chunk_budget_exceeded"
 
 
 @dataclass(frozen=True)
 class TranscriptPump:
     """Advances every live segment one tick's worth forward — the lane's only producer
-    of transcript deltas. Not yet a tick :class:`~blizzard.runner.loop.steps.Step` itself;
-    a later phase wires it (and the drain) into a registered step (D3)."""
+    of transcript deltas."""
 
     ctx: LoopContext
 
@@ -41,11 +44,11 @@ class TranscriptPump:
             self._pump_one(segment)
 
     def _pump_one(self, segment: TranscriptSegmentRecord) -> None:
-        if segment.truncated_reason is not None:
-            return  # already stopped shipping this chunk's content (D4)
+        if segment.shipping_stopped_reason is not None:
+            return  # permanently stopped past the per-chunk budget (D4) — review F1
         budget_before = self.ctx.store.chunk_transcript_shipped_bytes(segment.chunk_id)
         if budget_before >= CHUNK_TRANSCRIPT_MAX_BYTES:
-            self._truncate(segment, _CHUNK_BUDGET_EXCEEDED)
+            self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
             return
 
         bindings = self.ctx.store.bindings_for_chunk(segment.chunk_id)
@@ -65,12 +68,29 @@ class TranscriptPump:
             payload = json.dumps(delta)
             record_truncated = True
 
-        delta_bytes = len(payload.encode("utf-8"))
-        if budget_before + delta_bytes > CHUNK_TRANSCRIPT_MAX_BYTES:
-            self._truncate(segment, _CHUNK_BUDGET_EXCEEDED)
+        new_cursor = batch.next_position.token if batch.next_position is not None else segment.cursor
+        if len(payload.encode("utf-8")) > TRANSCRIPT_RECORD_MAX_BYTES:
+            # Structural overhead alone still exceeds the cap (review F2) — ship a small
+            # marker instead of an over-cap body the hub would reject-but-ack anyway.
+            unshippable = {"segment_id": segment.segment_id, "turns": [], "turns_dropped": len(batch.turns)}
+            payload = json.dumps(unshippable)
+            self.ctx.store.record_transcript_delta(
+                segment_id=segment.segment_id,
+                chunk_id=segment.chunk_id,
+                cursor=new_cursor,
+                shipped_bytes=segment.shipped_bytes + len(payload.encode("utf-8")),
+                shipped_turns=segment.shipped_turns,
+                payload=payload,
+                created_at=self.ctx.clock.now(),
+            )
+            self._mark_record_truncated(segment, _RECORD_UNSHIPPABLE)
             return
 
-        new_cursor = batch.next_position.token if batch.next_position is not None else segment.cursor
+        delta_bytes = len(payload.encode("utf-8"))
+        if budget_before + delta_bytes > CHUNK_TRANSCRIPT_MAX_BYTES:
+            self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
+            return
+
         self.ctx.store.record_transcript_delta(
             segment_id=segment.segment_id,
             chunk_id=segment.chunk_id,
@@ -81,10 +101,17 @@ class TranscriptPump:
             created_at=self.ctx.clock.now(),
         )
         if record_truncated:
-            self._truncate(segment, _RECORD_CAP_EXCEEDED)
+            self._mark_record_truncated(segment, _RECORD_CAP_EXCEEDED)
 
-    def _truncate(self, segment: TranscriptSegmentRecord, reason: str) -> None:
-        self.ctx.store.truncate_transcript_segment(segment.segment_id, reason=reason)
+    def _stop_shipping(self, segment: TranscriptSegmentRecord, reason: str) -> None:
+        self.ctx.store.stop_transcript_segment_shipping(segment.segment_id, reason=reason)
+        self._warn(segment, reason)
+
+    def _mark_record_truncated(self, segment: TranscriptSegmentRecord, reason: str) -> None:
+        self.ctx.store.mark_transcript_record_truncated(segment.segment_id, reason=reason)
+        self._warn(segment, reason)
+
+    def _warn(self, segment: TranscriptSegmentRecord, reason: str) -> None:
         OutboundFacts(self.ctx).transcript_truncated(
             chunk_id=segment.chunk_id, segment_id=segment.segment_id, reason=reason, at=self.ctx.clock.now()
         )
@@ -124,20 +151,46 @@ def _sidechain_wire(sidechain: SidechainConversation) -> dict[str, Any]:
     }
 
 
-def _shrink_to_cap(delta: dict[str, Any]) -> dict[str, Any]:
-    """Shrink turn text in place until the serialized delta fits the per-record cap (D4).
+def _flat_turns(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Every turn in ``turns``, plus every turn nested under a sidechain (review F2) — a
+    sidechain turn's own text is exactly as shrinkable as its parent's."""
+    flat: list[dict[str, Any]] = []
+    for turn in turns:
+        flat.append(turn)
+        sidechain = turn.get("sidechain")
+        if sidechain is not None:
+            flat.extend(_flat_turns(sidechain["turns"]))
+    return flat
 
-    Never drops a turn, so the cursor still advances past the whole batch: the largest
-    ``text`` field is halved, repeatedly, until the encoding fits or nothing is left."""
-    turns = delta["turns"]
-    for _ in range(200):
+
+def _shrink_candidates(delta: dict[str, Any]) -> list[tuple[dict[str, Any], str]]:
+    """Every shrinkable ``(holder, field)`` pair still carrying text: a turn's own ``text``
+    (top-level or nested under a sidechain) and its tool call's ``output`` (review F2 — the
+    ordinary case for a Claude Code transcript, where the oversized content is tool output,
+    not the turn's own text)."""
+    candidates: list[tuple[dict[str, Any], str]] = []
+    for turn in _flat_turns(delta["turns"]):
+        if turn.get("text"):
+            candidates.append((turn, "text"))
+        tool = turn.get("tool")
+        if tool is not None and tool.get("output"):
+            candidates.append((tool, "output"))
+    return candidates
+
+
+def _shrink_to_cap(delta: dict[str, Any]) -> dict[str, Any]:
+    """Shrink turn text and tool-output fields in place — including nested sidechain turns
+    (review F2) — until the serialized delta fits the per-record cap (D4). Never drops a
+    turn: the largest remaining shrinkable field is halved, repeatedly, until it fits or
+    nothing is left (a still-over-cap result is the caller's own :data:`_RECORD_UNSHIPPABLE`)."""
+    for _ in range(400):
         if len(json.dumps(delta).encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES:
             break
-        candidates = [t for t in turns if t.get("text")]
+        candidates = _shrink_candidates(delta)
         if not candidates:
             break  # nothing left to shrink; the cap stays exceeded by structure alone
-        target = max(candidates, key=lambda t: len(t["text"]))
-        text = target["text"]
-        target["text"] = text[: len(text) // 2]
-        target["truncated"] = True
+        holder, field = max(candidates, key=lambda c: len(c[0][c[1]]))
+        text = holder[field]
+        holder[field] = text[: len(text) // 2]
+        holder["output_truncated" if field == "output" else "truncated"] = True
     return delta
