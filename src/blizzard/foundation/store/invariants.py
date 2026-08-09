@@ -144,11 +144,10 @@ class GaplessTranscriptOutboundSeq(QueryCheck):
 
 
 class TranscriptSegmentFinalizedExactlyOnce(QueryCheck):
-    """A finalized segment (`finalized_at` set) has exactly one final marker buffered for
-    it — the lane's promise that a step's segments are final by step close, landed exactly
-    once, never zero and never duplicated (issue #246). Unconditional: a segment always has
-    a `normalizer_version` to declare (real once read, else the source seam's own "never
-    ran" sentinel), so this holds regardless of `[transcripts] ship` or whether a pump ever ran."""
+    """A finalized segment (`finalized_at` set) has exactly one `final` row buffered for it —
+    a step's segments are final by step close, landed once, never zero and never duplicated
+    (issue #246). Unconditional: every segment has a `normalizer_version` to declare, so this
+    holds regardless of `[transcripts] ship` or whether a pump ever ran."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []

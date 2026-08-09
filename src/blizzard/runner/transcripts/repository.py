@@ -2,9 +2,8 @@
 
 :class:`Turn` and :class:`Transcript` are the parsed read model. A missing or unreadable
 transcript is a **normal** outcome, not an exception: ``Transcript.available`` and
-``.reason`` carry it in-band. Read-only by design (``bzh:repository-split``): this
-projection reads an existing session file and has no write path of its own — the
-separate transcript outbound lane (issue #246) is what writes turn content elsewhere."""
+``.reason`` carry it in-band. Read-only by design (``bzh:repository-split``): this projection
+reads an existing session file, and the separate outbound lane (issue #246) does the writing."""
 
 from __future__ import annotations
 

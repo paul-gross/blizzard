@@ -127,16 +127,10 @@ class OutboundFactRecord:
 
 @dataclass(frozen=True)
 class TranscriptSegmentLedgerRow:
-    """One row of the transcript segment ledger (issue #246, D2) — a mutable ledger like
-    :class:`LeaseRecord`. Named apart from the wire's own
-    :class:`blizzard.wire.transcript_segment.TranscriptSegmentRecord` (blizzard#247), which
-    this is not — this is the runner's own local ledger state, never shipped as-is.
-    ``normalizer_version`` starts at the harness source seam's own "never ran" sentinel
-    (``""``) and updates to the real one on this segment's first successful pump read —
-    never ``None``, since a closure must always have one to declare on its final record
-    regardless of ``ship`` or whether any read ever happened. ``truncated_reason``
-    (transient) and ``shipping_stopped_reason`` (latching — the only field
-    :class:`TranscriptPump`'s guard reads) are deliberately two fields, not one (review F1)."""
+    """One row of the transcript segment ledger (issue #246, D2) — local state, never shipped
+    as-is, and so named apart from the wire's own ``TranscriptSegmentRecord`` (blizzard#247).
+    ``normalizer_version`` is never ``None``: it starts at the source seam's "never ran"
+    sentinel so a closure always has one to declare. Two reasons, not one, per review F1."""
 
     segment_id: str
     chunk_id: str
@@ -158,11 +152,9 @@ class TranscriptSegmentLedgerRow:
 
 @dataclass(frozen=True)
 class BufferedTranscriptDelta:
-    """One pending record in the transcript lane's own store-and-forward buffer (D3) — the
-    transcript-lane counterpart to :class:`BufferedFact`. ``payload`` is a
-    :class:`blizzard.wire.transcript_segment.TranscriptSegmentRecord`'s fields (minus
-    ``seq``/``runner_id``) as JSON; ``final`` mirrors the payload's own ``final`` flag and
-    drives this row's own ack-time keep-vs-delete (issue #246)."""
+    """One pending record in the transcript lane's own buffer (D3) — :class:`BufferedFact`'s
+    counterpart. ``payload`` is a ``TranscriptSegmentRecord``'s fields (minus
+    ``seq``/``runner_id``) as JSON; ``final`` mirrors it, driving ack-time keep-vs-delete."""
 
     seq: int
     segment_id: str
@@ -739,10 +731,9 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         created_at: datetime,
     ) -> int:
         """Advance a segment's cursor/shipped counts/version stamp and enqueue its record —
-        ONE transaction (issue #246): a crash between them would either re-read
-        already-shipped turns or ship a record the cursor never advanced past.
-        ``normalizer_version``/``harness_version`` persist onto the segment row (not just
-        the payload) so a later closure can build a #247-shaped final record without the
+        ONE transaction (issue #246): a crash between them would either re-read already-shipped
+        turns or ship a record the cursor never advanced past. The versions persist onto the
+        row, not just the payload, so a later closure builds its final record without the
         harness seam. Returns the buffered record's seq."""
         ...
 

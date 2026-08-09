@@ -873,11 +873,9 @@ def test_record_closure_is_a_no_op_for_a_lease_with_no_segments(tmp_path):  # ty
 
 @pytest.mark.unit
 def test_record_closure_ships_a_final_marker_even_when_no_pump_ever_ran(tmp_path):  # type: ignore[no-untyped-def]
-    """A normalizer version is a static per-harness constant, not something a read is
-    needed to learn — closure ships a real, valid final record even for a segment that
-    never had a single pump tick (e.g. `[transcripts] ship = false` the whole time), using
-    the source seam's own "never ran" sentinel version. This is what lets the crash sweep
-    reach `transcript.before-submit`/`.after-submit.before-ack` with `ship` at its default."""
+    """A normalizer version is a static constant, not something a read must learn, so closure
+    ships a valid final record on the sentinel version even for a never-pumped segment — what
+    lets the crash sweep reach the `transcript.*` points with `ship` at its default."""
     store = _store(tmp_path)
     _mint(store, lease="lease_1")
     store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)

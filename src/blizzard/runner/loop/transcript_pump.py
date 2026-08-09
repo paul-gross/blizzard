@@ -1,10 +1,9 @@
 """The transcript lane's per-tick pump (issue #246) — advances each live segment's
 forward-read cursor through ``IHarnessTranscriptSource.turns_since`` and enqueues its
-record atomically with the cursor write (D3), shaped as one of blizzard#247's
-turn-range ``TranscriptSegmentRecord`` slices. ``run()`` no-ops while
-``ctx.config.transcripts_ship`` is ``False`` (D5); the lane around it does not — a segment
-still stamps and finalizes with a marker on every closure regardless of ``ship``. Wired into
-``tick`` by :class:`~blizzard.runner.loop.transcript_drain.TranscriptDrain`."""
+record atomically with the cursor write (D3), shaped as one of blizzard#247's turn-range
+``TranscriptSegmentRecord`` slices. ``run()`` no-ops while ``ctx.config.transcripts_ship``
+is ``False`` (D5); the lane around it does not — a segment still finalizes with a marker on
+every closure regardless. Wired into ``tick`` by :class:`TranscriptDrain`."""
 
 from __future__ import annotations
 
@@ -20,9 +19,8 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.store.repository import TranscriptSegmentLedgerRow
 
-#: The runner's own per-record cap (D4) — the well-behaved-case half of #247's two-sided
-#: enforcement; the hub's own independent 4 MB `RECORD_MAX_BYTES` (`hub/domain/transcripts.py`)
-#: is the rogue-case backstop and deliberately a different number.
+#: The runner's own per-record cap (D4) — the well-behaved half of #247's two-sided
+#: enforcement, deliberately below the hub's own 4 MB rogue-case `RECORD_MAX_BYTES`.
 TRANSCRIPT_RECORD_MAX_BYTES = 1024 * 1024
 
 #: The per-chunk budget (D4) — measured as the sum of `shipped_bytes` across the chunk's
@@ -85,8 +83,7 @@ class TranscriptPump:
             return  # source unavailable this tick — retry from the same cursor next time
         new_cursor = batch.next_position.token if batch.next_position is not None else segment.cursor
         # A subagent conversation whose parent turn is outside the window surfaces here, not
-        # in `batch.turns` — never silently dropped, so it always reaches an operator-visible
-        # warning even though (unlike a truncation) it claims no turn range on the wire lane.
+        # in `batch.turns` — never silently dropped, so it always reaches a warning.
         dropped_sidechains = len(batch.unlinked_sidechains)
 
         if not batch.turns:
@@ -125,8 +122,7 @@ class TranscriptPump:
 
         if len(payload.encode("utf-8")) > TRANSCRIPT_RECORD_MAX_BYTES:
             # Structural overhead alone still exceeds the cap (review F2) — ship an empty
-            # slice over the same claimed range instead of an over-cap body the hub would
-            # reject-but-ack anyway; the range stays gapless even though its content is lost.
+            # slice over the same claimed range, keeping it gapless, never an over-cap body.
             record["turns"] = []
             payload = json.dumps(record)
             self.ctx.store.record_transcript_delta(
@@ -228,9 +224,8 @@ def _tool_wire(tool: ToolCall) -> dict[str, Any]:
 
 
 def _sidechain_wire(sidechain: SidechainConversation) -> dict[str, Any]:
-    # Sidechain turns carry no wire-level index of their own — blizzard#247's
-    # TurnSegmentView.index is a segment-relative offset among the *linked* turn stream;
-    # a sidechain's own turns are addressed by position within `turns`, not by index.
+    # Sidechain turns carry no index of their own — #247's TurnSegmentView.index offsets the
+    # *linked* stream, so these are addressed by position within `turns`.
     return {
         "agent_id": sidechain.agent_id,
         "agent_type": sidechain.agent_type,

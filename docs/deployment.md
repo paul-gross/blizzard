@@ -1336,9 +1336,10 @@ hub stores what it accepts, compressed at rest, behind an operator-only read API
 # Ship transcript records to the hub. Off by default: with no [transcripts] table (or
 # `ship` omitted), the runner reads no session content and enqueues no record. The switch
 # gates non-final records alone — every open segment still ships its own final record at
-# lease closure regardless (the same unconditional close-out the fact lane's own facts
-# get), *unless* that segment never once had a successful read to learn its normalizer
-# version from — with nothing to declare, it ships no wire footprint at all.
+# lease closure regardless, the same unconditional close-out the fact lane's own facts
+# get. A segment that never had a single successful read is no exception: a normalizer
+# version is a static per-harness constant, so its final record declares the source's own
+# "never ran" sentinel rather than shipping nothing.
 ship = false
 ```
 

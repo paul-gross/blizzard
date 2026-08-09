@@ -170,6 +170,37 @@ def test_finalized_segment_with_exactly_one_final_marker_is_not_a_violation(tmp_
     assert "runner:transcript-segment-finalized-exactly-once" not in slugs
 
 
+def test_pending_non_final_records_do_not_count_as_final_markers(tmp_path: Path) -> None:
+    """The check counts `final` rows only: a finalized segment normally still has undrained
+    content records beside its one marker, and counting those fires on a healthy store —
+    unseen by every tier, which runs `[transcripts] ship` at its default."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=_NOW)))
+        for seq, final in ((1, False), (2, False), (3, True)):
+            conn.execute(
+                insert(runner.transcript_outbound_buffer).values(
+                    seq=seq, final=final, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+                )
+            )
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:transcript-segment-finalized-exactly-once" not in slugs
+
+
+def test_a_finalized_segment_with_only_non_final_records_is_a_violation(tmp_path: Path) -> None:
+    """The same filter from the other side: content records are not a close-out."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=_NOW)))
+        conn.execute(
+            insert(runner.transcript_outbound_buffer).values(
+                seq=1, final=False, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+            )
+        )
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:transcript-segment-finalized-exactly-once" in slugs
+
+
 def test_an_open_segment_needs_no_final_marker(tmp_path: Path) -> None:
     """`finalized_at IS NULL` (still open) is not checked — only a finalized segment must
     have carried its marker."""

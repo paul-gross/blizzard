@@ -468,11 +468,8 @@ transcript_segments = Table(
     # Also this segment's next `turn_range_start` (blizzard#247's wire key) — turn indices
     # are segment-relative and gapless, so the running count doubles as the next offset.
     Column("shipped_turns", Integer, nullable=False),
-    # A normalizer version is a static per-harness constant, not something reading is
-    # needed to learn — stamped `""` at spawn (the source seam's own "never ran" sentinel,
-    # `runner/harness/transcript.py`'s `_NO_NORMALIZER_VERSION`) and updated to the real
-    # one on the segment's first successful pump read. Either way, a final record always
-    # has one to declare — the closure marker never depends on `ship` or a prior read.
+    # A static per-harness constant, not something reading is needed to learn — stamped with
+    # the source seam's "never ran" sentinel at spawn, so a closure always has one to declare.
     Column("normalizer_version", String, nullable=False),
     Column("harness_version", String, nullable=True),
     # Two fields, not one (review F1): `truncated_reason` never latches; `shipping_stopped_reason` does.
@@ -491,12 +488,13 @@ transcript_outbound_buffer = Table(
     Column("seq", Integer, primary_key=True, autoincrement=True),  # per-runner monotonic, own sequence
     Column("segment_id", String, nullable=False),
     Column("chunk_id", String, nullable=False),
-    # NULL = pending. An acked non-final row is deleted, never reaching this state; an
-    # acked final row IS marked here — its continued presence is the exactly-once receipt.
+    # Mirrors the payload's own `final` flag, so ack-time keep-vs-delete needs no JSON read.
     Column("final", Boolean, nullable=False),
     # A blizzard.wire.transcript_segment.TranscriptSegmentRecord's fields, minus `seq`
     # (this row's own PK) and `runner_id` (batch-level, added at drain time).
     Column("payload", Text, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
+    # NULL = pending. An acked non-final row is deleted, never reaching this state; an
+    # acked final row IS marked here — its continued presence is the exactly-once receipt.
     Column("acked_at", UtcDateTime, nullable=True),
 )

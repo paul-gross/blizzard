@@ -483,9 +483,8 @@ def test_run_yields_to_its_own_deadline_across_many_open_segments() -> None:
 
 def test_pump_warns_on_an_unlinked_sidechain_dropped_alongside_a_normal_record() -> None:
     """A subagent conversation whose parent turn is outside the read window surfaces on
-    ``batch.unlinked_sidechains``, not ``batch.turns`` — it must never be silently dropped
-    even when the tick also has ordinary turns to ship. #247's schema has no field for it,
-    so it rides its own fact-lane warning rather than the wire record."""
+    ``batch.unlinked_sidechains``, never silently dropped. #247's schema has no field for
+    it, so it rides its own fact-lane warning rather than the wire record."""
     batch = _batch([_turn(0, "hi")], next_token="pos-1", unlinked_sidechains=[_unlinked_sidechain("sub_1")])
     ctx, _source = _ctx(ship=True, batches={"sess-a": batch})
     _spawn_one_segment(ctx)

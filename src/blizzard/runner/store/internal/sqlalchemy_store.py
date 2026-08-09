@@ -84,9 +84,8 @@ _log = get_logger("blizzard.runner.store")
 # (issue #51).
 _ESCALATED_REASON = "escalated"
 
-# A fresh segment's placeholder, before its first successful pump read — mirrors
-# `runner/harness/transcript.py`'s own `_NO_NORMALIZER_VERSION` sentinel convention
-# (restated, not imported: the store never depends on the harness seam, issue #246).
+# A fresh segment's placeholder, before its first pump read — the harness seam's own
+# sentinel convention, restated rather than imported (the store never depends on it).
 _NO_NORMALIZER_VERSION = ""
 
 
@@ -168,11 +167,9 @@ OPEN_LEASE = Unclosed(leases.c.lease_id, lease_closures.c.lease_id)
 
 def _enqueue_transcript_final(conn, segment, *, at: datetime) -> None:  # type: ignore[no-untyped-def]
     """Enqueue the wire-shaped final record closing ``segment`` out (issue #246, blizzard#247's
-    shape) — an empty range starting where shipping left off. Ships unconditionally, on
-    every closure regardless of ``[transcripts] ship`` or whether a pump ever ran: a
-    normalizer version is a static per-harness constant, not something a read is needed to
-    learn, so ``segment.normalizer_version`` already has one to declare (the source seam's
-    own "never ran" sentinel if no read ever happened, the real one otherwise)."""
+    shape) — an empty range starting where shipping left off. Ships unconditionally, on every
+    closure regardless of ``[transcripts] ship`` or whether a pump ever ran: a normalizer
+    version is a static constant, so ``segment.normalizer_version`` always has one to declare."""
     payload = json.dumps(
         {
             "segment_id": str(segment.segment_id),
@@ -942,9 +939,8 @@ class SqlAlchemyRunnerStore:
 
     def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:
         with self._begin() as conn:
-            # Non-final rows are pruned outright (up to the record cap each, nothing reads
-            # an acked one); final markers stay, acked in place — their row is the
-            # exactly-once receipt.
+            # Non-final rows are pruned outright, nothing reading an acked one; a final
+            # marker stays, acked in place — its row is the exactly-once receipt.
             conn.execute(
                 transcript_outbound_buffer.delete()
                 .where(transcript_outbound_buffer.c.seq == seq)
