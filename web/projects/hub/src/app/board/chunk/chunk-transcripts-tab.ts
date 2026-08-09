@@ -23,11 +23,11 @@ const MAX_RENDERED_TURNS = 1000;
  * {@link ChunkArtifactsTab}'s nav-beside-viewer shape and, like it, is presentational
  * (`bzh:frontend-container-presentational`, `review:F1`): the two queries behind this tab
  * (blizzard#248 D8: the index on open, one segment's turns only once opened) live on
- * {@link ChunkPage}, which passes their resolved state down as inputs — nothing about a
- * chunk's transcripts is in `detail()`'s own payload (D8, pinned at
+ * `ChunkTranscriptsContainer`, which passes their resolved state down as inputs — nothing
+ * about a chunk's transcripts is in `detail()`'s own payload (D8, pinned at
  * `test_chunk_detail_carries_no_transcript_field`).
  *
- * {@link indexState}/{@link segmentState} are `ChunkPage`'s own `asyncState()` folds over
+ * {@link indexState}/{@link segmentState} are that container's own `asyncState()` folds over
  * its two queries (`bzh:frontend-empty-state-gated`); {@link isForbidden} is carried
  * separately since a 403 on the index read is its own honest state (D9), not the generic
  * error `indexState` reports for anything else.
@@ -287,11 +287,11 @@ export class ChunkTranscriptsTab {
   readonly currentNodeName = input<string | null>(null);
   readonly latestEpoch = input<number | null>(null);
 
-  /** `ChunkPage`'s `injectHubChunkTranscriptsQuery` read, resolved: the segment index
+  /** The container's `injectHubChunkTranscriptsQuery` read, resolved: the segment index
    * once {@link indexState} is `'ready'`, `[]` otherwise. */
   readonly segments = input<readonly TranscriptSegmentIndexEntry[]>([]);
 
-  /** `asyncState()` over `ChunkPage`'s index query (loading/error/ready — never `'empty'`;
+  /** `asyncState()` over the container's index query (loading/error/ready — never `'empty'`;
    * "no segments yet" is this component's own {@link steps}-derived state). */
   readonly indexState = input.required<KitAsyncStateValue>();
 
@@ -306,7 +306,7 @@ export class ChunkTranscriptsTab {
    * the open segment, or `null`. */
   readonly sidechainTurnIndex = input<string | null>(null);
 
-  /** `ChunkPage`'s `injectHubChunkTranscriptSegmentQuery` read, resolved: `'empty'` while
+  /** The container's `injectHubChunkTranscriptSegmentQuery` read, resolved: `'empty'` while
    * {@link segmentId} names nothing (the query's own `enabled: false` rest state,
    * `bzh:frontend-empty-state-gated`'s documented trap), else loading/error/ready. */
   readonly segmentState = input.required<KitAsyncStateValue>();
