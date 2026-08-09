@@ -5,10 +5,12 @@ turn-range wire shape."""
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.transcript import (
     NormalizedTurn,
@@ -19,7 +21,12 @@ from blizzard.runner.harness.transcript import (
 )
 from blizzard.runner.loop.attempt import FAILED, Attempt
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.transcript_pump import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES, TranscriptPump
+from blizzard.runner.loop.transcript_pump import (
+    CHUNK_TRANSCRIPT_MAX_BYTES,
+    PUMP_LEASE_MAX_SECONDS,
+    TRANSCRIPT_RECORD_MAX_BYTES,
+    TranscriptPump,
+)
 from blizzard.runner.store.repository import NewLease
 from tests.runner_fakes import (
     FakeHarness,
@@ -548,6 +555,36 @@ def test_pump_lease_yields_to_its_own_deadline() -> None:
     TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=ctx.clock.now())
 
     assert ctx.store.pending_transcript_outbound() == []  # bound already elapsed — nothing pumped
+
+
+@dataclass
+class _AdvancingClock(FixedClock):
+    """Advances ``step`` on every read, so a deadline computed from one read is already past
+    by the next — whatever the call order, without a fixture counting calls."""
+
+    step: timedelta = timedelta(seconds=PUMP_LEASE_MAX_SECONDS * 2)
+    calls: int = 0
+
+    def now(self) -> datetime:
+        self.calls += 1
+        return self.instant + self.step * self.calls
+
+
+def test_lease_close_bounds_the_pump_it_runs_before_closing() -> None:
+    """review F4's other half: ``pump_lease`` honoring a deadline is worth nothing unless
+    ``Attempt.close`` actually computes and passes one. Passing ``None`` there survives
+    every other case, so the bound is pinned at the closure boundary itself."""
+    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    ctx = replace(ctx, clock=_AdvancingClock(instant=_NOW))
+    _spawn_one_segment(ctx)
+    lease = ctx.store.active_lease("lease_1")
+    assert lease is not None
+
+    Attempt(ctx, lease).close(FAILED, _NOW)
+
+    assert source.turns_since_calls == []  # the bound elapsed before the read, not during it
+    pending = ctx.store.pending_transcript_outbound()
+    assert [d.final for d in pending] == [True]  # only closure's own marker — the closure still landed
 
 
 class _RaisingTranscriptSource:

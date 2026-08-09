@@ -52,8 +52,8 @@ SidechainSegmentView.model_rebuild()
 
 class TranscriptSegmentRecord(BaseModel):
     """One shipped turn-range slice of a segment (D1). ``final=True`` marks the one
-    record that closes the segment out. ``record_truncated`` (review F5) is the runner's
-    own declaration of an accepted, hub-cap-conforming record shipped with ``turns``
+    record that closes the segment out. ``record_truncated`` is the runner's own
+    declaration of an accepted, hub-cap-conforming record shipped with ``turns``
     emptied — distinct from the hub's own ``rejected`` (D5/D6)."""
 
     seq: int

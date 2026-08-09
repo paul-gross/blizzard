@@ -12,6 +12,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
+from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import NewLease
 from blizzard.runner.store.schema import park_facts, pause_parks
 from tests.runner_fakes import make_store
@@ -114,3 +115,50 @@ def test_declaration_environment_id_migration_discards_the_pre_revision_rows(tmp
     assert surviving == 0
     assert "environment_id" in columns
     assert "forge" not in columns
+
+
+@pytest.mark.component
+def test_a_migrated_transcript_outbound_seq_is_never_reissued_after_a_prune(tmp_path: Path) -> None:
+    """``sqlite_autoincrement`` is declared twice, and only ``schema.py``'s copy is on the
+    path a test store takes. Production migrates (`bzh:gating-tier-pins-production-paths`),
+    so the revision's own copy is pinned here: dropping it reissues a pruned seq."""
+    config = runner_runtime.init_environment(tmp_path)
+    engine = create_engine_from_url(config.db_url)
+    try:
+        store = SqlAlchemyRunnerStore(engine)
+        store.record_lease(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                runner_id="r1",
+                retries_max=2,
+                created_at=_NOW,
+            )
+        )
+        store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+        segment_id = store.open_transcript_segments()[0].segment_id
+        first = _delta(store, segment_id, cursor="tok-1")
+        store.ack_transcript_outbound(first, acked_at=_NOW)  # prunes the table's only, and highest, row
+        second = _delta(store, segment_id, cursor="tok-2")
+    finally:
+        engine.dispose()
+
+    assert second != first
+
+
+def _delta(store: SqlAlchemyRunnerStore, segment_id: str, *, cursor: str) -> int:
+    return store.record_transcript_delta(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor=cursor,
+        shipped_bytes=1,
+        shipped_turns=1,
+        normalizer_version="v1",
+        harness_version=None,
+        payload="{}",
+        created_at=_NOW,
+    )

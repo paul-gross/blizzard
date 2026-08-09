@@ -3495,9 +3495,9 @@
    "total": 177
   },
   "test_pin_runner_store.py": {
-   "comments": 5,
-   "docstrings": 15,
-   "total": 116
+   "comments": 6,
+   "docstrings": 18,
+   "total": 164
   },
   "test_pin_wire.py": {
    "comments": 2,
@@ -3985,9 +3985,9 @@
    "total": 357
   },
   "test_transcript_pump.py": {
-   "comments": 66,
-   "docstrings": 57,
-   "total": 668
+   "comments": 68,
+   "docstrings": 62,
+   "total": 705
   },
   "test_transcript_segment_store.py": {
    "comments": 5,
