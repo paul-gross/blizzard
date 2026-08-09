@@ -285,6 +285,50 @@ def test_a_tool_inputs_structure_carries_through_untouched_below_the_cap(tmp_pat
     assert transcript.turns[0].truncated is False
 
 
+def _tool_use_line(tool_input: object) -> str:
+    """A ``tool_use`` record whose ``input`` is not a dict — ``fx.assistant_tool_use``
+    only types a dict, so a non-object shape (``ToolInput.of``,
+    ``claude_code_normalizer.py``) is built inline here."""
+    content = [{"type": "tool_use", "id": "t1", "name": "Weird", "input": tool_input}]
+    return json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
+
+
+@pytest.mark.component
+def test_a_string_shaped_tool_input_carries_through_unparsed_below_the_cap(tmp_path: Path) -> None:
+    """A non-object ``input`` (``ToolInputShape`` ``"string"``) carries through as
+    ``input_unparsed`` — never coerced into ``input`` (``ToolInput.of``)."""
+    _write(tmp_path, [_tool_use_line("123")])
+    transcript = _read(tmp_path)
+
+    tool = transcript.turns[0].tool
+    assert tool is not None
+    assert tool.input_shape == "string"
+    assert tool.input == {}
+    assert tool.input_unparsed == "123"
+    assert transcript.turns[0].truncated is False
+
+
+@pytest.mark.component
+def test_an_oversized_string_shaped_tool_input_degrades_and_relabels_to_other(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``review:F13`` — the over-cap degrade-and-relabel path (``CappedToolCall.of``)
+    exercised off a non-``"object"`` shape: ``serialized`` comes from
+    ``tool.input_unparsed``, not ``json.dumps(tool.input)``, so this is a distinct branch
+    from :func:`test_max_block_chars_degrades_an_oversized_tool_input_to_a_capped_raw_string`."""
+    monkeypatch.setattr(projection_module, "MAX_BLOCK_CHARS", 10)
+    _write(tmp_path, [_tool_use_line("x" * 50)])
+    transcript = _read(tmp_path)
+
+    tool = transcript.turns[0].tool
+    assert tool is not None
+    assert tool.input_shape == "other"
+    assert tool.input == {}
+    assert tool.input_unparsed is not None
+    assert len(tool.input_unparsed) == 10
+    assert transcript.turns[0].truncated is True
+
+
 # --------------------------------------------------------------------------- #
 # Which of the batch's two truncation flags reaches the panel
 

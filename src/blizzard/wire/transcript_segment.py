@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.runner.transcripts.repository import TurnKind
+
 
 class ToolCallSegmentView(BaseModel):
     """A tool invocation, structured — mirrors :class:`~blizzard.runner.harness.transcript.ToolCall`."""
@@ -40,7 +42,7 @@ class TurnSegmentView(BaseModel):
     ``NormalizedTurn.index``."""
 
     index: int
-    kind: str  # env | asst | tool | thinking
+    kind: TurnKind
     timestamp: str | None
     text: str
     tool: ToolCallSegmentView | None

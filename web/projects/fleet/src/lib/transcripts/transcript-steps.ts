@@ -1,5 +1,12 @@
 import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
 
+/** The reserved terminal node id (`review:F2`) — the domain's `RESERVED_TERMINAL`
+ * (`src/blizzard/hub/domain/graph.py`). Duplicated here (not a backend import) since
+ * the wire model carries `current_node_id` as a plain string, not a discriminated
+ * value. A completed chunk's `current_node_id()` is this terminal — never a step that
+ * actually ran, so it names no in-flight step to append. */
+const DONE_TERMINAL = 'done';
+
 /**
  * One node-history step's transcript-segment group (blizzard#248 D5) — joined to
  * `ChunkDetail.history` by `(node_id, epoch)`: a {@link TransitionView}'s own
@@ -66,7 +73,7 @@ export function deriveTranscriptSteps(
     });
   }
 
-  if (current.nodeId !== null && current.epoch !== null) {
+  if (current.nodeId !== null && current.nodeId !== DONE_TERMINAL && current.epoch !== null) {
     const key = `${current.nodeId}:${current.epoch}`;
     if (!claimed.has(key)) {
       claimed.add(key);

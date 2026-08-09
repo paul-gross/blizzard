@@ -1173,7 +1173,7 @@ export type TurnSegmentView = {
     /**
      * Kind
      */
-    kind: string;
+    kind: 'env' | 'asst' | 'tool' | 'thinking' | 'sidechain';
     sidechain: SidechainSegmentView | null;
     /**
      * Text

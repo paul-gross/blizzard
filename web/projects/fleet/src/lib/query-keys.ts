@@ -47,12 +47,21 @@ export function hubGraphKey(graphId: string | null): readonly unknown[] {
   return ['hub', 'graph', graphId];
 }
 
-/** One chunk's transcript-segment index (blizzard#248), keyed by id. */
+/** One chunk's transcript-segment index (blizzard#248), keyed by id — deliberately under
+ * the {@link hubChunkKey} prefix, so a `chunk-changed` SSE event refetches it: new
+ * segments genuinely appear here as the chunk's steps progress. */
 export function hubChunkTranscriptsKey(chunkId: string | null): readonly unknown[] {
   return ['hub', 'chunk', chunkId, 'transcripts'];
 }
 
-/** One segment's decompressed turns (blizzard#248), keyed by chunk and segment id. */
+/** One segment's decompressed turns (blizzard#248), keyed by chunk and segment id —
+ * deliberately its own top-level prefix, *not* nested under {@link hubChunkKey}
+ * (`review:F6`): once a segment is `final`, its content is immutable, and the pair
+ * already uniquely identifies it, so nothing needs a `chunk-changed` SSE event to
+ * refetch it. Nesting it there previously meant every SSE event on the chunk refetched
+ * an already-rendered segment's content — a decompress+parse+per-turn-validate on the
+ * hub for no reason — defeating this query's own `refetchInterval: false`
+ * (`transcript-segments.query.ts`). */
 export function hubChunkTranscriptSegmentKey(chunkId: string | null, segmentId: string | null): readonly unknown[] {
-  return ['hub', 'chunk', chunkId, 'transcripts', segmentId];
+  return ['hub', 'chunk-transcript-segment', chunkId, segmentId];
 }

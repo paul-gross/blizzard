@@ -3,6 +3,13 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { formatAbsolute, formatLocalClockWithDay, type LocalClockWithDay } from '../when';
 import type { TranscriptSidechain, TranscriptTool, TranscriptTurn } from './transcript-turn';
 
+/** {@link TranscriptViewer.inputPreview}'s own cap (`review:F8`) — the `<summary>` line
+ * clamps visually via CSS (`.tc-input`'s `text-overflow: ellipsis`), but a tool call's
+ * structured input can run to megabytes, and `inputPreview` runs on every change-detection
+ * pass; capping the string itself keeps that `JSON.stringify` output — and the DOM node
+ * holding it — bounded regardless of how the container is styled. */
+const MAX_INPUT_PREVIEW_CHARS = 300;
+
 /**
  * The shared, presentational turn list (blizzard#248 D3/D4) — one component both the
  * runner's local panel (`local-panel/src/lib/transcript-panel.ts`) and the hub's chunk
@@ -14,13 +21,21 @@ import type { TranscriptSidechain, TranscriptTool, TranscriptTurn } from './tran
  * - `env`/`asst` — plain text, as `local-transcript-panel` always rendered them.
  * - `tool` — a `<details>` card naming the call, its structured input, and its output
  *   (or a running placeholder while `tool.output` is still `null`); a tool call that
- *   spawned a sidechain nests this same component recursively inside the card
- *   (blizzard#248 D7 — "nested and standalone sidechains are one component").
+ *   spawned a sidechain nests this same component recursively inside the card, behind
+ *   its own open-standalone control (blizzard#248 D7 — "nested and standalone
+ *   sidechains are one component", read both nested-in-context and standalone;
+ *   `review:F3`).
  * - `thinking` — collapsed by default, expanding in place; a redacted turn
  *   (`thinking_redacted`) shows a presence placeholder instead of prose.
  * - `sidechain` — an *unlinked* sidechain (blizzard#248 D7: no spawning tool call to
  *   nest under) renders as its own top-level entry, recursing the same way a nested one
  *   does.
+ *
+ * `openStandalone` always emits the turn that owns the sidechain (a `tool` turn for a
+ * nested one, a `sidechain` turn for an unlinked one) and is forwarded through every
+ * recursive instantiation, so a bubbled emission from a nested viewer reaches the
+ * container that turns it into a URL-held selection instead of being swallowed partway
+ * up (`review:F3`).
  *
  * `turnClockInfo`/`turnAbsolute` render a turn's `timestamp` in the viewer's own local
  * zone (issue #136, `bzh:utc-instants`) — unchanged from `local-transcript-panel`'s own
@@ -56,8 +71,15 @@ import type { TranscriptSidechain, TranscriptTool, TranscriptTurn } from './tran
                   <div class="tc-out">{{ turn.tool?.output ?? 'running…' }}</div>
                   @if (turn.sidechain; as sidechain) {
                     <div class="sidechain" data-testid="transcript-sidechain-nested">
-                      <div class="sc-head">{{ sidechainLabel(sidechain) }}</div>
-                      <fleet-transcript-viewer [turns]="sidechain.turns" />
+                      <button
+                        type="button"
+                        class="sc-head sc-open"
+                        data-testid="transcript-sidechain-open"
+                        (click)="openStandalone.emit(turn)"
+                      >
+                        {{ sidechainLabel(sidechain) }} · open standalone
+                      </button>
+                      <fleet-transcript-viewer [turns]="sidechain.turns" (openStandalone)="openStandalone.emit($event)" />
                     </div>
                   }
                 </details>
@@ -83,7 +105,7 @@ import type { TranscriptSidechain, TranscriptTool, TranscriptTurn } from './tran
                     >
                       {{ sidechainLabel(sidechain) }} · open standalone
                     </button>
-                    <fleet-transcript-viewer [turns]="sidechain.turns" />
+                    <fleet-transcript-viewer [turns]="sidechain.turns" (openStandalone)="openStandalone.emit($event)" />
                   </div>
                 }
               }
@@ -201,6 +223,10 @@ import type { TranscriptSidechain, TranscriptTool, TranscriptTurn } from './tran
       padding: 2px 6px;
     }
     .tool-call .tc-head {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
       cursor: pointer;
       list-style: none;
     }
@@ -208,13 +234,18 @@ import type { TranscriptSidechain, TranscriptTool, TranscriptTurn } from './tran
       display: none;
     }
     .tool-call .tc-name {
+      flex: none;
       color: var(--green);
       font-size: var(--fs-sm);
     }
     .tool-call .tc-input {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       color: var(--amber);
       font-weight: normal;
-      margin-left: 6px;
     }
     .tool-call .tc-out {
       margin-top: 3px;
@@ -285,17 +316,17 @@ export class TranscriptViewer {
   /** The turns to render, in order — this component never fetches or filters them. */
   readonly turns = input.required<readonly TranscriptTurn[]>();
 
-  /** Emitted with an unlinked sidechain's own top-level ``"sidechain"`` turn when the
-   * operator asks to view it standalone (blizzard#248 D7). This component always
-   * renders the sidechain inline too — a container with no standalone concept (the
-   * runner's local panel) needs no listener at all; the hub's Transcripts tab is the
-   * one that turns this into a URL-held selection. */
+  /** Emitted with the turn that owns a sidechain — nested (`tool`) or unlinked
+   * (`sidechain`) — when the operator asks to view it standalone (blizzard#248 D7,
+   * `review:F3`). This component always renders the sidechain inline too; a container
+   * with no standalone concept (the runner's local panel) needs no listener at all; the
+   * hub's Transcripts tab is the one that turns this into a URL-held selection. */
   readonly openStandalone = output<TranscriptTurn>();
 
   protected inputPreview(tool: TranscriptTool | null): string {
     if (tool === null) return '';
-    if (tool.input_shape === 'object') return JSON.stringify(tool.input);
-    return tool.input_unparsed ?? '';
+    const raw = tool.input_shape === 'object' ? JSON.stringify(tool.input) : (tool.input_unparsed ?? '');
+    return raw.length > MAX_INPUT_PREVIEW_CHARS ? `${raw.slice(0, MAX_INPUT_PREVIEW_CHARS)}…` : raw;
   }
 
   protected sidechainLabel(sidechain: TranscriptSidechain): string {

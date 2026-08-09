@@ -103,6 +103,17 @@ describe('deriveTranscriptSteps', () => {
     expect(steps[0].segments.map((s) => s.segment_id)).toEqual(['first', 'second']);
   });
 
+  it('does not append a phantom in-flight step for a completed chunk\'s reserved "done" terminal (review:F2)', () => {
+    const steps = deriveTranscriptSteps(
+      [segment({ segment_id: 'a', node_id: 'build', epoch: 2 })],
+      [transition({ from_node_id: 'build', epoch: 2, to_node_id: 'done' })],
+      { nodeId: 'done', nodeName: null, epoch: 2 },
+    );
+
+    expect(steps.map((s) => s.key)).toEqual(['build:2']);
+    expect(steps.every((s) => !s.current)).toBe(true);
+  });
+
   it('a single-segment step has no adjacent segment on either side', () => {
     const steps = deriveTranscriptSteps(
       [segment({ segment_id: 'only', node_id: 'build', epoch: 2, spawn_generation: 0 })],

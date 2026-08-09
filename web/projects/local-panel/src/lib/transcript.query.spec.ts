@@ -1,13 +1,17 @@
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
+import { runnerClient, type runnerApi } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
 import { runnerTranscriptKey } from './query-keys';
 import { injectTranscriptQuery } from './transcript.query';
 
-const TRANSCRIPT = {
+// Typed against the generated wire shape (`review:F5`) — an untyped literal here would
+// keep passing `toEqual` even after the server's turn shape moves on, the way the
+// retired `tool_name`/`tool_input`/`tool_output` fields did after blizzard#248 D1 widened
+// the runner's transcript wire to `TurnSegmentView`.
+const TRANSCRIPT: runnerApi.TranscriptResponse = {
   lease_id: 'L-903',
   session_id: 'sess-77',
   available: true,
@@ -19,9 +23,9 @@ const TRANSCRIPT = {
       kind: 'env',
       timestamp: '2026-07-16T11:00:00+00:00',
       text: 'NODE ENVELOPE',
-      tool_name: null,
-      tool_input: null,
-      tool_output: null,
+      tool: null,
+      thinking_redacted: false,
+      sidechain: null,
       truncated: false,
     },
   ],

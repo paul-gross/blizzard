@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
+import { hubChunkTranscriptSegmentKey, hubChunkTranscriptsKey } from '../query-keys';
 import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource } from './sse.service';
 import { FleetLiveUpdates } from './fleet-live';
 
@@ -78,6 +79,26 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
     expect(keys).toContainEqual(['hub', 'fleet-spend']);
     expect(keys).toContainEqual(['hub', 'events']);
+  });
+
+  it('refetches the transcript-segment index but not an already-fetched segment’s content on chunk-changed (review:F6)', () => {
+    // The index genuinely changes as a chunk's steps progress, so it stays under the
+    // `hub/chunk/<id>` prefix a chunk-changed event invalidates. A segment's own content
+    // is immutable once `final`, and the (chunkId, segmentId) pair already identifies it
+    // uniquely — nesting it under the same prefix meant every SSE event on the chunk
+    // re-decompressed an already-rendered segment for no reason, defeating this query's
+    // own `refetchInterval: false`. Populate the cache with real entries at both keys and
+    // assert on TanStack's actual prefix-match invalidation, not just call arguments.
+    queryClient.setQueryData(hubChunkTranscriptsKey('ch_live'), { chunk_id: 'ch_live', segments: [] });
+    queryClient.setQueryData(hubChunkTranscriptSegmentKey('ch_live', 'sg_1'), { segment_id: 'sg_1' });
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'running' }), '1');
+
+    expect(queryClient.getQueryState(hubChunkTranscriptsKey('ch_live'))?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(hubChunkTranscriptSegmentKey('ch_live', 'sg_1'))?.isInvalidated).toBe(false);
   });
 
   it('invalidates the events feed, and that chunk when named, on an event-logged frame', () => {

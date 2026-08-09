@@ -1,37 +1,43 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import {
   deriveTranscriptSteps,
-  injectHubChunkTranscriptSegmentQuery,
-  injectHubChunkTranscriptsQuery,
   KitAsyncState,
   type KitAsyncStateValue,
-  TranscriptFetchError,
+  type TranscriptSegmentContentView,
   type TranscriptSegmentIndexEntry,
   type TranscriptStep,
   TranscriptViewer,
   type TransitionView,
 } from 'fleet';
 
+/** Keep only the most recent this-many turns rendered for one segment — mirrors the
+ * runner panel's own `MAX_TURNS` cap
+ * (`src/blizzard/runner/transcripts/internal/projected_transcript_repository.py`), so
+ * neither surface renders an unbounded DOM for one large segment (`review:F7`). A
+ * sidechain's own turns are uncapped, same as the runner side. */
+const MAX_RENDERED_TURNS = 1000;
+
 /**
  * The chunk detail page's Transcripts tab (blizzard#248 Phase 2) — a nav of node-history
  * steps, each holding its segments, beside a lazily-fetched segment viewer. Mirrors
- * {@link ChunkArtifactsTab}'s nav-beside-viewer shape, but owns its own two queries
- * (blizzard#248 D8: the index on open, one segment's turns only once opened) rather than
- * reading data already on `detail()` — nothing about a chunk's transcripts is in its
- * payload (D8, pinned at `test_chunk_detail_carries_no_transcript_field`).
+ * {@link ChunkArtifactsTab}'s nav-beside-viewer shape and, like it, is presentational
+ * (`bzh:frontend-container-presentational`, `review:F1`): the two queries behind this tab
+ * (blizzard#248 D8: the index on open, one segment's turns only once opened) live on
+ * {@link ChunkPage}, which passes their resolved state down as inputs — nothing about a
+ * chunk's transcripts is in `detail()`'s own payload (D8, pinned at
+ * `test_chunk_detail_carries_no_transcript_field`).
  *
- * The index query always fires once a chunk is selected, regardless of `transcript:read`
- * (D9): {@link ChunkPage} already hides this tab's *option* from the strip for an
- * identity without it, but a held deep link still reaches this component, and the
- * backend, not a client-side guess, is the source of truth — a 403 renders as this
- * container's own honest state rather than a generic error or a silent empty tab.
+ * {@link indexState}/{@link segmentState} are `ChunkPage`'s own `asyncState()` folds over
+ * its two queries (`bzh:frontend-empty-state-gated`); {@link isForbidden} is carried
+ * separately since a 403 on the index read is its own honest state (D9), not the generic
+ * error `indexState` reports for anything else.
  */
 @Component({
   selector: 'app-chunk-transcripts-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitAsyncState, TranscriptViewer],
   template: `
-    @if (navState() === 'loading') {
+    @if (indexState() === 'loading') {
       <fleet-kit-async-state state="loading" loadingText="LOADING TRANSCRIPTS…" loadingTestid="transcripts-loading" />
     } @else if (isForbidden()) {
       <fleet-kit-async-state
@@ -40,7 +46,7 @@ import {
         emptyText="NO PERMISSION TO READ TRANSCRIPTS"
         emptyTestid="transcripts-forbidden"
       />
-    } @else if (navState() === 'error') {
+    } @else if (indexState() === 'error') {
       <fleet-kit-async-state state="error" errorText="TRANSCRIPTS UNAVAILABLE" errorTestid="transcripts-error" />
     } @else if (steps().length === 0) {
       <fleet-kit-async-state state="empty" emptyText="NO TRANSCRIPT SEGMENTS YET" emptyTestid="transcripts-empty" />
@@ -88,11 +94,11 @@ import {
           }
         </nav>
         <section class="tx-view">
-          @if (segmentId() === null) {
+          @if (segmentState() === 'empty') {
             <fleet-kit-async-state state="empty" emptyText="SELECT A SEGMENT" emptyTestid="transcript-segment-empty" />
-          } @else if (segmentQuery.isPending()) {
+          } @else if (segmentState() === 'loading') {
             <fleet-kit-async-state state="loading" loadingText="LOADING SEGMENT…" loadingTestid="transcript-segment-loading" />
-          } @else if (segmentQuery.isError()) {
+          } @else if (segmentState() === 'error') {
             <fleet-kit-async-state state="error" errorText="SEGMENT UNAVAILABLE" errorTestid="transcript-segment-error" />
           } @else {
             <div class="seg-body" data-testid="transcript-segment-body">
@@ -117,11 +123,16 @@ import {
                     ← Continued from segment {{ prev.spawn_generation + 1 }}
                   </button>
                 }
-                @if (segmentQuery.data()?.truncated) {
+                @if (segmentData()?.truncated) {
                   <p class="banner" data-testid="transcript-segment-truncated">TRUNCATED — SOME CONTENT WAS DROPPED</p>
                 }
+                @if (turnsCapped()) {
+                  <p class="banner" data-testid="transcript-segment-turns-capped">
+                    SHOWING THE MOST RECENT {{ MAX_RENDERED_TURNS }} TURNS
+                  </p>
+                }
                 <fleet-transcript-viewer
-                  [turns]="segmentQuery.data()?.turns ?? []"
+                  [turns]="cappedTurns()"
                   (openStandalone)="pickSidechain.emit('' + $event.index)"
                 />
                 @if (continuesIn(); as next) {
@@ -268,9 +279,6 @@ import {
   `,
 })
 export class ChunkTranscriptsTab {
-  /** The chunk this tab is for. */
-  readonly chunkId = input.required<string>();
-
   /** `ChunkDetail.history` — the node-history steps to group segments under. */
   readonly history = input.required<readonly TransitionView[]>();
 
@@ -279,12 +287,32 @@ export class ChunkTranscriptsTab {
   readonly currentNodeName = input<string | null>(null);
   readonly latestEpoch = input<number | null>(null);
 
+  /** `ChunkPage`'s `injectHubChunkTranscriptsQuery` read, resolved: the segment index
+   * once {@link indexState} is `'ready'`, `[]` otherwise. */
+  readonly segments = input<readonly TranscriptSegmentIndexEntry[]>([]);
+
+  /** `asyncState()` over `ChunkPage`'s index query (loading/error/ready — never `'empty'`;
+   * "no segments yet" is this component's own {@link steps}-derived state). */
+  readonly indexState = input.required<KitAsyncStateValue>();
+
+  /** Whether the index read came back 403 (D9) — checked ahead of {@link indexState}'s
+   * generic `'error'` so a permission denial renders as its own honest state. */
+  readonly isForbidden = input(false);
+
   /** The `?segment` URL param — the open segment, or `null`. */
   readonly segmentId = input<string | null>(null);
 
-  /** The `?sidechain` URL param — an unlinked sidechain's turn index, opened
-   * standalone within the open segment, or `null`. */
+  /** The `?sidechain` URL param — a sidechain's own turn index, opened standalone within
+   * the open segment, or `null`. */
   readonly sidechainTurnIndex = input<string | null>(null);
+
+  /** `ChunkPage`'s `injectHubChunkTranscriptSegmentQuery` read, resolved: `'empty'` while
+   * {@link segmentId} names nothing (the query's own `enabled: false` rest state,
+   * `bzh:frontend-empty-state-gated`'s documented trap), else loading/error/ready. */
+  readonly segmentState = input.required<KitAsyncStateValue>();
+
+  /** The open segment's turns and completion state, once {@link segmentState} is `'ready'`. */
+  readonly segmentData = input<TranscriptSegmentContentView | undefined>(undefined);
 
   /** Emitted with a segment id when the operator picks it, or `null` to close one. */
   readonly pickSegment = output<string | null>();
@@ -293,22 +321,10 @@ export class ChunkTranscriptsTab {
    * standalone, or `null` to return to the segment. */
   readonly pickSidechain = output<string | null>();
 
-  private readonly indexQuery = injectHubChunkTranscriptsQuery(() => this.chunkId());
-  protected readonly segmentQuery = injectHubChunkTranscriptSegmentQuery(() => this.chunkId(), () => this.segmentId());
-
-  protected readonly isForbidden = computed(() => {
-    const err = this.indexQuery.error();
-    return err instanceof TranscriptFetchError && err.status === 403;
-  });
-
-  protected readonly navState = computed<KitAsyncStateValue>(() => {
-    if (this.indexQuery.isPending()) return 'loading';
-    if (this.indexQuery.isError()) return 'error';
-    return 'ready';
-  });
+  protected readonly MAX_RENDERED_TURNS = MAX_RENDERED_TURNS;
 
   protected readonly steps = computed<readonly TranscriptStep[]>(() =>
-    deriveTranscriptSteps(this.indexQuery.data()?.segments ?? [], this.history(), {
+    deriveTranscriptSteps(this.segments(), this.history(), {
       nodeId: this.currentNodeId(),
       nodeName: this.currentNodeName(),
       epoch: this.latestEpoch(),
@@ -342,14 +358,26 @@ export class ChunkTranscriptsTab {
     return found.step.segments[found.index + 1] ?? null;
   });
 
-  /** The unlinked sidechain opened standalone (blizzard#248 D7), or `null` when none
-   * is — the open segment's own top-level `"sidechain"` turn named by
-   * {@link sidechainTurnIndex}. */
+  /** {@link segmentData}'s turns, tail-capped at {@link MAX_RENDERED_TURNS} the same way
+   * the runner panel caps its own top-level list (`review:F7`) — never an unbounded DOM
+   * for one large segment. A sidechain's own turns pass through {@link TranscriptViewer}
+   * uncapped, same as the runner side. */
+  protected readonly cappedTurns = computed(() => {
+    const turns = this.segmentData()?.turns ?? [];
+    return turns.length > MAX_RENDERED_TURNS ? turns.slice(-MAX_RENDERED_TURNS) : turns;
+  });
+
+  protected readonly turnsCapped = computed(() => (this.segmentData()?.turns?.length ?? 0) > MAX_RENDERED_TURNS);
+
+  /** The sidechain opened standalone (blizzard#248 D7, `review:F3`), or `null` when none
+   * is — the open segment's own top-level turn named by {@link sidechainTurnIndex},
+   * whether it carries the sidechain nested (a `"tool"` turn) or unlinked (a
+   * `"sidechain"` turn); both shapes carry a non-null `sidechain`. */
   protected readonly standaloneSidechain = computed(() => {
     const raw = this.sidechainTurnIndex();
     if (raw === null) return null;
     const index = Number(raw);
-    const turn = this.segmentQuery.data()?.turns?.find((t) => t.index === index && t.kind === 'sidechain');
+    const turn = this.segmentData()?.turns?.find((t) => t.index === index && t.sidechain !== null);
     return turn?.sidechain ?? null;
   });
 

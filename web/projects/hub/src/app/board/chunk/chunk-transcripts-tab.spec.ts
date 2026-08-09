@@ -1,51 +1,47 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import type { hubApi, KitAsyncStateValue, TranscriptSegmentContentView, TranscriptSegmentIndexEntry } from 'fleet';
 
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
-let stub: RequestClientStub | undefined;
-
-afterEach(() => stub?.restore());
-
 interface Props {
-  chunkId?: string;
   history?: unknown[];
   currentNodeId?: string | null;
   currentNodeName?: string | null;
   latestEpoch?: number | null;
+  segments?: readonly TranscriptSegmentIndexEntry[];
+  indexState?: KitAsyncStateValue;
+  isForbidden?: boolean;
   segmentId?: string | null;
   sidechainTurnIndex?: string | null;
+  segmentState?: KitAsyncStateValue;
+  segmentData?: TranscriptSegmentContentView;
 }
 
-async function render(
-  props: Props,
-  route: (method: string, path: string) => unknown,
-): Promise<{ el: HTMLElement; fixture: ComponentFixture<ChunkTranscriptsTab> }> {
-  stub = stubRequestClient(hubClient, route);
+async function render(props: Props): Promise<{ el: HTMLElement; fixture: ComponentFixture<ChunkTranscriptsTab> }> {
   await TestBed.configureTestingModule({
     imports: [ChunkTranscriptsTab],
-    providers: [
-      provideZonelessChangeDetection(),
-      provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-    ],
+    providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(ChunkTranscriptsTab);
-  fixture.componentRef.setInput('chunkId', props.chunkId ?? 'ch_1');
   fixture.componentRef.setInput('history', props.history ?? []);
   fixture.componentRef.setInput('currentNodeId', props.currentNodeId ?? null);
   fixture.componentRef.setInput('currentNodeName', props.currentNodeName ?? null);
   fixture.componentRef.setInput('latestEpoch', props.latestEpoch ?? null);
+  fixture.componentRef.setInput('segments', props.segments ?? []);
+  fixture.componentRef.setInput('indexState', props.indexState ?? 'ready');
+  fixture.componentRef.setInput('isForbidden', props.isForbidden ?? false);
   fixture.componentRef.setInput('segmentId', props.segmentId ?? null);
   fixture.componentRef.setInput('sidechainTurnIndex', props.sidechainTurnIndex ?? null);
+  fixture.componentRef.setInput('segmentState', props.segmentState ?? (props.segmentId ? 'ready' : 'empty'));
+  fixture.componentRef.setInput('segmentData', props.segmentData);
   // This component is presentational — a URL-held selection, like `ChunkPage` owns for
   // real, is what turns a `pickSegment`/`pickSidechain` output into the next `segmentId`/
-  // `sidechainTurnIndex` input. Stand in for that container role here.
+  // `sidechainTurnIndex` input, and `ChunkPage`'s own queries into the next `segmentState`/
+  // `segmentData` input. Stand in for that container role here.
   fixture.componentInstance.pickSegment.subscribe((id) => fixture.componentRef.setInput('segmentId', id));
   fixture.componentInstance.pickSidechain.subscribe((idx) => fixture.componentRef.setInput('sidechainTurnIndex', idx));
-  await settle(fixture);
+  await fixture.whenStable();
   return { el: fixture.nativeElement as HTMLElement, fixture };
 }
 
@@ -61,7 +57,21 @@ const HISTORY = [
   },
 ];
 
-function segment(overrides: Record<string, unknown> = {}) {
+function turn(overrides: Partial<hubApi.TurnSegmentViewOutput> = {}): hubApi.TurnSegmentViewOutput {
+  return {
+    index: 0,
+    kind: 'asst',
+    timestamp: null,
+    text: '',
+    tool: null,
+    thinking_redacted: false,
+    sidechain: null,
+    truncated: false,
+    ...overrides,
+  };
+}
+
+function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): TranscriptSegmentIndexEntry {
   return {
     segment_id: 'seg-1',
     node_id: 'build',
@@ -80,155 +90,179 @@ function segment(overrides: Record<string, unknown> = {}) {
 }
 
 describe('ChunkTranscriptsTab', () => {
-  it('lists one group per node-history entry and issues no segment-content request until opened', async () => {
-    const { el } = await render({ history: HISTORY }, (method, path) => {
-      if (path === '/api/chunks/ch_1/transcripts') return { chunk_id: 'ch_1', segments: [segment()] };
-      return {};
-    });
+  it('lists one group per node-history entry and renders the select-a-segment rest state', async () => {
+    const { el } = await render({ history: HISTORY, segments: [segment()] });
 
     expect(el.querySelectorAll('[data-testid="transcript-step"]')).toHaveLength(1);
     expect(el.querySelector('[data-testid="transcript-segment-item"]')).not.toBeNull();
-    expect(stub?.forRoute('/api/chunks/ch_1/transcripts/seg-1', 'GET')).toHaveLength(0);
     expect(el.querySelector('[data-testid="transcript-segment-empty"]')?.textContent).toContain('SELECT A SEGMENT');
   });
 
-  it('fetches and renders a segment’s turns once its nav row is clicked', async () => {
-    const { el, fixture } = await render({ history: HISTORY }, (method, path) => {
-      if (path === '/api/chunks/ch_1/transcripts') return { chunk_id: 'ch_1', segments: [segment()] };
-      if (path === '/api/chunks/ch_1/transcripts/seg-1') {
-        return {
-          segment_id: 'seg-1',
-          final: true,
-          truncated: false,
-          turns: [
-            {
-              index: 0,
-              kind: 'asst',
-              timestamp: null,
-              text: 'hello from the segment',
-              tool: null,
-              thinking_redacted: false,
-              sidechain: null,
-              truncated: false,
-            },
-          ],
-        };
-      }
-      return {};
+  it('emits pickSegment when a nav row is clicked, and renders the segment once its data arrives', async () => {
+    const { el, fixture } = await render({
+      history: HISTORY,
+      segments: [segment()],
     });
 
     el.querySelector<HTMLButtonElement>('[data-testid="transcript-segment-item"]')?.click();
-    await settle(fixture);
+    fixture.componentRef.setInput('segmentState', 'ready');
+    fixture.componentRef.setInput('segmentData', {
+      segment_id: 'seg-1',
+      final: true,
+      truncated: false,
+      turns: [turn({ text: 'hello from the segment' })],
+    });
+    await fixture.whenStable();
 
     expect(el.querySelector('[data-testid="transcript-segment-body"]')?.textContent).toContain(
       'hello from the segment',
     );
-    expect(stub?.forRoute('/api/chunks/ch_1/transcripts/seg-1', 'GET')).toHaveLength(1);
+  });
+
+  it('renders the loading state while segmentState is loading', async () => {
+    const { el } = await render({ history: HISTORY, segments: [segment()], segmentId: 'seg-1', segmentState: 'loading' });
+
+    expect(el.querySelector('[data-testid="transcript-segment-loading"]')).not.toBeNull();
   });
 
   it('renders continued-from and continues-in links resolving to each other, for a multi-segment step', async () => {
-    const { el, fixture } = await render(
-      { history: HISTORY, segmentId: 'seg-2' },
-      (method, path) => {
-        if (path === '/api/chunks/ch_1/transcripts') {
-          return {
-            chunk_id: 'ch_1',
-            segments: [
-              segment({ segment_id: 'seg-1', spawn_generation: 0 }),
-              segment({ segment_id: 'seg-2', spawn_generation: 1 }),
-            ],
-          };
-        }
-        return { segment_id: 'seg-2', final: true, truncated: false, turns: [] };
-      },
-    );
-    await settle(fixture);
+    const { el, fixture } = await render({
+      history: HISTORY,
+      segments: [segment({ segment_id: 'seg-1', spawn_generation: 0 }), segment({ segment_id: 'seg-2', spawn_generation: 1 })],
+      segmentId: 'seg-2',
+      segmentData: { segment_id: 'seg-2', final: true, truncated: false, turns: [] },
+    });
 
     const back = el.querySelector<HTMLButtonElement>('[data-testid="transcript-continued-from"]');
     expect(back?.textContent).toContain('segment 1');
     expect(el.querySelector('[data-testid="transcript-continues-in"]')).toBeNull();
 
     back?.click();
-    await settle(fixture);
+    fixture.componentRef.setInput('segmentData', { segment_id: 'seg-1', final: true, truncated: false, turns: [] });
+    await fixture.whenStable();
     expect(el.querySelector('[data-testid="transcript-continued-from"]')).toBeNull();
     expect(el.querySelector('[data-testid="transcript-continues-in"]')?.textContent).toContain('segment 2');
   });
 
   it('renders a truncated segment through KitAsyncState-style banner, never as empty or a generic error', async () => {
-    const { el } = await render({ history: HISTORY, segmentId: 'seg-1' }, (method, path) => {
-      if (path === '/api/chunks/ch_1/transcripts') return { chunk_id: 'ch_1', segments: [segment({ truncated: true })] };
-      return { segment_id: 'seg-1', final: true, truncated: true, turns: [] };
+    const { el } = await render({
+      history: HISTORY,
+      segments: [segment({ truncated: true })],
+      segmentId: 'seg-1',
+      segmentData: { segment_id: 'seg-1', final: true, truncated: true, turns: [] },
     });
 
     expect(el.querySelector('[data-testid="transcript-segment-truncated"]')?.textContent).toContain('TRUNCATED');
     expect(el.querySelector('[data-testid="transcript-segment-body"]')).not.toBeNull();
   });
 
+  it('caps a large segment’s rendered turns and says so (review:F7)', async () => {
+    const turns: hubApi.TurnSegmentViewOutput[] = Array.from({ length: 1200 }, (_, i) =>
+      turn({ index: i, text: `turn ${i}` }),
+    );
+    const { el } = await render({
+      history: HISTORY,
+      segments: [segment()],
+      segmentId: 'seg-1',
+      segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns },
+    });
+
+    expect(el.querySelector('[data-testid="transcript-segment-turns-capped"]')?.textContent).toContain('1000');
+    expect(el.querySelectorAll('[data-testid="transcript-turn"]')).toHaveLength(1000);
+    expect(el.textContent).toContain('turn 1199');
+    expect(el.textContent).not.toContain('turn 0');
+  });
+
   it('renders the 403 as its own honest state, not a generic error', async () => {
-    const { el } = await render({ history: HISTORY }, () => stubError(403, { detail: 'forbidden' }));
+    const { el } = await render({ history: HISTORY, isForbidden: true });
 
     expect(el.querySelector('[data-testid="transcripts-forbidden"]')?.textContent).toContain('NO PERMISSION');
     expect(el.querySelector('[data-testid="transcripts-error"]')).toBeNull();
   });
 
   it('renders a genuine transport failure distinctly from the permission state', async () => {
-    // 404, not 500 — a terminal status per `shouldRetryTranscriptFetch` (unit-tested on
-    // its own in `transcript-segments.query.spec.ts`), so this stays fast; a retryable
-    // status here would genuinely retry through the real query client for several
-    // seconds before settling.
-    const { el } = await render({ history: HISTORY }, () => stubError(404, { detail: 'unknown chunk' }));
+    const { el } = await render({ history: HISTORY, indexState: 'error' });
 
     expect(el.querySelector('[data-testid="transcripts-error"]')?.textContent).toContain('UNAVAILABLE');
     expect(el.querySelector('[data-testid="transcripts-forbidden"]')).toBeNull();
   });
 
+  it('renders the loading state while the index read is in flight', async () => {
+    const { el } = await render({ history: HISTORY, indexState: 'loading' });
+
+    expect(el.querySelector('[data-testid="transcripts-loading"]')).not.toBeNull();
+  });
+
   it('says so when there are no segments at all', async () => {
-    const { el } = await render({}, () => ({ chunk_id: 'ch_1', segments: [] }));
+    const { el } = await render({});
 
     expect(el.querySelector('[data-testid="transcripts-empty"]')?.textContent).toContain('NO TRANSCRIPT SEGMENTS');
   });
 
-  it('opens an unlinked sidechain standalone and back again, both URL-selectable (D7)', async () => {
-    const sidechainTurn = {
+  it('opens a sidechain standalone and back again, both URL-selectable (D7)', async () => {
+    const sidechainTurn = turn({
       index: 2,
       kind: 'sidechain',
-      timestamp: null,
-      text: '',
-      tool: null,
-      thinking_redacted: false,
       sidechain: {
         agent_id: null,
         agent_type: null,
         link: 'unlinked',
-        turns: [
-          {
-            index: 0,
-            kind: 'asst',
-            timestamp: null,
-            text: 'standalone sidechain text',
-            tool: null,
-            thinking_redacted: false,
-            sidechain: null,
-            truncated: false,
-          },
-        ],
+        turns: [turn({ text: 'standalone sidechain text' })],
       },
-      truncated: false,
-    };
+    });
 
-    const { el, fixture } = await render({ history: HISTORY, segmentId: 'seg-1' }, (method, path) => {
-      if (path === '/api/chunks/ch_1/transcripts') return { chunk_id: 'ch_1', segments: [segment()] };
-      return { segment_id: 'seg-1', final: true, truncated: false, turns: [sidechainTurn] };
+    const { el, fixture } = await render({
+      history: HISTORY,
+      segments: [segment()],
+      segmentId: 'seg-1',
+      segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns: [sidechainTurn] },
     });
 
     el.querySelector<HTMLButtonElement>('[data-testid="transcript-sidechain-open"]')?.click();
-    await settle(fixture);
+    await fixture.whenStable();
 
     expect(el.querySelector('[data-testid="transcript-sidechain-back"]')).not.toBeNull();
     expect(el.textContent).toContain('standalone sidechain text');
 
     el.querySelector<HTMLButtonElement>('[data-testid="transcript-sidechain-back"]')?.click();
-    await settle(fixture);
+    await fixture.whenStable();
     expect(el.querySelector('[data-testid="transcript-sidechain-back"]')).toBeNull();
+  });
+
+  it('opens a nested sidechain (under a tool call) standalone too, not just an unlinked one (review:F3)', async () => {
+    const nestedSidechainTurn = turn({
+      index: 1,
+      kind: 'tool',
+      tool: {
+        name: 'Task',
+        input: { prompt: 'find X' },
+        input_unparsed: null,
+        input_shape: 'object',
+        tool_use_id: 't1',
+        output: 'done',
+        output_truncated: false,
+      },
+      sidechain: {
+        agent_id: 'agent-1',
+        agent_type: 'explorer',
+        link: 'prompt-timestamp',
+        turns: [turn({ text: 'nested sidechain text' })],
+      },
+    });
+
+    const { el, fixture } = await render({
+      history: HISTORY,
+      segments: [segment()],
+      segmentId: 'seg-1',
+      segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns: [nestedSidechainTurn] },
+    });
+
+    el.querySelector<HTMLButtonElement>(
+      '[data-testid="transcript-sidechain-nested"] [data-testid="transcript-sidechain-open"]',
+    )?.click();
+    await fixture.whenStable();
+
+    expect(el.querySelector('[data-testid="transcript-sidechain-back"]')).not.toBeNull();
+    expect(el.textContent).toContain('nested sidechain text');
   });
 });

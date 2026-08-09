@@ -1,8 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, type hubApi } from 'fleet';
-import { stubRequestClient } from 'fleet/testing';
+import type { hubApi } from 'fleet';
 import { page } from 'vitest/browser';
 
 import { ChunkGeneralTab } from './chunk-general-tab';
@@ -305,60 +303,50 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep, blizzard#2
  */
 describe('chunk page Transcripts tab layout shell sweep (web:shell-sweep, blizzard#248)', () => {
   it('stacks the step nav above the segment viewer at 390px with no horizontal overflow', async () => {
-    const stub = stubRequestClient(hubClient, (method, path) => {
-      if (path === '/api/chunks/ch_1/transcripts') {
-        return {
-          chunk_id: 'ch_1',
-          segments: [
-            {
-              segment_id: 'sg_1',
-              node_id: 'nd_build',
-              epoch: 1,
-              spawn_generation: 0,
-              turn_range_start: 0,
-              turn_range_end: 1,
-              final: true,
-              truncated: false,
-              byte_count: 40,
-              normalizer_version: 'v1',
-              harness_version: null,
-              received_at: '2026-08-09T00:00:00+00:00',
-            },
-          ],
-        };
-      }
-      return {
-        segment_id: 'sg_1',
-        final: true,
-        truncated: false,
-        turns: [
-          {
-            index: 0,
-            kind: 'asst',
-            timestamp: null,
-            text: 'a narrow-viewport turn, long enough to prove wrapping rather than overflow',
-            tool: null,
-            thinking_redacted: false,
-            sidechain: null,
-            truncated: false,
-          },
-        ],
-      };
-    });
-
     await TestBed.configureTestingModule({
       imports: [ChunkTranscriptsTab],
-      providers: [
-        provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      ],
+      providers: [provideZonelessChangeDetection()],
     }).compileComponents();
     const fixture = TestBed.createComponent(ChunkTranscriptsTab);
-    fixture.componentRef.setInput('chunkId', 'ch_1');
     fixture.componentRef.setInput('history', [
       { from_node_id: 'nd_build', from_node_name: 'build', to_node_id: 'nd_review', to_node_name: 'review', choice_name: null, epoch: 1, recorded_at: '2026-08-09T00:00:00+00:00' } satisfies hubApi.TransitionView,
     ]);
+    fixture.componentRef.setInput('segments', [
+      {
+        segment_id: 'sg_1',
+        node_id: 'nd_build',
+        epoch: 1,
+        spawn_generation: 0,
+        turn_range_start: 0,
+        turn_range_end: 1,
+        final: true,
+        truncated: false,
+        byte_count: 40,
+        normalizer_version: 'v1',
+        harness_version: null,
+        received_at: '2026-08-09T00:00:00+00:00',
+      },
+    ]);
+    fixture.componentRef.setInput('indexState', 'ready');
     fixture.componentRef.setInput('segmentId', 'sg_1');
+    fixture.componentRef.setInput('segmentState', 'ready');
+    fixture.componentRef.setInput('segmentData', {
+      segment_id: 'sg_1',
+      final: true,
+      truncated: false,
+      turns: [
+        {
+          index: 0,
+          kind: 'asst',
+          timestamp: null,
+          text: 'a narrow-viewport turn, long enough to prove wrapping rather than overflow',
+          tool: null,
+          thinking_redacted: false,
+          sidechain: null,
+          truncated: false,
+        },
+      ],
+    });
     await fixture.whenStable();
 
     const root = fixture.nativeElement as HTMLElement;
@@ -383,7 +371,6 @@ describe('chunk page Transcripts tab layout shell sweep (web:shell-sweep, blizza
       ).toBeLessThanOrEqual(tab!.clientWidth);
     } finally {
       root.remove();
-      stub.restore();
     }
   });
 });

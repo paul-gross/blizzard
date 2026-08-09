@@ -28,7 +28,7 @@ import {
 import { ChunkArtifactsTab } from './chunk-artifacts-tab';
 import { type ChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-selection';
 import { ChunkGeneralTab } from './chunk-general-tab';
-import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
+import { ChunkTranscriptsContainer } from './chunk-transcripts-container';
 
 /**
  * The chunk detail page (`/board/chunk/:chunkId`, issue #160) — reached from
@@ -49,7 +49,11 @@ import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
  * This container keeps the back bar, the shared action-error/outcome
  * channels, the identity header, the tab strip, and the queries and three
  * operator mutations every tab shares; each tab's own layout is its own
- * presentational component's job.
+ * presentational component's job. The Transcripts tab's own two queries stay
+ * off this container entirely — {@link ChunkTranscriptsContainer} owns them,
+ * mounted only inside the `@case ('transcripts')` branch below, which is what
+ * keeps them lazy (`review:F1`; split out rather than folded in here to keep
+ * this file under `web:structural-gate`'s line cap).
  *
  * Scope note, deliberate rather than an oversight: the dock's **destructive
  * and structural** operator actions — detach, pause/resume, close — are not
@@ -70,7 +74,7 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
 @Component({
   selector: 'app-chunk-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifactsTab, ChunkGeneralTab, ChunkTranscriptsTab, KitAsyncState, KitBackBar, KitBadge, KitTabs, RouterLink],
+  imports: [ChunkArtifactsTab, ChunkGeneralTab, ChunkTranscriptsContainer, KitAsyncState, KitBackBar, KitBadge, KitTabs, RouterLink],
   template: `
     <div class="cp">
       <a class="back-row" routerLink="/board" [queryParams]="{ chunk: chunkId() }" data-testid="mobile-chunk-back">
@@ -110,7 +114,7 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
               />
             }
             @case ('transcripts') {
-              <app-chunk-transcripts-tab
+              <app-chunk-transcripts-container
                 [chunkId]="chunkId() ?? ''"
                 [history]="d.history ?? []"
                 [currentNodeId]="d.current_node_id"
@@ -217,7 +221,7 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
       flex: 1;
       min-height: 0;
     }
-    app-chunk-transcripts-tab {
+    app-chunk-transcripts-container {
       flex: 1;
       min-height: 0;
     }
@@ -258,8 +262,8 @@ export class ChunkPage {
   }
 
   /** A segment picked in the Transcripts tab writes its id back to the URL —
-   * {@link ChunkTranscriptsTab} is a pure function of that param, never its own
-   * selection state (blizzard#248 D8). */
+   * {@link ChunkTranscriptsContainer} forwards it straight to the presentational tab,
+   * a pure function of that param, never its own selection state (blizzard#248 D8). */
   protected onSelectTranscriptSegment(segmentId: string | null): void {
     this.selection.selectTranscriptSegment(segmentId);
   }
@@ -290,7 +294,7 @@ export class ChunkPage {
   /** Whether the current identity may read a chunk's stored transcript segments
    * (`transcript:read`, blizzard#248 D9) — the Transcripts tab's own *option* is
    * hidden from the strip without it. A deep link still reaches
-   * {@link ChunkTranscriptsTab}, which renders the backend's 403 as its own state
+   * {@link ChunkTranscriptsContainer}, which renders the backend's 403 as its own state
    * rather than relying on this client-side check to be the only gate. */
   protected readonly canReadTranscripts = computed(() => hasPermission(this.meQuery.data(), 'transcript:read'));
 

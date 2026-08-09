@@ -663,9 +663,11 @@ operator without it never sees the tab option, and a held deep link to one rende
 honest permission notice rather than a generic error. Open, it lists the chunk's
 node-history steps, each holding the transcript segments a runner shipped while working
 that step; opening a segment fetches its turns lazily, including any nested subagent
-conversation and the harness's own private reasoning, and a step that bounced back and
-forth (a build that failed review and ran again) links its segments end to end so the
-whole conversation reads in order.
+conversation and the harness's own private reasoning, and a step whose one attempt spans
+multiple segments (a resumed session within the same node and epoch) links them end to
+end so that attempt's whole conversation reads in order. A bounce back into an earlier
+node (a build that failed review and ran again) is a **later epoch** — its own step,
+never stitched to the attempt before it.
 
 ### Operator verbs
 

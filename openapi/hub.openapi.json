@@ -4351,6 +4351,13 @@
             "type": "integer"
           },
           "kind": {
+            "enum": [
+              "env",
+              "asst",
+              "tool",
+              "thinking",
+              "sidechain"
+            ],
             "title": "Kind",
             "type": "string"
           },
@@ -4419,6 +4426,13 @@
             "type": "integer"
           },
           "kind": {
+            "enum": [
+              "env",
+              "asst",
+              "tool",
+              "thinking",
+              "sidechain"
+            ],
             "title": "Kind",
             "type": "string"
           },

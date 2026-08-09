@@ -2,8 +2,11 @@
 
 Seeds segments through ``POST /api/fleet/transcripts`` as a runner principal — the path
 ``tests/service/test_transcript_segments_service.py`` already drives, since the runner's
-own shipping lane (#246) is undelivered and no runner spawns here. Skipped unless
-``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock`` worktree provisioned and Chromium installed."""
+own shipping lane (#246) is undelivered and no runner spawns here. The chunk is bare-ingested
+only — no claim, lease, or transition — so its segments land in the tab's *unmatched* bucket
+(D5), not a history-matched step; `transcript-steps.spec.ts` proves the matched-step grouping
+unit-tested (`review:F9`). Skipped unless ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock``
+worktree provisioned and Chromium installed."""
 
 from __future__ import annotations
 
@@ -209,7 +212,14 @@ def test_chunk_transcripts_tab_browser(tmp_path: Path, chromium_available: bool)
 
                 page.get_by_test_id("tab-transcripts").click()
                 expect(page.get_by_test_id("chunk-transcripts-tab")).to_be_visible()
+                # This chunk carries no transition or lease (`_ingest` only ingests it), so
+                # both segments' shared `(node_id, epoch)` matches no history row: this is
+                # the tab's *unmatched* bucket (D5), one group either way — proving the tab
+                # groups a step's segments together and renders the "unmatched" tag, not the
+                # transition-matched grouping (`transcript-steps.spec.ts` proves that path
+                # unit-tested; `review:F9`).
                 expect(page.get_by_test_id("transcript-step")).to_have_count(1)
+                expect(page.get_by_test_id("transcript-step")).to_contain_text("unmatched")
 
                 # Open the step's first segment.
                 page.locator('[data-testid="transcript-segment-item"][data-segment-id="sg_1"]').click()
