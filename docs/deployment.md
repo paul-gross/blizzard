@@ -650,8 +650,17 @@ A hub-local user carries one of five roles, a total order —
 lands as `pending`: the lobby, holding no permissions at all beyond the public self
 routes (`GET /api/me`, login, logout) — no board read, no writes. `guest` reads the
 fleet's state (the board, chunks, graphs, events) and mutates nothing, but not a
-chunk's stored transcript segments — those need `contributor`+ (`transcript:read`),
-since a transcript carries everything a worker saw. An `admin`
+chunk's stored transcript segments — an operator's read of those needs `contributor`+
+(`transcript:read`) on this role ladder, since a transcript carries everything a
+worker saw. A second reader sits outside this ladder entirely: an authenticated
+runner reads back its own shipped segments for one of its leases through a
+fleet-plane route (`GET /api/fleet/chunks/{chunk_id}/transcript-segments`), gated on
+that route's own always-raising ownership check rather than `runner_auth_mode` — it
+refuses (401/403) a caller whose token doesn't resolve or names a different runner
+than the segments' owner, regardless of the flag's `warn`/`enforce` setting (unlike
+the rest of the fleet router, where `warn` leaves an unresolved or mismatched token to
+proceed); this is a runner bearer token, not a hub-local user role, so no row of this
+table gates it. An `admin`
 (promoted from the admin page, `POST /api/users/{id}/role`, gated on `user:manage`)
 can move a subject freely among `pending`/`guest`/`contributor`, but only a
 `superuser` actor may grant or revoke `admin` itself, and `superuser` is never
