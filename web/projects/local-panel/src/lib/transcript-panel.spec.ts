@@ -320,4 +320,136 @@ describe('TranscriptPanel', () => {
 
     expect(el.querySelector('[data-testid="transcript-truncated"]')?.textContent).toContain('TRUNCATED');
   });
+
+  it('shows the archived badge for turns served from the hub, and not for a plain local read (blizzard#249)', async () => {
+    const { el } = await render('L-903', (method, path) =>
+      method === 'GET' && path === '/api/leases/L-903/transcript'
+        ? {
+            lease_id: 'L-903',
+            session_id: 'sess-77',
+            available: true,
+            reason: null,
+            truncated: false,
+            provenance: 'archived',
+            hub_unreachable: false,
+            dropped_turns: 0,
+            turns: [],
+          }
+        : {},
+    );
+
+    expect(el.querySelector('[data-testid="transcript-archived-badge"]')?.textContent).toContain('ARCHIVED');
+  });
+
+  it('shows no archived badge for a plain local read', async () => {
+    const { el } = await render('L-903', (method, path) =>
+      method === 'GET' && path === '/api/leases/L-903/transcript'
+        ? { lease_id: 'L-903', session_id: 'sess-77', available: true, reason: null, truncated: false, turns: [] }
+        : {},
+    );
+
+    expect(el.querySelector('[data-testid="transcript-archived-badge"]')).toBeNull();
+  });
+
+  it('shows a dropped-turns count when the hub→panel projection drops turns', async () => {
+    const { el } = await render('L-903', (method, path) =>
+      method === 'GET' && path === '/api/leases/L-903/transcript'
+        ? {
+            lease_id: 'L-903',
+            session_id: 'sess-77',
+            available: true,
+            reason: null,
+            truncated: false,
+            provenance: 'archived',
+            hub_unreachable: false,
+            dropped_turns: 4,
+            turns: [],
+          }
+        : {},
+    );
+
+    const droppedEl = el.querySelector('[data-testid="transcript-dropped-turns"]');
+    expect(droppedEl?.textContent).toContain('4');
+    expect(droppedEl?.textContent).toContain('NOT SHOWN');
+  });
+
+  it('renders no dropped-turns note when the count is zero (every local read, and a hub read that drops nothing)', async () => {
+    const { el } = await render('L-903', (method, path) =>
+      method === 'GET' && path === '/api/leases/L-903/transcript'
+        ? {
+            lease_id: 'L-903',
+            session_id: 'sess-77',
+            available: true,
+            reason: null,
+            truncated: false,
+            provenance: 'archived',
+            hub_unreachable: false,
+            dropped_turns: 0,
+            turns: [],
+          }
+        : {},
+    );
+
+    expect(el.querySelector('[data-testid="transcript-dropped-turns"]')).toBeNull();
+  });
+
+  it('shows a distinct hub-unreachable state when the hub could not be asked and local cannot answer either (blizzard#249 D1)', async () => {
+    const { el } = await render('L-903', (method, path) =>
+      method === 'GET' && path === '/api/leases/L-903/transcript'
+        ? {
+            lease_id: 'L-903',
+            session_id: 'sess-77',
+            available: false,
+            reason: 'not_found',
+            truncated: false,
+            provenance: 'local',
+            hub_unreachable: true,
+            dropped_turns: 0,
+            turns: [],
+          }
+        : {},
+    );
+
+    const unreachableEl = el.querySelector('[data-testid="transcript-hub-unreachable"]');
+    expect(unreachableEl?.textContent).toContain('HUB UNREACHABLE');
+    // Never mistaken for the routine no-transcript-yet reading `reason: "not_found"` carries.
+    expect(el.querySelector('[data-testid="transcript-not-found"]')).toBeNull();
+  });
+
+  it('falls back to a plain local turns read, with no hub-unreachable banner, when the hub is unreachable but local still answers (D1\'s quiet-fallback cell)', async () => {
+    // Per the runner service (`transcripts/service.py:96`), `hub_unreachable` is set only
+    // when the local read *also* fails — a closed lease whose hub is down but whose local
+    // file still answers resolves with `hub_unreachable: false`, indistinguishable on the
+    // wire from any other local read. This pins that the panel renders it exactly that way.
+    const { el } = await render('L-903', (method, path) =>
+      method === 'GET' && path === '/api/leases/L-903/transcript'
+        ? {
+            lease_id: 'L-903',
+            session_id: 'sess-77',
+            available: true,
+            reason: null,
+            truncated: false,
+            provenance: 'local',
+            hub_unreachable: false,
+            dropped_turns: 0,
+            turns: [
+              {
+                index: 0,
+                kind: 'asst',
+                timestamp: '2026-07-16T11:00:05+00:00',
+                text: 'Still here.',
+                tool_name: null,
+                tool_input: null,
+                tool_output: null,
+                truncated: false,
+              },
+            ],
+          }
+        : {},
+    );
+
+    expect(el.querySelector('[data-testid="transcript-turns"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcript-hub-unreachable"]')).toBeNull();
+    expect(el.querySelector('[data-testid="transcript-archived-badge"]')).toBeNull();
+  });
 });

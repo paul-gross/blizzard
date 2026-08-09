@@ -18,7 +18,7 @@
  *
  *   npm run shell-sweep   (from web/)
  *
- * The five specs:
+ * The six specs:
  *   - projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts — the hub
  *     board shell (BoardHeader + AppNavMenu), swept over width only (no
  *     username is ever shown there): never lets the profile menu drift
@@ -44,6 +44,12 @@
  *     runner registry's rate-limit pace bars (issue #218): the stacked
  *     utilization/elapsed pair per sampled window genuinely stacks, with no
  *     horizontal overflow, at the board right rail's ~390px width.
+ *   - projects/local-panel/src/lib/transcript-panel.shell-sweep.spec.ts —
+ *     the transcript panel's two new blizzard#249 states, reachable from the
+ *     mobile chunk-detail screen (`data-testid="detail-transcript"`): the
+ *     archived badge + dropped-turns count render with no horizontal
+ *     overflow, and the hub-unreachable degrade banner wraps rather than
+ *     pushing past the viewport under `nowrap`.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -54,6 +60,7 @@ const SWEEPS = [
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-panel-layout.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-panel-mobile.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/runners/runner-view.shell-sweep.spec.ts' },
+  { project: 'local-panel', spec: 'projects/local-panel/src/lib/transcript-panel.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {
@@ -76,7 +83,7 @@ function main() {
     return;
   }
 
-  console.log('\nshell-sweep: all five specs clean.\n');
+  console.log('\nshell-sweep: all six specs clean.\n');
 }
 
 main();
