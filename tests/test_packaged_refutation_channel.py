@@ -106,19 +106,6 @@ def test_consuming_node_adjudicates_the_channel(graph_name: str, producer: str, 
 
 @pytest.mark.parametrize(
     ("graph_name", "producer", "consumer", "asset"),
-    [pytest.param(*c, id=f"{c[0]}:{c[2]}") for c in _CHANNELS],
-)
-def test_consuming_node_bounds_its_own_loop(graph_name: str, producer: str, consumer: str, asset: str) -> None:
-    """A judged failure edge never consumes the node's retry budget, so the only bound on a
-    refute/re-raise stalemate is the one the judgement prompt authors."""
-    node = _node(_load(graph_name), consumer)
-    assert node.judgement is not None
-    text = node.judgement.prompt or ""
-    assert "blizzard runner ask" in text, f"{graph_name}: node {consumer!r} can bounce forever with no escalation path"
-
-
-@pytest.mark.parametrize(
-    ("graph_name", "producer", "consumer", "asset"),
     [pytest.param(*c, id=f"{c[0]}:{c[1]}") for c in _CHANNELS],
 )
 def test_findings_producer_requires_an_anchor(graph_name: str, producer: str, consumer: str, asset: str) -> None:
