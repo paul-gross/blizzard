@@ -74,6 +74,9 @@ class LoopConfig:
     #: This runner's runtime directory (``RunnerConfig.root``), absolute; empty means
     #: unresolved, and readers compose nothing from it rather than guessing (issue #251).
     runner_dir: str = ""
+    #: The transcript outbound lane's own switch (``[transcripts] ship``, issue #246); off
+    #: by default (D5) — the pump enqueues no delta while this is ``False``.
+    transcripts_ship: bool = False
 
 
 @dataclass(frozen=True)

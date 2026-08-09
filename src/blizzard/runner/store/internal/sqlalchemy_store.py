@@ -77,6 +77,7 @@ from blizzard.runner.store.schema import (
     workspace_prompt,
 )
 from blizzard.wire.facts import USAGE_RECORDED
+from blizzard.wire.transcript_outbound import TRANSCRIPT_DELTA, TRANSCRIPT_FINAL
 
 _log = get_logger("blizzard.runner.store")
 
@@ -389,6 +390,13 @@ class SqlAlchemyRunnerStore:
         )
         return [self._row_to_transcript_segment(r) for r in self._all(stmt)]
 
+    def chunk_transcript_shipped_bytes(self, chunk_id: str) -> int:
+        stmt = select(func.coalesce(func.sum(transcript_segments.c.shipped_bytes), 0)).where(
+            transcript_segments.c.chunk_id == chunk_id
+        )
+        with self._connect() as conn:
+            return int(conn.execute(stmt).scalar_one())
+
     def pending_transcript_outbound(self) -> list[BufferedTranscriptDelta]:
         stmt = (
             select(transcript_outbound_buffer)
@@ -398,6 +406,7 @@ class SqlAlchemyRunnerStore:
         return [
             BufferedTranscriptDelta(
                 seq=int(r.seq),
+                kind=str(r.kind),
                 segment_id=str(r.segment_id),
                 chunk_id=str(r.chunk_id),
                 payload=str(r.payload),
@@ -798,7 +807,41 @@ class SqlAlchemyRunnerStore:
                         created_at=closed_at,
                     )
                 )
-        _log.info("lease closed", lease_id=lease_id, chunk_id=chunk_id, reason=reason)
+            # The lane's promise is that a step's segments are final by step close (issue
+            # #246) — every segment this lease still has open finalizes here, atomically
+            # with the closure itself, on the transcript lane's OWN buffer (D3): never
+            # routed through `outbound_buffer` above, which `TranscriptDrain` never reads
+            # and the transcript ingest route cannot parse.
+            open_segment_ids = [
+                str(r.segment_id)
+                for r in conn.execute(
+                    select(transcript_segments.c.segment_id)
+                    .where(transcript_segments.c.lease_id == lease_id)
+                    .where(transcript_segments.c.finalized_at.is_(None))
+                )
+            ]
+            for segment_id in open_segment_ids:
+                conn.execute(
+                    transcript_segments.update()
+                    .where(transcript_segments.c.segment_id == segment_id)
+                    .values(finalized_at=closed_at)
+                )
+                conn.execute(
+                    transcript_outbound_buffer.insert().values(
+                        kind=TRANSCRIPT_FINAL,
+                        segment_id=segment_id,
+                        chunk_id=chunk_id,
+                        payload=json.dumps({"segment_id": segment_id}),
+                        created_at=closed_at,
+                    )
+                )
+        _log.info(
+            "lease closed",
+            lease_id=lease_id,
+            chunk_id=chunk_id,
+            reason=reason,
+            transcript_segments_finalized=len(open_segment_ids),
+        )
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
         with self._begin() as conn:
@@ -855,11 +898,13 @@ class SqlAlchemyRunnerStore:
             )
         _log.info("transcript segment finalized", segment_id=segment_id)
 
-    def enqueue_transcript_outbound(self, *, segment_id: str, chunk_id: str, payload: str, created_at: datetime) -> int:
+    def enqueue_transcript_outbound(
+        self, *, kind: str, segment_id: str, chunk_id: str, payload: str, created_at: datetime
+    ) -> int:
         with self._begin() as conn:
             result = conn.execute(
                 transcript_outbound_buffer.insert().values(
-                    segment_id=segment_id, chunk_id=chunk_id, payload=payload, created_at=created_at
+                    kind=kind, segment_id=segment_id, chunk_id=chunk_id, payload=payload, created_at=created_at
                 )
             )
         key = result.inserted_primary_key
@@ -872,6 +917,35 @@ class SqlAlchemyRunnerStore:
                 .where(transcript_outbound_buffer.c.seq == seq)
                 .values(acked_at=acked_at)
             )
+
+    def record_transcript_delta(
+        self,
+        *,
+        segment_id: str,
+        chunk_id: str,
+        cursor: str | None,
+        shipped_bytes: int,
+        shipped_turns: int,
+        payload: str,
+        created_at: datetime,
+    ) -> int:
+        with self._begin() as conn:
+            conn.execute(
+                transcript_segments.update()
+                .where(transcript_segments.c.segment_id == segment_id)
+                .values(cursor=cursor, shipped_bytes=shipped_bytes, shipped_turns=shipped_turns)
+            )
+            result = conn.execute(
+                transcript_outbound_buffer.insert().values(
+                    kind=TRANSCRIPT_DELTA,
+                    segment_id=segment_id,
+                    chunk_id=chunk_id,
+                    payload=payload,
+                    created_at=created_at,
+                )
+            )
+        key = result.inserted_primary_key
+        return int(key[0]) if key is not None else 0
 
     def record_ask(
         self,

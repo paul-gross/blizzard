@@ -107,6 +107,10 @@ class Table:
         value = self.body.get(key)
         return default if value is None else int(value)
 
+    def boolean(self, key: str, default: bool) -> bool:
+        value = self.body.get(key)
+        return default if value is None else bool(value)
+
     def names(self, key: str) -> tuple[str, ...]:
         """Every entry at ``key`` as a string; an absent key is empty."""
         value = self.body.get(key)
@@ -173,6 +177,24 @@ class ExternalUsage:
 
 
 @dataclass(frozen=True)
+class Transcripts:
+    """The ``[transcripts]`` table (issue #246) — the dedicated outbound lane's own switch,
+    distinct from the top-level ``transcripts_root`` (the harness source's read location)."""
+
+    table: Table
+
+    @classmethod
+    def of(cls, raw: object) -> Transcripts:
+        return cls(Table.of(raw))
+
+    @property
+    def ship(self) -> bool:
+        """Off by default (D5): the dogfood fleet spends no bandwidth on content nothing
+        keeps until a real segment sink lands (``#247``)."""
+        return self.table.boolean("ship", False)
+
+
+@dataclass(frozen=True)
 class Auth:
     """The ``[auth]`` table (issue #95) — runner-local role resolution, keyed by hub username."""
 
@@ -231,6 +253,9 @@ class RunnerConfig:
     #: Where the harness writes session transcripts (issue #29); read from the toml, never
     #: re-read from the environment live, so a changed env var needs a re-``init``.
     transcripts_root: str = ""
+    #: The transcript outbound lane's own switch (``[transcripts] ship``, issue #246);
+    #: off by default (D5) — the pump enqueues no delta while this is ``False``.
+    transcripts_ship: bool = False
     #: The per-chunk spend cap (issue #61a); ``None`` means no cap. A chunk reaching it
     #: parks ``needs_human`` at its next step boundary.
     chunk_cap_usd: float | None = None
@@ -461,6 +486,10 @@ class RunnerConfig:
             "\n# Where the coding harness writes session transcripts (issue #29);\n"
             "# empty = ~/.claude/projects.\n"
             f'transcripts_root = "{self.transcripts_root}"\n'
+            "\n# The transcript outbound lane (issue #246) — off by default: nothing is retained\n"
+            "# hub-side until a real segment store lands, so shipping content earns no bandwidth.\n"
+            "[transcripts]\n"
+            f"ship = {'true' if self.transcripts_ship else 'false'}\n"
             "\n# Spend controls (epic #57); absent = no cap. `chunk_cap_usd` parks a chunk\n"
             "# needs_human at its next step boundary once its derived spend reaches this cap.\n"
             "# `runner_ceiling_usd` engages this runner's own local pause brake (the same one\n"
@@ -526,6 +555,7 @@ class RunnerConfig:
         spend = Spend.of(raw.get("cost"))
         usage = ExternalUsage.of(raw.get("external_subscription_usage"))
         auth = Auth.of(raw.get("auth"))
+        transcripts = Transcripts.of(raw.get("transcripts"))
         return cls(
             root=root,
             db_url=str(raw["db_url"]),
@@ -553,6 +583,7 @@ class RunnerConfig:
             runner_prompt=str(raw.get("runner_prompt", "")),
             runner_prompt_file=str(raw.get("runner_prompt_file", "")),
             transcripts_root=str(raw.get("transcripts_root", "")),
+            transcripts_ship=transcripts.ship,
             chunk_cap_usd=spend.chunk_cap_usd,
             runner_ceiling_usd=spend.ceiling_usd,
             runner_ceiling_window_hours=spend.window_hours,

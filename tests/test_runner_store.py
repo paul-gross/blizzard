@@ -637,8 +637,12 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
     store = _store(tmp_path)
     store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
 
-    t1 = store.enqueue_transcript_outbound(segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW)
-    t2 = store.enqueue_transcript_outbound(segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW)
+    t1 = store.enqueue_transcript_outbound(
+        kind="transcript.delta", segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+    )
+    t2 = store.enqueue_transcript_outbound(
+        kind="transcript.delta", segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+    )
     assert t2 == t1 + 1  # gapless — the fact-lane enqueue above minted no transcript-lane seq
     assert [d.seq for d in store.pending_transcript_outbound()] == [t1, t2]
     assert store.pending_transcript_outbound()[0].segment_id == "seg_1"
@@ -647,3 +651,44 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
     assert [d.seq for d in store.pending_transcript_outbound()] == [t2]
     # The fact lane's own buffer is untouched by the transcript lane's ack.
     assert len(store.pending_outbound()) == 1
+
+
+@pytest.mark.unit
+def test_record_closure_finalizes_every_open_segment_and_marks_it_atomically(tmp_path):  # type: ignore[no-untyped-def]
+    """The lane's promise: a step's segments are final by step close (issue #246). Every
+    still-open segment for the closing lease is finalized AND its ``transcript.final``
+    marker enqueued — on the transcript lane's own buffer, never ``outbound_buffer``,
+    and in the same transaction as the closure itself."""
+    store = _store(tmp_path)
+    _mint(store, lease="lease_1")
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_spawn(
+        "lease_1", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW + timedelta(minutes=1)
+    )
+    segment_ids = {s.segment_id for s in store.open_transcript_segments()}
+    assert len(segment_ids) == 2  # two generations, both still open
+
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+
+    assert store.open_transcript_segments() == []
+    for segment_id in segment_ids:
+        segment = store.transcript_segment(segment_id)
+        assert segment is not None
+        assert segment.finalized_at == _NOW
+
+    pending = store.pending_transcript_outbound()
+    assert {d.segment_id for d in pending} == segment_ids
+    assert all(d.kind == "transcript.final" for d in pending)
+    # The fact lane's own buffer carries no marker — D3's structural separation.
+    assert store.pending_outbound() == []
+
+
+@pytest.mark.unit
+def test_record_closure_is_a_no_op_for_a_lease_with_no_segments(tmp_path):  # type: ignore[no-untyped-def]
+    """A closure for a lease that never spawned (or whose segments already finalized)
+    enqueues no marker — the existing 30+ callers of ``record_closure`` in tests that
+    never touch transcripts are unaffected."""
+    store = _store(tmp_path)
+    _mint(store, lease="lease_1")
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+    assert store.pending_transcript_outbound() == []

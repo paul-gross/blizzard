@@ -150,10 +150,12 @@ class TranscriptSegmentRecord:
 
 @dataclass(frozen=True)
 class BufferedTranscriptDelta:
-    """One pending transcript delta in the lane's own store-and-forward buffer (D3) — the
-    transcript-lane counterpart to :class:`BufferedFact`."""
+    """One pending fact in the transcript lane's own store-and-forward buffer (D3) — the
+    transcript-lane counterpart to :class:`BufferedFact`. ``kind`` is
+    ``transcript.delta`` or ``transcript.final`` (:mod:`blizzard.wire.transcript_outbound`)."""
 
     seq: int
+    kind: str
     segment_id: str
     chunk_id: str
     payload: str
@@ -392,6 +394,11 @@ class IReadRunnerStore(Protocol):
 
     def open_transcript_segments(self) -> list[TranscriptSegmentRecord]:
         """Segments with no final marker yet — the pump's per-tick work list (issue #246)."""
+        ...
+
+    def chunk_transcript_shipped_bytes(self, chunk_id: str) -> int:
+        """Sum of ``shipped_bytes`` across every one of this chunk's segments, open or
+        finalized — the running total the 64 MB per-chunk budget (D4) is measured against."""
         ...
 
     def pending_transcript_outbound(self) -> list[BufferedTranscriptDelta]:
@@ -708,8 +715,27 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Stamp a segment's final marker — shipped for good by its step's close (issue #246)."""
         ...
 
-    def enqueue_transcript_outbound(self, *, segment_id: str, chunk_id: str, payload: str, created_at: datetime) -> int:
-        """Append a transcript delta to the lane's own buffer; return its seq (D3)."""
+    def enqueue_transcript_outbound(
+        self, *, kind: str, segment_id: str, chunk_id: str, payload: str, created_at: datetime
+    ) -> int:
+        """Append a fact to the transcript lane's own buffer; return its seq (D3)."""
+        ...
+
+    def record_transcript_delta(
+        self,
+        *,
+        segment_id: str,
+        chunk_id: str,
+        cursor: str | None,
+        shipped_bytes: int,
+        shipped_turns: int,
+        payload: str,
+        created_at: datetime,
+    ) -> int:
+        """Advance a segment's cursor/shipped counts and enqueue its delta — ONE
+        transaction (issue #246): a crash between the two would either re-read
+        already-shipped turns or ship a delta the cursor never advanced past. Returns the
+        buffered delta's seq."""
         ...
 
     def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:

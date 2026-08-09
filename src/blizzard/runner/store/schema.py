@@ -483,6 +483,7 @@ transcript_outbound_buffer = Table(
     "transcript_outbound_buffer",
     metadata,
     Column("seq", Integer, primary_key=True, autoincrement=True),  # per-runner monotonic, own sequence
+    Column("kind", String, nullable=False),  # transcript.delta | transcript.final
     Column("segment_id", String, nullable=False),
     Column("chunk_id", String, nullable=False),
     Column("payload", Text, nullable=False),  # the JSON body posted to the transcript ingest route

@@ -105,6 +105,7 @@ class LoopWiring:
             runner_ceiling_window_hours=config.runner_ceiling_window_hours,
             external_usage_sample_interval_seconds=config.external_usage_sample_interval_seconds,
             runner_dir=str(config.root),
+            transcripts_ship=config.transcripts_ship,
         )
         _worker_files = WorkerStdoutFiles(str(worker_stdout_dir), store)
         _clock = SystemClock()
