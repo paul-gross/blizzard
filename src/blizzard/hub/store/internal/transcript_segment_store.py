@@ -63,6 +63,46 @@ class TranscriptSegmentStore:
             for row in rows
         ]
 
+    def runner_id_for_lease(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                select(s.transcript_segments.c.runner_id)
+                .where(
+                    s.transcript_segments.c.chunk_id == chunk_id,
+                    s.transcript_segments.c.node_id == node_id,
+                    s.transcript_segments.c.epoch == epoch,
+                )
+                .limit(1)
+            ).one_or_none()
+        return row.runner_id if row is not None else None
+
+    def records_for_lease(self, chunk_id: str, node_id: str, epoch: int, runner_id: str) -> list[SegmentRecordContent]:
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                select(s.transcript_segments)
+                .where(
+                    s.transcript_segments.c.chunk_id == chunk_id,
+                    s.transcript_segments.c.node_id == node_id,
+                    s.transcript_segments.c.epoch == epoch,
+                    s.transcript_segments.c.runner_id == runner_id,
+                )
+                .order_by(
+                    s.transcript_segments.c.spawn_generation,
+                    s.transcript_segments.c.segment_id,
+                    s.transcript_segments.c.turn_range_start,
+                )
+            ).all()
+        return [
+            SegmentRecordContent(
+                turn_range_start=row.turn_range_start,
+                turn_range_end=row.turn_range_end,
+                final=row.final,
+                rejected=row.rejected,
+                turns_json=self._decompress(row.content, row.codec) if row.content is not None else "[]",
+            )
+            for row in rows
+        ]
+
     def high_water(self, runner_id: str) -> int:
         with self._engine.connect() as conn:
             row = conn.execute(

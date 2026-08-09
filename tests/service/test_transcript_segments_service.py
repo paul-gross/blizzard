@@ -1,6 +1,7 @@
-"""Transcript-segment service tier (blizzard#247) — the real hub's fleet ingest route
-driven from outside a running daemon. No runner-side counterpart exists yet (#246), so
-this drives ``POST /api/fleet/transcripts`` directly rather than through a mock-runner
+"""Transcript-segment service tier (blizzard#247, blizzard#249) — the real hub's fleet
+ingest and lease-transcript-read routes driven from outside a running daemon. No
+runner-side counterpart exists yet (#246), so this drives ``POST /api/fleet/transcripts``
+and ``GET .../transcript-segments`` directly rather than through a mock-runner
 ``/_drive/*`` verb. Run with ``BLIZZARD_SERVICE=1``."""
 
 from __future__ import annotations
@@ -11,7 +12,14 @@ import pytest
 
 from blizzard.hub.domain.transcripts import RECORD_MAX_BYTES
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub
-from tests.service.support import mint_fixture, require_mock_fleet, require_winter_source, service_gate
+from tests.service.support import (
+    mint_fixture,
+    mock_hub,
+    mock_hub_chunk_spec,
+    require_mock_fleet,
+    require_winter_source,
+    service_gate,
+)
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -110,3 +118,55 @@ def test_a_cap_rejected_record_re_offered_under_a_fresh_seq_is_re_adjudicated(tm
         assert [t["text"] for t in content.json()["turns"]] == ["hi"]
         [entry] = hub.get(f"/api/chunks/{chunk_id}/transcripts").json()["segments"]
         assert entry["truncated"] is False
+
+
+# --- the lease-transcript read route (D2/D3, issue #249) ------------------------
+
+
+def test_an_enrolled_runner_reads_back_the_lease_segments_it_shipped(tmp_path: Path) -> None:
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        chunk_id = _ingest(forge, hub, "lease transcript read")
+        register = hub.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "ws-1"})
+        assert register.status_code == 201, register.text
+        enroll = hub.post("/api/runners/r1/enrollments")
+        assert enroll.status_code == 201, enroll.text
+        token = enroll.json()["token"]
+
+        ack = hub.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": [_record(chunk_id, seq=1)]})
+        assert ack.status_code == 200, ack.text
+
+        resp = hub.get(
+            f"/api/fleet/chunks/{chunk_id}/transcript-segments",
+            params={"node_id": "nd_build", "epoch": 1},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["chunk_id"] == chunk_id
+        assert body["node_id"] == "nd_build"
+        assert body["epoch"] == 1
+        assert body["final"] is True
+        assert [t["text"] for t in body["turns"]] == ["hi"]
+
+
+def test_the_mock_hubs_counterpart_route_round_trips_a_shipped_lease(tmp_path: Path) -> None:
+    """D6: the mock hub's retention and its own counterpart route, driven from the app
+    side over real HTTP against a real ``blizzard-mock-hub`` subprocess."""
+    bin_dir = require_mock_fleet()
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        seeded = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(f"{REPO}/issues/1"))
+        assert seeded.status_code == 201, seeded.text
+        chunk_id = seeded.json()["chunk_id"]
+
+        ack = hub.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": [_record(chunk_id, seq=1)]})
+        assert ack.status_code == 200, ack.text
+
+        resp = hub.get(f"/api/fleet/chunks/{chunk_id}/transcript-segments", params={"node_id": "nd_build", "epoch": 1})
+
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["chunk_id"] == chunk_id
+        assert [t["text"] for t in body["turns"]] == ["hi"]

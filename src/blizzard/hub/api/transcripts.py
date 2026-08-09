@@ -1,5 +1,6 @@
 """Transcript-segment routes (blizzard#247) — the operator-plane discovery/content reads,
-plus the wire<->domain rendering the fleet router's ingest route shares.
+plus the wire<->domain rendering the fleet router's ingest and lease-read routes share
+(issue #249).
 
 The discovery route (D12) returns segment metadata and byte counts only — never turn
 content — so a caller must hold a ``segment_id`` from it before the content route
@@ -25,6 +26,7 @@ from blizzard.hub.domain.transcripts import (
     TranscriptIngestResult,
 )
 from blizzard.wire.transcript_segment import (
+    LeaseTranscriptView,
     TranscriptSegmentAck,
     TranscriptSegmentContentView,
     TranscriptSegmentIndexEntry,
@@ -86,17 +88,32 @@ def _index_entry(row: SegmentIndexRow) -> TranscriptSegmentIndexEntry:
     )
 
 
-def _content_view(segment_id: str, records: list[SegmentRecordContent]) -> TranscriptSegmentContentView:
+def _rendered_turns(records: list[SegmentRecordContent]) -> tuple[list[TurnSegmentView], bool, bool]:
+    """Turns concatenated across stored records, in record order, plus the fold both
+    :func:`_content_view` and :func:`lease_content_view` share: ``final`` true iff any
+    record closed its segment out, ``truncated`` true iff any record was cap-rejected."""
     turns: list[TurnSegmentView] = []
     for record in records:
         if record.rejected:
             continue
         turns.extend(TurnSegmentView.model_validate(turn) for turn in json.loads(record.turns_json))
-    return TranscriptSegmentContentView(
-        segment_id=segment_id,
-        final=any(record.final for record in records),
-        truncated=any(record.rejected for record in records),
-        turns=turns,
+    return turns, any(record.final for record in records), any(record.rejected for record in records)
+
+
+def _content_view(segment_id: str, records: list[SegmentRecordContent]) -> TranscriptSegmentContentView:
+    turns, final, truncated = _rendered_turns(records)
+    return TranscriptSegmentContentView(segment_id=segment_id, final=final, truncated=truncated, turns=turns)
+
+
+def lease_content_view(
+    chunk_id: str, node_id: str, epoch: int, records: list[SegmentRecordContent]
+) -> LeaseTranscriptView:
+    """The fleet router's lease-transcript route renders through this — the same
+    turns/final/truncated fold as :func:`_content_view`, over a lease's full record set
+    rather than one segment's (D2, issue #249)."""
+    turns, final, truncated = _rendered_turns(records)
+    return LeaseTranscriptView(
+        chunk_id=chunk_id, node_id=node_id, epoch=epoch, final=final, truncated=truncated, turns=turns
     )
 
 

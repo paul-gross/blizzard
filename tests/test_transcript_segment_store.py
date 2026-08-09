@@ -157,6 +157,48 @@ def test_update_to_accepted_transitions_a_rejected_row_in_place(tmp_path: Path) 
     assert len(rows) == 1
 
 
+# --- lease reads (D2, issue #249) -----------------------------------------------
+
+
+def test_runner_id_for_lease_is_none_when_the_lease_holds_no_segments(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(engine)
+
+    assert store.runner_id_for_lease("ch_1", "nd_build", 1) is None
+
+
+def test_runner_id_for_lease_resolves_to_the_shipping_runner(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(engine)
+    store.insert_accepted(_record(), byte_count=10, codec="zlib", at=_NOW)
+
+    assert store.runner_id_for_lease("ch_1", "nd_build", 1) == "r1"
+
+
+def test_records_for_lease_spans_every_spawn_generation_but_not_other_leases(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(engine)
+    first_spawn = _record(segment_id="sg_1", spawn_generation=1, turn_range_start=0, turn_range_end=0)
+    second_spawn = _record(segment_id="sg_2", spawn_generation=2, turn_range_start=1, turn_range_end=1)
+    other_epoch = _record(segment_id="sg_3", epoch=2, turn_range_start=0, turn_range_end=0)
+    other_node = _record(segment_id="sg_4", node_id="nd_other", turn_range_start=0, turn_range_end=0)
+    other_runner = _record(segment_id="sg_5", runner_id="r2", turn_range_start=0, turn_range_end=0)
+    for record in (first_spawn, second_spawn, other_epoch, other_node, other_runner):
+        store.insert_accepted(record, byte_count=10, codec="zlib", at=_NOW)
+
+    records = store.records_for_lease("ch_1", "nd_build", 1, "r1")
+
+    assert [r.turn_range_start for r in records] == [0, 1]
+
+
+def test_records_for_lease_confines_to_the_declared_runner(tmp_path: Path) -> None:
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(engine)
+    store.insert_accepted(_record(), byte_count=10, codec="zlib", at=_NOW)
+
+    assert store.records_for_lease("ch_1", "nd_build", 1, "r2") == []
+
+
 def test_update_still_rejected_refreshes_the_row_without_storing_content(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptSegmentStore(engine)

@@ -2,7 +2,9 @@
 
 Enforcement is structural, not per-route: the router's own ``dependencies`` mean a fleet verb is
 authenticated *because of where it is mounted*, and a route declaring its own ``runner_id`` confines
-it further through :meth:`FleetRequest.assert_owns`."""
+it further through :meth:`FleetRequest.assert_owns`. The lease-transcript read is the one exception
+(D3, issue #249): its ownership check, :func:`_demand_lease_owner`, always raises rather than
+deferring to ``runner_auth_mode``."""
 
 from __future__ import annotations
 
@@ -54,7 +56,7 @@ from blizzard.wire.route import (
     RouteTokenRekeyResponse,
 )
 from blizzard.wire.runner import RunnerRegistrationRequest, RunnerRegistrationResponse, RunnerView
-from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch
+from blizzard.wire.transcript_segment import LeaseTranscriptView, TranscriptSegmentAck, TranscriptSegmentBatch
 
 router = APIRouter(prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_runner_principal)])
 
@@ -102,6 +104,24 @@ class FleetRequest:
             declared_runner_id=runner_id,
             token_runner_id=self.principal.runner_id,
         )
+
+
+def _demand_lease_owner(principal: RunnerPrincipal | None, owning_runner_id: str | None) -> RunnerPrincipal:
+    """The lease-transcript read route's own ownership gate (D3, issue #249) — **always**
+    raises, unlike :meth:`FleetRequest.assert_owns`, which ``runner_auth_mode`` leaves
+    inert on a default-configured hub. Refuses a caller with no resolvable token (401) and
+    a resolved caller whose id differs from the lease's actual segment owner (403);
+    ``owning_runner_id=None`` means the lease holds no segments at all, which is not a
+    refusal — Decision 1's "hub holds nothing" branch, left for the caller to fall back
+    on."""
+    if principal is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="no resolvable runner token")
+    if owning_runner_id is not None and owning_runner_id != principal.runner_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"lease segments belong to runner {owning_runner_id!r}, not {principal.runner_id!r}",
+        )
+    return principal
 
 
 @dataclass(frozen=True)
@@ -512,6 +532,25 @@ def ingest_transcript_segments(
     ]
     result = services.transcript_ingest.ingest(batch.runner_id, records)
     return transcripts_api.to_ack(batch.runner_id, result)
+
+
+@router.get("/chunks/{chunk_id}/transcript-segments", response_model=LeaseTranscriptView)
+def get_lease_transcript_segments(
+    chunk_id: str,
+    node_id: str,
+    epoch: int,
+    services: Annotated[HubServices, Depends(get_services)],
+    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+) -> LeaseTranscriptView:
+    """A runner's read-back of its own shipped segments (D2/D3, issue #249) — every
+    accepted record across every spawn generation under a lease's ``(chunk_id, node_id,
+    epoch)``, confined against the ``runner_id`` already on those rows regardless of
+    ``runner_auth_mode`` — this route's own always-raising ownership check, not the
+    router's mode-gated one."""
+    owner = services.transcripts.runner_id_for_lease(chunk_id, node_id, epoch)
+    principal = _demand_lease_owner(principal, owner)
+    records = services.transcripts.records_for_lease(chunk_id, node_id, epoch, principal.runner_id)
+    return transcripts_api.lease_content_view(chunk_id, node_id, epoch, records)
 
 
 @router.post("/runners", response_model=RunnerRegistrationResponse, status_code=status.HTTP_201_CREATED)

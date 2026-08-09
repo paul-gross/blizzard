@@ -53,6 +53,25 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _register(hub, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> None:  # type: ignore[no-untyped-def]
+    resp = hub.client.post("/api/fleet/runners", json={"runner_id": runner_id, "workspace_id": workspace_id})
+    assert resp.status_code == 201, resp.text
+
+
+def _enroll(hub, runner_id: str = "runner-a") -> str:  # type: ignore[no-untyped-def]
+    resp = hub.client.post(f"/api/runners/{runner_id}/enrollments")
+    assert resp.status_code == 201, resp.text
+    return str(resp.json()["token"])
+
+
+def _seed_enrolled(hub, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:  # type: ignore[no-untyped-def]
+    """Register + enroll ``runner_id`` on ``hub`` and return its token — same shape as
+    ``test_fleet_auth.py``'s helper of the same name, minus the throwaway-hub indirection
+    since registration here needs no separate auth mode."""
+    _register(hub, runner_id=runner_id, workspace_id=workspace_id)
+    return _enroll(hub, runner_id)
+
+
 def _ingest_chunk(hub, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:  # type: ignore[no-untyped-def]
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token]}, headers=headers)
     assert resp.status_code == 201, resp.text
@@ -268,3 +287,43 @@ def test_the_index_route_carries_no_turn_content_at_any_size(tmp_path: Path) -> 
     body = resp.json()
     assert "turns" not in body["segments"][0]
     assert body["segments"][0]["byte_count"] > 5000 * 50
+
+
+# --- the fleet lease-transcript read (D3, issue #249): both refusals, under the -----
+# --- hub's default `runner_auth_mode` (`RUNNER_AUTH_WARN`), where `assert_owns` is ---
+# --- inert on both branches (Tested assumptions) — this route must refuse anyway. ---
+
+
+def test_lease_transcript_read_is_401_with_no_resolvable_token_under_the_default_auth_mode(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)  # warn, the default
+    chunk_id = _ingest_chunk(hub)
+    hub.client.post(
+        "/api/fleet/transcripts",
+        json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
+    )
+
+    resp = hub.client.get(
+        f"/api/fleet/chunks/{chunk_id}/transcript-segments", params={"node_id": "nd_build", "epoch": 1}
+    )
+
+    assert resp.status_code == 401
+
+
+def test_lease_transcript_read_is_403_for_a_runner_asking_for_another_runners_segments_under_the_default_auth_mode(
+    tmp_path: Path,
+) -> None:
+    hub = build_hub(tmp_path)  # warn, the default
+    chunk_id = _ingest_chunk(hub)
+    hub.client.post(
+        "/api/fleet/transcripts",
+        json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
+    )
+    other_token = _seed_enrolled(hub, "runner-b", "ws-b")
+
+    resp = hub.client.get(
+        f"/api/fleet/chunks/{chunk_id}/transcript-segments",
+        params={"node_id": "nd_build", "epoch": 1},
+        headers=_bearer(other_token),
+    )
+
+    assert resp.status_code == 403
