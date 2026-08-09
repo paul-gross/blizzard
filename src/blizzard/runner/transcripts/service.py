@@ -8,15 +8,11 @@ segment *is* the ack (``bzh:facts-not-status``); see :meth:`TranscriptService.fo
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
 
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.store.repository import IReadRunnerStore, LeaseRecord
 from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
-from blizzard.runner.transcripts.repository import IReadTranscriptRepository, Transcript
-
-#: Which side answered a resolved transcript (D1) — the wire's ``provenance`` field.
-TranscriptProvenance = Literal["local", "archived"]
+from blizzard.runner.transcripts.repository import IReadTranscriptRepository, Transcript, TranscriptProvenance
 
 
 @dataclass(frozen=True)

@@ -31,9 +31,9 @@ def _turn(index: int, kind: str, *, text: str = "", sidechain: SidechainSegmentV
 @pytest.mark.unit
 def test_env_and_asst_turns_are_kept_and_nothing_is_dropped() -> None:
     turns = [_turn(0, "env", text="build the thing"), _turn(1, "asst", text="Sure.")]
-    kept, dropped = select_turns(turns)
+    kept, dropped_before = select_turns(turns)
     assert [t.kind for t in kept] == ["env", "asst"]
-    assert dropped == 0
+    assert sum(dropped_before) == 0
     assert [to_turn(t, i).text for i, t in enumerate(kept)] == ["build the thing", "Sure."]
     assert [to_turn(t, i).kind for i, t in enumerate(kept)] == ["env", "asst"]
 
@@ -41,9 +41,9 @@ def test_env_and_asst_turns_are_kept_and_nothing_is_dropped() -> None:
 @pytest.mark.unit
 def test_a_thinking_turn_is_dropped_and_counted() -> None:
     turns = [_turn(0, "env", text="hi"), _turn(1, "thinking")]
-    kept, dropped = select_turns(turns)
+    kept, dropped_before = select_turns(turns)
     assert [t.kind for t in kept] == ["env"]
-    assert dropped == 1
+    assert sum(dropped_before) == 1
 
 
 @pytest.mark.unit
@@ -69,9 +69,9 @@ def test_a_sidechain_is_dropped_wholesale_but_its_spawning_tool_turn_is_kept() -
         sidechain=sidechain,
         truncated=False,
     )
-    kept, dropped = select_turns([tool_turn])
+    kept, dropped_before = select_turns([tool_turn])
     assert [t.kind for t in kept] == ["tool"]
-    assert dropped == 1  # the one nested turn, not the kept spawning call
+    assert sum(dropped_before) == 1  # the one nested turn, not the kept spawning call
 
 
 @pytest.mark.unit
@@ -120,10 +120,10 @@ def test_a_sidechain_within_a_sidechain_counts_every_nested_turn() -> None:
         truncated=False,
     )
 
-    kept, dropped = select_turns([outer_tool_turn])
+    kept, dropped_before = select_turns([outer_tool_turn])
 
     assert [t.kind for t in kept] == ["tool"]
-    assert dropped == 2  # the inner tool turn and the deepest asst turn
+    assert sum(dropped_before) == 2  # the inner tool turn and the deepest asst turn
 
 
 @pytest.mark.unit
@@ -154,3 +154,33 @@ def test_to_turn_serializes_tool_input_and_reads_the_timestamp() -> None:
     assert result.tool_input == '{"command": "ls"}'
     assert result.tool_output == "file1"
     assert result.timestamp == datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
+
+
+@pytest.mark.unit
+def test_a_tool_turn_with_no_tool_payload_is_dropped_and_counted_not_raised() -> None:
+    """review F1: a validating-but-inconsistent body (``kind="tool"`` with no ``tool``)
+    degrades like ``thinking`` rather than hitting the old bare ``assert``."""
+    turns = [_turn(0, "env", text="hi"), _turn(1, "tool")]
+    kept, dropped_before = select_turns(turns)
+    assert [t.kind for t in kept] == ["env"]
+    assert sum(dropped_before) == 1
+
+
+@pytest.mark.unit
+def test_to_turn_degrades_a_tool_turn_with_no_payload_instead_of_raising() -> None:
+    """Belt-and-suspenders with the above: ``to_turn`` itself is total, in case a future
+    caller ever hands it a malformed turn ``select_turns`` didn't already filter."""
+    turn = _turn(0, "tool", text="fallback text")
+    result = to_turn(turn, 0)
+    assert result.kind == "asst"
+    assert result.text == "fallback text"
+
+
+@pytest.mark.unit
+def test_to_turn_reads_an_unparseable_timestamp_as_none_instead_of_raising() -> None:
+    """review F1: a non-ISO ``timestamp`` degrades to ``None`` rather than raising
+    ``ValueError`` past this 200-always seam."""
+    turn = _turn(0, "env", text="hi")
+    turn = turn.model_copy(update={"timestamp": "not-a-timestamp"})
+    result = to_turn(turn, 0)
+    assert result.timestamp is None

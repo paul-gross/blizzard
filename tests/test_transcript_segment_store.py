@@ -175,6 +175,19 @@ def test_runner_id_for_lease_resolves_to_the_shipping_runner(tmp_path: Path) -> 
     assert store.runner_id_for_lease("ch_1", "nd_build", 1) == "r1"
 
 
+def test_runner_id_for_lease_raises_when_two_runners_hold_the_same_lease_key(tmp_path: Path) -> None:
+    """review F7: the query's own safety rests on an invariant (a genuine requeue bumps
+    the fencing epoch) it neither states nor enforces — a violation must surface as an
+    error, never as an arbitrary pick between the two runners' rows."""
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(engine)
+    store.insert_accepted(_record(segment_id="sg_1", runner_id="r1"), byte_count=10, codec="zlib", at=_NOW)
+    store.insert_accepted(_record(segment_id="sg_2", runner_id="r2"), byte_count=10, codec="zlib", at=_NOW)
+
+    with pytest.raises(RuntimeError, match="multiple runners"):
+        store.runner_id_for_lease("ch_1", "nd_build", 1)
+
+
 def test_records_for_lease_spans_every_spawn_generation_but_not_other_leases(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptSegmentStore(engine)

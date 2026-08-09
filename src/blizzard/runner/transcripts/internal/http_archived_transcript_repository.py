@@ -60,10 +60,16 @@ class HttpArchivedTranscriptRepository:
             _log.error("malformed archived transcript body", chunk_id=chunk_id, node_id=node_id, error=str(exc))
             return _UNREACHABLE
         if not view.turns:
-            return _EMPTY
-        kept, dropped = select_turns(view.turns)
+            # All-cap-rejected still carries no turns, but `view.truncated` says so (F3).
+            if not view.truncated:
+                return _EMPTY
+            return ArchivedTranscript(status="found", turns=[], truncated=True, dropped=0)
+        kept, dropped_before = select_turns(view.turns)
         turns_truncated = len(kept) > MAX_TURNS
         capped = kept[-MAX_TURNS:] if turns_truncated else kept
+        # Count drops only over the turns that survive the cap (review F4) — a drop
+        # attached to a turn the cap itself discarded is not part of what's rendered.
+        dropped = sum(dropped_before[-MAX_TURNS:]) if turns_truncated else sum(dropped_before)
         return ArchivedTranscript(
             status="found",
             turns=[to_turn(t, i) for i, t in enumerate(capped)],

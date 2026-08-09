@@ -9,8 +9,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from blizzard.runner.transcripts.repository import TranscriptUnavailable, TurnKind
-from blizzard.runner.transcripts.service import TranscriptProvenance
+from blizzard.runner.transcripts.repository import TranscriptProvenance, TranscriptUnavailable, TurnKind
 
 
 class TurnView(BaseModel):

@@ -64,17 +64,30 @@ class TranscriptSegmentStore:
         ]
 
     def runner_id_for_lease(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
+        """The single ``runner_id`` on a lease's stored segments (D2) — asserted, not
+        assumed (review F7): a ``LIMIT 1`` with no ``ORDER BY`` would silently 403 the
+        legitimate owner should two runners' rows ever share one key, so a violation
+        raises here instead of picking an arbitrary row."""
         with self._engine.connect() as conn:
-            row = conn.execute(
+            rows = conn.execute(
                 select(s.transcript_segments.c.runner_id)
                 .where(
                     s.transcript_segments.c.chunk_id == chunk_id,
                     s.transcript_segments.c.node_id == node_id,
                     s.transcript_segments.c.epoch == epoch,
                 )
-                .limit(1)
-            ).one_or_none()
-        return row.runner_id if row is not None else None
+                .distinct()
+            ).all()
+        if not rows:
+            return None
+        runner_ids = sorted({row.runner_id for row in rows})
+        if len(runner_ids) > 1:
+            raise RuntimeError(
+                f"lease (chunk_id={chunk_id!r}, node_id={node_id!r}, epoch={epoch}) has segments "
+                f"from multiple runners {runner_ids!r} — the fencing-epoch invariant this query "
+                "depends on was violated"
+            )
+        return runner_ids[0]
 
     def records_for_lease(self, chunk_id: str, node_id: str, epoch: int, runner_id: str) -> list[SegmentRecordContent]:
         with self._engine.connect() as conn:

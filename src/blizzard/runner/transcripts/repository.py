@@ -19,6 +19,10 @@ TurnKind = Literal["env", "asst", "tool"]
 #: healthy agent, never a fault on their own; only ``unreadable`` logs at ERROR.
 TranscriptUnavailable = Literal["spawning", "not_found", "unreadable"]
 
+#: Which side answered a resolved transcript (D1) — the wire's ``provenance`` field,
+#: co-located with its siblings above rather than in ``transcripts/service.py`` (F8).
+TranscriptProvenance = Literal["local", "archived"]
+
 
 @dataclass(frozen=True)
 class Turn:

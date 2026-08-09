@@ -112,7 +112,7 @@ import { injectTranscriptQuery } from './transcript.query';
         }
         @if ((transcript()?.dropped_turns ?? 0) > 0) {
           <p class="banner dropped" data-testid="transcript-dropped-turns">
-            {{ transcript()?.dropped_turns }} TURNS NOT SHOWN — HUB ARCHIVE LACKS FULL DETAIL
+            {{ transcript()?.dropped_turns }} TURNS NOT SHOWN — PANEL VIEW LACKS FULL DETAIL
           </p>
         }
         @for (turn of transcript()?.turns ?? []; track turn.index) {

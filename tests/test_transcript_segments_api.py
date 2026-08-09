@@ -326,3 +326,24 @@ def test_lease_transcript_read_is_403_for_a_runner_asking_for_another_runners_se
     )
 
     assert resp.status_code == 403
+
+
+def test_lease_transcript_read_403_does_not_leak_the_owning_runners_id(tmp_path: Path) -> None:
+    """review F6: the response body must not turn any enrolled runner into a fleet-wide
+    ownership oracle — it can learn a lease is owned by someone else, never by whom."""
+    hub = build_hub(tmp_path)  # warn, the default
+    chunk_id = _ingest_chunk(hub)
+    hub.client.post(
+        "/api/fleet/transcripts",
+        json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
+    )
+    other_token = _seed_enrolled(hub, "runner-b", "ws-b")
+
+    resp = hub.client.get(
+        f"/api/fleet/chunks/{chunk_id}/transcript-segments",
+        params={"node_id": "nd_build", "epoch": 1},
+        headers=_bearer(other_token),
+    )
+
+    assert resp.status_code == 403
+    assert "r1" not in resp.text

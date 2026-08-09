@@ -1,9 +1,9 @@
 """Projects a hub segment's turns onto the panel's read model (blizzard#249, D5).
 
-``thinking`` turns and sidechains have no slot in the panel's turn model, so this mirrors
-the local path's own narrowing — drop both wholesale — but, unlike it, **counts** what it
-drops, recursively through a dropped sidechain. Tool-input re-materialization is shared
-with the local path's ``SerializedInput``, not duplicated."""
+Narrows like the local path — drops ``thinking`` turns and sidechains wholesale, but
+counts what it drops. Total rather than raising (review F1): a malformed turn
+(``kind="tool"`` with no payload, an unparseable ``timestamp``) degrades in place
+instead of reaching this 200-always route as an exception."""
 
 from __future__ import annotations
 
@@ -16,21 +16,28 @@ from blizzard.runner.transcripts.repository import Turn, TurnKind
 from blizzard.wire.transcript_segment import TurnSegmentView
 
 
-def select_turns(turns: list[TurnSegmentView]) -> tuple[list[TurnSegmentView], int]:
-    """The segment's turns, narrowed to the panel's kept set, paired with how many turns
-    that narrowing dropped. Unindexed and uncapped — indexing and the recency cap are the
-    caller's, applied the same way the local path applies them
-    (``internal/projected_transcript_repository.py``)."""
+def select_turns(turns: list[TurnSegmentView]) -> tuple[list[TurnSegmentView], list[int]]:
+    """The segment's turns narrowed to the panel's kept set, paired one-for-one with how
+    many turns each survivor's own drop absorbed — thinking/malformed turns dropped just
+    before it, plus its own sidechain's nested count. Per-kept rather than one aggregate
+    (review F4), so a caller applying the recency cap after this call can total only the
+    drops the surviving turns actually carry, not the whole pre-cap history."""
     kept: list[TurnSegmentView] = []
-    dropped = 0
+    dropped_before: list[int] = []
+    pending = 0
     for turn in turns:
-        if turn.kind == "thinking":
-            dropped += 1
+        if turn.kind == "thinking" or (turn.kind == "tool" and turn.tool is None):
+            pending += 1
             continue
+        own = _count(turn.sidechain.turns) if turn.sidechain is not None else 0
         kept.append(turn)
-        if turn.sidechain is not None:
-            dropped += _count(turn.sidechain.turns)
-    return kept, dropped
+        dropped_before.append(pending + own)
+        pending = 0
+    if pending and kept:
+        # Trailing drops after the last kept turn have nowhere else to land — attributed
+        # to the last surviving turn, so they are not silently lost from the total.
+        dropped_before[-1] += pending
+    return kept, dropped_before
 
 
 def _count(turns: list[TurnSegmentView]) -> int:
@@ -42,11 +49,22 @@ def _count(turns: list[TurnSegmentView]) -> int:
     return total
 
 
+def _parse_timestamp(raw: str | None) -> datetime | None:
+    if raw is None:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
 def to_turn(turn: TurnSegmentView, index: int) -> Turn:
-    """One kept segment turn, projected onto the panel's read model at ``index``."""
-    timestamp = datetime.fromisoformat(turn.timestamp) if turn.timestamp is not None else None
-    if turn.kind == "tool":
-        assert turn.tool is not None
+    """One kept segment turn, projected onto the panel's read model at ``index``. A
+    turn reaching here with ``kind="tool"`` always carries a payload — ``select_turns``
+    already dropped the malformed case — and an unparseable ``timestamp`` degrades to
+    ``None`` rather than raising."""
+    timestamp = _parse_timestamp(turn.timestamp)
+    if turn.kind == "tool" and turn.tool is not None:
         tool = ToolCall(
             name=turn.tool.name,
             input=turn.tool.input,
@@ -67,8 +85,8 @@ def to_turn(turn: TurnSegmentView, index: int) -> Turn:
             tool_output=tool.output,
             truncated=turn.truncated or tool.output_truncated or serialized.truncated,
         )
-    # Only "env"/"asst" reach here — "thinking" is filtered by `select_turns` and "tool"
-    # returns above; the panel's own `TurnKind` names are unchanged either way.
+    # A payload-less "tool" turn degrades here too, as plain text, instead of raising;
+    # "thinking" never reaches here — `select_turns` already filtered it.
     kind: TurnKind = "env" if turn.kind == "env" else "asst"
     return Turn(
         index=index,

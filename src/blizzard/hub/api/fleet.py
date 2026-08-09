@@ -13,6 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
+from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api import chunks as chunks_api
@@ -56,6 +57,8 @@ from blizzard.wire.route import (
 )
 from blizzard.wire.runner import RunnerRegistrationRequest, RunnerRegistrationResponse, RunnerView
 from blizzard.wire.transcript_segment import LeaseTranscriptView, TranscriptSegmentAck, TranscriptSegmentBatch
+
+_log = get_logger("blizzard.hub.fleet")
 
 router = APIRouter(prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_runner_principal)])
 
@@ -114,10 +117,14 @@ def _demand_lease_owner(principal: RunnerPrincipal | None, owning_runner_id: str
     if principal is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="no resolvable runner token")
     if owning_runner_id is not None and owning_runner_id != principal.runner_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"lease segments belong to runner {owning_runner_id!r}, not {principal.runner_id!r}",
+        # The owning runner's id stays out of the response (review F6) — logged
+        # server-side instead, where an operator, not another runner, can see it.
+        _log.warning(
+            "lease-transcript ownership mismatch",
+            owning_runner_id=owning_runner_id,
+            requesting_runner_id=principal.runner_id,
         )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="lease segments belong to another runner")
     return principal
 
 
