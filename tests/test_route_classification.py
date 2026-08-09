@@ -22,6 +22,7 @@ from blizzard.auth_core import (
     QUESTION_ANSWER,
     QUEUE_REORDER,
     RUNNER_PAUSE,
+    TRANSCRIPT_READ,
     USER_MANAGE,
     Permission,
 )
@@ -98,6 +99,10 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     # Key rotation (issue #95) — the same admin-tier permission the user-management
     # API uses; no new permission is minted for this one verb.
     ("POST", "/api/auth/rotate-signing-key"): USER_MANAGE,
+    # Transcript-segment discovery/content reads (blizzard#247, D11) — above
+    # FLEET_VIEW, since a transcript carries everything a worker saw.
+    ("GET", "/api/chunks/{chunk_id}/transcripts"): TRANSCRIPT_READ,
+    ("GET", "/api/chunks/{chunk_id}/transcripts/{segment_id}"): TRANSCRIPT_READ,
 }
 
 #: Fleet plane — every route mounted under ``/api/fleet/*`` (issue #87's own
@@ -123,6 +128,7 @@ _FLEET: set[tuple[str, str]] = {
     ("POST", "/api/fleet/runners"),
     ("POST", "/api/fleet/runners/{runner_id}/heartbeats"),
     ("GET", "/api/fleet/runners/{runner_id}"),
+    ("POST", "/api/fleet/transcripts"),  # the transcript lane's own push (blizzard#247, D7)
 }
 
 

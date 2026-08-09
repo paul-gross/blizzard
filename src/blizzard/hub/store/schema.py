@@ -14,6 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     MetaData,
     String,
     Table,
@@ -754,3 +755,54 @@ event_log = Table(
 
 # The read's own sort key (newest-first) — indexed so ordering never scans the table.
 Index("ix_event_log_recorded_at", event_log.c.recorded_at)
+
+# --- Transcript segments (blizzard#247, epic:transcripts) ----------------------
+# A row is one shipped record, not one segment (D1) — append-only; a cap rejection (D5)
+# lands contentless. The natural key (D8) dedupes a re-offer under a fresh lane sequence.
+
+transcript_segments = Table(
+    "transcript_segments",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("segment_id", String, nullable=False),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("node_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("spawn_generation", Integer, nullable=False),
+    Column("runner_id", String, nullable=False),
+    Column("turn_range_start", Integer, nullable=False),
+    Column("turn_range_end", Integer, nullable=False),
+    # True on the one record that closes the segment out — never inferred from a
+    # transition, since a tail may land after the step's completion (product plan).
+    Column("final", Boolean, nullable=False),
+    # A cap rejection (D5/D6): no content, no codec; `rejection_reason` is non-null iff
+    # `rejected`.
+    Column("rejected", Boolean, nullable=False),
+    Column("rejection_reason", String, nullable=True),
+    # Raw, uncompressed turn bytes as received (D4) — the budget currency for both caps,
+    # regardless of `rejected`.
+    Column("byte_count", Integer, nullable=False),
+    Column("codec", String, nullable=True),  # e.g. "zlib" (D10); null iff rejected
+    Column("content", LargeBinary, nullable=True),  # compressed turns JSON; null iff rejected
+    Column("normalizer_version", String, nullable=False),
+    Column("harness_version", String, nullable=True),
+    # Hub-stamped receipt instant (plan-review F1) — the D3 rolling 24h window anchors
+    # here, never on a runner-supplied instant.
+    Column("received_at", UtcDateTime, nullable=False),
+    UniqueConstraint("segment_id", "turn_range_start", name="uq_transcript_segments_segment_turn_start"),
+)
+
+Index("ix_transcript_segments_chunk_id", transcript_segments.c.chunk_id)
+Index("ix_transcript_segments_runner_received_at", transcript_segments.c.runner_id, transcript_segments.c.received_at)
+Index("ix_transcript_segments_segment_id", transcript_segments.c.segment_id)
+
+# --- Transcript lane high-water mark (D7 — own table, not runner_high_water) --------
+# `runner_high_water` belongs to the fact lane; a second lane sharing it would collide.
+
+transcript_high_water = Table(
+    "transcript_high_water",
+    metadata,
+    Column("runner_id", String, primary_key=True),
+    Column("seq", Integer, nullable=False),
+    Column("updated_at", UtcDateTime, nullable=False),
+)

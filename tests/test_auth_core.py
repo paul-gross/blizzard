@@ -16,6 +16,7 @@ from blizzard.auth_core import (
     QUEUE_REORDER,
     ROLE_PERMISSIONS,
     RUNNER_PAUSE,
+    TRANSCRIPT_READ,
     USER_MANAGE,
     Role,
     expand,
@@ -39,6 +40,7 @@ def test_guest_holds_fleet_view_and_nothing_else() -> None:
         RUNNER_PAUSE,
         GRAPH_EDIT,
         USER_MANAGE,
+        TRANSCRIPT_READ,
     }
     guest = expand(Role.GUEST)
     assert FLEET_VIEW in guest
@@ -87,6 +89,16 @@ def test_runner_pause_and_graph_edit_are_admin_and_above() -> None:
     for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):
         assert RUNNER_PAUSE not in expand(role)
         assert GRAPH_EDIT not in expand(role)
+
+
+def test_transcript_read_is_contributor_and_above() -> None:
+    """``transcript:read`` is held by ``contributor``+ (blizzard#247, D11) — not by
+    ``guest``, which holds every other read: a transcript carries everything a worker
+    saw, not just the fleet's state."""
+    for role in (Role.CONTRIBUTOR, Role.ADMIN, Role.SUPERUSER):
+        assert TRANSCRIPT_READ in expand(role)
+    for role in (Role.PENDING, Role.GUEST):
+        assert TRANSCRIPT_READ not in expand(role)
 
 
 def test_operating_write_permissions_are_contributor_and_above() -> None:

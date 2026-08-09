@@ -18,6 +18,7 @@ from blizzard.hub.api import chunks as chunks_api
 from blizzard.hub.api import questions as questions_api
 from blizzard.hub.api import queue as queue_api
 from blizzard.hub.api import runners as runners_api
+from blizzard.hub.api import transcripts as transcripts_api
 from blizzard.hub.api.auth import AuthMode, RunnerPrincipal, require_runner_principal
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast
@@ -53,6 +54,7 @@ from blizzard.wire.route import (
     RouteTokenRekeyResponse,
 )
 from blizzard.wire.runner import RunnerRegistrationRequest, RunnerRegistrationResponse, RunnerView
+from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch
 
 router = APIRouter(prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_runner_principal)])
 
@@ -494,6 +496,22 @@ def ingest_runner_facts(
     result = services.facts.ingest(batch, route_token_mode=fleet.route_token_mode)
     broadcast.publish(result)
     return result.ack
+
+
+@router.post("/transcripts", response_model=TranscriptSegmentAck)
+def ingest_transcript_segments(
+    batch: TranscriptSegmentBatch,
+    services: Annotated[HubServices, Depends(get_services)],
+    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
+) -> TranscriptSegmentAck:
+    """Land the runner's batched transcript records — the transcript lane's own
+    store-and-forward push (D7), distinct from :func:`ingest_runner_facts`'s fact lane."""
+    fleet.assert_owns(batch.runner_id)
+    records = [
+        (record.seq, transcripts_api.to_domain_record(record, runner_id=batch.runner_id)) for record in batch.records
+    ]
+    result = services.transcript_ingest.ingest(batch.runner_id, records)
+    return transcripts_api.to_ack(batch.runner_id, result)
 
 
 @router.post("/runners", response_model=RunnerRegistrationResponse, status_code=status.HTTP_201_CREATED)
