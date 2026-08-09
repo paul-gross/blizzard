@@ -3741,6 +3741,98 @@
         "title": "SessionMode",
         "type": "string"
       },
+      "SidechainSegmentView-Input": {
+        "description": "A subagent's private conversation, nested under its spawning tool call \u2014 mirrors\n:class:`~blizzard.runner.harness.transcript.SidechainConversation`. Recursive: a\nsidechain turn may itself carry a tool call whose own sidechain nests further.",
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "agent_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Type"
+          },
+          "link": {
+            "title": "Link",
+            "type": "string"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/TurnSegmentView-Input"
+            },
+            "title": "Turns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agent_id",
+          "agent_type",
+          "link",
+          "turns"
+        ],
+        "title": "SidechainSegmentView",
+        "type": "object"
+      },
+      "SidechainSegmentView-Output": {
+        "description": "A subagent's private conversation, nested under its spawning tool call \u2014 mirrors\n:class:`~blizzard.runner.harness.transcript.SidechainConversation`. Recursive: a\nsidechain turn may itself carry a tool call whose own sidechain nests further.",
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "agent_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Type"
+          },
+          "link": {
+            "title": "Link",
+            "type": "string"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/TurnSegmentView-Output"
+            },
+            "title": "Turns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agent_id",
+          "agent_type",
+          "link",
+          "turns"
+        ],
+        "title": "SidechainSegmentView",
+        "type": "object"
+      },
       "SubmittedArtifact": {
         "description": "An artifact committed atomically with the completion.",
         "properties": {
@@ -3817,6 +3909,346 @@
           "kind"
         ],
         "title": "SubmittedArtifact",
+        "type": "object"
+      },
+      "ToolCallSegmentView": {
+        "description": "A tool invocation, structured \u2014 mirrors :class:`~blizzard.runner.harness.transcript.ToolCall`.",
+        "properties": {
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "input_shape": {
+            "title": "Input Shape",
+            "type": "string"
+          },
+          "input_unparsed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Unparsed"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output"
+          },
+          "output_truncated": {
+            "title": "Output Truncated",
+            "type": "boolean"
+          },
+          "tool_use_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Use Id"
+          }
+        },
+        "required": [
+          "name",
+          "input",
+          "input_unparsed",
+          "input_shape",
+          "tool_use_id",
+          "output",
+          "output_truncated"
+        ],
+        "title": "ToolCallSegmentView",
+        "type": "object"
+      },
+      "TranscriptSegmentAck": {
+        "description": "The hub's per-batch acknowledgement against the transcript lane's high-water mark.\n\n``capped`` is D6's cap-rejection class: acknowledged and content-dropped, with the\nlane's high-water advancing past it \u2014 a durable decision that must not\nre-adjudicate on replay. Unlike the fact lane (``hub/domain/facts.py``), no\ncontract-mismatch rejection exists here: every field is already wire-validated.",
+        "properties": {
+          "already_applied": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Already Applied",
+            "type": "array"
+          },
+          "applied": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Applied",
+            "type": "array"
+          },
+          "capped": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Capped",
+            "type": "array"
+          },
+          "high_water": {
+            "title": "High Water",
+            "type": "integer"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "high_water"
+        ],
+        "title": "TranscriptSegmentAck",
+        "type": "object"
+      },
+      "TranscriptSegmentBatch": {
+        "description": "A runner's push of one-or-more buffered transcript records, ordered by ``seq`` \u2014\nthe transcript lane's own store-and-forward batch, distinct from the fact lane's\n``RunnerFactBatch`` (D7).",
+        "properties": {
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptSegmentRecord"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "records"
+        ],
+        "title": "TranscriptSegmentBatch",
+        "type": "object"
+      },
+      "TranscriptSegmentContentView": {
+        "description": "One segment's decompressed turns, concatenated across its stored records in\nturn-range order \u2014 the lazy per-segment content read (D12).",
+        "properties": {
+          "final": {
+            "title": "Final",
+            "type": "boolean"
+          },
+          "segment_id": {
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "turns": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TurnSegmentView-Output"
+            },
+            "title": "Turns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "segment_id",
+          "final",
+          "truncated"
+        ],
+        "title": "TranscriptSegmentContentView",
+        "type": "object"
+      },
+      "TranscriptSegmentIndexEntry": {
+        "description": "One segment's metadata row (D12) \u2014 byte counts and completion state, never turn\ncontent. ``truncated`` surfaces D5's per-segment cap-rejection mark now rather than\ndeferring the board (#248) into a route reshape (plan-review F2).",
+        "properties": {
+          "byte_count": {
+            "title": "Byte Count",
+            "type": "integer"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "final": {
+            "title": "Final",
+            "type": "boolean"
+          },
+          "harness_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Version"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "normalizer_version": {
+            "title": "Normalizer Version",
+            "type": "string"
+          },
+          "received_at": {
+            "title": "Received At",
+            "type": "string"
+          },
+          "segment_id": {
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "spawn_generation": {
+            "title": "Spawn Generation",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "turn_range_end": {
+            "title": "Turn Range End",
+            "type": "integer"
+          },
+          "turn_range_start": {
+            "title": "Turn Range Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "segment_id",
+          "node_id",
+          "epoch",
+          "spawn_generation",
+          "turn_range_start",
+          "turn_range_end",
+          "final",
+          "truncated",
+          "byte_count",
+          "normalizer_version",
+          "harness_version",
+          "received_at"
+        ],
+        "title": "TranscriptSegmentIndexEntry",
+        "type": "object"
+      },
+      "TranscriptSegmentIndexView": {
+        "description": "The per-chunk segment discovery read (D12) \u2014 unreachable content, only what a\ncaller needs to then ask for one segment's turns.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "segments": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TranscriptSegmentIndexEntry"
+            },
+            "title": "Segments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chunk_id"
+        ],
+        "title": "TranscriptSegmentIndexView",
+        "type": "object"
+      },
+      "TranscriptSegmentRecord": {
+        "description": "One shipped turn-range slice of a segment (D1). ``final=True`` marks the one\nrecord that closes the segment out \u2014 the hub never infers completeness from a\ntransition (product plan, ``epic:transcripts``).",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "final": {
+            "title": "Final",
+            "type": "boolean"
+          },
+          "harness_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Version"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "normalizer_version": {
+            "title": "Normalizer Version",
+            "type": "string"
+          },
+          "segment_id": {
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "spawn_generation": {
+            "title": "Spawn Generation",
+            "type": "integer"
+          },
+          "turn_range_end": {
+            "title": "Turn Range End",
+            "type": "integer"
+          },
+          "turn_range_start": {
+            "title": "Turn Range Start",
+            "type": "integer"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/TurnSegmentView-Input"
+            },
+            "title": "Turns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "seq",
+          "segment_id",
+          "chunk_id",
+          "node_id",
+          "epoch",
+          "spawn_generation",
+          "turn_range_start",
+          "turn_range_end",
+          "final",
+          "normalizer_version",
+          "harness_version",
+          "turns"
+        ],
+        "title": "TranscriptSegmentRecord",
         "type": "object"
       },
       "TransitionView": {
@@ -3909,6 +4341,142 @@
           "recorded_at"
         ],
         "title": "TransitionView",
+        "type": "object"
+      },
+      "TurnSegmentView-Input": {
+        "description": "One normalized turn, carried in full \u2014 mirrors\n:class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is\n**segment-relative**, minted by the producer (D9) \u2014 never the batch-local, unstable\n``NormalizedTurn.index``.",
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "sidechain": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SidechainSegmentView-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "thinking_redacted": {
+            "title": "Thinking Redacted",
+            "type": "boolean"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolCallSegmentView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "index",
+          "kind",
+          "timestamp",
+          "text",
+          "tool",
+          "thinking_redacted",
+          "sidechain",
+          "truncated"
+        ],
+        "title": "TurnSegmentView",
+        "type": "object"
+      },
+      "TurnSegmentView-Output": {
+        "description": "One normalized turn, carried in full \u2014 mirrors\n:class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is\n**segment-relative**, minted by the producer (D9) \u2014 never the batch-local, unstable\n``NormalizedTurn.index``.",
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "sidechain": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SidechainSegmentView-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "thinking_redacted": {
+            "title": "Thinking Redacted",
+            "type": "boolean"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolCallSegmentView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "index",
+          "kind",
+          "timestamp",
+          "text",
+          "tool",
+          "thinking_redacted",
+          "sidechain",
+          "truncated"
+        ],
+        "title": "TurnSegmentView",
         "type": "object"
       },
       "UserIdentityView": {
@@ -5300,6 +5868,101 @@
         ]
       }
     },
+    "/api/chunks/{chunk_id}/transcripts": {
+      "get": {
+        "description": "The chunk's segment index (D12) \u2014 metadata and byte counts only, never turns.",
+        "operationId": "list_transcript_segments_api_chunks__chunk_id__transcripts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptSegmentIndexView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Transcript Segments",
+        "tags": [
+          "transcripts"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/transcripts/{segment_id}": {
+      "get": {
+        "description": "One segment's decompressed turns, concatenated across its stored records in\nturn-range order \u2014 the lazy per-segment content read (D12).",
+        "operationId": "get_transcript_segment_api_chunks__chunk_id__transcripts__segment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "segment_id",
+            "required": true,
+            "schema": {
+              "title": "Segment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptSegmentContentView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Transcript Segment",
+        "tags": [
+          "transcripts"
+        ]
+      }
+    },
     "/api/chunks/{chunk_id}/work-items": {
       "get": {
         "description": "Pass-through work items read \u2014 one entry per pointer, contents never stored.\n\nA per-pointer resolution or forge failure degrades to an ``error`` on that entry\nrather than failing the whole read. A chunk with no pointers is an empty list, not\na 404; no configured work source at all is a 503 up front.",
@@ -6381,6 +7044,48 @@
           }
         },
         "summary": "Fleet Summary",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/transcripts": {
+      "post": {
+        "description": "Land the runner's batched transcript records \u2014 the transcript lane's own\nstore-and-forward push (D7), distinct from :func:`ingest_runner_facts`'s fact lane.",
+        "operationId": "ingest_transcript_segments_api_fleet_transcripts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscriptSegmentBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptSegmentAck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Transcript Segments",
         "tags": [
           "fleet"
         ]

@@ -1,6 +1,6 @@
 """Wire-shape pins (unit tier) — decisions a wire model makes by *not* carrying something.
 
-Five wire decisions are invisible to every other test: an absent field, a required field
+Six wire decisions are invisible to every other test: an absent field, a required field
 that could be defaulted, and the exported OpenAPI schema set. Each reversion leaves the
 whole suite green while restoring the removed behavior — pinned here (``bzh:mutation-review-selection``).
 """
@@ -13,7 +13,7 @@ import pytest
 from pydantic import ValidationError
 
 from blizzard.runner.app import create_app_for_export
-from blizzard.wire.chunk import ChunkIngestRequest
+from blizzard.wire.chunk import ChunkDetail, ChunkIngestRequest
 from blizzard.wire.git_commits import GitCommitDeclarationRequest
 from blizzard.wire.graph import GraphPolicyRequest
 from blizzard.wire.history import ChunkHistoryView
@@ -59,6 +59,14 @@ def test_graph_policy_request_follow_latest_carries_no_default() -> None:
     with pytest.raises(ValidationError):
         GraphPolicyRequest()  # type: ignore[call-arg]
     assert GraphPolicyRequest(follow_latest=None).follow_latest is None
+
+
+def test_chunk_detail_carries_no_transcript_field() -> None:
+    """Transcript content only ever leaves via the lazy per-segment reads (blizzard#247,
+    D12) — chunk detail's payload size must not grow with a chunk's stored transcript,
+    the anti-pattern named against ``hub/api/chunk_views.py``'s own ``_artifacts``."""
+    assert "transcript" not in ChunkDetail.model_fields
+    assert not [name for name in ChunkDetail.model_fields if "transcript" in name.lower()]
 
 
 def test_the_runner_spec_carries_no_chunk_detail_history_views() -> None:

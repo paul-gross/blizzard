@@ -78,12 +78,14 @@ class SegmentIndexRow:
 
 @dataclass(frozen=True)
 class SegmentRecordContent:
-    """One stored record's decompressed turns, in the order the content route
-    concatenates them."""
+    """One record's decompressed turns, in the order the content route concatenates
+    them. ``rejected`` records carry ``turns_json="[]"`` — the content route's own
+    truncation signal, since a segment can be cap-rejected mid-stream."""
 
     turn_range_start: int
     turn_range_end: int
     final: bool
+    rejected: bool
     turns_json: str
 
 

@@ -53,6 +53,7 @@ class TranscriptSegmentStore:
                 turn_range_start=row.turn_range_start,
                 turn_range_end=row.turn_range_end,
                 final=row.final,
+                rejected=row.rejected,
                 turns_json=self._decompress(row.content, row.codec) if row.content is not None else "[]",
             )
             for row in rows

@@ -2440,6 +2440,58 @@ export type RunnerView = {
 export type SessionMode = 'resume' | 'fresh';
 
 /**
+ * SidechainSegmentView
+ *
+ * A subagent's private conversation, nested under its spawning tool call — mirrors
+ * :class:`~blizzard.runner.harness.transcript.SidechainConversation`. Recursive: a
+ * sidechain turn may itself carry a tool call whose own sidechain nests further.
+ */
+export type SidechainSegmentViewInput = {
+    /**
+     * Agent Id
+     */
+    agent_id: string | null;
+    /**
+     * Agent Type
+     */
+    agent_type: string | null;
+    /**
+     * Link
+     */
+    link: string;
+    /**
+     * Turns
+     */
+    turns: Array<TurnSegmentViewInput>;
+};
+
+/**
+ * SidechainSegmentView
+ *
+ * A subagent's private conversation, nested under its spawning tool call — mirrors
+ * :class:`~blizzard.runner.harness.transcript.SidechainConversation`. Recursive: a
+ * sidechain turn may itself carry a tool call whose own sidechain nests further.
+ */
+export type SidechainSegmentViewOutput = {
+    /**
+     * Agent Id
+     */
+    agent_id: string | null;
+    /**
+     * Agent Type
+     */
+    agent_type: string | null;
+    /**
+     * Link
+     */
+    link: string;
+    /**
+     * Turns
+     */
+    turns: Array<TurnSegmentViewOutput>;
+};
+
+/**
  * SubmittedArtifact
  *
  * An artifact committed atomically with the completion.
@@ -2474,6 +2526,253 @@ export type SubmittedArtifact = {
      * Repo
      */
     repo?: string | null;
+};
+
+/**
+ * ToolCallSegmentView
+ *
+ * A tool invocation, structured — mirrors :class:`~blizzard.runner.harness.transcript.ToolCall`.
+ */
+export type ToolCallSegmentView = {
+    /**
+     * Input
+     */
+    input: {
+        [key: string]: unknown;
+    };
+    /**
+     * Input Shape
+     */
+    input_shape: string;
+    /**
+     * Input Unparsed
+     */
+    input_unparsed: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Output
+     */
+    output: string | null;
+    /**
+     * Output Truncated
+     */
+    output_truncated: boolean;
+    /**
+     * Tool Use Id
+     */
+    tool_use_id: string | null;
+};
+
+/**
+ * TranscriptSegmentAck
+ *
+ * The hub's per-batch acknowledgement against the transcript lane's high-water mark.
+ *
+ * ``capped`` is D6's cap-rejection class: acknowledged and content-dropped, with the
+ * lane's high-water advancing past it — a durable decision that must not
+ * re-adjudicate on replay. Unlike the fact lane (``hub/domain/facts.py``), no
+ * contract-mismatch rejection exists here: every field is already wire-validated.
+ */
+export type TranscriptSegmentAck = {
+    /**
+     * Already Applied
+     */
+    already_applied?: Array<number>;
+    /**
+     * Applied
+     */
+    applied?: Array<number>;
+    /**
+     * Capped
+     */
+    capped?: Array<number>;
+    /**
+     * High Water
+     */
+    high_water: number;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+};
+
+/**
+ * TranscriptSegmentBatch
+ *
+ * A runner's push of one-or-more buffered transcript records, ordered by ``seq`` —
+ * the transcript lane's own store-and-forward batch, distinct from the fact lane's
+ * ``RunnerFactBatch`` (D7).
+ */
+export type TranscriptSegmentBatch = {
+    /**
+     * Records
+     */
+    records: Array<TranscriptSegmentRecord>;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+};
+
+/**
+ * TranscriptSegmentContentView
+ *
+ * One segment's decompressed turns, concatenated across its stored records in
+ * turn-range order — the lazy per-segment content read (D12).
+ */
+export type TranscriptSegmentContentView = {
+    /**
+     * Final
+     */
+    final: boolean;
+    /**
+     * Segment Id
+     */
+    segment_id: string;
+    /**
+     * Truncated
+     */
+    truncated: boolean;
+    /**
+     * Turns
+     */
+    turns?: Array<TurnSegmentViewOutput>;
+};
+
+/**
+ * TranscriptSegmentIndexEntry
+ *
+ * One segment's metadata row (D12) — byte counts and completion state, never turn
+ * content. ``truncated`` surfaces D5's per-segment cap-rejection mark now rather than
+ * deferring the board (#248) into a route reshape (plan-review F2).
+ */
+export type TranscriptSegmentIndexEntry = {
+    /**
+     * Byte Count
+     */
+    byte_count: number;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Final
+     */
+    final: boolean;
+    /**
+     * Harness Version
+     */
+    harness_version: string | null;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Normalizer Version
+     */
+    normalizer_version: string;
+    /**
+     * Received At
+     */
+    received_at: string;
+    /**
+     * Segment Id
+     */
+    segment_id: string;
+    /**
+     * Spawn Generation
+     */
+    spawn_generation: number;
+    /**
+     * Truncated
+     */
+    truncated: boolean;
+    /**
+     * Turn Range End
+     */
+    turn_range_end: number;
+    /**
+     * Turn Range Start
+     */
+    turn_range_start: number;
+};
+
+/**
+ * TranscriptSegmentIndexView
+ *
+ * The per-chunk segment discovery read (D12) — unreachable content, only what a
+ * caller needs to then ask for one segment's turns.
+ */
+export type TranscriptSegmentIndexView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Segments
+     */
+    segments?: Array<TranscriptSegmentIndexEntry>;
+};
+
+/**
+ * TranscriptSegmentRecord
+ *
+ * One shipped turn-range slice of a segment (D1). ``final=True`` marks the one
+ * record that closes the segment out — the hub never infers completeness from a
+ * transition (product plan, ``epic:transcripts``).
+ */
+export type TranscriptSegmentRecord = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Final
+     */
+    final: boolean;
+    /**
+     * Harness Version
+     */
+    harness_version: string | null;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Normalizer Version
+     */
+    normalizer_version: string;
+    /**
+     * Segment Id
+     */
+    segment_id: string;
+    /**
+     * Seq
+     */
+    seq: number;
+    /**
+     * Spawn Generation
+     */
+    spawn_generation: number;
+    /**
+     * Turn Range End
+     */
+    turn_range_end: number;
+    /**
+     * Turn Range Start
+     */
+    turn_range_start: number;
+    /**
+     * Turns
+     */
+    turns: Array<TurnSegmentViewInput>;
 };
 
 /**
@@ -2521,6 +2820,80 @@ export type TransitionView = {
      * To Node Name
      */
     to_node_name?: string | null;
+};
+
+/**
+ * TurnSegmentView
+ *
+ * One normalized turn, carried in full — mirrors
+ * :class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is
+ * **segment-relative**, minted by the producer (D9) — never the batch-local, unstable
+ * ``NormalizedTurn.index``.
+ */
+export type TurnSegmentViewInput = {
+    /**
+     * Index
+     */
+    index: number;
+    /**
+     * Kind
+     */
+    kind: string;
+    sidechain: SidechainSegmentViewInput | null;
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Thinking Redacted
+     */
+    thinking_redacted: boolean;
+    /**
+     * Timestamp
+     */
+    timestamp: string | null;
+    tool: ToolCallSegmentView | null;
+    /**
+     * Truncated
+     */
+    truncated: boolean;
+};
+
+/**
+ * TurnSegmentView
+ *
+ * One normalized turn, carried in full — mirrors
+ * :class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is
+ * **segment-relative**, minted by the producer (D9) — never the batch-local, unstable
+ * ``NormalizedTurn.index``.
+ */
+export type TurnSegmentViewOutput = {
+    /**
+     * Index
+     */
+    index: number;
+    /**
+     * Kind
+     */
+    kind: string;
+    sidechain: SidechainSegmentViewOutput | null;
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Thinking Redacted
+     */
+    thinking_redacted: boolean;
+    /**
+     * Timestamp
+     */
+    timestamp: string | null;
+    tool: ToolCallSegmentView | null;
+    /**
+     * Truncated
+     */
+    truncated: boolean;
 };
 
 /**
@@ -3382,6 +3755,70 @@ export type StopChunkApiChunksChunkIdStopPostResponses = {
 
 export type StopChunkApiChunksChunkIdStopPostResponse = StopChunkApiChunksChunkIdStopPostResponses[keyof StopChunkApiChunksChunkIdStopPostResponses];
 
+export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/transcripts';
+};
+
+export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetError = ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors[keyof ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors];
+
+export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranscriptSegmentIndexView;
+};
+
+export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponse = ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses[keyof ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses];
+
+export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Segment Id
+         */
+        segment_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/transcripts/{segment_id}';
+};
+
+export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetError = GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors[keyof GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors];
+
+export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranscriptSegmentContentView;
+};
+
+export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponse = GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses[keyof GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses];
+
 export type GetWorkItemsApiChunksChunkIdWorkItemsGetData = {
     body?: never;
     path: {
@@ -4068,6 +4505,31 @@ export type FleetSummaryApiFleetSummaryGetResponses = {
 };
 
 export type FleetSummaryApiFleetSummaryGetResponse = FleetSummaryApiFleetSummaryGetResponses[keyof FleetSummaryApiFleetSummaryGetResponses];
+
+export type IngestTranscriptSegmentsApiFleetTranscriptsPostData = {
+    body: TranscriptSegmentBatch;
+    path?: never;
+    query?: never;
+    url: '/api/fleet/transcripts';
+};
+
+export type IngestTranscriptSegmentsApiFleetTranscriptsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type IngestTranscriptSegmentsApiFleetTranscriptsPostError = IngestTranscriptSegmentsApiFleetTranscriptsPostErrors[keyof IngestTranscriptSegmentsApiFleetTranscriptsPostErrors];
+
+export type IngestTranscriptSegmentsApiFleetTranscriptsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranscriptSegmentAck;
+};
+
+export type IngestTranscriptSegmentsApiFleetTranscriptsPostResponse = IngestTranscriptSegmentsApiFleetTranscriptsPostResponses[keyof IngestTranscriptSegmentsApiFleetTranscriptsPostResponses];
 
 export type ListGraphsApiGraphsGetData = {
     body?: never;

@@ -16,6 +16,7 @@ from blizzard.auth_core import (
     QUEUE_REORDER,
     ROLE_PERMISSIONS,
     RUNNER_PAUSE,
+    TRANSCRIPT_READ,
     USER_MANAGE,
     Role,
     expand,
@@ -39,6 +40,7 @@ def test_guest_holds_fleet_view_and_nothing_else() -> None:
         RUNNER_PAUSE,
         GRAPH_EDIT,
         USER_MANAGE,
+        TRANSCRIPT_READ,
     }
     guest = expand(Role.GUEST)
     assert FLEET_VIEW in guest
