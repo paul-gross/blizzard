@@ -312,10 +312,9 @@ def test_a_string_shaped_tool_input_carries_through_unparsed_below_the_cap(tmp_p
 def test_an_oversized_string_shaped_tool_input_degrades_and_relabels_to_other(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``review:F13`` — the over-cap degrade-and-relabel path (``CappedToolCall.of``)
-    exercised off a non-``"object"`` shape: ``serialized`` comes from
-    ``tool.input_unparsed``, not ``json.dumps(tool.input)``, so this is a distinct branch
-    from :func:`test_max_block_chars_degrades_an_oversized_tool_input_to_a_capped_raw_string`."""
+    """``review:F13`` — ``CappedToolCall.of``'s degrade-and-relabel path off a
+    non-``"object"`` shape, where ``serialized`` comes from ``tool.input_unparsed``: a
+    distinct branch from :func:`test_max_block_chars_degrades_an_oversized_tool_input_to_a_capped_raw_string`."""
     monkeypatch.setattr(projection_module, "MAX_BLOCK_CHARS", 10)
     _write(tmp_path, [_tool_use_line("x" * 50)])
     transcript = _read(tmp_path)
