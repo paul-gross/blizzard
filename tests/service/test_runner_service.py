@@ -222,7 +222,7 @@ def _transcript_chunk_spec(work_ref_url: str) -> dict:
 
 def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> None:
     """A real mock-claude-code subprocess mints a genuine transcript; read back through
-    the runner's own local HTTP API. Pins provenance: the Bash turn's tool_output carries
+    the runner's own local HTTP API. Pins provenance: the Bash turn's tool output carries
     the real commit sha, cross-checked against the bare origin."""
     bin_dir = require_mock_fleet()
     workspace, _origins, origin_bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
@@ -267,23 +267,26 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
     assert "env" in kinds, f"no env (spawn) turn: {kinds}"
     assert "asst" in kinds, f"no asst (verdict) turn: {kinds}"
 
-    tool_turns = {t["tool_name"]: t for t in turns if t["kind"] == "tool"}
+    tool_turns = {t["tool"]["name"]: t["tool"] for t in turns if t["kind"] == "tool"}
     assert "Edit" in tool_turns, f"no Edit tool turn: {turns}"
     assert "Bash" in tool_turns, f"no Bash tool turn: {turns}"
-    edit_turn = tool_turns["Edit"]
-    bash_turn = tool_turns["Bash"]
-    assert edit_turn["tool_output"], "the Edit turn's tool_output was never filled in"
-    assert bash_turn["tool_output"], "the Bash turn's tool_output was never filled in"
+    edit_tool = tool_turns["Edit"]
+    bash_tool = tool_turns["Bash"]
+    assert edit_tool["output"], "the Edit turn's tool output was never filled in"
+    assert bash_tool["output"], "the Bash turn's tool output was never filled in"
+    # The structured `input` survives the wire as a mapping (blizzard#248 D1), never a
+    # re-materialized JSON string.
+    assert isinstance(bash_tool["input"], dict), f"tool input is not structured: {bash_tool!r}"
 
     # Provenance: the real commit sha, independently read off the bare origin, must
-    # appear in the transcript's tool_output — content only the real commit created.
+    # appear in the transcript's tool output — content only the real commit created.
     real_sha = _git_bare(origin_bare, "log", "--all", "--format=%H", "-1", "--", "transcript-proof.txt").strip()
     assert real_sha, "the mock harness's commit never reached the bare origin"
-    assert real_sha[:7] in bash_turn["tool_output"], (
-        f"transcript tool_output does not carry the real commit sha "
-        f"({real_sha[:7]!r} not in {bash_turn['tool_output']!r})"
+    assert real_sha[:7] in bash_tool["output"], (
+        f"transcript tool output does not carry the real commit sha "
+        f"({real_sha[:7]!r} not in {bash_tool['output']!r})"
     )
-    assert _TRANSCRIPT_COMMIT_MESSAGE in bash_turn["tool_output"]
+    assert _TRANSCRIPT_COMMIT_MESSAGE in bash_tool["output"]
 
     # The verdict landed as the final asst turn, carrying the judgement's own text.
     asst_turn = next(t for t in turns if t["kind"] == "asst")
