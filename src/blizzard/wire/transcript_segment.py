@@ -1,0 +1,135 @@
+"""Transcript segment wire bodies (blizzard#247, ``epic:transcripts``) — the first wire
+projection of #245's normalized turn model onto shipped, hub-stored content.
+
+A record is one shipped **turn-range slice** of a segment (D1), never a whole segment at
+once. ``seq`` is the transcript lane's own per-runner high-water sequence (D7) — the
+replay guard; ``(segment_id, turn_range_start)`` is the natural key a re-offer under a
+*fresh* seq still dedupes against (D8). ``wire/transcript.py`` (the runner panel's older,
+narrower ``TurnView``) is untouched — this module's turn views carry the full #245
+vocabulary (structured tool calls, thinking, nested sidechains)."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel
+
+
+class ToolCallSegmentView(BaseModel):
+    """A tool invocation, structured — mirrors :class:`~blizzard.runner.harness.transcript.ToolCall`."""
+
+    name: str
+    input: dict[str, object]
+    input_unparsed: str | None
+    input_shape: str
+    tool_use_id: str | None
+    output: str | None
+    output_truncated: bool
+
+
+class SidechainSegmentView(BaseModel):
+    """A subagent's private conversation, nested under its spawning tool call — mirrors
+    :class:`~blizzard.runner.harness.transcript.SidechainConversation`. Recursive: a
+    sidechain turn may itself carry a tool call whose own sidechain nests further."""
+
+    agent_id: str | None
+    agent_type: str | None
+    link: str
+    turns: list[TurnSegmentView]
+
+
+class TurnSegmentView(BaseModel):
+    """One normalized turn, carried in full — mirrors
+    :class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is
+    **segment-relative**, minted by the producer (D9) — never the batch-local, unstable
+    ``NormalizedTurn.index``."""
+
+    index: int
+    kind: str  # env | asst | tool | thinking
+    timestamp: str | None
+    text: str
+    tool: ToolCallSegmentView | None
+    thinking_redacted: bool
+    sidechain: SidechainSegmentView | None
+    truncated: bool
+
+
+SidechainSegmentView.model_rebuild()
+
+
+class TranscriptSegmentRecord(BaseModel):
+    """One shipped turn-range slice of a segment (D1). ``final=True`` marks the one
+    record that closes the segment out — the hub never infers completeness from a
+    transition (product plan, ``epic:transcripts``)."""
+
+    seq: int
+    segment_id: str
+    chunk_id: str
+    node_id: str
+    epoch: int
+    spawn_generation: int
+    turn_range_start: int
+    turn_range_end: int
+    final: bool
+    normalizer_version: str
+    harness_version: str | None
+    turns: list[TurnSegmentView]
+
+
+class TranscriptSegmentBatch(BaseModel):
+    """A runner's push of one-or-more buffered transcript records, ordered by ``seq`` —
+    the transcript lane's own store-and-forward batch, distinct from the fact lane's
+    ``RunnerFactBatch`` (D7)."""
+
+    runner_id: str
+    records: list[TranscriptSegmentRecord]
+
+
+class TranscriptSegmentAck(BaseModel):
+    """The hub's per-batch acknowledgement against the transcript lane's high-water mark.
+
+    ``capped`` is D6's cap-rejection class: acknowledged and content-dropped, with the
+    lane's high-water advancing past it — a durable decision that must not
+    re-adjudicate on replay. Unlike the fact lane (``hub/domain/facts.py``), no
+    contract-mismatch rejection exists here: every field is already wire-validated."""
+
+    runner_id: str
+    high_water: int
+    applied: list[int] = []
+    already_applied: list[int] = []
+    capped: list[int] = []
+
+
+class TranscriptSegmentIndexEntry(BaseModel):
+    """One segment's metadata row (D12) — byte counts and completion state, never turn
+    content. ``truncated`` surfaces D5's per-segment cap-rejection mark now rather than
+    deferring the board (#248) into a route reshape (plan-review F2)."""
+
+    segment_id: str
+    node_id: str
+    epoch: int
+    spawn_generation: int
+    turn_range_start: int
+    turn_range_end: int
+    final: bool
+    truncated: bool
+    byte_count: int
+    normalizer_version: str
+    harness_version: str | None
+    received_at: str
+
+
+class TranscriptSegmentIndexView(BaseModel):
+    """The per-chunk segment discovery read (D12) — unreachable content, only what a
+    caller needs to then ask for one segment's turns."""
+
+    chunk_id: str
+    segments: list[TranscriptSegmentIndexEntry] = []
+
+
+class TranscriptSegmentContentView(BaseModel):
+    """One segment's decompressed turns, concatenated across its stored records in
+    turn-range order — the lazy per-segment content read (D12)."""
+
+    segment_id: str
+    final: bool
+    truncated: bool
+    turns: list[TurnSegmentView] = []

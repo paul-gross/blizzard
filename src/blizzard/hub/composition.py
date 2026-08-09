@@ -60,6 +60,7 @@ from blizzard.hub.domain.questions import QuestionService
 from blizzard.hub.domain.queue import GroupService, QueueService
 from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry
 from blizzard.hub.domain.stop import StopService
+from blizzard.hub.domain.transcripts import IReadTranscriptSegments
 from blizzard.hub.domain.work import IReadChunkRepository
 from blizzard.hub.domain.work_closure import DeliveryClosureReconciler
 from blizzard.hub.events.broker import EventBroker
@@ -67,6 +68,7 @@ from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 
@@ -128,6 +130,9 @@ class HubServices:
     #: The reverse-proxy trust set (issue #130) — empty by default, so forwarded headers
     #: are ignored from every peer.
     trusted_proxies: TrustedProxies
+    #: The transcript-segment read Protocol (blizzard#247) — the operator-plane index and
+    #: content routes' own seam (``bzh:controller-read-only``).
+    transcripts: IReadTranscriptSegments
 
 
 def build_services(
@@ -159,6 +164,7 @@ def build_services(
     chunk_store = ChunkStore(engine, clock)
     graph_store = GraphStore(engine)
     registry_store = RunnerRegistryStore(engine)
+    transcript_store = TranscriptSegmentStore(engine)
     marker_authority = MarkerAuthority()
     hub_node = HubNodeExecutor(
         chunks=chunk_store,
@@ -250,4 +256,5 @@ def build_services(
         auth_facts=auth_facts_service,
         signing=signing,
         trusted_proxies=trusted_proxies if trusted_proxies is not None else TrustedProxies(),
+        transcripts=transcript_store,
     )
