@@ -2739,6 +2739,11 @@
    "docstrings": 15,
    "total": 303
   },
+  "service/test_transcript_segments_service.py": {
+   "comments": 2,
+   "docstrings": 4,
+   "total": 78
+  },
   "service/test_usage_service.py": {
    "comments": 19,
    "docstrings": 14,
