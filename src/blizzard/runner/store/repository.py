@@ -705,10 +705,9 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def mark_transcript_record_truncated(self, segment_id: str, *, reason: str) -> bool:
         """Note that one shipped record was shrunk in place (D4's per-record 1 MB cap) —
-        informational only, never latching: the segment keeps pumping next tick. Idempotent:
-        a segment with a reason already recorded keeps its first one. Returns whether this
-        call actually set the field, so a caller can warn once per segment per reason
-        instead of once per tick that reaches an already-marked segment."""
+        informational only, never latching. Idempotent PER REASON, not once ever (review
+        F14): a later, different reason still overwrites, so a worse outcome is never
+        masked by an earlier, milder one. Returns whether the field actually changed."""
         ...
 
     def stop_transcript_segment_shipping(self, segment_id: str, *, reason: str) -> bool:

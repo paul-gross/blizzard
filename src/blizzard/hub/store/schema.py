@@ -786,6 +786,9 @@ transcript_segments = Table(
     Column("content", LargeBinary, nullable=True),  # compressed turns JSON; null iff rejected
     Column("normalizer_version", String, nullable=False),
     Column("harness_version", String, nullable=True),
+    # The runner's OWN cap declaration (review F5), distinct from `rejected` above.
+    # Nullable, no backfill — matches this tree's own precedent.
+    Column("record_truncated", Boolean, nullable=True),
     # Hub-stamped receipt instant (plan-review F1) — the D3 rolling 24h window anchors
     # here, never on a runner-supplied instant.
     Column("received_at", UtcDateTime, nullable=False),

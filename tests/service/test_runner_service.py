@@ -171,6 +171,35 @@ def test_transcript_route_failure_never_blocks_the_fact_lane(tmp_path: Path) -> 
         assert _status(hub, chunk_id) == "done"
 
 
+def test_transcript_route_slow_never_blocks_the_fact_lane(tmp_path: Path) -> None:
+    """D6's other half (review F18): the test above proves wedged (hard-down);
+    `delay_transcripts` proves the route can answer, slowly, and the chunk still lands."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    transcripts_root = tmp_path / "transcripts"
+    fenced = _tick_env()
+    fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
+
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        chunk_id = _seed(hub)
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, transcripts_root=str(transcripts_root), transcripts_ship=True)
+
+        # Global, not chunk-scoped: the transcripts route's path carries no chunk id of its
+        # own (each record names its chunk in the request body, not the URL).
+        assert hub.post("/_levers/delay_transcripts", json={"payload": {"ms": 300}}).status_code == 200
+
+        landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
+        assert landed, f"the chunk did not land while the transcript route was slow (status {_status(hub, chunk_id)!r})"
+
+        drained = poll_until(
+            lambda: _tick_then(config, fenced, lambda: _pending_transcript_outbound(config) == 0), timeout=60.0
+        )
+        assert drained, "the transcript backlog never fully flushed despite the route staying up (just slow)"
+        assert _status(hub, chunk_id) == "done"
+
+
 def test_stale_envelope_is_tolerated_and_the_chunk_still_lands(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")

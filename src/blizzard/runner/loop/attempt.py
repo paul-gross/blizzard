@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
@@ -13,7 +13,7 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.spawn import Environments, Spawner
-from blizzard.runner.loop.transcript_pump import TranscriptPump
+from blizzard.runner.loop.transcript_pump import PUMP_LEASE_MAX_SECONDS, TranscriptPump
 from blizzard.runner.store.repository import LeaseRecord
 from blizzard.wire.facts import EVENT_RECORDED
 
@@ -225,7 +225,7 @@ class Attempt:
         as the closure it describes (issue #125), so the two are never seen apart. Every
         closure path funnels through here — the one place to pump this lease's own open
         transcript segment(s) before ``record_closure`` finalizes them (issue #246)."""
-        TranscriptPump(self.ctx).pump_lease(self.lease.lease_id)
+        self._pump_lease_before_close()
         self.ctx.store.record_closure(
             lease_id=self.lease.lease_id,
             chunk_id=self.lease.chunk_id,
@@ -235,6 +235,20 @@ class Attempt:
             event_kind=EVENT_RECORDED if event else None,
             event_payload=json.dumps(event) if event else None,
         )
+
+    def _pump_lease_before_close(self) -> None:
+        """D3's promise applies here too (review F4): bounded like the tick's ordinary
+        drain, and exception-isolated, so neither a slow transcript read nor a raised
+        exception can delay or fail the closure itself."""
+        deadline = self.ctx.clock.now() + timedelta(seconds=PUMP_LEASE_MAX_SECONDS)
+        try:
+            TranscriptPump(self.ctx).pump_lease(self.lease.lease_id, deadline=deadline)
+        except Exception:
+            _log.exception(
+                "transcript pump failed ahead of lease closure — closing anyway",
+                lease_id=self.lease.lease_id,
+                chunk_id=self.lease.chunk_id,
+            )
 
     def _event(
         self, classification: tuple[str, str], message: str, reason: str, via: str, stderr_tail: str

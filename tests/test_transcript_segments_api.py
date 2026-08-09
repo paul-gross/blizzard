@@ -231,6 +231,37 @@ def test_a_cap_rejected_tail_is_visible_as_truncation_on_both_read_routes(
     assert [t["index"] for t in content.json()["turns"]] == [0]
 
 
+def test_a_runner_declared_record_truncation_is_visible_on_both_read_routes_even_when_accepted(
+    tmp_path: Path,
+) -> None:
+    """review F5: the runner's own cap fallback ships an ACCEPTED record (no hub cap
+    trips) whose ``turns`` is empty while its claimed range isn't — distinct from the
+    hub's own rejection above. Both must surface as ``truncated: true``."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
+    token = seed_session(hub, contributor)
+    chunk_id = _ingest_chunk(hub, headers=_cookie(token))
+    head = hub.client.post(
+        "/api/fleet/transcripts",
+        json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
+    )
+    assert head.json()["applied"] == [1]
+
+    tail_record = _record(chunk_id, seq=2, turn_range_start=1, turn_range_end=5, final=True)
+    tail_record["turns"] = []  # the runner emptied it; the range still claims turns 1-5
+    tail_record["record_truncated"] = True
+    tail = hub.client.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": [tail_record]})
+    assert tail.json()["applied"] == [2]  # accepted outright — nothing about it trips a hub cap
+    assert tail.json()["capped"] == []
+
+    index = hub.client.get(f"/api/chunks/{chunk_id}/transcripts", headers=_cookie(token))
+    assert index.json()["segments"][0]["truncated"] is True
+
+    content = hub.client.get(f"/api/chunks/{chunk_id}/transcripts/sg_1", headers=_cookie(token))
+    assert content.json()["truncated"] is True
+    assert [t["index"] for t in content.json()["turns"]] == [0]  # only the first record's turn
+
+
 # --- the index route's own content-size guarantee --------------------------------
 
 

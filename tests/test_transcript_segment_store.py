@@ -36,6 +36,7 @@ def _record(**overrides: object) -> SegmentRecord:
         "final": True,
         "normalizer_version": "v1",
         "harness_version": "claude-code-1.0",
+        "record_truncated": False,
         "turns_json": '[{"index": 0, "kind": "asst"}]',
     }
     values.update(overrides)

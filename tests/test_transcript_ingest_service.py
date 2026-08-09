@@ -49,6 +49,7 @@ def _record(
         "final": final,
         "normalizer_version": "v1",
         "harness_version": "claude-code-1.0",
+        "record_truncated": False,
         "turns_json": f'[{{"index": {turn_range_start}, "kind": "asst", "text": "turn"}}]',
     }
     values.update(overrides)

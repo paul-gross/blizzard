@@ -27,6 +27,10 @@ TRANSCRIPT_RECORD_MAX_BYTES = 1024 * 1024
 #: segments, the only quantity the runner controls and the hub bills against.
 CHUNK_TRANSCRIPT_MAX_BYTES = 64 * 1024 * 1024
 
+#: Bounds :meth:`TranscriptPump.pump_lease`'s pre-closure read (review F4) — matches
+#: ``TranscriptDrain._MAX_SECONDS_PER_RUN``; D3's promise applies to closure too.
+PUMP_LEASE_MAX_SECONDS = 5.0
+
 #: Never-silent reasons (D4, review F1) — the first two are transient (``mark_transcript_
 #: record_truncated``); only ``_CHUNK_BUDGET_EXCEEDED`` latches ``stop_transcript_segment_shipping``.
 _RECORD_CAP_EXCEEDED = "record_cap_exceeded"
@@ -53,15 +57,17 @@ class TranscriptPump:
                 break  # this run's bound reached — the rest catch up on a later tick
             self._pump_one(segment)
 
-    def pump_lease(self, lease_id: str) -> None:
+    def pump_lease(self, lease_id: str, *, deadline: datetime | None = None) -> None:
         """Read whatever a single lease's own still-open segment(s) have to ship, right
-        before that lease closes. ``Attempt.close`` calls this ahead of ``record_closure``:
-        finalization excludes a segment from every later tick's ``run()``, so without this,
-        content written between the previous tick's pump and this closure — often the
-        worker's last output before failing — would never be read at all."""
+        before that lease closes — finalization excludes a segment from every later
+        tick's ``run()``, so without this, content since the last pump would never be
+        read. ``deadline`` bounds this call the same way ``run``'s does (review F4);
+        ``Attempt.close`` also wraps it in its own exception isolation."""
         if not self.ctx.config.transcripts_ship or self.ctx.transcripts is None:
             return
         for segment in self.ctx.store.open_transcript_segments():
+            if deadline is not None and self.ctx.clock.now() >= deadline:
+                break  # this call's own bound reached — the rest catches up on a later tick
             if segment.lease_id == lease_id:
                 self._pump_one(segment)
 
@@ -111,6 +117,7 @@ class TranscriptPump:
             "final": False,
             "normalizer_version": batch.normalizer_version,
             "harness_version": batch.harness_version,
+            "record_truncated": False,
             "turns": [_turn_wire(t, turn_range_start + i) for i, t in enumerate(batch.turns)],
         }
         payload = json.dumps(record)
@@ -124,6 +131,9 @@ class TranscriptPump:
             # Structural overhead alone still exceeds the cap (review F2) — ship an empty
             # slice over the same claimed range, keeping it gapless, never an over-cap body.
             record["turns"] = []
+            # `record_truncated` (review F5): this hub-accepted record's own loss, wire-visible
+            # since the hub's own cap-rejection `truncated` signal never fires for it.
+            record["record_truncated"] = True
             payload = json.dumps(record)
             self.ctx.store.record_transcript_delta(
                 segment_id=segment.segment_id,
@@ -144,6 +154,10 @@ class TranscriptPump:
         delta_bytes = len(payload.encode("utf-8"))
         if budget_before + delta_bytes > CHUNK_TRANSCRIPT_MAX_BYTES:
             self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
+            # review F13: this branch already read a real batch — any dropped sidechain
+            # must still warn, not vanish silently along with the tipping record.
+            if dropped_sidechains:
+                self._warn_sidechains_dropped(segment, dropped_sidechains)
             return
 
         self.ctx.store.record_transcript_delta(
@@ -168,8 +182,8 @@ class TranscriptPump:
             self._warn(segment, reason)
 
     def _mark_record_truncated(self, segment: TranscriptSegmentLedgerRow, reason: str) -> None:
-        # `_RECORD_CAP_EXCEEDED` never latches, so this can be reached every tick — gate on
-        # the store's first-occurrence guard so the fact lane warns once per segment, not once per tick.
+        # Gated on the store's per-reason guard (review F14): warns once per segment per
+        # reason, not once per tick, but a later, worse reason still warns again.
         changed = self.ctx.store.mark_transcript_record_truncated(segment.segment_id, reason=reason)
         if changed:
             self._warn(segment, reason)

@@ -166,31 +166,16 @@ OPEN_LEASE = Unclosed(leases.c.lease_id, lease_closures.c.lease_id)
 
 
 def _enqueue_transcript_final(conn, segment, *, at: datetime) -> None:  # type: ignore[no-untyped-def]
-    """Enqueue the wire-shaped final record closing ``segment`` out (issue #246, blizzard#247's
-    shape) — an empty range starting where shipping left off. Ships unconditionally, on every
-    closure regardless of ``[transcripts] ship`` or whether a pump ever ran: a normalizer
-    version is a static constant, so ``segment.normalizer_version`` always has one to declare."""
-    payload = json.dumps(
-        {
-            "segment_id": str(segment.segment_id),
-            "chunk_id": str(segment.chunk_id),
-            "node_id": str(segment.node_id),
-            "epoch": int(segment.epoch),
-            "spawn_generation": int(segment.generation),
-            "turn_range_start": int(segment.shipped_turns),
-            "turn_range_end": int(segment.shipped_turns) - 1,
-            "final": True,
-            "normalizer_version": str(segment.normalizer_version),
-            "harness_version": str(segment.harness_version) if segment.harness_version is not None else None,
-            "turns": [],
-        }
-    )
+    """Enqueue a marker noting ``segment`` is finalized (issue #246) — a minimal row, not
+    the wire-shaped ``TranscriptSegmentRecord`` itself (review F8): that body is rendered
+    at the drain boundary from the ledger row (``bzh:dependency-inversion``). Ships
+    unconditionally, regardless of ``[transcripts] ship`` or whether a pump ever ran."""
     conn.execute(
         transcript_outbound_buffer.insert().values(
             segment_id=str(segment.segment_id),
             chunk_id=str(segment.chunk_id),
             final=True,
-            payload=payload,
+            payload=json.dumps({"segment_id": str(segment.segment_id)}),
             created_at=at,
         )
     )
@@ -766,23 +751,25 @@ class SqlAlchemyRunnerStore:
                 .select_from(leases.join(lease_context, leases.c.lease_id == lease_context.c.lease_id))
                 .where(leases.c.lease_id == lease_id)
             ).one()
-            # A resumed session: close the prior segment, carrying its cursor forward. Scoped
-            # by chunk + session, not lease — an ordinary resume mints a fresh lease.
-            prior_open_segment = conn.execute(
+            # Carries a resumed session's cursor forward (review F3) — the cross-lease
+            # case finds its predecessor ALREADY finalized, so read regardless of that.
+            prior_segment = conn.execute(
                 select(transcript_segments)
                 .where(transcript_segments.c.chunk_id == context_row.chunk_id)
                 .where(transcript_segments.c.session_id == session_id)
-                .where(transcript_segments.c.finalized_at.is_(None))
+                .order_by(transcript_segments.c.stamped_at.desc())
+                .limit(1)
             ).one_or_none()
             carried_cursor: str | None = None
-            if prior_open_segment is not None:
-                carried_cursor = str(prior_open_segment.cursor) if prior_open_segment.cursor is not None else None
-                conn.execute(
-                    transcript_segments.update()
-                    .where(transcript_segments.c.segment_id == prior_open_segment.segment_id)
-                    .values(finalized_at=spawned_at)
-                )
-                _enqueue_transcript_final(conn, prior_open_segment, at=spawned_at)
+            if prior_segment is not None:
+                carried_cursor = str(prior_segment.cursor) if prior_segment.cursor is not None else None
+                if prior_segment.finalized_at is None:
+                    conn.execute(
+                        transcript_segments.update()
+                        .where(transcript_segments.c.segment_id == prior_segment.segment_id)
+                        .values(finalized_at=spawned_at)
+                    )
+                    _enqueue_transcript_final(conn, prior_segment, at=spawned_at)
             conn.execute(
                 transcript_segments.insert().values(
                     segment_id=Id.mint_at(SEGMENT_PREFIX, spawned_at).value,
@@ -910,12 +897,17 @@ class SqlAlchemyRunnerStore:
 
     def mark_transcript_record_truncated(self, segment_id: str, *, reason: str) -> bool:
         with self._begin() as conn:
-            # `IS NULL` guard: keeps its first reason. The returned changed-or-not lets the
-            # caller warn once per segment rather than once per tick that reaches it.
+            # Warn once per segment per REASON, not once ever (review F14): a repeat of the
+            # SAME reason is a no-op, but a later, worse reason still overwrites and warns.
             result = conn.execute(
                 transcript_segments.update()
                 .where(transcript_segments.c.segment_id == segment_id)
-                .where(transcript_segments.c.truncated_reason.is_(None))
+                .where(
+                    or_(
+                        transcript_segments.c.truncated_reason.is_(None),
+                        transcript_segments.c.truncated_reason != reason,
+                    )
+                )
                 .values(truncated_reason=reason)
             )
         changed = result.rowcount > 0

@@ -198,8 +198,10 @@ class Transcripts:
 
     @property
     def ship(self) -> bool:
-        """Off by default (D5): the dogfood fleet spends no bandwidth on content nothing
-        keeps until a real segment sink lands (``#247``)."""
+        """Off by default (D5, review F7) — a rollout decision, not a discard-sink one:
+        ``#247`` already landed the hub's durable, compressed-at-rest, operator-gated
+        segment store, so a `True` value here would be retained, not wasted bandwidth.
+        The dogfood fleet just has not turned shipping on yet."""
         return self.table.boolean("ship", False)
 
 
@@ -495,8 +497,9 @@ class RunnerConfig:
             "\n# Where the coding harness writes session transcripts (issue #29);\n"
             "# empty = ~/.claude/projects.\n"
             f'transcripts_root = "{self.transcripts_root}"\n'
-            "\n# The transcript outbound lane (issue #246) — off by default: nothing is retained\n"
-            "# hub-side until a real segment store lands, so shipping content earns no bandwidth.\n"
+            "\n# The transcript outbound lane (issue #246) — off by default; the hub's own\n"
+            "# durable, compressed-at-rest segment store (issue #247) is already landed, so\n"
+            "# turning this on is a rollout decision, not a bandwidth-for-nothing one.\n"
             "[transcripts]\n"
             f"ship = {'true' if self.transcripts_ship else 'false'}\n"
             "\n# Spend controls (epic #57); absent = no cap. `chunk_cap_usd` parks a chunk\n"

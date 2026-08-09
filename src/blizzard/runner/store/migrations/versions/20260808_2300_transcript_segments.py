@@ -54,6 +54,9 @@ transcript_outbound_buffer = sa.Table(
     sa.Column("payload", sa.Text, nullable=False),
     sa.Column("created_at", UtcDateTime, nullable=False),
     sa.Column("acked_at", UtcDateTime, nullable=True),
+    # Real SQLite AUTOINCREMENT (review F1) — matches live `schema.py`'s own kwarg; a seq
+    # this table's `ack_transcript_outbound` prunes on ack must never be reissued.
+    sqlite_autoincrement=True,
 )
 
 _TABLES = (transcript_segments, transcript_outbound_buffer)

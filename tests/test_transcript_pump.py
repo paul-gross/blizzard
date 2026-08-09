@@ -162,6 +162,47 @@ def test_pump_is_a_noop_when_ship_is_false() -> None:
     assert source.turns_since_calls == []  # the whole lane costs nothing when shipping is off
 
 
+def test_pump_skips_a_segment_already_stopped_from_shipping() -> None:
+    """review F10: `_pump_one`'s first guard — an already-latched segment never reads the
+    source at all. No prior test ever seeded `shipping_stopped_reason` first."""
+    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    segment_id = _spawn_one_segment(ctx)
+    ctx.store.stop_transcript_segment_shipping(segment_id, reason="chunk_budget_exceeded")
+
+    TranscriptPump(ctx).run()
+
+    assert source.turns_since_calls == []  # never even reached the source
+    assert ctx.store.pending_transcript_outbound() == []
+
+
+def test_pump_retries_from_the_same_cursor_when_the_source_is_unavailable() -> None:
+    """review F10: `turns_since` can report `available=False` (e.g. the harness session
+    file is mid-rotation) — the pump must leave the cursor untouched and ship nothing,
+    retrying from the same position next tick. No prior test scripted this outcome."""
+    unavailable = TranscriptBatch(
+        session_id="sess-a",
+        available=False,
+        reason="not_found",
+        turns=[],
+        unlinked_sidechains=[],
+        next_position=None,
+        complete=True,
+        truncated=False,
+        sidechain_truncated=False,
+        normalizer_version="fake/1",
+        harness_version=None,
+    )
+    ctx, _source = _ctx(ship=True, batches={"sess-a": unavailable})
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    assert ctx.store.pending_transcript_outbound() == []
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.cursor is None  # untouched — nothing to advance to
+
+
 def test_pump_ships_a_record_and_advances_the_cursor() -> None:
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi"), _turn(1, "there")], next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
@@ -234,10 +275,15 @@ def test_pump_truncates_a_single_record_that_alone_exceeds_the_cap() -> None:
     assert segment.cursor == "pos-1"  # the cursor advances past the whole batch regardless
     assert segment.truncated_reason == "record_cap_exceeded"
     assert segment.shipping_stopped_reason is None  # never latches the pump's guard
-    # Truncation is never silent (D4): a warning rides the FACT lane, not the transcript one.
+    # Truncation is never silent (D4): a warning rides the FACT lane. review F12: assert
+    # the actual payload, not just the generic envelope kind every fact-lane event shares.
     fact_events = ctx.store.pending_outbound()
     assert len(fact_events) == 1
     assert fact_events[0].kind == "event.recorded"
+    warning = json.loads(fact_events[0].payload)
+    assert warning["severity"] == "warning"
+    assert warning["kind"] == "transcript-truncated"
+    assert warning["detail"] == {"segment_id": segment_id, "reason": "record_cap_exceeded"}
 
 
 def test_pump_keeps_shipping_after_a_record_cap_truncation() -> None:
@@ -290,6 +336,9 @@ def test_pump_shrinks_tool_output_not_just_top_level_text() -> None:
     pending = ctx.store.pending_transcript_outbound()
     assert len(pending) == 1
     assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
+    body = json.loads(pending[0].payload)
+    assert body["turns"] != []  # shrunk, not emptied — genuine content still shipped
+    assert body["record_truncated"] is False  # review F5: not the accepted-but-empty case
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "record_cap_exceeded"
@@ -334,6 +383,9 @@ def test_pump_ships_an_explicit_empty_slice_when_shrinking_cannot_close_the_gap(
     body = json.loads(pending[0].payload)
     assert body["turns"] == []
     assert (body["turn_range_start"], body["turn_range_end"]) == (0, len(many_turns) - 1)
+    # review F5: this record is accepted outright by every hub-side cap (it's tiny once
+    # emptied) — `record_truncated` is the ONLY wire signal that it lost its claimed span.
+    assert body["record_truncated"] is True
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
     assert segment.cursor == "pos-1"  # still advances — never re-reads the batch
@@ -399,6 +451,40 @@ def test_pump_stops_shipping_past_the_chunk_budget_and_a_later_closure_still_fin
     assert any(d.final for d in pending)
 
 
+def test_pump_still_warns_a_dropped_sidechain_on_the_tick_that_tips_the_chunk_budget() -> None:
+    """review F13: unlike the pre-read budget check above, THIS tick's own record (a
+    real, just-read batch) is what tips the budget over — its dropped sidechain must
+    still warn, not vanish silently along with the stop."""
+    ctx, _source = _ctx(
+        ship=True,
+        batches={
+            "sess-a": _batch([_turn(0, "hi")], next_token="pos-1", unlinked_sidechains=[_unlinked_sidechain("sub_1")])
+        },
+    )
+    segment_id = _spawn_one_segment(ctx)
+    # Close to the budget, not AT it — this tick's own record (read, not faked) is what tips it.
+    ctx.store.record_transcript_delta(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor=None,
+        shipped_bytes=CHUNK_TRANSCRIPT_MAX_BYTES - 10,
+        shipped_turns=0,
+        normalizer_version="fake/1",
+        harness_version=None,
+        payload="{}",
+        created_at=_NOW,
+    )
+
+    TranscriptPump(ctx).run()
+
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.shipping_stopped_reason == "chunk_budget_exceeded"  # this tick's record tipped it
+    fact_events = ctx.store.pending_outbound()
+    kinds = [json.loads(e.payload)["kind"] for e in fact_events]
+    assert "transcript-sidechain-dropped" in kinds  # never silently dropped alongside the stop
+
+
 def test_pump_never_double_ships_after_a_same_session_resume() -> None:
     """review F3's pump-level regression: a same-session resume must not leave two open
     segments reading it — the pump only ever finds ONE, picking up where it left off."""
@@ -448,6 +534,65 @@ def test_lease_close_pumps_the_open_segment_before_finalizing_it() -> None:
     assert False in finals  # the last output shipped...
     assert True in finals  # ...and closure's own marker followed
     assert finals.index(False) < finals.index(True)  # ...content before finalization
+
+
+def test_pump_lease_yields_to_its_own_deadline() -> None:
+    """review F4: ``pump_lease`` must honor an already-elapsed deadline exactly like
+    ``run()`` does — the bound ``Attempt.close`` computes before calling it, so a slow
+    transcript-source read can never delay the closure it precedes past a few seconds."""
+    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    _spawn_one_segment(ctx)
+    lease = ctx.store.active_lease("lease_1")
+    assert lease is not None
+
+    TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=ctx.clock.now())
+
+    assert ctx.store.pending_transcript_outbound() == []  # bound already elapsed — nothing pumped
+
+
+class _RaisingTranscriptSource:
+    """An :class:`IHarnessTranscriptSource` whose ``turns_since`` always raises — review
+    F4's exception-isolation case, which no fixture can script through
+    :class:`FakeTranscriptSource` alone."""
+
+    def turns_since(self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None):  # type: ignore[no-untyped-def]
+        raise RuntimeError("transcript source unavailable (scripted)")
+
+    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+        return []
+
+    def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return None
+
+
+def test_lease_close_survives_a_raising_transcript_source() -> None:
+    """review F4: ``Attempt.close`` funnels every closure path through its own
+    pre-closure pump call. A read that raises must not propagate past it — the
+    closure, and whatever it accompanies, must still land."""
+    store = make_store("sqlite://")
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1"),
+        verdict=None,
+        transcript_source=_RaisingTranscriptSource(),
+    )
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+    )
+    segment_id = _spawn_one_segment(ctx)
+    lease = ctx.store.active_lease("lease_1")
+    assert lease is not None
+
+    Attempt(ctx, lease).close(FAILED, _NOW)  # must not raise
+
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.finalized_at is not None  # record_closure ran regardless of the raise
+    assert segment.cursor is None  # the pre-closure read never got a chance to advance it
 
 
 def test_run_yields_to_its_own_deadline_across_many_open_segments() -> None:

@@ -125,11 +125,19 @@ class GaplessOutboundSeq(QueryCheck):
 
 
 class GaplessTranscriptOutboundSeq(QueryCheck):
-    """A hole in the transcript lane's own seqs would break FIFO idempotent replay — the
-    lane's own mark, never `outbound_buffer`'s (D3, issue #246)."""
+    """A hole in the transcript lane's own *pending* (unacked) seqs means a lost record
+    (D3, issue #246) — scoped to the pending window, not every seq ever minted (review
+    F2), since an acked non-final row is pruned outright."""
 
     def run(self) -> list[Violation]:
-        seqs = sorted(row[0] for row in self.conn.execute(select(runner.transcript_outbound_buffer.c.seq)))
+        seqs = sorted(
+            row[0]
+            for row in self.conn.execute(
+                select(runner.transcript_outbound_buffer.c.seq).where(
+                    runner.transcript_outbound_buffer.c.acked_at.is_(None)
+                )
+            )
+        )
         if not seqs:
             return []
         expected = list(range(seqs[0], seqs[0] + len(seqs)))
@@ -138,7 +146,8 @@ class GaplessTranscriptOutboundSeq(QueryCheck):
         missing = sorted(set(expected) - set(seqs))
         return [
             Violation(
-                "runner:gapless-transcript-outbound-seq", f"transcript outbound seqs not gapless; missing {missing}"
+                "runner:gapless-transcript-outbound-seq",
+                f"pending transcript outbound seqs not gapless; missing {missing}",
             )
         ]
 

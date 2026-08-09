@@ -6,7 +6,6 @@ assert the SQL derivations the loop relies on, against a real tmp sqlite store.
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -652,9 +651,9 @@ def test_record_spawn_carries_the_cursor_forward_and_closes_the_prior_segment_on
 
 @pytest.mark.unit
 def test_record_spawn_carries_the_cursor_forward_on_a_cross_lease_resume(tmp_path):  # type: ignore[no-untyped-def]
-    """A named session pool resumes across DIFFERENT leases — the ordinary path, since
-    ``SessionResolver.resume_target`` is chunk-scoped, not lease-scoped. A lease-scoped
-    carry-forward would miss this and cold-read the whole session."""
+    """A named session pool resumes across DIFFERENT leases. Goes through the REAL
+    production order (review F3): ``record_closure`` finalizes lease_1's segment before
+    lease_2 mints, so carry-forward must find it ALREADY finalized."""
     store = _store(tmp_path)
     _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
     store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
@@ -670,6 +669,10 @@ def test_record_spawn_carries_the_cursor_forward_on_a_cross_lease_resume(tmp_pat
         payload="{}",
         created_at=_NOW,
     )
+    closed_at = _NOW + timedelta(seconds=30)
+    store.record_closure(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=closed_at
+    )
 
     # A different node-step, a different lease — but the SAME session, resumed via the pool.
     _mint(store, chunk="ch_1", node="nd_review", node_name="review", epoch=2, lease="lease_2")
@@ -678,15 +681,20 @@ def test_record_spawn_carries_the_cursor_forward_on_a_cross_lease_resume(tmp_pat
     )
 
     open_segments = store.open_transcript_segments()
-    assert len(open_segments) == 1  # lease_1's segment closed out at the boundary
+    assert len(open_segments) == 1  # lease_1's segment was already closed out by record_closure
     gen2 = open_segments[0]
     assert gen2.lease_id == "lease_2"
     assert gen2.session_id == "sess-a"
-    assert gen2.cursor == "tok-1"  # carried forward across the lease boundary
+    assert gen2.cursor == "tok-1"  # carried forward across the lease boundary, from the ALREADY-finalized segment
 
     finalized_gen1 = store.transcript_segment(gen1.segment_id)
     assert finalized_gen1 is not None
-    assert finalized_gen1.finalized_at == _NOW + timedelta(minutes=1)
+    assert finalized_gen1.finalized_at == closed_at  # record_closure's own stamp, not record_spawn's later one
+
+    # record_closure already enqueued gen1's one final marker — record_spawn must not enqueue
+    # a second one for a segment it didn't finalize itself (TranscriptSegmentFinalizedExactlyOnce).
+    finals = [d for d in store.pending_transcript_outbound() if d.segment_id == gen1.segment_id and d.final]
+    assert len(finals) == 1
 
 
 @pytest.mark.unit
@@ -730,21 +738,31 @@ def test_transcript_segment_delta_stop_shipping_and_record_truncated(tmp_path): 
     assert advanced is not None
     assert (advanced.cursor, advanced.shipped_bytes, advanced.shipped_turns) == ("tok-1", 100, 3)
 
-    store.mark_transcript_record_truncated(segment_id, reason="record_cap_exceeded")
-    # A second call keeps the first reason rather than overwriting it.
-    store.mark_transcript_record_truncated(segment_id, reason="different_reason")
+    changed_1 = store.mark_transcript_record_truncated(segment_id, reason="record_cap_exceeded")
+    assert changed_1 is True
+    # A repeat of the SAME reason is a no-op (review F14) — no per-tick spam...
+    changed_2 = store.mark_transcript_record_truncated(segment_id, reason="record_cap_exceeded")
+    assert changed_2 is False
     marked = store.transcript_segment(segment_id)
     assert marked is not None
     assert marked.truncated_reason == "record_cap_exceeded"
     assert marked.shipping_stopped_reason is None  # informational only — still open, still pumpable
     assert len(store.open_transcript_segments()) == 1
 
+    # ...but a later, DIFFERENT reason still overwrites (review F14) — a worse outcome
+    # must never be masked by an earlier, milder one.
+    changed_3 = store.mark_transcript_record_truncated(segment_id, reason="record_unshippable")
+    assert changed_3 is True
+    overwritten = store.transcript_segment(segment_id)
+    assert overwritten is not None
+    assert overwritten.truncated_reason == "record_unshippable"
+
     store.stop_transcript_segment_shipping(segment_id, reason="chunk_budget_exceeded")
     store.stop_transcript_segment_shipping(segment_id, reason="different_reason")
     stopped = store.transcript_segment(segment_id)
     assert stopped is not None
     assert stopped.shipping_stopped_reason == "chunk_budget_exceeded"
-    assert stopped.truncated_reason == "record_cap_exceeded"  # untouched by the stop-shipping latch
+    assert stopped.truncated_reason == "record_unshippable"  # untouched by the stop-shipping latch
     assert len(store.open_transcript_segments()) == 1  # stopping shipping does not finalize
 
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
@@ -802,6 +820,43 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
         remaining = conn.execute(sa.select(transcript_outbound_buffer.c.seq)).scalars().all()
     # An acked `delta` row is pruned outright, not merely marked — up to 1 MB each.
     assert list(remaining) == [t2]
+
+
+@pytest.mark.unit
+def test_ack_transcript_outbound_never_reissues_a_pruned_rows_seq(tmp_path):  # type: ignore[no-untyped-def]
+    """review F1: a bare SQLite `INTEGER PRIMARY KEY` reuses a deleted row's rowid —
+    exactly what pruning the highest-seq acked row sets up. A reissued seq the hub already
+    marked applied would read as a replay, silently dropping genuinely new content."""
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    segment_id = store.open_transcript_segments()[0].segment_id
+    t1 = store.record_transcript_delta(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor="tok-1",
+        shipped_bytes=1,
+        shipped_turns=1,
+        normalizer_version="v1",
+        harness_version=None,
+        payload="{}",
+        created_at=_NOW,
+    )
+
+    store.ack_transcript_outbound(t1, acked_at=_NOW)  # prunes t1 outright — it was the table's only, and highest, row
+
+    t2 = store.record_transcript_delta(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor="tok-2",
+        shipped_bytes=1,
+        shipped_turns=1,
+        normalizer_version="v1",
+        harness_version=None,
+        payload="{}",
+        created_at=_NOW,
+    )
+    assert t2 != t1  # never reissued, even though t1 is now gone and t2 is the new max
 
 
 @pytest.mark.unit
@@ -873,9 +928,9 @@ def test_record_closure_is_a_no_op_for_a_lease_with_no_segments(tmp_path):  # ty
 
 @pytest.mark.unit
 def test_record_closure_ships_a_final_marker_even_when_no_pump_ever_ran(tmp_path):  # type: ignore[no-untyped-def]
-    """A normalizer version is a static constant, not something a read must learn, so closure
-    ships a valid final record on the sentinel version even for a never-pumped segment — what
-    lets the crash sweep reach the `transcript.*` points with `ship` at its default."""
+    """Closure finalizes a segment on its normalizer-version sentinel even with no pump
+    ever run. The buffered marker row stays minimal (review F8) — this pins the sentinel
+    on the ledger row, the one place ``_final_record`` reads it from."""
     store = _store(tmp_path)
     _mint(store, lease="lease_1")
     store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
@@ -886,8 +941,7 @@ def test_record_closure_ships_a_final_marker_even_when_no_pump_ever_ran(tmp_path
     marker = store.pending_transcript_outbound()
     assert len(marker) == 1
     assert marker[0].final is True
-    body = json.loads(marker[0].payload)
-    assert body["normalizer_version"] == ""  # the sentinel, never learned from a real read
     segment = store.transcript_segment(segment_id)
     assert segment is not None
     assert segment.finalized_at == _NOW
+    assert segment.normalizer_version == ""  # the sentinel, never learned from a real read

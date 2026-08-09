@@ -39,8 +39,9 @@ REJECTED_RUNNER_DAILY_RATE_EXCEEDED = "runner_daily_rate_exceeded"
 @dataclass(frozen=True)
 class SegmentRecord:
     """One shipped turn-range slice, store-shaped: ``turns_json`` is the record's turns,
-    already serialized by the caller — the domain never depends on the wire's pydantic
-    turn views (``bzh:domain-core``), and the store confines the compression codec."""
+    already serialized by the caller (``bzh:domain-core``). ``record_truncated`` (review
+    F5) is the runner's OWN cap declaration, distinct from this hub's own ``rejected``
+    (below)."""
 
     segment_id: str
     chunk_id: str
@@ -53,14 +54,16 @@ class SegmentRecord:
     final: bool
     normalizer_version: str
     harness_version: str | None
+    record_truncated: bool
     turns_json: str
 
 
 @dataclass(frozen=True)
 class SegmentIndexRow:
     """One segment's aggregated metadata (D12) — every stored/rejected record folded
-    into its owning segment. ``truncated`` is true iff any of the segment's records were
-    cap-rejected (plan-review F2)."""
+    into its owning segment. ``truncated`` is true iff any record was cap-rejected
+    (plan-review F2) OR declared its own ``record_truncated`` (review F5), a runner-side
+    loss this hub's own cap adjudication never sees."""
 
     segment_id: str
     node_id: str
@@ -79,13 +82,15 @@ class SegmentIndexRow:
 @dataclass(frozen=True)
 class SegmentRecordContent:
     """One record's decompressed turns, in the order the content route concatenates
-    them. ``rejected`` records carry ``turns_json="[]"`` — the content route's own
-    truncation signal, since a segment can be cap-rejected mid-stream."""
+    them. ``rejected`` records carry ``turns_json="[]"``. ``record_truncated`` (review
+    F5) is the accepted-but-runner-emptied counterpart: also empty, but never
+    ``rejected`` — the hub stored it outright."""
 
     turn_range_start: int
     turn_range_end: int
     final: bool
     rejected: bool
+    record_truncated: bool
     turns_json: str
 
 

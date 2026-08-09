@@ -497,4 +497,7 @@ transcript_outbound_buffer = Table(
     # NULL = pending. An acked non-final row is deleted, never reaching this state; an
     # acked final row IS marked here — its continued presence is the exactly-once receipt.
     Column("acked_at", UtcDateTime, nullable=True),
+    # Real SQLite AUTOINCREMENT (review F1): a bare `INTEGER PRIMARY KEY` would reuse a
+    # pruned row's rowid, reissuing a seq the hub already marked applied.
+    sqlite_autoincrement=True,
 )

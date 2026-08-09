@@ -58,6 +58,7 @@ class TranscriptSegmentStore:
                 turn_range_end=row.turn_range_end,
                 final=row.final,
                 rejected=row.rejected,
+                record_truncated=bool(row.record_truncated),  # NULL (pre-column row) reads as False
                 turns_json=self._decompress(row.content, row.codec) if row.content is not None else "[]",
             )
             for row in rows
@@ -193,6 +194,7 @@ class TranscriptSegmentStore:
             "final": record.final,
             "normalizer_version": record.normalizer_version,
             "harness_version": record.harness_version,
+            "record_truncated": record.record_truncated,
         }
 
     @staticmethod
@@ -215,7 +217,8 @@ class TranscriptSegmentStore:
             turn_range_start=min(r.turn_range_start for r in rows),
             turn_range_end=max(r.turn_range_end for r in rows),
             final=any(r.final for r in rows),
-            truncated=any(r.rejected for r in rows),
+            # Cap-rejected (this hub) OR runner-declared `record_truncated` (review F5).
+            truncated=any(r.rejected or bool(r.record_truncated) for r in rows),
             byte_count=sum(r.byte_count for r in rows),
             normalizer_version=rows[0].normalizer_version,
             harness_version=rows[0].harness_version,
