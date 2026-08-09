@@ -352,12 +352,12 @@ def test_case12c_committed_registry_cross_repo_agreement() -> None:
 # Case 13 — site identity is correct against real files.
 
 
-def test_case13_chunk_takeover_leading_block_attributes_to_class() -> None:
-    path = _REPO_ROOT / "web/projects/fleet/src/lib/chunk-detail/chunk-takeover.ts"
+def test_case13_chunk_escalation_leading_block_attributes_to_class() -> None:
+    path = _REPO_ROOT / "web/projects/fleet/src/lib/chunk-detail/chunk-escalation.ts"
     spans = prose_spans.extract_spans(path)
     leading = [s for s in spans if s.start_line == 6]
     assert len(leading) == 1
-    assert leading[0].symbol == "ChunkTakeover"
+    assert leading[0].symbol == "ChunkEscalation"
 
 
 def test_case13_deployment_doc_heading_slug() -> None:

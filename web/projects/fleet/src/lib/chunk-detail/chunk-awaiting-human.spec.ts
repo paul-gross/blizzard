@@ -440,7 +440,7 @@ describe('ChunkAwaitingHuman', () => {
     expect(getComputedStyle(answer, '::before').content).not.toMatch(/^["']\s/);
   });
 
-  it('renders the takeover region for an escalated chunk (deep coverage lives in ChunkTakeover’s own spec)', async () => {
+  it('renders the takeover region for an escalated chunk (deep coverage lives in ChunkEscalation’s own spec)', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', ESCALATED_DETAIL);
     await fixture.whenStable();

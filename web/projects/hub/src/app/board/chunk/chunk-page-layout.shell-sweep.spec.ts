@@ -74,7 +74,7 @@ const ASK_DETAIL: hubApi.ChunkDetail = {
  * long strings shaped the way they actually arrive: an absolute runtime dir plus a
  * `blizzard runner takeover` invocation, and an absolute worktree path plus a
  * `claude --resume <uuid>` invocation. The fallback renders inside a collapsed
- * `<details>` (`chunk-takeover.ts`), so the sweep below proves the dock does not
+ * `<details>` (`chunk-escalation.ts`), so the sweep below proves the dock does not
  * overflow with it collapsed *or* expanded.
  */
 const NEEDS_HUMAN_DETAIL: hubApi.ChunkDetail = {

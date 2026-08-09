@@ -11,21 +11,16 @@ import { KitButton } from '../kit/kit-button';
  * `wrapped_takeover_command` is the `blizzard runner takeover` form the runner
  * composes; it is primary whenever present, with the raw `takeover_command`
  * demoted to a collapsed fallback disclosure below it. When wrapped is absent but
- * raw is present, the raw field renders as the primary copyable command instead.
+ * raw is present, the raw field renders as the primary copyable command instead —
+ * under framing that does not tell the operator to run it, because the wire carries
+ * no discriminator between a runner-composed resume command and the hub-authored
+ * guidance prose that occupies the same field.
  * Wrapped-vs-raw rules and the wire field's own optionality:
  * `blizzard-context:/domain/humans.md` §Escalation and `EscalationView` in
- * `src/blizzard/wire/chunk.py`. A hub-authored escalation's guidance prose also
- * lands here and copies as text, which is harmless.
- *
- * "Takeover" in the class/selector name is the deliberate operator-facing word for
- * entering a parked session — matching `blizzard runner takeover` and the "Needs
- * human · takeover" tag below — not the separately-modeled Takeover entity (its own
- * store table, `TakeoverService`, `OpenTakeoverView`, `GET /api/takeovers`; see
- * `blizzard-context:/domain/humans.md`'s §Takeover). This component renders none of
- * that entity's state: it only reads the open escalation (`data-testid="escalation"`).
+ * `src/blizzard/wire/chunk.py`.
  */
 @Component({
-  selector: 'fleet-chunk-detail-takeover',
+  selector: 'fleet-chunk-detail-escalation',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitButton],
   template: `
@@ -49,8 +44,9 @@ import { KitButton } from '../kit/kit-button';
             <code class="cmd">{{ esc.takeover_command }}</code>
           </details>
         } @else if (hasCommand()) {
-          <p class="esc-hint">
-            The worker escalated (epoch {{ esc.epoch }}). Run the takeover command to enter its session:
+          <p class="esc-hint" data-testid="unwrapped-hint">
+            The worker escalated (epoch {{ esc.epoch }}). Its unwrapped takeover field carries either a resume
+            command to run, or guidance for clearing the chunk — the escalation does not say which:
           </p>
           <div class="takeover">
             <code class="cmd" data-testid="takeover-command">{{ primaryCommand() }}</code>
@@ -133,7 +129,7 @@ import { KitButton } from '../kit/kit-button';
     }
   `,
 })
-export class ChunkTakeover {
+export class ChunkEscalation {
   /** The chunk aggregate to render the open escalation of, if any. */
   readonly detail = input.required<ChunkDetail>();
 

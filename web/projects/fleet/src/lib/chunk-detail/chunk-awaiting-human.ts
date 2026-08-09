@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import type { ChunkDetail, ChunkStatus, DecisionView, QuestionView } from '../api/hub';
 import { KitButton } from '../kit/kit-button';
-import { ChunkTakeover } from './chunk-takeover';
+import { ChunkEscalation } from './chunk-escalation';
 
 /** Emitted when the operator answers a chunk's open question from the dock. */
 export interface AnswerQuestionEvent {
@@ -30,7 +30,7 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
  * The chunk's awaiting-human gate (issue #79) — whatever the chunk waits on
  * a human for: an open **question** with an inline **Answer** action (MVP
  * criterion 7), an open gate **decision** as **choice buttons** (MVP
- * criterion 12), or an open **escalation**, rendered by {@link ChunkTakeover}
+ * criterion 12), or an open **escalation**, rendered by {@link ChunkEscalation}
  * — this component keeps no escalation state of its own, just forwards `detail`.
  *
  * Below those, the **answered trail** (issue #165): a recently answered question stays
@@ -45,7 +45,7 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
 @Component({
   selector: 'fleet-chunk-detail-awaiting-human',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkTakeover, KitButton],
+  imports: [ChunkEscalation, KitButton],
   template: `
     @if (openQuestions().length > 0 || openDecision()) {
       <div class="awaiting" data-testid="awaiting-human">
@@ -132,7 +132,7 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
       </div>
     }
 
-    <fleet-chunk-detail-takeover [detail]="detail()" />
+    <fleet-chunk-detail-escalation [detail]="detail()" />
   `,
   styles: `
     :host {

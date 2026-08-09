@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 
 import type { ChunkDetail } from '../api/hub';
-import { ChunkTakeover } from './chunk-takeover';
+import { ChunkEscalation } from './chunk-escalation';
 
 /** An escalation carrying both forms — the runner-composed shape. */
 const WRAPPED_DETAIL: ChunkDetail = {
@@ -70,16 +70,16 @@ const NO_ESCALATION_DETAIL: ChunkDetail = {
 
 async function render(detail: ChunkDetail, extraProviders: unknown[] = []) {
   await TestBed.configureTestingModule({
-    imports: [ChunkTakeover],
+    imports: [ChunkEscalation],
     providers: [provideZonelessChangeDetection(), ...extraProviders],
   }).compileComponents();
-  const fixture = TestBed.createComponent(ChunkTakeover);
+  const fixture = TestBed.createComponent(ChunkEscalation);
   fixture.componentRef.setInput('detail', detail);
   await fixture.whenStable();
   return fixture;
 }
 
-describe('ChunkTakeover', () => {
+describe('ChunkEscalation', () => {
   let originalClipboardDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
@@ -142,26 +142,29 @@ describe('ChunkTakeover', () => {
       'cd /work/ch_01esc00000000000000000000000 && claude --resume se_01',
     );
     expect(el.querySelector('[data-testid="takeover-command-raw-fallback"]')).toBeNull();
-    expect(el.querySelector('.esc-hint')?.textContent).toContain('Run the takeover command');
+    // Framed as the unwrapped field, not as a command to run — see the prose case below
+    // for why this branch cannot claim runnability.
+    expect(el.querySelector('[data-testid="unwrapped-hint"]')?.textContent).toContain('either a resume');
 
     el.querySelector<HTMLButtonElement>('[data-testid="copy-takeover"]')?.click();
     await fixture.whenStable();
     expect(writeText).toHaveBeenCalledWith('cd /work/ch_01esc00000000000000000000000 && claude --resume se_01');
   });
 
-  it('renders hub-authored guidance prose in the same copyable command box when unwrapped', async () => {
+  it('renders hub-authored guidance prose under the same unwrapped framing, claiming no runnability', async () => {
     const fixture = await render(PROSE_ONLY_DETAIL);
     const el = fixture.nativeElement as HTMLElement;
 
-    // Accepted trade-off: the board cannot tell a runnable raw command from
-    // hub-authored guidance prose, so both render copyable; copying prose is
-    // harmless while an uncopyable command is a regression.
+    // The wire carries no discriminator between this and RAW_ONLY_DETAIL above, so the
+    // branch is shared by construction: it stays copyable (an uncopyable command would be
+    // a regression; copying prose is harmless) but tells nobody to run what it shows.
     expect(el.querySelector('[data-testid="escalation"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="takeover-command"]')?.textContent).toContain(
       'mint a graph named `review`',
     );
     expect(el.querySelector('[data-testid="copy-takeover"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="takeover-command-raw-fallback"]')).toBeNull();
+    expect(el.querySelector('[data-testid="unwrapped-hint"]')?.textContent).not.toContain('Run the');
   });
 
   it('copies the wrapped command when it is primary, flipping the label and resetting it after the timeout', async () => {
