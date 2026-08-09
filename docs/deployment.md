@@ -1320,6 +1320,35 @@ sample_interval_seconds = 300
 See the runner panel on the board for a paced-window bar per sampled window (`5h`/`7d` for
 Claude Code), rendered only when a runner has a non-stale sample to show.
 
+## Shipping transcript content to the hub — the outbound lane (off by default)
+
+Alongside the fact lane (`lease.minted`, completions, and the rest), the runner carries a
+second, structurally independent outbound lane for transcript content: normalized turns
+read from the harness's own session transcript, batched and pushed to the hub over their
+own route, buffering through a hub outage exactly like the fact lane's own store-and-forward
+does. A wedged or slow transcript flush never delays a completion or a gate decision — the
+two lanes share nothing but the runner process.
+
+```toml
+[transcripts]
+# Ship transcript deltas to the hub. Off by default: with no [transcripts] table (or
+# `ship` omitted), the runner reads nothing and enqueues nothing for this lane.
+ship = false
+```
+
+- **Off by default, and the content is discarded hub-side either way, today.** The hub's
+  ingest route accepts and acknowledges the lane's facts, but stores none of them — no
+  transcript content is retained anywhere until a later release lands the real segment
+  store. Turning `ship` on today buys the lane's own crash-correctness and lane-independence
+  proof, not a durable transcript a human or the board can read back.
+- **Capped, and truncation is never silent.** A single buffered record is capped at 1 MB —
+  an oversized turn is truncated in place, not dropped, so the runner's read position still
+  advances past it. A chunk's cumulative shipped bytes are capped at 64 MB — past it, the
+  runner stops shipping that chunk's content but still ships every segment's final marker.
+  Either cap firing is recorded on the segment and surfaced as a `warning` operational event
+  (see [the event log](#operational-visibility--the-event-log) below), the same way a
+  captured command failure is.
+
 ## Operational visibility — the event log
 
 The failures that cost the most are the least visible: a worker that exits without recording a

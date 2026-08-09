@@ -2369,8 +2369,8 @@
   },
   "blizzard/runner/transcripts/repository.py": {
    "comments": 4,
-   "docstrings": 23,
-   "total": 66
+   "docstrings": 24,
+   "total": 67
   },
   "blizzard/runner/transcripts/service.py": {
    "comments": 4,
