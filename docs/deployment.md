@@ -1344,12 +1344,15 @@ ship = false
   store. Turning `ship` on today buys the lane's own crash-correctness and lane-independence
   proof, not a durable transcript a human or the board can read back.
 - **Capped, and truncation is never silent.** A single buffered record is capped at 1 MB —
-  an oversized turn is truncated in place, not dropped, so the runner's read position still
-  advances past it. A chunk's cumulative shipped bytes are capped at 64 MB — past it, the
-  runner stops shipping that chunk's content but still ships every segment's final marker.
-  Either cap firing is recorded on the segment and surfaced as a `warning` operational event
-  (see [the event log](#operational-visibility--the-event-log) below), the same way a
-  captured command failure is.
+  an oversized turn's own text, its tool output, and any nested sidechain turn are shrunk in
+  place rather than dropped, so the runner's read position still advances past it. A record
+  still over cap once nothing is left to shrink — structural overhead alone — ships instead
+  as a turnless marker naming how many turns it dropped, never as an over-cap body. A chunk's
+  cumulative shipped bytes are capped at 64 MB — past it, the runner stops shipping that
+  chunk's content but still ships every segment's final marker. Each of those outcomes is
+  recorded on the segment and surfaced as a `warning` operational event (see
+  [the event log](#operational-visibility--the-event-log) below), the same way a captured
+  command failure is.
 
 ## Operational visibility — the event log
 
