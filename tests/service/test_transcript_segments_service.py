@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.domain.transcripts import RECORD_MAX_BYTES
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub
 from tests.service.support import mint_fixture, require_mock_fleet, require_winter_source, service_gate
 
@@ -76,3 +77,36 @@ def test_ingest_and_read_back_round_trip_over_the_wire(tmp_path: Path) -> None:
         content = hub.get(f"/api/chunks/{chunk_id}/transcripts/sg_1")
         assert content.status_code == 200, content.text
         assert [t["text"] for t in content.json()["turns"]] == ["hi"]
+
+
+def test_a_segment_is_not_readable_through_another_chunks_path(tmp_path: Path) -> None:
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        owning = _ingest(forge, hub, "owning chunk")
+        other = _ingest(forge, hub, "other chunk")
+        ack = hub.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": [_record(owning, seq=1)]})
+        assert ack.status_code == 200, ack.text
+
+        assert hub.get(f"/api/chunks/{other}/transcripts/sg_1").status_code == 404
+        assert hub.get(f"/api/chunks/{owning}/transcripts/sg_1").status_code == 200
+
+
+def test_a_cap_rejected_record_re_offered_under_a_fresh_seq_is_re_adjudicated(tmp_path: Path) -> None:
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        chunk_id = _ingest(forge, hub, "re-adjudicated segment")
+        oversized = _record(chunk_id, seq=1)
+        oversized["turns"][0]["text"] = "x" * (RECORD_MAX_BYTES + 1)
+
+        ack = hub.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": [oversized]})
+        assert ack.status_code == 200, ack.text
+        assert ack.json()["capped"] == [1]
+        [entry] = hub.get(f"/api/chunks/{chunk_id}/transcripts").json()["segments"]
+        assert entry["truncated"] is True
+
+        retry = hub.post("/api/fleet/transcripts", json={"runner_id": "r1", "records": [_record(chunk_id, seq=99)]})
+        assert retry.json()["applied"] == [99], retry.text
+        content = hub.get(f"/api/chunks/{chunk_id}/transcripts/sg_1")
+        assert [t["text"] for t in content.json()["turns"]] == ["hi"]
+        [entry] = hub.get(f"/api/chunks/{chunk_id}/transcripts").json()["segments"]
+        assert entry["truncated"] is False
