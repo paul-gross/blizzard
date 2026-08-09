@@ -128,10 +128,8 @@ class OutboundFactRecord:
 @dataclass(frozen=True)
 class TranscriptSegmentRecord:
     """One row of the transcript segment ledger (issue #246, D2) — a mutable ledger like
-    :class:`LeaseRecord`, not an append-only fact. ``cursor`` is the opaque forward-read
-    token (``None`` = unread from the start); ``truncated_reason`` is ``None`` while the
-    segment's caps have not been breached (D4); ``finalized_at`` is ``None`` while the
-    segment is still live."""
+    :class:`LeaseRecord`, not an append-only fact. ``cursor``/``truncated_reason``/
+    ``finalized_at`` are ``None`` while unread-from-start / uncapped (D4) / still live."""
 
     segment_id: str
     chunk_id: str

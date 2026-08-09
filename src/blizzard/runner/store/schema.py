@@ -451,10 +451,7 @@ external_usage_samples = Table(
 )
 
 # --- Transcript segments (the segment ledger — issue #246, D2) ---------------
-# One row per segment, stamped inside `record_spawn`'s own transaction (D1) and then
-# mutated in place as the pump advances it — a mutable ledger like `leases`, not an
-# append-only fact table. Keyed `(chunk_id, node_id, epoch, generation)`; `segment_id` is
-# the runner-minted `seg_<ulid>` carried on the wire as the hub's idempotence key.
+# Mutable, like `leases`, not append-only; keyed `(chunk_id, node_id, epoch, generation)`.
 
 transcript_segments = Table(
     "transcript_segments",
@@ -475,9 +472,7 @@ transcript_segments = Table(
 )
 
 # --- Transcript outbound buffer (the lane's own store-and-forward — D3) ------
-# A second FIFO drain, structurally independent of `outbound_buffer`'s: its own
-# autoincrementing per-runner sequence, so a wedged transcript flush can never delay the
-# fact lane's.
+# A second FIFO drain, its own sequence, structurally independent of `outbound_buffer`'s.
 
 transcript_outbound_buffer = Table(
     "transcript_outbound_buffer",

@@ -110,10 +110,8 @@ _CI_SUBSET = (
     # `claim.*` (issue #84b) is a boundary family within `_GENERIC_POINTS`; a family's lone
     # member is its own CI representative.
     "claim.after-persist.before-response",
-    # `transcript.*` (D3, issue #246) is reachable by THIS generic scenario with no dedicated
-    # one: every lease closure enqueues a final marker regardless of `[transcripts] ship`, so
-    # the drain always has something to submit by the time the scenario's chunk lands. Its
-    # post-submit-pre-ack window is the recovery-critical member, mirroring `flush.*`'s own.
+    # `transcript.*` (D3, issue #246): reachable here with no dedicated scenario — every
+    # lease closure enqueues a final marker regardless of `[transcripts] ship`.
     "transcript.after-submit.before-ack",
 )
 

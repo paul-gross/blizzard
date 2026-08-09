@@ -1,7 +1,5 @@
 """transcript_outbound_buffer.kind (runner store tree, issue #246) — the fact-kind
-discriminator (``transcript.delta`` | ``transcript.final``) the phase-1 revision omitted;
-mirrors ``outbound_buffer.kind``. Backfills existing rows as ``transcript.delta`` (this
-lane ships disabled by default, so no real row predates this revision).
+discriminator (``transcript.delta`` | ``transcript.final``), mirroring ``outbound_buffer``.
 
 Revision ID: 20260809_0900_runner_transcript_outbound_kind
 Revises: 20260808_2300_runner_transcript_segments

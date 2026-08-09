@@ -127,10 +127,8 @@ def _sidechain_wire(sidechain: SidechainConversation) -> dict[str, Any]:
 def _shrink_to_cap(delta: dict[str, Any]) -> dict[str, Any]:
     """Shrink turn text in place until the serialized delta fits the per-record cap (D4).
 
-    Never drops a turn — the cursor advances past the whole batch regardless — so a
-    single oversized turn and a merely-collectively-oversized batch both converge: the
-    largest ``text`` field is halved, repeatedly, until the encoding fits or there is
-    nothing left to shrink."""
+    Never drops a turn, so the cursor still advances past the whole batch: the largest
+    ``text`` field is halved, repeatedly, until the encoding fits or nothing is left."""
     turns = delta["turns"]
     for _ in range(200):
         if len(json.dumps(delta).encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES:

@@ -1,11 +1,9 @@
 """Runner→hub transcript delta intake (issue #246) — the dedicated outbound lane's own
 wire, alongside ``wire/facts.py``'s fact-lane pair. Structurally independent of it (D3): a
-batched store-and-forward push whose per-runner monotonic seq is applied idempotently
-against the transcript lane's own high-water mark, never the fact lane's.
-
-A segment's final marker rides this same batch as a distinctly-kinded fact — one route,
-one buffer, one ack shape, following ``RunnerFact``'s own ``kind``/``payload`` split
-rather than growing a second route."""
+batched push whose per-runner seq applies idempotently against the transcript lane's own
+high-water mark. A segment's final marker rides the same batch as a distinctly-kinded
+fact, following ``RunnerFact``'s own ``kind``/``payload`` split rather than a second
+route."""
 
 from __future__ import annotations
 
@@ -18,9 +16,8 @@ from pydantic import BaseModel
 TRANSCRIPT_DELTA = "transcript.delta"
 TRANSCRIPT_FINAL = "transcript.final"
 
-#: The per-record cap (plan D4) — enforced runner-side (truncated in place) and, in case a
-#: runner ever ships an over-cap record anyway, rejected-but-acked hub-side so it can never
-#: wedge the mark.
+#: The per-record cap (plan D4) — truncated in place runner-side, rejected-but-acked
+#: hub-side if one ever ships over-cap anyway.
 TRANSCRIPT_RECORD_MAX_BYTES = 1024 * 1024
 
 

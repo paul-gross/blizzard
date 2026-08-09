@@ -655,10 +655,8 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
 
 @pytest.mark.unit
 def test_record_closure_finalizes_every_open_segment_and_marks_it_atomically(tmp_path):  # type: ignore[no-untyped-def]
-    """The lane's promise: a step's segments are final by step close (issue #246). Every
-    still-open segment for the closing lease is finalized AND its ``transcript.final``
-    marker enqueued — on the transcript lane's own buffer, never ``outbound_buffer``,
-    and in the same transaction as the closure itself."""
+    """A step's segments are final by step close (issue #246): every open segment for the
+    closing lease is finalized and its marker enqueued, atomically, on its own buffer."""
     store = _store(tmp_path)
     _mint(store, lease="lease_1")
     store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)

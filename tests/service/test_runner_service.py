@@ -138,10 +138,8 @@ def _pending_transcript_outbound(config: RunnerConfig) -> int:
 
 
 def test_transcript_route_failure_never_blocks_the_fact_lane(tmp_path: Path) -> None:
-    """D6: the lane's independence proof. With the transcript route 503ing throughout, the
-    fact lane (completions) still lands the chunk while transcript facts buffer; on the
-    route's return the backlog flushes with no loss (every seq eventually applied) and no
-    duplication (a re-flushed seq re-acks as already_applied, never re-applied twice)."""
+    """D6: with the transcript route 503ing, the fact lane still lands the chunk while
+    transcript facts buffer; the backlog flushes with no loss or duplication on return."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"

@@ -20,6 +20,7 @@ from blizzard.hub.domain.work import ChunkFacts, RouteHistory
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.internal.chunk_store import DEFAULT_MODEL, ChunkStore
 from blizzard.runner.store import schema as runner
+from blizzard.wire.transcript_outbound import TRANSCRIPT_FINAL
 
 
 @dataclass(frozen=True)
@@ -122,6 +123,60 @@ class GaplessOutboundSeq(QueryCheck):
             return []
         missing = sorted(set(expected) - set(seqs))
         return [Violation("runner:gapless-outbound-seq", f"outbound seqs not gapless; missing {missing}")]
+
+
+class GaplessTranscriptOutboundSeq(QueryCheck):
+    """A hole in the transcript lane's own seqs would break FIFO idempotent replay — the
+    lane's own mark, never `outbound_buffer`'s (D3, issue #246)."""
+
+    def run(self) -> list[Violation]:
+        seqs = sorted(row[0] for row in self.conn.execute(select(runner.transcript_outbound_buffer.c.seq)))
+        if not seqs:
+            return []
+        expected = list(range(seqs[0], seqs[0] + len(seqs)))
+        if seqs == expected:
+            return []
+        missing = sorted(set(expected) - set(seqs))
+        return [
+            Violation(
+                "runner:gapless-transcript-outbound-seq", f"transcript outbound seqs not gapless; missing {missing}"
+            )
+        ]
+
+
+class TranscriptSegmentFinalizedExactlyOnce(QueryCheck):
+    """A finalized segment (`finalized_at` set) has exactly one `transcript.final` marker
+    buffered for it — the lane's promise that a step's segments are final by step close,
+    landed exactly once, never zero and never duplicated (issue #246)."""
+
+    def run(self) -> list[Violation]:
+        violations: list[Violation] = []
+        finalized = {
+            row[0]
+            for row in self.conn.execute(
+                select(runner.transcript_segments.c.segment_id).where(
+                    runner.transcript_segments.c.finalized_at.is_not(None)
+                )
+            )
+        }
+        markers = Counter(
+            row[0]
+            for row in self.conn.execute(
+                select(runner.transcript_outbound_buffer.c.segment_id).where(
+                    runner.transcript_outbound_buffer.c.kind == TRANSCRIPT_FINAL
+                )
+            )
+        )
+        for segment_id in finalized:
+            n = markers.get(segment_id, 0)
+            if n != 1:
+                violations.append(
+                    Violation(
+                        "runner:transcript-segment-finalized-exactly-once",
+                        f"segment {segment_id} is finalized but has {n} transcript.final markers buffered",
+                    )
+                )
+        return violations
 
 
 class OneOpenPauseParkPerLease(QueryCheck):
@@ -509,6 +564,8 @@ class RunnerInvariants:
                 OneLiveLeasePerChunk(conn),
                 UniqueEnvBinding(conn),
                 GaplessOutboundSeq(conn),
+                GaplessTranscriptOutboundSeq(conn),
+                TranscriptSegmentFinalizedExactlyOnce(conn),
                 OneOpenPauseParkPerLease(conn),
                 UsageAttributedOnce(conn),
                 NudgeAtMostOnce(conn),

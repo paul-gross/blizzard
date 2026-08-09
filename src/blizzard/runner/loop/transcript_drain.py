@@ -28,9 +28,8 @@ _CP_AFTER_SUBMIT = crashpoint("transcript.after-submit.before-ack", "hub applied
 class TranscriptDrain:
     """The transcript lane's pump-then-flush — registered directly in ``tick`` (D3), after
     every fact-lane step, never chained to ``Pull``. Reachable by the generic build → deliver
-    crash sweep with no dedicated scenario: every lease closure enqueues a final marker here
-    regardless of ``[transcripts] ship`` (D4/D5), so this drain always has something to
-    submit by the time a chunk's attempt closes."""
+    crash sweep with no dedicated scenario: every lease closure enqueues a final marker
+    regardless of ``[transcripts] ship`` (D4/D5)."""
 
     ctx: LoopContext
 

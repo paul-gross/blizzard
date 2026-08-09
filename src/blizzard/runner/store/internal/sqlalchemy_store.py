@@ -723,10 +723,8 @@ class SqlAlchemyRunnerStore:
                     select(func.count()).select_from(lease_spawns).where(lease_spawns.c.lease_id == lease_id)
                 ).scalar_one()
             )
-            # Every start path that reaches this transaction (fresh spawn, pooled rotation,
-            # dormant resume) is a spawn generation and so a segment boundary (issue #246, D1) —
-            # stamping it here, rather than at the three call sites, is what makes a fourth start
-            # path structurally unable to miss it.
+            # Every start path reaching this transaction is a segment boundary (issue #246,
+            # D1) — stamped here, not at the call sites, so a fourth can't miss it.
             context_row = conn.execute(
                 select(leases.c.chunk_id, leases.c.epoch, lease_context.c.node_id)
                 .select_from(leases.join(lease_context, leases.c.lease_id == lease_context.c.lease_id))
@@ -807,11 +805,8 @@ class SqlAlchemyRunnerStore:
                         created_at=closed_at,
                     )
                 )
-            # The lane's promise is that a step's segments are final by step close (issue
-            # #246) — every segment this lease still has open finalizes here, atomically
-            # with the closure itself, on the transcript lane's OWN buffer (D3): never
-            # routed through `outbound_buffer` above, which `TranscriptDrain` never reads
-            # and the transcript ingest route cannot parse.
+            # Segments are final by step close (issue #246) — finalized atomically here, on
+            # the transcript lane's OWN buffer (D3), never `outbound_buffer` above.
             open_segment_ids = [
                 str(r.segment_id)
                 for r in conn.execute(

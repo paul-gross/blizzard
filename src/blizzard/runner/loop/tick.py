@@ -1,13 +1,9 @@
-"""The tick driver — one pass of CEILING → REAP → RESUME → PULL → FILL → ADVANCE →
-TRANSCRIPT DRAIN → SAMPLE.
+"""The tick driver — CEILING → REAP → RESUME → PULL → FILL → ADVANCE → TRANSCRIPT DRAIN → SAMPLE.
 
-``tick`` composes the steps in order — the single synchronous pass both the CLI
-verb and the periodic daemon driver call. The order is load-bearing: the spend ceiling
-brakes the same tick it fires in; startup recovery *is* REAP running early; RESUME
-precedes ADVANCE, which would otherwise read a killed-mid-work worker as done.
-TranscriptDrain sits after every fact-lane step (D3, issue #246) — never chained to
-PULL's own drain — so a wedged or slow transcript flush delays nothing fleet-truth-bearing;
-it precedes SAMPLE only because that step's own docstring claims *last*."""
+``tick`` composes the steps in order — the single synchronous pass both the CLI verb and
+the periodic daemon driver call. Order is load-bearing: RESUME precedes ADVANCE;
+TranscriptDrain sits after every fact-lane step (D3, issue #246), never chained to
+PULL's own drain, so a wedged transcript flush delays nothing fleet-truth-bearing."""
 
 from __future__ import annotations
 
