@@ -1068,9 +1068,21 @@ export type TranscriptResponse = {
      */
     available: boolean;
     /**
+     * Dropped Turns
+     */
+    dropped_turns?: number;
+    /**
+     * Hub Unreachable
+     */
+    hub_unreachable?: boolean;
+    /**
      * Lease Id
      */
     lease_id: string;
+    /**
+     * Provenance
+     */
+    provenance?: 'local' | 'archived';
     /**
      * Reason
      */

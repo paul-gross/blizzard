@@ -39,6 +39,7 @@ from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import IReadRunnerStore, IWriteRunnerStore
 from blizzard.runner.store.schema import metadata as runner_metadata
+from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, RouteView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
@@ -300,6 +301,23 @@ class FakeTranscriptSource:
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         return self._sizes.get(session_id)
+
+
+class FakeArchivedTranscriptRepository:
+    """A scriptable :class:`IReadArchivedTranscriptRepository` (blizzard#249) — one canned
+    :class:`ArchivedTranscript` per ``(chunk_id, node_id, epoch)`` key. An unscripted key
+    reads as ``status="empty"``, so a test only names the leases it cares about."""
+
+    def __init__(self, by_key: dict[tuple[str, str, int], ArchivedTranscript] | None = None) -> None:
+        self._by_key = by_key or {}
+        self.calls: list[tuple[str, str, int]] = []
+
+    def read_turns(self, *, chunk_id: str, node_id: str, epoch: int) -> ArchivedTranscript:
+        key = (chunk_id, node_id, epoch)
+        self.calls.append(key)
+        if key in self._by_key:
+            return self._by_key[key]
+        return ArchivedTranscript(status="empty", turns=[], truncated=False, dropped=0)
 
 
 class FakeHarness:

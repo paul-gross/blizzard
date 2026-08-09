@@ -75,8 +75,11 @@ from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessS
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import IWriteRunnerStore
+from blizzard.runner.transcripts.internal.http_archived_transcript_repository import (
+    HttpArchivedTranscriptRepository,
+)
 from blizzard.runner.transcripts.internal.projected_transcript_repository import ProjectedTranscriptRepository
-from blizzard.runner.transcripts.service import LocalTranscriptService
+from blizzard.runner.transcripts.service import TranscriptService
 
 # The one coding-harness name a selftest may target today (issue #54).
 CLAUDE_CODE_HARNESS_NAME = "claude_code"
@@ -138,7 +141,7 @@ def create_app(
     harness: IHarnessAdapter | None = None,
     runner_store: IWriteRunnerStore | None = None,
     leases: LocalLeaseService | None = None,
-    transcripts: LocalTranscriptService | None = None,
+    transcripts: TranscriptService | None = None,
     runner_status: RunnerStatusService | None = None,
     takeover: TakeoverService | None = None,
     requeue: RequeueService | None = None,
@@ -256,8 +259,16 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     leases = LocalLeaseService(store=runner_store, clock=SystemClock(), process=LinuxProcessProbe())
     # Projected off the harness's own source, via the accessor — never built twice.
     transcript_repository = ProjectedTranscriptRepository(harness.transcript_source())
-    transcripts = LocalTranscriptService(
-        store=runner_store, transcripts=transcript_repository, workspace_root=config.workspace_root
+    # The archived-transcript seam (blizzard#249, D4): its own authenticated client, distinct
+    # from `hub_http_client` below — that one carries no auth headers, wired only for the
+    # unauthenticated JWKS/hub-auth-mode reads.
+    archived_transcript_client = httpx.Client(base_url=config.hub_url, timeout=15.0, headers=config.auth_headers())
+    archived_transcripts = HttpArchivedTranscriptRepository(archived_transcript_client)
+    transcripts = TranscriptService(
+        store=runner_store,
+        transcripts=transcript_repository,
+        archived=archived_transcripts,
+        workspace_root=config.workspace_root,
     )
     # The clock/probe instances below are per-service: both are stateless, so a second
     # instance is equivalent to sharing one.
