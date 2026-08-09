@@ -26,10 +26,13 @@ ESCALATED = "escalated"
 PARKED = "parked"  # a runner-config gate: the node-step completed, the chunk parks on a decision
 RELEASED = "released"  # the chunk was found reassigned/detached/unknown — abandon, no requeue (blizzard#9)
 
-# ABANDON — the reassigned/detached release. A crash here leaves a still-active lease with a
-# dead pid, envs unreleased and no closure; recovery is PULL's `_reconcile_leases`.
+# ABANDON — the reassigned/detached release, in two windows. Release runs BEFORE the closure so
+# the still-active lease stays the handle recovery re-derives the idempotent abandon from.
 _CP_ABANDON_AFTER_KILL = crashpoint(
     "abandon.after-kill.before-release", "detached worker killed; environments not yet released"
+)
+_CP_ABANDON_AFTER_RELEASE = crashpoint(
+    "abandon.after-release.before-closure", "environments released; the lease's closure not yet recorded"
 )
 
 # PAUSE — the operator's per-chunk pause park (issue #46): the worker dies, the claim, route,
@@ -145,9 +148,18 @@ class Attempt:
                 bindings[0].workdir, lease.session_id, model=lease.resolved_model, effort=lease.resolved_effort
             )
             # Wrapped-vs-raw rules: `blizzard-context:/domain/humans.md` §Escalation.
-            # `bindings` is checked explicitly above — an empty one is not provably unreachable.
             if self.ctx.config.runner_dir:
                 wrapped = TakeoverCommand(lease.chunk_id, self.ctx.config.runner_dir).wrapped
+        else:
+            # No session ever recorded, or its bindings already released — both compose nothing.
+            # The two fields say which, per `blizzard-context:/domain/humans.md` §Escalation.
+            _log.warning(
+                "escalating with no takeover command",
+                chunk_id=lease.chunk_id,
+                lease_id=lease.lease_id,
+                has_session=lease.session_id is not None,
+                bound_envs=len(bindings),
+            )
         OutboundFacts(self.ctx).escalation(lease, takeover=takeover, wrapped_takeover=wrapped, at=self.ctx.clock.now())
         _log.info(f"escalated to needs-human — {reason}", chunk_id=lease.chunk_id, takeover=takeover, wrapped=wrapped)
 
@@ -163,6 +175,7 @@ class Attempt:
             self.ctx.process.kill(lease.pid)
         _CP_ABANDON_AFTER_KILL.reached()  # recovery is the next tick's re-scan
         self.ctx.env_release.release_chunk(lease.chunk_id)
+        _CP_ABANDON_AFTER_RELEASE.reached()  # re-run releases nothing more, then records the closure
         park = self.ctx.store.open_park(lease.lease_id)
         if park is not None:
             self.ctx.store.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)

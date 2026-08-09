@@ -107,8 +107,8 @@ _CI_SUBSET = (
     "spawn.after-lease-mint.before-spawn",
     "advance.after-buffer.before-flush",
     "flush.after-submit.before-ack",
-    # `claim.*` (issue #84b) is a boundary family within `_GENERIC_POINTS`; its lone member
-    # is its own CI representative (see `_ABANDON_CI_SUBSET` for the convention).
+    # `claim.*` (issue #84b) is a boundary family within `_GENERIC_POINTS`; a family's lone
+    # member is its own CI representative.
     "claim.after-persist.before-response",
 )
 
@@ -116,8 +116,9 @@ _CI_SUBSET = (
 # (each resume case restarts the runner twice).
 _RESUME_CI_SUBSET = ("resume.after-kill.before-reattach",)
 
-# The abandon CI subset: `abandon.*`'s lone point is its own CI representative
-# (bzh:crash-point-registry).
+# The abandon CI subset, bounding wall time at one case for a two-member family (blizzard#280):
+# `after-release.before-closure` is the strictly-later state of this same scenario, so the earlier
+# window is the wider arm. The full sweep runs both; only CI drops one.
 _ABANDON_CI_SUBSET = ("abandon.after-kill.before-release",)
 
 # The pause CI subset (#46): the family's lone point, the regression fence on the
@@ -1349,9 +1350,9 @@ def _wait_for_closure(runner_dir: Path, lease_id: str, *, timeout: float = 30.0)
 
 @pytest.mark.parametrize("point", _ABANDON_SWEEP)
 def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """A ``kill -9`` right after the abandon's kill (worker dead, envs still held) still
-    recovers through restart-resume's path, not REAP's: the lease closes ``released``, not
-    ``reaped``, and the chunk is re-claimable and lands exactly once (blizzard#38 slice 5)."""
+    """A ``kill -9`` anywhere inside the abandon — before its release, or after it and before
+    the closure — recovers through restart-resume's path, not REAP's: the lease closes
+    ``released``, and the chunk is re-claimable and lands exactly once (blizzard#38, #280)."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     marker = tmp_path / "hang-once.marker"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
@@ -1385,7 +1386,7 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready", "detach did not release the route"
 
         # The armed runner's next PULL learns of the detach, kills the hung worker, and self-SIGKILLs
-        # at `point` before the environments are released.
+        # at `point` — before the environments are released, or after them and before the closure.
         code = wait_death(runner_proc)
         assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
         _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")

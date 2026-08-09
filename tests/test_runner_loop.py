@@ -1710,9 +1710,9 @@ def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path
 
 @pytest.mark.unit
 def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_command(tmp_path):  # type: ignore[no-untyped-def]
-    """A lease with a recorded session but no surviving binding — the narrow crash
-    window where `_abandon_reassigned` released bindings ahead of its closure record —
-    composes neither command and raises nothing: `and bindings` guards the `IndexError`."""
+    """A lease with a recorded session that was never bound to an environment composes
+    neither command and raises nothing: `and bindings` guards the `IndexError`. The
+    *released*-binding shape is its own case below."""
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -1749,6 +1749,62 @@ def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_comm
     payload = json.loads(escalations[0].payload)
     assert payload["takeover_command"] == ""
     assert payload["wrapped_takeover_command"] == ""
+
+
+@pytest.mark.unit
+def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path):  # type: ignore[no-untyped-def]
+    """The doubted state built the way the funnel reaches it (blizzard#280): a binding recorded
+    and then *released*, as `abandon` releases it. It escalates anyway — the chunk still needs a
+    human — and warns which of `humans.md`'s reasons produced a command-less escalation."""
+    store = _store(tmp_path)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.session_id == "sess-a"
+    assert store.bindings_for_chunk("ch_1") == []  # released, not merely never bound
+
+    config = LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, runner_dir="/tmp/runner-dir")
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        config=config,
+    )
+
+    from structlog.testing import capture_logs
+
+    with capture_logs() as logs:
+        Attempt(ctx, lease).escalate()
+
+    escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
+    assert len(escalations) == 1
+    payload = json.loads(escalations[0].payload)
+    assert payload["chunk_id"] == "ch_1"
+    assert payload["takeover_command"] == ""
+    assert payload["wrapped_takeover_command"] == ""
+    # The fields, not the prose, are what tell a released binding apart from a lease that
+    # never had a session — the two reasons `humans.md` §Escalation keeps distinct.
+    warned = [entry for entry in logs if entry["event"] == "escalating with no takeover command"]
+    assert len(warned) == 1
+    assert warned[0]["log_level"] == "warning"
+    assert warned[0]["has_session"] is True
+    assert warned[0]["bound_envs"] == 0
 
 
 # Per-chunk spend cap (issue #61a)

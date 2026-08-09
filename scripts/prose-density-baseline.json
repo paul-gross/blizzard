@@ -2008,9 +2008,9 @@
    "total": 5
   },
   "blizzard/runner/loop/attempt.py": {
-   "comments": 26,
+   "comments": 28,
    "docstrings": 35,
-   "total": 239
+   "total": 252
   },
   "blizzard/runner/loop/build.py": {
    "comments": 14,
@@ -2540,9 +2540,9 @@
    "total": 579
   },
   "crash/test_kill9_sweep.py": {
-   "comments": 199,
+   "comments": 200,
    "docstrings": 117,
-   "total": 2120
+   "total": 2121
   },
   "e2e/__init__.py": {
    "comments": 0,
@@ -3750,9 +3750,9 @@
    "total": 107
   },
   "test_runner_loop.py": {
-   "comments": 263,
-   "docstrings": 127,
-   "total": 2304
+   "comments": 267,
+   "docstrings": 130,
+   "total": 2360
   },
   "test_runner_loop_build.py": {
    "comments": 0,
