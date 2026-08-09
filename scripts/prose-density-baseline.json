@@ -2969,6 +2969,11 @@
    "docstrings": 25,
    "total": 1152
   },
+  "test_config_keys_reach_a_gating_tier.py": {
+   "comments": 1,
+   "docstrings": 5,
+   "total": 47
+  },
   "test_container_image.py": {
    "comments": 0,
    "docstrings": 11,
@@ -3751,8 +3756,8 @@
   },
   "test_runner_loop_build.py": {
    "comments": 0,
-   "docstrings": 15,
-   "total": 84
+   "docstrings": 21,
+   "total": 126
   },
   "test_runner_nudge.py": {
    "comments": 13,

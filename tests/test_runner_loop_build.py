@@ -1,8 +1,8 @@
-"""``LoopWiring`` composition (``bzh:dependency-injection``) — issue #88.
+"""Composition-root threading (``bzh:dependency-injection``) — issue #88.
 
-The composition root threads ``RunnerConfig.worker_env_passthrough`` into the
-``ClaudeCodeAdapter`` it constructs, so the operator's ``[worker] env_passthrough``
-toml key reaches the spawn-environment allowlist rather than being read and dropped.
+Each case pins one ``RunnerConfig`` key reaching the collaborator built from it: an
+unthreaded key is read from the operator's toml and dropped, which no other tier sees.
+Both roots that build a ``ClaudeCodeAdapter`` are covered (issue #276).
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver
@@ -49,6 +50,47 @@ def test_loop_wiring_threads_external_usage_credentials_path_into_the_adapter(tm
 
     assert isinstance(ctx.harness, ClaudeCodeAdapter)
     assert ctx.harness._credentials_path == scratch
+
+
+@pytest.mark.unit
+def test_loop_wiring_threads_the_worker_settings_path_and_permission_mode(tmp_path: Path) -> None:
+    """Both reach the spawned worker only as adapter argv flags (``--settings``,
+    ``--permission-mode``), so dropping either threading leaves every worker running
+    without the runner-owned hook file, or at the interactive permission default."""
+    settings = str(tmp_path / "worker-settings.json")
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url=RunnerConfig.default_db_url(tmp_path),
+        workspace_root=str(tmp_path / "workspace"),
+        worker_settings_path=settings,
+        harness_permission_mode="acceptEdits",
+    )
+
+    ctx = LoopWiring(config, "", "").context(FakeHub())
+
+    assert isinstance(ctx.harness, ClaudeCodeAdapter)
+    assert ctx.harness._settings_path == settings
+    assert ctx.harness._permission_mode == "acceptEdits"
+
+
+@pytest.mark.unit
+def test_hosted_app_threads_the_worker_settings_path_and_permission_mode(tmp_path: Path) -> None:
+    """The hosted app builds its own adapter, and the takeover command it composes
+    asserts the permission mode (issue #258) — a second threading of the same two keys,
+    which the loop's own root does not cover."""
+    settings = str(tmp_path / "worker-settings.json")
+    (tmp_path / CONFIG_FILENAME).write_text(
+        f'db_url = "{RunnerConfig.default_db_url(tmp_path)}"\n'
+        f'worker_settings_path = "{settings}"\n'
+        'harness_permission_mode = "acceptEdits"\n'
+    )
+
+    app = build_hosted_app(RunnerConfig.load(tmp_path))
+
+    harness = app.state.harness
+    assert isinstance(harness, ClaudeCodeAdapter)
+    assert harness._settings_path == settings
+    assert " --permission-mode acceptEdits" in harness.resume_command("/w", "s-1", attended=True)
 
 
 @pytest.mark.unit
