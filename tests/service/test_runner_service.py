@@ -283,8 +283,7 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
     real_sha = _git_bare(origin_bare, "log", "--all", "--format=%H", "-1", "--", "transcript-proof.txt").strip()
     assert real_sha, "the mock harness's commit never reached the bare origin"
     assert real_sha[:7] in bash_tool["output"], (
-        f"transcript tool output does not carry the real commit sha "
-        f"({real_sha[:7]!r} not in {bash_tool['output']!r})"
+        f"transcript tool output does not carry the real commit sha ({real_sha[:7]!r} not in {bash_tool['output']!r})"
     )
     assert _TRANSCRIPT_COMMIT_MESSAGE in bash_tool["output"]
 
