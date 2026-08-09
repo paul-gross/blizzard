@@ -1,9 +1,12 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { hubApi } from 'fleet';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { hubClient, type hubApi } from 'fleet';
+import { stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { ChunkGeneralTab } from './chunk-general-tab';
+import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
 /**
  * The chunk detail page's General tab two-column arrangement half of
@@ -289,6 +292,98 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep, blizzard#2
       ).toBeLessThanOrEqual(general.clientWidth);
     } finally {
       root.remove();
+    }
+  });
+});
+
+/**
+ * The Transcripts tab's own narrow-viewport case (blizzard#248 Phase 3,
+ * `bzh:narrow-viewport-tier-rule`) — its nav-beside-viewer split collapses to the
+ * stacked layout below `@media (min-width: 720px)` (`chunk-transcripts-tab.ts`), the
+ * same query jsdom parses without evaluating, so a real headless-Chromium proof is
+ * needed the same way the General tab's own two-column split needed one above.
+ */
+describe('chunk page Transcripts tab layout shell sweep (web:shell-sweep, blizzard#248)', () => {
+  it('stacks the step nav above the segment viewer at 390px with no horizontal overflow', async () => {
+    const stub = stubRequestClient(hubClient, (method, path) => {
+      if (path === '/api/chunks/ch_1/transcripts') {
+        return {
+          chunk_id: 'ch_1',
+          segments: [
+            {
+              segment_id: 'sg_1',
+              node_id: 'nd_build',
+              epoch: 1,
+              spawn_generation: 0,
+              turn_range_start: 0,
+              turn_range_end: 1,
+              final: true,
+              truncated: false,
+              byte_count: 40,
+              normalizer_version: 'v1',
+              harness_version: null,
+              received_at: '2026-08-09T00:00:00+00:00',
+            },
+          ],
+        };
+      }
+      return {
+        segment_id: 'sg_1',
+        final: true,
+        truncated: false,
+        turns: [
+          {
+            index: 0,
+            kind: 'asst',
+            timestamp: null,
+            text: 'a narrow-viewport turn, long enough to prove wrapping rather than overflow',
+            tool: null,
+            thinking_redacted: false,
+            sidechain: null,
+            truncated: false,
+          },
+        ],
+      };
+    });
+
+    await TestBed.configureTestingModule({
+      imports: [ChunkTranscriptsTab],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ChunkTranscriptsTab);
+    fixture.componentRef.setInput('chunkId', 'ch_1');
+    fixture.componentRef.setInput('history', [
+      { from_node_id: 'nd_build', from_node_name: 'build', to_node_id: 'nd_review', to_node_name: 'review', choice_name: null, epoch: 1, recorded_at: '2026-08-09T00:00:00+00:00' } satisfies hubApi.TransitionView,
+    ]);
+    fixture.componentRef.setInput('segmentId', 'sg_1');
+    await fixture.whenStable();
+
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const tab = root.querySelector<HTMLElement>('[data-testid="chunk-transcripts-tab"]');
+      const nav = root.querySelector<HTMLElement>('[data-testid="transcripts-tab-nav"]');
+      const body = root.querySelector<HTMLElement>('[data-testid="transcript-segment-body"]');
+      expect(tab, 'no chunk-transcripts-tab in the DOM').not.toBeNull();
+      expect(nav, 'no transcripts-tab-nav in the DOM').not.toBeNull();
+      expect(body, 'no transcript-segment-body in the DOM').not.toBeNull();
+
+      expect(nav!.getBoundingClientRect().top).toBeLessThan(body!.getBoundingClientRect().top);
+      expect(
+        tab!.scrollWidth,
+        `Transcripts tab overflows horizontally (${tab!.scrollWidth} > ${tab!.clientWidth})`,
+      ).toBeLessThanOrEqual(tab!.clientWidth);
+    } finally {
+      root.remove();
+      stub.restore();
     }
   });
 });
