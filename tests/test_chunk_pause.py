@@ -124,7 +124,7 @@ def _pause_locally(store, ctx, *, paused: bool):  # type: ignore[no-untyped-def]
 def test_restart_into_a_standing_pause_keeps_the_claim(tmp_path):  # type: ignore[no-untyped-def]
     """A runner restarted while one of its chunks is paused must park it, not abandon it
     (plan §0.2 B) — a status-keyed RESUME branch would drop a still-routed chunk through
-    to ``_abandon_reassigned`` instead."""
+    to ``Attempt.abandon`` instead."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     probe = FakeProbe()  # the worker died with the daemon — a real restart's shape

@@ -475,7 +475,7 @@ def test_reap_abandons_instead_of_escalating_a_chunk_unknown_at_the_hub(tmp_path
 
 @pytest.mark.unit
 def test_reap_orphan_requeue_releases_envs_when_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
-    """The requeue path's own 404 guard: REAP's ``_fail_attempt`` closes the exhausted
+    """The requeue path's own 404 guard: REAP's ``Attempt.fail`` closes the exhausted
     attempt and calls ``_requeue`` before PULL's sweep runs, so no active lease is left
     for that sweep to abandon — left generic, the env would hold forever (issue #9)."""
     store = _store(tmp_path)

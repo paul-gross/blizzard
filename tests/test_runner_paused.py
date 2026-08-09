@@ -652,7 +652,7 @@ def test_hub_paused_only_reap_still_requeues(tmp_path):  # type: ignore[no-untyp
 
 
 def test_reap_orphan_at_exhausted_retries_defers_escalation_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
-    """Issue #45 review: REAP's orphan case reaches `_fail_attempt` even while paused,
+    """Issue #45 review: REAP's orphan case reaches `Attempt.fail` even while paused,
     and an exhausted budget lands on the escalate branch, where the deferral lives."""
     store = _store(tmp_path)
     _seed_orphan_lease(store, retries_max=0)  # exhausted on the very first attempt
@@ -839,7 +839,7 @@ def test_advance_does_not_judge_a_lease_resume_left_open_after_a_hub_blip(tmp_pa
 
 
 def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
-    """The escalate gate's third `_fail_attempt` caller (issue #45): a completion
+    """The escalate gate's third `Attempt.fail` caller (issue #45): a completion
     buffered just before pause flushes during it, the hub rejects it as stale, and the
     exhausted budget must not open the escalate door while paused."""
     store = _store(tmp_path)

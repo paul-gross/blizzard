@@ -1,6 +1,6 @@
 """Runner operational-event emission — the failure funnel (issue #125, Phase 3).
 
-Every surfaced attempt failure emits ONE ``event.recorded`` at ``_fail_attempt`` —
+Every surfaced attempt failure emits ONE ``event.recorded`` at ``Attempt.fail`` —
 retry→``warning``, escalate→``critical``, abandon→``info``, paused-defer→nothing. Each
 captured command failure emits a ``warning`` ``command-failed``; some catches RE-RAISE.
 """
@@ -70,7 +70,7 @@ def _events(store):  # type: ignore[no-untyped-def]
 
 def _dead_worker_ctx(store, **kwargs):  # type: ignore[no-untyped-def]
     """A context whose worker is dead (empty alive set) and whose judgement is verdict-less
-    — driving ADVANCE straight into ``_fail_attempt(via="advance")``."""
+    — driving ADVANCE straight into ``Attempt.fail(via="advance")``."""
     hub = FakeHub()
     hub.envelopes = {"ch_1": make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])}
     return make_context(
@@ -83,7 +83,7 @@ def _dead_worker_ctx(store, **kwargs):  # type: ignore[no-untyped-def]
     )
 
 
-# --- change K: the _fail_attempt funnel ------------------------------------- #
+# --- change K: the Attempt.fail funnel ------------------------------------- #
 
 
 def test_retry_branch_emits_a_warning_attempt_failed(tmp_path):  # type: ignore[no-untyped-def]
@@ -156,8 +156,8 @@ def test_reap_stalled_but_alive_worker_emits_via_reap(tmp_path):  # type: ignore
 
 def test_reassign_abandon_branch_emits_an_info_attempt_abandoned(tmp_path):  # type: ignore[no-untyped-def]
     """The abandon branch (SF-6): retries exhausted AND the hub now routes the chunk
-    elsewhere → `info` `attempt-abandoned`, emitted in `_fail_attempt` itself, not the
-    shared `_abandon_reassigned` (which RESUME/PULL detach also reach and stays silent)."""
+    elsewhere → `info` `attempt-abandoned`, emitted in `Attempt.fail` itself, not the
+    shared `Attempt.abandon` (which RESUME/PULL detach also reach and stays silent)."""
     store = _store(tmp_path)
     _seed_lease(store, retries_max=0)  # exhausted -> the reassign check runs
     hub = FakeHub()
@@ -189,7 +189,7 @@ def test_reassign_abandon_branch_emits_an_info_attempt_abandoned(tmp_path):  # t
 
 
 def test_at_most_once_a_second_tick_emits_no_duplicate(tmp_path):  # type: ignore[no-untyped-def]
-    """At-most-once is structural: `_fail_attempt` runs once per attempt (it closes the
+    """At-most-once is structural: `Attempt.fail` runs once per attempt (it closes the
     lease), so a second ADVANCE over the now-closed lease emits nothing more (AC#7)."""
     store = _store(tmp_path)
     _seed_lease(store, retries_max=0)  # escalate — no fresh lease to re-fail
