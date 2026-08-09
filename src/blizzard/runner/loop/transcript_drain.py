@@ -6,8 +6,8 @@ crash-point family — a transport failure here stops only this lane, never the 
 from __future__ import annotations
 
 import json
-import time
 from dataclasses import dataclass
+from datetime import timedelta
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
@@ -24,26 +24,29 @@ _log = get_logger("blizzard.runner.loop")
 _CP_BEFORE_SUBMIT = crashpoint("transcript.before-submit", "fact at head of the transcript buffer; not submitted")
 _CP_AFTER_SUBMIT = crashpoint("transcript.after-submit.before-ack", "hub applied the fact; ack not recorded")
 
-#: Bounds this drain's own per-``run()`` work (review F4) — a slow-but-healthy hub must
-#: still yield to the next tick's fact-lane steps, not just a wedged one. Real wall time.
+#: Bounds this drain's own per-``run()`` work — a slow-but-healthy hub must still yield to
+#: the next tick's fact-lane steps. Wall time via the injected clock, not a raw monotonic read.
 _MAX_RECORDS_PER_RUN = 50
 _MAX_SECONDS_PER_RUN = 5.0
 
 
 @dataclass(frozen=True)
 class TranscriptDrain:
-    """The transcript lane's pump-then-flush — registered directly in ``tick`` (D3, see
-    its module docstring for the exact ordering), never chained to ``Pull``'s own
-    ``OutboundDrain``. Bounded per run (review F4); ships every lease closure's final
-    marker regardless of ``[transcripts] ship`` (D4/D5)."""
+    """The transcript lane's pump-then-flush — registered directly in ``tick`` (D3), never
+    chained to ``Pull``'s own ``OutboundDrain``. Bounded per run, one deadline shared across
+    the pump and the flush below; ships every closure's final marker regardless of
+    ``[transcripts] ship`` (D4/D5)."""
 
     ctx: LoopContext
 
     def run(self) -> None:
-        TranscriptPump(self.ctx).run()
-        deadline = time.monotonic() + _MAX_SECONDS_PER_RUN
-        for delivered, delta in enumerate(self.ctx.store.pending_transcript_outbound()):
-            if delivered >= _MAX_RECORDS_PER_RUN or time.monotonic() >= deadline:
+        deadline = self.ctx.clock.now() + timedelta(seconds=_MAX_SECONDS_PER_RUN)
+        TranscriptPump(self.ctx).run(deadline=deadline)
+        # `limit` bounds the query itself — else a large backlog's full payload set (up to
+        # 1 MB/record) loads every tick regardless of how few records the loop below lets through.
+        pending = self.ctx.store.pending_transcript_outbound(limit=_MAX_RECORDS_PER_RUN)
+        for delivered, delta in enumerate(pending):
+            if delivered >= _MAX_RECORDS_PER_RUN or self.ctx.clock.now() >= deadline:
                 break  # this run's bound reached — retry the rest next tick
             if not self._deliver(delta):
                 break  # transport failure — stop; retry the backlog next tick

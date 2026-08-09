@@ -13,6 +13,7 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.spawn import Environments, Spawner
+from blizzard.runner.loop.transcript_pump import TranscriptPump
 from blizzard.runner.store.repository import LeaseRecord
 from blizzard.wire.facts import EVENT_RECORDED
 
@@ -221,7 +222,10 @@ class Attempt:
 
     def close(self, reason: str, at: datetime, event: dict[str, object] | None = None) -> None:
         """Close this lease. An ``event`` lands in the outbound buffer in the same transaction
-        as the closure it describes (issue #125), so the two are never seen apart."""
+        as the closure it describes (issue #125), so the two are never seen apart. Every
+        closure path funnels through here — the one place to pump this lease's own open
+        transcript segment(s) before ``record_closure`` finalizes them (issue #246)."""
+        TranscriptPump(self.ctx).pump_lease(self.lease.lease_id)
         self.ctx.store.record_closure(
             lease_id=self.lease.lease_id,
             chunk_id=self.lease.chunk_id,

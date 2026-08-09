@@ -9,10 +9,12 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+import sqlalchemy as sa
 
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.store.repository import NewLease
+from blizzard.runner.store.schema import transcript_outbound_buffer
 from tests.runner_fakes import make_store
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -646,6 +648,43 @@ def test_record_spawn_carries_the_cursor_forward_and_closes_the_prior_segment_on
 
 
 @pytest.mark.unit
+def test_record_spawn_carries_the_cursor_forward_on_a_cross_lease_resume(tmp_path):  # type: ignore[no-untyped-def]
+    """A named session pool resumes across DIFFERENT leases — the ordinary path, since
+    ``SessionResolver.resume_target`` is chunk-scoped, not lease-scoped. A lease-scoped
+    carry-forward would miss this and cold-read the whole session."""
+    store = _store(tmp_path)
+    _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    gen1 = store.open_transcript_segments()[0]
+    store.record_transcript_delta(
+        segment_id=gen1.segment_id,
+        chunk_id="ch_1",
+        cursor="tok-1",
+        shipped_bytes=100,
+        shipped_turns=3,
+        payload="{}",
+        created_at=_NOW,
+    )
+
+    # A different node-step, a different lease — but the SAME session, resumed via the pool.
+    _mint(store, chunk="ch_1", node="nd_review", node_name="review", epoch=2, lease="lease_2")
+    store.record_spawn(
+        "lease_2", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW + timedelta(minutes=1)
+    )
+
+    open_segments = store.open_transcript_segments()
+    assert len(open_segments) == 1  # lease_1's segment closed out at the boundary
+    gen2 = open_segments[0]
+    assert gen2.lease_id == "lease_2"
+    assert gen2.session_id == "sess-a"
+    assert gen2.cursor == "tok-1"  # carried forward across the lease boundary
+
+    finalized_gen1 = store.transcript_segment(gen1.segment_id)
+    assert finalized_gen1 is not None
+    assert finalized_gen1.finalized_at == _NOW + timedelta(minutes=1)
+
+
+@pytest.mark.unit
 def test_record_spawn_stamps_one_segment_per_lease_at_its_own_epoch(tmp_path):  # type: ignore[no-untyped-def]
     """Two leases (e.g. two retries at fresh epochs) each stamp their own generation-1
     segment — the epoch is part of the key, so the two are never confused."""
@@ -739,11 +778,46 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
     assert t2 == t1 + 1  # gapless — the fact-lane enqueue above minted no transcript-lane seq
     assert [d.seq for d in store.pending_transcript_outbound()] == [t1, t2]
     assert store.pending_transcript_outbound()[0].segment_id == segment_id
+    # `limit` bounds the query itself, not just what a caller iterates — issue #246, F5.
+    assert [d.seq for d in store.pending_transcript_outbound(limit=1)] == [t1]
 
     store.ack_transcript_outbound(t1, acked_at=_NOW)
     assert [d.seq for d in store.pending_transcript_outbound()] == [t2]
     # The fact lane's own buffer is untouched by the transcript lane's ack.
     assert len(store.pending_outbound()) == 1
+
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
+    with engine.connect() as conn:
+        remaining = conn.execute(sa.select(transcript_outbound_buffer.c.seq)).scalars().all()
+    # An acked `delta` row is pruned outright, not merely marked — up to 1 MB each.
+    assert list(remaining) == [t2]
+
+
+@pytest.mark.unit
+def test_ack_transcript_outbound_keeps_a_final_marker_row_acked_not_deleted(tmp_path):  # type: ignore[no-untyped-def]
+    """Regression: pruning an acked `final` row like a `delta` row breaks
+    `TranscriptSegmentFinalizedExactlyOnce`, which counts marker rows still present as the
+    receipt a finalized segment's marker landed exactly once."""
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+    marker = store.pending_transcript_outbound()
+    assert len(marker) == 1
+    assert marker[0].kind == "transcript.final"
+
+    store.ack_transcript_outbound(marker[0].seq, acked_at=_NOW)
+
+    assert store.pending_transcript_outbound() == []  # no longer pending...
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
+    with engine.connect() as conn:
+        remaining = conn.execute(
+            sa.select(transcript_outbound_buffer.c.seq, transcript_outbound_buffer.c.acked_at)
+        ).all()
+    # ...but the row itself is still there, marked acked — not deleted.
+    assert len(remaining) == 1
+    assert remaining[0].seq == marker[0].seq
+    assert remaining[0].acked_at is not None
 
 
 @pytest.mark.unit

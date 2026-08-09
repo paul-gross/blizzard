@@ -397,12 +397,14 @@ class SqlAlchemyRunnerStore:
         with self._connect() as conn:
             return int(conn.execute(stmt).scalar_one())
 
-    def pending_transcript_outbound(self) -> list[BufferedTranscriptDelta]:
+    def pending_transcript_outbound(self, *, limit: int | None = None) -> list[BufferedTranscriptDelta]:
         stmt = (
             select(transcript_outbound_buffer)
             .where(transcript_outbound_buffer.c.acked_at.is_(None))
             .order_by(transcript_outbound_buffer.c.seq)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit)
         return [
             BufferedTranscriptDelta(
                 seq=int(r.seq),
@@ -730,31 +732,31 @@ class SqlAlchemyRunnerStore:
                 .select_from(leases.join(lease_context, leases.c.lease_id == lease_context.c.lease_id))
                 .where(leases.c.lease_id == lease_id)
             ).one()
-            # A same-session resume (review F3): close the prior generation's segment out
-            # now, carrying its cursor forward, so only one open segment ever reads it.
-            prior_same_session = conn.execute(
+            # A resumed session: close the prior segment, carrying its cursor forward. Scoped
+            # by chunk + session, not lease — an ordinary resume mints a fresh lease.
+            prior_open_segment = conn.execute(
                 select(
                     transcript_segments.c.segment_id,
                     transcript_segments.c.cursor,
                 )
-                .where(transcript_segments.c.lease_id == lease_id)
+                .where(transcript_segments.c.chunk_id == context_row.chunk_id)
                 .where(transcript_segments.c.session_id == session_id)
                 .where(transcript_segments.c.finalized_at.is_(None))
             ).one_or_none()
             carried_cursor: str | None = None
-            if prior_same_session is not None:
-                carried_cursor = str(prior_same_session.cursor) if prior_same_session.cursor is not None else None
+            if prior_open_segment is not None:
+                carried_cursor = str(prior_open_segment.cursor) if prior_open_segment.cursor is not None else None
                 conn.execute(
                     transcript_segments.update()
-                    .where(transcript_segments.c.segment_id == prior_same_session.segment_id)
+                    .where(transcript_segments.c.segment_id == prior_open_segment.segment_id)
                     .values(finalized_at=spawned_at)
                 )
                 conn.execute(
                     transcript_outbound_buffer.insert().values(
                         kind=TRANSCRIPT_FINAL,
-                        segment_id=prior_same_session.segment_id,
+                        segment_id=prior_open_segment.segment_id,
                         chunk_id=str(context_row.chunk_id),
-                        payload=json.dumps({"segment_id": str(prior_same_session.segment_id)}),
+                        payload=json.dumps({"segment_id": str(prior_open_segment.segment_id)}),
                         created_at=spawned_at,
                     )
                 )
@@ -892,34 +894,48 @@ class SqlAlchemyRunnerStore:
         with self._begin() as conn:
             conn.execute(outbound_buffer.update().where(outbound_buffer.c.seq == seq).values(acked_at=acked_at))
 
-    def mark_transcript_record_truncated(self, segment_id: str, *, reason: str) -> None:
+    def mark_transcript_record_truncated(self, segment_id: str, *, reason: str) -> bool:
         with self._begin() as conn:
-            # `IS NULL` guard: a segment already carrying a reason keeps its first one.
-            # Informational only (review F1) — never stops future ticks.
-            conn.execute(
+            # `IS NULL` guard: keeps its first reason. The returned changed-or-not lets the
+            # caller warn once per segment rather than once per tick that reaches it.
+            result = conn.execute(
                 transcript_segments.update()
                 .where(transcript_segments.c.segment_id == segment_id)
                 .where(transcript_segments.c.truncated_reason.is_(None))
                 .values(truncated_reason=reason)
             )
-        _log.warning("transcript record truncated", segment_id=segment_id, reason=reason)
+        changed = result.rowcount > 0
+        if changed:
+            _log.warning("transcript record truncated", segment_id=segment_id, reason=reason)
+        return changed
 
-    def stop_transcript_segment_shipping(self, segment_id: str, *, reason: str) -> None:
+    def stop_transcript_segment_shipping(self, segment_id: str, *, reason: str) -> bool:
         with self._begin() as conn:
             # `IS NULL` guard: a segment already stopped keeps its first reason.
-            conn.execute(
+            result = conn.execute(
                 transcript_segments.update()
                 .where(transcript_segments.c.segment_id == segment_id)
                 .where(transcript_segments.c.shipping_stopped_reason.is_(None))
                 .values(shipping_stopped_reason=reason)
             )
-        _log.warning("transcript segment stopped shipping", segment_id=segment_id, reason=reason)
+        changed = result.rowcount > 0
+        if changed:
+            _log.warning("transcript segment stopped shipping", segment_id=segment_id, reason=reason)
+        return changed
 
     def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:
         with self._begin() as conn:
+            # Delta rows are pruned outright (up to 1 MB each, nothing reads an acked one);
+            # final markers stay, acked in place — their row is the exactly-once receipt.
+            conn.execute(
+                transcript_outbound_buffer.delete()
+                .where(transcript_outbound_buffer.c.seq == seq)
+                .where(transcript_outbound_buffer.c.kind == TRANSCRIPT_DELTA)
+            )
             conn.execute(
                 transcript_outbound_buffer.update()
                 .where(transcript_outbound_buffer.c.seq == seq)
+                .where(transcript_outbound_buffer.c.kind == TRANSCRIPT_FINAL)
                 .values(acked_at=acked_at)
             )
 
@@ -951,6 +967,12 @@ class SqlAlchemyRunnerStore:
             )
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
+
+    def advance_transcript_cursor(self, segment_id: str, *, cursor: str) -> None:
+        with self._begin() as conn:
+            conn.execute(
+                transcript_segments.update().where(transcript_segments.c.segment_id == segment_id).values(cursor=cursor)
+            )
 
     def record_ask(
         self,

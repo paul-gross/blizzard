@@ -485,5 +485,7 @@ transcript_outbound_buffer = Table(
     Column("chunk_id", String, nullable=False),
     Column("payload", Text, nullable=False),  # the JSON body posted to the transcript ingest route
     Column("created_at", UtcDateTime, nullable=False),
-    Column("acked_at", UtcDateTime, nullable=True),  # NULL = pending; set when the hub acks the seq
+    # NULL = pending. An acked `delta` row is deleted, never reaching this state; an acked
+    # `final` row IS marked here — its continued presence is the exactly-once receipt.
+    Column("acked_at", UtcDateTime, nullable=True),
 )

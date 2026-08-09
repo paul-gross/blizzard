@@ -16,6 +16,7 @@ from blizzard.runner.harness.transcript import (
     TranscriptBatch,
     TranscriptPosition,
 )
+from blizzard.runner.loop.attempt import FAILED, Attempt
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.transcript_pump import CHUNK_TRANSCRIPT_MAX_BYTES, TranscriptPump
 from blizzard.runner.store.repository import NewLease
@@ -91,19 +92,27 @@ def _sidechain_turn(index: int, *, sidechain_text: str) -> NormalizedTurn:
     )
 
 
-def _batch(turns: list[NormalizedTurn], *, next_token: str) -> TranscriptBatch:
+def _batch(
+    turns: list[NormalizedTurn], *, next_token: str, unlinked_sidechains: list[SidechainConversation] | None = None
+) -> TranscriptBatch:
     return TranscriptBatch(
         session_id="sess-a",
         available=True,
         reason=None,
         turns=turns,
-        unlinked_sidechains=[],
+        unlinked_sidechains=unlinked_sidechains or [],
         next_position=TranscriptPosition(next_token),
         complete=True,
         truncated=False,
         sidechain_truncated=False,
         normalizer_version="fake/1",
         harness_version=None,
+    )
+
+
+def _unlinked_sidechain(agent_id: str) -> SidechainConversation:
+    return SidechainConversation(
+        agent_id=agent_id, agent_type="general", link="unlinked", turns=[_turn(0, "orphaned subagent turn")]
     )
 
 
@@ -180,6 +189,29 @@ def test_pump_never_reads_before_the_cursor() -> None:
     assert source.turns_since_calls[1][2] == TranscriptPosition("pos-1")  # second: carried forward
 
 
+def test_pump_advances_the_cursor_on_a_turnless_batch() -> None:
+    """A window can move the source's read position without producing any turn — e.g. a run
+    of control records the normalizer drops. The cursor must still advance, or every later
+    tick re-reads and re-normalizes the exact same bytes from the same stale position."""
+    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([], next_token="pos-1")})
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.cursor == "pos-1"  # advanced despite shipping nothing
+    assert ctx.store.pending_transcript_outbound() == []  # nothing to ship — no delta enqueued
+
+    source._batches["sess-a"] = _batch([_turn(0, "finally a turn")], next_token="pos-2")
+    TranscriptPump(ctx).run()
+
+    assert source.turns_since_calls[-1][2] == TranscriptPosition("pos-1")  # read from the advanced cursor
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) == 1
+    assert ctx.store.transcript_segment(segment_id).cursor == "pos-2"  # type: ignore[union-attr]
+
+
 def test_pump_truncates_a_single_record_that_alone_exceeds_the_cap() -> None:
     """D4: a single turn over the 1 MB cap is truncated in place, not dropped. review F1:
     the TRANSIENT reason — ``truncated_reason``, never ``shipping_stopped_reason``."""
@@ -220,6 +252,24 @@ def test_pump_keeps_shipping_after_a_record_cap_truncation() -> None:
     assert source.turns_since_calls[1][2] == TranscriptPosition("pos-1")  # read past the truncated batch
     pending = ctx.store.pending_transcript_outbound()
     assert len(pending) == 2  # both ticks shipped — the record-cap event never stopped the second
+
+
+def test_pump_warns_once_per_segment_when_every_tick_needs_truncation() -> None:
+    """A segment hitting ``record_cap_exceeded`` every tick (never latched) must still warn
+    only once — not once per tick, or a chatty session floods the fact lane."""
+    huge = "x" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
+    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, huge)], next_token="pos-1")})
+    _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+    source._batches["sess-a"] = _batch([_turn(0, huge)], next_token="pos-2")
+    TranscriptPump(ctx).run()
+    source._batches["sess-a"] = _batch([_turn(0, huge)], next_token="pos-3")
+    TranscriptPump(ctx).run()
+
+    assert len(ctx.store.pending_transcript_outbound()) == 3  # every tick still shipped, shrunk
+    fact_events = ctx.store.pending_outbound()
+    assert len(fact_events) == 1  # exactly one warning across all three truncated ticks
 
 
 def test_pump_shrinks_tool_output_not_just_top_level_text() -> None:
@@ -285,6 +335,27 @@ def test_pump_ships_an_explicit_marker_when_shrinking_cannot_close_the_gap() -> 
     assert segment.shipping_stopped_reason is None  # transient, not a stop-shipping latch
 
 
+def test_pump_shrinks_a_batch_with_many_large_shrinkable_fields() -> None:
+    """A batch whose oversized content spans many turns — a real catch-up window's shape —
+    must converge under the cap, not get dropped whole. Regression for a fixed-iteration
+    loop that only ever touched the single largest field per pass."""
+    many_turns = [_tool_turn(i, output="x" * 30_000) for i in range(300)]
+    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(many_turns, next_token="pos-1")})
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) == 1
+    assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
+    body = json.loads(pending[0].payload)
+    assert len(body["turns"]) == len(many_turns)  # every turn survives, shrunk, not dropped
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "record_cap_exceeded"
+    assert segment.cursor == "pos-1"
+
+
 def test_pump_stops_shipping_past_the_chunk_budget_and_a_later_closure_still_finalizes() -> None:
     ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
@@ -339,3 +410,94 @@ def test_pump_never_double_ships_after_a_same_session_resume() -> None:
     pending = ctx.store.pending_transcript_outbound()
     assert len([d for d in pending if d.kind == "transcript.delta"]) == 2  # gen1's delta + gen2's one new delta
     assert len([d for d in pending if d.kind == "transcript.final"]) == 1  # gen1's own close-out
+
+
+def test_lease_close_pumps_the_open_segment_before_finalizing_it() -> None:
+    """A lease closure finalizes its segment, dropping it out of every later tick's
+    ``run()`` — so ``Attempt.close`` must pump the lease's own segment first, or content
+    written since the last pump never ships."""
+    ctx, _source = _ctx(
+        ship=True, batches={"sess-a": _batch([_turn(0, "last output before failure")], next_token="pos-1")}
+    )
+    segment_id = _spawn_one_segment(ctx)
+    lease = ctx.store.active_lease("lease_1")
+    assert lease is not None
+
+    Attempt(ctx, lease).close(FAILED, _NOW)
+
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.finalized_at is not None
+    assert segment.cursor == "pos-1"  # the pre-closure content was actually read and shipped
+
+    pending = ctx.store.pending_transcript_outbound()
+    kinds = [d.kind for d in pending]
+    assert "transcript.delta" in kinds  # the last output shipped...
+    assert kinds.index("transcript.delta") < kinds.index("transcript.final")  # ...before finalization
+
+
+def test_run_yields_to_its_own_deadline_across_many_open_segments() -> None:
+    """``run()`` iterates every open segment with no bound unless given a ``deadline``. One
+    already past on entry must stop it before the first segment, leaving the rest for later."""
+    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    _spawn_one_segment(ctx)
+    ctx.store.record_binding(chunk_id="ch_2", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
+    ctx.store.record_lease(
+        NewLease(
+            lease_id="lease_2",
+            chunk_id="ch_2",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    ctx.store.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW)
+
+    TranscriptPump(ctx).run(deadline=_NOW)  # already past by the time the loop checks it
+
+    assert ctx.store.pending_transcript_outbound() == []  # neither segment pumped this run
+    assert all(s.cursor is None for s in ctx.store.open_transcript_segments())
+
+    TranscriptPump(ctx).run()  # no deadline — catches both up on a later tick
+
+    assert len(ctx.store.pending_transcript_outbound()) == 2
+
+
+def test_pump_records_an_unlinked_sidechain_dropped_alongside_a_normal_delta() -> None:
+    """A subagent conversation whose parent turn is outside the read window surfaces on
+    ``batch.unlinked_sidechains``, not ``batch.turns`` — it must never be silently dropped
+    even when the tick also has ordinary turns to ship."""
+    batch = _batch([_turn(0, "hi")], next_token="pos-1", unlinked_sidechains=[_unlinked_sidechain("sub_1")])
+    ctx, _source = _ctx(ship=True, batches={"sess-a": batch})
+    _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) == 1
+    body = json.loads(pending[0].payload)
+    assert len(body["turns"]) == 1
+    assert body["unlinked_sidechains_dropped"] == 1
+
+
+def test_pump_records_an_unlinked_sidechain_dropped_with_no_turns() -> None:
+    """The turnless-batch path must not silently advance the cursor when an unlinked
+    sidechain was the only thing in the window — that loss still needs a trace."""
+    batch = _batch([], next_token="pos-1", unlinked_sidechains=[_unlinked_sidechain("sub_1")])
+    ctx, _source = _ctx(ship=True, batches={"sess-a": batch})
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) == 1
+    body = json.loads(pending[0].payload)
+    assert body["turns"] == []
+    assert body["unlinked_sidechains_dropped"] == 1
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.cursor == "pos-1"  # still advances

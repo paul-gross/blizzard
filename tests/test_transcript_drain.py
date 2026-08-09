@@ -1,10 +1,12 @@
-"""The transcript lane's drain (component tier, issue #246, review F8) — break-on-error,
-ack-on-rejected, ack-on-already-applied, and the per-run bound (review F4)."""
+"""The transcript lane's drain (component tier, issue #246) — break-on-error, ack-on-rejected,
+ack-on-already-applied, and the per-run bound."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop import transcript_drain as transcript_drain_module
 from blizzard.runner.loop.context import LoopConfig
@@ -15,7 +17,22 @@ from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, ma
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
 
-def _ctx(hub: FakeHub):  # type: ignore[no-untyped-def]
+@dataclass
+class _SteppingClock(FixedClock):
+    """Returns ``instant`` on the first call, ``instant`` pushed by ``step`` on every call
+    after — simulates real wall-clock elapsing across one ``run()`` without monkeypatching a
+    process-wide module: the drain's deadline flows through the injected clock, so a test
+    substitutes by type instead of reaching into the stdlib ``time`` module."""
+
+    step: timedelta = timedelta(seconds=0)
+    calls: int = 0
+
+    def now(self) -> datetime:
+        self.calls += 1
+        return self.instant if self.calls == 1 else self.instant + self.step
+
+
+def _ctx(hub: FakeHub, *, clock: FixedClock | None = None):  # type: ignore[no-untyped-def]
     store = make_store("sqlite://")
     harness = FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1"), verdict=None)
     return make_context(
@@ -25,6 +42,7 @@ def _ctx(hub: FakeHub):  # type: ignore[no-untyped-def]
         harness=harness,
         probe=FakeProbe(),
         config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=False),
+        clock=clock,
     )
 
 
@@ -139,27 +157,16 @@ def test_drain_bounds_its_own_per_run_record_count() -> None:
     assert len(ctx.store.pending_transcript_outbound()) == 5  # the rest waits for the next tick
 
 
-def test_drain_bounds_its_own_per_run_wall_clock(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    """review F4: a SLOW but healthy hub (not a `HubClientError`) must still yield to the
-    next tick — real wall time, since a slow HTTP round trip costs real seconds regardless
-    of the injected domain clock."""
+def test_drain_bounds_its_own_per_run_wall_clock() -> None:
+    """A SLOW but healthy hub (not a `HubClientError`) must still yield to the next tick.
+    The stepping clock reports the deadline already elapsed on its second call, so the
+    first record is never even attempted."""
     hub = FakeHub()
-    ctx = _ctx(hub)
+    step = timedelta(seconds=transcript_drain_module._MAX_SECONDS_PER_RUN + 1)
+    ctx = _ctx(hub, clock=_SteppingClock(_NOW, step=step))
     segment_id = _spawn_one_segment(ctx)
     _enqueue_delta(ctx, segment_id, cursor="pos-1")
     _enqueue_delta(ctx, segment_id, cursor="pos-2")
-
-    real_monotonic = transcript_drain_module.time.monotonic
-    # The deadline is computed once at `run()`'s start; report it as already elapsed from
-    # the very first check inside the loop, so the first record is never even attempted.
-    calls = {"n": 0}
-
-    def _fake_monotonic() -> float:
-        calls["n"] += 1
-        base = real_monotonic()
-        return base if calls["n"] == 1 else base + transcript_drain_module._MAX_SECONDS_PER_RUN + 1
-
-    monkeypatch.setattr(transcript_drain_module.time, "monotonic", _fake_monotonic)
 
     TranscriptDrain(ctx).run()
 

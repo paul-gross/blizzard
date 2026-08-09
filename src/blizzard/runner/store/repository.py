@@ -401,8 +401,12 @@ class IReadRunnerStore(Protocol):
         finalized — the running total the 64 MB per-chunk budget (D4) is measured against."""
         ...
 
-    def pending_transcript_outbound(self) -> list[BufferedTranscriptDelta]:
-        """The unacked transcript buffer, FIFO by seq — the drain's own lane (D3)."""
+    def pending_transcript_outbound(self, *, limit: int | None = None) -> list[BufferedTranscriptDelta]:
+        """The unacked transcript buffer, FIFO by seq — the drain's own lane (D3).
+
+        ``limit`` bounds the query itself, not just what the caller iterates — a large
+        backlog's full payload set (up to the per-record cap each) is otherwise materialized
+        before any per-run bound the caller applies is ever consulted."""
         ...
 
     def unforwarded_ask(self, lease_id: str) -> AskRecord | None:
@@ -697,16 +701,18 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Mark a buffered fact delivered — a semantic rejection acks too."""
         ...
 
-    def mark_transcript_record_truncated(self, segment_id: str, *, reason: str) -> None:
+    def mark_transcript_record_truncated(self, segment_id: str, *, reason: str) -> bool:
         """Note that one shipped record was shrunk in place (D4's per-record 1 MB cap) —
         informational only, never latching: the segment keeps pumping next tick. Idempotent:
-        a segment with a reason already recorded keeps its first one."""
+        a segment with a reason already recorded keeps its first one. Returns whether this
+        call actually set the field, so a caller can warn once per segment per reason
+        instead of once per tick that reaches an already-marked segment."""
         ...
 
-    def stop_transcript_segment_shipping(self, segment_id: str, *, reason: str) -> None:
+    def stop_transcript_segment_shipping(self, segment_id: str, *, reason: str) -> bool:
         """Permanently stop shipping this segment's content — the per-chunk 64 MB budget
-        breached (D4). The only field :class:`TranscriptPump`'s guard reads (review F1);
-        idempotent, keeps its first reason."""
+        breached (D4). The only field :class:`TranscriptPump`'s guard reads; idempotent,
+        keeps its first reason. Returns whether this call actually set the field."""
         ...
 
     def record_transcript_delta(
@@ -726,8 +732,19 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         buffered delta's seq."""
         ...
 
+    def advance_transcript_cursor(self, segment_id: str, *, cursor: str) -> None:
+        """Advance a segment's read cursor with nothing to enqueue — a window that moved
+        the source's read position but produced no turn (e.g. a run of control records),
+        which still must not be re-read next tick. Unlike :meth:`record_transcript_delta`,
+        no outbound row: there is no delta to ship, only progress to remember."""
+        ...
+
     def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:
-        """Mark a buffered transcript delta delivered — the transcript drain's own ack (D3)."""
+        """Ack a buffered transcript row — the drain's own ack (D3). A ``delta`` row is
+        pruned outright (up to the 1 MB cap each, nothing reads one acked); a ``final`` row
+        stays, marked acked — its own tiny row is the exactly-once receipt
+        :class:`~blizzard.foundation.store.invariants.TranscriptSegmentFinalizedExactlyOnce`
+        checks for."""
         ...
 
     def record_ask(
