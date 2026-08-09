@@ -1,13 +1,9 @@
 """httpx adapter for the archived-transcript seam (blizzard#249, D4).
 
-All httpx and pydantic-wire usage is confined here: the hub's
-``GET /api/fleet/chunks/{chunk_id}/transcript-segments`` is fetched, validated into the
-wire's :class:`~blizzard.wire.transcript_segment.LeaseTranscriptView`, and translated into
-the domain :class:`~blizzard.runner.transcripts.archived_repository.ArchivedTranscript` at
-this one boundary — never raised past it, since the seam's contract is that every outcome,
-including a transport failure, reaches the caller as a value (D4). Structurally modeled on
-``runner/loop/internal/http_hub.py``'s httpx-exception-to-domain-value translation, but that
-adapter raises ``HubClientError``; this one returns ``status="unreachable"`` instead."""
+All httpx and pydantic-wire usage is confined here: the hub's transcript-segments read is
+fetched, validated, and translated into an :class:`ArchivedTranscript` — never raised past
+this boundary. Modeled on ``runner/loop/internal/http_hub.py``, but that adapter raises
+``HubClientError``; this one returns ``status="unreachable"`` instead."""
 
 from __future__ import annotations
 

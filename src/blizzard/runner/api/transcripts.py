@@ -1,10 +1,9 @@
 """The transcript read — ``GET /api/leases/{lease_id}/transcript`` (issue #29, blizzard#249).
 
-**The URL stays lease-keyed**, not session-keyed: ``session_id`` is nullable, so a session-keyed route
-could only 404 a ``spawning`` lease, collapsing "agent is starting up" into "transcript not found".
-**200-always with an in-band ``reason``** — a missing or unreadable transcript is a normal state of a
-healthy agent, never a 5xx. **404 means "no lease with this id, ever"**; a closed lease stays readable,
-served from the hub when it holds the segments (D1) and from the local file otherwise."""
+**Lease-keyed, not session-keyed**: ``session_id`` is nullable, so a session-keyed route
+could only 404 a ``spawning`` lease, collapsing "agent is starting up" into "not found".
+**200-always with an in-band ``reason``**, never a 5xx. **404 means "no lease with this id,
+ever"**; a closed lease stays readable, served from the hub or the local file (D1)."""
 
 from __future__ import annotations
 

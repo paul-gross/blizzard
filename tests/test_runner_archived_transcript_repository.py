@@ -1,10 +1,7 @@
 """``HttpArchivedTranscriptRepository`` — driven against a fake hub via ``httpx.MockTransport``
-(blizzard#249, D4).
-
-The seam's whole contract: every outcome, including a transport failure, reaches the
-caller as a value on :class:`ArchivedTranscript`, never a raised exception. Also pins that
-the request carries the runner's own auth header — the outbound-and-runner-authenticated
-half of AC3, at the transport layer this file owns."""
+(blizzard#249, D4). The seam's whole contract: every outcome, including a transport failure,
+reaches the caller as a value on :class:`ArchivedTranscript`, never a raised exception. Also
+pins that the request carries the runner's own auth header — AC3's transport-layer half."""
 
 from __future__ import annotations
 

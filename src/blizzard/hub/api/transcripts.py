@@ -1,10 +1,8 @@
 """Transcript-segment routes (blizzard#247) — the operator-plane discovery/content reads,
 plus the wire<->domain rendering the fleet router's ingest and lease-read routes share
-(issue #249).
-
-The discovery route (D12) returns segment metadata and byte counts only — never turn
-content — so a caller must hold a ``segment_id`` from it before the content route
-answers anything. Gated on :data:`~blizzard.auth_core.TRANSCRIPT_READ` (D11)."""
+(issue #249). The discovery route (D12) returns segment metadata and byte counts only —
+never turn content — so a caller must hold a ``segment_id`` from it before the content
+route answers anything. Gated on :data:`~blizzard.auth_core.TRANSCRIPT_READ` (D11)."""
 
 from __future__ import annotations
 

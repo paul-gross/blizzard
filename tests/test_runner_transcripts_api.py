@@ -1,11 +1,9 @@
 """The transcript route — ``GET /api/leases/{lease_id}/transcript`` (issue #29, blizzard#249).
 
-Exercised over a real store via ``TestClient``: a real sqlite store for lease facts, and
-fake ``IReadTranscriptRepository``/``IReadArchivedTranscriptRepository`` seams standing in
-for the filesystem and the hub, so this file's job is the route's resolution and
-status-code contract, not the normalization or the transport. Decision 1's full
-resolution table is pinned at the service tier (``test_runner_transcripts_service.py``);
-this file only needs enough of it to prove the wire carries what the service resolves."""
+Exercised over a real store via ``TestClient``, with fake ``IReadTranscriptRepository``/
+``IReadArchivedTranscriptRepository`` seams standing in for the filesystem and the hub — this
+file's job is the route's status-code contract, not normalization or transport. Decision 1's
+full resolution table is pinned at the service tier (``test_runner_transcripts_service.py``)."""
 
 from __future__ import annotations
 
@@ -157,10 +155,9 @@ def test_200_not_found_when_the_file_is_missing(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_200_for_a_closed_lease_with_no_hub_segments_falls_back_to_local(tmp_path: Path) -> None:
-    """A closed lease's transcript stays reachable —
-    ``active_lease()`` would 404 here; the route must use the closure-spanning ``lease()``.
-    The hub is asked first (D1); an unscripted ``FakeArchivedTranscriptRepository`` answers
-    "holds nothing", so this pins the fall-back-to-local branch of Decision 1's table."""
+    """A closed lease's transcript stays reachable — the route must use the closure-spanning
+    ``lease()``, not ``active_lease()``. The hub is asked first (D1); an unscripted
+    ``FakeArchivedTranscriptRepository`` answers "holds nothing", pinning the fall-back."""
     transcript = Transcript(session_id="sess-a", available=True, reason=None, turns=[], truncated=False)
     repo = FakeTranscriptRepository({"sess-a": transcript})
     archived = FakeArchivedTranscriptRepository()

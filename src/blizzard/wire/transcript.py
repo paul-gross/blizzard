@@ -2,9 +2,8 @@
 
 A turn's ``timestamp`` is an ISO-8601 string with an explicit UTC offset, never naive
 (``bzh:utc-instants``). ``available=False`` carries ``reason`` and an empty ``turns``.
-``provenance``/``hub_unreachable``/``dropped_turns`` are blizzard#249's home-selection
-growth (D1, D5) — every response carries them; a local read's ``provenance`` is always
-``"local"``, ``hub_unreachable`` is ``False``, and ``dropped_turns`` is ``0``."""
+``provenance``/``hub_unreachable``/``dropped_turns`` are blizzard#249's home-selection growth
+(D1, D5), on every response; a local read's is always ``"local"``/``False``/``0``."""
 
 from __future__ import annotations
 

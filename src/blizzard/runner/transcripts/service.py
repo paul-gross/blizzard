@@ -1,18 +1,9 @@
 """The transcript route's domain read model (issue #29) — resolves a lease's transcript to
-a home (blizzard#249, D1).
-
-Holds only read-only store/repository/archived seams (``bzh:repository-split``), so a
-controller may hold this service directly (``bzh:controller-read-only``). ``store.lease(lease_id)``
-**spans closure** — unlike ``active_lease``, which filters to unclosed leases — because a
-transcript outlives its lease and a closed lease's transcript must stay readable.
-
-Home selection keys on the hub's segment index, not on runner-local ack state: the hub
-holding a segment *is* the ack (``bzh:facts-not-status``). An **open** lease
-(``store.active_lease`` is not ``None``) is never asked of the hub at all — local, live,
-unchanged. A **closed** lease asks the hub first; its segments, when found, win. Every
-other hub answer — holds nothing, refuses, or is unreachable while local still answers —
-falls back to local, and the wire's ``hub_unreachable`` flag is set only in the one
-remaining case: the hub is unreachable *and* local cannot answer either."""
+a home per Decision 1 (blizzard#249). Holds only read-only seams (``bzh:repository-split``),
+so a controller may hold it directly (``bzh:controller-read-only``). ``store.lease(lease_id)``
+spans closure — unlike ``active_lease`` — because a transcript outlives its lease. Home
+selection keys on the hub's segment index, not runner-local ack state: the hub holding a
+segment *is* the ack (``bzh:facts-not-status``); see :meth:`TranscriptService.for_lease`."""
 
 from __future__ import annotations
 
@@ -32,9 +23,8 @@ TranscriptProvenance = Literal["local", "archived"]
 class ResolvedTranscript:
     """A lease's transcript, resolved to a home per Decision 1. ``hub_unreachable`` is
     ``True`` only when a closed lease's hub could not be asked *and* local cannot answer
-    either; ``dropped`` counts turns the hub→panel projection (D5) dropped, and is zero on
-    every local read — the local path's own pre-existing narrowing predates this change and
-    stays unreported."""
+    either; ``dropped`` counts turns the hub→panel projection (D5) dropped, always zero on
+    a local read — its own pre-existing narrowing predates this change, unreported."""
 
     transcript: Transcript
     provenance: TranscriptProvenance
@@ -77,8 +67,7 @@ class TranscriptService:
             return ResolvedTranscript(transcript=local, provenance="local", hub_unreachable=False, dropped=0)
 
         # Closed: the hub's segment index is the ack, so ask it first (D1). A refusal or
-        # an empty index is a definite answer, resolved to local exactly like "holds
-        # nothing" — never a transport failure.
+        # an empty index is a definite answer, resolved to local like "holds nothing".
         archived = self._archived.read_turns(chunk_id=lease.chunk_id, node_id=lease.node_id, epoch=lease.epoch)
         if archived.status == "found":
             transcript = Transcript(

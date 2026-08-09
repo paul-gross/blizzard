@@ -289,9 +289,8 @@ def test_the_index_route_carries_no_turn_content_at_any_size(tmp_path: Path) -> 
     assert body["segments"][0]["byte_count"] > 5000 * 50
 
 
-# --- the fleet lease-transcript read (D3, issue #249): both refusals, under the -----
-# --- hub's default `runner_auth_mode` (`RUNNER_AUTH_WARN`), where `assert_owns` is ---
-# --- inert on both branches (Tested assumptions) — this route must refuse anyway. ---
+# --- the fleet lease-transcript read (D3, #249): both refusals under the hub's default ---
+# --- `RUNNER_AUTH_WARN`, where `assert_owns` is inert on both branches — refuse anyway. ---
 
 
 def test_lease_transcript_read_is_401_with_no_resolvable_token_under_the_default_auth_mode(tmp_path: Path) -> None:

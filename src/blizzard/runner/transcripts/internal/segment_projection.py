@@ -1,14 +1,9 @@
 """Projects a hub segment's turns onto the panel's read model (blizzard#249, D5).
 
-A segment turn carries ``thinking`` and recursive sidechains that the panel's
-:class:`~blizzard.runner.transcripts.repository.Turn` has no slot for — the same gap the
-local path's own narrowing already lives with (``internal/projected_transcript_repository.py``).
-This mirrors that narrowing exactly — drop ``thinking`` turns and every sidechain wholesale
-— but, unlike the local path, **counts** what it drops: the dropped ``thinking`` turn
-itself, plus every turn nested under a dropped sidechain, recursively, since the whole
-subagent conversation goes with it. Tool-input re-materialization is shared with the local
-path's own :class:`~blizzard.runner.transcripts.internal.projected_transcript_repository.SerializedInput`,
-not duplicated."""
+``thinking`` turns and sidechains have no slot in the panel's turn model, so this mirrors
+the local path's own narrowing — drop both wholesale — but, unlike it, **counts** what it
+drops, recursively through a dropped sidechain. Tool-input re-materialization is shared
+with the local path's ``SerializedInput``, not duplicated."""
 
 from __future__ import annotations
 
