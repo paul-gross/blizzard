@@ -20,7 +20,7 @@ from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.facts import ANSWER_DELIVERED, QUESTION_ASKED
 from blizzard.wire.question import QuestionView
-from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store
+from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
 
 pytestmark = pytest.mark.unit
 
@@ -115,6 +115,44 @@ def test_exited_worker_with_open_ask_parks_without_a_verdict(tmp_path):  # type:
     # No verdict elicited and no completion buffered — a park is not a judgement.
     assert harness.judged == []
     assert store.pending_submission_lease_ids() == set()
+
+
+def test_ask_during_judgement_parks_instead_of_failing(tmp_path):  # type: ignore[no-untyped-def]
+    """No ask is open when the worker exits — the pre-elicitation check in
+    `_advance_exited_worker` finds nothing — but the worker asks instead of returning a
+    verdict *during* the judgement elicitation itself. `Judgement.run`'s own verdict-less
+    branch must re-check and park, not burn a retry on a verdict that was never coming."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+
+    def _ask_mid_judgement() -> None:
+        store.record_ask(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            question_id="qn_1",
+            question="Which API?",
+            options=["rest", "graphql"],
+            session_id="sess-a",
+            asked_at=_NOW,
+        )
+
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "meets criteria")])
+    harness = FakeHarness(handle=_HANDLE, verdict=None, judge_side_effect=_ask_mid_judgement)
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+
+    Advance(ctx).run()
+
+    # Parked, not failed: no retry consumed, same lease still active.
+    assert store.parked_lease_ids() == {"lease_1"}
+    assert store.attempt_count("ch_1", "nd_build") == 1
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.lease_id == "lease_1"
+    # The question was forwarded up the outbound buffer (store-and-forward).
+    buffered = [f for f in store.pending_outbound() if f.kind == QUESTION_ASKED]
+    assert len(buffered) == 1
+    assert '"question_id": "qn_1"' in buffered[0].payload
+    assert store.pending_submission_lease_ids() == set()  # no completion buffered
 
 
 def test_park_is_not_repeated_and_never_elicits_a_verdict(tmp_path):  # type: ignore[no-untyped-def]

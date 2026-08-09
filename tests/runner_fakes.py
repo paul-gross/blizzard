@@ -7,7 +7,7 @@ fakes standing in for the hub, provider, harness, probe, and worktree git.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 
 from sqlalchemy import MetaData
@@ -320,9 +320,13 @@ class FakeHarness:
         external_usage_snapshot: ExternalSubscriptionUsageSnapshot | None = None,
         external_usage_raises: Exception | None = None,
         transcript_source: IHarnessTranscriptSource | None = None,
+        judge_side_effect: Callable[[], None] | None = None,
     ) -> None:
         self._handle = handle
         self.verdict = verdict
+        # Fires inside `judge()`, before its reply is returned — lets a test express "the
+        # worker asked instead of returning a verdict" (e.g. `store.record_ask(...)`).
+        self._judge_side_effect = judge_side_effect
         self.assessment = assessment
         self.usage = usage
         self.usage_by_kind = usage_by_kind
@@ -393,6 +397,8 @@ class FakeHarness:
         self.judged.append((workdir, session_id, judgement_prompt))
         self.judge_preambles.append(preamble)
         self.judge_model_effort.append((model, effort))
+        if self._judge_side_effect is not None:
+            self._judge_side_effect()
         return "<judged output>"
 
     def resume_with_message(

@@ -10,6 +10,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.loop.attempt import FAILED, Attempt
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT
 from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.git_commits import DeclaredCommits
 from blizzard.runner.loop.hub import HubClientError
 from blizzard.runner.loop.judgement_prompt import JudgementPrompt
@@ -105,6 +106,14 @@ class Judgement:
 
         choice = self.ctx.harness.parse_verdict(output)
         if choice is None:
+            # Ask-during-judgement: the worker escalated instead of returning a verdict. The
+            # pre-elicitation check in `_advance_exited_worker` cannot see this one — it was
+            # recorded during the elicitation just above — so park on it here instead of
+            # burning a retry on a verdict that was never coming.
+            ask = self.ctx.store.unforwarded_ask(lease.lease_id)
+            if ask is not None:
+                DormantSession(self.ctx, lease).park_on_ask(ask)
+                return
             _log.warning("verdict-less judgement — failing attempt", chunk_id=lease.chunk_id, lease_id=lease.lease_id)
             Attempt(self.ctx, lease).fail(reason=FAILED, via="advance")
             return
