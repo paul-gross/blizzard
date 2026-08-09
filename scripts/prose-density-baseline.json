@@ -2504,8 +2504,8 @@
   },
   "blizzard/wire/transcript_segment.py": {
    "comments": 1,
-   "docstrings": 32,
-   "total": 131
+   "docstrings": 31,
+   "total": 130
   },
   "blizzard/wire/user.py": {
    "comments": 0,
@@ -2659,6 +2659,11 @@
    "docstrings": 12,
    "total": 160
   },
+  "e2e/test_transcript_tab_browser_e2e.py": {
+   "comments": 6,
+   "docstrings": 13,
+   "total": 245
+  },
   "journey/__init__.py": {
    "comments": 0,
    "docstrings": 0,
@@ -2735,9 +2740,9 @@
    "total": 122
   },
   "service/test_runner_service.py": {
-   "comments": 23,
+   "comments": 25,
    "docstrings": 15,
-   "total": 303
+   "total": 305
   },
   "service/test_transcript_segments_service.py": {
    "comments": 2,
