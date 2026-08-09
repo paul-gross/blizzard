@@ -9,6 +9,7 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
+from blizzard.hub.domain import transcripts as transcripts_domain
 from tests.support import build_hub, seed_session, seed_user
 
 pytestmark = pytest.mark.component
@@ -173,6 +174,40 @@ def test_get_segment_is_200_at_contributor_and_returns_decompressed_turns(tmp_pa
     assert body["final"] is True
     assert body["truncated"] is False
     assert [t["text"] for t in body["turns"]] == ["hi"]
+
+
+# --- truncation (D5/D6), the operator's only signal turns are missing --------------
+
+
+def test_a_cap_rejected_tail_is_visible_as_truncation_on_both_read_routes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
+    token = seed_session(hub, contributor)
+    chunk_id = _ingest_chunk(hub, headers=_cookie(token))
+    head = hub.client.post(
+        "/api/fleet/transcripts",
+        json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
+    )
+    assert head.json()["applied"] == [1]
+
+    monkeypatch.setattr(transcripts_domain, "RECORD_MAX_BYTES", 10)
+    tail = hub.client.post(
+        "/api/fleet/transcripts",
+        json={
+            "runner_id": "r1",
+            "records": [_record(chunk_id, seq=2, turn_range_start=1, turn_range_end=1, final=True)],
+        },
+    )
+    assert tail.json()["capped"] == [2]
+
+    index = hub.client.get(f"/api/chunks/{chunk_id}/transcripts", headers=_cookie(token))
+    assert index.json()["segments"][0]["truncated"] is True
+
+    content = hub.client.get(f"/api/chunks/{chunk_id}/transcripts/sg_1", headers=_cookie(token))
+    assert content.json()["truncated"] is True
+    assert [t["index"] for t in content.json()["turns"]] == [0]
 
 
 # --- the index route's own content-size guarantee --------------------------------

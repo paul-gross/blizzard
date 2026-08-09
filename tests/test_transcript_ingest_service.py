@@ -93,17 +93,21 @@ def test_a_batch_straddling_the_mark_applies_only_whats_past_it(tmp_path: Path) 
 
 def test_a_re_offer_under_a_fresh_seq_dedupes_against_the_natural_key(tmp_path: Path) -> None:
     """D8: a rebuilt buffer or a backfill resends the same ``(segment_id,
-    turn_range_start)`` — a re-offer must not duplicate stored content even when a
-    caller's own sequence tracking has reset."""
+    turn_range_start)`` under a *later* lane seq, so the high-water mark cannot catch it
+    — the natural key must, and without raising on the schema's unique constraint."""
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
     store = TranscriptSegmentStore(hub.engine)
     service = TranscriptIngestService(store=store, clock=hub.clock)
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
 
-    assert store.natural_key_exists("sg_1", 0) is True
-    [content] = store.records_for_segment("sg_1")
+    result = service.ingest("r1", [_record(7, turn_range_start=0, turn_range_end=0)])
+
+    assert result.applied == [7]
+    assert result.high_water == 7
+    [content] = store.records_for_segment("sg_1")  # still one row, not two
     assert content.turn_range_start == 0
+    assert store.chunk_stored_bytes("ch_1") == len(_record(1, turn_range_start=0, turn_range_end=0)[1].turns_json)
 
 
 def test_a_tail_record_ingested_after_completion_reads_back_in_turn_range_order(tmp_path: Path) -> None:
@@ -113,7 +117,6 @@ def test_a_tail_record_ingested_after_completion_reads_back_in_turn_range_order(
     service = TranscriptIngestService(store=store, clock=hub.clock)
 
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
-    # The tail lands in a later batch — the hub never infers completeness from a transition.
     service.ingest("r1", [_record(2, turn_range_start=1, turn_range_end=1, final=True)])
 
     records = store.records_for_segment("sg_1")
@@ -150,6 +153,12 @@ def test_an_oversized_record_is_rejected_acked_and_advances_the_high_water(tmp_p
 
     assert result.capped == [1]
     assert result.high_water == 1
+    # D6: the advance is *durable*, not just returned — a cap rejection must never be
+    # re-adjudicated on replay, so the mark has to survive the call that made it.
+    assert store.high_water("r1") == 1
+    replay = service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json=big)])
+    assert replay.already_applied == [1]
+    assert replay.capped == []
     [entry] = store.segments_for_chunk("ch_1")
     assert entry.truncated is True
 
@@ -270,13 +279,13 @@ def test_stored_bytes_count_toward_both_caps_rejected_bytes_toward_the_daily_rat
     assert store.chunk_bytes == 100
     assert store.runner_bytes == 100
 
-    store.chunk_bytes = transcripts_domain.CHUNK_BUDGET_MAX_BYTES  # force the chunk budget over the line
+    store.chunk_bytes = transcripts_domain.CHUNK_BUDGET_MAX_BYTES
     before_runner_bytes = store.runner_bytes
     service.ingest("r1", [_record(2, turn_range_start=1, turn_range_end=1, turns_json="b" * 100)])
 
     assert store.rejected and store.rejected[-1][2] == REJECTED_CHUNK_BUDGET_EXCEEDED
-    assert store.runner_bytes == before_runner_bytes + 100  # rejected bytes still count toward the daily rate
-    assert store.chunk_bytes == transcripts_domain.CHUNK_BUDGET_MAX_BYTES  # never touched by the rejection
+    assert store.runner_bytes == before_runner_bytes + 100
+    assert store.chunk_bytes == transcripts_domain.CHUNK_BUDGET_MAX_BYTES
 
 
 def test_the_record_size_cap_is_adjudicated_before_the_others() -> None:
