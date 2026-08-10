@@ -560,19 +560,29 @@ describe('chunk page Transcripts tab composed-chain layout shell sweep (web:shel
 
         // Under the bug, the host has no `position: relative` of its own, so the status
         // line's `position: absolute` centers against the initial containing block — the
-        // browser viewport — rather than this small permission-notice host.
+        // browser viewport — rather than this permission-notice host.
         expect(hostRect.height, `the tab's own box is unreasonably small (${hostRect.height}px)`).toBeGreaterThan(100);
 
-        const statusCenterX = statusRect.left + statusRect.width / 2;
         const statusCenterY = statusRect.top + statusRect.height / 2;
+        const hostCenterY = hostRect.top + hostRect.height / 2;
+        const viewportCenterY = window.innerHeight / 2;
+
+        // Containment alone proves nothing here: the host fills the whole tab body, so
+        // the viewport's own center falls *inside* it too, and a status line centered on
+        // the viewport satisfies an inside-the-box check just as well — that weaker
+        // assertion survived removing this component's `position: relative` entirely.
+        // The discriminating claim is which box it centers **on**, so measure against
+        // both candidates. Neither distance is zero (`.status` is a `<p>`, and its
+        // un-reset user-agent top margin sits its center a line below the 50% line it is
+        // placed at), which is why this compares the two rather than pinning either.
         expect(
-          statusCenterX >= hostRect.left && statusCenterX <= hostRect.right,
-          `status line's horizontal center (${statusCenterX}) falls outside the tab's own box (${hostRect.left}..${hostRect.right})`,
-        ).toBe(true);
+          Math.abs(hostCenterY - viewportCenterY),
+          `fixture defect: the tab's center (${hostCenterY}) sits too near the viewport's (${viewportCenterY}) to tell the two apart`,
+        ).toBeGreaterThan(30);
         expect(
-          statusCenterY >= hostRect.top && statusCenterY <= hostRect.bottom,
-          `status line's vertical center (${statusCenterY}) falls outside the tab's own box (${hostRect.top}..${hostRect.bottom}) — it centered on the viewport instead`,
-        ).toBe(true);
+          Math.abs(statusCenterY - hostCenterY),
+          `status line centered on ${statusCenterY}, nearer the viewport's center (${viewportCenterY}) than the tab's own (${hostCenterY}) — it has no positioned ancestor`,
+        ).toBeLessThan(Math.abs(statusCenterY - viewportCenterY));
       } finally {
         root.remove();
       }

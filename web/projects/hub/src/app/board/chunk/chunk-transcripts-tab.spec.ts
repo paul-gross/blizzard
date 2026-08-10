@@ -361,6 +361,9 @@ describe('ChunkTranscriptsTab', () => {
       segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns: [standaloneOpenedTurn] },
     });
 
+    const emitted: (string | null)[] = [];
+    fixture.componentInstance.pickSidechain.subscribe((path) => emitted.push(path));
+
     const deeperOpenButton = el.querySelector<HTMLButtonElement>(
       '[data-testid="transcript-sidechain-standalone"] [data-testid="transcript-sidechain-open"]',
     );
@@ -368,6 +371,21 @@ describe('ChunkTranscriptsTab', () => {
     deeperOpenButton?.click();
     await fixture.whenStable();
 
+    // `'deeper text'` alone proves nothing: the deeper sidechain already renders inline
+    // *inside* the open standalone view, so it reads the same whether the click did
+    // anything or not — that assertion survived deleting the `(openStandalone)` binding
+    // this case exists for. What the click has to change is the selection, and the path
+    // it names has to be the full address from the segment's own turns, not the deeper
+    // sidechain's locally-indexed `'0'`.
+    expect(emitted, 'the standalone view’s open-standalone control emitted nothing — its binding is dead').toEqual([
+      '3.0',
+    ]);
+    // Rendering follows the selection: the deeper sidechain is now the standalone view
+    // itself, so its own wrapper — the one that held the clicked control — is gone.
+    expect(
+      el.querySelectorAll('[data-testid="transcript-sidechain-standalone"]').length,
+      'the standalone view did not descend into the deeper sidechain',
+    ).toBe(0);
     expect(el.textContent).toContain('deeper text');
   });
 });
