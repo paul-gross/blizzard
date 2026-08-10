@@ -26,15 +26,16 @@ export function shouldRetryTranscriptFetch(failureCount: number, error: Error): 
 
 /**
  * Hub `GET /api/chunks/{chunk_id}/transcripts` read (blizzard#248 D12) — the chunk's
- * segment index: metadata and byte counts only, never turn content. `chunkId` is the
- * caller's own gate (`review:F10`): {@link ChunkPage} thunks it to `null` whenever the
- * Transcripts tab isn't selected, so this fires only once that tab is actually open, not
- * for every chunk selection (D8's "the index on open"). Permission is gated on
- * `transcript:read` at the backend rather than here — a deep link held by a viewer-role
- * identity still issues this request once the tab is open, so the 403 renders as the
- * container's own honest state (D9) instead of the tab silently never appearing (which
- * it also doesn't, since {@link ChunkPage} hides the tab itself for that identity — this
- * query's own gate is belt-and-suspenders).
+ * segment index: metadata and byte counts only, never turn content. This query's own
+ * `enabled: id !== null` is belt-and-suspenders, not the actual gate (`review:F5`): the
+ * hub's chunk page passes `chunkId` unconditionally, so laziness (D8's "the index on
+ * open") comes entirely from where the container that injects this query is mounted —
+ * only inside the chunk page's Transcripts-tab branch, never for every chunk selection.
+ * Permission is gated on `transcript:read` at the backend rather than here — a deep link
+ * held by a viewer-role identity still issues this request once the tab is open, so the
+ * 403 renders as the container's own honest state (D9) instead of the tab silently never
+ * appearing (which it also doesn't, since the chunk page hides the tab option itself for
+ * that identity).
  */
 export function injectHubChunkTranscriptsQuery(chunkId: () => string | null) {
   return injectQuery(() => {

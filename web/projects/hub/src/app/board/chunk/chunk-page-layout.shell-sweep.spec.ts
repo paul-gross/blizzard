@@ -1,9 +1,14 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { hubApi } from 'fleet';
+import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { hubClient, type hubApi } from 'fleet';
+import { OPERATOR_ME_RESPONSE, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { ChunkGeneralTab } from './chunk-general-tab';
+import { ChunkPage } from './chunk-page';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
 /**
@@ -371,6 +376,208 @@ describe('chunk page Transcripts tab layout shell sweep (web:shell-sweep, blizza
       ).toBeLessThanOrEqual(tab!.clientWidth);
     } finally {
       root.remove();
+    }
+  });
+});
+
+/**
+ * The Transcripts tab's real composed chain — `ChunkPage` → `ChunkTranscriptsContainer` →
+ * `ChunkTranscriptsTab` — under a real browser (round-2 review G11/G12). The case above
+ * mounts `ChunkTranscriptsTab` standalone via `TestBed.createComponent`, which never
+ * assembles `ChunkTranscriptsContainer`'s own box into the chain, so it could not have
+ * caught either round-2 regression: the styleless container breaking the flex/height
+ * chain down to `.tx-view`'s scroll container (F1), and the tab's own four top-level
+ * `KitAsyncState` states centering on the browser viewport for want of a positioned
+ * ancestor (F2). Driven through a real router the way `chunk-page.spec.ts` drives it, so
+ * the container is genuinely mounted, not stood in for.
+ */
+const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
+
+const CHAIN_DETAIL: hubApi.ChunkDetail = {
+  chunk_id: CHUNK_ID,
+  graph_id: 'gr_1',
+  graph_name: 'default',
+  current_node_id: 'nd_build',
+  current_node_name: 'build',
+  latest_epoch: 1,
+  status: 'running',
+  work_refs: [],
+  history: [],
+  artifacts: [],
+};
+
+@Component({ selector: 'app-board-stub', template: '' })
+class ChainBoardStub {}
+
+const CHAIN_ROUTES = [
+  { path: 'board', component: ChainBoardStub },
+  { path: 'board/chunk/:chunkId', component: ChunkPage },
+];
+
+/** Stands in for `App`'s own `.layout` (`app.ts`) — the real height-capped, flex-column
+ * ancestor that gives a routed page's `:host { flex: 1; min-height: 0 }` a definite
+ * height to resolve against. `RouterTestingHarness` mounts the routed component as a
+ * direct child of its own fixture root (the same slot `.layout` fills in the real app,
+ * router-outlet-adjacent), so this styles that root itself rather than wrapping it —
+ * wrapping it in a further div would only push the missing flex context out one level,
+ * since the *root* is what needs to be the routed component's flex parent. */
+function mountInAppShell(root: HTMLElement): void {
+  root.style.cssText = 'display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden;';
+  document.body.appendChild(root);
+}
+
+/** A tail-heavy segment: enough turns, each long enough, to overflow any viewport this
+ * sweep uses — the load-bearing fixture for F1's "a long segment is unreachable" claim. */
+function overflowingTurns(): unknown[] {
+  return Array.from({ length: 60 }, (_, i) => ({
+    index: i,
+    kind: 'asst',
+    timestamp: null,
+    text: `turn ${i} — long enough, repeated enough times, to overflow a phone-height viewport on its own`,
+    tool: null,
+    thinking_redacted: false,
+    sidechain: null,
+    truncated: false,
+  }));
+}
+
+describe('chunk page Transcripts tab composed-chain layout shell sweep (web:shell-sweep, review:F1/F2)', () => {
+  it("keeps a long segment's own view scrollable, bounded by the tab's real box, not clipped with no scroll container (review:F1)", async () => {
+    const stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) {
+        return {
+          chunk_id: CHUNK_ID,
+          segments: [
+            {
+              segment_id: 'sg_1',
+              node_id: 'nd_build',
+              epoch: 1,
+              spawn_generation: 0,
+              turn_range_start: 0,
+              turn_range_end: 60,
+              final: true,
+              truncated: false,
+              byte_count: 4000,
+              normalizer_version: 'v1',
+              harness_version: null,
+              received_at: '2026-08-09T00:00:00+00:00',
+            },
+          ],
+        };
+      }
+      if (path === `/api/chunks/${CHUNK_ID}/transcripts/sg_1`) {
+        return { segment_id: 'sg_1', final: true, truncated: false, turns: overflowingTurns() };
+      }
+      return CHAIN_DETAIL;
+    });
+
+    try {
+      await TestBed.configureTestingModule({
+        providers: [
+          provideZonelessChangeDetection(),
+          provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+          provideRouter(CHAIN_ROUTES),
+        ],
+      }).compileComponents();
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=transcripts&segment=sg_1`);
+      await settle(harness.fixture);
+
+      const root = harness.fixture.nativeElement as HTMLElement;
+      mountInAppShell(root);
+      await settle(harness.fixture);
+
+      try {
+        await page.viewport(390, 700);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const tab = root.querySelector<HTMLElement>('[data-testid="chunk-transcripts-tab"]');
+        const txView = root.querySelector<HTMLElement>('[data-testid="transcript-segment-body"]')?.parentElement ?? null;
+        expect(tab, 'no chunk-transcripts-tab in the composed chain').not.toBeNull();
+        expect(txView, 'no scroll section around the segment body').not.toBeNull();
+
+        // The regression's own signature: under the bug, the tab has no definite height
+        // (`height: auto`), so it grows to fit every turn rather than being clipped to the
+        // space `.cp-body` actually has — this bounds it to the real viewport.
+        expect(
+          tab!.getBoundingClientRect().height,
+          `the tab's own box is unbounded (${tab!.getBoundingClientRect().height}px) — the flex/height chain never reached it`,
+        ).toBeLessThanOrEqual(700);
+
+        // With a real, bounded box, `.tx-view` is the one that overflows — and is a
+        // genuine scroll container an operator can actually reach the tail through.
+        expect(
+          txView!.scrollHeight,
+          'the segment view never overflows its own box — the long segment fixture is not actually long enough',
+        ).toBeGreaterThan(txView!.clientHeight);
+        txView!.scrollTop = txView!.scrollHeight;
+        expect(txView!.scrollTop, 'the segment view is clipped, not scrollable').toBeGreaterThan(0);
+      } finally {
+        root.remove();
+      }
+    } finally {
+      stub.restore();
+    }
+  });
+
+  it("centers the tab's own permission-denied state inside the tab, not the browser viewport (review:F2)", async () => {
+    const stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return { ...OPERATOR_ME_RESPONSE, permissions: [] };
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return stubError(403, { detail: 'forbidden' });
+      return CHAIN_DETAIL;
+    });
+
+    try {
+      await TestBed.configureTestingModule({
+        providers: [
+          provideZonelessChangeDetection(),
+          provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+          provideRouter(CHAIN_ROUTES),
+        ],
+      }).compileComponents();
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
+      await settle(harness.fixture);
+
+      const root = harness.fixture.nativeElement as HTMLElement;
+      mountInAppShell(root);
+      await settle(harness.fixture);
+
+      try {
+        await page.viewport(390, 900);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const host = root.querySelector<HTMLElement>('app-chunk-transcripts-tab');
+        const status = root.querySelector<HTMLElement>('[data-testid="transcripts-forbidden"]');
+        expect(host, 'no app-chunk-transcripts-tab host in the composed chain').not.toBeNull();
+        expect(status, 'no transcripts-forbidden status line rendered').not.toBeNull();
+
+        const hostRect = host!.getBoundingClientRect();
+        const statusRect = status!.getBoundingClientRect();
+
+        // Under the bug, the host has no `position: relative` of its own, so the status
+        // line's `position: absolute` centers against the initial containing block — the
+        // browser viewport — rather than this small permission-notice host.
+        expect(hostRect.height, `the tab's own box is unreasonably small (${hostRect.height}px)`).toBeGreaterThan(100);
+
+        const statusCenterX = statusRect.left + statusRect.width / 2;
+        const statusCenterY = statusRect.top + statusRect.height / 2;
+        expect(
+          statusCenterX >= hostRect.left && statusCenterX <= hostRect.right,
+          `status line's horizontal center (${statusCenterX}) falls outside the tab's own box (${hostRect.left}..${hostRect.right})`,
+        ).toBe(true);
+        expect(
+          statusCenterY >= hostRect.top && statusCenterY <= hostRect.bottom,
+          `status line's vertical center (${statusCenterY}) falls outside the tab's own box (${hostRect.top}..${hostRect.bottom}) — it centered on the viewport instead`,
+        ).toBe(true);
+      } finally {
+        root.remove();
+      }
+    } finally {
+      stub.restore();
     }
   });
 });

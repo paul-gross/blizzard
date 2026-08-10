@@ -9,8 +9,9 @@ export type ChunkDetailTab = 'general' | 'artifacts' | 'transcripts';
  * The chunk detail page's selection, as the URL holds it (issue #160, widened
  * blizzard#248 D7/D9) — `tab` names the active tab; `artifact` the artifact
  * selected within the Artifacts tab; `segment`/`sidechain` the Transcripts
- * tab's own open segment and, within it, a standalone-opened unlinked
- * sidechain turn. The URL is the single source of truth: the page derives its
+ * tab's own open segment and, within it, a standalone-opened sidechain
+ * conversation — nested under a tool call or unlinked, either carries one
+ * (`review:F4`). The URL is the single source of truth: the page derives its
  * state from these params and every selection writes them back, never the
  * reverse, so a link is copyable, a reload keeps its place, back/forward walk
  * the selection, and the board dock's artifact link is a plain `routerLink`
@@ -36,8 +37,10 @@ export interface ChunkDetailSelection {
    * Transcripts tab, or `null`. Unvalidated, the same stance as `artifactKey`. */
   readonly transcriptSegment: Signal<string | null>;
 
-  /** The raw `sidechain` param — an unlinked sidechain turn's `index` within
-   * the open segment, opened standalone (blizzard#248 D7), or `null`. */
+  /** The raw `sidechain` param — an encoded `SidechainPath` (`fleet`'s
+   * `transcript-sidechain-path.ts`) naming the sidechain, nested under a tool
+   * call or unlinked, opened standalone within the open segment
+   * (blizzard#248 D7, `review:F4`), or `null`. */
   readonly transcriptSidechain: Signal<string | null>;
 
   /** Merge a selection into the URL — a client-side navigation (no reload)
@@ -49,9 +52,10 @@ export interface ChunkDetailSelection {
    * segment. */
   selectTranscriptSegment(segmentId: string | null): void;
 
-  /** Open (or close, with `null`) an unlinked sidechain standalone within the
-   * currently open segment. */
-  selectTranscriptSidechain(turnIndex: string | null): void;
+  /** Open (or close, with `null`) a sidechain standalone within the
+   * currently open segment, addressed by its encoded `SidechainPath`
+   * (`review:F4`). */
+  selectTranscriptSidechain(path: string | null): void;
 }
 
 const TABS: readonly ChunkDetailTab[] = ['general', 'artifacts', 'transcripts'];
@@ -87,10 +91,10 @@ export function injectChunkDetailSelection(): ChunkDetailSelection {
         queryParamsHandling: 'merge',
       });
     },
-    selectTranscriptSidechain(turnIndex: string | null): void {
+    selectTranscriptSidechain(path: string | null): void {
       void router.navigate([], {
         relativeTo: route,
-        queryParams: { sidechain: turnIndex },
+        queryParams: { sidechain: path },
         queryParamsHandling: 'merge',
       });
     },

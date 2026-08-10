@@ -19,6 +19,16 @@ import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
  * stays under `web:structural-gate`'s line cap; {@link ChunkPage} mounts this only inside
  * its `@case ('transcripts')` branch, which is what keeps these two queries lazy — they
  * fire only once that tab is actually selected, the same as before this split.
+ *
+ * `:host { display: contents }` (`review:F1`, round-2 regression fix) — this component
+ * contributes no box of its own, so its single child (`app-chunk-transcripts-tab`)
+ * becomes a direct flex item of {@link ChunkPage}'s `.cp-body` the way it was before this
+ * container existed. Without it, the tab's own `:host { flex: 1; min-height: 0 }`
+ * (`chunk-transcripts-tab.ts`) has no flex ancestor to apply against — this container's
+ * own box, laid out in normal block flow — and resolves to `height: auto`, which breaks
+ * the tab's internal `height: 100%` chain all the way down to `.tx-view`'s scroll
+ * container, so a long segment becomes unreachable, clipped by `ChunkPage`'s
+ * `.cp { overflow: hidden }` with nothing to scroll.
  */
 @Component({
   selector: 'app-chunk-transcripts-container',
@@ -34,12 +44,17 @@ import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
       [indexState]="indexState()"
       [isForbidden]="isForbidden()"
       [segmentId]="segmentId()"
-      [sidechainTurnIndex]="sidechainTurnIndex()"
+      [sidechainPath]="sidechainPath()"
       [segmentState]="segmentState()"
       [segmentData]="segmentQuery.data()"
       (pickSegment)="pickSegment.emit($event)"
       (pickSidechain)="pickSidechain.emit($event)"
     />
+  `,
+  styles: `
+    :host {
+      display: contents;
+    }
   `,
 })
 export class ChunkTranscriptsContainer {
@@ -49,7 +64,7 @@ export class ChunkTranscriptsContainer {
   readonly currentNodeName = input<string | null>(null);
   readonly latestEpoch = input<number | null>(null);
   readonly segmentId = input<string | null>(null);
-  readonly sidechainTurnIndex = input<string | null>(null);
+  readonly sidechainPath = input<string | null>(null);
 
   readonly pickSegment = output<string | null>();
   readonly pickSidechain = output<string | null>();

@@ -1,8 +1,9 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { vi } from 'vitest';
 
 import type { TranscriptTurn } from './transcript-turn';
-import { TranscriptViewer } from './transcript-viewer';
+import { type SidechainOpenEvent, TranscriptViewer } from './transcript-viewer';
 
 async function render(turns: TranscriptTurn[]): Promise<{ el: HTMLElement; fixture: ComponentFixture<TranscriptViewer> }> {
   await TestBed.configureTestingModule({
@@ -219,8 +220,8 @@ describe('TranscriptViewer', () => {
       truncated: false,
     };
     const { el, fixture } = await render([turn]);
-    const emitted: TranscriptTurn[] = [];
-    fixture.componentInstance.openStandalone.subscribe((t) => emitted.push(t));
+    const emitted: SidechainOpenEvent[] = [];
+    fixture.componentInstance.openStandalone.subscribe((e) => emitted.push(e));
 
     const openButton = el.querySelector<HTMLButtonElement>(
       '[data-testid="transcript-sidechain-nested"] [data-testid="transcript-sidechain-open"]',
@@ -228,10 +229,10 @@ describe('TranscriptViewer', () => {
     expect(openButton).not.toBeNull();
     openButton?.click();
 
-    expect(emitted).toEqual([turn]);
+    expect(emitted).toEqual([{ turn, path: [0] }]);
   });
 
-  it('forwards a nested viewer\'s openStandalone emission through the recursive instance, not swallowing it', async () => {
+  it("forwards a nested viewer's openStandalone emission through the recursive instance, prefixing its own path (review:F3)", async () => {
     const innerSidechainTurn: TranscriptTurn = {
       index: 0,
       kind: 'sidechain',
@@ -261,8 +262,8 @@ describe('TranscriptViewer', () => {
       truncated: false,
     };
     const { el, fixture } = await render([outerTurn]);
-    const emitted: TranscriptTurn[] = [];
-    fixture.componentInstance.openStandalone.subscribe((t) => emitted.push(t));
+    const emitted: SidechainOpenEvent[] = [];
+    fixture.componentInstance.openStandalone.subscribe((e) => emitted.push(e));
 
     const innerOpenButton = el.querySelector<HTMLButtonElement>(
       '[data-testid="transcript-sidechain-standalone"] [data-testid="transcript-sidechain-open"]',
@@ -270,7 +271,9 @@ describe('TranscriptViewer', () => {
     expect(innerOpenButton).not.toBeNull();
     innerOpenButton?.click();
 
-    expect(emitted).toEqual([innerSidechainTurn]);
+    // The outer turn's own index (0) is prepended in front of the inner emission's own
+    // path (also 0) — exactly the collision `review:F3`'s fix disambiguates.
+    expect(emitted).toEqual([{ turn: innerSidechainTurn, path: [0, 0] }]);
   });
 
   it('renders an unlinked sidechain as its own top-level entry', async () => {
@@ -321,12 +324,12 @@ describe('TranscriptViewer', () => {
       truncated: false,
     };
     const { el, fixture } = await render([turn]);
-    const emitted: TranscriptTurn[] = [];
-    fixture.componentInstance.openStandalone.subscribe((t) => emitted.push(t));
+    const emitted: SidechainOpenEvent[] = [];
+    fixture.componentInstance.openStandalone.subscribe((e) => emitted.push(e));
 
     (el.querySelector('[data-testid="transcript-sidechain-open"]') as HTMLButtonElement).click();
 
-    expect(emitted).toEqual([turn]);
+    expect(emitted).toEqual([{ turn, path: [3] }]);
   });
 
   it('shows the truncation note on a turn that lost content', async () => {
@@ -344,5 +347,68 @@ describe('TranscriptViewer', () => {
     ]);
 
     expect(el.querySelector('.trunc-note')?.textContent).toContain('truncated');
+  });
+
+  describe('turn timestamps render in browser-local time (issue #136, review:F8)', () => {
+    // Re-homed from `local-panel/transcript-panel.spec.ts` when `turnClockInfo`/
+    // `turnAbsolute` moved here (blizzard#248 D3/D4) — pin both the zone and "now" so the
+    // local-day boundary is deterministic.
+    beforeEach(() => {
+      vi.stubEnv('TZ', 'America/New_York');
+      vi.setSystemTime(new Date('2026-07-16T15:00:00.000Z')); // 11:00 EDT
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+    });
+
+    function envTurn(timestamp: string | null): TranscriptTurn {
+      return {
+        index: 0,
+        kind: 'env',
+        timestamp,
+        text: 'NODE ENVELOPE',
+        tool: null,
+        thinking_redacted: false,
+        sidechain: null,
+        truncated: false,
+      };
+    }
+
+    it('renders today\'s turn as the local time alone, no day cell, tooltipped with the full date (issue #175)', async () => {
+      const { el } = await render([envTurn('2026-07-16T11:00:00+00:00')]); // 07:00 EDT, same local day as "now"
+
+      const turn = el.querySelector('[data-testid="transcript-turn"]');
+      expect(turn?.querySelector('.t .day')).toBeNull();
+      expect(turn?.querySelector('.t .time')?.textContent).toBe('07:00:00');
+      expect(turn?.textContent).not.toContain('UTC');
+      expect(turn?.querySelector('.t')?.getAttribute('title')).toBe('2026/07/16 07:00:00');
+    });
+
+    it("renders yesterday's turn as \"Yesterday\" above the local time", async () => {
+      const { el } = await render([envTurn('2026-07-15T23:30:00+00:00')]); // 19:30 EDT the day before "now"
+
+      const turn = el.querySelector('[data-testid="transcript-turn"]');
+      expect(turn?.querySelector('.t .day')?.textContent).toBe('Yesterday');
+      expect(turn?.querySelector('.t .time')?.textContent).toBe('19:30:00');
+    });
+
+    it('renders an older turn as its yyyy-mm-dd date above the local time', async () => {
+      const { el } = await render([envTurn('2026-07-01T11:00:00+00:00')]); // well before "now"
+
+      const turn = el.querySelector('[data-testid="transcript-turn"]');
+      expect(turn?.querySelector('.t .day')?.textContent).toBe('2026-07-01');
+      expect(turn?.querySelector('.t .time')?.textContent).toBe('07:00:00');
+    });
+
+    it('falls back to a bare dash with no tooltip for an absent or unparsable timestamp', async () => {
+      const { el } = await render([envTurn(null)]);
+
+      const turn = el.querySelector('[data-testid="transcript-turn"]');
+      expect(turn?.querySelector('.t .time')?.textContent).toBe('—');
+      expect(turn?.querySelector('.t .day')).toBeNull();
+      expect(turn?.querySelector('.t')?.getAttribute('title')).toBeNull();
+    });
   });
 });

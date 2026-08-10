@@ -121,7 +121,7 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
                 [currentNodeName]="d.current_node_name ?? null"
                 [latestEpoch]="d.latest_epoch"
                 [segmentId]="selection.transcriptSegment()"
-                [sidechainTurnIndex]="selection.transcriptSidechain()"
+                [sidechainPath]="selection.transcriptSidechain()"
                 (pickSegment)="onSelectTranscriptSegment($event)"
                 (pickSidechain)="onSelectTranscriptSidechain($event)"
               />
@@ -221,10 +221,10 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
       flex: 1;
       min-height: 0;
     }
-    app-chunk-transcripts-container {
-      flex: 1;
-      min-height: 0;
-    }
+    /* No rule targets \`app-chunk-transcripts-container\` itself (review:F1) — it is
+       \`display: contents\`, so it generates no box of its own to size; its child
+       \`app-chunk-transcripts-tab\` is a direct flex item of \`.cp-body\` instead, and
+       carries \`flex: 1; min-height: 0\` on its own \`:host\` (\`chunk-transcripts-tab.ts\`). */
     /* Positioned and height-bearing so KitAsyncState's absolutely centered
        status line has a box to center in. */
     .rest {
@@ -268,10 +268,11 @@ export class ChunkPage {
     this.selection.selectTranscriptSegment(segmentId);
   }
 
-  /** An unlinked sidechain opened standalone in the Transcripts tab writes its turn
-   * index back to the URL, so it is deep-linkable (blizzard#248 D7). */
-  protected onSelectTranscriptSidechain(turnIndex: string | null): void {
-    this.selection.selectTranscriptSidechain(turnIndex);
+  /** A sidechain opened standalone in the Transcripts tab — nested under a tool call or
+   * unlinked — writes its encoded `SidechainPath` back to the URL, so it is
+   * deep-linkable (blizzard#248 D7, `review:F4`). */
+  protected onSelectTranscriptSidechain(path: string | null): void {
+    this.selection.selectTranscriptSidechain(path);
   }
 
   private readonly detailQuery = injectHubChunkDetailQuery(() => this.chunkId());

@@ -13,7 +13,7 @@ interface Props {
   indexState?: KitAsyncStateValue;
   isForbidden?: boolean;
   segmentId?: string | null;
-  sidechainTurnIndex?: string | null;
+  sidechainPath?: string | null;
   segmentState?: KitAsyncStateValue;
   segmentData?: TranscriptSegmentContentView;
 }
@@ -32,15 +32,15 @@ async function render(props: Props): Promise<{ el: HTMLElement; fixture: Compone
   fixture.componentRef.setInput('indexState', props.indexState ?? 'ready');
   fixture.componentRef.setInput('isForbidden', props.isForbidden ?? false);
   fixture.componentRef.setInput('segmentId', props.segmentId ?? null);
-  fixture.componentRef.setInput('sidechainTurnIndex', props.sidechainTurnIndex ?? null);
+  fixture.componentRef.setInput('sidechainPath', props.sidechainPath ?? null);
   fixture.componentRef.setInput('segmentState', props.segmentState ?? (props.segmentId ? 'ready' : 'empty'));
   fixture.componentRef.setInput('segmentData', props.segmentData);
   // This component is presentational — a URL-held selection, like `ChunkPage` owns for
   // real, is what turns a `pickSegment`/`pickSidechain` output into the next `segmentId`/
-  // `sidechainTurnIndex` input, and `ChunkPage`'s own queries into the next `segmentState`/
+  // `sidechainPath` input, and `ChunkPage`'s own queries into the next `segmentState`/
   // `segmentData` input. Stand in for that container role here.
   fixture.componentInstance.pickSegment.subscribe((id) => fixture.componentRef.setInput('segmentId', id));
-  fixture.componentInstance.pickSidechain.subscribe((idx) => fixture.componentRef.setInput('sidechainTurnIndex', idx));
+  fixture.componentInstance.pickSidechain.subscribe((path) => fixture.componentRef.setInput('sidechainPath', path));
   await fixture.whenStable();
   return { el: fixture.nativeElement as HTMLElement, fixture };
 }
@@ -264,5 +264,110 @@ describe('ChunkTranscriptsTab', () => {
 
     expect(el.querySelector('[data-testid="transcript-sidechain-back"]')).not.toBeNull();
     expect(el.textContent).toContain('nested sidechain text');
+  });
+
+  it('opens a sidechain nested two levels deep standalone, disambiguated from an index collision (review:F3, G13)', async () => {
+    // Both the top-level turn and the innermost sidechain's own turn share index 0 —
+    // exactly the collision a scalar `?sidechain=<index>` could not address: a path of
+    // `[0]` would resolve to the *outer* sidechain instead of the intended inner one.
+    const innerSidechainTurn = turn({
+      index: 0,
+      kind: 'tool',
+      tool: {
+        name: 'InnerTask',
+        input: {},
+        input_unparsed: null,
+        input_shape: 'object',
+        tool_use_id: 't2',
+        output: 'done',
+        output_truncated: false,
+      },
+      sidechain: {
+        agent_id: 'agent-2',
+        agent_type: 'inner-explorer',
+        link: 'prompt-timestamp',
+        turns: [turn({ text: 'innermost text' })],
+      },
+    });
+    const outerSidechainTurn = turn({
+      index: 0,
+      kind: 'tool',
+      tool: {
+        name: 'OuterTask',
+        input: {},
+        input_unparsed: null,
+        input_shape: 'object',
+        tool_use_id: 't1',
+        output: 'done',
+        output_truncated: false,
+      },
+      sidechain: {
+        agent_id: 'agent-1',
+        agent_type: 'outer-explorer',
+        link: 'prompt-timestamp',
+        turns: [innerSidechainTurn],
+      },
+    });
+
+    const { el, fixture } = await render({
+      history: HISTORY,
+      segments: [segment()],
+      segmentId: 'seg-1',
+      segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns: [outerSidechainTurn] },
+    });
+
+    const innerOpenButton = el.querySelector<HTMLButtonElement>(
+      '[data-testid="transcript-sidechain-nested"] [data-testid="transcript-sidechain-nested"] [data-testid="transcript-sidechain-open"]',
+    );
+    expect(innerOpenButton, 'no doubly-nested open-standalone button in the DOM').not.toBeNull();
+    innerOpenButton?.click();
+    await fixture.whenStable();
+
+    expect(el.querySelector('[data-testid="transcript-sidechain-back"]')).not.toBeNull();
+    expect(el.textContent).toContain('innermost text');
+    expect(el.textContent).not.toContain('InnerTask');
+  });
+
+  it("gives the standalone view's own nested sidechain an open-standalone control that actually opens it (review:F3)", async () => {
+    // Round-2 regression: the standalone branch's recursive viewer forwarded no
+    // `(openStandalone)` at all, so a sidechain-within-the-standalone-view's own
+    // open-standalone control was dead.
+    const deeperSidechainTurn = turn({
+      index: 0,
+      kind: 'sidechain',
+      sidechain: {
+        agent_id: null,
+        agent_type: null,
+        link: 'unlinked',
+        turns: [turn({ text: 'deeper text' })],
+      },
+    });
+    const standaloneOpenedTurn = turn({
+      index: 3,
+      kind: 'sidechain',
+      sidechain: {
+        agent_id: null,
+        agent_type: null,
+        link: 'unlinked',
+        turns: [deeperSidechainTurn],
+      },
+    });
+
+    const { el, fixture } = await render({
+      history: HISTORY,
+      segments: [segment()],
+      segmentId: 'seg-1',
+      sidechainPath: '3',
+      segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns: [standaloneOpenedTurn] },
+    });
+
+    const deeperOpenButton = el.querySelector<HTMLButtonElement>(
+      '[data-testid="transcript-sidechain-standalone"] [data-testid="transcript-sidechain-open"]',
+    );
+    expect(deeperOpenButton, 'no open-standalone control on the standalone view’s own nested sidechain').not.toBeNull();
+    deeperOpenButton?.click();
+    await fixture.whenStable();
+
+    expect(el.textContent).toContain('deeper text');
   });
 });

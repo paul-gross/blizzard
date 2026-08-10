@@ -1,14 +1,33 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import { formatAbsolute, formatLocalClockWithDay, type LocalClockWithDay } from '../when';
 import type { TranscriptSidechain, TranscriptTool, TranscriptTurn } from './transcript-turn';
 
-/** {@link TranscriptViewer.inputPreview}'s own cap (`review:F8`) — the `<summary>` line
- * clamps visually via CSS (`.tc-input`'s `text-overflow: ellipsis`), but a tool call's
- * structured input can run to megabytes, and `inputPreview` runs on every change-detection
- * pass; capping the string itself keeps that `JSON.stringify` output — and the DOM node
- * holding it — bounded regardless of how the container is styled. */
+/** The `<summary>` line's own cap (`review:F8`) — clamps visually via CSS too
+ * (`.tc-input`'s `text-overflow: ellipsis`), but a tool call's structured input can run
+ * to megabytes; capping the string bounds the *retained* preview and DOM node, not the
+ * `JSON.stringify` cost, which still runs once per turn —
+ * {@link TranscriptViewer.inputPreviewsByTool} is what keeps that a once-per-turns-change
+ * cost rather than a once-per-change-detection-pass one (`review:F6`). */
 const MAX_INPUT_PREVIEW_CHARS = 300;
+
+/** {@link TranscriptViewer.inputPreviewsByTool}'s per-tool computation, a free function
+ * so the memoizing `computed()` calls it once per turn instead of the template calling it
+ * once per change-detection pass (`review:F6`). */
+function computeInputPreview(tool: TranscriptTool): string {
+  const raw = tool.input_shape === 'object' ? JSON.stringify(tool.input) : (tool.input_unparsed ?? '');
+  return raw.length > MAX_INPUT_PREVIEW_CHARS ? `${raw.slice(0, MAX_INPUT_PREVIEW_CHARS)}…` : raw;
+}
+
+/** One turn's recursive "open standalone" address (blizzard#248 D7, `review:F3`) —
+ * emitted instead of a bare {@link TranscriptTurn} so a sidechain nested more than one
+ * level deep carries the full `SidechainPath` (`./transcript-sidechain-path`) down to it,
+ * not just its own locally-indexed turn. `turn` is the turn that owns the addressed
+ * sidechain — a `tool` turn for a nested one, a `sidechain` turn for an unlinked one. */
+export interface SidechainOpenEvent {
+  readonly turn: TranscriptTurn;
+  readonly path: readonly number[];
+}
 
 /**
  * The shared, presentational turn list (blizzard#248 D3/D4) — one component both the
@@ -31,11 +50,11 @@ const MAX_INPUT_PREVIEW_CHARS = 300;
  *   nest under) renders as its own top-level entry, recursing the same way a nested one
  *   does.
  *
- * `openStandalone` always emits the turn that owns the sidechain (a `tool` turn for a
- * nested one, a `sidechain` turn for an unlinked one) and is forwarded through every
- * recursive instantiation, so a bubbled emission from a nested viewer reaches the
- * container that turns it into a URL-held selection instead of being swallowed partway
- * up (`review:F3`).
+ * `openStandalone` always emits a {@link SidechainOpenEvent} — the owning turn plus the
+ * full `SidechainPath` down to it — forwarded through every recursive instantiation, each
+ * level prepending its own spawning turn's index as it re-emits outward, so a bubbled
+ * emission from a sidechain nested arbitrarily deep still names it uniquely rather than
+ * just its own locally-indexed identity (`review:F3`).
  *
  * `turnClockInfo`/`turnAbsolute` render a turn's `timestamp` in the viewer's own local
  * zone (issue #136, `bzh:utc-instants`) — unchanged from `local-transcript-panel`'s own
@@ -75,11 +94,11 @@ const MAX_INPUT_PREVIEW_CHARS = 300;
                         type="button"
                         class="sc-head sc-open"
                         data-testid="transcript-sidechain-open"
-                        (click)="openStandalone.emit(turn)"
+                        (click)="emitOpenStandalone(turn)"
                       >
                         {{ sidechainLabel(sidechain) }} · open standalone
                       </button>
-                      <fleet-transcript-viewer [turns]="sidechain.turns" (openStandalone)="openStandalone.emit($event)" />
+                      <fleet-transcript-viewer [turns]="sidechain.turns" (openStandalone)="forwardOpenStandalone(turn, $event)" />
                     </div>
                   }
                 </details>
@@ -101,11 +120,11 @@ const MAX_INPUT_PREVIEW_CHARS = 300;
                       type="button"
                       class="sc-head sc-open"
                       data-testid="transcript-sidechain-open"
-                      (click)="openStandalone.emit(turn)"
+                      (click)="emitOpenStandalone(turn)"
                     >
                       {{ sidechainLabel(sidechain) }} · open standalone
                     </button>
-                    <fleet-transcript-viewer [turns]="sidechain.turns" (openStandalone)="openStandalone.emit($event)" />
+                    <fleet-transcript-viewer [turns]="sidechain.turns" (openStandalone)="forwardOpenStandalone(turn, $event)" />
                   </div>
                 }
               }
@@ -316,17 +335,42 @@ export class TranscriptViewer {
   /** The turns to render, in order — this component never fetches or filters them. */
   readonly turns = input.required<readonly TranscriptTurn[]>();
 
-  /** Emitted with the turn that owns a sidechain — nested (`tool`) or unlinked
-   * (`sidechain`) — when the operator asks to view it standalone (blizzard#248 D7,
-   * `review:F3`). This component always renders the sidechain inline too; a container
-   * with no standalone concept (the runner's local panel) needs no listener at all; the
-   * hub's Transcripts tab is the one that turns this into a URL-held selection. */
-  readonly openStandalone = output<TranscriptTurn>();
+  /** Emitted with a {@link SidechainOpenEvent} when the operator asks to view a sidechain
+   * standalone (blizzard#248 D7, `review:F3`). This component always renders the
+   * sidechain inline too; a container with no standalone concept (the runner's local
+   * panel) needs no listener at all; the hub's Transcripts tab turns this into a
+   * URL-held selection. */
+  readonly openStandalone = output<SidechainOpenEvent>();
+
+  /** A turn's own open-standalone button, clicked directly — its path is just its own
+   * index; {@link forwardOpenStandalone} prepends further indices as this bubbles out
+   * through any enclosing viewer (`review:F3`). */
+  protected emitOpenStandalone(turn: TranscriptTurn): void {
+    this.openStandalone.emit({ turn, path: [turn.index] });
+  }
+
+  /** Forward a nested viewer's own emission outward, prepending `prefixTurn`'s index —
+   * the turn that spawned that nested viewer — onto its path (`review:F3`). Without
+   * this, an emission from a sidechain nested two or more levels deep would carry only
+   * its own innermost index, which a different turn at any ancestor level can share. */
+  protected forwardOpenStandalone(prefixTurn: TranscriptTurn, event: SidechainOpenEvent): void {
+    this.openStandalone.emit({ turn: event.turn, path: [prefixTurn.index, ...event.path] });
+  }
+
+  /** {@link inputPreview}'s memoized backing (`review:F6`) — one `JSON.stringify` per
+   * tool turn, recomputed only when {@link turns} changes, not on every change-detection
+   * pass the way computing it directly in the template-invoked `inputPreview` did. */
+  private readonly inputPreviewsByTool = computed<Map<TranscriptTool, string>>(() => {
+    const previews = new Map<TranscriptTool, string>();
+    for (const turn of this.turns()) {
+      if (turn.tool !== null) previews.set(turn.tool, computeInputPreview(turn.tool));
+    }
+    return previews;
+  });
 
   protected inputPreview(tool: TranscriptTool | null): string {
     if (tool === null) return '';
-    const raw = tool.input_shape === 'object' ? JSON.stringify(tool.input) : (tool.input_unparsed ?? '');
-    return raw.length > MAX_INPUT_PREVIEW_CHARS ? `${raw.slice(0, MAX_INPUT_PREVIEW_CHARS)}…` : raw;
+    return this.inputPreviewsByTool().get(tool) ?? '';
   }
 
   protected sidechainLabel(sidechain: TranscriptSidechain): string {

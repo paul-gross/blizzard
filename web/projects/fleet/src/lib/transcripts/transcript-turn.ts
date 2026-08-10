@@ -4,9 +4,12 @@
  * The runner's `runnerApi.TurnSegmentView` and the hub's `hubApi.TurnSegmentViewOutput`
  * are two independently-regenerated TS types that nothing else forces to agree; nothing
  * here imports either, so a container passes its own generated type straight through
- * and TypeScript's structural typing accepts it as long as the shapes still match.
- * `transcript-turn.spec.ts` pins that assignability — a future divergence between the
- * two OpenAPI schemas fails `web:typecheck` there, not as a runtime render bug.
+ * and TypeScript's structural typing accepts it as long as the shapes still match. That
+ * assignability is enforced where it actually compiles under `web:typecheck`
+ * (`npm run build`, which excludes `*.spec.ts`) — the two real construction sites,
+ * `transcript-panel.ts`'s and `chunk-transcripts-tab.ts`'s `[turns]` bindings — not by a
+ * dedicated spec (`review:F7`: a prior `transcript-turn.spec.ts` claimed to hold this
+ * guard, but specs compile under `tsconfig.spec.json`, which `web:typecheck` never runs).
  */
 export interface TranscriptTool {
   name: string;
