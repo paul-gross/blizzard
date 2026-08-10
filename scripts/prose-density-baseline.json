@@ -457,8 +457,8 @@
   },
   "blizzard_mock/mock_hub/api/deps.py": {
    "comments": 3,
-   "docstrings": 22,
-   "total": 166
+   "docstrings": 24,
+   "total": 168
   },
   "blizzard_mock/mock_hub/api/middleware.py": {
    "comments": 6,
@@ -3865,9 +3865,9 @@
    "total": 224
   },
   "test_runner_store.py": {
-   "comments": 103,
-   "docstrings": 65,
-   "total": 995
+   "comments": 106,
+   "docstrings": 68,
+   "total": 1012
   },
   "test_runner_takeover.py": {
    "comments": 68,

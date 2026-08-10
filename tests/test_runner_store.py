@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import sqlalchemy as sa
 
+from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.store.repository import NewLease
@@ -697,11 +698,27 @@ def test_record_spawn_carries_the_cursor_forward_on_a_cross_lease_resume(tmp_pat
     assert len(finals) == 1
 
 
+def _pin_next_segment_id_suffixes(monkeypatch, suffixes):  # type: ignore[no-untyped-def]
+    """Force the next segment mints' relative id order — a ULID's sub-millisecond half is
+    random, so two same-instant ids order as a coin flip and a test reading its expectation
+    off that order observes the tie-break only half the time."""
+    queued = list(suffixes)
+    real = Id.mint_at.__func__  # type: ignore[attr-defined]
+
+    def fake(cls, prefix, at):  # type: ignore[no-untyped-def]
+        minted = real(cls, prefix, at)
+        return Id(prefix, minted.ulid[:-1] + queued.pop(0)) if prefix == SEGMENT_PREFIX and queued else minted
+
+    monkeypatch.setattr(Id, "mint_at", classmethod(fake))
+
+
 @pytest.mark.unit
-def test_record_spawn_breaks_a_stamped_at_tie_by_segment_id(tmp_path):  # type: ignore[no-untyped-def]
+@pytest.mark.parametrize("suffixes", [("A", "Z"), ("Z", "A")], ids=["newer-id-greater", "older-id-greater"])
+def test_record_spawn_breaks_a_stamped_at_tie_by_segment_id(tmp_path, monkeypatch, suffixes):  # type: ignore[no-untyped-def]
     """review F5 (`bzh:sql-portable`): two finalized segments sharing an identical
-    ``stamped_at`` must resolve deterministically — sqlite's incidental rowid order would
-    hide a missing tie-break; postgres does not guarantee it."""
+    ``stamped_at`` must resolve deterministically (postgres does not) — run at BOTH id
+    orders, so whichever row a tie-break-less scan yields first, one case still fails."""
+    _pin_next_segment_id_suffixes(monkeypatch, suffixes)
     store = _store(tmp_path)
     _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
     store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
