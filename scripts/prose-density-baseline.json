@@ -1328,9 +1328,9 @@
    "total": 308
   },
   "blizzard/hub/store/internal/transcript_segment_store.py": {
-   "comments": 11,
+   "comments": 14,
    "docstrings": 10,
-   "total": 290
+   "total": 339
   },
   "blizzard/hub/store/migrations/__init__.py": {
    "comments": 0,
@@ -2612,12 +2612,12 @@
   "e2e/test_board_browser_e2e.py": {
    "comments": 76,
    "docstrings": 32,
-   "total": 519
+   "total": 521
   },
   "e2e/test_board_cost_live_e2e.py": {
    "comments": 15,
    "docstrings": 13,
-   "total": 192
+   "total": 185
   },
   "e2e/test_checks_gate_e2e.py": {
    "comments": 9,
@@ -2662,7 +2662,7 @@
   "e2e/test_graphs_diagram_browser_e2e.py": {
    "comments": 36,
    "docstrings": 31,
-   "total": 425
+   "total": 454
   },
   "e2e/test_login_session_e2e.py": {
    "comments": 10,
@@ -4017,12 +4017,12 @@
   "test_transcript_drain.py": {
    "comments": 41,
    "docstrings": 50,
-   "total": 567
+   "total": 570
   },
   "test_transcript_ingest_service.py": {
    "comments": 12,
-   "docstrings": 10,
-   "total": 387
+   "docstrings": 12,
+   "total": 401
   },
   "test_transcript_pump.py": {
    "comments": 167,
@@ -4031,8 +4031,8 @@
   },
   "test_transcript_segment_store.py": {
    "comments": 7,
-   "docstrings": 9,
-   "total": 245
+   "docstrings": 15,
+   "total": 323
   },
   "test_transcript_segments_api.py": {
    "comments": 16,

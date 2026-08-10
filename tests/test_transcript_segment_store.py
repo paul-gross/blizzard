@@ -3,19 +3,25 @@ natural-key uniqueness the schema enforces (blizzard#247, Phase 1 — unit tier)
 
 from __future__ import annotations
 
+import ast
+import json
+import zlib
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql import ClauseElement, visitors
+from sqlalchemy.sql.elements import TextClause
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.transcripts import SegmentRecord
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal import transcript_segment_store as store_module
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 
 pytestmark = pytest.mark.unit
@@ -49,7 +55,35 @@ def _migrated_engine(tmp_path: Path):  # type: ignore[no-untyped-def]
     return create_engine_from_url(db_url)
 
 
-# --- dialect-portable DDL and cap-accounting selects -------------------------
+# --- dialect-portable DDL and the statements the store itself executes -------
+
+
+def _executed_statements() -> dict[str, ClauseElement]:
+    """The store's OWN statements — a look-alike re-declared here would keep compiling
+    while the product's drifted off the portable surface."""
+    record = _record()
+    m = store_module
+    return {
+        "_segments_for_chunk_stmt": m._segments_for_chunk_stmt("ch_1"),
+        "_records_for_segment_stmt": m._records_for_segment_stmt("ch_1", "sg_1"),
+        "_lease_runner_ids_stmt": m._lease_runner_ids_stmt("ch_1", "nd_build", 1),
+        "_records_for_lease_stmt": m._records_for_lease_stmt("ch_1", "nd_build", 1, "r1"),
+        "_high_water_stmt": m._high_water_stmt("r1"),
+        "_high_water_owner_stmt": m._high_water_owner_stmt("r1"),
+        "_natural_key_state_stmt": m._natural_key_state_stmt("sg_1", 0),
+        "_chunk_stored_bytes_stmt": m._chunk_stored_bytes_stmt("ch_1"),
+        "_runner_window_bytes_stmt": m._runner_window_bytes_stmt("r1", _NOW),
+        "_insert_high_water_stmt": m._insert_high_water_stmt("r1", seq=7, at=_NOW),
+        "_update_high_water_stmt": m._update_high_water_stmt("r1", seq=7, at=_NOW),
+        "_insert_accepted_stmt": m._insert_accepted_stmt(record, byte_count=10, codec="zlib", content=b"z", at=_NOW),
+        "_insert_rejected_stmt": m._insert_rejected_stmt(record, byte_count=999, reason="record_too_large", at=_NOW),
+        "_update_to_accepted_stmt": m._update_to_accepted_stmt(
+            record, byte_count=10, codec="zlib", content=b"z", at=_NOW
+        ),
+        "_update_still_rejected_stmt": m._update_still_rejected_stmt(
+            record, byte_count=999, reason="record_too_large", at=_NOW
+        ),
+    }
 
 
 def test_transcript_segments_ddl_compiles_under_both_dialects() -> None:
@@ -60,18 +94,44 @@ def test_transcript_segments_ddl_compiles_under_both_dialects() -> None:
         assert "transcript_segments" in sql
 
 
-def test_cap_accounting_selects_compile_under_both_dialects() -> None:
-    chunk_budget = select(func.coalesce(func.sum(s.transcript_segments.c.byte_count), 0)).where(
-        s.transcript_segments.c.chunk_id == "ch_1", s.transcript_segments.c.rejected.is_(False)
-    )
-    daily_rate = select(func.coalesce(func.sum(s.transcript_segments.c.byte_count), 0)).where(
-        s.transcript_segments.c.runner_id == "r1", s.transcript_segments.c.received_at >= _NOW
-    )
-    for stmt in (chunk_budget, daily_rate):
-        pg_sql = str(stmt.compile(dialect=postgresql.dialect()))
-        sqlite_sql = str(stmt.compile(dialect=sqlite.dialect()))
-        assert "coalesce" in pg_sql.lower()
-        assert "coalesce" in sqlite_sql.lower()
+def test_transcript_high_water_ddl_compiles_under_both_dialects() -> None:
+    from sqlalchemy.schema import CreateTable
+
+    for dialect in (postgresql.dialect(), sqlite.dialect()):
+        sql = str(CreateTable(s.transcript_high_water).compile(dialect=dialect))
+        assert "transcript_high_water" in sql
+
+
+def test_every_statement_the_store_executes_compiles_under_both_dialects() -> None:
+    for name, stmt in _executed_statements().items():
+        for dialect in (postgresql.dialect(), sqlite.dialect()):
+            assert "transcript_" in str(stmt.compile(dialect=dialect)), name
+
+
+def test_no_statement_the_store_executes_leaves_the_portable_surface() -> None:
+    """`bzh:sql-portable`'s two escape hatches a both-dialects compile cannot see: raw
+    `text()` SQL (opaque to every compiler) and a dialect-namespaced construct."""
+    for name, stmt in _executed_statements().items():
+        assert type(stmt).__module__.startswith("sqlalchemy.sql."), name
+        assert not [e for e in visitors.iterate(stmt) if isinstance(e, TextClause)], name
+
+
+def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> None:
+    builders = {name for name in vars(store_module) if name.endswith("_stmt")}
+    assert builders == set(_executed_statements())
+
+    source = ast.parse(Path(store_module.__file__ or "").read_text())
+    executed = [
+        node.args[0]
+        for node in ast.walk(source)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "execute"
+    ]
+    assert len(executed) == len(builders)
+    for arg in executed:
+        built_by_a_builder = (
+            isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name) and arg.func.id.endswith("_stmt")
+        )
+        assert built_by_a_builder, ast.unparse(arg)
 
 
 # --- codec round-trip ---------------------------------------------------------
@@ -89,6 +149,24 @@ def test_turn_content_round_trips_through_the_codec(tmp_path: Path) -> None:
     with engine.connect() as conn:
         row = conn.execute(select(s.transcript_segments.c.codec)).one()
     assert row.codec == "zlib"
+
+
+def test_turn_content_is_compressed_at_rest_not_stored_as_plaintext(tmp_path: Path) -> None:
+    """AC1/D10: the round-trip above cannot tell zlib from a no-op codec, so this reads
+    the raw column — highly compressible turns must land far under their plaintext."""
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(engine)
+    turns = [{"index": i, "kind": "asst", "text": "the same sentence, over and over. " * 40} for i in range(64)]
+    plaintext = json.dumps(turns).encode("utf-8")
+    record = _record(turns_json=plaintext.decode("utf-8"))
+
+    store.insert_accepted(record, byte_count=len(plaintext), codec="zlib", at=_NOW)
+
+    with engine.connect() as conn:
+        row = conn.execute(select(s.transcript_segments.c.content)).one()
+    assert row.content != plaintext
+    assert zlib.decompress(row.content) == plaintext
+    assert len(row.content) * 10 < len(plaintext)
 
 
 def test_a_rejected_record_stores_no_content_or_codec(tmp_path: Path) -> None:

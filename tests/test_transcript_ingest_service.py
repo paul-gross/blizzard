@@ -227,6 +227,20 @@ def test_an_oversized_record_is_rejected_acked_and_advances_the_high_water(tmp_p
     assert entry.truncated is True
 
 
+def test_the_three_caps_are_the_magnitudes_the_epic_declares() -> None:
+    """AC3: every cap-behavior test below monkeypatches these to tens of bytes, so the
+    shipped magnitudes — 4 MB a record, 64 MB a chunk, 2 GB a runner-day — are pinned here."""
+    mb = 1024 * 1024
+    gb = 1024 * mb
+    shipped = (
+        transcripts_domain.RECORD_MAX_BYTES,
+        transcripts_domain.CHUNK_BUDGET_MAX_BYTES,
+        transcripts_domain.RUNNER_DAILY_RATE_MAX_BYTES,
+    )
+
+    assert shipped == (4 * mb, 64 * mb, 2 * gb)
+
+
 def test_the_chunk_budget_cap_rejects_independently_of_the_other_two(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
