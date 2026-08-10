@@ -115,7 +115,7 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
             }
             @case ('transcripts') {
               <app-chunk-transcripts-container
-                [chunkId]="chunkId() ?? ''"
+                [chunkId]="chunkId()"
                 [history]="d.history ?? []"
                 [currentNodeId]="d.current_node_id"
                 [currentNodeName]="d.current_node_name ?? null"

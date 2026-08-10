@@ -81,16 +81,16 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'events']);
   });
 
-  it('refetches the transcript-segment index but not an already-fetched segment’s content on chunk-changed (review:F6)', () => {
+  it('refetches the transcript-segment index but not an already-fetched final segment’s content on chunk-changed (review:F6)', () => {
     // The index genuinely changes as a chunk's steps progress, so it stays under the
-    // `hub/chunk/<id>` prefix a chunk-changed event invalidates. A segment's own content
-    // is immutable once `final`, and the (chunkId, segmentId) pair already identifies it
+    // `hub/chunk/<id>` prefix a chunk-changed event invalidates. A `final` segment's own
+    // content is immutable, and the (chunkId, segmentId) pair already identifies it
     // uniquely — nesting it under the same prefix meant every SSE event on the chunk
     // re-decompressed an already-rendered segment for no reason, defeating this query's
     // own `refetchInterval: false`. Populate the cache with real entries at both keys and
     // assert on TanStack's actual prefix-match invalidation, not just call arguments.
     queryClient.setQueryData(hubChunkTranscriptsKey('ch_live'), { chunk_id: 'ch_live', segments: [] });
-    queryClient.setQueryData(hubChunkTranscriptSegmentKey('ch_live', 'sg_1'), { segment_id: 'sg_1' });
+    queryClient.setQueryData(hubChunkTranscriptSegmentKey('ch_live', 'sg_1', true), { segment_id: 'sg_1' });
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
@@ -98,7 +98,22 @@ describe('FleetLiveUpdates', () => {
     source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'running' }), '1');
 
     expect(queryClient.getQueryState(hubChunkTranscriptsKey('ch_live'))?.isInvalidated).toBe(true);
-    expect(queryClient.getQueryState(hubChunkTranscriptSegmentKey('ch_live', 'sg_1'))?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(hubChunkTranscriptSegmentKey('ch_live', 'sg_1', true))?.isInvalidated).toBe(false);
+  });
+
+  it('also refetches an open (non-final) segment’s content on chunk-changed (review:F2)', () => {
+    // An operator watching a live step needs its content to keep refreshing — a segment
+    // the caller hasn't resolved as `final` yet (or has resolved as still open) stays
+    // under the `hub/chunk/<id>` prefix so the same signal that refetches the index also
+    // refetches it, rather than freezing until an SSE reconnect's blanket invalidation.
+    queryClient.setQueryData(hubChunkTranscriptSegmentKey('ch_live', 'sg_2', false), { segment_id: 'sg_2' });
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'running' }), '1');
+
+    expect(queryClient.getQueryState(hubChunkTranscriptSegmentKey('ch_live', 'sg_2', false))?.isInvalidated).toBe(true);
   });
 
   it('invalidates the events feed, and that chunk when named, on an event-logged frame', () => {

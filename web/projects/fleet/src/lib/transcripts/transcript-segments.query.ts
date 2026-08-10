@@ -60,14 +60,21 @@ export function injectHubChunkTranscriptsQuery(chunkId: () => string | null) {
 /**
  * Hub `GET /api/chunks/{chunk_id}/transcripts/{segment_id}` read (blizzard#248 D12) —
  * one segment's turns, fetched lazily: `enabled` only once a segment is actually
- * opened, so listing the index never itself issues a content request.
+ * opened, so listing the index never itself issues a content request. `final` (the
+ * caller's own resolution of the segment's index entry — `false` until known) decides
+ * whether this query's key stays live to a `chunk-changed` SSE event or is treated as
+ * immutable (`review:F2`, `hubChunkTranscriptSegmentKey`).
  */
-export function injectHubChunkTranscriptSegmentQuery(chunkId: () => string | null, segmentId: () => string | null) {
+export function injectHubChunkTranscriptSegmentQuery(
+  chunkId: () => string | null,
+  segmentId: () => string | null,
+  final: () => boolean,
+) {
   return injectQuery(() => {
     const cid = chunkId();
     const sid = segmentId();
     return {
-      queryKey: hubChunkTranscriptSegmentKey(cid, sid),
+      queryKey: hubChunkTranscriptSegmentKey(cid, sid, final()),
       enabled: cid !== null && sid !== null,
       queryFn: async (): Promise<TranscriptSegmentContentView> => {
         const { data, error, response } = await getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet({

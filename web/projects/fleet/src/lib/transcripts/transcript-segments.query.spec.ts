@@ -45,7 +45,12 @@ class TestTranscriptsQueryHost {
 class TestTranscriptSegmentQueryHost {
   readonly chunkId = signal<string | null>('ch_1');
   readonly segmentId = signal<string | null>(null);
-  readonly query = injectHubChunkTranscriptSegmentQuery(() => this.chunkId(), () => this.segmentId());
+  readonly final = signal(false);
+  readonly query = injectHubChunkTranscriptSegmentQuery(
+    () => this.chunkId(),
+    () => this.segmentId(),
+    () => this.final(),
+  );
 }
 
 describe('injectHubChunkTranscriptsQuery', () => {

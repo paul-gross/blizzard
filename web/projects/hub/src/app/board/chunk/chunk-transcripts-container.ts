@@ -58,7 +58,10 @@ import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
   `,
 })
 export class ChunkTranscriptsContainer {
-  readonly chunkId = input.required<string>();
+  /** `ChunkPage.chunkId()`'s own type — nullable everywhere else that field is threaded
+   * (`review:F12`) — so the query's own `enabled: id !== null` stays the real gate
+   * rather than a `?? ''` sentinel that could pass it with an empty id. */
+  readonly chunkId = input.required<string | null>();
   readonly history = input.required<readonly TransitionView[]>();
   readonly currentNodeId = input<string | null>(null);
   readonly currentNodeName = input<string | null>(null);
@@ -70,7 +73,19 @@ export class ChunkTranscriptsContainer {
   readonly pickSidechain = output<string | null>();
 
   protected readonly indexQuery = injectHubChunkTranscriptsQuery(() => this.chunkId());
-  protected readonly segmentQuery = injectHubChunkTranscriptSegmentQuery(() => this.chunkId(), () => this.segmentId());
+
+  /** The selected segment's own `final`, resolved from the already-fetched index
+   * (`review:F2`) — `false`, the safe still-live default, until the index names it.
+   * Feeds {@link segmentQuery}'s key placement, not just a render-time flag. */
+  protected readonly selectedSegmentFinal = computed(
+    () => this.indexQuery.data()?.segments?.find((s) => s.segment_id === this.segmentId())?.final ?? false,
+  );
+
+  protected readonly segmentQuery = injectHubChunkTranscriptSegmentQuery(
+    () => this.chunkId(),
+    () => this.segmentId(),
+    () => this.selectedSegmentFinal(),
+  );
 
   protected readonly isForbidden = computed(() => {
     const err = this.indexQuery.error();
