@@ -609,7 +609,7 @@ def test_record_spawn_carries_the_cursor_forward_and_closes_the_prior_segment_on
     _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
     store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
     gen1 = store.open_transcript_segments()[0]
-    store.record_transcript_delta(
+    store.record_transcript_deltas(
         segment_id=gen1.segment_id,
         chunk_id="ch_1",
         cursor="tok-1",
@@ -617,7 +617,7 @@ def test_record_spawn_carries_the_cursor_forward_and_closes_the_prior_segment_on
         shipped_turns=3,
         normalizer_version="v1",
         harness_version=None,
-        payload="{}",
+        payloads=["{}"],
         created_at=_NOW,
     )
 
@@ -659,7 +659,7 @@ def test_record_spawn_carries_the_cursor_forward_on_a_cross_lease_resume(tmp_pat
     _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
     store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
     gen1 = store.open_transcript_segments()[0]
-    store.record_transcript_delta(
+    store.record_transcript_deltas(
         segment_id=gen1.segment_id,
         chunk_id="ch_1",
         cursor="tok-1",
@@ -667,7 +667,7 @@ def test_record_spawn_carries_the_cursor_forward_on_a_cross_lease_resume(tmp_pat
         shipped_turns=3,
         normalizer_version="v1",
         harness_version=None,
-        payload="{}",
+        payloads=["{}"],
         created_at=_NOW,
     )
     closed_at = _NOW + timedelta(seconds=30)
@@ -723,7 +723,7 @@ def test_record_spawn_breaks_a_stamped_at_tie_by_segment_id(tmp_path, monkeypatc
     _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
     store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
     seg1 = store.open_transcript_segments()[0]
-    store.record_transcript_delta(
+    store.record_transcript_deltas(
         segment_id=seg1.segment_id,
         chunk_id="ch_1",
         cursor="tok-1",
@@ -731,7 +731,7 @@ def test_record_spawn_breaks_a_stamped_at_tie_by_segment_id(tmp_path, monkeypatc
         shipped_turns=1,
         normalizer_version="v1",
         harness_version=None,
-        payload="{}",
+        payloads=["{}"],
         created_at=_NOW,
     )
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
@@ -740,7 +740,7 @@ def test_record_spawn_breaks_a_stamped_at_tie_by_segment_id(tmp_path, monkeypatc
     # SAME instant as lease_1's own spawn (not advanced) — manufactures the tie.
     store.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW)
     seg2 = store.open_transcript_segments()[0]
-    store.record_transcript_delta(
+    store.record_transcript_deltas(
         segment_id=seg2.segment_id,
         chunk_id="ch_1",
         cursor="tok-2",
@@ -748,7 +748,7 @@ def test_record_spawn_breaks_a_stamped_at_tie_by_segment_id(tmp_path, monkeypatc
         shipped_turns=1,
         normalizer_version="v1",
         harness_version=None,
-        payload="{}",
+        payloads=["{}"],
         created_at=_NOW,
     )
     store.record_closure(lease_id="lease_2", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
@@ -788,7 +788,7 @@ def test_transcript_segment_delta_stop_shipping_and_record_truncated(tmp_path): 
     store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
     segment_id = store.open_transcript_segments()[0].segment_id
 
-    store.record_transcript_delta(
+    store.record_transcript_deltas(
         segment_id=segment_id,
         chunk_id="ch_1",
         cursor="tok-1",
@@ -796,17 +796,17 @@ def test_transcript_segment_delta_stop_shipping_and_record_truncated(tmp_path): 
         shipped_turns=3,
         normalizer_version="v1",
         harness_version=None,
-        payload="{}",
+        payloads=["{}"],
         created_at=_NOW,
     )
     advanced = store.transcript_segment(segment_id)
     assert advanced is not None
     assert (advanced.cursor, advanced.shipped_bytes, advanced.shipped_turns) == ("tok-1", 100, 3)
 
-    changed_1 = store.mark_transcript_record_truncated(segment_id, reason="record_cap_exceeded")
+    changed_1 = store.mark_transcript_record_truncated(segment_id, reason="record_cap_exceeded", severity=1)
     assert changed_1 is True
     # A repeat of the SAME reason is a no-op (review F14) — no per-tick spam...
-    changed_2 = store.mark_transcript_record_truncated(segment_id, reason="record_cap_exceeded")
+    changed_2 = store.mark_transcript_record_truncated(segment_id, reason="record_cap_exceeded", severity=1)
     assert changed_2 is False
     marked = store.transcript_segment(segment_id)
     assert marked is not None
@@ -814,13 +814,29 @@ def test_transcript_segment_delta_stop_shipping_and_record_truncated(tmp_path): 
     assert marked.shipping_stopped_reason is None  # informational only — still open, still pumpable
     assert len(store.open_transcript_segments()) == 1
 
-    # ...but a later, DIFFERENT reason still overwrites (review F14) — a worse outcome
-    # must never be masked by an earlier, milder one.
-    changed_3 = store.mark_transcript_record_truncated(segment_id, reason="record_unshippable")
+    # ...but a later, DIFFERENT reason still overwrites the display if it is AT LEAST AS
+    # SEVERE (review F14; review round 8 F2 — by the caller's explicit ranking, not
+    # last-write-wins) — a worse outcome must never be masked by an earlier, milder one.
+    changed_3 = store.mark_transcript_record_truncated(segment_id, reason="record_unshippable", severity=2)
     assert changed_3 is True
     overwritten = store.transcript_segment(segment_id)
     assert overwritten is not None
     assert overwritten.truncated_reason == "record_unshippable"
+
+    # A THIRD, distinct reason still warns even though it is MILDER than what is currently
+    # displayed (review round 8 F2, G12) — the warning latches per (segment, reason), fully
+    # independent of the display field's own worst-of precedence.
+    changed_4 = store.mark_transcript_record_truncated(segment_id, reason="source_read_truncated", severity=0)
+    assert changed_4 is True
+    milder = store.transcript_segment(segment_id)
+    assert milder is not None
+    assert milder.truncated_reason == "record_unshippable"  # the milder reason never overwrites the display
+
+    # Re-affirming the reason still on display is a no-op too (round 8 F2) — the fix for
+    # G12 must not accidentally start double-warning a reason merely because a milder one
+    # was seen in between.
+    changed_5 = store.mark_transcript_record_truncated(segment_id, reason="record_unshippable", severity=2)
+    assert changed_5 is False
 
     store.stop_transcript_segment_shipping(segment_id, reason="chunk_budget_exceeded")
     store.stop_transcript_segment_shipping(segment_id, reason="different_reason")
@@ -847,7 +863,7 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
     segment_id = store.open_transcript_segments()[0].segment_id
     store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
 
-    t1 = store.record_transcript_delta(
+    (t1,) = store.record_transcript_deltas(
         segment_id=segment_id,
         chunk_id="ch_1",
         cursor="tok-1",
@@ -855,10 +871,10 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
         shipped_turns=1,
         normalizer_version="v1",
         harness_version=None,
-        payload="{}",
+        payloads=["{}"],
         created_at=_NOW,
     )
-    t2 = store.record_transcript_delta(
+    (t2,) = store.record_transcript_deltas(
         segment_id=segment_id,
         chunk_id="ch_1",
         cursor="tok-2",
@@ -866,7 +882,7 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
         shipped_turns=1,
         normalizer_version="v1",
         harness_version=None,
-        payload="{}",
+        payloads=["{}"],
         created_at=_NOW,
     )
     assert t2 == t1 + 1  # gapless — the fact-lane enqueue above minted no transcript-lane seq
@@ -896,7 +912,7 @@ def test_ack_transcript_outbound_never_reissues_a_pruned_rows_seq(tmp_path):  # 
     _mint(store)
     store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
     segment_id = store.open_transcript_segments()[0].segment_id
-    t1 = store.record_transcript_delta(
+    (t1,) = store.record_transcript_deltas(
         segment_id=segment_id,
         chunk_id="ch_1",
         cursor="tok-1",
@@ -904,13 +920,13 @@ def test_ack_transcript_outbound_never_reissues_a_pruned_rows_seq(tmp_path):  # 
         shipped_turns=1,
         normalizer_version="v1",
         harness_version=None,
-        payload="{}",
+        payloads=["{}"],
         created_at=_NOW,
     )
 
     store.ack_transcript_outbound(t1, acked_at=_NOW)  # prunes t1 outright — it was the table's only, and highest, row
 
-    t2 = store.record_transcript_delta(
+    (t2,) = store.record_transcript_deltas(
         segment_id=segment_id,
         chunk_id="ch_1",
         cursor="tok-2",
@@ -918,7 +934,7 @@ def test_ack_transcript_outbound_never_reissues_a_pruned_rows_seq(tmp_path):  # 
         shipped_turns=1,
         normalizer_version="v1",
         harness_version=None,
-        payload="{}",
+        payloads=["{}"],
         created_at=_NOW,
     )
     assert t2 != t1  # never reissued, even though t1 is now gone and t2 is the new max

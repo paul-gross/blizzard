@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 from structlog.testing import capture_logs
 
@@ -94,7 +95,7 @@ def _enqueue_delta(ctx, segment_id: str, *, cursor: str) -> int:  # type: ignore
             "turns": [],
         }
     )
-    return ctx.store.record_transcript_delta(
+    (seq,) = ctx.store.record_transcript_deltas(
         segment_id=segment_id,
         chunk_id="ch_1",
         cursor=cursor,
@@ -102,9 +103,10 @@ def _enqueue_delta(ctx, segment_id: str, *, cursor: str) -> int:  # type: ignore
         shipped_turns=1,
         normalizer_version="fake/1",
         harness_version=None,
-        payload=payload,
+        payloads=[payload],
         created_at=_NOW,
     )
+    return seq
 
 
 def test_drain_run_pumps_then_flushes_a_real_pump_output_to_the_hub_with_shipping_on() -> None:
@@ -189,7 +191,7 @@ def test_drain_renders_a_final_marker_from_the_ledger_row_not_a_hand_built_paylo
             "turns": [],
         }
     )
-    ctx.store.record_transcript_delta(
+    ctx.store.record_transcript_deltas(
         segment_id=segment_id,
         chunk_id="ch_1",
         cursor="tok-1",
@@ -197,7 +199,7 @@ def test_drain_renders_a_final_marker_from_the_ledger_row_not_a_hand_built_paylo
         shipped_turns=3,
         normalizer_version="claude-code/1.2",
         harness_version="1.2.3",
-        payload=content_payload,
+        payloads=[content_payload],
         created_at=_NOW,
     )
     ctx.store.record_closure(
@@ -245,7 +247,7 @@ def test_drain_renders_a_final_marker_as_truncated_from_a_record_truncation_alon
     hub = FakeHub()
     ctx = _ctx(hub)
     segment_id = _spawn_one_segment(ctx)
-    ctx.store.mark_transcript_record_truncated(segment_id, reason="record_cap_exceeded")
+    ctx.store.mark_transcript_record_truncated(segment_id, reason="record_cap_exceeded", severity=1)
     ctx.store.record_closure(
         lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )
@@ -427,9 +429,9 @@ def test_drain_bounds_its_own_per_run_wall_clock() -> None:
 
 
 def test_drain_never_queries_pending_once_the_pump_alone_exhausts_the_deadline() -> None:
-    """The pump may consume the whole shared deadline on its own — the flush must check
-    the deadline before its own (up to 50-row) query, not just inside its loop after
-    already paying for it."""
+    """Even capped at its own share of the budget (F9), the pump can still exhaust the
+    RUN's own deadline outright — the flush must check the deadline before its own (up
+    to 50-row) query, not just inside its loop after already paying for it."""
     hub = FakeHub()
     step = timedelta(seconds=transcript_drain_module._MAX_SECONDS_PER_RUN + 1)
     ctx = _ctx(hub, clock=_SteppingClock(_NOW, step=step))
@@ -450,6 +452,33 @@ def test_drain_never_queries_pending_once_the_pump_alone_exhausts_the_deadline()
 
     assert calls == 0  # the query itself is never reached
     assert hub.transcripts_pushed == []
+
+
+def test_drain_caps_the_pumps_own_deadline_to_a_fraction_of_the_run_budget() -> None:
+    """review round 8 F9: ``TranscriptPump.run`` used to receive the run's FULL deadline —
+    a slow-but-not-wedged pump could consume the whole budget and starve the flush every
+    tick, with only the 256MB backpressure latch as a backstop. Pins that the pump is
+    handed a strictly smaller deadline than the run's own."""
+    hub = FakeHub()
+    ctx = _ctx(hub, clock=FixedClock(instant=_NOW))
+    captured: dict[str, object] = {}
+    original_run = transcript_drain_module.TranscriptPump.run
+
+    def _capturing_run(self, *, deadline=None):  # type: ignore[no-untyped-def]
+        captured["deadline"] = deadline
+        return original_run(self, deadline=deadline)
+
+    with patch.object(transcript_drain_module.TranscriptPump, "run", _capturing_run):
+        TranscriptDrain(ctx).run()
+
+    full_deadline = _NOW + timedelta(seconds=transcript_drain_module._MAX_SECONDS_PER_RUN)
+    expected_pump_deadline = _NOW + timedelta(
+        seconds=transcript_drain_module._MAX_SECONDS_PER_RUN * transcript_drain_module._PUMP_BUDGET_FRACTION
+    )
+    pump_deadline = captured["deadline"]
+    assert isinstance(pump_deadline, datetime)
+    assert pump_deadline == expected_pump_deadline
+    assert pump_deadline < full_deadline  # the pump never gets the WHOLE run budget
 
 
 class _RaisingTranscriptSource:

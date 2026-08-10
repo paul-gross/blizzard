@@ -906,22 +906,34 @@ class SqlAlchemyRunnerStore:
         with self._begin() as conn:
             conn.execute(outbound_buffer.update().where(outbound_buffer.c.seq == seq).values(acked_at=acked_at))
 
-    def mark_transcript_record_truncated(self, segment_id: str, *, reason: str) -> bool:
+    def mark_transcript_record_truncated(self, segment_id: str, *, reason: str, severity: int) -> bool:
         with self._begin() as conn:
-            # Warn once per segment per reason: a repeat of the same reason is a no-op,
-            # but a later, worse reason still overwrites and warns.
-            result = conn.execute(
-                transcript_segments.update()
-                .where(transcript_segments.c.segment_id == segment_id)
-                .where(
-                    or_(
-                        transcript_segments.c.truncated_reason.is_(None),
-                        transcript_segments.c.truncated_reason != reason,
-                    )
+            row = conn.execute(
+                select(
+                    transcript_segments.c.truncated_reason,
+                    transcript_segments.c.truncated_reason_severity,
+                    transcript_segments.c.truncated_reasons_warned,
+                ).where(transcript_segments.c.segment_id == segment_id)
+            ).first()
+            if row is None:
+                return False
+            current_reason, current_severity, warned_json = row
+            warned: list[str] = json.loads(warned_json) if warned_json is not None else []
+            # Latched per (segment, reason) — a reason already warned never re-warns, no
+            # matter how the display field below moves after it (F2).
+            already_warned = reason in warned
+            values: dict[str, Any] = {}
+            if not already_warned:
+                values["truncated_reasons_warned"] = json.dumps([*warned, reason])
+            # Worst-of, by the CALLER's own severity — the store holds no opinion on reasons.
+            if current_reason != reason and (current_reason is None or severity >= current_severity):
+                values["truncated_reason"] = reason
+                values["truncated_reason_severity"] = severity
+            if values:
+                conn.execute(
+                    transcript_segments.update().where(transcript_segments.c.segment_id == segment_id).values(**values)
                 )
-                .values(truncated_reason=reason)
-            )
-        changed = result.rowcount > 0
+        changed = not already_warned
         if changed:
             _log.warning("transcript record truncated", segment_id=segment_id, reason=reason)
         return changed
@@ -974,43 +986,6 @@ class SqlAlchemyRunnerStore:
                 .where(transcript_outbound_buffer.c.final.is_(True))
                 .values(acked_at=acked_at)
             )
-
-    def record_transcript_delta(
-        self,
-        *,
-        segment_id: str,
-        chunk_id: str,
-        cursor: str | None,
-        shipped_bytes: int,
-        shipped_turns: int,
-        normalizer_version: str,
-        harness_version: str | None,
-        payload: str,
-        created_at: datetime,
-    ) -> int:
-        with self._begin() as conn:
-            conn.execute(
-                transcript_segments.update()
-                .where(transcript_segments.c.segment_id == segment_id)
-                .values(
-                    cursor=cursor,
-                    shipped_bytes=shipped_bytes,
-                    shipped_turns=shipped_turns,
-                    normalizer_version=normalizer_version,
-                    harness_version=harness_version,
-                )
-            )
-            result = conn.execute(
-                transcript_outbound_buffer.insert().values(
-                    segment_id=segment_id,
-                    chunk_id=chunk_id,
-                    final=False,
-                    payload=payload,
-                    created_at=created_at,
-                )
-            )
-        key = result.inserted_primary_key
-        return int(key[0]) if key is not None else 0
 
     def record_transcript_deltas(
         self,

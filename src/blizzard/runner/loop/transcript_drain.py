@@ -14,7 +14,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.loop.transcript_pump import TranscriptPump
+from blizzard.runner.loop.transcript_pump import TRUNCATION_REASON_SEVERITY, TranscriptPump
 from blizzard.runner.store.repository import BufferedTranscriptDelta, TranscriptSegmentLedgerRow
 from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 
@@ -28,18 +28,26 @@ _CP_AFTER_SUBMIT = crashpoint("transcript.after-submit.before-ack", "hub applied
 #: The reason `_deliver` marks on a hub-cap-rejected record — distinct from `transcript_pump.py`'s own.
 _HUB_CAPPED = "hub_capped"
 
+#: Worse than every pump-side reason (F2, review round 8): unlike those, this one means the
+#: content was already read, shipped, and hub-confirmed lost, never merely unattempted.
+_HUB_CAPPED_SEVERITY = max(TRUNCATION_REASON_SEVERITY.values()) + 1
+
 #: Bounds this drain's own per-``run()`` work — checked only BETWEEN deliveries, so the
 #: REAL worst case is this constant PLUS one in-flight delivery's own push timeout (F7).
 _MAX_RECORDS_PER_RUN = 50
 _MAX_SECONDS_PER_RUN = 5.0
 
+#: F9 (review round 8): the pump alone must not be able to consume the WHOLE run budget —
+#: reserves the other half for the flush below, so it cannot starve indefinitely.
+_PUMP_BUDGET_FRACTION = 0.5
+
 
 @dataclass(frozen=True)
 class TranscriptDrain:
     """The transcript lane's pump-then-flush — registered directly in ``tick`` (D3), never
-    chained to ``Pull``'s own ``OutboundDrain``. Bounded per run, one deadline shared across
-    the pump and the flush below; ships every closure's final marker regardless of
-    ``[transcripts] ship`` (D4/D5)."""
+    chained to ``Pull``'s own ``OutboundDrain``. Bounded per run, one shared budget split
+    between the pump and the flush below (F9: the pump alone cannot starve the flush);
+    ships every closure's final marker regardless of ``[transcripts] ship`` (D4/D5)."""
 
     ctx: LoopContext
 
@@ -51,13 +59,15 @@ class TranscriptDrain:
             _log.exception("transcript drain failed — continuing the tick", runner_id=self.ctx.config.runner_id)
 
     def _run_unsafe(self) -> None:
-        deadline = self.ctx.clock.now() + timedelta(seconds=_MAX_SECONDS_PER_RUN)
+        started = self.ctx.clock.now()
+        deadline = started + timedelta(seconds=_MAX_SECONDS_PER_RUN)
+        pump_deadline = started + timedelta(seconds=_MAX_SECONDS_PER_RUN * _PUMP_BUDGET_FRACTION)
         # review round 6 F2, defense in depth: `TranscriptPump.run` isolates each
         # segment's own failure (its own per-segment try/except), but a failure OUTSIDE
         # that loop — e.g. `open_transcript_segments()` itself raising — must not skip
         # the flush below either.
         try:
-            TranscriptPump(self.ctx).run(deadline=deadline)
+            TranscriptPump(self.ctx).run(deadline=pump_deadline)
         except Exception:
             _log.exception(
                 "transcript pump failed — the buffered flush below still runs", runner_id=self.ctx.config.runner_id
@@ -87,7 +97,9 @@ class TranscriptDrain:
             # drain on a record the hub will never store in full: ack and move on (D6, D4).
             _log.error("hub capped buffered transcript record", seq=delta.seq, segment_id=delta.segment_id)
             # Never silent — the same segment-field/fact-lane pair the pump's own paths use.
-            changed = self.ctx.store.mark_transcript_record_truncated(delta.segment_id, reason=_HUB_CAPPED)
+            changed = self.ctx.store.mark_transcript_record_truncated(
+                delta.segment_id, reason=_HUB_CAPPED, severity=_HUB_CAPPED_SEVERITY
+            )
             if changed:
                 OutboundFacts(self.ctx).transcript_truncated(
                     chunk_id=delta.chunk_id, segment_id=delta.segment_id, reason=_HUB_CAPPED, at=self.ctx.clock.now()

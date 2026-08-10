@@ -472,11 +472,18 @@ transcript_segments = Table(
     # the source seam's "never ran" sentinel at spawn, so a closure always has one to declare.
     Column("normalizer_version", String, nullable=False),
     Column("harness_version", String, nullable=True),
-    # Two fields, not one: `truncated_reason` never latches; `shipping_stopped_reason` does.
+    # `truncated_reason` displays the WORST reason seen so far (explicit severity, F2);
+    # `shipping_stopped_reason` is a separate field that latches on its first cause instead.
     Column("truncated_reason", String, nullable=True),  # NULL = no record ever shrunk
+    # The severity `truncated_reason` was last set with (F2) — so the store can compare
+    # without itself knowing what any reason string means.
+    Column("truncated_reason_severity", Integer, nullable=True),
     Column("shipping_stopped_reason", String, nullable=True),  # NULL = still shipping (D4)
     # JSON array of subagent `agent_id`s already warned about on the fact lane.
     Column("sidechain_warned_agents", Text, nullable=True),  # NULL = none warned yet
+    # JSON array of truncation `reason`s warned about (F2) — the warn-once latch,
+    # independent of `truncated_reason`'s own worst-of display value.
+    Column("truncated_reasons_warned", Text, nullable=True),  # NULL = none warned yet
     Column("finalized_at", UtcDateTime, nullable=True),  # NULL = still open; set by step close
     Column("stamped_at", UtcDateTime, nullable=False),
 )
@@ -492,8 +499,8 @@ transcript_outbound_buffer = Table(
     Column("chunk_id", String, nullable=False),
     # Mirrors the payload's own `final` flag, so ack-time keep-vs-delete needs no JSON read.
     Column("final", Boolean, nullable=False),
-    # A blizzard.wire.transcript_segment.TranscriptSegmentRecord's fields, minus `seq`
-    # (this row's own PK) and `runner_id` (batch-level, added at drain time).
+    # Two shapes, keyed by `final`: non-final is a TranscriptSegmentRecord's fields (minus
+    # `seq`/`runner_id`); final is just `{"segment_id": ...}` — see `_enqueue_transcript_final`.
     Column("payload", Text, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
     # NULL = pending. An acked non-final row is deleted, never reaching this state; an

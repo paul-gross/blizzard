@@ -457,8 +457,8 @@
   },
   "blizzard_mock/mock_hub/api/deps.py": {
    "comments": 3,
-   "docstrings": 27,
-   "total": 172
+   "docstrings": 31,
+   "total": 179
   },
   "blizzard_mock/mock_hub/api/middleware.py": {
    "comments": 6,
@@ -543,7 +543,7 @@
   "blizzard_mock/mock_runner/api/routes.py": {
    "comments": 0,
    "docstrings": 13,
-   "total": 201
+   "total": 215
   },
   "blizzard_mock/mock_runner/app.py": {
    "comments": 0,
@@ -566,9 +566,9 @@
    "total": 0
   },
   "blizzard_mock/mock_runner/domain/gateway.py": {
-   "comments": 11,
+   "comments": 13,
    "docstrings": 7,
-   "total": 43
+   "total": 47
   },
   "blizzard_mock/mock_runner/domain/levers.py": {
    "comments": 17,
@@ -577,13 +577,13 @@
   },
   "blizzard_mock/mock_runner/domain/models.py": {
    "comments": 2,
-   "docstrings": 38,
-   "total": 146
+   "docstrings": 41,
+   "total": 158
   },
   "blizzard_mock/mock_runner/domain/service.py": {
-   "comments": 20,
-   "docstrings": 42,
-   "total": 369
+   "comments": 21,
+   "docstrings": 47,
+   "total": 423
   },
   "blizzard_mock/mock_runner/internal/__init__.py": {
    "comments": 0,
@@ -593,7 +593,7 @@
   "blizzard_mock/mock_runner/internal/httpx_gateway.py": {
    "comments": 2,
    "docstrings": 7,
-   "total": 76
+   "total": 79
   }
  },
  "src": {
@@ -2014,8 +2014,8 @@
   },
   "blizzard/runner/loop/attempt.py": {
    "comments": 28,
-   "docstrings": 40,
-   "total": 270
+   "docstrings": 41,
+   "total": 271
   },
   "blizzard/runner/loop/build.py": {
    "comments": 14,
@@ -2133,14 +2133,14 @@
    "total": 44
   },
   "blizzard/runner/loop/transcript_drain.py": {
-   "comments": 22,
+   "comments": 26,
    "docstrings": 11,
-   "total": 125
+   "total": 137
   },
   "blizzard/runner/loop/transcript_pump.py": {
-   "comments": 68,
-   "docstrings": 54,
-   "total": 513
+   "comments": 71,
+   "docstrings": 55,
+   "total": 529
   },
   "blizzard/runner/loop/usage.py": {
    "comments": 4,
@@ -2208,9 +2208,9 @@
    "total": 1
   },
   "blizzard/runner/store/internal/sqlalchemy_store.py": {
-   "comments": 80,
+   "comments": 81,
    "docstrings": 27,
-   "total": 1601
+   "total": 1576
   },
   "blizzard/runner/store/migrations/__init__.py": {
    "comments": 0,
@@ -2362,6 +2362,11 @@
    "docstrings": 6,
    "total": 36
   },
+  "blizzard/runner/store/migrations/versions/20260810_1200_transcript_truncated_reasons_warned.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "total": 41
+  },
   "blizzard/runner/store/migrations/versions/__init__.py": {
    "comments": 0,
    "docstrings": 0,
@@ -2369,13 +2374,13 @@
   },
   "blizzard/runner/store/repository.py": {
    "comments": 4,
-   "docstrings": 382,
-   "total": 994
+   "docstrings": 378,
+   "total": 975
   },
   "blizzard/runner/store/schema.py": {
-   "comments": 135,
+   "comments": 141,
    "docstrings": 5,
-   "total": 514
+   "total": 521
   },
   "blizzard/runner/transcripts/__init__.py": {
    "comments": 0,
@@ -2529,8 +2534,8 @@
   },
   "blizzard/wire/transcript_segment.py": {
    "comments": 4,
-   "docstrings": 32,
-   "total": 136
+   "docstrings": 33,
+   "total": 137
   },
   "blizzard/wire/user.py": {
    "comments": 0,
@@ -3502,7 +3507,7 @@
   "test_pin_runner_store.py": {
    "comments": 6,
    "docstrings": 18,
-   "total": 164
+   "total": 165
   },
   "test_pin_wire.py": {
    "comments": 2,
@@ -3865,9 +3870,9 @@
    "total": 224
   },
   "test_runner_store.py": {
-   "comments": 106,
+   "comments": 114,
    "docstrings": 68,
-   "total": 1012
+   "total": 1028
   },
   "test_runner_takeover.py": {
    "comments": 68,
@@ -3980,9 +3985,9 @@
    "total": 105
   },
   "test_transcript_drain.py": {
-   "comments": 40,
-   "docstrings": 53,
-   "total": 546
+   "comments": 42,
+   "docstrings": 57,
+   "total": 575
   },
   "test_transcript_ingest_service.py": {
    "comments": 11,
@@ -3990,9 +3995,9 @@
    "total": 359
   },
   "test_transcript_pump.py": {
-   "comments": 153,
-   "docstrings": 182,
-   "total": 1722
+   "comments": 165,
+   "docstrings": 198,
+   "total": 1811
   },
   "test_transcript_segment_store.py": {
    "comments": 6,

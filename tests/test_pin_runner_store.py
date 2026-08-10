@@ -151,7 +151,7 @@ def test_a_migrated_transcript_outbound_seq_is_never_reissued_after_a_prune(tmp_
 
 
 def _delta(store: SqlAlchemyRunnerStore, segment_id: str, *, cursor: str) -> int:
-    return store.record_transcript_delta(
+    (seq,) = store.record_transcript_deltas(
         segment_id=segment_id,
         chunk_id="ch_1",
         cursor=cursor,
@@ -159,6 +159,7 @@ def _delta(store: SqlAlchemyRunnerStore, segment_id: str, *, cursor: str) -> int
         shipped_turns=1,
         normalizer_version="v1",
         harness_version=None,
-        payload="{}",
+        payloads=["{}"],
         created_at=_NOW,
     )
+    return seq

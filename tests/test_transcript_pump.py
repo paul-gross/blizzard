@@ -395,6 +395,35 @@ def test_pump_warns_once_per_segment_when_every_tick_needs_truncation() -> None:
     assert len(fact_events) == 1  # exactly one warning across all three truncated ticks
 
 
+def test_pump_warns_once_per_reason_even_as_the_segments_displayed_reason_alternates() -> None:
+    """review round 8 F2 (G12): the store's old guard fired whenever the DISPLAYED reason
+    changed from the one before it, so a segment whose reason alternates tick to tick
+    (a real shape: a truncated source read one tick, an over-cap record the next, a
+    truncated read again the tick after) re-warned on EVERY tick — unbounded, not
+    once-per-segment. Fixed by latching the warning per (segment, reason), independent of
+    which reason currently displays."""
+    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1", truncated=True)})
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()  # tick 1: source_read_truncated (mild) — new reason, warns
+
+    huge = "x" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
+    source._batches["sess-a"] = _batch([_turn(0, huge)], next_token="pos-2")
+    TranscriptPump(ctx).run()  # tick 2: record_cap_exceeded (worse) — new reason, warns
+
+    source._batches["sess-a"] = _batch([_turn(0, "bye")], next_token="pos-3", truncated=True)
+    TranscriptPump(ctx).run()  # tick 3: source_read_truncated AGAIN — same reason, no re-warn
+
+    fact_events = ctx.store.pending_outbound()
+    kinds = [json.loads(e.payload)["kind"] for e in fact_events]
+    assert kinds.count("transcript-truncated") == 2  # exactly one per DISTINCT reason, not per tick
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    # The milder reason reappearing on tick 3 never overwrites the worse one still standing
+    # (explicit severity, not last-write-wins).
+    assert segment.truncated_reason == "record_cap_exceeded"
+
+
 def test_pump_shrinks_tool_output_not_just_top_level_text() -> None:
     """review F2: an oversized ``tool.output`` — the ordinary case for a Claude Code
     transcript, not an oversized ``text`` — must shrink too, or the record still ships
@@ -766,7 +795,7 @@ def test_pump_stops_shipping_past_the_chunk_budget_and_a_later_closure_still_fin
     ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
     # Fake the chunk already at its 64 MB budget via a prior record, cheaply — no real content.
-    ctx.store.record_transcript_delta(
+    ctx.store.record_transcript_deltas(
         segment_id=segment_id,
         chunk_id="ch_1",
         cursor=None,
@@ -774,7 +803,7 @@ def test_pump_stops_shipping_past_the_chunk_budget_and_a_later_closure_still_fin
         shipped_turns=0,
         normalizer_version="fake/1",
         harness_version=None,
-        payload="{}",
+        payloads=["{}"],
         created_at=_NOW,
     )
 
@@ -810,7 +839,7 @@ def test_pump_still_warns_a_dropped_sidechain_on_the_tick_that_tips_the_chunk_bu
     )
     segment_id = _spawn_one_segment(ctx)
     # Close to the budget, not AT it — this tick's own record (read, not faked) is what tips it.
-    ctx.store.record_transcript_delta(
+    ctx.store.record_transcript_deltas(
         segment_id=segment_id,
         chunk_id="ch_1",
         cursor=None,
@@ -818,7 +847,7 @@ def test_pump_still_warns_a_dropped_sidechain_on_the_tick_that_tips_the_chunk_bu
         shipped_turns=0,
         normalizer_version="fake/1",
         harness_version=None,
-        payload="{}",
+        payloads=["{}"],
         created_at=_NOW,
     )
 
@@ -1245,7 +1274,7 @@ def test_pump_stops_shipping_a_split_batch_that_would_exceed_the_chunk_budget_wh
     segment_id = _spawn_one_segment(ctx)
     # Close enough to the budget that THIS tick's own (summed, multi-record) total tips it,
     # but not already AT the budget — the pre-read guard already covers that simpler case.
-    ctx.store.record_transcript_delta(
+    ctx.store.record_transcript_deltas(
         segment_id=segment_id,
         chunk_id="ch_1",
         cursor=None,
@@ -1253,7 +1282,7 @@ def test_pump_stops_shipping_a_split_batch_that_would_exceed_the_chunk_budget_wh
         shipped_turns=0,
         normalizer_version="fake/1",
         harness_version=None,
-        payload="{}",
+        payloads=["{}"],
         created_at=_NOW,
     )
 
@@ -1588,6 +1617,25 @@ def test_pump_shrinks_a_multi_edit_shaped_tool_input_instead_of_emptying_the_rec
     assert segment.truncated_reason == "record_cap_exceeded"
 
 
+def test_pump_shrinking_a_multi_edit_input_never_mutates_the_sources_own_turn() -> None:
+    """review round 8 F8: `_tool_wire`'s ``dict(tool.input)`` is a SHALLOW copy — the
+    shrink pass recurses into and mutates nested containers (``MultiEdit.edits``) in
+    place, which a shallow copy still shares with the harness batch's own ``ToolCall``.
+    Pins that the source turn built by the test — the same object a real harness source
+    could hand back on a later read — is untouched after the pump shrinks its copy."""
+    huge = "e" * (TRANSCRIPT_RECORD_MAX_BYTES // 2)
+    turn = _multi_edit_tool_turn(0, old=huge, new=huge)
+    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([turn], next_token="pos-1")})
+    _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    assert turn.tool is not None
+    source_edit = turn.tool.input["edits"][0]
+    assert source_edit["old_string"] == huge  # untouched — full length, not shrunk in place
+    assert source_edit["new_string"] == huge
+
+
 # --- review round 7 F8: backpressure against an already-unbounded outbound buffer ----
 
 
@@ -1716,6 +1764,47 @@ def test_pump_lease_marks_incomplete_when_the_source_raises_at_closure() -> None
 
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
+    assert segment.truncated_reason == "lease_closure_incomplete"
+    fact_events = ctx.store.pending_outbound()
+    kinds = [json.loads(e.payload)["kind"] for e in fact_events]
+    assert "transcript-truncated" in kinds
+
+
+def test_pump_lease_marks_incomplete_when_the_cursor_is_stuck_at_closure() -> None:
+    """review round 8 F1 (G11): the stuck-cursor guard (turns present, cursor unmoved —
+    see ``test_pump_skips_when_an_already_pumped_segments_cursor_would_not_advance``) used
+    to return ``_CAUGHT_UP`` to ``_drain_segment``, so a lease closing through this exact
+    branch finalized its segment with no truncation trace even though turns were read and
+    discarded. Drives the guard through ``pump_lease`` itself, not just ``run()``."""
+    ctx, source = _ctx(ship=True)
+    segment_id = _spawn_one_segment(ctx)
+    # Stuck: turns present, `next_position=None` so `new_cursor` falls back to the
+    # segment's own (still-`None`) cursor — the guard fires on the very first read too.
+    source._batches["sess-a"] = TranscriptBatch(
+        session_id="sess-a",
+        available=True,
+        reason=None,
+        turns=[_turn(0, "first"), _turn(1, "second")],
+        unlinked_sidechains=[],
+        next_position=None,
+        complete=True,
+        truncated=False,
+        sidechain_truncated=False,
+        normalizer_version="fake/1",
+        harness_version=None,
+    )
+    lease = ctx.store.active_lease("lease_1")
+    assert lease is not None
+
+    with capture_logs() as logs:
+        TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=_NOW + timedelta(seconds=PUMP_LEASE_MAX_SECONDS))
+
+    _assert_skipped_not_raised(logs)
+    assert len(source.turns_since_calls) == 1  # attempted once, then stopped rather than spinning
+    assert ctx.store.pending_transcript_outbound() == []  # the stuck read shipped nothing
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.shipped_turns == 0  # nothing ever shipped — this is real loss, not caught-up
     assert segment.truncated_reason == "lease_closure_incomplete"
     fact_events = ctx.store.pending_outbound()
     kinds = [json.loads(e.payload)["kind"] for e in fact_events]

@@ -237,9 +237,10 @@ class Attempt:
         )
 
     def _pump_lease_before_close(self) -> None:
-        """D3's promise applies here too: bounded like the tick's ordinary drain, and
-        exception-isolated, so neither a slow transcript read nor a raised exception can
-        delay or fail the closure itself."""
+        """D3's promise applies here too, weaker: exceptions never fail the closure (F2),
+        but delay is bounded, not eliminated (F3) — ``deadline`` is checked only BETWEEN
+        ``_pump_one`` calls, so one in-flight read can run past ``PUMP_LEASE_MAX_SECONDS``,
+        and it is minted fresh per call, so N closing leases pay it up to N times."""
         deadline = self.ctx.clock.now() + timedelta(seconds=PUMP_LEASE_MAX_SECONDS)
         try:
             TranscriptPump(self.ctx).pump_lease(self.lease.lease_id, deadline=deadline)

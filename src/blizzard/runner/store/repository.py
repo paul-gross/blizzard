@@ -153,8 +153,9 @@ class TranscriptSegmentLedgerRow:
 @dataclass(frozen=True)
 class BufferedTranscriptDelta:
     """One pending record in the transcript lane's own buffer (D3) — :class:`BufferedFact`'s
-    counterpart. ``payload`` is a ``TranscriptSegmentRecord``'s fields (minus
-    ``seq``/``runner_id``) as JSON; ``final`` mirrors it, driving ack-time keep-vs-delete."""
+    counterpart. Non-final ``payload`` is a ``TranscriptSegmentRecord``'s fields (minus
+    ``seq``/``runner_id``) as JSON; a final one is just ``{"segment_id": ...}``. ``final``
+    mirrors the payload's own flag, driving ack-time keep-vs-delete."""
 
     seq: int
     segment_id: str
@@ -711,11 +712,12 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Mark a buffered fact delivered — a semantic rejection acks too."""
         ...
 
-    def mark_transcript_record_truncated(self, segment_id: str, *, reason: str) -> bool:
-        """Note that one shipped record was shrunk in place (D4's per-record 1 MB cap) —
-        informational only, never latching. Idempotent per reason: a later, different
-        reason still overwrites, so a worse outcome is never masked by an earlier, milder
-        one. Returns whether the field actually changed."""
+    def mark_transcript_record_truncated(self, segment_id: str, *, reason: str, severity: int) -> bool:
+        """Note that one shipped record was shrunk in place (D4's 1 MB per-record cap) —
+        informational only. Latches per ``(segment_id, reason)`` (F2): the SAME reason
+        recurring never re-warns; a DIFFERENT one always does, regardless of what currently
+        displays. ``severity`` ranks ``reason`` against this method's other callers — the
+        store keeps whichever arrived with the highest severity as the displayed one."""
         ...
 
     def stop_transcript_segment_shipping(self, segment_id: str, *, reason: str) -> bool:
@@ -728,26 +730,6 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Latch the dropped-sidechain fact-lane warning per (segment, agent_id): a subagent
         conversation can outlive one pump window, so this must not re-warn every tick it
         stays unlinked. Returns whether this is the first warning for this agent."""
-        ...
-
-    def record_transcript_delta(
-        self,
-        *,
-        segment_id: str,
-        chunk_id: str,
-        cursor: str | None,
-        shipped_bytes: int,
-        shipped_turns: int,
-        normalizer_version: str,
-        harness_version: str | None,
-        payload: str,
-        created_at: datetime,
-    ) -> int:
-        """Advance a segment's cursor/shipped counts/version stamp and enqueue its record —
-        ONE transaction (issue #246): a crash between them would either re-read already-shipped
-        turns or ship a record the cursor never advanced past. The versions persist onto the
-        row, not just the payload, so a later closure builds its final record without the
-        harness seam. Returns the buffered record's seq."""
         ...
 
     def record_transcript_deltas(
@@ -763,11 +745,10 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         payloads: list[str],
         created_at: datetime,
     ) -> list[int]:
-        """:meth:`record_transcript_delta`'s plural sibling (F1): the same ONE segment-
-        ledger update, atomically enqueuing ``len(payloads)`` buffer rows instead of one —
-        a batch split into several records still advances the cursor exactly once, all in
-        the same transaction, or a crash would silently lose whichever didn't make it in.
-        Returns their seqs, in payload order."""
+        """Advance a segment's cursor/shipped counts/version stamp and atomically enqueue
+        ``len(payloads)`` buffer rows (issue #246; F1) — ONE transaction, so a batch split
+        into several records still advances the cursor exactly once, and a crash loses
+        neither the cursor advance nor any record. Returns their seqs, in payload order."""
         ...
 
     def advance_transcript_cursor(
@@ -776,7 +757,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Advance a segment's read cursor (and version stamp) with nothing to enqueue — a
         window that moved the source's read position but produced no turn (e.g. a run of
         control records), which still must not be re-read next tick. Unlike
-        :meth:`record_transcript_delta`, no outbound row: there is no record to ship, only
+        :meth:`record_transcript_deltas`, no outbound row: there is no record to ship, only
         progress to remember."""
         ...
 

@@ -7,6 +7,7 @@ records rather than shrinking/emptying down to one. ``run()`` no-ops while
 
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass
 from datetime import datetime
@@ -63,12 +64,21 @@ _SOURCE_READ_TRUNCATED = "source_read_truncated"
 #: deadline — distinct from `_SOURCE_READ_TRUNCATED`, this tick's own incomplete read.
 _LEASE_CLOSURE_INCOMPLETE = "lease_closure_incomplete"
 
-#: `_pump_one`'s outcome (verify round 8, F2 follow-up) — see its own docstring for what
-#: each value means to `pump_lease`'s drain loop.
-_PumpOutcome = Literal["caught_up", "incomplete", "not_attempted"]
+#: Explicit worst-of ranking (F2), mildest first — see `mark_transcript_record_truncated`.
+#: Public: `transcript_drain.py` extends it with its own `_HUB_CAPPED` reason.
+TRUNCATION_REASON_SEVERITY: dict[str, int] = {
+    _SOURCE_READ_TRUNCATED: 0,
+    _RECORD_CAP_EXCEEDED: 1,
+    _RECORD_UNSHIPPABLE: 2,
+    _LEASE_CLOSURE_INCOMPLETE: 3,
+}
+
+#: `_pump_one`'s outcome (F2; F1 round 8's `stuck`) — see its own docstring for each value.
+_PumpOutcome = Literal["caught_up", "incomplete", "not_attempted", "stuck"]
 _CAUGHT_UP: _PumpOutcome = "caught_up"
 _INCOMPLETE: _PumpOutcome = "incomplete"
 _NOT_ATTEMPTED: _PumpOutcome = "not_attempted"
+_STUCK: _PumpOutcome = "stuck"
 
 
 @dataclass(frozen=True)
@@ -81,8 +91,9 @@ class TranscriptPump:
     def run(self, *, deadline: datetime | None = None) -> None:
         """Pump every open segment. ``deadline`` bounds only how many ADDITIONAL segments a
         run attempts once one is already in flight — never the duration of the one being
-        read, which the harness source's own ``MAX_BATCH_BYTES`` window bounds instead,
-        not wall-clock. ``TranscriptDrain.run`` shares one deadline across both."""
+        read, which the harness source's own ``MAX_BATCH_BYTES`` window bounds instead, not
+        wall-clock. ``TranscriptDrain.run`` passes only a FRACTION of its own budget (F9),
+        reserving the rest for the flush."""
         if not self.ctx.config.transcripts_ship or self.ctx.transcripts is None:
             return
         for segment in self.ctx.store.open_transcript_segments():
@@ -115,9 +126,8 @@ class TranscriptPump:
             outcome = self._pump_one_safe(segment)
             if outcome == _CAUGHT_UP:
                 return  # caught up — nothing more to gain from reading again right now
-            if outcome == _NOT_ATTEMPTED:
-                # Retrying here gains nothing — this loop can't change backpressure or an
-                # unavailable source, so mark and stop rather than spin to the deadline.
+            if outcome in (_NOT_ATTEMPTED, _STUCK):
+                # Retrying gains nothing for either outcome (F1 round 8) — mark and stop.
                 self._mark_record_truncated(segment, _LEASE_CLOSURE_INCOMPLETE)
                 return
             if deadline is not None and self.ctx.clock.now() >= deadline:
@@ -145,11 +155,11 @@ class TranscriptPump:
             return _NOT_ATTEMPTED
 
     def _pump_one(self, segment: TranscriptSegmentLedgerRow) -> _PumpOutcome:
-        """Advance ``segment`` one read window forward (F2, extended verify round 8).
-        ``_NOT_ATTEMPTED``: nothing was read at all (F8 backpressure, or the source itself
-        unavailable) — ``pump_lease`` treats this as incomplete, not caught-up, since a
-        finalizing segment gets no later tick to make up a read it never took. Otherwise
-        ``_CAUGHT_UP``/``_INCOMPLETE`` from ``batch.complete`` on a path that actually read."""
+        """Advance ``segment`` one read window forward (F2; F1 round 8). ``_NOT_ATTEMPTED``:
+        nothing was read at all — ``pump_lease`` treats this as incomplete, not caught-up,
+        since a finalizing segment gets no later tick to make up a read it never took.
+        ``_STUCK``: read, but the cursor didn't move — same treatment; see that branch's
+        own comment. Otherwise ``_CAUGHT_UP``/``_INCOMPLETE`` from ``batch.complete``."""
         if segment.shipping_stopped_reason is not None:
             return _CAUGHT_UP  # permanently stopped past the per-chunk budget (D4)
         budget_before = self.ctx.store.chunk_transcript_shipped_bytes(segment.chunk_id)
@@ -206,7 +216,9 @@ class TranscriptPump:
             # tick must still warn, or the latch means it never warns at all.
             if newly_dropped_sidechains:
                 self._warn_sidechains_dropped(segment, newly_dropped_sidechains)
-            return _CAUGHT_UP
+            # F1: genuine loss, not caught-up — `_CAUGHT_UP` here would finalize the
+            # segment at lease closure with no truncation trace (see `_pump_one`'s own docstring).
+            return _STUCK
 
         turn_range_start = segment.shipped_turns
         records, any_shrunk, any_unshippable = _build_records(segment, batch, turn_range_start)
@@ -235,8 +247,8 @@ class TranscriptPump:
             payloads=payloads,
             created_at=self.ctx.clock.now(),
         )
-        # Worse-last (F1): the store overwrites `truncated_reason` on every differing call,
-        # so calling the worse reason after the milder one keeps the worse one standing.
+        # Order here no longer matters (F2, round 8): the store keeps the worse of the two
+        # by the explicit severity each call carries, not by which call happened last.
         if any_shrunk:
             self._mark_record_truncated(segment, _RECORD_CAP_EXCEEDED)
         if any_unshippable:
@@ -251,8 +263,10 @@ class TranscriptPump:
             self._warn(segment, reason)
 
     def _mark_record_truncated(self, segment: TranscriptSegmentLedgerRow, reason: str) -> None:
-        # Gated on the store's per-reason guard: warns once per segment per reason.
-        changed = self.ctx.store.mark_transcript_record_truncated(segment.segment_id, reason=reason)
+        # Latched per (segment, reason) by the store (F2) — see its own docstring.
+        changed = self.ctx.store.mark_transcript_record_truncated(
+            segment.segment_id, reason=reason, severity=TRUNCATION_REASON_SEVERITY[reason]
+        )
         if changed:
             self._warn(segment, reason)
 
@@ -299,7 +313,9 @@ def _turn_wire(turn: NormalizedTurn, index: int) -> dict[str, Any]:
 def _tool_wire(tool: ToolCall) -> dict[str, Any]:
     return {
         "name": tool.name,
-        "input": dict(tool.input),  # copied — the shrink pass below mutates the wire dict in place
+        # F8: deep, not shallow — the shrink pass recurses into and mutates NESTED
+        # containers too (e.g. `MultiEdit.edits`), which a shallow copy still shares.
+        "input": copy.deepcopy(tool.input),
         "input_unparsed": tool.input_unparsed,
         "input_shape": tool.input_shape,
         "tool_use_id": tool.tool_use_id,

@@ -2643,8 +2643,9 @@ export type TranscriptSegmentContentView = {
  * TranscriptSegmentIndexEntry
  *
  * One segment's metadata row (D12) — byte counts and completion state, never turn
- * content. ``truncated`` marks a segment the per-segment cap rejected part of (D5), so a
- * consumer can tell an incomplete segment from a short one without fetching it.
+ * content. ``truncated`` is true iff any record was cap-rejected (D5) OR the runner
+ * itself declared ``record_truncated`` on one, so a consumer can tell an incomplete
+ * segment from a short one without fetching it.
  */
 export type TranscriptSegmentIndexEntry = {
     /**

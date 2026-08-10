@@ -1326,10 +1326,18 @@ Alongside the fact lane (`lease.minted`, completions, and the rest), the runner 
 second, structurally independent outbound lane for transcript content: normalized turns
 read from the harness's own session transcript, sliced into turn-range records and pushed
 to the hub over their own route, buffering through a hub outage exactly like the fact
-lane's own store-and-forward does. A wedged or slow transcript flush never delays a
+lane's own store-and-forward does. A wedged or slow transcript FLUSH never delays a
 completion or a gate decision — the two lanes share nothing but the runner process. The
 hub stores what it accepts, compressed at rest, behind an operator-only read API
 (blizzard#247) — this is a durable transcript, not a discard sink.
+
+The one exception is the READ half, not the flush: a closing lease's own still-open
+segment is pumped one last time before the closure it gates is recorded, bounded by a
+`PUMP_LEASE_MAX_SECONDS` (5s) budget checked only between reads — so one slow in-flight
+read can still push closure past that bound, and a raised exception is isolated (never
+fails the closure) but not free of delay either. This is deliberate: draining what a
+closing segment can before it stops being pumpable is worth a bounded wait, not zero
+delay.
 
 ```toml
 [transcripts]

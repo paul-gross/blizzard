@@ -134,6 +134,7 @@ _EXPECTED_DRIVE_VERBS: dict[str, str] = {
         "on the mock's api_router"
     ),
     "get-git-commits": "test-only control — reads back a lease's declared git commits, no IHubClient operation",
+    "push-transcript": "IHubClient.push_transcripts — POST /api/fleet/transcripts (blizzard#246/#247, review round 8 F7)",
 }
 
 

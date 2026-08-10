@@ -4080,7 +4080,7 @@
         "type": "object"
       },
       "TranscriptSegmentIndexEntry": {
-        "description": "One segment's metadata row (D12) \u2014 byte counts and completion state, never turn\ncontent. ``truncated`` marks a segment the per-segment cap rejected part of (D5), so a\nconsumer can tell an incomplete segment from a short one without fetching it.",
+        "description": "One segment's metadata row (D12) \u2014 byte counts and completion state, never turn\ncontent. ``truncated`` is true iff any record was cap-rejected (D5) OR the runner\nitself declared ``record_truncated`` on one, so a consumer can tell an incomplete\nsegment from a short one without fetching it.",
         "properties": {
           "byte_count": {
             "title": "Byte Count",
