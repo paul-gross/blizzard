@@ -1730,7 +1730,7 @@
         "type": "object"
       },
       "TurnSegmentView": {
-        "description": "One normalized turn, carried in full \u2014 mirrors\n:class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is\n**segment-relative**, minted by the producer (D9) \u2014 never the batch-local, unstable\n``NormalizedTurn.index``. ``kind`` is a closed vocabulary \u2014 ``docs/versioning.md``.",
+        "description": "One normalized turn, carried in full \u2014 mirrors :class:`~blizzard.runner.harness.transcript.NormalizedTurn`.\n``index``'s stability is per-producer: **segment-relative** and stable (D9) from the shipping lane, but\nbatch-local and read-unstable, sliding with the recency window, from the runner's lease-transcript route\n(blizzard#248 D1). ``kind`` is closed \u2014 ``docs/versioning.md``.",
         "properties": {
           "index": {
             "title": "Index",

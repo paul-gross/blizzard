@@ -2823,10 +2823,10 @@ export type TransitionView = {
 /**
  * TurnSegmentView
  *
- * One normalized turn, carried in full — mirrors
- * :class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is
- * **segment-relative**, minted by the producer (D9) — never the batch-local, unstable
- * ``NormalizedTurn.index``. ``kind`` is a closed vocabulary — ``docs/versioning.md``.
+ * One normalized turn, carried in full — mirrors :class:`~blizzard.runner.harness.transcript.NormalizedTurn`.
+ * ``index``'s stability is per-producer: **segment-relative** and stable (D9) from the shipping lane, but
+ * batch-local and read-unstable, sliding with the recency window, from the runner's lease-transcript route
+ * (blizzard#248 D1). ``kind`` is closed — ``docs/versioning.md``.
  */
 export type TurnSegmentViewInput = {
     /**
@@ -2860,10 +2860,10 @@ export type TurnSegmentViewInput = {
 /**
  * TurnSegmentView
  *
- * One normalized turn, carried in full — mirrors
- * :class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is
- * **segment-relative**, minted by the producer (D9) — never the batch-local, unstable
- * ``NormalizedTurn.index``. ``kind`` is a closed vocabulary — ``docs/versioning.md``.
+ * One normalized turn, carried in full — mirrors :class:`~blizzard.runner.harness.transcript.NormalizedTurn`.
+ * ``index``'s stability is per-producer: **segment-relative** and stable (D9) from the shipping lane, but
+ * batch-local and read-unstable, sliding with the recency window, from the runner's lease-transcript route
+ * (blizzard#248 D1). ``kind`` is closed — ``docs/versioning.md``.
  */
 export type TurnSegmentViewOutput = {
     /**
