@@ -970,6 +970,9 @@ def test_lease_close_survives_a_raising_transcript_source() -> None:
     assert segment is not None
     assert segment.finalized_at is not None  # record_closure ran regardless of the raise
     assert segment.cursor is None  # the pre-closure read never got a chance to advance it
+    # verify round 8: surviving the raise isn't enough — through the real closure path
+    # (not just a direct pump_lease call), the segment it finalized must carry a trace.
+    assert segment.truncated_reason == "lease_closure_incomplete"
 
 
 def test_run_yields_to_its_own_deadline_across_many_open_segments() -> None:
@@ -1633,3 +1636,87 @@ def test_pump_gates_on_outstanding_buffered_bytes_before_reading_a_new_batch() -
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
     assert segment.cursor == "pos-1"
+
+
+# --- verify round 8: F2's incomplete-marking missed every path that returns without ever
+# reading the source — a lease-closure pump this happens to hasn't "caught up", it just
+# never tried, and the finalizing segment still loses whatever the source held with no trace.
+
+
+def test_pump_lease_marks_incomplete_when_backpressure_gates_the_close_time_read() -> None:
+    """verify round 8 (F2 follow-up): F8's backpressure gate returning early looked
+    identical to a caught-up segment to ``pump_lease``'s drain loop — the segment finalized
+    with its content never even attempted, no truncated_reason, no fact-lane warning."""
+    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    segment_id = _spawn_one_segment(ctx)
+    lease = ctx.store.active_lease("lease_1")
+    assert lease is not None
+    gated_ctx = replace(
+        ctx,
+        store=_StoreWithStubbedOutstandingBytes(ctx.store, outstanding_bytes=_MAX_BUFFERED_BYTES),  # type: ignore[arg-type]
+    )
+
+    TranscriptPump(gated_ctx).pump_lease(lease.lease_id, deadline=_NOW + timedelta(seconds=PUMP_LEASE_MAX_SECONDS))
+
+    assert source.turns_since_calls == []  # never even attempted
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "lease_closure_incomplete"
+    fact_events = ctx.store.pending_outbound()
+    kinds = [json.loads(e.payload)["kind"] for e in fact_events]
+    assert "transcript-truncated" in kinds
+
+
+def test_pump_lease_marks_incomplete_when_the_source_is_unavailable_at_closure() -> None:
+    """verify round 8 (F2 follow-up): an unscripted session reads as ``not_found``
+    (``FakeTranscriptSource``'s own default) — the same shape a real harness source
+    reports on a race or a worker that never wrote a transcript. ``_pump_one``'s
+    ``not batch.available`` branch used to read as caught-up to the drain loop too."""
+    ctx, source = _ctx(ship=True, batches={})  # "sess-a" unscripted — reads not_found
+    segment_id = _spawn_one_segment(ctx)
+    lease = ctx.store.active_lease("lease_1")
+    assert lease is not None
+
+    TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=_NOW + timedelta(seconds=PUMP_LEASE_MAX_SECONDS))
+
+    assert len(source.turns_since_calls) == 1  # attempted, just came back unavailable
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "lease_closure_incomplete"
+    fact_events = ctx.store.pending_outbound()
+    kinds = [json.loads(e.payload)["kind"] for e in fact_events]
+    assert "transcript-truncated" in kinds
+
+
+def test_pump_lease_marks_incomplete_when_the_source_raises_at_closure() -> None:
+    """verify round 8 (F2 follow-up): review F4's own
+    ``test_lease_close_survives_a_raising_transcript_source`` proved the raise doesn't
+    propagate, but never checked whether the segment it finalized carries any trace of the
+    read it never got — it didn't. ``_pump_one_safe``'s caught-exception path used to read
+    as caught-up to the drain loop, same bug as the two paths above."""
+    store = make_store("sqlite://")
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1"),
+        verdict=None,
+        transcript_source=_RaisingTranscriptSource(),
+    )
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+    )
+    segment_id = _spawn_one_segment(ctx)
+    lease = ctx.store.active_lease("lease_1")
+    assert lease is not None
+
+    TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=_NOW + timedelta(seconds=PUMP_LEASE_MAX_SECONDS))
+
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "lease_closure_incomplete"
+    fact_events = ctx.store.pending_outbound()
+    kinds = [json.loads(e.payload)["kind"] for e in fact_events]
+    assert "transcript-truncated" in kinds

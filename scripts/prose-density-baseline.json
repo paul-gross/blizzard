@@ -2138,9 +2138,9 @@
    "total": 125
   },
   "blizzard/runner/loop/transcript_pump.py": {
-   "comments": 64,
-   "docstrings": 52,
-   "total": 498
+   "comments": 68,
+   "docstrings": 54,
+   "total": 513
   },
   "blizzard/runner/loop/usage.py": {
    "comments": 4,
@@ -3990,9 +3990,9 @@
    "total": 359
   },
   "test_transcript_pump.py": {
-   "comments": 144,
-   "docstrings": 170,
-   "total": 1635
+   "comments": 153,
+   "docstrings": 182,
+   "total": 1722
   },
   "test_transcript_segment_store.py": {
    "comments": 6,

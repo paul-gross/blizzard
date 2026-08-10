@@ -63,6 +63,13 @@ _SOURCE_READ_TRUNCATED = "source_read_truncated"
 #: deadline — distinct from `_SOURCE_READ_TRUNCATED`, this tick's own incomplete read.
 _LEASE_CLOSURE_INCOMPLETE = "lease_closure_incomplete"
 
+#: `_pump_one`'s outcome (verify round 8, F2 follow-up) — see its own docstring for what
+#: each value means to `pump_lease`'s drain loop.
+_PumpOutcome = Literal["caught_up", "incomplete", "not_attempted"]
+_CAUGHT_UP: _PumpOutcome = "caught_up"
+_INCOMPLETE: _PumpOutcome = "incomplete"
+_NOT_ATTEMPTED: _PumpOutcome = "not_attempted"
+
 
 @dataclass(frozen=True)
 class TranscriptPump:
@@ -105,8 +112,14 @@ class TranscriptPump:
             segment = self.ctx.store.transcript_segment(segment_id)
             if segment is None:
                 return  # the segment vanished from under us — nothing left to drain
-            if self._pump_one_safe(segment):
+            outcome = self._pump_one_safe(segment)
+            if outcome == _CAUGHT_UP:
                 return  # caught up — nothing more to gain from reading again right now
+            if outcome == _NOT_ATTEMPTED:
+                # Retrying here gains nothing — this loop can't change backpressure or an
+                # unavailable source, so mark and stop rather than spin to the deadline.
+                self._mark_record_truncated(segment, _LEASE_CLOSURE_INCOMPLETE)
+                return
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 self._mark_record_truncated(segment, _LEASE_CLOSURE_INCOMPLETE)
                 return
@@ -116,10 +129,11 @@ class TranscriptPump:
         if segment is not None:
             self._mark_record_truncated(segment, _LEASE_CLOSURE_INCOMPLETE)
 
-    def _pump_one_safe(self, segment: TranscriptSegmentLedgerRow) -> bool:
+    def _pump_one_safe(self, segment: TranscriptSegmentLedgerRow) -> _PumpOutcome:
         """review round 6 F2: one segment's own failure must not abort the loop. Returns
-        ``True`` on a caught exception too (F2) — a raising segment must not spin
-        ``pump_lease``'s drain loop."""
+        ``_NOT_ATTEMPTED`` on a caught exception (verify round 8) — a raising segment must
+        not spin ``pump_lease``'s drain loop, but at lease closure it must not read as
+        caught-up either, or whatever the source held finalizes with no truncation trace."""
         try:
             return self._pump_one(segment)
         except Exception:
@@ -128,22 +142,23 @@ class TranscriptPump:
                 segment_id=segment.segment_id,
                 session_id=segment.session_id,
             )
-            return True
+            return _NOT_ATTEMPTED
 
-    def _pump_one(self, segment: TranscriptSegmentLedgerRow) -> bool:
-        """Advance ``segment`` one read window forward. Returns whether it's now caught up
-        with the source (F2): ``True`` on every early-return path with nothing to gain from
-        an immediate re-call, ``batch.complete`` on the one path that actually read —
-        ``pump_lease`` loops on this to drain a closing lease's segment fully."""
+    def _pump_one(self, segment: TranscriptSegmentLedgerRow) -> _PumpOutcome:
+        """Advance ``segment`` one read window forward (F2, extended verify round 8).
+        ``_NOT_ATTEMPTED``: nothing was read at all (F8 backpressure, or the source itself
+        unavailable) — ``pump_lease`` treats this as incomplete, not caught-up, since a
+        finalizing segment gets no later tick to make up a read it never took. Otherwise
+        ``_CAUGHT_UP``/``_INCOMPLETE`` from ``batch.complete`` on a path that actually read."""
         if segment.shipping_stopped_reason is not None:
-            return True  # permanently stopped past the per-chunk budget (D4)
+            return _CAUGHT_UP  # permanently stopped past the per-chunk budget (D4)
         budget_before = self.ctx.store.chunk_transcript_shipped_bytes(segment.chunk_id)
         if budget_before >= CHUNK_TRANSCRIPT_MAX_BYTES:
             self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
-            return True
+            return _CAUGHT_UP
         if self.ctx.store.outstanding_transcript_buffer_bytes() >= _MAX_BUFFERED_BYTES:
             # F8: transient backpressure, not a latch — self-clears once the drain catches up.
-            return True
+            return _NOT_ATTEMPTED
 
         bindings = self.ctx.store.bindings_for_chunk(segment.chunk_id)
         spawn_cwd = SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
@@ -152,7 +167,7 @@ class TranscriptPump:
         since = TranscriptPosition(segment.cursor) if segment.cursor is not None else None
         batch = source.turns_since(segment.session_id, spawn_cwd=spawn_cwd, since=since)
         if not batch.available:
-            return True  # source unavailable this tick — retry from the same cursor next time
+            return _NOT_ATTEMPTED  # source unavailable this tick — retry from the same cursor next time
         if batch.truncated or batch.sidechain_truncated:
             self._mark_record_truncated(segment, _SOURCE_READ_TRUNCATED)
         new_cursor = batch.next_position.token if batch.next_position is not None else segment.cursor
@@ -175,7 +190,7 @@ class TranscriptPump:
                 )
             if newly_dropped_sidechains:
                 self._warn_sidechains_dropped(segment, newly_dropped_sidechains)
-            return batch.complete
+            return _CAUGHT_UP if batch.complete else _INCOMPLETE
 
         # Turns present — the source must have advanced PAST them. An unchanged cursor
         # re-reads and re-ships the same turns every tick, under a fresh range each time.
@@ -191,7 +206,7 @@ class TranscriptPump:
             # tick must still warn, or the latch means it never warns at all.
             if newly_dropped_sidechains:
                 self._warn_sidechains_dropped(segment, newly_dropped_sidechains)
-            return True
+            return _CAUGHT_UP
 
         turn_range_start = segment.shipped_turns
         records, any_shrunk, any_unshippable = _build_records(segment, batch, turn_range_start)
@@ -207,7 +222,7 @@ class TranscriptPump:
             self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
             if newly_dropped_sidechains:  # this branch already read a real batch
                 self._warn_sidechains_dropped(segment, newly_dropped_sidechains)
-            return True
+            return _CAUGHT_UP
 
         self.ctx.store.record_transcript_deltas(
             segment_id=segment.segment_id,
@@ -228,7 +243,7 @@ class TranscriptPump:
             self._mark_record_truncated(segment, _RECORD_UNSHIPPABLE)
         if newly_dropped_sidechains:
             self._warn_sidechains_dropped(segment, newly_dropped_sidechains)
-        return batch.complete
+        return _CAUGHT_UP if batch.complete else _INCOMPLETE
 
     def _stop_shipping(self, segment: TranscriptSegmentLedgerRow, reason: str) -> None:
         changed = self.ctx.store.stop_transcript_segment_shipping(segment.segment_id, reason=reason)
