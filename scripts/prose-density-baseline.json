@@ -506,9 +506,9 @@
    "total": 191
   },
   "blizzard_mock/mock_hub/domain/service.py": {
-   "comments": 34,
+   "comments": 37,
    "docstrings": 74,
-   "total": 706
+   "total": 713
   },
   "blizzard_mock/mock_hub/domain/state.py": {
    "comments": 6,
@@ -2138,9 +2138,9 @@
    "total": 116
   },
   "blizzard/runner/loop/transcript_pump.py": {
-   "comments": 32,
+   "comments": 33,
    "docstrings": 27,
-   "total": 332
+   "total": 334
   },
   "blizzard/runner/loop/usage.py": {
    "comments": 4,
@@ -3980,9 +3980,9 @@
    "total": 105
   },
   "test_transcript_drain.py": {
-   "comments": 27,
-   "docstrings": 40,
-   "total": 476
+   "comments": 28,
+   "docstrings": 43,
+   "total": 498
   },
   "test_transcript_ingest_service.py": {
    "comments": 11,
@@ -3990,9 +3990,9 @@
    "total": 359
   },
   "test_transcript_pump.py": {
-   "comments": 86,
-   "docstrings": 87,
-   "total": 928
+   "comments": 94,
+   "docstrings": 95,
+   "total": 1004
   },
   "test_transcript_segment_store.py": {
    "comments": 6,

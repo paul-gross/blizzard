@@ -111,7 +111,9 @@ class TranscriptPump:
                 self._warn_sidechains_dropped(segment, newly_dropped_sidechains)
             return
 
-        assert new_cursor is not None  # turns present — the source must have advanced past them
+        # Turns present — the source must have advanced PAST them. An unchanged cursor
+        # re-reads and re-ships the same turns every tick, under a fresh range each time.
+        assert new_cursor is not None and new_cursor != segment.cursor
         turn_range_start = segment.shipped_turns
         record: dict[str, Any] = {
             "segment_id": segment.segment_id,

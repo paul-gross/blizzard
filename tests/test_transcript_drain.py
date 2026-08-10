@@ -238,6 +238,28 @@ def test_drain_renders_a_final_marker_as_truncated_when_the_segment_carries_a_re
     assert final_pushes[0].record_truncated is True
 
 
+def test_drain_renders_a_final_marker_as_truncated_from_a_record_truncation_alone() -> None:
+    """The other half of `_final_record`'s disjunction, which fails independently: a segment
+    that shipped fine but had a record truncated (cap, unshippable, source-read, hub cap)
+    latches `truncated_reason` WITHOUT ever latching `shipping_stopped_reason`."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    ctx.store.mark_transcript_record_truncated(segment_id, reason="record_cap_exceeded")
+    ctx.store.record_closure(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+
+    TranscriptDrain(ctx).run()
+
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.shipping_stopped_reason is None  # only the record-truncation half is set
+    final_pushes = [r for r in hub.transcripts_pushed if r.final]
+    assert len(final_pushes) == 1
+    assert final_pushes[0].record_truncated is True
+
+
 def test_drain_renders_a_final_marker_on_the_sentinel_version_when_no_pump_ever_ran() -> None:
     """review F8: a segment that closes with no pump read ever having run still carries its
     normalizer-version sentinel on the ledger row (``bzh``'s "never ran" convention) —

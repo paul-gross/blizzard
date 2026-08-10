@@ -56,11 +56,11 @@ def _turn(index: int, text: str) -> NormalizedTurn:
     )
 
 
-def _tool_call(output: str, *, input_: dict[str, object] | None = None) -> ToolCall:
+def _tool_call(output: str, *, input_: dict[str, object] | None = None, input_unparsed: str | None = None) -> ToolCall:
     return ToolCall(
         name="Bash",
         input=input_ or {},
-        input_unparsed=None,
+        input_unparsed=input_unparsed,
         input_shape="object",
         tool_use_id="tool_1",
         output=output,
@@ -93,6 +93,21 @@ def _input_tool_turn(index: int, *, content: str) -> NormalizedTurn:
         timestamp=_NOW,
         text="",
         tool=_tool_call("", input_={"content": content}),
+        thinking_redacted=False,
+        sidechain=None,
+        truncated=False,
+    )
+
+
+def _unparsed_input_tool_turn(index: int, *, raw: str) -> NormalizedTurn:
+    """The un-parsed half of the same shape: the harness handed over a tool-input blob the
+    normalizer could not parse into a dict, so it survives only as ``input_unparsed``."""
+    return NormalizedTurn(
+        index=index,
+        kind="tool",
+        timestamp=_NOW,
+        text="",
+        tool=_tool_call("", input_unparsed=raw),
         thinking_redacted=False,
         sidechain=None,
         truncated=False,
@@ -256,6 +271,9 @@ def test_pump_never_reads_before_the_cursor() -> None:
     _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
+    # A real source never re-serves the same turns at the same position; scripting the
+    # second read to advance keeps the fake honest about what `since` is carried into.
+    source._batches["sess-a"] = _batch([_turn(1, "more")], next_token="pos-2")
     TranscriptPump(ctx).run()
 
     assert source.turns_since_calls[0][2] is None  # first read: from the start
@@ -506,6 +524,32 @@ def test_pump_shrinks_an_oversized_tool_input_value_instead_of_emptying_the_reco
     assert segment.cursor == "pos-1"
 
 
+def test_pump_shrinks_an_oversized_unparsed_tool_input_instead_of_emptying_the_record() -> None:
+    """`input_unparsed` is the second half of F1's fix and fails independently of the parsed
+    `input` walk: an unparseable oversized blob is just as unshrinkable-looking, and the
+    whole claimed range is lost the same way if the candidate is never offered."""
+    huge_raw = "u" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
+    ctx, _source = _ctx(
+        ship=True, batches={"sess-a": _batch([_unparsed_input_tool_turn(0, raw=huge_raw)], next_token="pos-1")}
+    )
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) == 1
+    assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
+    body = json.loads(pending[0].payload)
+    assert body["turns"] != []  # shrunk, not emptied
+    retained = body["turns"][0]["tool"]["input_unparsed"]
+    assert 0 < len(retained) < len(huge_raw)
+    assert body["turns"][0]["tool"]["input_truncated"] is True  # the shared tool-level marker
+    assert body["record_truncated"] is True
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "record_cap_exceeded"
+
+
 def test_pump_shrinks_many_medium_tool_inputs_instead_of_emptying_the_record() -> None:
     """Many ordinary `Edit`-shaped calls, each individually under cap, summing well over it
     — the batch must converge to a shrunk, non-empty result, not fall into the
@@ -553,6 +597,38 @@ def test_pump_asserts_rather_than_silently_re_shipping_when_turns_carry_no_next_
         TranscriptPump(ctx).run()
 
     assert ctx.store.pending_transcript_outbound() == []  # never enqueued before the assert fired
+
+
+def test_pump_asserts_when_an_already_pumped_segments_cursor_would_not_advance() -> None:
+    """The same stuck source against a segment that HAS pumped before: `new_cursor` falls
+    back to its own non-null cursor, so a null-check alone passes and the pump re-ships the
+    identical turns every tick. The guard is that the cursor CHANGED, not that it exists."""
+    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "first")], next_token="pos-1")})
+    segment_id = _spawn_one_segment(ctx)
+    TranscriptPump(ctx).run()
+    assert ctx.store.transcript_segment(segment_id).cursor == "pos-1"  # type: ignore[union-attr]
+
+    source._batches["sess-a"] = TranscriptBatch(
+        session_id="sess-a",
+        available=True,
+        reason=None,
+        turns=[_turn(0, "second"), _turn(1, "third")],
+        unlinked_sidechains=[],
+        next_position=None,  # stuck: turns to ship, nowhere to advance to
+        complete=True,
+        truncated=False,
+        sidechain_truncated=False,
+        normalizer_version="fake/1",
+        harness_version=None,
+    )
+
+    with pytest.raises(AssertionError):
+        TranscriptPump(ctx).run()
+
+    assert len(ctx.store.pending_transcript_outbound()) == 1  # only the first pump's record
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.shipped_turns == 1  # the re-ship never happened
 
 
 def test_pump_marks_and_warns_when_the_source_read_itself_came_back_truncated() -> None:
