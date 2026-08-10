@@ -1,19 +1,20 @@
-"""Transcript domain types and the read-only repository seam (issue #29).
+"""Transcript domain types and the read-only repository seam (issue #29, widened blizzard#248).
 
-:class:`Turn` and :class:`Transcript` are the parsed read model. A missing or unreadable
-transcript is a **normal** outcome, not an exception: ``Transcript.available`` and
-``.reason`` carry it in-band. Read-only by design (``bzh:repository-split``): this projection
-reads an existing session file, and the separate outbound lane (issue #246) does the writing."""
+:class:`Turn`/:class:`Transcript` are the parsed read model, carrying the hub segment wire's own turn
+shape — thinking turns and sidechains included (blizzard#248 D1/D2). A missing or unreadable transcript
+is a **normal** outcome, not an exception: ``.available``/``.reason`` carry it in-band. Read-only by
+design (``bzh:repository-split``) — the separate outbound lane (issue #246) does the writing."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
 
-#: The panel's turn vocabulary. ``ask``/``verdict`` are deferred —
-#: not derivable from raw records alone (they need facts this package never reads).
-TurnKind = Literal["env", "asst", "tool"]
+#: The shared turn wire vocabulary — closes ``TurnSegmentView.kind`` too (blizzard#248 D1),
+#: widened for thinking/unlinked-sidechain (D2); ``ask``/``verdict`` stay deferred, not derivable here.
+TurnKind = Literal["env", "asst", "tool", "thinking", "sidechain"]
 
 #: Why a transcript is unavailable — all three are ordinary, expected states of a
 #: healthy agent, never a fault on their own; only ``unreadable`` logs at ERROR.
@@ -21,19 +22,48 @@ TranscriptUnavailable = Literal["spawning", "not_found", "unreadable"]
 
 
 @dataclass(frozen=True)
+class ToolCall:
+    """A tool invocation, structured — mirrors
+    :class:`~blizzard.runner.harness.transcript.ToolCall`. Carried through, never
+    re-materialized to a JSON string (blizzard#248 D1) — rendering structured ``input``
+    is the viewer's job."""
+
+    name: str
+    input: Mapping[str, object]
+    input_unparsed: str | None
+    input_shape: str
+    tool_use_id: str | None
+    output: str | None
+    output_truncated: bool
+
+
+@dataclass(frozen=True)
+class Sidechain:
+    """A subagent's private conversation, nested under its spawning tool turn (or, when
+    ``link == "unlinked"``, carried as its own top-level ``"sidechain"`` turn instead) —
+    mirrors :class:`~blizzard.runner.harness.transcript.SidechainConversation`. Recursive:
+    one of ``turns`` may itself carry a tool call whose own sidechain nests further."""
+
+    agent_id: str | None
+    agent_type: str | None
+    link: str
+    turns: list[Turn]
+
+
+@dataclass(frozen=True)
 class Turn:
-    """One collapsed conversation turn. ``tool_output`` is ``None`` while a ``tool``
-    turn's result has not yet arrived — the live steady state, not corruption.
-    ``truncated`` is block-level: this turn lost content to ``MAX_BLOCK_CHARS``, distinct
-    from :attr:`Transcript.truncated`, which is file/turn-count-level."""
+    """One conversation turn, carried in full (blizzard#248 D2). ``tool``/``sidechain`` populate only
+    on a ``kind="tool"`` turn, except a ``"sidechain"`` turn's own ``sidechain``, which stands alone
+    (unlinked); ``thinking_redacted`` is ``kind="thinking"``-only. ``tool.output`` is ``None`` while
+    pending; ``truncated`` is block-level, distinct from :attr:`Transcript.truncated`."""
 
     index: int
     kind: TurnKind
     timestamp: datetime | None
     text: str
-    tool_name: str | None
-    tool_input: str | None
-    tool_output: str | None
+    tool: ToolCall | None
+    thinking_redacted: bool
+    sidechain: Sidechain | None
     truncated: bool
 
 
@@ -41,8 +71,8 @@ class Turn:
 class Transcript:
     """A lease's parsed session — the transcript read model. ``available=False`` carries
     ``reason`` and an empty ``turns``, so a caller must check it before reading ``turns``.
-    ``truncated`` is file-level: the tail-byte cap or ``MAX_TURNS`` dropped the oldest
-    turns, distinct from a turn's own :attr:`Turn.truncated`."""
+    ``truncated`` is file-level: the tail-byte cap, ``MAX_TURNS``, or a sidechain-only read
+    budget cut content the panel renders, distinct from a turn's own :attr:`Turn.truncated`."""
 
     session_id: str | None
     available: bool

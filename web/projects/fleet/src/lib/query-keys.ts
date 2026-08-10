@@ -46,3 +46,33 @@ export function hubChunkWorkItemsKey(chunkId: string | null): readonly unknown[]
 export function hubGraphKey(graphId: string | null): readonly unknown[] {
   return ['hub', 'graph', graphId];
 }
+
+/** One chunk's transcript-segment index (blizzard#248), keyed by id — deliberately under
+ * the {@link hubChunkKey} prefix, so a `chunk-changed` SSE event refetches it: new
+ * segments genuinely appear here as the chunk's steps progress. */
+export function hubChunkTranscriptsKey(chunkId: string | null): readonly unknown[] {
+  return ['hub', 'chunk', chunkId, 'transcripts'];
+}
+
+/** One segment's decompressed turns (blizzard#248), keyed by chunk and segment id, plus
+ * whether the segment is `final` — the placement, not just the id pair, is what decides
+ * whether a `chunk-changed` SSE event refetches it (`review:F2`, tightening `review:F6`).
+ * A `final` segment's content is immutable and the (chunkId, segmentId) pair already
+ * uniquely identifies it, so it gets its own top-level prefix, *not* nested under
+ * {@link hubChunkKey} — nesting it there would mean every SSE event on the chunk
+ * refetches an already-rendered segment's content, a decompress+parse+per-turn-validate
+ * on the hub for no reason, defeating this query's own `refetchInterval: false`
+ * (`transcript-segments.query.ts`). A non-`final` (open) segment has no such immutability
+ * guarantee — an operator watching it live needs its content to keep refreshing — so it
+ * stays under the {@link hubChunkKey} prefix, the same live signal the index itself
+ * refetches on. Finality isn't known in advance of the index read, so a caller that
+ * hasn't resolved it yet passes `final: false`, the safe (still-live) default. */
+export function hubChunkTranscriptSegmentKey(
+  chunkId: string | null,
+  segmentId: string | null,
+  final: boolean,
+): readonly unknown[] {
+  return final
+    ? ['hub', 'chunk-transcript-segment', chunkId, segmentId]
+    : ['hub', 'chunk', chunkId, 'transcript-segment', segmentId];
+}

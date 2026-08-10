@@ -1,13 +1,14 @@
 """Transcript segment wire bodies (blizzard#247, ``epic:transcripts``) — the first wire
 projection of #245's normalized turn model onto shipped, hub-stored content.
 
-A record is one shipped **turn-range slice** of a segment (D1). ``seq`` is the lane's
-high-water sequence (D7); ``(segment_id, turn_range_start)`` is the natural key a
-re-offer under a fresh seq dedupes against (D8). ``wire/transcript.py`` is untouched."""
+A record is one shipped **turn-range slice** of a segment (D1); ``seq`` is the lane's
+high-water sequence (D7), ``(segment_id, turn_range_start)`` the re-offer dedupe key (D8)."""
 
 from __future__ import annotations
 
 from pydantic import BaseModel
+
+from blizzard.runner.transcripts.repository import TurnKind
 
 
 class ToolCallSegmentView(BaseModel):
@@ -26,9 +27,9 @@ class ToolCallSegmentView(BaseModel):
 
 
 class SidechainSegmentView(BaseModel):
-    """A subagent's private conversation, nested under the tool call that spawned it.
-    Recursive: a sidechain turn may itself carry a tool call whose own sidechain nests
-    further."""
+    """A subagent's private conversation, nested under the tool call that spawned it, or
+    carried on its own ``sidechain`` turn when no spawning call resolved. Recursive: a
+    sidechain turn may itself carry a tool call whose own sidechain nests further."""
 
     agent_id: str | None
     agent_type: str | None
@@ -37,13 +38,15 @@ class SidechainSegmentView(BaseModel):
 
 
 class TurnSegmentView(BaseModel):
-    """One normalized turn, carried in full. ``index`` is **segment-relative** and minted
-    by the producer (D9), stable across the batches a segment arrives in — EXCEPT under
-    ``sidechain.turns``, where it counts within that one sidechain instead, restarting at
-    0 for each rather than offset by the enclosing segment's own stream."""
+    """One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted (D9),
+    stable across a segment's batches — EXCEPT under ``sidechain.turns``, where it restarts at 0 within
+    that one sidechain, and on a lease transcript read, where it numbers only the turns that read
+    returned and slides with the recency window (blizzard#248 D1). ``kind`` is closed."""
 
     index: int
-    kind: str  # env | asst | tool | thinking
+    #: Closed to :data:`TurnKind` — a viewer branches on it turn-by-turn — while ``link``/
+    #: ``input_shape`` stay open (`review:F10`); the cost is ``docs/versioning.md``'s.
+    kind: TurnKind
     timestamp: str | None
     text: str
     tool: ToolCallSegmentView | None

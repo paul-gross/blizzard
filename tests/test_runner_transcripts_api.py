@@ -71,9 +71,9 @@ def test_200_with_turns_for_an_active_lease(tmp_path: Path) -> None:
         kind="env",
         timestamp=_NOW,
         text="build the thing",
-        tool_name=None,
-        tool_input=None,
-        tool_output=None,
+        tool=None,
+        thinking_redacted=False,
+        sidechain=None,
         truncated=False,
     )
     transcript = Transcript(session_id="sess-a", available=True, reason=None, turns=[turn], truncated=False)
@@ -98,9 +98,9 @@ def test_200_with_turns_for_an_active_lease(tmp_path: Path) -> None:
         "kind": "env",
         "timestamp": _NOW.isoformat(),
         "text": "build the thing",
-        "tool_name": None,
-        "tool_input": None,
-        "tool_output": None,
+        "tool": None,
+        "thinking_redacted": False,
+        "sidechain": None,
         "truncated": False,
     }
     assert_all_timestamps_utc(body)

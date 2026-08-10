@@ -658,6 +658,20 @@ can move a subject freely among `pending`/`guest`/`contributor`, but only a
 assignable through that API in either direction — it is bootstrap-only, per the
 previous section.
 
+### The chunk board's Transcripts tab
+
+A chunk's board page (`/board/chunk/:chunkId`) carries a Transcripts tab beside General
+and Artifacts, gated on `transcript:read` the same way the API route above is: an
+operator without it never sees the tab option, and a held deep link to one renders an
+honest permission notice rather than a generic error. Open, it lists the chunk's
+node-history steps, each holding the transcript segments a runner shipped while working
+that step; opening a segment fetches its turns lazily, including any nested subagent
+conversation and the harness's own private reasoning, and a step whose one attempt spans
+multiple segments (a resumed session within the same node and epoch) links them end to
+end so that attempt's whole conversation reads in order. A bounce back into an earlier
+node (a build that failed review and ran again) is a **later epoch** — its own step,
+never stitched to the attempt before it.
+
 ### Operator verbs
 
 `blizzard hub login` logs an operator into the hub: by default it opens a browser to

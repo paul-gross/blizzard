@@ -3,7 +3,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
-import { vi } from 'vitest';
 
 import { TranscriptPanel } from './transcript-panel';
 
@@ -118,7 +117,11 @@ describe('TranscriptPanel', () => {
     expect(el.querySelector('[data-testid="transcript-not-found"]')).toBeNull();
   });
 
-  it('renders turns in order, kind-classed, with a tool card and a running placeholder for a pending result', async () => {
+  it('delegates turns to the shared fleet-transcript-viewer, in order and kind-classed', async () => {
+    // Full turn-kind coverage (env/asst/tool/thinking/sidechain, timestamps, caps) is
+    // `TranscriptViewer`'s own spec (`fleet/lib/transcripts/transcript-viewer.spec.ts`)
+    // now that turn rendering moved there (blizzard#248 D3/D4) — this is a thin smoke
+    // test that the container still wires the query's turns through to it.
     const { el } = await render('L-903', (method, path) =>
       method === 'GET' && path === '/api/leases/L-903/transcript'
         ? {
@@ -133,29 +136,27 @@ describe('TranscriptPanel', () => {
                 kind: 'env',
                 timestamp: '2026-07-16T11:00:00+00:00',
                 text: 'NODE ENVELOPE',
-                tool_name: null,
-                tool_input: null,
-                tool_output: null,
+                tool: null,
+                thinking_redacted: false,
+                sidechain: null,
                 truncated: false,
               },
               {
                 index: 1,
-                kind: 'asst',
-                timestamp: '2026-07-16T11:00:05+00:00',
-                text: 'Starting.',
-                tool_name: null,
-                tool_input: null,
-                tool_output: null,
-                truncated: false,
-              },
-              {
-                index: 2,
                 kind: 'tool',
                 timestamp: '2026-07-16T11:00:10+00:00',
                 text: '',
-                tool_name: 'Bash',
-                tool_input: 'pytest',
-                tool_output: null,
+                tool: {
+                  name: 'Bash',
+                  input: { command: 'pytest' },
+                  input_unparsed: null,
+                  input_shape: 'object',
+                  tool_use_id: 't1',
+                  output: null,
+                  output_truncated: false,
+                },
+                thinking_redacted: false,
+                sidechain: null,
                 truncated: false,
               },
             ],
@@ -164,151 +165,10 @@ describe('TranscriptPanel', () => {
     );
 
     const turns = el.querySelectorAll('[data-testid="transcript-turn"]');
-    expect(turns).toHaveLength(3);
+    expect(turns).toHaveLength(2);
     expect(turns[0].classList.contains('k-env')).toBe(true);
-    expect(turns[0].textContent).toContain('NODE ENVELOPE');
-    expect(turns[1].classList.contains('k-asst')).toBe(true);
-    expect(turns[1].textContent).toContain('Starting.');
-    expect(turns[2].classList.contains('k-tool')).toBe(true);
-    expect(turns[2].textContent).toContain('Bash');
-    expect(turns[2].textContent).toContain('pytest');
-    expect(turns[2].textContent).toContain('running…');
-  });
-
-  it('renders the tool output once it resolves, replacing the running placeholder', async () => {
-    const { el } = await render('L-903', (method, path) =>
-      method === 'GET' && path === '/api/leases/L-903/transcript'
-        ? {
-            lease_id: 'L-903',
-            session_id: 'sess-77',
-            available: true,
-            reason: null,
-            truncated: false,
-            turns: [
-              {
-                index: 0,
-                kind: 'tool',
-                timestamp: '2026-07-16T11:00:10+00:00',
-                text: '',
-                tool_name: 'Bash',
-                tool_input: 'pytest',
-                tool_output: '3 passed',
-                truncated: false,
-              },
-            ],
-          }
-        : {},
-    );
-
-    expect(el.textContent).toContain('3 passed');
-    expect(el.textContent).not.toContain('running…');
-  });
-
-  describe('turn timestamps render in browser-local time (issue #136)', () => {
-    // Pin both the zone and "now" so the local-day boundary is deterministic —
-    // a bare wall-clock read would make this flaky in CI (a different host TZ,
-    // or a run that straddles the "today" cutoff, changes the expected shape).
-    beforeEach(() => {
-      vi.stubEnv('TZ', 'America/New_York');
-      vi.setSystemTime(new Date('2026-07-16T15:00:00.000Z')); // 11:00 EDT
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-      vi.unstubAllEnvs();
-    });
-
-    it('renders today\'s turn as the local time alone, never UTC-suffixed', async () => {
-      const { el } = await render('L-903', (method, path) =>
-        method === 'GET' && path === '/api/leases/L-903/transcript'
-          ? {
-              lease_id: 'L-903',
-              session_id: 'sess-77',
-              available: true,
-              reason: null,
-              truncated: false,
-              turns: [
-                {
-                  index: 0,
-                  kind: 'env',
-                  timestamp: '2026-07-16T11:00:00+00:00', // 07:00 EDT, same local day as "now"
-                  text: 'NODE ENVELOPE',
-                  tool_name: null,
-                  tool_input: null,
-                  tool_output: null,
-                  truncated: false,
-                },
-              ],
-            }
-          : {},
-      );
-
-      const turn = el.querySelector('[data-testid="transcript-turn"]');
-      expect(turn?.querySelector('.t .day')).toBeNull();
-      expect(turn?.querySelector('.t .time')?.textContent).toBe('07:00:00');
-      expect(turn?.textContent).not.toContain('UTC');
-      expect(turn?.querySelector('.t')?.getAttribute('title')).toBe('2026/07/16 07:00:00');
-    });
-
-    it("renders yesterday's turn as \"Yesterday\" above the local time", async () => {
-      const { el } = await render('L-903', (method, path) =>
-        method === 'GET' && path === '/api/leases/L-903/transcript'
-          ? {
-              lease_id: 'L-903',
-              session_id: 'sess-77',
-              available: true,
-              reason: null,
-              truncated: false,
-              turns: [
-                {
-                  index: 0,
-                  kind: 'env',
-                  timestamp: '2026-07-15T23:30:00+00:00', // 19:30 EDT the day before "now"
-                  text: 'NODE ENVELOPE',
-                  tool_name: null,
-                  tool_input: null,
-                  tool_output: null,
-                  truncated: false,
-                },
-              ],
-            }
-          : {},
-      );
-
-      const turn = el.querySelector('[data-testid="transcript-turn"]');
-      expect(turn?.querySelector('.t .day')?.textContent).toBe('Yesterday');
-      expect(turn?.querySelector('.t .time')?.textContent).toBe('19:30:00');
-    });
-
-    it('renders an older turn as its yyyy-mm-dd date above the local time', async () => {
-      const { el } = await render('L-903', (method, path) =>
-        method === 'GET' && path === '/api/leases/L-903/transcript'
-          ? {
-              lease_id: 'L-903',
-              session_id: 'sess-77',
-              available: true,
-              reason: null,
-              truncated: false,
-              turns: [
-                {
-                  index: 0,
-                  kind: 'env',
-                  timestamp: '2026-07-01T11:00:00+00:00', // well before "now"
-                  text: 'NODE ENVELOPE',
-                  tool_name: null,
-                  tool_input: null,
-                  tool_output: null,
-                  truncated: false,
-                },
-              ],
-            }
-          : {},
-      );
-
-      const turn = el.querySelector('[data-testid="transcript-turn"]');
-      expect(turn?.querySelector('.t .day')?.textContent).toBe('2026-07-01');
-      expect(turn?.querySelector('.t .time')?.textContent).toBe('07:00:00');
-    });
+    expect(turns[1].classList.contains('k-tool')).toBe(true);
+    expect(turns[1].textContent).toContain('running…');
   });
 
   it('shows the truncation banner when the server capped the read', async () => {

@@ -35,7 +35,17 @@ const DETAIL = {
   status: 'running',
   work_refs: [{ source: 'blizzard', ref: '26', url: null }],
   history: [
-    { node_id: 'nd_build', node_name: 'build', epoch: 1, at: '2026-07-16T11:00:00.000Z', outcome: 'transitioned' },
+    {
+      choice_name: 'pass',
+      epoch: 1,
+      from_node_id: 'nd_build',
+      from_node_name: 'build',
+      graph_id: 'gr_1',
+      graph_name: 'default',
+      recorded_at: '2026-07-16T11:00:00.000Z',
+      to_node_id: 'nd_review',
+      to_node_name: 'review',
+    },
   ],
   artifacts: [
     {
@@ -408,5 +418,66 @@ describe('Mobile chunk drill-down', () => {
     expect(el.querySelector<HTMLAnchorElement>('[data-testid="mobile-artifact-back"]')?.getAttribute('href')).toBe(
       `/board/chunk/${CHUNK_ID}`,
     );
+  });
+
+  // --- The Transcripts tab (blizzard#248 Phase 2) ---------------------------
+
+  it('shows the Transcripts tab option and switches to it, fetching the segment index', async () => {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments: [] };
+      return DETAIL;
+    });
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
+    await settle(harness.fixture);
+
+    let el = harness.fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="tab-transcripts"]')).not.toBeNull();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="tab-transcripts"]')?.click();
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
+    // Non-vacuous (review:F4): with a real `TransitionView` fixture the derivation
+    // groups one step from `DETAIL.history` even though the index carries no segments
+    // yet, so this renders the tab body, not the `transcripts-empty` alternative.
+    expect(el.querySelector('[data-testid="chunk-transcripts-tab"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcripts-empty"]')).toBeNull();
+    const step = el.querySelector('[data-testid="transcript-step"]');
+    expect(step?.textContent).toContain('build · epoch 1');
+    expect(step?.textContent).toContain('No segments.');
+  });
+
+  it('hides the Transcripts tab option for an identity without transcript:read', async () => {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return { ...OPERATOR_ME_RESPONSE, permissions: [] };
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      return DETAIL;
+    });
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    expect(el.querySelector('[data-testid="tab-transcripts"]')).toBeNull();
+  });
+
+  it('still renders the Transcripts tab’s content on a held deep link, without the tab option in the strip', async () => {
+    // A deep link `?tab=transcripts` bypasses the tab strip entirely (the `@switch`
+    // renders off the URL, not off which options are visible) — the backend's own 403
+    // is what actually gates a viewer-role identity, not this client-side hide (D9).
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return { ...OPERATOR_ME_RESPONSE, permissions: [] };
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return stubError(403, { detail: 'forbidden' });
+      return DETAIL;
+    });
+    const el = await open(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
+
+    expect(el.querySelector('[data-testid="tab-transcripts"]')).toBeNull();
+    expect(el.querySelector('[data-testid="transcripts-forbidden"]')?.textContent).toContain('NO PERMISSION');
   });
 });

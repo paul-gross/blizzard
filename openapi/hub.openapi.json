@@ -3742,7 +3742,7 @@
         "type": "string"
       },
       "SidechainSegmentView-Input": {
-        "description": "A subagent's private conversation, nested under the tool call that spawned it.\nRecursive: a sidechain turn may itself carry a tool call whose own sidechain nests\nfurther.",
+        "description": "A subagent's private conversation, nested under the tool call that spawned it, or\ncarried on its own ``sidechain`` turn when no spawning call resolved. Recursive: a\nsidechain turn may itself carry a tool call whose own sidechain nests further.",
         "properties": {
           "agent_id": {
             "anyOf": [
@@ -3788,7 +3788,7 @@
         "type": "object"
       },
       "SidechainSegmentView-Output": {
-        "description": "A subagent's private conversation, nested under the tool call that spawned it.\nRecursive: a sidechain turn may itself carry a tool call whose own sidechain nests\nfurther.",
+        "description": "A subagent's private conversation, nested under the tool call that spawned it, or\ncarried on its own ``sidechain`` turn when no spawning call resolved. Recursive: a\nsidechain turn may itself carry a tool call whose own sidechain nests further.",
         "properties": {
           "agent_id": {
             "anyOf": [
@@ -4354,13 +4354,20 @@
         "type": "object"
       },
       "TurnSegmentView-Input": {
-        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and minted\nby the producer (D9), stable across the batches a segment arrives in \u2014 EXCEPT under\n``sidechain.turns``, where it counts within that one sidechain instead, restarting at\n0 for each rather than offset by the enclosing segment's own stream.",
+        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted (D9),\nstable across a segment's batches \u2014 EXCEPT under ``sidechain.turns``, where it restarts at 0 within\nthat one sidechain, and on a lease transcript read, where it numbers only the turns that read\nreturned and slides with the recency window (blizzard#248 D1). ``kind`` is closed.",
         "properties": {
           "index": {
             "title": "Index",
             "type": "integer"
           },
           "kind": {
+            "enum": [
+              "env",
+              "asst",
+              "tool",
+              "thinking",
+              "sidechain"
+            ],
             "title": "Kind",
             "type": "string"
           },
@@ -4422,13 +4429,20 @@
         "type": "object"
       },
       "TurnSegmentView-Output": {
-        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and minted\nby the producer (D9), stable across the batches a segment arrives in \u2014 EXCEPT under\n``sidechain.turns``, where it counts within that one sidechain instead, restarting at\n0 for each rather than offset by the enclosing segment's own stream.",
+        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted (D9),\nstable across a segment's batches \u2014 EXCEPT under ``sidechain.turns``, where it restarts at 0 within\nthat one sidechain, and on a lease transcript read, where it numbers only the turns that read\nreturned and slides with the recency window (blizzard#248 D1). ``kind`` is closed.",
         "properties": {
           "index": {
             "title": "Index",
             "type": "integer"
           },
           "kind": {
+            "enum": [
+              "env",
+              "asst",
+              "tool",
+              "thinking",
+              "sidechain"
+            ],
             "title": "Kind",
             "type": "string"
           },

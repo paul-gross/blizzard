@@ -2437,9 +2437,9 @@ export type SessionMode = 'resume' | 'fresh';
 /**
  * SidechainSegmentView
  *
- * A subagent's private conversation, nested under the tool call that spawned it.
- * Recursive: a sidechain turn may itself carry a tool call whose own sidechain nests
- * further.
+ * A subagent's private conversation, nested under the tool call that spawned it, or
+ * carried on its own ``sidechain`` turn when no spawning call resolved. Recursive: a
+ * sidechain turn may itself carry a tool call whose own sidechain nests further.
  */
 export type SidechainSegmentViewInput = {
     /**
@@ -2463,9 +2463,9 @@ export type SidechainSegmentViewInput = {
 /**
  * SidechainSegmentView
  *
- * A subagent's private conversation, nested under the tool call that spawned it.
- * Recursive: a sidechain turn may itself carry a tool call whose own sidechain nests
- * further.
+ * A subagent's private conversation, nested under the tool call that spawned it, or
+ * carried on its own ``sidechain`` turn when no spawning call resolved. Recursive: a
+ * sidechain turn may itself carry a tool call whose own sidechain nests further.
  */
 export type SidechainSegmentViewOutput = {
     /**
@@ -2828,10 +2828,10 @@ export type TransitionView = {
 /**
  * TurnSegmentView
  *
- * One normalized turn, carried in full. ``index`` is **segment-relative** and minted
- * by the producer (D9), stable across the batches a segment arrives in — EXCEPT under
- * ``sidechain.turns``, where it counts within that one sidechain instead, restarting at
- * 0 for each rather than offset by the enclosing segment's own stream.
+ * One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted (D9),
+ * stable across a segment's batches — EXCEPT under ``sidechain.turns``, where it restarts at 0 within
+ * that one sidechain, and on a lease transcript read, where it numbers only the turns that read
+ * returned and slides with the recency window (blizzard#248 D1). ``kind`` is closed.
  */
 export type TurnSegmentViewInput = {
     /**
@@ -2841,7 +2841,7 @@ export type TurnSegmentViewInput = {
     /**
      * Kind
      */
-    kind: string;
+    kind: 'env' | 'asst' | 'tool' | 'thinking' | 'sidechain';
     sidechain: SidechainSegmentViewInput | null;
     /**
      * Text
@@ -2865,10 +2865,10 @@ export type TurnSegmentViewInput = {
 /**
  * TurnSegmentView
  *
- * One normalized turn, carried in full. ``index`` is **segment-relative** and minted
- * by the producer (D9), stable across the batches a segment arrives in — EXCEPT under
- * ``sidechain.turns``, where it counts within that one sidechain instead, restarting at
- * 0 for each rather than offset by the enclosing segment's own stream.
+ * One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted (D9),
+ * stable across a segment's batches — EXCEPT under ``sidechain.turns``, where it restarts at 0 within
+ * that one sidechain, and on a lease transcript read, where it numbers only the turns that read
+ * returned and slides with the recency window (blizzard#248 D1). ``kind`` is closed.
  */
 export type TurnSegmentViewOutput = {
     /**
@@ -2878,7 +2878,7 @@ export type TurnSegmentViewOutput = {
     /**
      * Kind
      */
-    kind: string;
+    kind: 'env' | 'asst' | 'tool' | 'thinking' | 'sidechain';
     sidechain: SidechainSegmentViewOutput | null;
     /**
      * Text

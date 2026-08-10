@@ -101,3 +101,16 @@ def test_the_runner_spec_escalation_view_is_the_runners_own() -> None:
     assert not [name for name in schemas if "__" in name]  # a collision mangles both names
     assert "resume_command" in schemas["EscalationView"]["properties"]
     assert "ChunkHeaderView" in schemas and "ChunkDetail" not in schemas
+
+
+def test_the_runner_spec_serves_the_shared_segment_turn_shape_not_a_retired_turn_view() -> None:
+    """``TurnView`` is retired (blizzard#248 D1): the runner's lease-transcript route now
+    serves ``TurnSegmentView`` — the same turn shape the hub's segment-content route
+    serves — so a regenerated client never grows a second, parallel turn model."""
+    schemas = _runner_schemas()
+    assert "TurnView" not in schemas
+    assert "TurnSegmentView" in schemas
+    turn_props = schemas["TurnSegmentView"]["properties"]
+    assert {"tool", "thinking_redacted", "sidechain"} <= set(turn_props)
+    assert set(schemas["TranscriptResponse"]["properties"]["turns"]["items"]) == {"$ref"}
+    assert schemas["TranscriptResponse"]["properties"]["turns"]["items"]["$ref"].endswith("TurnSegmentView")

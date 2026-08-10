@@ -28,7 +28,9 @@
  *     work item, issues and node history genuinely stack at phone widths, and
  *     node history genuinely sits beside a shared work-item/issues column at
  *     1024px — the `@media (min-width: 720px)` grid split jsdom cannot
- *     evaluate.
+ *     evaluate — plus the same page's takeover panel (blizzard#251) and its
+ *     Transcripts tab (blizzard#248), the latter both standalone and through
+ *     its real ChunkPage → container → tab chain.
  *   - projects/local-panel/src/lib/local-panel-layout.shell-sweep.spec.ts —
  *     the runner's local-panel shell (LocalPanelLayout), swept over width ×
  *     signed-in username length — the axis issue #163's actual defect lived

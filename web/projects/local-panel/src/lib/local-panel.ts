@@ -307,7 +307,7 @@ export class LocalPanel {
       badge: this.openAskCount(),
       badgeTestid: 'tab-asks-runner-badge',
     },
-    { testid: 'tab-transcripts', label: 'Transcripts', inert: true },
+    { testid: 'tab-transcripts-runner', label: 'Transcripts', inert: true },
   ]);
 
   /** What is open in the panel, held in the URL (issue #99) — see

@@ -1,26 +1,16 @@
 """Transcript wire bodies — ``GET /api/leases/{lease_id}/transcript`` (issue #29).
 
 A turn's ``timestamp`` is an ISO-8601 string with an explicit UTC offset, never naive
-(``bzh:utc-instants``). ``available=False`` carries ``reason`` and an empty ``turns``."""
+(``bzh:utc-instants``). ``available=False`` carries ``reason`` and an empty ``turns``.
+``TurnView`` is retired (blizzard#248 D1) for ``transcript_segment.py``'s ``TurnSegmentView``,
+the same shape the hub's segment-content route serves — one viewer renders both."""
 
 from __future__ import annotations
 
 from pydantic import BaseModel
 
-from blizzard.runner.transcripts.repository import TranscriptUnavailable, TurnKind
-
-
-class TurnView(BaseModel):
-    """One collapsed conversation turn on the wire."""
-
-    index: int
-    kind: TurnKind
-    timestamp: str | None
-    text: str
-    tool_name: str | None
-    tool_input: str | None
-    tool_output: str | None
-    truncated: bool
+from blizzard.runner.transcripts.repository import TranscriptUnavailable
+from blizzard.wire.transcript_segment import TurnSegmentView
 
 
 class TranscriptResponse(BaseModel):
@@ -30,5 +20,5 @@ class TranscriptResponse(BaseModel):
     session_id: str | None
     available: bool
     reason: TranscriptUnavailable | None
-    turns: list[TurnView] = []
+    turns: list[TurnSegmentView] = []
     truncated: bool = False

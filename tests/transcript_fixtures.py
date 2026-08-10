@@ -63,13 +63,12 @@ def meta_record(text: str = "/context output") -> str:
 
 
 def sidechain_record(text: str = "subagent chatter") -> str:
-    """An `isSidechain` record — a subagent's spliced-in conversation.
-
-    Routing (inline assembly vs. `unlinked_sidechains`) is the normalizer's own
-    behavior, and panel-layer filtering is the projection's — not restated here.
-    """
+    """An `isSidechain` record with no resolvable `parentUuid` chain, so the normalizer
+    routes it to `unlinked_sidechains` — carried through as its own top-level
+    `"sidechain"` turn by the projection (blizzard#248 D2/D7)."""
+    content = [{"type": "text", "text": text}]
     return _line(
-        {"type": "assistant", "message": {"role": "assistant", "content": text}, "isSidechain": True, "uuid": "s1"}
+        {"type": "assistant", "message": {"role": "assistant", "content": content}, "isSidechain": True, "uuid": "s1"}
     )
 
 

@@ -984,6 +984,32 @@ export type SessionEndResponse = {
 };
 
 /**
+ * SidechainSegmentView
+ *
+ * A subagent's private conversation, nested under the tool call that spawned it, or
+ * carried on its own ``sidechain`` turn when no spawning call resolved. Recursive: a
+ * sidechain turn may itself carry a tool call whose own sidechain nests further.
+ */
+export type SidechainSegmentView = {
+    /**
+     * Agent Id
+     */
+    agent_id: string | null;
+    /**
+     * Agent Type
+     */
+    agent_type: string | null;
+    /**
+     * Link
+     */
+    link: string;
+    /**
+     * Turns
+     */
+    turns: Array<TurnSegmentView>;
+};
+
+/**
  * StagedAttachment
  *
  * One of the lease's currently staged (not-yet-published) submissions —
@@ -1058,6 +1084,48 @@ export type TakeoverRequest = {
 };
 
 /**
+ * ToolCallSegmentView
+ *
+ * A tool invocation, structured: what was called, with what input, and what came back.
+ */
+export type ToolCallSegmentView = {
+    /**
+     * Input
+     */
+    input: {
+        [key: string]: unknown;
+    };
+    /**
+     * Input Shape
+     */
+    input_shape: string;
+    /**
+     * Input Truncated
+     */
+    input_truncated?: boolean;
+    /**
+     * Input Unparsed
+     */
+    input_unparsed: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Output
+     */
+    output: string | null;
+    /**
+     * Output Truncated
+     */
+    output_truncated: boolean;
+    /**
+     * Tool Use Id
+     */
+    tool_use_id: string | null;
+};
+
+/**
  * TranscriptResponse
  *
  * A lease's parsed transcript — always 200 when the lease exists.
@@ -1086,15 +1154,18 @@ export type TranscriptResponse = {
     /**
      * Turns
      */
-    turns?: Array<TurnView>;
+    turns?: Array<TurnSegmentView>;
 };
 
 /**
- * TurnView
+ * TurnSegmentView
  *
- * One collapsed conversation turn on the wire.
+ * One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted (D9),
+ * stable across a segment's batches — EXCEPT under ``sidechain.turns``, where it restarts at 0 within
+ * that one sidechain, and on a lease transcript read, where it numbers only the turns that read
+ * returned and slides with the recency window (blizzard#248 D1). ``kind`` is closed.
  */
-export type TurnView = {
+export type TurnSegmentView = {
     /**
      * Index
      */
@@ -1102,27 +1173,21 @@ export type TurnView = {
     /**
      * Kind
      */
-    kind: 'env' | 'asst' | 'tool';
+    kind: 'env' | 'asst' | 'tool' | 'thinking' | 'sidechain';
+    sidechain: SidechainSegmentView | null;
     /**
      * Text
      */
     text: string;
     /**
+     * Thinking Redacted
+     */
+    thinking_redacted: boolean;
+    /**
      * Timestamp
      */
     timestamp: string | null;
-    /**
-     * Tool Input
-     */
-    tool_input: string | null;
-    /**
-     * Tool Name
-     */
-    tool_name: string | null;
-    /**
-     * Tool Output
-     */
-    tool_output: string | null;
+    tool: ToolCallSegmentView | null;
     /**
      * Truncated
      */
