@@ -52,7 +52,16 @@ class TranscriptDrain:
 
     def _run_unsafe(self) -> None:
         deadline = self.ctx.clock.now() + timedelta(seconds=_MAX_SECONDS_PER_RUN)
-        TranscriptPump(self.ctx).run(deadline=deadline)
+        # review round 6 F2, defense in depth: `TranscriptPump.run` isolates each
+        # segment's own failure (its own per-segment try/except), but a failure OUTSIDE
+        # that loop — e.g. `open_transcript_segments()` itself raising — must not skip
+        # the flush below either.
+        try:
+            TranscriptPump(self.ctx).run(deadline=deadline)
+        except Exception:
+            _log.exception(
+                "transcript pump failed — the buffered flush below still runs", runner_id=self.ctx.config.runner_id
+            )
         if self.ctx.clock.now() >= deadline:
             return  # the pump alone exhausted the shared bound; the flush catches up next tick
         # `limit` bounds the query itself, and is this run's ONLY count bound — a second,

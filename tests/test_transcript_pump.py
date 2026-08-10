@@ -65,7 +65,6 @@ def _tool_call(output: str, *, input_: dict[str, object] | None = None, input_un
         tool_use_id="tool_1",
         output=output,
         output_truncated=False,
-        input_truncated=False,
     )
 
 
@@ -524,6 +523,36 @@ def test_pump_shrinks_an_oversized_tool_input_value_instead_of_emptying_the_reco
     assert segment.cursor == "pos-1"
 
 
+def test_pump_shrinks_non_ascii_content_by_a_real_fraction_not_to_near_zero() -> None:
+    """review round 6 F1: the shrink budget (``size``/``overshoot``) is measured in
+    ``json.dumps``-escaped bytes, but the old ``shrinkable`` sum used raw Python ``len()``
+    — for non-ASCII text (``ensure_ascii=True`` escapes each CJK character to 6 bytes),
+    that unit mismatch clamped ``keep_fraction`` to 0.0 and emptied the field on the first
+    pass, even though the record is only modestly (~18%) over cap. Mirrors the finding's
+    own repro: a CJK-heavy field, ~1.24 MB serialized against the 1 MB cap."""
+    huge_content = "文" * 206_000  # ~1.24 MB serialized (escaped) — ~18% over the 1 MB cap
+    ctx, _source = _ctx(
+        ship=True, batches={"sess-a": _batch([_input_tool_turn(0, content=huge_content)], next_token="pos-1")}
+    )
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) == 1
+    assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
+    body = json.loads(pending[0].payload)
+    assert body["turns"] != []  # shrunk, not emptied to near-zero on the first pass
+    retained = body["turns"][0]["tool"]["input"]["content"]
+    assert len(retained) > len(huge_content) * 0.5  # a real fraction survives, not a sliver
+    assert body["turns"][0]["tool"]["input_truncated"] is True
+    assert body["record_truncated"] is True
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "record_cap_exceeded"
+    assert segment.cursor == "pos-1"
+
+
 def test_pump_shrinks_an_oversized_unparsed_tool_input_instead_of_emptying_the_record() -> None:
     """`input_unparsed` is the second half of F1's fix and fails independently of the parsed
     `input` walk: an unparseable oversized blob is just as unshrinkable-looking, and the
@@ -573,10 +602,12 @@ def test_pump_shrinks_many_medium_tool_inputs_instead_of_emptying_the_record() -
     assert segment.cursor == "pos-1"
 
 
-def test_pump_asserts_rather_than_silently_re_shipping_when_turns_carry_no_next_position() -> None:
-    """`IHarnessTranscriptSource` permits a batch with turns but no `next_position` — the
-    pump must not enqueue a record it can never advance the cursor past, or the next tick
-    re-reads and re-ships the exact same turns forever."""
+def test_pump_skips_rather_than_silently_re_shipping_when_turns_carry_no_next_position() -> None:
+    """review round 6 F3: `IHarnessTranscriptSource` permits a batch with turns but no
+    `next_position` — the pump must not enqueue a record it can never advance the cursor
+    past, or the next tick re-reads and re-ships the exact same turns forever. A bare
+    `assert` guarding this is stripped under `python -O`; the guard must be a real
+    conditional that skips the segment and logs, never raises."""
     stuck = TranscriptBatch(
         session_id="sess-a",
         available=True,
@@ -591,18 +622,23 @@ def test_pump_asserts_rather_than_silently_re_shipping_when_turns_carry_no_next_
         harness_version=None,
     )
     ctx, _source = _ctx(ship=True, batches={"sess-a": stuck})
-    _spawn_one_segment(ctx)
+    segment_id = _spawn_one_segment(ctx)
 
-    with pytest.raises(AssertionError):
-        TranscriptPump(ctx).run()
+    TranscriptPump(ctx).run()  # must return cleanly, not raise
 
-    assert ctx.store.pending_transcript_outbound() == []  # never enqueued before the assert fired
+    assert ctx.store.pending_transcript_outbound() == []  # never enqueued
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.cursor is None  # never advanced — the pump never had anywhere real to advance to
+    assert segment.shipped_turns == 0
 
 
-def test_pump_asserts_when_an_already_pumped_segments_cursor_would_not_advance() -> None:
+def test_pump_skips_when_an_already_pumped_segments_cursor_would_not_advance() -> None:
     """The same stuck source against a segment that HAS pumped before: `new_cursor` falls
-    back to its own non-null cursor, so a null-check alone passes and the pump re-ships the
-    identical turns every tick. The guard is that the cursor CHANGED, not that it exists."""
+    back to its own non-null cursor, so a null-check alone passes and the pump would
+    re-ship the identical turns every tick. The guard is that the cursor CHANGED, not
+    that it exists — and (review round 6 F3) skips the segment rather than raising, so
+    the loop's other segments (and the drain's own buffered flush) still proceed."""
     ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "first")], next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
     TranscriptPump(ctx).run()
@@ -622,8 +658,7 @@ def test_pump_asserts_when_an_already_pumped_segments_cursor_would_not_advance()
         harness_version=None,
     )
 
-    with pytest.raises(AssertionError):
-        TranscriptPump(ctx).run()
+    TranscriptPump(ctx).run()  # must return cleanly, not raise
 
     assert len(ctx.store.pending_transcript_outbound()) == 1  # only the first pump's record
     segment = ctx.store.transcript_segment(segment_id)
@@ -928,6 +963,88 @@ def test_run_yields_to_its_own_deadline_across_many_open_segments() -> None:
     TranscriptPump(ctx).run()  # no deadline — catches both up on a later tick
 
     assert len(ctx.store.pending_transcript_outbound()) == 2
+
+
+class _PartiallyRaisingTranscriptSource:
+    """review round 6 F2: raises for one session, serves a real batch for another — the
+    per-segment isolation case no single-session fixture can script."""
+
+    def __init__(self, *, raising_session: str, batch: TranscriptBatch) -> None:
+        self._raising_session = raising_session
+        self._batch = batch
+
+    def turns_since(self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None):  # type: ignore[no-untyped-def]
+        if session_id == self._raising_session:
+            raise RuntimeError("transcript source unavailable (scripted)")
+        return self._batch
+
+    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+        return []
+
+    def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return None
+
+
+def test_run_isolates_one_segments_pump_failure_from_the_rest() -> None:
+    """review round 6 F2: `run()`'s segment loop had no per-segment `try`, so one
+    segment's own pump failure propagated out of `run()` entirely, aborting the loop
+    before a later segment was even attempted (and, via `TranscriptDrain._run_unsafe`,
+    skipping that tick's own buffered-record flush). One bad segment must not stop the
+    others in the same run."""
+    store = make_store("sqlite://")
+    good_batch = _batch([_turn(0, "hi")], next_token="pos-1")
+    source = _PartiallyRaisingTranscriptSource(raising_session="sess-bad", batch=good_batch)
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-bad", pid=1, process_start_time="1"),
+        verdict=None,
+        transcript_source=source,
+    )
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+    )
+    ctx.store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    ctx.store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    ctx.store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-bad", spawned_at=_NOW)
+    ctx.store.record_binding(chunk_id="ch_2", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
+    ctx.store.record_lease(
+        NewLease(
+            lease_id="lease_2",
+            chunk_id="ch_2",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    ctx.store.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-good", spawned_at=_NOW)
+
+    TranscriptPump(ctx).run()  # must not raise despite "sess-bad"'s own failure
+
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) == 1  # the good segment's own record still shipped
+    assert pending[0].chunk_id == "ch_2"
+    bad_segment = next(s for s in ctx.store.open_transcript_segments() if s.chunk_id == "ch_1")
+    assert bad_segment.cursor is None  # the failing segment's own read never advanced it
 
 
 def test_pump_warns_on_an_unlinked_sidechain_dropped_alongside_a_normal_record() -> None:

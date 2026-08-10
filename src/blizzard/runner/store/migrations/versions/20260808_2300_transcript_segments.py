@@ -54,7 +54,10 @@ transcript_outbound_buffer = sa.Table(
     sa.Column("payload", sa.Text, nullable=False),
     sa.Column("created_at", UtcDateTime, nullable=False),
     sa.Column("acked_at", UtcDateTime, nullable=True),
-    # Real SQLite AUTOINCREMENT, matching live `schema.py` — a pruned seq must never be reissued.
+    # Documented `bzh:sql-portable` exemption, matching live `schema.py`'s own copy of this
+    # comment: a pruned seq must never be reissued, a SQLite-only hazard this SQLite-only
+    # pragma guards against — Postgres's own sequence-backed `SERIAL` identity (this
+    # column's compiled form there) never reuses a deleted row's value by construction.
     sqlite_autoincrement=True,
 )
 

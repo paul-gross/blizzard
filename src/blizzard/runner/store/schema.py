@@ -499,6 +499,16 @@ transcript_outbound_buffer = Table(
     # NULL = pending. An acked non-final row is deleted, never reaching this state; an
     # acked final row IS marked here — its continued presence is the exactly-once receipt.
     Column("acked_at", UtcDateTime, nullable=True),
-    # Real SQLite AUTOINCREMENT: a bare `INTEGER PRIMARY KEY` would reuse a pruned rowid.
+    # Documented `bzh:sql-portable` exemption (blizzard-context:/standards/persistence.md):
+    # a bare SQLite `INTEGER PRIMARY KEY` reuses a pruned row's rowid, which would let a
+    # deleted (acked, non-final) row's `seq` be reissued to a later record — a correctness
+    # hazard for this table alone, since it prunes rows the sibling `outbound_buffer`
+    # never does. `sqlite_autoincrement` is SQLite-only syntax (a no-op on every other
+    # dialect) guarding a SQLite-only hazard: Postgres's own `autoincrement=True` default
+    # compiles this column to `SERIAL` (verified via `CreateTable(...).compile(dialect=
+    # postgresql.dialect())`), a sequence-backed identity that never reissues a deleted
+    # row's value by construction — no portable equivalent is needed on that side, and the
+    # pin test's SQLite-only coverage (`tests/test_pin_runner_store.py`) is sufficient for
+    # what this pragma actually protects against.
     sqlite_autoincrement=True,
 )

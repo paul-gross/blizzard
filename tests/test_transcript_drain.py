@@ -469,7 +469,10 @@ class _RaisingTranscriptSource:
 def test_drain_run_survives_a_raising_pump_and_recovers_next_run() -> None:
     """review F4: `TranscriptDrain.run` is not the last step in `tick` — an uncaught raise
     must not propagate past it, or every later tick step goes unrun for as long as the
-    condition persists."""
+    condition persists. review round 6 F2: this particular failure — a single segment's
+    own `turns_since` raising — is now isolated at the pump's own per-segment level
+    (`TranscriptPump._pump_one_safe`), so it never reaches `_run_unsafe`'s outer catch at
+    all; the buffered flush proceeds in the SAME run, not merely "recovers next run"."""
     hub = FakeHub()
     store = make_store("sqlite://")
     harness = FakeHarness(
@@ -485,14 +488,59 @@ def test_drain_run_survives_a_raising_pump_and_recovers_next_run() -> None:
         probe=FakeProbe(),
         config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
     )
-    _spawn_one_segment(ctx)
+    segment_id = _spawn_one_segment(ctx)
+    # A buffered record that has NOTHING to do with this tick's own (failing) pump read —
+    # F2's own regression: before the fix, the pump's raise propagated out of `run()` and
+    # aborted `_run_unsafe` before it ever reached this flush.
+    _enqueue_delta(ctx, segment_id, cursor="pos-1")
 
     with capture_logs() as logs:
         TranscriptDrain(ctx).run()  # must not raise
 
-    failures = [e for e in logs if "transcript drain failed" in e["event"]]
-    assert len(failures) == 1
+    pump_failures = [e for e in logs if "failed to pump segment" in e["event"]]
+    assert len(pump_failures) == 1  # isolated at the pump's own per-segment level
+    drain_failures = [e for e in logs if "transcript drain failed" in e["event"]]
+    assert drain_failures == []  # never reaches the outer, whole-tick catch
+    assert hub.transcripts_pushed != []  # the pre-existing buffered delta still flushed, same run
+    assert ctx.store.pending_transcript_outbound() == []
 
     # The condition ending (a healthy tick) recovers on the very next run — nothing wedged.
     healthy_ctx = replace(ctx, transcripts=FakeTranscriptSource())
     TranscriptDrain(healthy_ctx).run()  # must not raise either
+
+
+class _RaisingOpenSegmentsStore:
+    """Wraps a real store, but makes `open_transcript_segments` raise — the failure
+    OUTSIDE `TranscriptPump`'s own per-segment loop (review round 6 F2's second half),
+    which no per-segment try/except can isolate."""
+
+    def __init__(self, inner):  # type: ignore[no-untyped-def]
+        self._inner = inner
+
+    def open_transcript_segments(self):  # type: ignore[no-untyped-def]
+        raise RuntimeError("store unavailable (scripted)")
+
+    def __getattr__(self, name: str):  # type: ignore[no-untyped-def]
+        return getattr(self._inner, name)
+
+
+def test_drain_run_survives_the_pump_itself_raising_outside_the_segment_loop() -> None:
+    """review round 6 F2's defense-in-depth half: a failure BEFORE `TranscriptPump.run`'s
+    own segment loop even starts (e.g. `open_transcript_segments()` itself raising) is not
+    reachable by the per-segment try/except — `_run_unsafe` must wrap the pump call itself
+    too, so the buffered flush below it still runs."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    ctx = replace(ctx, config=replace(ctx.config, transcripts_ship=True))
+    segment_id = _spawn_one_segment(ctx)
+    _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    ctx = replace(ctx, store=_RaisingOpenSegmentsStore(ctx.store))
+
+    with capture_logs() as logs:
+        TranscriptDrain(ctx).run()  # must not raise
+
+    pump_failures = [e for e in logs if "transcript pump failed" in e["event"]]
+    assert len(pump_failures) == 1
+    drain_failures = [e for e in logs if "transcript drain failed" in e["event"]]
+    assert drain_failures == []  # caught at the pump-call site, not the outer whole-tick catch
+    assert hub.transcripts_pushed != []  # the buffered flush still ran despite the pump's own raise

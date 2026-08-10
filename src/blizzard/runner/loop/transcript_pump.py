@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import NormalizedTurn, SidechainConversation, ToolCall, TranscriptPosition
@@ -19,12 +20,18 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.store.repository import TranscriptSegmentLedgerRow
 
+_log = get_logger("blizzard.runner.loop")
+
 #: The runner's own per-record cap (D4) — the well-behaved half of #247's two-sided
 #: enforcement, deliberately below the hub's own 4 MB rogue-case `RECORD_MAX_BYTES`.
 TRANSCRIPT_RECORD_MAX_BYTES = 1024 * 1024
 
 #: The per-chunk budget (D4) — measured as the sum of `shipped_bytes` across the chunk's
-#: segments, the only quantity the runner controls and the hub bills against.
+#: segments, the only quantity the runner controls. Conservative, not identical, to what
+#: the hub bills: `TranscriptIngestService._apply` charges only the turns payload
+#: (`len(record.turns_json.encode("utf-8"))`, `hub/domain/transcripts.py`), never the
+#: whole serialized record's `segment_id`/`chunk_id`/`node_id`/epoch/generation/turn-range
+#: fields `shipped_bytes` also counts.
 CHUNK_TRANSCRIPT_MAX_BYTES = 64 * 1024 * 1024
 
 #: Bounds :meth:`TranscriptPump.pump_lease`'s pre-closure read — matches `TranscriptDrain`'s own.
@@ -56,7 +63,7 @@ class TranscriptPump:
         for segment in self.ctx.store.open_transcript_segments():
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 break  # this run's bound reached — the rest catch up on a later tick
-            self._pump_one(segment)
+            self._pump_one_safe(segment)
 
     def pump_lease(self, lease_id: str, *, deadline: datetime | None = None) -> None:
         """Read whatever a single lease's own still-open segment(s) have to ship, right
@@ -69,7 +76,22 @@ class TranscriptPump:
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 break  # this call's own bound reached — the rest catches up on a later tick
             if segment.lease_id == lease_id:
-                self._pump_one(segment)
+                self._pump_one_safe(segment)
+
+    def _pump_one_safe(self, segment: TranscriptSegmentLedgerRow) -> None:
+        """review round 6 F2: one segment's own failure must not abort the loop — a
+        raise here used to propagate out of ``run()``/``pump_lease()`` entirely, skipping
+        every later segment (and, via ``TranscriptDrain._run_unsafe``, that tick's own
+        buffered-record flush, including final markers that ship regardless of
+        ``[transcripts] ship``)."""
+        try:
+            self._pump_one(segment)
+        except Exception:
+            _log.exception(
+                "transcript pump: failed to pump segment — continuing with the rest",
+                segment_id=segment.segment_id,
+                session_id=segment.session_id,
+            )
 
     def _pump_one(self, segment: TranscriptSegmentLedgerRow) -> None:
         if segment.shipping_stopped_reason is not None:
@@ -113,7 +135,15 @@ class TranscriptPump:
 
         # Turns present — the source must have advanced PAST them. An unchanged cursor
         # re-reads and re-ships the same turns every tick, under a fresh range each time.
-        assert new_cursor is not None and new_cursor != segment.cursor
+        # A real conditional, not a bare `assert`: `python -O` strips assertions, which
+        # would silently reopen the re-ship-forever defect this guards against (F3).
+        if new_cursor is None or new_cursor == segment.cursor:
+            _log.error(
+                "transcript pump: turns present but cursor did not advance — skipping segment this tick",
+                segment_id=segment.segment_id,
+                session_id=segment.session_id,
+            )
+            return
         turn_range_start = segment.shipped_turns
         record: dict[str, Any] = {
             "segment_id": segment.segment_id,
@@ -245,7 +275,10 @@ def _tool_wire(tool: ToolCall) -> dict[str, Any]:
         "tool_use_id": tool.tool_use_id,
         "output": tool.output,
         "output_truncated": tool.output_truncated,
-        "input_truncated": tool.input_truncated,
+        # F5 (round 6): `ToolCall` carries no `input_truncated` — the harness seam never
+        # observes it, only the shrink pass below (which mutates this wire dict in place)
+        # ever sets it True.
+        "input_truncated": False,
     }
 
 
@@ -307,6 +340,17 @@ _SHRINK_OVERCUT = 1.15
 _SHRINK_TARGET_BYTES = int(TRANSCRIPT_RECORD_MAX_BYTES / _SHRINK_OVERCUT)
 
 
+def _byte_cost(text: str) -> int:
+    """A string's cost in the same unit ``_shrink_to_cap`` measures overshoot in:
+    ``json.dumps``-escaped bytes, not raw Python ``len()``. ``json.dumps`` defaults to
+    ``ensure_ascii=True``, so a non-ASCII character costs several encoded bytes (6 for a
+    BMP character via ``\\uXXXX``, 12 for an astral one via a surrogate pair) but only 1
+    Python ``len()`` unit — mixing the two units clamps ``keep_fraction`` to 0.0 on
+    non-ASCII-heavy content (F1). The +2 for the surrounding quotes is a small, constant,
+    shared overcount across every candidate — conservative, not a correctness issue."""
+    return len(json.dumps(text))
+
+
 def _shrink_to_cap(record: dict[str, Any]) -> dict[str, Any]:
     """Shrink turn text and tool-output fields in place — including nested sidechain turns —
     until the serialized record fits the per-record cap (D4). Never drops a turn: every
@@ -318,7 +362,7 @@ def _shrink_to_cap(record: dict[str, Any]) -> dict[str, Any]:
         if size <= TRANSCRIPT_RECORD_MAX_BYTES:
             break
         candidates = _shrink_candidates(record)
-        shrinkable = sum(len(holder[field]) for holder, field, _, _ in candidates)
+        shrinkable = sum(_byte_cost(holder[field]) for holder, field, _, _ in candidates)
         if not candidates or shrinkable == 0:
             break  # nothing left to shrink; the cap stays exceeded by structure alone
         # A window many times over cap still keeps the fraction the budget allows, rather

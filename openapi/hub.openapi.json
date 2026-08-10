@@ -3924,6 +3924,7 @@
             "type": "string"
           },
           "input_truncated": {
+            "default": false,
             "title": "Input Truncated",
             "type": "boolean"
           },
@@ -3976,8 +3977,7 @@
           "input_shape",
           "tool_use_id",
           "output",
-          "output_truncated",
-          "input_truncated"
+          "output_truncated"
         ],
         "title": "ToolCallSegmentView",
         "type": "object"

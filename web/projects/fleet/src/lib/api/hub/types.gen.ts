@@ -2542,7 +2542,7 @@ export type ToolCallSegmentView = {
     /**
      * Input Truncated
      */
-    input_truncated: boolean;
+    input_truncated?: boolean;
     /**
      * Input Unparsed
      */

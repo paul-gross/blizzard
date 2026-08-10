@@ -20,7 +20,10 @@ class ToolCallSegmentView(BaseModel):
     tool_use_id: str | None
     output: str | None
     output_truncated: bool
-    input_truncated: bool
+    # Defaulted (review round 6 F4), matching `TranscriptSegmentRecord.record_truncated`'s
+    # own convention: a previously-stored turn (from before this field existed) must still
+    # validate on read-back through `_content_view`, not 500 with a `ValidationError`.
+    input_truncated: bool = False
 
 
 class SidechainSegmentView(BaseModel):

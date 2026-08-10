@@ -411,7 +411,6 @@ class _TurnCollapser:
             tool_use_id=tool_use_id if isinstance(tool_use_id, str) else None,
             output=None,
             output_truncated=False,
-            input_truncated=False,
         )
 
     def _user(self, record: Record) -> None:
