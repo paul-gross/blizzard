@@ -276,7 +276,7 @@ export const sessionEndApiLeasesLeaseIdSessionEndPost = <ThrowOnError extends bo
 /**
  * Get Transcript
  *
- * The lease's parsed transcript — 404 iff no lease with this id ever existed.
+ * The lease's resolved transcript — 404 iff no lease with this id ever existed.
  */
 export const getTranscriptApiLeasesLeaseIdTranscriptGet = <ThrowOnError extends boolean = false>(options: Options<GetTranscriptApiLeasesLeaseIdTranscriptGetData, ThrowOnError>): RequestResult<GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, ThrowOnError> => (options.client ?? client).get<GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/transcript', ...options });
 

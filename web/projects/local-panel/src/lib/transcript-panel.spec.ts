@@ -10,6 +10,22 @@ let stub: RequestClientStub | undefined;
 
 afterEach(() => stub?.restore());
 
+/** The common shape the archived/hub-unreachable block below shares, varied by one or two
+ * fields per case rather than each repeating the whole nine-field body. */
+function archivedBody(overrides: Record<string, unknown> = {}) {
+  return {
+    lease_id: 'L-903',
+    session_id: 'sess-77',
+    available: true,
+    reason: null,
+    truncated: false,
+    provenance: 'local',
+    hub_unreachable: false,
+    turns: [],
+    ...overrides,
+  };
+}
+
 async function render(
   leaseId: string | null,
   route: (method: string, path: string) => unknown,
@@ -173,11 +189,66 @@ describe('TranscriptPanel', () => {
 
   it('shows the truncation banner when the server capped the read', async () => {
     const { el } = await render('L-903', (method, path) =>
-      method === 'GET' && path === '/api/leases/L-903/transcript'
-        ? { lease_id: 'L-903', session_id: 'sess-77', available: true, reason: null, truncated: true, turns: [] }
-        : {},
+      method === 'GET' && path === '/api/leases/L-903/transcript' ? archivedBody({ truncated: true }) : {},
     );
 
     expect(el.querySelector('[data-testid="transcript-truncated"]')?.textContent).toContain('TRUNCATED');
+  });
+
+  it('shows the archived badge for turns served from the hub, and not for a plain local read (blizzard#249)', async () => {
+    const { el } = await render('L-903', (method, path) =>
+      method === 'GET' && path === '/api/leases/L-903/transcript' ? archivedBody({ provenance: 'archived' }) : {},
+    );
+
+    expect(el.querySelector('[data-testid="transcript-archived-badge"]')?.textContent).toContain('ARCHIVED');
+  });
+
+  it('shows no archived badge for a plain local read', async () => {
+    const { el } = await render('L-903', (method, path) =>
+      method === 'GET' && path === '/api/leases/L-903/transcript' ? archivedBody() : {},
+    );
+
+    expect(el.querySelector('[data-testid="transcript-archived-badge"]')).toBeNull();
+  });
+
+  it('shows a distinct hub-unreachable state when the hub could not be asked and local cannot answer either (blizzard#249 D1)', async () => {
+    const { el } = await render('L-903', (method, path) =>
+      method === 'GET' && path === '/api/leases/L-903/transcript'
+        ? archivedBody({ available: false, reason: 'not_found', hub_unreachable: true })
+        : {},
+    );
+
+    const unreachableEl = el.querySelector('[data-testid="transcript-hub-unreachable"]');
+    expect(unreachableEl?.textContent).toContain('HUB UNREACHABLE');
+    // Never mistaken for the routine no-transcript-yet reading `reason: "not_found"` carries.
+    expect(el.querySelector('[data-testid="transcript-not-found"]')).toBeNull();
+  });
+
+  it('falls back to a plain local turns read, with no hub-unreachable banner, when the hub is unreachable but local still answers (D1\'s quiet-fallback cell)', async () => {
+    // `TranscriptResponse.hub_unreachable`'s own doc (`wire/transcript.py`) states when
+    // it's set; this pins that the panel renders the unset case as a plain local turns
+    // read, indistinguishable from any other local read, with no hub-unreachable banner.
+    const { el } = await render('L-903', (method, path) =>
+      method === 'GET' && path === '/api/leases/L-903/transcript'
+        ? archivedBody({
+            turns: [
+              {
+                index: 0,
+                kind: 'asst',
+                timestamp: '2026-07-16T11:00:05+00:00',
+                text: 'Still here.',
+                tool: null,
+                thinking_redacted: false,
+                sidechain: null,
+                truncated: false,
+              },
+            ],
+          })
+        : {},
+    );
+
+    expect(el.querySelector('[data-testid="transcript-turns"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcript-hub-unreachable"]')).toBeNull();
+    expect(el.querySelector('[data-testid="transcript-archived-badge"]')).toBeNull();
   });
 });

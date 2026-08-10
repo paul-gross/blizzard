@@ -99,6 +99,17 @@ class IReadTranscriptSegments(Protocol):
 
     def records_for_segment(self, chunk_id: str, segment_id: str) -> list[SegmentRecordContent]: ...
 
+    def runner_id_for_lease(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
+        """The ``runner_id`` on a lease's stored segments (D2), or ``None`` when it holds
+        none — the fleet-plane read route's own ownership signal (issue #249), resolved
+        independently of the caller so the route can refuse a mismatch."""
+        ...
+
+    def records_for_lease(self, chunk_id: str, node_id: str, epoch: int, runner_id: str) -> list[SegmentRecordContent]:
+        """Every accepted-or-rejected record across a lease's ``(chunk_id, node_id, epoch)``
+        (D2), across every spawn generation, confined to ``runner_id``."""
+        ...
+
 
 class IWriteTranscriptSegments(IReadTranscriptSegments, Protocol):
     """Read-write variant. Only :class:`TranscriptIngestService` depends on this."""

@@ -2468,6 +2468,43 @@
         "title": "LeaseMintReport",
         "type": "object"
       },
+      "LeaseTranscriptView": {
+        "description": "A lease's transcript, concatenated across every segment stored under its\n``(chunk_id, node_id, epoch)`` \u2014 every spawn generation, not one (D2). The fleet-plane\ncounterpart to the per-segment content read: a runner's read-back of its own shipped\nsegments (D3, issue #249). No ``final``: a segment's own closes only *that* segment.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "turns": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TurnSegmentView-Output"
+            },
+            "title": "Turns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "node_id",
+          "epoch",
+          "truncated"
+        ],
+        "title": "LeaseTranscriptView",
+        "type": "object"
+      },
       "MeResponse": {
         "description": "The resolved identity's wire view.",
         "properties": {
@@ -6733,6 +6770,67 @@
           }
         },
         "summary": "Rekey Route Token",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/transcript-segments": {
+      "get": {
+        "description": "A runner's read-back of its own shipped segments (D2/D3, issue #249) \u2014 every\naccepted record across every spawn generation under a lease's ``(chunk_id, node_id,\nepoch)``, confined against the ``runner_id`` already on those rows regardless of\n``runner_auth_mode`` \u2014 this route's own always-raising ownership check, not the\nrouter's mode-gated one.",
+        "operationId": "get_lease_transcript_segments_api_fleet_chunks__chunk_id__transcript_segments_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "epoch",
+            "required": true,
+            "schema": {
+              "title": "Epoch",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseTranscriptView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Lease Transcript Segments",
         "tags": [
           "fleet"
         ]

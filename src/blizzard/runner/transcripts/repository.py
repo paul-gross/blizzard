@@ -20,6 +20,9 @@ TurnKind = Literal["env", "asst", "tool", "thinking", "sidechain"]
 #: healthy agent, never a fault on their own; only ``unreadable`` logs at ERROR.
 TranscriptUnavailable = Literal["spawning", "not_found", "unreadable"]
 
+#: Which side answered a resolved transcript (D1) — the wire's ``provenance`` field.
+TranscriptProvenance = Literal["local", "archived"]
+
 
 @dataclass(frozen=True)
 class ToolCall:

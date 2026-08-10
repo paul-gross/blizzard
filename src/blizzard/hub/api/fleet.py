@@ -2,7 +2,8 @@
 
 Enforcement is structural, not per-route: the router's own ``dependencies`` mean a fleet verb is
 authenticated *because of where it is mounted*, and a route declaring its own ``runner_id`` confines
-it further through :meth:`FleetRequest.assert_owns`."""
+it further through :meth:`FleetRequest.assert_owns` — except the lease-transcript read, whose
+:func:`_demand_lease_owner` always raises rather than deferring (D3, issue #249)."""
 
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
+from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api import chunks as chunks_api
@@ -54,7 +56,9 @@ from blizzard.wire.route import (
     RouteTokenRekeyResponse,
 )
 from blizzard.wire.runner import RunnerRegistrationRequest, RunnerRegistrationResponse, RunnerView
-from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch
+from blizzard.wire.transcript_segment import LeaseTranscriptView, TranscriptSegmentAck, TranscriptSegmentBatch
+
+_log = get_logger("blizzard.hub.fleet")
 
 router = APIRouter(prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_runner_principal)])
 
@@ -102,6 +106,22 @@ class FleetRequest:
             declared_runner_id=runner_id,
             token_runner_id=self.principal.runner_id,
         )
+
+
+def _demand_lease_owner(principal: RunnerPrincipal, owning_runner_id: str | None) -> None:
+    """The lease-transcript read route's own ownership gate (D3, issue #249) — **always**
+    raises on a mismatch, unlike :meth:`FleetRequest.assert_owns`, which ``runner_auth_mode``
+    leaves inert by default. ``owning_runner_id=None`` is Decision 1's "hub holds nothing"
+    branch, not a refusal — left for the caller to fall back on."""
+    if owning_runner_id is not None and owning_runner_id != principal.runner_id:
+        # The owning runner's id stays out of the response — logged server-side instead,
+        # where an operator, not another runner, can see it.
+        _log.warning(
+            "lease-transcript ownership mismatch",
+            owning_runner_id=owning_runner_id,
+            requesting_runner_id=principal.runner_id,
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="lease segments belong to another runner")
 
 
 @dataclass(frozen=True)
@@ -512,6 +532,43 @@ def ingest_transcript_segments(
     ]
     result = services.transcript_ingest.ingest(batch.runner_id, records)
     return transcripts_api.to_ack(batch.runner_id, result)
+
+
+@router.get("/chunks/{chunk_id}/transcript-segments", response_model=LeaseTranscriptView)
+def get_lease_transcript_segments(
+    chunk_id: str,
+    node_id: str,
+    epoch: int,
+    services: Annotated[HubServices, Depends(get_services)],
+    principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
+) -> LeaseTranscriptView:
+    """A runner's read-back of its own shipped segments (D2/D3, issue #249) — every
+    accepted record across every spawn generation under a lease's ``(chunk_id, node_id,
+    epoch)``, confined against the ``runner_id`` already on those rows regardless of
+    ``runner_auth_mode`` — this route's own always-raising ownership check, not the
+    router's mode-gated one."""
+    if principal is None:
+        # Refused before any store read, not after (an unauthenticated caller must never
+        # reach `runner_id_for_lease` at all, default `runner_auth_mode` or not).
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="no resolvable runner token")
+    try:
+        owner = services.transcripts.runner_id_for_lease(chunk_id, node_id, epoch)
+    except RuntimeError as exc:
+        # A violated fencing-epoch invariant: an integrity bug elsewhere, never a caller
+        # error, and undeclared by the seam — logged with context, then a definite 500.
+        _log.error(
+            "lease-transcript fencing invariant violated",
+            chunk_id=chunk_id,
+            node_id=node_id,
+            epoch=epoch,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="lease segments in an inconsistent state"
+        ) from exc
+    _demand_lease_owner(principal, owner)
+    records = services.transcripts.records_for_lease(chunk_id, node_id, epoch, principal.runner_id)
+    return transcripts_api.lease_content_view(chunk_id, node_id, epoch, records)
 
 
 @router.post("/runners", response_model=RunnerRegistrationResponse, status_code=status.HTTP_201_CREATED)

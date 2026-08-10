@@ -1,14 +1,15 @@
 """Runner service tier — the real runner against the mock hub (verification/blizzard.md).
 
 The runner's loop is driven one tick at a time against a mock hub whose levers
-manufacture rare states: unreachable hub, dropped ack, stale envelope — plus a fourth
-scenario reading a real transcript back through the runner's own local HTTP API (#29).
+manufacture rare states: unreachable hub, dropped ack, stale envelope — plus two scenarios
+reading a real transcript back through the runner's own local HTTP API (#29, blizzard#249).
 """
 
 from __future__ import annotations
 
 import dataclasses
 import os
+import shutil
 import time
 from pathlib import Path
 
@@ -29,6 +30,8 @@ from tests.service.support import (
     require_mock_fleet,
     require_winter_source,
     service_gate,
+    transcript_segment_record,
+    transcript_segment_turn,
 )
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -363,6 +366,123 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
     asst_turn = next(t for t in turns if t["kind"] == "asst")
     assert "pass" in asst_turn["text"]
     assert "the mock harness committed the change; checks are green" in asst_turn["text"]
+
+
+#: The seq this scenario seeds its own hub-side segment under.
+_SEEDED_SEGMENT_SEQ = 10_000
+
+
+def test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api(tmp_path: Path) -> None:
+    """All three of blizzard#249 D1's homes over ``build_hosted_app``'s real outbound
+    wiring — local while open, the hub once closed (even with the local file rotated
+    away), and the distinct hub-unreachable state once the hub process is gone."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    transcripts_root = tmp_path / "transcripts"
+    fenced = _tick_env()
+    fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
+
+    hub_port = _free_port()
+    config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+    config = dataclasses.replace(config, host="127.0.0.1", port=_free_port(), transcripts_root=str(transcripts_root))
+
+    # The runner daemon deliberately outlives the mock hub: the last leg reads the panel
+    # route with the hub process already terminated.
+    with _runner_api(config):
+        panel = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=15.0)
+        try:
+            with mock_hub(bin_dir, hub_port) as hub:
+                seeded = hub.post("/_seed/chunk", json=_transcript_chunk_spec(_WORK_REF_URL))
+                assert seeded.status_code == 201, seeded.text
+                chunk_id = seeded.json()["chunk_id"]
+
+                open_read: dict = {}
+
+                def _open_lease_answered() -> bool:
+                    open_read.update(_panel_read_while_open(config, fenced, panel, chunk_id))
+                    return bool(open_read.get("available") and open_read.get("turns"))
+
+                assert poll_until(_open_lease_answered, timeout=90.0), "the open lease never served a transcript"
+                assert open_read["provenance"] == "local", open_read
+                assert open_read["hub_unreachable"] is False, open_read
+
+                landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=120.0)
+                assert landed, f"chunk did not land (status {_status(hub, chunk_id)!r})"
+                lease = _sole_lease(panel, chunk_id)
+                lease_id = lease["lease_id"]
+
+                # Closed, hub reachable but holding nothing: a definite answer, so local.
+                closed_local = panel.get(f"/api/leases/{lease_id}/transcript").json()
+                assert closed_local["provenance"] == "local", closed_local
+                assert closed_local["available"] is True, closed_local
+
+                # Well past the runner's own lane: the mock retains nothing for an
+                # at-or-under-mark seq, so a colliding seed would seed no turns at all.
+                shipped = hub.post(
+                    "/api/fleet/transcripts",
+                    json={
+                        "runner_id": config.runner_id,
+                        "records": [
+                            transcript_segment_record(
+                                chunk_id,
+                                seq=_SEEDED_SEGMENT_SEQ,
+                                node_id=lease["node_id"],
+                                epoch=lease["epoch"],
+                                turns=[
+                                    transcript_segment_turn(0, "asst", "from the hub archive"),
+                                    transcript_segment_turn(1, "thinking", "and its reasoning"),
+                                ],
+                            )
+                        ],
+                    },
+                )
+                assert shipped.status_code == 200, shipped.text
+                assert shipped.json()["applied"] == [_SEEDED_SEGMENT_SEQ], shipped.text
+
+                archived = panel.get(f"/api/leases/{lease_id}/transcript").json()
+                assert archived["provenance"] == "archived", archived
+                # Every kind survives the trip since blizzard#248 widened the read model —
+                # a thinking turn reaching the panel is what a narrowing read would lose.
+                assert [t["text"] for t in archived["turns"]] == ["from the hub archive", "and its reasoning"], archived
+                assert [t["kind"] for t in archived["turns"]] == ["asst", "thinking"], archived
+                assert archived["hub_unreachable"] is False, archived
+
+                # The rotation case (#249's own acceptance criterion): the local file is
+                # gone and the panel is undegraded, because the hub still answers.
+                shutil.rmtree(transcripts_root)
+                rotated = panel.get(f"/api/leases/{lease_id}/transcript").json()
+                assert rotated["provenance"] == "archived", rotated
+                assert [t["text"] for t in rotated["turns"]] == ["from the hub archive", "and its reasoning"], rotated
+
+            unreachable = panel.get(f"/api/leases/{lease_id}/transcript")
+            assert unreachable.status_code == 200, unreachable.text
+            body = unreachable.json()
+            # The flag, not `reason`, is what the panel branches on — a failed local read
+            # still reports its own `not_found`, which must never be the whole answer.
+            assert body["hub_unreachable"] is True, body
+            assert body["provenance"] == "local", body
+            assert panel.get("/api/leases/no-such-lease/transcript").status_code == 404
+        finally:
+            panel.close()
+
+
+def _sole_lease(panel: httpx.Client, chunk_id: str) -> dict:
+    """The chunk's one lease as the runner's own lease list reports it."""
+    leases = panel.get("/api/leases")
+    assert leases.status_code == 200, leases.text
+    matches = [item for item in leases.json()["items"] if item["chunk_id"] == chunk_id]
+    assert len(matches) == 1, f"expected exactly one lease for the chunk, got {matches!r}"
+    return matches[0]
+
+
+def _panel_read_while_open(config: RunnerConfig, fenced: dict[str, str], panel: httpx.Client, chunk_id: str) -> dict:
+    """One tick, then the panel's transcript read for the chunk's lease if it has one yet."""
+    _drive(config, fenced, ticks=1, pause=0.3)
+    matches = [item for item in panel.get("/api/leases").json()["items"] if item["chunk_id"] == chunk_id]
+    if not matches:
+        return {}
+    resp = panel.get(f"/api/leases/{matches[0]['lease_id']}/transcript")
+    return resp.json() if resp.status_code == 200 else {}
 
 
 def _run_and_check(config: RunnerConfig, fenced: dict[str, str], hub: httpx.Client, chunk_id: str, target: str) -> bool:

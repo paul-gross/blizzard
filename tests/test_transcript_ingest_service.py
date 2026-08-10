@@ -297,6 +297,12 @@ class _FakeTranscriptStore:
     def records_for_segment(self, chunk_id: str, segment_id: str) -> list[SegmentRecordContent]:
         raise NotImplementedError
 
+    def runner_id_for_lease(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
+        raise NotImplementedError
+
+    def records_for_lease(self, chunk_id: str, node_id: str, epoch: int, runner_id: str) -> list[SegmentRecordContent]:
+        raise NotImplementedError
+
     def high_water(self, runner_id: str) -> int:
         return 0
 

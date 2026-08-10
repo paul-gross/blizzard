@@ -1,9 +1,8 @@
 """Transcript-segment routes (blizzard#247) — the operator-plane discovery/content reads,
-plus the wire<->domain rendering the fleet router's ingest route shares.
-
-The discovery route (D12) returns segment metadata and byte counts only — never turn
-content — so a caller must hold a ``segment_id`` from it before the content route
-answers anything. Gated on :data:`~blizzard.auth_core.TRANSCRIPT_READ` (D11)."""
+plus the wire<->domain rendering the fleet router's ingest and lease-read routes share
+(issue #249). The discovery route (D12) returns segment metadata and byte counts only —
+never turn content — so a caller must hold a ``segment_id`` from it before the content
+route answers anything. Gated on :data:`~blizzard.auth_core.TRANSCRIPT_READ` (D11)."""
 
 from __future__ import annotations
 
@@ -25,6 +24,7 @@ from blizzard.hub.domain.transcripts import (
     TranscriptIngestResult,
 )
 from blizzard.wire.transcript_segment import (
+    LeaseTranscriptView,
     TranscriptSegmentAck,
     TranscriptSegmentContentView,
     TranscriptSegmentIndexEntry,
@@ -87,20 +87,36 @@ def _index_entry(row: SegmentIndexRow) -> TranscriptSegmentIndexEntry:
     )
 
 
-def _content_view(segment_id: str, records: list[SegmentRecordContent]) -> TranscriptSegmentContentView:
+def _rendered_turns(records: list[SegmentRecordContent]) -> tuple[list[TurnSegmentView], bool, bool]:
+    """Turns concatenated across stored records, in record order, plus the fold both
+    :func:`_content_view` and :func:`lease_content_view` share: ``final`` true iff any
+    record closed its segment out, ``truncated`` true iff any record lost turns."""
     turns: list[TurnSegmentView] = []
     for record in records:
         if record.rejected:
             continue
         turns.extend(TurnSegmentView.model_validate(turn) for turn in json.loads(record.turns_json))
-    return TranscriptSegmentContentView(
-        segment_id=segment_id,
-        final=any(record.final for record in records),
-        # A cap rejection (this hub's own) OR a runner-declared `record_truncated` — an
-        # accepted record the runner itself had to ship turns-empty.
-        truncated=any(record.rejected or record.record_truncated for record in records),
-        turns=turns,
-    )
+    # A cap rejection (this hub's own) OR a runner-declared `record_truncated` — an
+    # accepted record the runner itself had to ship turns-empty.
+    truncated = any(record.rejected or record.record_truncated for record in records)
+    return turns, any(record.final for record in records), truncated
+
+
+def _content_view(segment_id: str, records: list[SegmentRecordContent]) -> TranscriptSegmentContentView:
+    turns, final, truncated = _rendered_turns(records)
+    return TranscriptSegmentContentView(segment_id=segment_id, final=final, truncated=truncated, turns=turns)
+
+
+def lease_content_view(
+    chunk_id: str, node_id: str, epoch: int, records: list[SegmentRecordContent]
+) -> LeaseTranscriptView:
+    """The fleet router's lease-transcript route renders through this — :func:`_rendered_turns`
+    over a lease's full record set rather than one segment's (D2, issue #249). ``index`` is
+    renumbered across the whole read: a segment's own is producer-minted and generation-local
+    (D9), so concatenating a lease's generations would otherwise restart it at zero mid-list."""
+    turns, _final, truncated = _rendered_turns(records)
+    renumbered = [turn.model_copy(update={"index": i}) for i, turn in enumerate(turns)]
+    return LeaseTranscriptView(chunk_id=chunk_id, node_id=node_id, epoch=epoch, truncated=truncated, turns=renumbered)
 
 
 # --- operator-plane routes ------------------------------------------------------

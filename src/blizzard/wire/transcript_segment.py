@@ -137,3 +137,16 @@ class TranscriptSegmentContentView(BaseModel):
     final: bool
     truncated: bool
     turns: list[TurnSegmentView] = []
+
+
+class LeaseTranscriptView(BaseModel):
+    """A lease's transcript, concatenated across every segment stored under its
+    ``(chunk_id, node_id, epoch)`` — every spawn generation, not one (D2). The fleet-plane
+    counterpart to the per-segment content read: a runner's read-back of its own shipped
+    segments (D3, issue #249). No ``final``: a segment's own closes only *that* segment."""
+
+    chunk_id: str
+    node_id: str
+    epoch: int
+    truncated: bool
+    turns: list[TurnSegmentView] = []

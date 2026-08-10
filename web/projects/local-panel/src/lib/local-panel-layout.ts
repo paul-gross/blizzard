@@ -30,7 +30,9 @@ import type { MachineChunkRow } from './local-panel';
 /**
  * The runner's machine-local panel's layout half (issue #80) — shaped like
  * the discovery mock's machine panel: a three-column grid over the runner's
- * hub-free local API.
+ * local API, hub-free save for the rails that proxy through it — the
+ * fleet-summary strip (`local-info`) and, for a closed lease, the transcript
+ * dock below (issue #249).
  *
  * - **Left (340px)** — liveness: the *active* leases (closed rows are history,
  *   not liveness — they live on the chunks list), each with a heartbeat

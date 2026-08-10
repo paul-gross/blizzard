@@ -425,6 +425,16 @@ class SqlAlchemyRunnerStore:
         with self._connect() as conn:
             return int(conn.execute(stmt).scalar_one())
 
+    def has_unshipped_transcript_content(self, chunk_id: str) -> bool:
+        stmt = (
+            select(transcript_outbound_buffer.c.seq)
+            .where(transcript_outbound_buffer.c.chunk_id == chunk_id)
+            .where(transcript_outbound_buffer.c.acked_at.is_(None))
+            .where(transcript_outbound_buffer.c.final.is_(False))
+            .limit(1)
+        )
+        return bool(self._all(stmt))
+
     def pending_transcript_outbound(self, *, limit: int | None = None) -> list[BufferedTranscriptDelta]:
         stmt = (
             select(transcript_outbound_buffer)

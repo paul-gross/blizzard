@@ -22,7 +22,7 @@ from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.store.repository import IReadRunnerStore, IWriteRunnerStore, LeaseRecord
-from blizzard.runner.transcripts.service import LocalTranscriptService
+from blizzard.runner.transcripts.service import TranscriptService
 
 _STORE = "runner store"
 
@@ -67,8 +67,8 @@ class RunnerWiring:
         service: LocalLeaseService | None = getattr(self.state, "leases", None)
         return service if service is not None else self._refuse("lease service")
 
-    def transcripts(self) -> LocalTranscriptService:
-        service: LocalTranscriptService | None = getattr(self.state, "transcripts", None)
+    def transcripts(self) -> TranscriptService:
+        service: TranscriptService | None = getattr(self.state, "transcripts", None)
         return service if service is not None else self._refuse("transcript service")
 
     def takeover(self) -> TakeoverService:

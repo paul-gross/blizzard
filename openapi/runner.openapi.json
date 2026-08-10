@@ -1680,8 +1680,22 @@
             "title": "Available",
             "type": "boolean"
           },
+          "hub_unreachable": {
+            "default": false,
+            "title": "Hub Unreachable",
+            "type": "boolean"
+          },
           "lease_id": {
             "title": "Lease Id",
+            "type": "string"
+          },
+          "provenance": {
+            "default": "local",
+            "enum": [
+              "local",
+              "archived"
+            ],
+            "title": "Provenance",
             "type": "string"
           },
           "reason": {
@@ -3145,7 +3159,7 @@
     },
     "/api/leases/{lease_id}/transcript": {
       "get": {
-        "description": "The lease's parsed transcript \u2014 404 iff no lease with this id ever existed.",
+        "description": "The lease's resolved transcript \u2014 404 iff no lease with this id ever existed.",
         "operationId": "get_transcript_api_leases__lease_id__transcript_get",
         "parameters": [
           {

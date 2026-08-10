@@ -64,6 +64,60 @@ class TranscriptSegmentStore:
             for row in rows
         ]
 
+    def runner_id_for_lease(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
+        """The single ``runner_id`` on a lease's stored segments (D2) — asserted, not
+        assumed: a ``LIMIT 1`` with no ``ORDER BY`` would silently 403 the legitimate
+        owner should two runners' rows ever share one key, so a violation raises here
+        instead of picking an arbitrary row."""
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                select(s.transcript_segments.c.runner_id)
+                .where(
+                    s.transcript_segments.c.chunk_id == chunk_id,
+                    s.transcript_segments.c.node_id == node_id,
+                    s.transcript_segments.c.epoch == epoch,
+                )
+                .distinct()
+            ).all()
+        if not rows:
+            return None
+        runner_ids = sorted({row.runner_id for row in rows})
+        if len(runner_ids) > 1:
+            raise RuntimeError(
+                f"lease (chunk_id={chunk_id!r}, node_id={node_id!r}, epoch={epoch}) has segments "
+                f"from multiple runners {runner_ids!r} — the fencing-epoch invariant this query "
+                "depends on was violated"
+            )
+        return runner_ids[0]
+
+    def records_for_lease(self, chunk_id: str, node_id: str, epoch: int, runner_id: str) -> list[SegmentRecordContent]:
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                select(s.transcript_segments)
+                .where(
+                    s.transcript_segments.c.chunk_id == chunk_id,
+                    s.transcript_segments.c.node_id == node_id,
+                    s.transcript_segments.c.epoch == epoch,
+                    s.transcript_segments.c.runner_id == runner_id,
+                )
+                .order_by(
+                    s.transcript_segments.c.spawn_generation,
+                    s.transcript_segments.c.segment_id,
+                    s.transcript_segments.c.turn_range_start,
+                )
+            ).all()
+        return [
+            SegmentRecordContent(
+                turn_range_start=row.turn_range_start,
+                turn_range_end=row.turn_range_end,
+                final=row.final,
+                rejected=row.rejected,
+                record_truncated=bool(row.record_truncated),  # NULL (pre-column row) reads as False
+                turns_json=self._decompress(row.content, row.codec) if row.content is not None else "[]",
+            )
+            for row in rows
+        ]
+
     def high_water(self, runner_id: str) -> int:
         with self._engine.connect() as conn:
             row = conn.execute(

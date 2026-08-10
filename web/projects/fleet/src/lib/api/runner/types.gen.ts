@@ -1136,9 +1136,17 @@ export type TranscriptResponse = {
      */
     available: boolean;
     /**
+     * Hub Unreachable
+     */
+    hub_unreachable?: boolean;
+    /**
      * Lease Id
      */
     lease_id: string;
+    /**
+     * Provenance
+     */
+    provenance?: 'local' | 'archived';
     /**
      * Reason
      */

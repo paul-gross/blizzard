@@ -129,6 +129,9 @@ _FLEET: set[tuple[str, str]] = {
     ("POST", "/api/fleet/runners/{runner_id}/heartbeats"),
     ("GET", "/api/fleet/runners/{runner_id}"),
     ("POST", "/api/fleet/transcripts"),  # the transcript lane's own push (blizzard#247, D7)
+    # A lease's own read-back of its shipped segments, confined by its own always-raising
+    # ownership check rather than `assert_owns` (blizzard#249, D3).
+    ("GET", "/api/fleet/chunks/{chunk_id}/transcript-segments"),
 }
 
 

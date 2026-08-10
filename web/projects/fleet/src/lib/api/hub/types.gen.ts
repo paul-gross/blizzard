@@ -1594,6 +1594,37 @@ export type LeaseMintReport = {
 };
 
 /**
+ * LeaseTranscriptView
+ *
+ * A lease's transcript, concatenated across every segment stored under its
+ * ``(chunk_id, node_id, epoch)`` — every spawn generation, not one (D2). The fleet-plane
+ * counterpart to the per-segment content read: a runner's read-back of its own shipped
+ * segments (D3, issue #249). No ``final``: a segment's own closes only *that* segment.
+ */
+export type LeaseTranscriptView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Truncated
+     */
+    truncated: boolean;
+    /**
+     * Turns
+     */
+    turns?: Array<TurnSegmentViewOutput>;
+};
+
+/**
  * MeResponse
  *
  * The resolved identity's wire view.
@@ -4281,6 +4312,45 @@ export type RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses = {
 };
 
 export type RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponse = RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses[keyof RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses];
+
+export type GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Node Id
+         */
+        node_id: string;
+        /**
+         * Epoch
+         */
+        epoch: number;
+    };
+    url: '/api/fleet/chunks/{chunk_id}/transcript-segments';
+};
+
+export type GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetError = GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetErrors[keyof GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetErrors];
+
+export type GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: LeaseTranscriptView;
+};
+
+export type GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetResponse = GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetResponses[keyof GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetResponses];
 
 export type GetWorkItemsApiFleetChunksChunkIdWorkItemsGetData = {
     body?: never;

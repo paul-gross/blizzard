@@ -1,8 +1,9 @@
-"""The runner-local transcript route — ``GET /api/leases/{lease_id}/transcript`` (issue #29).
+"""The transcript route — ``GET /api/leases/{lease_id}/transcript`` (issue #29, blizzard#249).
 
-Exercised over a real store via ``TestClient``: a real sqlite store for lease facts,
-and a fake ``IReadTranscriptRepository`` standing in for the filesystem, so this
-file's job is the route's resolution and status-code contract, not the normalization."""
+Exercised over a real store via ``TestClient``, with fake ``IReadTranscriptRepository``/
+``IReadArchivedTranscriptRepository`` seams standing in for the filesystem and the hub — this
+file's job is the route's status-code contract, not normalization or transport. Decision 1's
+full resolution table is pinned at the service tier (``test_runner_transcripts_service.py``)."""
 
 from __future__ import annotations
 
@@ -15,9 +16,10 @@ from fastapi.testclient import TestClient
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.store.repository import NewLease
+from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import Transcript, Turn
-from blizzard.runner.transcripts.service import LocalTranscriptService
-from tests.runner_fakes import make_store
+from blizzard.runner.transcripts.service import TranscriptService
+from tests.runner_fakes import FakeArchivedTranscriptRepository, make_store
 from tests.support import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -40,11 +42,18 @@ class FakeTranscriptRepository:
         return Transcript(session_id=session_id, available=False, reason="not_found", turns=[], truncated=False)
 
 
-def _app_with_transcripts(tmp_path: Path, *, repo: FakeTranscriptRepository | None = None, workspace_root: str = ""):  # type: ignore[no-untyped-def]
+def _app_with_transcripts(
+    tmp_path: Path,
+    *,
+    repo: FakeTranscriptRepository | None = None,
+    archived: FakeArchivedTranscriptRepository | None = None,
+    workspace_root: str = "",
+):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     repo = repo or FakeTranscriptRepository()
-    service = LocalTranscriptService(store=store, transcripts=repo, workspace_root=workspace_root)
+    archived = archived or FakeArchivedTranscriptRepository()
+    service = TranscriptService(store=store, transcripts=repo, archived=archived, workspace_root=workspace_root)
     return create_app(config, runner_store=store, transcripts=service), store, repo
 
 
@@ -103,6 +112,10 @@ def test_200_with_turns_for_an_active_lease(tmp_path: Path) -> None:
         "sidechain": None,
         "truncated": False,
     }
+    # An open lease's response always carries a provenance of "local" and a
+    # dropped-turn count of zero, in addition to the turns pinned above.
+    assert body["provenance"] == "local"
+    assert body["hub_unreachable"] is False
     assert_all_timestamps_utc(body)
 
 
@@ -140,12 +153,14 @@ def test_200_not_found_when_the_file_is_missing(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_200_for_a_closed_lease_transcript_stays_reachable(tmp_path: Path) -> None:
-    """A closed lease's transcript stays reachable —
-    ``active_lease()`` would 404 here; the route must use the closure-spanning ``lease()``."""
+def test_200_for_a_closed_lease_with_no_hub_segments_falls_back_to_local(tmp_path: Path) -> None:
+    """A closed lease's transcript stays reachable — the route must use the closure-spanning
+    ``lease()``, not ``active_lease()``. The hub is asked first (D1); an unscripted
+    ``FakeArchivedTranscriptRepository`` answers "holds nothing", pinning the fall-back."""
     transcript = Transcript(session_id="sess-a", available=True, reason=None, turns=[], truncated=False)
     repo = FakeTranscriptRepository({"sess-a": transcript})
-    app, store, _repo = _app_with_transcripts(tmp_path, repo=repo)
+    archived = FakeArchivedTranscriptRepository()
+    app, store, _repo = _app_with_transcripts(tmp_path, repo=repo, archived=archived)
     _seed_lease(store)
     store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
@@ -158,9 +173,46 @@ def test_200_for_a_closed_lease_transcript_stays_reachable(tmp_path: Path) -> No
     body = resp.json()
     assert body["available"] is True
     assert body["session_id"] == "sess-a"
+    assert body["provenance"] == "local"
+    assert body["hub_unreachable"] is False
+    assert archived.calls == [("ch_1", "nd_build", 1)]  # the hub was asked first
     # A closed lease's bindings are always released — the hint passed to the
     # repository is legitimately None; the glob-by-session-id lookup does not need it.
     assert _repo.calls == [("sess-a", None)]
+
+
+@pytest.mark.component
+def test_200_for_a_closed_lease_with_hub_segments_serves_them(tmp_path: Path) -> None:
+    """The hub's segments win once found (D1) — the local fake is never consulted."""
+    hub_turn = Turn(
+        index=0,
+        kind="asst",
+        timestamp=_NOW,
+        text="from the hub",
+        tool=None,
+        thinking_redacted=False,
+        sidechain=None,
+        truncated=False,
+    )
+    archived = FakeArchivedTranscriptRepository(
+        {("ch_1", "nd_build", 1): ArchivedTranscript(status="found", turns=[hub_turn], truncated=False)}
+    )
+    repo = FakeTranscriptRepository()
+    app, store, _repo = _app_with_transcripts(tmp_path, repo=repo, archived=archived)
+    _seed_lease(store)
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+
+    with TestClient(app) as client:
+        resp = client.get("/api/leases/lease_1/transcript")
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["available"] is True
+    assert body["provenance"] == "archived"
+    assert body["hub_unreachable"] is False
+    assert [t["text"] for t in body["turns"]] == ["from the hub"]
+    assert repo.calls == []  # local is never consulted once the hub answers
 
 
 @pytest.mark.component

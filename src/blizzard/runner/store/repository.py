@@ -412,6 +412,14 @@ class IReadRunnerStore(Protocol):
         SHIPPED total, not the buffer's own resident total."""
         ...
 
+    def has_unshipped_transcript_content(self, chunk_id: str) -> bool:
+        """Whether this chunk holds an UNACKED **content** row in the transcript outbound
+        buffer (issue #249) — the "not yet acked by the hub" half of the panel's home
+        selection. Final markers are excluded deliberately: a pending one carries no turns,
+        so the hub's copy is already complete. An existence check, not
+        :meth:`pending_transcript_outbound`'s payload-materializing list read."""
+        ...
+
     def pending_transcript_outbound(self, *, limit: int | None = None) -> list[BufferedTranscriptDelta]:
         """The unacked transcript buffer, FIFO by seq — the drain's own lane (D3).
 
