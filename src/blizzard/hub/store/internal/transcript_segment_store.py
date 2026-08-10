@@ -163,7 +163,7 @@ class TranscriptSegmentStore:
                     codec=codec,
                     content=self._compress(record.turns_json, codec),
                     received_at=at,
-                    record_truncated=record.record_truncated,  # review F10: not the first offer's, stale
+                    record_truncated=record.record_truncated,  # the re-offer's own value, not the first
                 )
             )
 
@@ -180,7 +180,7 @@ class TranscriptSegmentStore:
                     rejection_reason=reason,
                     byte_count=byte_count,
                     received_at=at,
-                    record_truncated=record.record_truncated,  # review F10: not the first offer's, stale
+                    record_truncated=record.record_truncated,  # the re-offer's own value, not the first
                 )
             )
 
@@ -223,7 +223,7 @@ class TranscriptSegmentStore:
             turn_range_start=min(r.turn_range_start for r in rows),
             turn_range_end=max(r.turn_range_end for r in rows),
             final=any(r.final for r in rows),
-            # Cap-rejected (this hub) OR runner-declared `record_truncated` (review F5).
+            # Cap-rejected (this hub) OR runner-declared `record_truncated`.
             truncated=any(r.rejected or bool(r.record_truncated) for r in rows),
             byte_count=sum(r.byte_count for r in rows),
             normalizer_version=rows[0].normalizer_version,

@@ -129,8 +129,8 @@ class OutboundFactRecord:
 class TranscriptSegmentLedgerRow:
     """One row of the transcript segment ledger (issue #246, D2) — local state, never shipped
     as-is, and so named apart from the wire's own ``TranscriptSegmentRecord`` (blizzard#247).
-    ``normalizer_version`` is never ``None``: it starts at the source seam's "never ran"
-    sentinel so a closure always has one to declare. Two reasons, not one, per review F1."""
+    ``normalizer_version`` is never ``None``, starting at the source seam's "never ran"
+    sentinel. ``truncated_reason``/``shipping_stopped_reason`` are independent: the former never latches."""
 
     segment_id: str
     chunk_id: str
@@ -705,9 +705,9 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def mark_transcript_record_truncated(self, segment_id: str, *, reason: str) -> bool:
         """Note that one shipped record was shrunk in place (D4's per-record 1 MB cap) —
-        informational only, never latching. Idempotent PER REASON, not once ever (review
-        F14): a later, different reason still overwrites, so a worse outcome is never
-        masked by an earlier, milder one. Returns whether the field actually changed."""
+        informational only, never latching. Idempotent per reason: a later, different
+        reason still overwrites, so a worse outcome is never masked by an earlier, milder
+        one. Returns whether the field actually changed."""
         ...
 
     def stop_transcript_segment_shipping(self, segment_id: str, *, reason: str) -> bool:
@@ -717,10 +717,9 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         ...
 
     def mark_sidechain_dropped_warned(self, segment_id: str, *, agent_id: str | None) -> bool:
-        """Latch the dropped-sidechain fact-lane warning per (segment, agent_id) — review F2:
-        a subagent conversation outliving one pump window is the ordinary case, not a rare
-        anomaly, so it must not re-warn every tick it stays unlinked. Returns whether this
-        call is the first time this segment has warned about this agent."""
+        """Latch the dropped-sidechain fact-lane warning per (segment, agent_id): a subagent
+        conversation can outlive one pump window, so this must not re-warn every tick it
+        stays unlinked. Returns whether this is the first warning for this agent."""
         ...
 
     def record_transcript_delta(

@@ -2540,6 +2540,10 @@ export type ToolCallSegmentView = {
      */
     input_shape: string;
     /**
+     * Input Truncated
+     */
+    input_truncated: boolean;
+    /**
      * Input Unparsed
      */
     input_unparsed: string | null;

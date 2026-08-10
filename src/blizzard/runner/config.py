@@ -108,11 +108,9 @@ class Table:
         return default if value is None else int(value)
 
     def boolean(self, key: str, default: bool) -> bool:
-        """A real TOML boolean, or ``default`` when ``key`` is absent.
-
-        Rejects, rather than coerces, anything else (review F10, blizzard#246) — ``bool()``
-        on a non-empty string is truthy regardless of its text, so a typo'd
-        ``ship = "false"`` would otherwise silently turn a switch on."""
+        """A real TOML boolean, or ``default`` when ``key`` is absent. Raises on anything
+        else (blizzard#246): ``bool()`` on a non-empty string is truthy regardless of its
+        text, so a typo'd ``ship = "false"`` must never silently turn a switch on."""
         value = self.body.get(key)
         if value is None:
             return default
@@ -198,7 +196,7 @@ class Transcripts:
 
     @property
     def ship(self) -> bool:
-        """Off by default (D5, review F7) — a rollout decision, not a discard-sink one:
+        """Off by default (D5) — a rollout decision, not a discard-sink one:
         ``#247`` already landed the hub's durable, compressed-at-rest, operator-gated
         segment store, so a `True` value here would be retained, not wasted bandwidth.
         The dogfood fleet just has not turned shipping on yet."""

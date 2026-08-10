@@ -35,8 +35,8 @@ def tick(ctx: LoopContext) -> None:
     Pull(ctx).run()
     Fill(ctx).run()
     Advance(ctx).run()
-    # After every fact-lane-draining step (D3, issue #246), so a wedged or slow transcript
-    # flush delays nothing fleet-truth-bearing (bounded per run, review F4).
+    # After every fact-lane-draining step (D3, issue #246), so a wedged or slow, bounded
+    # transcript flush delays nothing fleet-truth-bearing.
     TranscriptDrain(ctx).run()
     # Last (issue #218) — its own docstring reserves this position; still safe to run
     # before or after TranscriptDrain, since either's fact-lane enqueue waits for PULL anyway.

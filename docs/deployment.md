@@ -1349,12 +1349,13 @@ ship = false
   fails every tick: the marker buffers forever (never draining) and a transport error logs
   each attempt. This is the same store-and-forward behavior the fact lane already has
   against any unreachable route; it is not a data-loss risk, but "off by default" alone
-  does not prepare an operator to expect it (review F11).
+  does not prepare an operator to expect it.
 - **Capped at both ends, independently.** The runner enforces its own 1 MB per-record cap
   and 64 MB per-chunk budget as the well-behaved case (D4): an oversized turn's own text,
-  its tool output, and any nested sidechain turn are shrunk in place rather than dropped, so
-  the runner's read position still advances past it. A record still over cap once nothing is
-  left to shrink — structural overhead alone — ships instead as an empty-turns slice over
+  its tool call's output, its tool call's input (any nested sidechain turn's, too), are all
+  shrunk in place rather than dropped, so the runner's read position still advances past it.
+  A record still over cap once nothing is left to shrink — structural overhead alone —
+  ships instead as an empty-turns slice over
   the same claimed range, never as an over-cap body. Past the 64 MB chunk budget, the runner
   stops shipping that chunk's content but still ships every open segment's final record. The
   hub enforces its own, independent caps as the rogue case — 4 MB/record, 64 MB/chunk,

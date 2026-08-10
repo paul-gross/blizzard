@@ -56,15 +56,16 @@ def _turn(index: int, text: str) -> NormalizedTurn:
     )
 
 
-def _tool_call(output: str) -> ToolCall:
+def _tool_call(output: str, *, input_: dict[str, object] | None = None) -> ToolCall:
     return ToolCall(
         name="Bash",
-        input={},
+        input=input_ or {},
         input_unparsed=None,
         input_shape="object",
         tool_use_id="tool_1",
         output=output,
         output_truncated=False,
+        input_truncated=False,
     )
 
 
@@ -77,6 +78,21 @@ def _tool_turn(index: int, *, output: str) -> NormalizedTurn:
         timestamp=_NOW,
         text="",
         tool=_tool_call(output),
+        thinking_redacted=False,
+        sidechain=None,
+        truncated=False,
+    )
+
+
+def _input_tool_turn(index: int, *, content: str) -> NormalizedTurn:
+    """A ``Write``-shaped turn whose oversized content lives in ``tool.input["content"]``,
+    never a turn's own ``text`` or a tool's ``output`` (F1)."""
+    return NormalizedTurn(
+        index=index,
+        kind="tool",
+        timestamp=_NOW,
+        text="",
+        tool=_tool_call("", input_={"content": content}),
         thinking_redacted=False,
         sidechain=None,
         truncated=False,
@@ -100,7 +116,12 @@ def _sidechain_turn(index: int, *, sidechain_text: str) -> NormalizedTurn:
 
 
 def _batch(
-    turns: list[NormalizedTurn], *, next_token: str, unlinked_sidechains: list[SidechainConversation] | None = None
+    turns: list[NormalizedTurn],
+    *,
+    next_token: str,
+    unlinked_sidechains: list[SidechainConversation] | None = None,
+    truncated: bool = False,
+    sidechain_truncated: bool = False,
 ) -> TranscriptBatch:
     return TranscriptBatch(
         session_id="sess-a",
@@ -110,8 +131,8 @@ def _batch(
         unlinked_sidechains=unlinked_sidechains or [],
         next_position=TranscriptPosition(next_token),
         complete=True,
-        truncated=False,
-        sidechain_truncated=False,
+        truncated=truncated,
+        sidechain_truncated=sidechain_truncated,
         normalizer_version="fake/1",
         harness_version=None,
     )
@@ -456,6 +477,140 @@ def test_pump_shrinks_a_severely_oversized_batch_without_emptying_every_field() 
     assert segment is not None
     assert segment.truncated_reason == "record_cap_exceeded"
     assert segment.cursor == "pos-1"
+
+
+def test_pump_shrinks_an_oversized_tool_input_value_instead_of_emptying_the_record() -> None:
+    """A `Write`-shaped tool call's oversized `input["content"]` must be as shrinkable as
+    a turn's own text or a tool's output — not silently left out, forcing the record to an
+    empty-turns slice with the hub-accepted content lost entirely."""
+    huge_content = "w" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
+    ctx, _source = _ctx(
+        ship=True, batches={"sess-a": _batch([_input_tool_turn(0, content=huge_content)], next_token="pos-1")}
+    )
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) == 1
+    assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
+    body = json.loads(pending[0].payload)
+    assert body["turns"] != []  # shrunk, not emptied — genuine content still shipped
+    retained = body["turns"][0]["tool"]["input"]["content"]
+    assert len(retained) > len(huge_content) * 0.8  # mildly over cap shrinks by a sliver
+    assert body["turns"][0]["tool"]["input_truncated"] is True
+    assert body["record_truncated"] is True
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "record_cap_exceeded"
+    assert segment.cursor == "pos-1"
+
+
+def test_pump_shrinks_many_medium_tool_inputs_instead_of_emptying_the_record() -> None:
+    """Many ordinary `Edit`-shaped calls, each individually under cap, summing well over it
+    — the batch must converge to a shrunk, non-empty result, not fall into the
+    structural-overhead empty-slice branch with nothing found to shrink."""
+    edits = [_input_tool_turn(i, content="e" * 20_000) for i in range(60)]  # 60 * 20 KB > 1 MB
+    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(edits, next_token="pos-1")})
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) == 1
+    assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
+    body = json.loads(pending[0].payload)
+    assert len(body["turns"]) == len(edits)  # every turn survives, shrunk, not dropped
+    retained = sum(len(t["tool"]["input"]["content"]) for t in body["turns"])
+    assert retained > 0
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "record_cap_exceeded"
+    assert segment.cursor == "pos-1"
+
+
+def test_pump_asserts_rather_than_silently_re_shipping_when_turns_carry_no_next_position() -> None:
+    """`IHarnessTranscriptSource` permits a batch with turns but no `next_position` — the
+    pump must not enqueue a record it can never advance the cursor past, or the next tick
+    re-reads and re-ships the exact same turns forever."""
+    stuck = TranscriptBatch(
+        session_id="sess-a",
+        available=True,
+        reason=None,
+        turns=[_turn(0, "hi")],
+        unlinked_sidechains=[],
+        next_position=None,
+        complete=True,
+        truncated=False,
+        sidechain_truncated=False,
+        normalizer_version="fake/1",
+        harness_version=None,
+    )
+    ctx, _source = _ctx(ship=True, batches={"sess-a": stuck})
+    _spawn_one_segment(ctx)
+
+    with pytest.raises(AssertionError):
+        TranscriptPump(ctx).run()
+
+    assert ctx.store.pending_transcript_outbound() == []  # never enqueued before the assert fired
+
+
+def test_pump_marks_and_warns_when_the_source_read_itself_came_back_truncated() -> None:
+    """`TranscriptBatch.truncated` (the main file's own tail cap) must latch the segment,
+    fire a fact-lane warning, and — since this batch carries turns — mark the shipped
+    wire record `record_truncated: true` too, not just the local, silent flag."""
+    batch = _batch([_turn(0, "hi")], next_token="pos-1", truncated=True)
+    ctx, _source = _ctx(ship=True, batches={"sess-a": batch})
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "source_read_truncated"
+    fact_events = ctx.store.pending_outbound()
+    kinds = [json.loads(e.payload)["kind"] for e in fact_events]
+    assert "transcript-truncated" in kinds
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) == 1
+    body = json.loads(pending[0].payload)
+    assert body["record_truncated"] is True
+
+
+def test_pump_marks_and_warns_when_the_sidechain_fanout_budget_ran_out() -> None:
+    """`TranscriptBatch.sidechain_truncated` (the sidecar fan-out budget) is a distinct
+    read-incompleteness signal from the main file's own tail cap, and must latch and warn
+    exactly the same way."""
+    batch = _batch([_turn(0, "hi")], next_token="pos-1", sidechain_truncated=True)
+    ctx, _source = _ctx(ship=True, batches={"sess-a": batch})
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "source_read_truncated"
+    fact_events = ctx.store.pending_outbound()
+    kinds = [json.loads(e.payload)["kind"] for e in fact_events]
+    assert "transcript-truncated" in kinds
+
+
+def test_pump_marks_and_warns_on_a_truncated_source_read_with_no_turns() -> None:
+    """The turnless branch can be tail/sidecar-truncated too — no turns to claim a range
+    over, but the loss still needs a trace, exactly like the with-turns case above."""
+    batch = _batch([], next_token="pos-1", truncated=True)
+    ctx, _source = _ctx(ship=True, batches={"sess-a": batch})
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    assert ctx.store.pending_transcript_outbound() == []  # no wire record — nothing to ship
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "source_read_truncated"
+    fact_events = ctx.store.pending_outbound()
+    kinds = [json.loads(e.payload)["kind"] for e in fact_events]
+    assert "transcript-truncated" in kinds
 
 
 def test_pump_stops_shipping_past_the_chunk_budget_and_a_later_closure_still_finalizes() -> None:

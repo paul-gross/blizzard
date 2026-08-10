@@ -458,7 +458,7 @@
   "blizzard_mock/mock_hub/api/deps.py": {
    "comments": 3,
    "docstrings": 24,
-   "total": 168
+   "total": 169
   },
   "blizzard_mock/mock_hub/api/middleware.py": {
    "comments": 6,
@@ -506,9 +506,9 @@
    "total": 191
   },
   "blizzard_mock/mock_hub/domain/service.py": {
-   "comments": 35,
+   "comments": 34,
    "docstrings": 74,
-   "total": 707
+   "total": 706
   },
   "blizzard_mock/mock_hub/domain/state.py": {
    "comments": 6,
@@ -1233,9 +1233,9 @@
    "total": 45
   },
   "blizzard/hub/domain/transcripts.py": {
-   "comments": 11,
-   "docstrings": 30,
-   "total": 214
+   "comments": 12,
+   "docstrings": 27,
+   "total": 215
   },
   "blizzard/hub/domain/work.py": {
    "comments": 44,
@@ -1608,9 +1608,9 @@
    "total": 0
   },
   "blizzard/hub/store/schema.py": {
-   "comments": 246,
+   "comments": 243,
    "docstrings": 6,
-   "total": 811
+   "total": 808
   },
   "blizzard/hub/work_sources/__init__.py": {
    "comments": 0,
@@ -1859,8 +1859,8 @@
   },
   "blizzard/runner/config.py": {
    "comments": 76,
-   "docstrings": 65,
-   "total": 612
+   "docstrings": 63,
+   "total": 610
   },
   "blizzard/runner/domain/__init__.py": {
    "comments": 0,
@@ -1970,7 +1970,7 @@
   "blizzard/runner/harness/internal/claude_code_normalizer.py": {
    "comments": 28,
    "docstrings": 34,
-   "total": 545
+   "total": 546
   },
   "blizzard/runner/harness/internal/claude_code_transcript.py": {
    "comments": 37,
@@ -1990,7 +1990,7 @@
   "blizzard/runner/harness/transcript.py": {
    "comments": 11,
    "docstrings": 55,
-   "total": 206
+   "total": 207
   },
   "blizzard/runner/harness/usage.py": {
    "comments": 2,
@@ -2133,14 +2133,14 @@
    "total": 44
   },
   "blizzard/runner/loop/transcript_drain.py": {
-   "comments": 19,
-   "docstrings": 12,
+   "comments": 18,
+   "docstrings": 11,
    "total": 116
   },
   "blizzard/runner/loop/transcript_pump.py": {
-   "comments": 35,
-   "docstrings": 29,
-   "total": 319
+   "comments": 32,
+   "docstrings": 27,
+   "total": 332
   },
   "blizzard/runner/loop/usage.py": {
    "comments": 4,
@@ -2353,9 +2353,9 @@
    "total": 33
   },
   "blizzard/runner/store/migrations/versions/20260808_2300_transcript_segments.py": {
-   "comments": 4,
+   "comments": 3,
    "docstrings": 6,
-   "total": 77
+   "total": 76
   },
   "blizzard/runner/store/migrations/versions/20260809_2330_transcript_sidechain_warned_agents.py": {
    "comments": 0,
@@ -2369,13 +2369,13 @@
   },
   "blizzard/runner/store/repository.py": {
    "comments": 4,
-   "docstrings": 373,
-   "total": 967
+   "docstrings": 372,
+   "total": 966
   },
   "blizzard/runner/store/schema.py": {
-   "comments": 126,
+   "comments": 125,
    "docstrings": 5,
-   "total": 505
+   "total": 504
   },
   "blizzard/runner/transcripts/__init__.py": {
    "comments": 0,
@@ -2530,7 +2530,7 @@
   "blizzard/wire/transcript_segment.py": {
    "comments": 1,
    "docstrings": 30,
-   "total": 130
+   "total": 131
   },
   "blizzard/wire/user.py": {
    "comments": 0,
@@ -2700,9 +2700,9 @@
    "total": 623
   },
   "runner_fakes.py": {
-   "comments": 49,
+   "comments": 51,
    "docstrings": 40,
-   "total": 715
+   "total": 720
   },
   "service/__init__.py": {
    "comments": 0,
@@ -3980,19 +3980,19 @@
    "total": 105
   },
   "test_transcript_drain.py": {
-   "comments": 18,
-   "docstrings": 31,
-   "total": 400
+   "comments": 27,
+   "docstrings": 40,
+   "total": 476
   },
   "test_transcript_ingest_service.py": {
-   "comments": 9,
+   "comments": 11,
    "docstrings": 8,
-   "total": 357
+   "total": 359
   },
   "test_transcript_pump.py": {
-   "comments": 80,
-   "docstrings": 68,
-   "total": 773
+   "comments": 86,
+   "docstrings": 87,
+   "total": 928
   },
   "test_transcript_segment_store.py": {
    "comments": 6,

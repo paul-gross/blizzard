@@ -1,4 +1,4 @@
-"""transcript_segments.sidechain_warned_agents (review F2, blizzard#246) — latches the
+"""transcript_segments.sidechain_warned_agents (blizzard#246) — latches the
 dropped-sidechain fact-lane warning per (segment, agent_id) instead of firing it every tick.
 
 Revision ID: 20260809_2330_runner_transcript_sidechain_warned_agents

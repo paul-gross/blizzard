@@ -3923,6 +3923,10 @@
             "title": "Input Shape",
             "type": "string"
           },
+          "input_truncated": {
+            "title": "Input Truncated",
+            "type": "boolean"
+          },
           "input_unparsed": {
             "anyOf": [
               {
@@ -3972,7 +3976,8 @@
           "input_shape",
           "tool_use_id",
           "output",
-          "output_truncated"
+          "output_truncated",
+          "input_truncated"
         ],
         "title": "ToolCallSegmentView",
         "type": "object"

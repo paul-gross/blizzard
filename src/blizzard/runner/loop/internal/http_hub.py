@@ -34,7 +34,7 @@ _log = get_logger("blizzard.runner.hub")
 #: The prefix every runner->hub call in this client goes under (issue #87).
 _FLEET_API = "/api/fleet"
 
-#: Overrides the shared client's own default timeout for this one call (review F3, #246).
+#: Overrides the shared client's own default timeout for this one call (issue #246).
 _TRANSCRIPT_PUSH_TIMEOUT_SECONDS = 5.0
 
 

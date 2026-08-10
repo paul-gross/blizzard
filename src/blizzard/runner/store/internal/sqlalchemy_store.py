@@ -166,10 +166,10 @@ OPEN_LEASE = Unclosed(leases.c.lease_id, lease_closures.c.lease_id)
 
 
 def _enqueue_transcript_final(conn, segment, *, at: datetime) -> None:  # type: ignore[no-untyped-def]
-    """Enqueue a marker noting ``segment`` is finalized (issue #246) — a minimal row, not
-    the wire-shaped ``TranscriptSegmentRecord`` itself (review F8): that body is rendered
-    at the drain boundary from the ledger row (``bzh:dependency-inversion``). Ships
-    unconditionally, regardless of ``[transcripts] ship`` or whether a pump ever ran."""
+    """Enqueue a marker noting ``segment`` is finalized (issue #246) — a minimal row; the
+    wire-shaped ``TranscriptSegmentRecord`` itself is rendered at the drain boundary from
+    the ledger row (``bzh:dependency-inversion``). Ships unconditionally, regardless of
+    ``[transcripts] ship`` or whether a pump ever ran."""
     conn.execute(
         transcript_outbound_buffer.insert().values(
             segment_id=str(segment.segment_id),
@@ -751,14 +751,14 @@ class SqlAlchemyRunnerStore:
                 .select_from(leases.join(lease_context, leases.c.lease_id == lease_context.c.lease_id))
                 .where(leases.c.lease_id == lease_id)
             ).one()
-            # Carries a resumed session's cursor forward (review F3) — the cross-lease
-            # case finds its predecessor ALREADY finalized, so read regardless of that.
+            # Carries a resumed session's cursor forward — the cross-lease case finds its
+            # predecessor already finalized, so this reads regardless of finalization.
             prior_segment = conn.execute(
                 select(transcript_segments)
                 .where(transcript_segments.c.chunk_id == context_row.chunk_id)
                 .where(transcript_segments.c.session_id == session_id)
-                # `segment_id` tie-breaks `stamped_at` — a same-instant pair would otherwise
-                # pick nondeterministically across backends (review F5, `bzh:sql-portable`).
+                # `segment_id` tie-breaks `stamped_at` (`bzh:sql-portable`) — a same-instant
+                # pair would otherwise pick nondeterministically across backends.
                 .order_by(transcript_segments.c.stamped_at.desc(), transcript_segments.c.segment_id.desc())
                 .limit(1)
             ).one_or_none()
@@ -899,8 +899,8 @@ class SqlAlchemyRunnerStore:
 
     def mark_transcript_record_truncated(self, segment_id: str, *, reason: str) -> bool:
         with self._begin() as conn:
-            # Warn once per segment per REASON, not once ever (review F14): a repeat of the
-            # SAME reason is a no-op, but a later, worse reason still overwrites and warns.
+            # Warn once per segment per reason: a repeat of the same reason is a no-op,
+            # but a later, worse reason still overwrites and warns.
             result = conn.execute(
                 transcript_segments.update()
                 .where(transcript_segments.c.segment_id == segment_id)

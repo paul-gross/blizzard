@@ -20,6 +20,7 @@ class ToolCallSegmentView(BaseModel):
     tool_use_id: str | None
     output: str | None
     output_truncated: bool
+    input_truncated: bool
 
 
 class SidechainSegmentView(BaseModel):

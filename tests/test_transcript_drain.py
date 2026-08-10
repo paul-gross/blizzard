@@ -16,6 +16,7 @@ from blizzard.runner.loop import transcript_drain as transcript_drain_module
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.transcript_drain import TranscriptDrain
 from blizzard.runner.store.repository import NewLease
+from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -218,6 +219,25 @@ def test_drain_renders_a_final_marker_from_the_ledger_row_not_a_hand_built_paylo
     assert final.record_truncated is False
 
 
+def test_drain_renders_a_final_marker_as_truncated_when_the_segment_carries_a_reason() -> None:
+    """A segment whose only hub row ends up being the final marker (e.g. a sibling segment
+    already exhausted the chunk budget) must still report `record_truncated: true` — not
+    the hardcoded `False` a genuinely clean segment gets."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    ctx.store.stop_transcript_segment_shipping(segment_id, reason="chunk_budget_exceeded")
+    ctx.store.record_closure(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+
+    TranscriptDrain(ctx).run()
+
+    final_pushes = [r for r in hub.transcripts_pushed if r.final]
+    assert len(final_pushes) == 1
+    assert final_pushes[0].record_truncated is True
+
+
 def test_drain_renders_a_final_marker_on_the_sentinel_version_when_no_pump_ever_ran() -> None:
     """review F8: a segment that closes with no pump read ever having run still carries its
     normalizer-version sentinel on the ledger row (``bzh``'s "never ran" convention) —
@@ -306,6 +326,36 @@ def test_drain_surfaces_a_hub_cap_rejection_never_silently() -> None:
     assert payload["detail"] == {"segment_id": segment_id, "reason": "hub_capped"}
 
 
+def test_drain_marks_a_hub_cap_rejection_on_replay_after_a_lost_ack() -> None:
+    """A crash in the after-submit.before-ack window (`_CP_AFTER_SUBMIT`) must not read
+    the retry's ack as ordinary idempotency — the hub's replay response must still
+    report `capped`, so the segment still gets marked and warned, not silently skipped."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    seq = _enqueue_delta(ctx, segment_id, cursor="pos-1")
+    hub.reject_transcript_seqs = {seq}
+    # The hub side of a first delivery attempt completing durably, with no local
+    # post-ack work ever running — the exact window `_CP_AFTER_SUBMIT` names.
+    delta = ctx.store.pending_transcript_outbound()[0]
+    record = TranscriptSegmentRecord.model_validate({"seq": delta.seq, **json.loads(delta.payload)})
+    hub.push_transcripts(TranscriptSegmentBatch(runner_id="r1", records=[record]))
+    assert ctx.store.pending_transcript_outbound() == [delta]  # still buffered — no local ack ran
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason is None  # not marked yet — the crash pre-empted it
+
+    TranscriptDrain(ctx).run()  # the retry
+
+    assert ctx.store.pending_transcript_outbound() == []  # finally cleared locally
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "hub_capped"
+    fact_events = ctx.store.pending_outbound()
+    assert len(fact_events) == 1
+    assert json.loads(fact_events[0].payload)["kind"] == "transcript-truncated"
+
+
 def test_drain_acks_an_already_applied_record_without_redelivering() -> None:
     """A replayed batch past the hub's own high-water mark reports already_applied — the
     drain still clears it locally rather than treating it as pending forever."""
@@ -352,6 +402,32 @@ def test_drain_bounds_its_own_per_run_wall_clock() -> None:
 
     assert hub.transcripts_pushed == []  # the wall-clock bound was already past on the first check
     assert len(ctx.store.pending_transcript_outbound()) == 2
+
+
+def test_drain_never_queries_pending_once_the_pump_alone_exhausts_the_deadline() -> None:
+    """The pump may consume the whole shared deadline on its own — the flush must check
+    the deadline before its own (up to 50-row) query, not just inside its loop after
+    already paying for it."""
+    hub = FakeHub()
+    step = timedelta(seconds=transcript_drain_module._MAX_SECONDS_PER_RUN + 1)
+    ctx = _ctx(hub, clock=_SteppingClock(_NOW, step=step))
+    segment_id = _spawn_one_segment(ctx)
+    _enqueue_delta(ctx, segment_id, cursor="pos-1")
+
+    calls = 0
+    real_pending = ctx.store.pending_transcript_outbound
+
+    def _counting_pending(*args, **kwargs):  # type: ignore[no-untyped-def]
+        nonlocal calls
+        calls += 1
+        return real_pending(*args, **kwargs)
+
+    ctx.store.pending_transcript_outbound = _counting_pending  # type: ignore[method-assign]
+
+    TranscriptDrain(ctx).run()
+
+    assert calls == 0  # the query itself is never reached
+    assert hub.transcripts_pushed == []
 
 
 class _RaisingTranscriptSource:

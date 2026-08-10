@@ -96,8 +96,8 @@ def _content_view(segment_id: str, records: list[SegmentRecordContent]) -> Trans
     return TranscriptSegmentContentView(
         segment_id=segment_id,
         final=any(record.final for record in records),
-        # A cap rejection (this hub's own) OR a runner-declared `record_truncated`
-        # (review F5) — an accepted record the runner itself had to ship turns-empty.
+        # A cap rejection (this hub's own) OR a runner-declared `record_truncated` — an
+        # accepted record the runner itself had to ship turns-empty.
         truncated=any(record.rejected or record.record_truncated for record in records),
         turns=turns,
     )

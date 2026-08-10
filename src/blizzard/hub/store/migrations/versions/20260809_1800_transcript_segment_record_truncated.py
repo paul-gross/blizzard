@@ -1,5 +1,5 @@
-"""transcript_segments.record_truncated (review F5, blizzard#246, hub store tree) —
-the runner's own cap declaration, distinct from `rejected`. Nullable, no backfill.
+"""transcript_segments.record_truncated (blizzard#246, hub store tree) — the runner's
+own cap declaration, distinct from `rejected`. Nullable, no backfill.
 
 Revision ID: 20260809_1800_hub_transcript_segment_record_truncated
 Revises: 20260809_1200_hub_transcript_segments

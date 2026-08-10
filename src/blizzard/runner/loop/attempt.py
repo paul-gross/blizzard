@@ -237,9 +237,9 @@ class Attempt:
         )
 
     def _pump_lease_before_close(self) -> None:
-        """D3's promise applies here too (review F4): bounded like the tick's ordinary
-        drain, and exception-isolated, so neither a slow transcript read nor a raised
-        exception can delay or fail the closure itself."""
+        """D3's promise applies here too: bounded like the tick's ordinary drain, and
+        exception-isolated, so neither a slow transcript read nor a raised exception can
+        delay or fail the closure itself."""
         deadline = self.ctx.clock.now() + timedelta(seconds=PUMP_LEASE_MAX_SECONDS)
         try:
             TranscriptPump(self.ctx).pump_lease(self.lease.lease_id, deadline=deadline)

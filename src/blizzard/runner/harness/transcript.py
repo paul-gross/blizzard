@@ -52,6 +52,7 @@ class ToolCall:
     tool_use_id: str | None
     output: str | None
     output_truncated: bool
+    input_truncated: bool
 
 
 @dataclass(frozen=True)

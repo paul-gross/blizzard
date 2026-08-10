@@ -472,10 +472,10 @@ transcript_segments = Table(
     # the source seam's "never ran" sentinel at spawn, so a closure always has one to declare.
     Column("normalizer_version", String, nullable=False),
     Column("harness_version", String, nullable=True),
-    # Two fields, not one (review F1): `truncated_reason` never latches; `shipping_stopped_reason` does.
+    # Two fields, not one: `truncated_reason` never latches; `shipping_stopped_reason` does.
     Column("truncated_reason", String, nullable=True),  # NULL = no record ever shrunk
     Column("shipping_stopped_reason", String, nullable=True),  # NULL = still shipping (D4)
-    # JSON array of subagent `agent_id`s already warned about on the fact lane (review F2).
+    # JSON array of subagent `agent_id`s already warned about on the fact lane.
     Column("sidechain_warned_agents", Text, nullable=True),  # NULL = none warned yet
     Column("finalized_at", UtcDateTime, nullable=True),  # NULL = still open; set by step close
     Column("stamped_at", UtcDateTime, nullable=False),
@@ -499,7 +499,6 @@ transcript_outbound_buffer = Table(
     # NULL = pending. An acked non-final row is deleted, never reaching this state; an
     # acked final row IS marked here — its continued presence is the exactly-once receipt.
     Column("acked_at", UtcDateTime, nullable=True),
-    # Real SQLite AUTOINCREMENT (review F1): a bare `INTEGER PRIMARY KEY` would reuse a
-    # pruned row's rowid, reissuing a seq the hub already marked applied.
+    # Real SQLite AUTOINCREMENT: a bare `INTEGER PRIMARY KEY` would reuse a pruned rowid.
     sqlite_autoincrement=True,
 )

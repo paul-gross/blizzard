@@ -196,9 +196,11 @@ def test_an_oversized_record_is_rejected_acked_and_advances_the_high_water(tmp_p
     # D6: the advance is *durable*, not just returned — a cap rejection must never be
     # re-adjudicated on replay, so the mark has to survive the call that made it.
     assert store.high_water("r1") == 1
+    # A replay must still report the cap outcome — a lost-ack retry (e.g. a runner crash
+    # between the hub's apply and its own local ack) must not read as ordinary idempotency.
     replay = service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json=big)])
-    assert replay.already_applied == [1]
-    assert replay.capped == []
+    assert replay.already_applied == []
+    assert replay.capped == [1]
     [entry] = store.segments_for_chunk("ch_1")
     assert entry.truncated is True
 

@@ -153,7 +153,12 @@ class FakeHub:
         applied, already, capped = [], [], []
         for record in sorted(batch.records, key=lambda r: r.seq):
             if record.seq <= mark:
-                already.append(record.seq)
+                # Mirrors the real hub's own replay fix: a lost-ack retry of an
+                # already-decided seq still reports its cap outcome, not bare idempotency.
+                if record.seq in self.reject_transcript_seqs:
+                    capped.append(record.seq)
+                else:
+                    already.append(record.seq)
                 continue
             mark = record.seq
             if record.seq in self.reject_transcript_seqs:
