@@ -390,6 +390,12 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                     time.sleep(0.3)
                 assert hub.get("/api/questions").json() == [], "the board answer did not close the open question"
 
+                # B's landing frees the runner's only agent slot in the same tick (blizzard#202).
+                page.get_by_test_id("runner-toggle").click()  # Pause — the *hub's* brake, not the runner's own
+                expect(page.get_by_test_id("runner")).to_have_attribute("data-hub-paused", "true")
+                expect(page.get_by_test_id("runner-hub-paused")).to_be_visible()
+                expect(page.get_by_test_id("runner-locally-paused")).to_have_count(0)
+
                 # --- Resume to done, chip flips again, dock shows history + artifacts --
                 status = _tick_until(config, hub, chunk_b, fenced, {"done", "needs_human", "stopped"}, 120.0)
                 assert status == "done", f"survivor did not land after the board answer (status {status!r})"
@@ -448,12 +454,8 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 )
 
                 # --- Pause brake from the board: A stays ready while paused ------------
-                expect(col_cards("ready")).to_have_count(1)  # A alone remains ready
-                page.get_by_test_id("runner-toggle").click()  # Pause
-                # The board's toggle drives the *hub's* brake, not the runner's own.
+                expect(col_cards("ready")).to_have_count(1)  # A alone remains ready — the brake held
                 expect(page.get_by_test_id("runner")).to_have_attribute("data-hub-paused", "true")
-                expect(page.get_by_test_id("runner-hub-paused")).to_be_visible()
-                expect(page.get_by_test_id("runner-locally-paused")).to_have_count(0)
 
                 _tick_n(config, fenced, 4)  # PULL reads paused → FILL claims nothing
                 assert hub.get(f"/api/chunks/{chunk_a}").json()["status"] == "ready", "paused runner still claimed A"
