@@ -2,8 +2,7 @@
 projection of #245's normalized turn model onto shipped, hub-stored content.
 
 A record is one shipped **turn-range slice** of a segment (D1); ``seq`` is the lane's
-high-water sequence (D7), ``(segment_id, turn_range_start)`` the re-offer dedupe key (D8).
-``wire/transcript.py`` imports ``TurnSegmentView`` too, as the runner's lease-transcript shape (blizzard#248 D1)."""
+high-water sequence (D7), ``(segment_id, turn_range_start)`` the re-offer dedupe key (D8)."""
 
 from __future__ import annotations
 
@@ -36,10 +35,10 @@ class SidechainSegmentView(BaseModel):
 
 
 class TurnSegmentView(BaseModel):
-    """One normalized turn, carried in full — mirrors
-    :class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is
-    **segment-relative**, minted by the producer (D9) — never the batch-local, unstable
-    ``NormalizedTurn.index``. ``kind`` is a closed vocabulary — ``docs/versioning.md``."""
+    """One normalized turn, carried in full — mirrors :class:`~blizzard.runner.harness.transcript.NormalizedTurn`.
+    ``index``'s stability is per-producer: **segment-relative** and stable (D9) from the shipping lane, but
+    batch-local and read-unstable, sliding with the recency window, from the runner's lease-transcript route
+    (blizzard#248 D1). ``kind`` is closed — ``docs/versioning.md``."""
 
     index: int
     #: Closed to :data:`TurnKind` — a viewer branches on it turn-by-turn — while ``link``/

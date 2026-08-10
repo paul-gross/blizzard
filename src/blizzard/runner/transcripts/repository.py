@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
 
-#: The panel's turn vocabulary, widened for thinking turns and an unlinked sidechain's own
-#: top-level entry (blizzard#248 D2). ``ask``/``verdict`` stay deferred — not derivable here.
+#: The shared turn wire vocabulary — closes ``TurnSegmentView.kind`` too (blizzard#248 D1),
+#: widened for thinking/unlinked-sidechain (D2); ``ask``/``verdict`` stay deferred, not derivable here.
 TurnKind = Literal["env", "asst", "tool", "thinking", "sidechain"]
 
 #: Why a transcript is unavailable — all three are ordinary, expected states of a
@@ -52,10 +52,10 @@ class Sidechain:
 
 @dataclass(frozen=True)
 class Turn:
-    """One conversation turn, carried in full (blizzard#248 D2). ``tool``/``thinking_redacted``/
-    ``sidechain`` populate only their own ``kind``, except a ``"sidechain"`` turn's own
-    ``sidechain``, which stands alone. ``tool.output`` is ``None`` while pending — the live
-    steady state. ``truncated`` is block-level, distinct from :attr:`Transcript.truncated`."""
+    """One conversation turn, carried in full (blizzard#248 D2). ``tool``/``sidechain`` populate only
+    on a ``kind="tool"`` turn, except a ``"sidechain"`` turn's own ``sidechain``, which stands alone
+    (unlinked); ``thinking_redacted`` is ``kind="thinking"``-only. ``tool.output`` is ``None`` while
+    pending; ``truncated`` is block-level, distinct from :attr:`Transcript.truncated`."""
 
     index: int
     kind: TurnKind
