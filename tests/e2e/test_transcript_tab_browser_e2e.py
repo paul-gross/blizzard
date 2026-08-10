@@ -223,8 +223,13 @@ def test_chunk_transcripts_tab_browser(tmp_path: Path, chromium_available: bool)
                 thinking.locator("summary").click()
                 expect(thinking.locator(".th-body")).to_have_text("weighing two approaches before committing to one")
 
-                # The nested sidechain is inline under its spawning tool call.
-                expect(page.get_by_test_id("transcript-sidechain-nested")).to_contain_text("surveying callers now")
+                # The nested sidechain is inline under its spawning tool call — expand the
+                # card first: a closed `<details>` still has `textContent` (round-2 review:F9).
+                tool_call = page.locator(".turn.k-tool .tool-call")
+                tool_call.locator("summary").click()
+                nested = page.get_by_test_id("transcript-sidechain-nested")
+                expect(nested).to_be_visible()
+                expect(nested).to_contain_text("surveying callers now")
 
                 # Follow the continues-in link to the second segment.
                 page.get_by_test_id("transcript-continues-in").click()
