@@ -1,5 +1,5 @@
 import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
-import { deriveTranscriptSteps } from './transcript-steps';
+import { deriveTranscriptSteps, resolveSegmentSeams } from './transcript-steps';
 
 function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): TranscriptSegmentIndexEntry {
   return {
@@ -114,6 +114,29 @@ describe('deriveTranscriptSteps', () => {
     expect(steps.every((s) => !s.current)).toBe(true);
   });
 
+  it('skips a graph-entry transition with no origin node, matching chunk-timeline.ts\'s own truthiness guard (review:F4)', () => {
+    const steps = deriveTranscriptSteps(
+      [],
+      [transition({ from_node_id: null, epoch: 1 }), transition({ from_node_id: 'build', epoch: 2 })],
+      { nodeId: null, nodeName: null, epoch: null },
+    );
+
+    expect(steps.map((s) => s.key)).toEqual(['build:2']);
+  });
+
+  it('suppresses the in-flight step when its epoch is already claimed by a history row, even under a different node (review:F3)', () => {
+    // `current_node_id` can already name the next node while `latest_epoch` still
+    // names the previous step's — the next lease hasn't minted its own epoch yet.
+    const steps = deriveTranscriptSteps(
+      [],
+      [transition({ from_node_id: 'build', epoch: 1, to_node_id: 'review' })],
+      { nodeId: 'review', nodeName: 'Review', epoch: 1 },
+    );
+
+    expect(steps.map((s) => s.key)).toEqual(['build:1']);
+    expect(steps.every((s) => !s.current)).toBe(true);
+  });
+
   it('a single-segment step has no adjacent segment on either side', () => {
     const steps = deriveTranscriptSteps(
       [segment({ segment_id: 'only', node_id: 'build', epoch: 2, spawn_generation: 0 })],
@@ -122,5 +145,39 @@ describe('deriveTranscriptSteps', () => {
     );
 
     expect(steps[0].segments).toHaveLength(1);
+  });
+});
+
+describe('resolveSegmentSeams (review:F11)', () => {
+  const steps = deriveTranscriptSteps(
+    [
+      segment({ segment_id: 'first', node_id: 'build', epoch: 2, spawn_generation: 0 }),
+      segment({ segment_id: 'second', node_id: 'build', epoch: 2, spawn_generation: 1 }),
+      segment({ segment_id: 'third', node_id: 'build', epoch: 2, spawn_generation: 2 }),
+    ],
+    [transition({ from_node_id: 'build', epoch: 2 })],
+    { nodeId: null, nodeName: null, epoch: null },
+  );
+
+  it('resolves both seams for a middle segment', () => {
+    const seams = resolveSegmentSeams(steps, 'second');
+    expect(seams.continuedFrom?.segment_id).toBe('first');
+    expect(seams.continuesIn?.segment_id).toBe('third');
+  });
+
+  it('has no continued-from seam for the first segment in its step', () => {
+    expect(resolveSegmentSeams(steps, 'first').continuedFrom).toBeNull();
+  });
+
+  it('has no continues-in seam for the last segment in its step', () => {
+    expect(resolveSegmentSeams(steps, 'third').continuesIn).toBeNull();
+  });
+
+  it('resolves no seams when no segment is open', () => {
+    expect(resolveSegmentSeams(steps, null)).toEqual({ continuedFrom: null, continuesIn: null });
+  });
+
+  it('resolves no seams for a segment id that names nothing in any step', () => {
+    expect(resolveSegmentSeams(steps, 'ghost')).toEqual({ continuedFrom: null, continuesIn: null });
   });
 });

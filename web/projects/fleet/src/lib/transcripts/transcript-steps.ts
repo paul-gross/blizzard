@@ -56,10 +56,12 @@ export function deriveTranscriptSteps(
 
   const steps: TranscriptStep[] = [];
   const claimed = new Set<string>();
+  const claimedEpochs = new Set<number>();
 
   for (const transition of history) {
-    if (transition.from_node_id === null) continue; // the graph's own entry step has no "from"
+    if (!transition.from_node_id) continue; // the graph's own entry step has no "from" — matches chunk-timeline.ts's own guard
     const key = `${transition.from_node_id}:${transition.epoch}`;
+    claimedEpochs.add(transition.epoch);
     if (claimed.has(key)) continue; // a step that bounced back and forward again names one key once
     claimed.add(key);
     steps.push({
@@ -73,7 +75,18 @@ export function deriveTranscriptSteps(
     });
   }
 
-  if (current.nodeId !== null && current.nodeId !== DONE_TERMINAL && current.epoch !== null) {
+  // Epochs are chunk-globally unique (minted once, at spawn), so an epoch a history
+  // row already claimed can never legitimately belong to the in-flight step too — it
+  // means a transition has already landed and `current_node_id` has moved on while
+  // `latest_epoch` (minted only at the *next* lease's spawn) hasn't caught up yet
+  // (`review:F3`). Suppressing the step here, rather than rendering it with a stale
+  // epoch, avoids a false `<next node> · epoch <previous epoch>` "in progress" step.
+  if (
+    current.nodeId !== null &&
+    current.nodeId !== DONE_TERMINAL &&
+    current.epoch !== null &&
+    !claimedEpochs.has(current.epoch)
+  ) {
     const key = `${current.nodeId}:${current.epoch}`;
     if (!claimed.has(key)) {
       claimed.add(key);
@@ -103,4 +116,37 @@ export function deriveTranscriptSteps(
   }
 
   return steps;
+}
+
+/** The open segment's resume-seam links (blizzard#248 D6), both derived from the same
+ * ordering: {@link TranscriptStep.segments} is already sorted by `spawn_generation`, so
+ * the segment immediately before/after the open one in its own step's array *is* the
+ * continued-from/continues-in link — no separate field carries either direction. */
+export interface SegmentSeams {
+  readonly continuedFrom: TranscriptSegmentIndexEntry | null;
+  readonly continuesIn: TranscriptSegmentIndexEntry | null;
+}
+
+const NO_SEAMS: SegmentSeams = { continuedFrom: null, continuesIn: null };
+
+/**
+ * Resolve one open segment's resume-seam links against `steps` (D5's own groups) — a
+ * pure function over `(steps, segmentId)`, unit-testable without a mounted component
+ * (`review:F11`), the same shape `deriveTranscriptSteps` already gives the step
+ * derivation itself.
+ */
+export function resolveSegmentSeams(
+  steps: readonly TranscriptStep[],
+  segmentId: string | null,
+): SegmentSeams {
+  if (segmentId === null) return NO_SEAMS;
+  for (const step of steps) {
+    const index = step.segments.findIndex((s) => s.segment_id === segmentId);
+    if (index === -1) continue;
+    return {
+      continuedFrom: index === 0 ? null : step.segments[index - 1],
+      continuesIn: step.segments[index + 1] ?? null,
+    };
+  }
+  return NO_SEAMS;
 }

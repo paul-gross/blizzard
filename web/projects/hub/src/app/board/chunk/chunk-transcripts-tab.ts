@@ -5,6 +5,7 @@ import {
   KitAsyncState,
   type KitAsyncStateValue,
   parseSidechainPath,
+  resolveSegmentSeams,
   resolveSidechainByPath,
   type SidechainOpenEvent,
   type TranscriptSegmentContentView,
@@ -328,32 +329,14 @@ export class ChunkTranscriptsTab {
     }),
   );
 
-  /** The open segment's own step and its index within that step's ordered segments —
-   * `null` while no segment is open, or one names nothing in {@link steps}. */
-  private readonly openStepAndIndex = computed<{ step: TranscriptStep; index: number } | null>(() => {
-    const id = this.segmentId();
-    if (id === null) return null;
-    for (const step of this.steps()) {
-      const index = step.segments.findIndex((s) => s.segment_id === id);
-      if (index !== -1) return { step, index };
-    }
-    return null;
-  });
+  /** The open segment's resume-seam links (blizzard#248 D6) — the pure derivation itself
+   * lives beside {@link deriveTranscriptSteps} (`review:F11`), tested there without a
+   * mounted fixture; this component only resolves it against its own {@link steps}. */
+  private readonly seams = computed(() => resolveSegmentSeams(this.steps(), this.segmentId()));
 
-  /** The resume-seam link back (blizzard#248 D6) — derived from the same ordering as
-   * {@link continuesIn}, not a separate field. */
-  protected readonly continuedFrom = computed<TranscriptSegmentIndexEntry | null>(() => {
-    const found = this.openStepAndIndex();
-    if (found === null || found.index === 0) return null;
-    return found.step.segments[found.index - 1];
-  });
+  protected readonly continuedFrom = computed<TranscriptSegmentIndexEntry | null>(() => this.seams().continuedFrom);
 
-  /** The resume-seam link forward (blizzard#248 D6). */
-  protected readonly continuesIn = computed<TranscriptSegmentIndexEntry | null>(() => {
-    const found = this.openStepAndIndex();
-    if (found === null) return null;
-    return found.step.segments[found.index + 1] ?? null;
-  });
+  protected readonly continuesIn = computed<TranscriptSegmentIndexEntry | null>(() => this.seams().continuesIn);
 
   /** {@link segmentData}'s turns, tail-capped at {@link MAX_RENDERED_TURNS} the same way
    * the runner panel caps its own list (`review:F7`). A sidechain's own turns pass
