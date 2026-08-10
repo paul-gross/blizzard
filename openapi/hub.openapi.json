@@ -4344,7 +4344,7 @@
         "type": "object"
       },
       "TurnSegmentView-Input": {
-        "description": "One normalized turn, carried in full \u2014 mirrors\n:class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is\n**segment-relative**, minted by the producer (D9) \u2014 never the batch-local, unstable\n``NormalizedTurn.index``.",
+        "description": "One normalized turn, carried in full \u2014 mirrors\n:class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is\n**segment-relative**, minted by the producer (D9) \u2014 never the batch-local, unstable\n``NormalizedTurn.index``. ``kind``'s own compat stance is recorded beside the field.",
         "properties": {
           "index": {
             "title": "Index",
@@ -4419,7 +4419,7 @@
         "type": "object"
       },
       "TurnSegmentView-Output": {
-        "description": "One normalized turn, carried in full \u2014 mirrors\n:class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is\n**segment-relative**, minted by the producer (D9) \u2014 never the batch-local, unstable\n``NormalizedTurn.index``.",
+        "description": "One normalized turn, carried in full \u2014 mirrors\n:class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is\n**segment-relative**, minted by the producer (D9) \u2014 never the batch-local, unstable\n``NormalizedTurn.index``. ``kind``'s own compat stance is recorded beside the field.",
         "properties": {
           "index": {
             "title": "Index",

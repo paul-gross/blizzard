@@ -1163,7 +1163,7 @@ export type TranscriptResponse = {
  * One normalized turn, carried in full — mirrors
  * :class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is
  * **segment-relative**, minted by the producer (D9) — never the batch-local, unstable
- * ``NormalizedTurn.index``.
+ * ``NormalizedTurn.index``. ``kind``'s own compat stance is recorded beside the field.
  */
 export type TurnSegmentView = {
     /**
