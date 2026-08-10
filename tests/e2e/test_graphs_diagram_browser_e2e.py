@@ -77,6 +77,21 @@ def _graph_yaml() -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
+_START_LANDING_JS = """
+(svg) => {
+  const path = svg.querySelector('[data-testid="graph-diagram-start-path"]');
+  const end = path.getPointAtLength(path.getTotalLength());
+  for (const g of svg.querySelectorAll('[data-testid="graph-diagram-node"]')) {
+    const box = g.querySelector('path.node-box').getBBox();
+    const withinX = end.x >= box.x && end.x <= box.x + box.width;
+    const atTop = end.y <= box.y + box.height && end.y >= box.y - 20;
+    if (withinX && atTop) return g.getAttribute('data-node-id');
+  }
+  return null;
+}
+"""
+
+
 def test_graphs_diagram_renders_in_the_browser(tmp_path: Path, chromium_available: bool) -> None:
     """The graph explorer's static DAG diagram, rendered by a real browser (scenario 7)."""
     if not chromium_available:
@@ -91,6 +106,7 @@ def test_graphs_diagram_renders_in_the_browser(tmp_path: Path, chromium_availabl
         assert created.status_code == 201, created.text
         graph_id = created.json()["graph_id"]
         graph_name = created.json()["name"]
+        entry_node_id = hub.get(f"/api/graphs/{graph_id}").json()["entry_node_id"]
 
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True)
@@ -129,8 +145,11 @@ def test_graphs_diagram_renders_in_the_browser(tmp_path: Path, chromium_availabl
                 expect(svg).to_be_visible()
                 # Every declared node is drawn — build, review, deliver.
                 expect(svg.get_by_test_id("graph-diagram-node")).to_have_count(3)
-                # The entry node (build) carries its ring.
-                expect(svg.get_by_test_id("graph-diagram-entry-ring")).to_have_count(1)
+                expect(svg.get_by_test_id("graph-diagram-start")).to_have_count(1)
+                assert svg.evaluate(_START_LANDING_JS) == entry_node_id, (
+                    "the START connector does not land on the entry node — blizzard#207 replaced the "
+                    "per-node entry ring with it, so geometry is all that marks which node is the entry"
+                )
                 # Forward edges are drawn and labelled with their firing choice.
                 advance_edges = svg.locator('[data-testid="graph-diagram-edge"][data-edge-kind="advance"]')
                 assert advance_edges.count() >= 1, "no advance edge rendered"
@@ -230,7 +249,7 @@ _MEASURE_DIAGRAM_JS = """
   const advance = (el) => (el ? el.getComputedTextLength() : null);
   const nodes = [];
   for (const g of document.querySelectorAll('[data-testid="graph-diagram-node"]')) {
-    const box = g.querySelector('rect.node-box').getBBox();
+    const box = g.querySelector('path.node-box').getBBox();
     const nameEl = g.querySelector('text.node-name');
     const badgeEl = g.querySelector('text.node-badge');
     const nameBox = nameEl.getBBox();
@@ -378,6 +397,16 @@ def test_diagram_geometry_matches_the_rendered_text(tmp_path: Path, chromium_ava
                 name_bound_nodes = 0
                 for seed_name, graph_id in graph_ids.items():
                     page.goto(f"http://127.0.0.1:{hub_port}/graphs/{graph_id}", wait_until="load")
+                    diagram = page.get_by_test_id("graph-diagram")
+                    expect(diagram).to_be_visible()
+                    if diagram.get_by_test_id("graph-diagram-fallback").count() > 0:
+                        # `layoutGraph`'s one documented refusal: an edge leaving the graph.
+                        edges = hub.get(f"/api/graphs/{graph_id}").json()["edges"]
+                        assert any(e["to_node_name"].startswith("graph:") for e in edges), (
+                            f"{seed_name}: fell back to the diagram-unavailable notice with every edge "
+                            "resolvable inside the graph — the browser layout regressed"
+                        )
+                        continue
                     expect(page.get_by_test_id("graph-diagram-svg")).to_be_visible()
 
                     geometry = page.evaluate(_MEASURE_DIAGRAM_JS)
