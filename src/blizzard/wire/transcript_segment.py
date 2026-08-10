@@ -39,16 +39,11 @@ class TurnSegmentView(BaseModel):
     """One normalized turn, carried in full — mirrors
     :class:`~blizzard.runner.harness.transcript.NormalizedTurn`. ``index`` is
     **segment-relative**, minted by the producer (D9) — never the batch-local, unstable
-    ``NormalizedTurn.index``. ``kind``'s own compat stance is recorded beside the field."""
+    ``NormalizedTurn.index``. ``kind`` is a closed vocabulary — ``docs/versioning.md``."""
 
     index: int
-    #: Closed to :data:`TurnKind`, unlike ``link``/``input_shape`` below (`review:F10`) — a
-    #: viewer branches its rendering on ``kind`` turn-by-turn, where those two gate at most
-    #: one tolerant string check each. Compat cost, accepted for now: an older runner
-    #: shipping an unrecognized kind 422s the whole ingest batch, and an already-stored
-    #: out-of-vocabulary kind raises on read, rather than either round-tripping opaquely
-    #: (#247's original ``str`` stance). Unreachable today — no runner ships a segment yet
-    #: (#246) — revisit (an open ``str`` with a fallback, or a wire version bump) before it does.
+    #: Closed to :data:`TurnKind` — a viewer branches on it turn-by-turn — while ``link``/
+    #: ``input_shape`` stay open (`review:F10`); the cost is ``docs/versioning.md``'s.
     kind: TurnKind
     timestamp: str | None
     text: str

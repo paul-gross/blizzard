@@ -37,6 +37,26 @@ concrete, not a feeling. A change is breaking when it changes any of:
 Adding a new optional config key, a new route, a new event type, or a new
 migration that walks back cleanly is **not** breaking.
 
+## Closed wire vocabularies
+
+Most string-valued wire fields stay open strings, so an unrecognized value
+round-trips rather than failing. One does not: `TurnSegmentView.kind`
+(`src/blizzard/wire/transcript_segment.py`) is typed as a closed `TurnKind`
+literal, because a transcript viewer branches its rendering on it turn by turn —
+where the sibling `link` and `input_shape` each gate at most one tolerant check
+and stay open.
+
+Closing it has a price, paid on both directions of that model's use: a runner
+shipping a kind an older hub doesn't know 422s the **whole ingest batch** rather
+than storing it opaquely, and a stored segment carrying an out-of-vocabulary kind
+raises on read instead of round-tripping. Adding a value to the vocabulary is
+therefore breaking on the skew window above, not additive.
+
+Nothing pays that price today — no runner ships a transcript segment yet
+(blizzard#246) — which is what makes the closed vocabulary affordable. Revisit
+before one does: either reopen the field to `str` with a rendering fallback, or
+carry the vocabulary behind a negotiated wire version.
+
 ## Supported skew — hub and runner versions
 
 **A runner may lag its hub by one minor version; a hub never requires a runner

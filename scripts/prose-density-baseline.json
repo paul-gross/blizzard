@@ -456,9 +456,9 @@
    "total": 94
   },
   "blizzard_mock/mock_hub/api/deps.py": {
-   "comments": 2,
+   "comments": 3,
    "docstrings": 14,
-   "total": 121
+   "total": 123
   },
   "blizzard_mock/mock_hub/api/middleware.py": {
    "comments": 4,
@@ -468,7 +468,7 @@
   "blizzard_mock/mock_hub/api/routes.py": {
    "comments": 7,
    "docstrings": 8,
-   "total": 202
+   "total": 208
   },
   "blizzard_mock/mock_hub/app.py": {
    "comments": 0,
@@ -506,19 +506,19 @@
    "total": 191
   },
   "blizzard_mock/mock_hub/domain/service.py": {
-   "comments": 24,
-   "docstrings": 70,
-   "total": 648
+   "comments": 30,
+   "docstrings": 74,
+   "total": 687
   },
   "blizzard_mock/mock_hub/domain/state.py": {
-   "comments": 4,
-   "docstrings": 12,
-   "total": 70
+   "comments": 6,
+   "docstrings": 21,
+   "total": 95
   },
   "blizzard_mock/mock_hub/domain/wire.py": {
-   "comments": 14,
+   "comments": 16,
    "docstrings": 13,
-   "total": 210
+   "total": 226
   },
   "blizzard_mock/mock_hub/internal/__init__.py": {
    "comments": 0,
@@ -528,7 +528,7 @@
   "blizzard_mock/mock_hub/internal/state_store.py": {
    "comments": 0,
    "docstrings": 6,
-   "total": 69
+   "total": 82
   },
   "blizzard_mock/mock_runner/__init__.py": {
    "comments": 0,
@@ -543,7 +543,7 @@
   "blizzard_mock/mock_runner/api/routes.py": {
    "comments": 0,
    "docstrings": 13,
-   "total": 199
+   "total": 201
   },
   "blizzard_mock/mock_runner/app.py": {
    "comments": 0,
@@ -583,7 +583,7 @@
   "blizzard_mock/mock_runner/domain/service.py": {
    "comments": 20,
    "docstrings": 42,
-   "total": 368
+   "total": 369
   },
   "blizzard_mock/mock_runner/internal/__init__.py": {
    "comments": 0,
@@ -2503,9 +2503,9 @@
    "total": 24
   },
   "blizzard/wire/transcript_segment.py": {
-   "comments": 0,
+   "comments": 2,
    "docstrings": 31,
-   "total": 132
+   "total": 134
   },
   "blizzard/wire/user.py": {
    "comments": 0,
@@ -2660,9 +2660,9 @@
    "total": 160
   },
   "e2e/test_transcript_tab_browser_e2e.py": {
-   "comments": 8,
+   "comments": 9,
    "docstrings": 13,
-   "total": 248
+   "total": 253
   },
   "journey/__init__.py": {
    "comments": 0,
