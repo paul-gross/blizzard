@@ -79,8 +79,9 @@ class SegmentIndexRow:
 @dataclass(frozen=True)
 class SegmentRecordContent:
     """One record's decompressed turns, in the order the content route concatenates them.
-    ``rejected`` records carry ``turns_json="[]"``. ``record_truncated`` is the
-    accepted-but-runner-emptied counterpart: also empty, but the hub stored it outright."""
+    ``rejected`` records carry ``turns_json="[]"``. ``record_truncated`` is the runner's
+    own declaration that THIS record lost content — ``turns_json`` is often non-empty
+    content the runner shrunk, not always ``"[]"``."""
 
     turn_range_start: int
     turn_range_end: int

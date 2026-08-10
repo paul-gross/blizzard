@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from structlog.testing import capture_logs
@@ -24,12 +25,13 @@ from blizzard.runner.harness.transcript import (
 from blizzard.runner.loop.attempt import FAILED, Attempt
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.transcript_pump import (
+    _MAX_BUFFERED_BYTES,
     CHUNK_TRANSCRIPT_MAX_BYTES,
     PUMP_LEASE_MAX_SECONDS,
     TRANSCRIPT_RECORD_MAX_BYTES,
     TranscriptPump,
 )
-from blizzard.runner.store.repository import NewLease
+from blizzard.runner.store.repository import BufferedTranscriptDelta, NewLease
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -152,6 +154,29 @@ def _batch(
         normalizer_version="fake/1",
         harness_version=None,
     )
+
+
+def _incomplete_batch(
+    turns: list[NormalizedTurn], *, next_token: str, unlinked_sidechains: list[SidechainConversation] | None = None
+) -> TranscriptBatch:
+    """``_batch``'s ``complete=False`` counterpart — the per-batch read budget ran out
+    before this whole window was covered, so ``next_position`` is where a caller resumes
+    RIGHT NOW, not next tick (F2, review round 7)."""
+    return replace(_batch(turns, next_token=next_token, unlinked_sidechains=unlinked_sidechains), complete=False)
+
+
+def _assert_gapless_contiguous(pending: Sequence[BufferedTranscriptDelta], *, total_turns: int) -> list[dict[str, Any]]:
+    """Every non-final buffered record's turn range, sorted, covers exactly
+    ``[0, total_turns)`` with no gap and no overlap (F1, review round 7) — the invariant
+    splitting an over-cap batch into several records must never break."""
+    bodies: list[dict[str, Any]] = sorted((json.loads(d.payload) for d in pending), key=lambda b: b["turn_range_start"])
+    expected_start = 0
+    for body in bodies:
+        assert body["turn_range_start"] == expected_start
+        assert body["turn_range_end"] >= body["turn_range_start"]
+        expected_start = body["turn_range_end"] + 1
+    assert expected_start == total_turns
+    return bodies
 
 
 def _unlinked_sidechain(agent_id: str) -> SidechainConversation:
@@ -419,10 +444,10 @@ def test_pump_shrinks_a_nested_sidechain_turns_text() -> None:
     assert segment.cursor == "pos-1"
 
 
-def test_pump_ships_an_explicit_empty_slice_when_shrinking_cannot_close_the_gap() -> None:
-    """review F2: once every shrinkable field is empty, structural overhead alone can still
-    exceed the cap — an explicit empty-turns slice over the claimed range, never a
-    still-over-cap enqueue. The range stays gapless even though the content is lost."""
+def test_pump_splits_many_small_turns_instead_of_emptying_the_whole_batch() -> None:
+    """review round 7 F1: before the fix, a WHOLE batch whose structural overhead alone
+    exceeded the cap got emptied in one explicit-empty record. Splitting into several
+    under-cap records instead needs no shrinking and drops nothing."""
     # Each turn's own JSON overhead (index/kind/timestamp/tool=None/…) is small but not
     # zero; enough turns with no shrinkable text still sums past the 1 MB cap.
     many_turns = [_turn(i, "") for i in range(20_000)]
@@ -432,26 +457,24 @@ def test_pump_ships_an_explicit_empty_slice_when_shrinking_cannot_close_the_gap(
     TranscriptPump(ctx).run()
 
     pending = ctx.store.pending_transcript_outbound()
-    assert len(pending) == 1
-    assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
-    body = json.loads(pending[0].payload)
-    assert body["turns"] == []
-    assert (body["turn_range_start"], body["turn_range_end"]) == (0, len(many_turns) - 1)
-    # review F5: this record is accepted outright by every hub-side cap (it's tiny once
-    # emptied) — `record_truncated` is the ONLY wire signal that it lost its claimed span.
-    assert body["record_truncated"] is True
+    assert len(pending) > 1  # split, not emptied whole
+    for delta in pending:
+        assert len(delta.payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
+    bodies = _assert_gapless_contiguous(pending, total_turns=len(many_turns))
+    assert all(body["turns"] != [] for body in bodies)  # nothing dropped
+    assert all(body["record_truncated"] is False for body in bodies)
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
-    assert segment.cursor == "pos-1"  # still advances — never re-reads the batch
-    assert segment.shipped_turns == len(many_turns)  # the range is claimed even though empty
-    assert segment.truncated_reason == "record_unshippable"
-    assert segment.shipping_stopped_reason is None  # transient, not a stop-shipping latch
+    assert segment.cursor == "pos-1"  # advances once — past the WHOLE batch
+    assert segment.shipped_turns == len(many_turns)
+    assert segment.truncated_reason is None  # splitting alone closed the gap
+    assert segment.shipping_stopped_reason is None
 
 
-def test_pump_shrinks_a_batch_with_many_large_shrinkable_fields() -> None:
+def test_pump_splits_a_batch_with_many_large_shrinkable_fields_instead_of_shrinking_them() -> None:
     """A batch whose oversized content spans many turns — a real catch-up window's shape —
-    must converge under the cap, not get dropped whole. Regression for a fixed-iteration
-    loop that only ever touched the single largest field per pass."""
+    now splits into several under-cap records with every byte intact (review round 7 F1),
+    rather than shrinking one combined record's content down to fit."""
     many_turns = [_tool_turn(i, output="x" * 30_000) for i in range(300)]
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(many_turns, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
@@ -459,24 +482,23 @@ def test_pump_shrinks_a_batch_with_many_large_shrinkable_fields() -> None:
     TranscriptPump(ctx).run()
 
     pending = ctx.store.pending_transcript_outbound()
-    assert len(pending) == 1
-    assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
-    body = json.loads(pending[0].payload)
-    assert len(body["turns"]) == len(many_turns)  # every turn survives, shrunk, not dropped
-    # review F6: every turn present with its content wiped to "" also passes the assertion
-    # above — assert real bytes survive, not just turn count.
-    retained = sum(len(t["tool"]["output"]) for t in body["turns"])
-    assert retained > 0
+    assert len(pending) > 1  # split, not one shrunk record
+    for delta in pending:
+        assert len(delta.payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
+    bodies = _assert_gapless_contiguous(pending, total_turns=len(many_turns))
+    outputs = [t["tool"]["output"] for body in bodies for t in body["turns"]]
+    assert len(outputs) == len(many_turns)  # every turn survives, not just some
+    assert all(len(o) == 30_000 for o in outputs)  # every byte survives — nothing shrunk
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
-    assert segment.truncated_reason == "record_cap_exceeded"
+    assert segment.truncated_reason is None  # splitting alone closed the gap
     assert segment.cursor == "pos-1"
 
 
-def test_pump_shrinks_a_severely_oversized_batch_without_emptying_every_field() -> None:
-    """review F1: a window many times over cap — the ordinary shape of a real catch-up
-    read, not a pathological one — must retain a share of its content, never empty every
-    field in the first pass. Mirrors the finding's own ~8 MB / 50-turn measurement."""
+def test_pump_splits_a_severely_oversized_batch_instead_of_shrinking_every_field() -> None:
+    """review round 7 F1: a window many times over cap — a real catch-up read's ordinary
+    shape — splits into several fully-intact records. Mirrors the finding's own ~8 MB /
+    50-turn measurement, which used to require lossy shrinking; splitting needs none."""
     window_turns = [_tool_turn(i, output="x" * 160_000) for i in range(50)]  # ~8 MB of output
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(window_turns, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
@@ -484,17 +506,16 @@ def test_pump_shrinks_a_severely_oversized_batch_without_emptying_every_field() 
     TranscriptPump(ctx).run()
 
     pending = ctx.store.pending_transcript_outbound()
-    assert len(pending) == 1
-    assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
-    body = json.loads(pending[0].payload)
-    assert len(body["turns"]) == len(window_turns)  # never drops a turn
-    retained = sum(len(t["tool"]["output"]) for t in body["turns"])
-    # Not literally 0, and not a token sliver either — the budget allows roughly cap-many
-    # bytes of content; demand at least a tenth of the cap survives, not just a nonzero byte.
-    assert retained > TRANSCRIPT_RECORD_MAX_BYTES * 0.1
+    assert len(pending) > 1  # split across several records
+    for delta in pending:
+        assert len(delta.payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
+    bodies = _assert_gapless_contiguous(pending, total_turns=len(window_turns))
+    outputs = [t["tool"]["output"] for body in bodies for t in body["turns"]]
+    assert len(outputs) == len(window_turns)  # never drops a turn
+    assert all(len(o) == 160_000 for o in outputs)  # never shrinks one either
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
-    assert segment.truncated_reason == "record_cap_exceeded"
+    assert segment.truncated_reason is None
     assert segment.cursor == "pos-1"
 
 
@@ -581,10 +602,10 @@ def test_pump_shrinks_an_oversized_unparsed_tool_input_instead_of_emptying_the_r
     assert segment.truncated_reason == "record_cap_exceeded"
 
 
-def test_pump_shrinks_many_medium_tool_inputs_instead_of_emptying_the_record() -> None:
+def test_pump_splits_many_medium_tool_inputs_instead_of_emptying_the_record() -> None:
     """Many ordinary `Edit`-shaped calls, each individually under cap, summing well over it
-    — the batch must converge to a shrunk, non-empty result, not fall into the
-    structural-overhead empty-slice branch with nothing found to shrink."""
+    — the batch splits into several under-cap records, each fully intact (review round 7
+    F1), not a single shrunk-or-emptied one."""
     edits = [_input_tool_turn(i, content="e" * 20_000) for i in range(60)]  # 60 * 20 KB > 1 MB
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(edits, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
@@ -592,15 +613,16 @@ def test_pump_shrinks_many_medium_tool_inputs_instead_of_emptying_the_record() -
     TranscriptPump(ctx).run()
 
     pending = ctx.store.pending_transcript_outbound()
-    assert len(pending) == 1
-    assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
-    body = json.loads(pending[0].payload)
-    assert len(body["turns"]) == len(edits)  # every turn survives, shrunk, not dropped
-    retained = sum(len(t["tool"]["input"]["content"]) for t in body["turns"])
-    assert retained > 0
+    assert len(pending) > 1  # split, not one shrunk record
+    for delta in pending:
+        assert len(delta.payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
+    bodies = _assert_gapless_contiguous(pending, total_turns=len(edits))
+    contents = [t["tool"]["input"]["content"] for body in bodies for t in body["turns"]]
+    assert len(contents) == len(edits)  # every turn survives, not just some
+    assert all(len(c) == 20_000 for c in contents)  # nothing shrunk
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
-    assert segment.truncated_reason == "record_cap_exceeded"
+    assert segment.truncated_reason is None  # splitting alone closed the gap
     assert segment.cursor == "pos-1"
 
 
@@ -1135,3 +1157,479 @@ def test_pump_warns_only_once_per_segment_per_agent_across_ticks() -> None:
     assert len(fact_events) == 2  # sub_1 once (tick 1), sub_2 once (tick 3) — never sub_1 again
     warnings = [json.loads(e.payload) for e in fact_events]
     assert [w["detail"]["agent_ids"] for w in warnings] == [["sub_1"], ["sub_2"]]
+
+
+# --- review round 7 F1: split an over-cap batch into several records, not one --------
+
+
+def test_pump_splits_a_batch_within_the_hub_cap_but_over_the_runner_cap() -> None:
+    """review round 7 F1: a batch within the hub's own 4 MB record cap but over the
+    runner's 1 MB one splits into multiple records, each within cap, none emptied — the
+    cursor advances exactly once, and the split records' ranges are contiguous, gapless."""
+    turns = [_tool_turn(i, output="x" * 300_000) for i in range(5)]  # ~1.5 MB total
+    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(turns, next_token="pos-1")})
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) > 1  # split, not one shrunk/emptied record
+    for delta in pending:
+        assert len(delta.payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
+    bodies = _assert_gapless_contiguous(pending, total_turns=len(turns))
+    assert all(body["turns"] != [] for body in bodies)  # none emptied
+    outputs = [t["tool"]["output"] for body in bodies for t in body["turns"]]
+    assert len(outputs) == len(turns)
+    assert all(len(o) == 300_000 for o in outputs)  # nothing shrunk either
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.cursor == "pos-1"  # advanced exactly once, past the WHOLE batch
+    assert segment.shipped_turns == len(turns)
+    assert segment.truncated_reason is None
+
+
+def _unshrinkable_tool_turn(index: int) -> NormalizedTurn:
+    """A `MultiEdit`-shaped turn with no shrinkable content at all (every string value is
+    empty) whose sheer structural bulk alone still exceeds the 1 MB cap, even shrunk to
+    nothing — the single pathological turn F1(b) needs, isolated from any sibling."""
+    edits = [{"old_string": "", "new_string": ""} for _ in range(40_000)]
+    return NormalizedTurn(
+        index=index,
+        kind="tool",
+        timestamp=_NOW,
+        text="",
+        tool=_tool_call("", input_={"edits": edits}),
+        thinking_redacted=False,
+        sidechain=None,
+        truncated=False,
+    )
+
+
+def test_pump_isolates_a_single_pathological_turn_from_its_siblings() -> None:
+    """review round 7 F1: a single turn over cap even after shrinking still falls back to
+    an explicit empty-turns record, scoped to just its own range. Sibling turns in the
+    same batch ship normally, in their own record(s), never swept up in its loss."""
+    turns = [_turn(0, "before"), _unshrinkable_tool_turn(1), _turn(2, "after")]
+    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(turns, next_token="pos-1")})
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) == 3  # the pathological turn never merges with a sibling
+    for delta in pending:
+        assert len(delta.payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
+    bodies = _assert_gapless_contiguous(pending, total_turns=len(turns))
+    empty_bodies = [b for b in bodies if b["turns"] == []]
+    assert len(empty_bodies) == 1
+    assert (empty_bodies[0]["turn_range_start"], empty_bodies[0]["turn_range_end"]) == (1, 1)  # scoped to just it
+    assert empty_bodies[0]["record_truncated"] is True
+    non_empty = [b for b in bodies if b["turns"] != []]
+    shipped_texts = [t["text"] for body in non_empty for t in body["turns"]]
+    assert shipped_texts == ["before", "after"]  # siblings ship normally, in full, unaffected
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.cursor == "pos-1"  # still advances past the whole batch
+    assert segment.truncated_reason == "record_unshippable"
+
+
+def test_pump_stops_shipping_a_split_batch_that_would_exceed_the_chunk_budget_when_summed() -> None:
+    """review round 7 F1: because every record a split batch produces advances the SAME
+    cursor write, they must ship all-or-nothing against the 64 MB per-chunk budget —
+    summed across every record the batch would produce, not just checked against one."""
+    turns = [_tool_turn(i, output="x" * 300_000) for i in range(5)]  # splits into >1 record
+    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(turns, next_token="pos-1")})
+    segment_id = _spawn_one_segment(ctx)
+    # Close enough to the budget that THIS tick's own (summed, multi-record) total tips it,
+    # but not already AT the budget — the pre-read guard already covers that simpler case.
+    ctx.store.record_transcript_delta(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor=None,
+        shipped_bytes=CHUNK_TRANSCRIPT_MAX_BYTES - 1_000_000,
+        shipped_turns=0,
+        normalizer_version="fake/1",
+        harness_version=None,
+        payload="{}",
+        created_at=_NOW,
+    )
+
+    TranscriptPump(ctx).run()
+
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) == 1  # only the seeded delta above — none of THIS tick's records shipped
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.shipping_stopped_reason == "chunk_budget_exceeded"
+    assert segment.cursor is None  # never advanced — nothing landed
+    assert segment.shipped_turns == 0  # none of the split batch's turns were claimed
+
+
+# --- review round 7 F2: `pump_lease` drains a segment fully, not just one window -----
+
+
+class _SequencedTranscriptSource:
+    """Serves a scripted sequence of batches for one session, one per call — the
+    within-one-invocation multi-read case ``pump_lease``'s drain loop (F2) needs, which
+    ``FakeTranscriptSource`` can't script (it needs external reassignment between calls,
+    impossible from inside a single ``pump_lease`` call)."""
+
+    def __init__(self, session_id: str, batches: list[TranscriptBatch]) -> None:
+        self._session_id = session_id
+        self._batches = list(batches)
+        self.turns_since_calls: list[tuple[str, str | None, TranscriptPosition | None]] = []
+
+    def turns_since(
+        self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None
+    ) -> TranscriptBatch:
+        self.turns_since_calls.append((session_id, spawn_cwd, since))
+        if session_id != self._session_id or not self._batches:
+            return TranscriptBatch(
+                session_id=session_id,
+                available=False,
+                reason="not_found",
+                turns=[],
+                unlinked_sidechains=[],
+                next_position=None,
+                complete=True,
+                truncated=False,
+                sidechain_truncated=False,
+                normalizer_version="fake/1",
+                harness_version=None,
+            )
+        return self._batches.pop(0)
+
+    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+        return []
+
+    def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return None
+
+
+def test_pump_lease_drains_a_segment_across_several_incomplete_reads() -> None:
+    """review round 7 F2: `TranscriptBatch.complete=False` means more remains RIGHT NOW —
+    `pump_lease` must loop reading the same segment until it catches up, not stop after
+    one window like `run()` does."""
+    batches = [
+        _incomplete_batch([_turn(0, "a")], next_token="pos-1"),
+        _incomplete_batch([_turn(1, "b")], next_token="pos-2"),
+        _batch([_turn(2, "c")], next_token="pos-3"),  # complete=True — the drain's last read
+    ]
+    source = _SequencedTranscriptSource("sess-a", batches)
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1"), verdict=None, transcript_source=source
+    )
+    store = make_store("sqlite://")
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+    )
+    segment_id = _spawn_one_segment(ctx)
+    lease = ctx.store.active_lease("lease_1")
+    assert lease is not None
+
+    TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=_NOW + timedelta(seconds=PUMP_LEASE_MAX_SECONDS))
+
+    assert len(source.turns_since_calls) == 3  # all three reads drained in one call
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.cursor == "pos-3"
+    assert segment.truncated_reason is None  # caught up — never marked incomplete
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) == 3
+
+
+@dataclass
+class _ClockAdvancingAfterNCallsSource:
+    """Wraps a ``_SequencedTranscriptSource``, advancing ``clock`` by ``jump`` right after
+    its ``after``-th call returns — pins exactly which read ``pump_lease``'s drain loop is
+    mid-flight on when its deadline first reads as expired (F2), without coupling the test
+    to how many internal ``.now()`` calls one ``_pump_one`` happens to make."""
+
+    inner: _SequencedTranscriptSource
+    clock: FixedClock
+    jump: timedelta
+    after: int
+
+    def turns_since(
+        self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None
+    ) -> TranscriptBatch:
+        batch = self.inner.turns_since(session_id, spawn_cwd=spawn_cwd, since=since)
+        if len(self.inner.turns_since_calls) == self.after:
+            self.clock.advance(self.jump)
+        return batch
+
+    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+        return self.inner.read_raw_lines(session_id, spawn_cwd=spawn_cwd)
+
+    def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return self.inner.size_bytes(session_id, spawn_cwd=spawn_cwd)
+
+
+def test_pump_lease_marks_incomplete_when_its_deadline_expires_mid_drain() -> None:
+    """review round 7 F2: a deadline expiring mid-drain stops the loop where it is — the
+    segment is marked truncated (the new incomplete-closure reason) and the fact-lane
+    warning fires, rather than the remaining unread content vanishing once it finalizes."""
+    batches = [
+        _incomplete_batch([_turn(0, "a")], next_token="pos-1"),
+        _incomplete_batch([_turn(1, "b")], next_token="pos-2"),
+        _batch([_turn(2, "c")], next_token="pos-3"),
+    ]
+    clock = FixedClock(instant=_NOW)
+    inner = _SequencedTranscriptSource("sess-a", batches)
+    source = _ClockAdvancingAfterNCallsSource(inner, clock=clock, jump=timedelta(seconds=10), after=2)
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1"), verdict=None, transcript_source=source
+    )
+    store = make_store("sqlite://")
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        clock=clock,
+    )
+    segment_id = _spawn_one_segment(ctx)
+    lease = ctx.store.active_lease("lease_1")
+    assert lease is not None
+    deadline = clock.now() + timedelta(seconds=5)
+
+    TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=deadline)
+
+    assert len(inner.turns_since_calls) == 2  # the third, would-be-final read never happened
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "lease_closure_incomplete"
+    assert segment.cursor == "pos-2"  # the first two reads still landed
+    fact_events = ctx.store.pending_outbound()
+    kinds = [json.loads(e.payload)["kind"] for e in fact_events]
+    assert "transcript-truncated" in kinds
+
+
+@dataclass
+class _AdvanceClockAfterSessionSource:
+    """Serves one complete batch per session; advances ``clock`` past ``deadline`` right
+    after serving ``advance_after``'s own read — pins ``pump_lease``'s OUTER per-segment
+    loop (not the per-segment drain loop) to see its deadline as expired before ever
+    attempting the next segment (F2)."""
+
+    batches: dict[str, TranscriptBatch]
+    clock: FixedClock
+    jump: timedelta
+    advance_after: str
+    turns_since_calls: list[tuple[str, str | None, TranscriptPosition | None]] = field(default_factory=list)
+
+    def turns_since(
+        self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None
+    ) -> TranscriptBatch:
+        self.turns_since_calls.append((session_id, spawn_cwd, since))
+        batch = self.batches.get(session_id)
+        if session_id == self.advance_after:
+            self.clock.advance(self.jump)
+        if batch is None:
+            return TranscriptBatch(
+                session_id=session_id,
+                available=False,
+                reason="not_found",
+                turns=[],
+                unlinked_sidechains=[],
+                next_position=None,
+                complete=True,
+                truncated=False,
+                sidechain_truncated=False,
+                normalizer_version="fake/1",
+                harness_version=None,
+            )
+        return batch
+
+    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+        return []
+
+    def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return None
+
+
+def test_pump_lease_marks_a_second_segment_truncated_when_never_even_attempted() -> None:
+    """review round 7 F2: the outer per-segment loop's own deadline-break used to drop a
+    never-attempted segment silently. A lease with two open segments (a resume under a
+    different session id) whose deadline expires right after the first now marks the second."""
+    clock = FixedClock(instant=_NOW)
+    source = _AdvanceClockAfterSessionSource(
+        batches={"sess-a": _batch([_turn(0, "a")], next_token="pos-1")},
+        clock=clock,
+        jump=timedelta(seconds=10),
+        advance_after="sess-a",
+    )
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1"), verdict=None, transcript_source=source
+    )
+    store = make_store("sqlite://")
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+        clock=clock,
+    )
+    segment_a_id = _spawn_one_segment(ctx)
+    # A same-lease resume under a DIFFERENT session id leaves segment sess-a open too —
+    # only a same-session resume finalizes it — so the lease now has two open segments.
+    ctx.store.record_spawn(
+        "lease_1", pid=2, process_start_time="2", session_id="sess-b", spawned_at=_NOW + timedelta(seconds=1)
+    )
+    lease = ctx.store.active_lease("lease_1")
+    assert lease is not None
+    open_segments = {
+        s.session_id: s.segment_id for s in ctx.store.open_transcript_segments() if s.lease_id == lease.lease_id
+    }
+    assert set(open_segments) == {"sess-a", "sess-b"}
+    segment_b_id = open_segments["sess-b"]
+    deadline = clock.now() + timedelta(seconds=5)
+
+    TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=deadline)
+
+    assert [c[0] for c in source.turns_since_calls] == ["sess-a"]  # sess-b never even attempted
+    segment_a = ctx.store.transcript_segment(segment_a_id)
+    segment_b = ctx.store.transcript_segment(segment_b_id)
+    assert segment_a is not None
+    assert segment_a.truncated_reason is None  # attempted and caught up
+    assert segment_b is not None
+    assert segment_b.truncated_reason == "lease_closure_incomplete"
+    fact_events = ctx.store.pending_outbound()
+    kinds = [json.loads(e.payload)["kind"] for e in fact_events]
+    assert kinds.count("transcript-truncated") == 1
+
+
+# --- review round 7 F3: the cursor-guard's early return must still warn a latched sidechain
+
+
+def test_pump_warns_a_dropped_sidechain_even_when_the_cursor_guard_skips_the_segment() -> None:
+    """review round 7 F3: `mark_sidechain_dropped_warned` latches (segment, agent_id) as
+    warned the instant it's called, so the cursor-guard's early return must still fire
+    that warning — or it's lost forever (no later tick re-latches the same pair)."""
+    stuck = TranscriptBatch(
+        session_id="sess-a",
+        available=True,
+        reason=None,
+        turns=[_turn(0, "hi")],
+        unlinked_sidechains=[_unlinked_sidechain("sub_1")],
+        next_position=None,
+        complete=True,
+        truncated=False,
+        sidechain_truncated=False,
+        normalizer_version="fake/1",
+        harness_version=None,
+    )
+    ctx, _source = _ctx(ship=True, batches={"sess-a": stuck})
+    _spawn_one_segment(ctx)
+
+    with capture_logs() as logs:
+        TranscriptPump(ctx).run()
+
+    _assert_skipped_not_raised(logs)
+    assert ctx.store.pending_transcript_outbound() == []  # never enqueued — the guard still skips
+    fact_events = ctx.store.pending_outbound()
+    kinds = [json.loads(e.payload)["kind"] for e in fact_events]
+    assert "transcript-sidechain-dropped" in kinds  # the already-latched warning still fires
+
+
+# --- review round 7 F4: shrink recurses into a tool input's nested containers --------
+
+
+def _multi_edit_tool_turn(index: int, *, old: str, new: str) -> NormalizedTurn:
+    """A `MultiEdit`-shaped turn: `tool.input["edits"]` is a LIST of dicts, each carrying
+    its own `old_string`/`new_string` — not a flat top-level string (F4)."""
+    return NormalizedTurn(
+        index=index,
+        kind="tool",
+        timestamp=_NOW,
+        text="",
+        tool=_tool_call("", input_={"edits": [{"old_string": old, "new_string": new}]}),
+        thinking_redacted=False,
+        sidechain=None,
+        truncated=False,
+    )
+
+
+def test_pump_shrinks_a_multi_edit_shaped_tool_input_instead_of_emptying_the_record() -> None:
+    """review round 7 F4: `MultiEdit.edits` nests its oversized strings below `tool.input`'s
+    top-level keys — a flat walk counts their bytes toward the overshoot but never offers
+    them as shrinkable. Mutation-verify by reverting to the flat top-level-only walk."""
+    huge = "e" * (TRANSCRIPT_RECORD_MAX_BYTES // 2)
+    turn = _multi_edit_tool_turn(0, old=huge, new=huge)
+    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([turn], next_token="pos-1")})
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) == 1
+    assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
+    body = json.loads(pending[0].payload)
+    assert body["turns"] != []  # shrunk, not emptied — genuine content still shipped
+    edit = body["turns"][0]["tool"]["input"]["edits"][0]
+    assert len(edit["old_string"]) > 0
+    assert len(edit["new_string"]) > 0
+    assert body["turns"][0]["tool"]["input_truncated"] is True
+    assert body["record_truncated"] is True
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "record_cap_exceeded"
+
+
+# --- review round 7 F8: backpressure against an already-unbounded outbound buffer ----
+
+
+class _StoreWithStubbedOutstandingBytes:
+    """Wraps a real store, overriding only ``outstanding_transcript_buffer_bytes`` —
+    avoids materializing hundreds of MB of real buffered payload just to cross F8's cap
+    in a test."""
+
+    def __init__(self, inner: object, *, outstanding_bytes: int) -> None:
+        self._inner = inner
+        self._outstanding_bytes = outstanding_bytes
+
+    def outstanding_transcript_buffer_bytes(self) -> int:
+        return self._outstanding_bytes
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)
+
+
+def test_pump_gates_on_outstanding_buffered_bytes_before_reading_a_new_batch() -> None:
+    """review round 7 F8: a prolonged hub outage leaves buffered content resident
+    indefinitely — the pump must not pile more onto it. Transient backpressure, not a
+    latch: it self-clears once the outstanding total drops back under the cap."""
+    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
+    segment_id = _spawn_one_segment(ctx)
+    over_cap_ctx = replace(
+        ctx,
+        store=_StoreWithStubbedOutstandingBytes(ctx.store, outstanding_bytes=_MAX_BUFFERED_BYTES),  # type: ignore[arg-type]
+    )
+
+    TranscriptPump(over_cap_ctx).run()
+
+    assert source.turns_since_calls == []  # never even read this tick
+    assert ctx.store.pending_transcript_outbound() == []
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.cursor is None  # never advanced
+
+    under_cap_ctx = replace(
+        ctx,
+        store=_StoreWithStubbedOutstandingBytes(ctx.store, outstanding_bytes=_MAX_BUFFERED_BYTES - 1),  # type: ignore[arg-type]
+    )
+    TranscriptPump(under_cap_ctx).run()
+
+    assert len(source.turns_since_calls) == 1  # resumed once back under the cap
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.cursor == "pos-1"

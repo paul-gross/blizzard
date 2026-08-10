@@ -1,21 +1,27 @@
 """The transcript lane's per-tick pump (issue #246) — advances each live segment's
 forward-read cursor through ``IHarnessTranscriptSource.turns_since`` and enqueues its
-record atomically with the cursor write (D3), shaped as one of blizzard#247's turn-range
-``TranscriptSegmentRecord`` slices. ``run()`` no-ops while ``ctx.config.transcripts_ship``
-is ``False`` (D5); the lane around it does not — a segment still finalizes with a marker on
-every closure regardless. Wired into ``tick`` by :class:`TranscriptDrain`."""
+record(s) atomically with the cursor write (D3), one-or-more of blizzard#247's turn-range
+``TranscriptSegmentRecord`` slices — a batch over the per-record cap SPLITS into several
+records rather than shrinking/emptying down to one. ``run()`` no-ops while
+``ctx.config.transcripts_ship`` is ``False`` (D5). Wired into ``tick`` by :class:`TranscriptDrain`."""
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.harness.transcript import NormalizedTurn, SidechainConversation, ToolCall, TranscriptPosition
+from blizzard.runner.harness.transcript import (
+    NormalizedTurn,
+    SidechainConversation,
+    ToolCall,
+    TranscriptBatch,
+    TranscriptPosition,
+)
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.store.repository import TranscriptSegmentLedgerRow
@@ -34,8 +40,16 @@ TRANSCRIPT_RECORD_MAX_BYTES = 1024 * 1024
 #: fields `shipped_bytes` also counts.
 CHUNK_TRANSCRIPT_MAX_BYTES = 64 * 1024 * 1024
 
+#: Backpressure cap on total unacked bytes across the WHOLE outbound buffer (F8), distinct
+#: from `CHUNK_TRANSCRIPT_MAX_BYTES`'s per-chunk shipped total — self-clears as the drain catches up.
+_MAX_BUFFERED_BYTES = 256 * 1024 * 1024
+
 #: Bounds :meth:`TranscriptPump.pump_lease`'s pre-closure read — matches `TranscriptDrain`'s own.
 PUMP_LEASE_MAX_SECONDS = 5.0
+
+#: Safety valve on :meth:`TranscriptPump._drain_segment` (F2) — bounds a source that never
+#: reports ``complete=True`` from looping forever if ``deadline`` is ever ``None``.
+_PUMP_LEASE_MAX_ITERATIONS = 1000
 
 #: Never-silent reasons (D4) — only `_CHUNK_BUDGET_EXCEEDED` latches `stop_transcript_segment_shipping`.
 _RECORD_CAP_EXCEEDED = "record_cap_exceeded"
@@ -44,6 +58,10 @@ _CHUNK_BUDGET_EXCEEDED = "chunk_budget_exceeded"
 
 #: This tick's own source read came back incomplete (`TranscriptBatch.truncated`/`.sidechain_truncated`).
 _SOURCE_READ_TRUNCATED = "source_read_truncated"
+
+#: F2: a lease-closure pump that could not fully catch up with the source before the shared
+#: deadline — distinct from `_SOURCE_READ_TRUNCATED`, this tick's own incomplete read.
+_LEASE_CLOSURE_INCOMPLETE = "lease_closure_incomplete"
 
 
 @dataclass(frozen=True)
@@ -66,40 +84,66 @@ class TranscriptPump:
             self._pump_one_safe(segment)
 
     def pump_lease(self, lease_id: str, *, deadline: datetime | None = None) -> None:
-        """Read whatever a single lease's own still-open segment(s) have to ship, right
-        before that lease closes — finalization excludes a segment from every later tick's
-        ``run()``, so without this, content since the last pump would never be read.
-        ``deadline`` bounds this call the same way ``run``'s does."""
+        """Drain a closing lease's own still-open segment(s) before finalization excludes
+        them from every later ``run()``. Unlike ``run()``, this DRAINS each segment — one
+        ``_pump_one`` call only advances one read window, and no later tick is coming — so
+        each is pumped until caught up or ``deadline`` (F2). A segment never even attempted
+        before ``deadline`` is marked truncated too, same as a partially-drained one."""
         if not self.ctx.config.transcripts_ship or self.ctx.transcripts is None:
             return
-        for segment in self.ctx.store.open_transcript_segments():
+        segments = [s for s in self.ctx.store.open_transcript_segments() if s.lease_id == lease_id]
+        for i, segment in enumerate(segments):
             if deadline is not None and self.ctx.clock.now() >= deadline:
-                break  # this call's own bound reached — the rest catches up on a later tick
-            if segment.lease_id == lease_id:
-                self._pump_one_safe(segment)
+                # Every remaining segment loses just as silently as a partially-drained one.
+                for remaining in segments[i:]:
+                    self._mark_record_truncated(remaining, _LEASE_CLOSURE_INCOMPLETE)
+                return
+            self._drain_segment(segment.segment_id, deadline=deadline)
 
-    def _pump_one_safe(self, segment: TranscriptSegmentLedgerRow) -> None:
-        """review round 6 F2: one segment's own failure must not abort the loop — a
-        raise here used to propagate out of ``run()``/``pump_lease()`` entirely, skipping
-        every later segment (and, via ``TranscriptDrain._run_unsafe``, that tick's own
-        buffered-record flush, including final markers that ship regardless of
-        ``[transcripts] ship``)."""
+    def _drain_segment(self, segment_id: str, *, deadline: datetime | None) -> None:
+        for _ in range(_PUMP_LEASE_MAX_ITERATIONS):
+            segment = self.ctx.store.transcript_segment(segment_id)
+            if segment is None:
+                return  # the segment vanished from under us — nothing left to drain
+            if self._pump_one_safe(segment):
+                return  # caught up — nothing more to gain from reading again right now
+            if deadline is not None and self.ctx.clock.now() >= deadline:
+                self._mark_record_truncated(segment, _LEASE_CLOSURE_INCOMPLETE)
+                return
+        # The safety valve: a source that never reports `complete=True` across this many
+        # reads is misbehaving — stop and mark, rather than spin forever.
+        segment = self.ctx.store.transcript_segment(segment_id)
+        if segment is not None:
+            self._mark_record_truncated(segment, _LEASE_CLOSURE_INCOMPLETE)
+
+    def _pump_one_safe(self, segment: TranscriptSegmentLedgerRow) -> bool:
+        """review round 6 F2: one segment's own failure must not abort the loop. Returns
+        ``True`` on a caught exception too (F2) — a raising segment must not spin
+        ``pump_lease``'s drain loop."""
         try:
-            self._pump_one(segment)
+            return self._pump_one(segment)
         except Exception:
             _log.exception(
                 "transcript pump: failed to pump segment — continuing with the rest",
                 segment_id=segment.segment_id,
                 session_id=segment.session_id,
             )
+            return True
 
-    def _pump_one(self, segment: TranscriptSegmentLedgerRow) -> None:
+    def _pump_one(self, segment: TranscriptSegmentLedgerRow) -> bool:
+        """Advance ``segment`` one read window forward. Returns whether it's now caught up
+        with the source (F2): ``True`` on every early-return path with nothing to gain from
+        an immediate re-call, ``batch.complete`` on the one path that actually read —
+        ``pump_lease`` loops on this to drain a closing lease's segment fully."""
         if segment.shipping_stopped_reason is not None:
-            return  # permanently stopped past the per-chunk budget (D4)
+            return True  # permanently stopped past the per-chunk budget (D4)
         budget_before = self.ctx.store.chunk_transcript_shipped_bytes(segment.chunk_id)
         if budget_before >= CHUNK_TRANSCRIPT_MAX_BYTES:
             self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
-            return
+            return True
+        if self.ctx.store.outstanding_transcript_buffer_bytes() >= _MAX_BUFFERED_BYTES:
+            # F8: transient backpressure, not a latch — self-clears once the drain catches up.
+            return True
 
         bindings = self.ctx.store.bindings_for_chunk(segment.chunk_id)
         spawn_cwd = SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
@@ -108,7 +152,7 @@ class TranscriptPump:
         since = TranscriptPosition(segment.cursor) if segment.cursor is not None else None
         batch = source.turns_since(segment.session_id, spawn_cwd=spawn_cwd, since=since)
         if not batch.available:
-            return  # source unavailable this tick — retry from the same cursor next time
+            return True  # source unavailable this tick — retry from the same cursor next time
         if batch.truncated or batch.sidechain_truncated:
             self._mark_record_truncated(segment, _SOURCE_READ_TRUNCATED)
         new_cursor = batch.next_position.token if batch.next_position is not None else segment.cursor
@@ -131,7 +175,7 @@ class TranscriptPump:
                 )
             if newly_dropped_sidechains:
                 self._warn_sidechains_dropped(segment, newly_dropped_sidechains)
-            return
+            return batch.complete
 
         # Turns present — the source must have advanced PAST them. An unchanged cursor
         # re-reads and re-ships the same turns every tick, under a fresh range each time.
@@ -143,77 +187,48 @@ class TranscriptPump:
                 segment_id=segment.segment_id,
                 session_id=segment.session_id,
             )
-            return
+            # F3: latched above regardless — a dropped sidechain observed on a stuck-cursor
+            # tick must still warn, or the latch means it never warns at all.
+            if newly_dropped_sidechains:
+                self._warn_sidechains_dropped(segment, newly_dropped_sidechains)
+            return True
+
         turn_range_start = segment.shipped_turns
-        record: dict[str, Any] = {
-            "segment_id": segment.segment_id,
-            "chunk_id": segment.chunk_id,
-            "node_id": segment.node_id,
-            "epoch": segment.epoch,
-            "spawn_generation": segment.generation,
-            "turn_range_start": turn_range_start,
-            "turn_range_end": turn_range_start + len(batch.turns) - 1,
-            "final": False,
-            "normalizer_version": batch.normalizer_version,
-            "harness_version": batch.harness_version,
-            "record_truncated": batch.truncated or batch.sidechain_truncated,
-            "turns": [_turn_wire(t, turn_range_start + i) for i, t in enumerate(batch.turns)],
-        }
-        payload = json.dumps(record)
-        record_truncated = False
-        if len(payload.encode("utf-8")) > TRANSCRIPT_RECORD_MAX_BYTES:
-            record = _shrink_to_cap(record)
-            # Wire-visible even when shrinking alone closes the gap — the local flag below
-            # only reaches the wire through the still-over-cap branch.
-            record["record_truncated"] = True
-            payload = json.dumps(record)
-            record_truncated = True
+        records, any_shrunk, any_unshippable = _build_records(segment, batch, turn_range_start)
+        # The source's own tail-cap signal (D4) rides the LAST record this batch produced.
+        if batch.truncated or batch.sidechain_truncated:
+            records[-1]["record_truncated"] = True
+        payloads = [json.dumps(record) for record in records]
+        total_bytes = sum(len(p.encode("utf-8")) for p in payloads)
 
-        if len(payload.encode("utf-8")) > TRANSCRIPT_RECORD_MAX_BYTES:
-            # Every shrinkable field is already empty — only per-turn JSON structure
-            # remains, so ship an empty slice over the claimed range, gapless.
-            record["turns"] = []
-            record["record_truncated"] = True
-            payload = json.dumps(record)
-            self.ctx.store.record_transcript_delta(
-                segment_id=segment.segment_id,
-                chunk_id=segment.chunk_id,
-                cursor=new_cursor,
-                shipped_bytes=segment.shipped_bytes + len(payload.encode("utf-8")),
-                shipped_turns=segment.shipped_turns + len(batch.turns),
-                normalizer_version=batch.normalizer_version,
-                harness_version=batch.harness_version,
-                payload=payload,
-                created_at=self.ctx.clock.now(),
-            )
-            self._mark_record_truncated(segment, _RECORD_UNSHIPPABLE)
-            if newly_dropped_sidechains:
-                self._warn_sidechains_dropped(segment, newly_dropped_sidechains)
-            return
-
-        delta_bytes = len(payload.encode("utf-8"))
-        if budget_before + delta_bytes > CHUNK_TRANSCRIPT_MAX_BYTES:
+        if budget_before + total_bytes > CHUNK_TRANSCRIPT_MAX_BYTES:
+            # All-or-nothing (F1): every record here advances the SAME cursor write, so
+            # shipping only some would silently lose the rest's turns forever.
             self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
-            # This branch already read a real batch — any dropped sidechain still warns.
-            if newly_dropped_sidechains:
+            if newly_dropped_sidechains:  # this branch already read a real batch
                 self._warn_sidechains_dropped(segment, newly_dropped_sidechains)
-            return
+            return True
 
-        self.ctx.store.record_transcript_delta(
+        self.ctx.store.record_transcript_deltas(
             segment_id=segment.segment_id,
             chunk_id=segment.chunk_id,
             cursor=new_cursor,
-            shipped_bytes=segment.shipped_bytes + delta_bytes,
+            shipped_bytes=segment.shipped_bytes + total_bytes,
             shipped_turns=segment.shipped_turns + len(batch.turns),
             normalizer_version=batch.normalizer_version,
             harness_version=batch.harness_version,
-            payload=payload,
+            payloads=payloads,
             created_at=self.ctx.clock.now(),
         )
-        if record_truncated:
+        # Worse-last (F1): the store overwrites `truncated_reason` on every differing call,
+        # so calling the worse reason after the milder one keeps the worse one standing.
+        if any_shrunk:
             self._mark_record_truncated(segment, _RECORD_CAP_EXCEEDED)
+        if any_unshippable:
+            self._mark_record_truncated(segment, _RECORD_UNSHIPPABLE)
         if newly_dropped_sidechains:
             self._warn_sidechains_dropped(segment, newly_dropped_sidechains)
+        return batch.complete
 
     def _stop_shipping(self, segment: TranscriptSegmentLedgerRow, reason: str) -> None:
         changed = self.ctx.store.stop_transcript_segment_shipping(segment.segment_id, reason=reason)
@@ -293,6 +308,97 @@ def _sidechain_wire(sidechain: SidechainConversation) -> dict[str, Any]:
     }
 
 
+def _record_envelope(
+    segment: TranscriptSegmentLedgerRow, batch: TranscriptBatch, *, turn_range_start: int, turn_range_end: int
+) -> dict[str, Any]:
+    return {
+        "segment_id": segment.segment_id,
+        "chunk_id": segment.chunk_id,
+        "node_id": segment.node_id,
+        "epoch": segment.epoch,
+        "spawn_generation": segment.generation,
+        "turn_range_start": turn_range_start,
+        "turn_range_end": turn_range_end,
+        "final": False,
+        "normalizer_version": batch.normalizer_version,
+        "harness_version": batch.harness_version,
+        "record_truncated": False,
+        "turns": [],
+    }
+
+
+#: A group's fitting outcome (F1): `"ok"` as read, `"shrunk"` fit only after `_shrink_to_cap`,
+#: `"unshippable"` stayed over cap even shrunk to nothing.
+_GroupOutcome = Literal["ok", "shrunk", "unshippable"]
+
+
+def _build_records(
+    segment: TranscriptSegmentLedgerRow, batch: TranscriptBatch, turn_range_start: int
+) -> tuple[list[dict[str, Any]], bool, bool]:
+    """Greedily pack ``batch.turns`` into ``TRANSCRIPT_RECORD_MAX_BYTES``-or-smaller records
+    (F1), closing a group once the next turn's estimated cost would push it over cap; each
+    closed group's REAL size is then verified (and shrunk/emptied if needed). A turn whose
+    own cost alone exceeds the cap forms a group of one, scoping any fallback to it alone.
+    Returns ``(records, any_shrunk, any_unshippable)`` for the caller's own worse-last mark."""
+    wire_turns = [_turn_wire(t, turn_range_start + i) for i, t in enumerate(batch.turns)]
+    turn_costs = [len(json.dumps(wt).encode("utf-8")) for wt in wire_turns]
+    overhead = len(
+        json.dumps(
+            _record_envelope(segment, batch, turn_range_start=turn_range_start, turn_range_end=turn_range_start)
+        ).encode("utf-8")
+    )
+
+    records: list[dict[str, Any]] = []
+    outcomes: list[_GroupOutcome] = []
+
+    def close_group(start: int, end: int) -> None:
+        record = _record_envelope(
+            segment, batch, turn_range_start=turn_range_start + start, turn_range_end=turn_range_start + end - 1
+        )
+        record["turns"] = wire_turns[start:end]
+        payload = json.dumps(record)
+        outcome: _GroupOutcome = "ok"
+        if len(payload.encode("utf-8")) > TRANSCRIPT_RECORD_MAX_BYTES:
+            record = _shrink_to_cap(record)
+            record["record_truncated"] = True
+            payload = json.dumps(record)
+            outcome = "shrunk"
+            if len(payload.encode("utf-8")) > TRANSCRIPT_RECORD_MAX_BYTES:
+                # Every shrinkable field here is already empty — ship an empty slice over
+                # just THIS group's claimed range, gapless, not the whole batch's (F1).
+                record["turns"] = []
+                record["record_truncated"] = True
+                outcome = "unshippable"
+        records.append(record)
+        outcomes.append(outcome)
+
+    # `json.dumps` separates array items with `", "` (2 bytes) — real for every turn but
+    # the group's first, so the estimate must include it or many-small-turn groups undercount.
+    _ARRAY_SEPARATOR_BYTES = 2
+    group_start = 0
+    running = overhead
+    for i, cost in enumerate(turn_costs):
+        separator = _ARRAY_SEPARATOR_BYTES if group_start < i else 0
+        if group_start < i and running + separator + cost > TRANSCRIPT_RECORD_MAX_BYTES:
+            close_group(group_start, i)
+            group_start = i
+            running = overhead
+            separator = 0
+        running += separator + cost
+    close_group(group_start, len(wire_turns))
+
+    return records, "shrunk" in outcomes, "unshippable" in outcomes
+
+
+#: Safety valve on the proportional shrink below — real convergence takes 1-3 passes; this
+#: only bounds pathological cases (heavy unicode escaping, many tiny fields) from looping.
+_SHRINK_MAX_PASSES = 20
+
+#: Margin applied to the target size a pass cuts down to, not the cut fraction.
+_SHRINK_OVERCUT = 1.15
+_SHRINK_TARGET_BYTES = int(TRANSCRIPT_RECORD_MAX_BYTES / _SHRINK_OVERCUT)
+
+
 def _flat_turns(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Every turn in ``turns``, plus every turn nested under a sidechain — a sidechain
     turn's own text is exactly as shrinkable as its parent's."""
@@ -305,14 +411,39 @@ def _flat_turns(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return flat
 
 
-def _shrink_candidates(
-    record: dict[str, Any],
-) -> list[tuple[dict[str, Any], str, dict[str, Any], str]]:
+#: A shrink candidate: ``(value_holder, field, marker_holder, marker_field)`` — the holder
+#: is a ``dict`` or ``list``, both indexed the same way via ``holder[field]``.
+_ShrinkCandidate = tuple[Any, Any, dict[str, Any], str]
+
+
+def _walk_shrinkable_strings(
+    container: object, marker_holder: dict[str, Any], marker_field: str, candidates: list[_ShrinkCandidate]
+) -> None:
+    """Recurse into nested ``dict``/``list`` containers, collecting every string leaf as a
+    shrinkable candidate (F4) — e.g. ``MultiEdit.edits``, a list of ``{old_string,
+    new_string}`` dicts, not a flat top-level string. Every leaf under one tool's ``input``
+    shares that tool's one ``input_truncated`` marker."""
+    items: list[tuple[Any, Any]]
+    if isinstance(container, dict):
+        items = list(container.items())
+    elif isinstance(container, list):
+        items = list(enumerate(container))
+    else:
+        return
+    for key, value in items:
+        if isinstance(value, str) and value:
+            candidates.append((container, key, marker_holder, marker_field))
+        elif isinstance(value, (dict, list)):
+            _walk_shrinkable_strings(value, marker_holder, marker_field, candidates)
+
+
+def _shrink_candidates(record: dict[str, Any]) -> list[_ShrinkCandidate]:
     """Every shrinkable ``(value_holder, field, marker_holder, marker_field)`` quadruple
     still carrying text: a turn's own ``text``, a tool call's ``output``, and every
-    string-valued key of its ``input``/``input_unparsed``. The marker location can differ
-    from the value's: every input key shares one tool-level ``input_truncated`` flag."""
-    candidates: list[tuple[dict[str, Any], str, dict[str, Any], str]] = []
+    string leaf nested anywhere under its ``input`` (F4) or its own ``input_unparsed``.
+    The marker location can differ from the value's: every leaf under one tool's ``input``
+    shares that one tool-level ``input_truncated`` flag."""
+    candidates: list[_ShrinkCandidate] = []
     for turn in _flat_turns(record["turns"]):
         if turn.get("text"):
             candidates.append((turn, "text", turn, "truncated"))
@@ -323,21 +454,10 @@ def _shrink_candidates(
             candidates.append((tool, "output", tool, "output_truncated"))
         input_ = tool.get("input")
         if isinstance(input_, dict):
-            for key, value in input_.items():
-                if isinstance(value, str) and value:
-                    candidates.append((input_, key, tool, "input_truncated"))
+            _walk_shrinkable_strings(input_, tool, "input_truncated", candidates)
         if tool.get("input_unparsed"):
             candidates.append((tool, "input_unparsed", tool, "input_truncated"))
     return candidates
-
-
-#: Safety valve on the proportional shrink below — real convergence takes 1-3 passes; this
-#: only bounds pathological cases (heavy unicode escaping, many tiny fields) from looping.
-_SHRINK_MAX_PASSES = 20
-
-#: Margin applied to the target size a pass cuts down to, not the cut fraction.
-_SHRINK_OVERCUT = 1.15
-_SHRINK_TARGET_BYTES = int(TRANSCRIPT_RECORD_MAX_BYTES / _SHRINK_OVERCUT)
 
 
 def _byte_cost(text: str) -> int:

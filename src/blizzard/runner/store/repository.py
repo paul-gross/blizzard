@@ -403,6 +403,14 @@ class IReadRunnerStore(Protocol):
         finalized — the running total the 64 MB per-chunk budget (D4) is measured against."""
         ...
 
+    def outstanding_transcript_buffer_bytes(self) -> int:
+        """Sum of ``payload`` bytes across every UNACKED row of the transcript outbound
+        buffer, across every segment (F8, review round 7) — the pump's own backpressure
+        gate against a prolonged hub outage leaving unbounded content resident in SQLite.
+        Distinct from :meth:`chunk_transcript_shipped_bytes`, which bounds one chunk's
+        SHIPPED total, not the buffer's own resident total."""
+        ...
+
     def pending_transcript_outbound(self, *, limit: int | None = None) -> list[BufferedTranscriptDelta]:
         """The unacked transcript buffer, FIFO by seq — the drain's own lane (D3).
 
@@ -740,6 +748,26 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         turns or ship a record the cursor never advanced past. The versions persist onto the
         row, not just the payload, so a later closure builds its final record without the
         harness seam. Returns the buffered record's seq."""
+        ...
+
+    def record_transcript_deltas(
+        self,
+        *,
+        segment_id: str,
+        chunk_id: str,
+        cursor: str | None,
+        shipped_bytes: int,
+        shipped_turns: int,
+        normalizer_version: str,
+        harness_version: str | None,
+        payloads: list[str],
+        created_at: datetime,
+    ) -> list[int]:
+        """:meth:`record_transcript_delta`'s plural sibling (F1): the same ONE segment-
+        ledger update, atomically enqueuing ``len(payloads)`` buffer rows instead of one —
+        a batch split into several records still advances the cursor exactly once, all in
+        the same transaction, or a crash would silently lose whichever didn't make it in.
+        Returns their seqs, in payload order."""
         ...
 
     def advance_transcript_cursor(

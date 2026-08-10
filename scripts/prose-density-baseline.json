@@ -1234,8 +1234,8 @@
   },
   "blizzard/hub/domain/transcripts.py": {
    "comments": 12,
-   "docstrings": 27,
-   "total": 215
+   "docstrings": 28,
+   "total": 216
   },
   "blizzard/hub/domain/work.py": {
    "comments": 44,
@@ -2138,9 +2138,9 @@
    "total": 125
   },
   "blizzard/runner/loop/transcript_pump.py": {
-   "comments": 42,
-   "docstrings": 39,
-   "total": 378
+   "comments": 64,
+   "docstrings": 52,
+   "total": 498
   },
   "blizzard/runner/loop/usage.py": {
    "comments": 4,
@@ -2208,9 +2208,9 @@
    "total": 1
   },
   "blizzard/runner/store/internal/sqlalchemy_store.py": {
-   "comments": 78,
+   "comments": 80,
    "docstrings": 27,
-   "total": 1552
+   "total": 1601
   },
   "blizzard/runner/store/migrations/__init__.py": {
    "comments": 0,
@@ -2369,8 +2369,8 @@
   },
   "blizzard/runner/store/repository.py": {
    "comments": 4,
-   "docstrings": 372,
-   "total": 966
+   "docstrings": 382,
+   "total": 994
   },
   "blizzard/runner/store/schema.py": {
    "comments": 135,
@@ -2529,8 +2529,8 @@
   },
   "blizzard/wire/transcript_segment.py": {
    "comments": 4,
-   "docstrings": 30,
-   "total": 134
+   "docstrings": 32,
+   "total": 136
   },
   "blizzard/wire/user.py": {
    "comments": 0,
@@ -3990,9 +3990,9 @@
    "total": 359
   },
   "test_transcript_pump.py": {
-   "comments": 104,
-   "docstrings": 117,
-   "total": 1136
+   "comments": 144,
+   "docstrings": 170,
+   "total": 1635
   },
   "test_transcript_segment_store.py": {
    "comments": 6,

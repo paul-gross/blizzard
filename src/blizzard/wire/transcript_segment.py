@@ -39,7 +39,9 @@ class SidechainSegmentView(BaseModel):
 
 class TurnSegmentView(BaseModel):
     """One normalized turn, carried in full. ``index`` is **segment-relative** and minted
-    by the producer (D9), so it is stable across the batches a segment arrives in."""
+    by the producer (D9), stable across the batches a segment arrives in — EXCEPT under
+    ``sidechain.turns``, where it counts within that one sidechain instead, restarting at
+    0 for each rather than offset by the enclosing segment's own stream."""
 
     index: int
     kind: str  # env | asst | tool | thinking
@@ -55,10 +57,10 @@ SidechainSegmentView.model_rebuild()
 
 
 class TranscriptSegmentRecord(BaseModel):
-    """One shipped turn-range slice of a segment (D1). ``final=True`` marks the one
-    record that closes the segment out. ``record_truncated`` is the runner's own
-    declaration of an accepted, hub-cap-conforming record shipped with ``turns``
-    emptied — distinct from the hub's own ``rejected`` (D5/D6)."""
+    """One shipped turn-range slice of a segment (D1). ``final=True`` marks the one record
+    that closes the segment out. ``record_truncated`` is the runner's own declaration that
+    THIS record lost content it would otherwise carry — shrunk, an incomplete source read,
+    or (only when neither closes the gap) ``turns`` emptied — distinct from ``rejected``."""
 
     seq: int
     segment_id: str

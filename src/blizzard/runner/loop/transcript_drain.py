@@ -28,8 +28,8 @@ _CP_AFTER_SUBMIT = crashpoint("transcript.after-submit.before-ack", "hub applied
 #: The reason `_deliver` marks on a hub-cap-rejected record — distinct from `transcript_pump.py`'s own.
 _HUB_CAPPED = "hub_capped"
 
-#: Bounds this drain's own per-``run()`` work — a slow-but-healthy hub must still yield to
-#: the next tick's fact-lane steps. Wall time via the injected clock, not a raw monotonic read.
+#: Bounds this drain's own per-``run()`` work — checked only BETWEEN deliveries, so the
+#: REAL worst case is this constant PLUS one in-flight delivery's own push timeout (F7).
 _MAX_RECORDS_PER_RUN = 50
 _MAX_SECONDS_PER_RUN = 5.0
 

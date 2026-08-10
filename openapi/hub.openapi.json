@@ -4178,7 +4178,7 @@
         "type": "object"
       },
       "TranscriptSegmentRecord": {
-        "description": "One shipped turn-range slice of a segment (D1). ``final=True`` marks the one\nrecord that closes the segment out. ``record_truncated`` is the runner's own\ndeclaration of an accepted, hub-cap-conforming record shipped with ``turns``\nemptied \u2014 distinct from the hub's own ``rejected`` (D5/D6).",
+        "description": "One shipped turn-range slice of a segment (D1). ``final=True`` marks the one record\nthat closes the segment out. ``record_truncated`` is the runner's own declaration that\nTHIS record lost content it would otherwise carry \u2014 shrunk, an incomplete source read,\nor (only when neither closes the gap) ``turns`` emptied \u2014 distinct from ``rejected``.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -4354,7 +4354,7 @@
         "type": "object"
       },
       "TurnSegmentView-Input": {
-        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and minted\nby the producer (D9), so it is stable across the batches a segment arrives in.",
+        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and minted\nby the producer (D9), stable across the batches a segment arrives in \u2014 EXCEPT under\n``sidechain.turns``, where it counts within that one sidechain instead, restarting at\n0 for each rather than offset by the enclosing segment's own stream.",
         "properties": {
           "index": {
             "title": "Index",
@@ -4422,7 +4422,7 @@
         "type": "object"
       },
       "TurnSegmentView-Output": {
-        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and minted\nby the producer (D9), so it is stable across the batches a segment arrives in.",
+        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and minted\nby the producer (D9), stable across the batches a segment arrives in \u2014 EXCEPT under\n``sidechain.turns``, where it counts within that one sidechain instead, restarting at\n0 for each rather than offset by the enclosing segment's own stream.",
         "properties": {
           "index": {
             "title": "Index",

@@ -416,6 +416,15 @@ class SqlAlchemyRunnerStore:
         with self._connect() as conn:
             return int(conn.execute(stmt).scalar_one())
 
+    def outstanding_transcript_buffer_bytes(self) -> int:
+        # Payloads are `json.dumps(ensure_ascii=True)`, so SQL `length()` (chars) agrees
+        # with the encoded byte length here (same fact the pump's own `_byte_cost` relies on).
+        stmt = select(func.coalesce(func.sum(func.length(transcript_outbound_buffer.c.payload)), 0)).where(
+            transcript_outbound_buffer.c.acked_at.is_(None)
+        )
+        with self._connect() as conn:
+            return int(conn.execute(stmt).scalar_one())
+
     def pending_transcript_outbound(self, *, limit: int | None = None) -> list[BufferedTranscriptDelta]:
         stmt = (
             select(transcript_outbound_buffer)
@@ -1002,6 +1011,46 @@ class SqlAlchemyRunnerStore:
             )
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
+
+    def record_transcript_deltas(
+        self,
+        *,
+        segment_id: str,
+        chunk_id: str,
+        cursor: str | None,
+        shipped_bytes: int,
+        shipped_turns: int,
+        normalizer_version: str,
+        harness_version: str | None,
+        payloads: list[str],
+        created_at: datetime,
+    ) -> list[int]:
+        with self._begin() as conn:
+            conn.execute(
+                transcript_segments.update()
+                .where(transcript_segments.c.segment_id == segment_id)
+                .values(
+                    cursor=cursor,
+                    shipped_bytes=shipped_bytes,
+                    shipped_turns=shipped_turns,
+                    normalizer_version=normalizer_version,
+                    harness_version=harness_version,
+                )
+            )
+            seqs: list[int] = []
+            for payload in payloads:
+                result = conn.execute(
+                    transcript_outbound_buffer.insert().values(
+                        segment_id=segment_id,
+                        chunk_id=chunk_id,
+                        final=False,
+                        payload=payload,
+                        created_at=created_at,
+                    )
+                )
+                key = result.inserted_primary_key
+                seqs.append(int(key[0]) if key is not None else 0)
+        return seqs
 
     def advance_transcript_cursor(
         self, segment_id: str, *, cursor: str, normalizer_version: str, harness_version: str | None
