@@ -13,6 +13,7 @@ from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.route import RouteClaim
+from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 
 
 def _client(handler) -> HttpHubClient:  # type: ignore[no-untyped-def]
@@ -122,6 +123,79 @@ def test_submit_completion_returns_apply_response() -> None:
         "ch_1", CompletionSubmission(choice="pass", epoch=1, runner_id="r1", from_node_id="nd_build")
     )
     assert resp.outcome == "hub_node_taken"
+
+
+@pytest.mark.unit
+def test_push_transcripts_posts_to_its_own_route_not_events() -> None:
+    """The transcript lane posts to ``/transcripts``, never ``/events`` — D3's structural
+    separation, exercised at the wire (issue #246)."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/fleet/transcripts"
+        return httpx.Response(200, json={"runner_id": "r1", "high_water": 3, "applied": [3], "already_applied": []})
+
+    batch = TranscriptSegmentBatch(
+        runner_id="r1",
+        records=[
+            TranscriptSegmentRecord(
+                seq=3,
+                segment_id="seg_1",
+                chunk_id="ch_1",
+                node_id="nd_build",
+                epoch=1,
+                spawn_generation=1,
+                turn_range_start=0,
+                turn_range_end=0,
+                final=False,
+                normalizer_version="v1",
+                harness_version=None,
+                turns=[],
+            )
+        ],
+    )
+    ack = _client(handler).push_transcripts(batch)
+    assert (ack.high_water, ack.applied) == (3, [3])
+
+
+@pytest.mark.unit
+def test_push_transcripts_overrides_the_shared_clients_default_timeout() -> None:
+    """review F3, issue #246: `TranscriptDrain.run`'s own 5 s bound is meaningless while
+    this call can run to the shared client's much longer default — it needs its own short
+    override, distinct from every other route on this client."""
+    seen_timeouts = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_timeouts.append(request.extensions["timeout"]["read"])
+        return httpx.Response(200, json={"runner_id": "r1", "high_water": 1, "applied": [1], "already_applied": []})
+
+    transport = httpx.MockTransport(handler)
+    # A much longer default than the transcript route's own override, so the two are
+    # unambiguously distinguishable in what the transport actually receives.
+    client = HttpHubClient(httpx.Client(base_url="http://hub.test", transport=transport, timeout=30.0))
+    batch = TranscriptSegmentBatch(
+        runner_id="r1",
+        records=[
+            TranscriptSegmentRecord(
+                seq=1,
+                segment_id="seg_1",
+                chunk_id="ch_1",
+                node_id="nd_build",
+                epoch=1,
+                spawn_generation=1,
+                turn_range_start=0,
+                turn_range_end=0,
+                final=False,
+                normalizer_version="v1",
+                harness_version=None,
+                turns=[],
+            )
+        ],
+    )
+    client.push_transcripts(batch)
+    client.peek_queue()  # a plain route, to prove it still rides the client's own default
+
+    assert seen_timeouts[0] == 5.0  # the transcript route's own short override
+    assert seen_timeouts[1] == 30.0  # every other route: unaffected, still the shared default
 
 
 @pytest.mark.unit

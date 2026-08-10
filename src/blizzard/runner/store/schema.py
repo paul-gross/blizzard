@@ -449,3 +449,64 @@ external_usage_samples = Table(
     Column("sampled_at", UtcDateTime, nullable=False),
     Column("payload", Text, nullable=True),  # NULL = this attempt sampled nothing
 )
+
+# --- Transcript segments (the segment ledger — issue #246, D2) ---------------
+# Mutable, like `leases`, not append-only; keyed `(chunk_id, node_id, epoch, generation)`.
+
+transcript_segments = Table(
+    "transcript_segments",
+    metadata,
+    Column("segment_id", String, primary_key=True),  # seg_<ulid>
+    Column("chunk_id", String, nullable=False, index=True),
+    Column("node_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("generation", Integer, nullable=False),  # this lease's spawn ordinal (1 = initial spawn)
+    Column("lease_id", String, nullable=False),
+    Column("session_id", String, nullable=False),
+    Column("cursor", String, nullable=True),  # opaque TranscriptPosition.token; NULL = unread from the start
+    Column("shipped_bytes", Integer, nullable=False),
+    # Also this segment's next `turn_range_start` (blizzard#247's wire key) — turn indices
+    # are segment-relative and gapless, so the running count doubles as the next offset.
+    Column("shipped_turns", Integer, nullable=False),
+    # A static per-harness constant, not something reading is needed to learn — stamped with
+    # the source seam's "never ran" sentinel at spawn, so a closure always has one to declare.
+    Column("normalizer_version", String, nullable=False),
+    Column("harness_version", String, nullable=True),
+    # `truncated_reason` displays the WORST reason seen so far, by explicit severity;
+    # `shipping_stopped_reason` is a separate field that latches on its first cause instead.
+    Column("truncated_reason", String, nullable=True),  # NULL = no record ever shrunk
+    # The severity `truncated_reason` was last set with — so the store can compare
+    # without itself knowing what any reason string means.
+    Column("truncated_reason_severity", Integer, nullable=True),
+    Column("shipping_stopped_reason", String, nullable=True),  # NULL = still shipping (D4)
+    # JSON array of subagent `agent_id`s already warned about on the fact lane.
+    Column("sidechain_warned_agents", Text, nullable=True),  # NULL = none warned yet
+    # JSON array of truncation `reason`s warned about — the warn-once latch,
+    # independent of `truncated_reason`'s own worst-of display value.
+    Column("truncated_reasons_warned", Text, nullable=True),  # NULL = none warned yet
+    Column("finalized_at", UtcDateTime, nullable=True),  # NULL = still open; set by step close
+    Column("stamped_at", UtcDateTime, nullable=False),
+)
+
+# --- Transcript outbound buffer (the lane's own store-and-forward — D3) ------
+# A second FIFO drain, its own sequence, structurally independent of `outbound_buffer`'s.
+
+transcript_outbound_buffer = Table(
+    "transcript_outbound_buffer",
+    metadata,
+    Column("seq", Integer, primary_key=True, autoincrement=True),  # per-runner monotonic, own sequence
+    Column("segment_id", String, nullable=False),
+    Column("chunk_id", String, nullable=False),
+    # Mirrors the payload's own `final` flag, so ack-time keep-vs-delete needs no JSON read.
+    Column("final", Boolean, nullable=False),
+    # Two shapes, keyed by `final`: non-final is a TranscriptSegmentRecord's fields (minus
+    # `seq`/`runner_id`); final is just `{"segment_id": ...}` — see `_enqueue_transcript_final`.
+    Column("payload", Text, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+    # NULL = pending. An acked non-final row is deleted, never reaching this state; an
+    # acked final row IS marked here — its continued presence is the exactly-once receipt.
+    Column("acked_at", UtcDateTime, nullable=True),
+    # A pruned row's rowid must never be reissued as a later `seq`; recorded `bzh:sql-portable`
+    # exemption in blizzard-context:/standards/persistence.md. Pinned in test_pin_runner_store.py.
+    sqlite_autoincrement=True,
+)

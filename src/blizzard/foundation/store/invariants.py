@@ -124,6 +124,70 @@ class GaplessOutboundSeq(QueryCheck):
         return [Violation("runner:gapless-outbound-seq", f"outbound seqs not gapless; missing {missing}")]
 
 
+class GaplessTranscriptOutboundSeq(QueryCheck):
+    """A hole in the transcript lane's own *pending* (unacked) seqs means a lost record
+    (D3, issue #246) — scoped to the pending window, not every seq ever minted (review
+    since an acked non-final row is pruned outright."""
+
+    def run(self) -> list[Violation]:
+        seqs = sorted(
+            row[0]
+            for row in self.conn.execute(
+                select(runner.transcript_outbound_buffer.c.seq).where(
+                    runner.transcript_outbound_buffer.c.acked_at.is_(None)
+                )
+            )
+        )
+        if not seqs:
+            return []
+        expected = list(range(seqs[0], seqs[0] + len(seqs)))
+        if seqs == expected:
+            return []
+        missing = sorted(set(expected) - set(seqs))
+        return [
+            Violation(
+                "runner:gapless-transcript-outbound-seq",
+                f"pending transcript outbound seqs not gapless; missing {missing}",
+            )
+        ]
+
+
+class TranscriptSegmentFinalizedExactlyOnce(QueryCheck):
+    """A finalized segment (`finalized_at` set) has exactly one `final` row buffered for it —
+    a step's segments are final by step close, landed once, never zero and never duplicated
+    (issue #246). Unconditional: every segment has a `normalizer_version` to declare, so this
+    holds regardless of `[transcripts] ship` or whether a pump ever ran."""
+
+    def run(self) -> list[Violation]:
+        violations: list[Violation] = []
+        finalized = {
+            row[0]
+            for row in self.conn.execute(
+                select(runner.transcript_segments.c.segment_id).where(
+                    runner.transcript_segments.c.finalized_at.is_not(None)
+                )
+            )
+        }
+        markers = Counter(
+            row[0]
+            for row in self.conn.execute(
+                select(runner.transcript_outbound_buffer.c.segment_id).where(
+                    runner.transcript_outbound_buffer.c.final.is_(True)
+                )
+            )
+        )
+        for segment_id in finalized:
+            n = markers.get(segment_id, 0)
+            if n != 1:
+                violations.append(
+                    Violation(
+                        "runner:transcript-segment-finalized-exactly-once",
+                        f"segment {segment_id} is finalized but has {n} final markers buffered",
+                    )
+                )
+        return violations
+
+
 class OneOpenPauseParkPerLease(QueryCheck):
     """An *open* pause-park is a park fact with no pause-resume at or after it (issue #46);
     a re-pause is legal."""
@@ -509,6 +573,8 @@ class RunnerInvariants:
                 OneLiveLeasePerChunk(conn),
                 UniqueEnvBinding(conn),
                 GaplessOutboundSeq(conn),
+                GaplessTranscriptOutboundSeq(conn),
+                TranscriptSegmentFinalizedExactlyOnce(conn),
                 OneOpenPauseParkPerLease(conn),
                 UsageAttributedOnce(conn),
                 NudgeAtMostOnce(conn),

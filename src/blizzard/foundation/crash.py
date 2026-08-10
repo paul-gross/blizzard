@@ -25,6 +25,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.runner.loop.attempt",
     "blizzard.runner.loop.judgement",
     "blizzard.runner.loop.drain",
+    "blizzard.runner.loop.transcript_drain",
     "blizzard.runner.loop.claim",
     "blizzard.runner.loop.dormant",
     "blizzard.runner.domain.attachments",

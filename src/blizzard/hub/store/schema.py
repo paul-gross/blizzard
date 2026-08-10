@@ -757,8 +757,7 @@ event_log = Table(
 Index("ix_event_log_recorded_at", event_log.c.recorded_at)
 
 # --- Transcript segments (blizzard#247, epic:transcripts) ----------------------
-# A row is one shipped record, not one segment (D1) — append-only; a cap rejection (D5)
-# lands contentless. The natural key (D8) dedupes a re-offer under a fresh lane sequence.
+# One row per shipped record (D1), append-only; the natural key (D8) dedupes re-offers.
 
 transcript_segments = Table(
     "transcript_segments",
@@ -786,8 +785,9 @@ transcript_segments = Table(
     Column("content", LargeBinary, nullable=True),  # compressed turns JSON; null iff rejected
     Column("normalizer_version", String, nullable=False),
     Column("harness_version", String, nullable=True),
-    # Hub-stamped receipt instant (plan-review F1) — the D3 rolling 24h window anchors
-    # here, never on a runner-supplied instant.
+    # The runner's OWN cap declaration, distinct from `rejected` above; nullable, no backfill.
+    Column("record_truncated", Boolean, nullable=True),
+    # Hub-stamped receipt instant — the D3 rolling 24h window anchors here, never on the runner's.
     Column("received_at", UtcDateTime, nullable=False),
     UniqueConstraint("segment_id", "turn_range_start", name="uq_transcript_segments_segment_turn_start"),
 )

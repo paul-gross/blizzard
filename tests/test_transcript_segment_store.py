@@ -36,6 +36,7 @@ def _record(**overrides: object) -> SegmentRecord:
         "final": True,
         "normalizer_version": "v1",
         "harness_version": "claude-code-1.0",
+        "record_truncated": False,
         "turns_json": '[{"index": 0, "kind": "asst"}]',
     }
     values.update(overrides)
@@ -157,6 +158,20 @@ def test_update_to_accepted_transitions_a_rejected_row_in_place(tmp_path: Path) 
     assert len(rows) == 1
 
 
+def test_update_to_accepted_carries_the_re_offers_own_truncated_flag(tmp_path: Path) -> None:
+    """review F10: a natural-key re-offer must not keep the FIRST offer's flag — the worse,
+    later offer's own truth wins, not a stale one."""
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(engine)
+    first = _record(record_truncated=True)
+    store.insert_rejected(first, byte_count=999, reason="record_too_large", at=_NOW)
+
+    store.update_to_accepted(_record(record_truncated=False), byte_count=10, codec="zlib", at=_NOW)
+
+    [content] = store.records_for_segment("ch_1", "sg_1")
+    assert content.record_truncated is False
+
+
 def test_update_still_rejected_refreshes_the_row_without_storing_content(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptSegmentStore(engine)
@@ -164,7 +179,7 @@ def test_update_still_rejected_refreshes_the_row_without_storing_content(tmp_pat
     store.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
     later = _NOW.replace(hour=12)
 
-    store.update_still_rejected(record, byte_count=1200, reason="record_too_large", at=later)
+    store.update_still_rejected(_record(record_truncated=True), byte_count=1200, reason="record_too_large", at=later)
 
     with engine.connect() as conn:
         rows = conn.execute(select(s.transcript_segments)).all()
@@ -172,3 +187,4 @@ def test_update_still_rejected_refreshes_the_row_without_storing_content(tmp_pat
     assert rows[0].content is None
     assert rows[0].byte_count == 1200
     assert rows[0].received_at == later
+    assert rows[0].record_truncated is True  # review F10: the re-offer's own flag, not the first's

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from sqlalchemy import text
 
 from blizzard.hub.domain import transcripts as transcripts_domain
 from blizzard.hub.domain.transcripts import (
@@ -49,6 +50,7 @@ def _record(
         "final": final,
         "normalizer_version": "v1",
         "harness_version": "claude-code-1.0",
+        "record_truncated": False,
         "turns_json": f'[{{"index": {turn_range_start}, "kind": "asst", "text": "turn"}}]',
     }
     values.update(overrides)
@@ -109,6 +111,27 @@ def test_a_re_offer_under_a_fresh_seq_dedupes_against_the_natural_key(tmp_path: 
     [content] = store.records_for_segment("ch_1", "sg_1")  # still one row, not two
     assert content.turn_range_start == 0
     assert store.chunk_stored_bytes("ch_1") == len(_record(1, turn_range_start=0, turn_range_end=0)[1].turns_json)
+
+
+def test_a_below_mark_record_the_hub_no_longer_holds_is_stored_not_reported_idempotent(tmp_path: Path) -> None:
+    """The runner PRUNES a row the ack calls ``already_applied``, so reporting idempotency
+    for a natural key the hub does not hold destroys the only copy of that content."""
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    store = TranscriptSegmentStore(hub.engine)
+    service = TranscriptIngestService(store=store, clock=hub.clock)
+    service.ingest(
+        "r1", [_record(1, turn_range_start=0, turn_range_end=0), _record(2, turn_range_start=1, turn_range_end=1)]
+    )
+    with hub.engine.begin() as conn:
+        conn.execute(text("DELETE FROM transcript_segments WHERE turn_range_start = 0"))
+
+    result = service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
+
+    assert result.applied == [1]
+    assert result.already_applied == []
+    assert result.high_water == 2  # still below the mark — the mark itself never moves back
+    assert [c.turn_range_start for c in store.records_for_segment("ch_1", "sg_1")] == [0, 1]
 
 
 def test_a_re_offer_of_a_previously_rejected_record_is_re_adjudicated_not_falsely_applied(tmp_path: Path) -> None:
@@ -195,9 +218,11 @@ def test_an_oversized_record_is_rejected_acked_and_advances_the_high_water(tmp_p
     # D6: the advance is *durable*, not just returned — a cap rejection must never be
     # re-adjudicated on replay, so the mark has to survive the call that made it.
     assert store.high_water("r1") == 1
+    # A replay must still report the cap outcome — a lost-ack retry (e.g. a runner crash
+    # between the hub's apply and its own local ack) must not read as ordinary idempotency.
     replay = service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json=big)])
-    assert replay.already_applied == [1]
-    assert replay.capped == []
+    assert replay.already_applied == []
+    assert replay.capped == [1]
     [entry] = store.segments_for_chunk("ch_1")
     assert entry.truncated is True
 

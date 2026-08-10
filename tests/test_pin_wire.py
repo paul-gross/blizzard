@@ -17,6 +17,7 @@ from blizzard.wire.chunk import ChunkDetail, ChunkIngestRequest
 from blizzard.wire.git_commits import GitCommitDeclarationRequest
 from blizzard.wire.graph import GraphPolicyRequest
 from blizzard.wire.history import ChunkHistoryView
+from blizzard.wire.transcript_segment import ToolCallSegmentView
 
 pytestmark = pytest.mark.unit
 
@@ -75,6 +76,21 @@ def test_the_runner_spec_carries_no_chunk_detail_history_views() -> None:
     schemas = _runner_schemas()
     assert not {"TransitionView", "MigrationView", "BounceView"} & set(schemas)
     assert "HistoryRowView" in schemas
+
+
+def test_tool_call_segment_view_defaults_a_missing_input_truncated_to_false() -> None:
+    """A turn stored before this field existed is read back through ``_content_view``'s
+    ``TurnSegmentView.model_validate``; required here, that read 500s on every such turn."""
+    without_field = {
+        "name": "Bash",
+        "input": {},
+        "input_unparsed": None,
+        "input_shape": "object",
+        "tool_use_id": "tool_1",
+        "output": None,
+        "output_truncated": False,
+    }
+    assert ToolCallSegmentView.model_validate(without_field).input_truncated is False
 
 
 def test_the_runner_spec_escalation_view_is_the_runners_own() -> None:

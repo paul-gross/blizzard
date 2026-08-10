@@ -28,6 +28,7 @@ _IHUBCLIENT_ENDPOINTS: dict[str, tuple[str, str]] = {
     "submit_completion": ("POST", "/api/fleet/chunks/{chunk_id}/completions"),
     "submit_decision": ("POST", "/api/fleet/chunks/{chunk_id}/decisions"),
     "push_facts": ("POST", "/api/fleet/events"),
+    "push_transcripts": ("POST", "/api/fleet/transcripts"),
     "get_envelope": ("GET", "/api/fleet/chunks/{chunk_id}/envelope"),
     "get_chunk": ("GET", "/api/fleet/chunks/{chunk_id}"),
     "hub_advance": ("POST", "/api/fleet/chunks/{chunk_id}/hub-advance"),
@@ -133,6 +134,7 @@ _EXPECTED_DRIVE_VERBS: dict[str, str] = {
         "on the mock's api_router"
     ),
     "get-git-commits": "test-only control — reads back a lease's declared git commits, no IHubClient operation",
+    "push-transcript": "IHubClient.push_transcripts — POST /api/fleet/transcripts (blizzard#246/#247, review round 8 F7)",
 }
 
 

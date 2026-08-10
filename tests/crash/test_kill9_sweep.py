@@ -110,6 +110,9 @@ _CI_SUBSET = (
     # `claim.*` (issue #84b) is a boundary family within `_GENERIC_POINTS`; a family's lone
     # member is its own CI representative.
     "claim.after-persist.before-response",
+    # `transcript.*` (D3, issue #246): reachable here with no dedicated scenario — every
+    # lease closure enqueues a final marker regardless of `[transcripts] ship`.
+    "transcript.after-submit.before-ack",
 )
 
 # The resume CI subset: the recovery-critical kill-first window, bounding wall time

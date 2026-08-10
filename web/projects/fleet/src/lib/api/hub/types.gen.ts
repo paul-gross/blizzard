@@ -2540,6 +2540,10 @@ export type ToolCallSegmentView = {
      */
     input_shape: string;
     /**
+     * Input Truncated
+     */
+    input_truncated?: boolean;
+    /**
      * Input Unparsed
      */
     input_unparsed: string | null;
@@ -2639,8 +2643,9 @@ export type TranscriptSegmentContentView = {
  * TranscriptSegmentIndexEntry
  *
  * One segment's metadata row (D12) — byte counts and completion state, never turn
- * content. ``truncated`` marks a segment the per-segment cap rejected part of (D5), so a
- * consumer can tell an incomplete segment from a short one without fetching it.
+ * content. ``truncated`` is true iff any record was cap-rejected (D5) OR the runner
+ * itself declared ``record_truncated`` on one, so a consumer can tell an incomplete
+ * segment from a short one without fetching it.
  */
 export type TranscriptSegmentIndexEntry = {
     /**
@@ -2713,9 +2718,10 @@ export type TranscriptSegmentIndexView = {
 /**
  * TranscriptSegmentRecord
  *
- * One shipped turn-range slice of a segment (D1). ``final=True`` marks the one
- * record that closes the segment out — the hub never infers completeness from a
- * transition (product plan, ``epic:transcripts``).
+ * One shipped turn-range slice of a segment (D1). ``final=True`` marks the one record
+ * that closes the segment out. ``record_truncated`` is the runner's own declaration that
+ * THIS record lost content it would otherwise carry — shrunk, an incomplete source read,
+ * or (only when neither closes the gap) ``turns`` emptied — distinct from ``rejected``.
  */
 export type TranscriptSegmentRecord = {
     /**
@@ -2742,6 +2748,10 @@ export type TranscriptSegmentRecord = {
      * Normalizer Version
      */
     normalizer_version: string;
+    /**
+     * Record Truncated
+     */
+    record_truncated?: boolean;
     /**
      * Segment Id
      */
@@ -2819,7 +2829,9 @@ export type TransitionView = {
  * TurnSegmentView
  *
  * One normalized turn, carried in full. ``index`` is **segment-relative** and minted
- * by the producer (D9), so it is stable across the batches a segment arrives in.
+ * by the producer (D9), stable across the batches a segment arrives in — EXCEPT under
+ * ``sidechain.turns``, where it counts within that one sidechain instead, restarting at
+ * 0 for each rather than offset by the enclosing segment's own stream.
  */
 export type TurnSegmentViewInput = {
     /**
@@ -2854,7 +2866,9 @@ export type TurnSegmentViewInput = {
  * TurnSegmentView
  *
  * One normalized turn, carried in full. ``index`` is **segment-relative** and minted
- * by the producer (D9), so it is stable across the batches a segment arrives in.
+ * by the producer (D9), stable across the batches a segment arrives in — EXCEPT under
+ * ``sidechain.turns``, where it counts within that one sidechain instead, restarting at
+ * 0 for each rather than offset by the enclosing segment's own stream.
  */
 export type TurnSegmentViewOutput = {
     /**

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.store.utc import as_utc
 
 # Crockford base32 alphabet (no I, L, O, U) — the canonical ULID encoding.
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -34,6 +35,7 @@ SELFTEST_PREFIX = "self"
 HUB_EXEC_SLOT_PREFIX = "hes"
 MIGRATION_PREFIX = "mg"  # a chunk_migrations fact (issue #90)
 USER_PREFIX = "usr"  # a hub-local user (issue #91)
+SEGMENT_PREFIX = "seg"  # a transcript segment, the hub's idempotence key (issue #246)
 
 
 @dataclass(frozen=True)
@@ -46,7 +48,15 @@ class Id:
 
     @classmethod
     def mint(cls, prefix: str, clock: IClock) -> Id:
-        millis = int(clock.now().timestamp() * 1000)
+        return cls.mint_at(prefix, clock.now())
+
+    @classmethod
+    def mint_at(cls, prefix: str, at: datetime) -> Id:
+        """Mint an id timestamped at ``at`` rather than an injected clock's ``now()`` — for a
+        caller that already holds a stamped instant (e.g. a store method passed one in,
+        ``bzh:injected-clock``) rather than a live clock of its own. A naive ``at`` reads as
+        UTC (``bzh:utc-instants``), never as the host's local zone."""
+        millis = int(as_utc(at).timestamp() * 1000)
         randomness = int.from_bytes(os.urandom(10), "big")
         return cls(prefix, cls._encode(millis, _TIME_CHARS) + cls._encode(randomness, _RAND_CHARS))
 

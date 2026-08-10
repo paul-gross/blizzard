@@ -48,6 +48,7 @@ from blizzard.wire.graph import ProducesEntry
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry, QueuePeekResponse
 from blizzard.wire.route import RouteClaim, RouteClaimResponse, RouteTokenRekeyResponse
+from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch, TranscriptSegmentRecord
 
 
 def make_store(tmp_path_url: str) -> SqlAlchemyRunnerStore:
@@ -86,6 +87,13 @@ class FakeHub:
         # untracked here; nothing in `src/` calls this route (push_facts carries it instead).
         self.pushed: list[RunnerFact] = []
         self.high_water: dict[str, int] = {}
+        # The transcript lane's own push log and mark — structurally separate from the
+        # fact lane's above (D3, issue #246).
+        self.transcripts_pushed: list[TranscriptSegmentRecord] = []
+        self.transcript_high_water: dict[str, int] = {}
+        # Seqs to cap-reject-but-ack, scripted (review F8) — the real ingest service's own
+        # size/budget/rate rejection (blizzard#247), which no fake could otherwise surface to a test.
+        self.reject_transcript_seqs: set[int] = set()
         self.questions: dict[str, QuestionView] = {}
         self.delivered: list[tuple[str, QuestionView]] = []
         self.registered: list[tuple[str, str]] = []  # (runner_id, workspace_id)
@@ -137,6 +145,33 @@ class FakeHub:
             applied.append(fact.seq)
         self.high_water[batch.runner_id] = mark
         return RunnerFactAck(runner_id=batch.runner_id, high_water=mark, applied=applied, already_applied=already)
+
+    def push_transcripts(self, batch: TranscriptSegmentBatch) -> TranscriptSegmentAck:
+        if self.down:
+            raise HubClientError("fake hub is down")
+        mark = self.transcript_high_water.get(batch.runner_id, 0)
+        applied, already, capped = [], [], []
+        for record in sorted(batch.records, key=lambda r: r.seq):
+            if record.seq <= mark:
+                # Mirrors the real hub's own replay fix: a lost-ack retry of an
+                # already-decided seq still reports its cap outcome, not bare idempotency.
+                if record.seq in self.reject_transcript_seqs:
+                    capped.append(record.seq)
+                else:
+                    already.append(record.seq)
+                continue
+            mark = record.seq
+            if record.seq in self.reject_transcript_seqs:
+                # Cap-rejected-but-acked: the mark still advances past it (D6/blizzard#247's
+                # `TranscriptIngestService._apply` — every reachable outcome advances the mark).
+                capped.append(record.seq)
+                continue
+            self.transcripts_pushed.append(record)
+            applied.append(record.seq)
+        self.transcript_high_water[batch.runner_id] = mark
+        return TranscriptSegmentAck(
+            runner_id=batch.runner_id, high_water=mark, applied=applied, already_applied=already, capped=capped
+        )
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
         if chunk_id in self.not_found:

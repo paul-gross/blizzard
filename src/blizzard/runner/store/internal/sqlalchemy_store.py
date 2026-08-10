@@ -15,12 +15,14 @@ from typing import Any
 from sqlalchemy import Engine, and_, case, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
+from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.store.repository import (
     AskRecord,
     BufferedFact,
+    BufferedTranscriptDelta,
     CheckResultRecord,
     ClosedLeaseRecord,
     EnvBindingRecord,
@@ -34,6 +36,7 @@ from blizzard.runner.store.repository import (
     PoolHead,
     RunnerStoreError,
     TakeoverRecord,
+    TranscriptSegmentLedgerRow,
     UsageTotals,
 )
 from blizzard.runner.store.schema import (
@@ -68,6 +71,8 @@ from blizzard.runner.store.schema import (
     session_preamble_facts,
     takeover_ends,
     takeovers,
+    transcript_outbound_buffer,
+    transcript_segments,
     usage_facts,
     workspace_prompt,
 )
@@ -78,6 +83,10 @@ _log = get_logger("blizzard.runner.store")
 # The caller-owned closure reason this store reads back to derive "open escalation"
 # (issue #51).
 _ESCALATED_REASON = "escalated"
+
+# A fresh segment's placeholder, before its first pump read — the harness seam's own
+# sentinel convention, restated rather than imported (the store never depends on it).
+_NO_NORMALIZER_VERSION = ""
 
 
 @dataclass(frozen=True)
@@ -154,6 +163,22 @@ UNCONSUMED_REQUEUE = Unsuperseded(
 
 OPEN_TAKEOVER = Unclosed(takeovers.c.takeover_id, takeover_ends.c.takeover_id)
 OPEN_LEASE = Unclosed(leases.c.lease_id, lease_closures.c.lease_id)
+
+
+def _enqueue_transcript_final(conn, segment, *, at: datetime) -> None:  # type: ignore[no-untyped-def]
+    """Enqueue a marker noting ``segment`` is finalized (issue #246) — a minimal row; the
+    wire-shaped ``TranscriptSegmentRecord`` itself is rendered at the drain boundary from
+    the ledger row (``bzh:dependency-inversion``). Ships unconditionally, regardless of
+    ``[transcripts] ship`` or whether a pump ever ran."""
+    conn.execute(
+        transcript_outbound_buffer.insert().values(
+            segment_id=str(segment.segment_id),
+            chunk_id=str(segment.chunk_id),
+            final=True,
+            payload=json.dumps({"segment_id": str(segment.segment_id)}),
+            created_at=at,
+        )
+    )
 
 
 class SqlAlchemyRunnerStore:
@@ -368,6 +393,54 @@ class SqlAlchemyRunnerStore:
                 lease_id=str(r.lease_id) if r.lease_id is not None else None,
                 created_at=r.created_at,
                 acked_at=r.acked_at,
+            )
+            for r in self._all(stmt)
+        ]
+
+    def transcript_segment(self, segment_id: str) -> TranscriptSegmentLedgerRow | None:
+        rows = self._all(select(transcript_segments).where(transcript_segments.c.segment_id == segment_id))
+        return self._row_to_transcript_segment(rows[0]) if rows else None
+
+    def open_transcript_segments(self) -> list[TranscriptSegmentLedgerRow]:
+        stmt = (
+            select(transcript_segments)
+            .where(transcript_segments.c.finalized_at.is_(None))
+            .order_by(transcript_segments.c.segment_id)
+        )
+        return [self._row_to_transcript_segment(r) for r in self._all(stmt)]
+
+    def chunk_transcript_shipped_bytes(self, chunk_id: str) -> int:
+        stmt = select(func.coalesce(func.sum(transcript_segments.c.shipped_bytes), 0)).where(
+            transcript_segments.c.chunk_id == chunk_id
+        )
+        with self._connect() as conn:
+            return int(conn.execute(stmt).scalar_one())
+
+    def outstanding_transcript_buffer_bytes(self) -> int:
+        # Payloads are `json.dumps(ensure_ascii=True)`, so SQL `length()` (chars) agrees
+        # with the encoded byte length here (same fact the pump's own `_byte_cost` relies on).
+        stmt = select(func.coalesce(func.sum(func.length(transcript_outbound_buffer.c.payload)), 0)).where(
+            transcript_outbound_buffer.c.acked_at.is_(None)
+        )
+        with self._connect() as conn:
+            return int(conn.execute(stmt).scalar_one())
+
+    def pending_transcript_outbound(self, *, limit: int | None = None) -> list[BufferedTranscriptDelta]:
+        stmt = (
+            select(transcript_outbound_buffer)
+            .where(transcript_outbound_buffer.c.acked_at.is_(None))
+            .order_by(transcript_outbound_buffer.c.seq)
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        return [
+            BufferedTranscriptDelta(
+                seq=int(r.seq),
+                final=bool(r.final),
+                segment_id=str(r.segment_id),
+                chunk_id=str(r.chunk_id),
+                payload=str(r.payload),
+                created_at=r.created_at,
             )
             for r in self._all(stmt)
         ]
@@ -675,6 +748,59 @@ class SqlAlchemyRunnerStore:
             # One transaction with the in-place pid rewrite: the spawn generation and the process
             # it describes are one fact, and a crash between them would leave the two disagreeing.
             conn.execute(lease_spawns.insert().values(lease_id=lease_id, spawned_at=spawned_at))
+            generation = int(
+                conn.execute(
+                    select(func.count()).select_from(lease_spawns).where(lease_spawns.c.lease_id == lease_id)
+                ).scalar_one()
+            )
+            # Every start path reaching this transaction is a segment boundary (issue #246,
+            # D1) — stamped here, not at the call sites, so a fourth can't miss it.
+            context_row = conn.execute(
+                select(leases.c.chunk_id, leases.c.epoch, lease_context.c.node_id)
+                .select_from(leases.join(lease_context, leases.c.lease_id == lease_context.c.lease_id))
+                .where(leases.c.lease_id == lease_id)
+            ).one()
+            # Carries a resumed session's cursor forward — the cross-lease case finds its
+            # predecessor already finalized, so this reads regardless of finalization.
+            prior_segment = conn.execute(
+                select(transcript_segments)
+                .where(transcript_segments.c.chunk_id == context_row.chunk_id)
+                .where(transcript_segments.c.session_id == session_id)
+                # `segment_id` tie-breaks `stamped_at` (`bzh:sql-portable`) — a same-instant
+                # pair would otherwise pick nondeterministically across backends.
+                .order_by(transcript_segments.c.stamped_at.desc(), transcript_segments.c.segment_id.desc())
+                .limit(1)
+            ).one_or_none()
+            carried_cursor: str | None = None
+            if prior_segment is not None:
+                carried_cursor = str(prior_segment.cursor) if prior_segment.cursor is not None else None
+                if prior_segment.finalized_at is None:
+                    conn.execute(
+                        transcript_segments.update()
+                        .where(transcript_segments.c.segment_id == prior_segment.segment_id)
+                        .values(finalized_at=spawned_at)
+                    )
+                    _enqueue_transcript_final(conn, prior_segment, at=spawned_at)
+            conn.execute(
+                transcript_segments.insert().values(
+                    segment_id=Id.mint_at(SEGMENT_PREFIX, spawned_at).value,
+                    chunk_id=str(context_row.chunk_id),
+                    node_id=str(context_row.node_id),
+                    epoch=int(context_row.epoch),
+                    generation=generation,
+                    lease_id=lease_id,
+                    session_id=session_id,
+                    cursor=carried_cursor,
+                    shipped_bytes=0,
+                    shipped_turns=0,
+                    normalizer_version=_NO_NORMALIZER_VERSION,
+                    harness_version=None,
+                    truncated_reason=None,
+                    shipping_stopped_reason=None,
+                    finalized_at=None,
+                    stamped_at=spawned_at,
+                )
+            )
         _log.info("worker spawned", lease_id=lease_id, pid=pid, session_id=session_id)
 
     def record_daemon_liveness(self, *, runner_id: str, alive_at: datetime) -> None:
@@ -733,7 +859,27 @@ class SqlAlchemyRunnerStore:
                         created_at=closed_at,
                     )
                 )
-        _log.info("lease closed", lease_id=lease_id, chunk_id=chunk_id, reason=reason)
+            # Segments are final by step close (issue #246) — finalized atomically here, on
+            # the transcript lane's OWN buffer (D3), never `outbound_buffer` above.
+            open_segments = conn.execute(
+                select(transcript_segments)
+                .where(transcript_segments.c.lease_id == lease_id)
+                .where(transcript_segments.c.finalized_at.is_(None))
+            ).all()
+            for segment in open_segments:
+                conn.execute(
+                    transcript_segments.update()
+                    .where(transcript_segments.c.segment_id == segment.segment_id)
+                    .values(finalized_at=closed_at)
+                )
+                _enqueue_transcript_final(conn, segment, at=closed_at)
+        _log.info(
+            "lease closed",
+            lease_id=lease_id,
+            chunk_id=chunk_id,
+            reason=reason,
+            transcript_segments_finalized=len(open_segments),
+        )
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
         with self._begin() as conn:
@@ -759,6 +905,141 @@ class SqlAlchemyRunnerStore:
     def ack_outbound(self, seq: int, *, acked_at: datetime) -> None:
         with self._begin() as conn:
             conn.execute(outbound_buffer.update().where(outbound_buffer.c.seq == seq).values(acked_at=acked_at))
+
+    def mark_transcript_record_truncated(self, segment_id: str, *, reason: str, severity: int) -> bool:
+        with self._begin() as conn:
+            row = conn.execute(
+                select(
+                    transcript_segments.c.truncated_reason,
+                    transcript_segments.c.truncated_reason_severity,
+                    transcript_segments.c.truncated_reasons_warned,
+                ).where(transcript_segments.c.segment_id == segment_id)
+            ).first()
+            if row is None:
+                return False
+            current_reason, current_severity, warned_json = row
+            warned: list[str] = json.loads(warned_json) if warned_json is not None else []
+            # Latched per (segment, reason) — a reason already warned never re-warns, no
+            # matter how the display field below moves after it.
+            already_warned = reason in warned
+            values: dict[str, Any] = {}
+            if not already_warned:
+                values["truncated_reasons_warned"] = json.dumps([*warned, reason])
+            # Worst-of, by the CALLER's own severity — the store holds no opinion on reasons.
+            # `current_severity` is nullable and never backfilled: a row that took its reason
+            # before that column existed reads NULL, which is not comparable.
+            if current_reason != reason and (
+                current_reason is None or current_severity is None or severity >= current_severity
+            ):
+                values["truncated_reason"] = reason
+                values["truncated_reason_severity"] = severity
+            if values:
+                conn.execute(
+                    transcript_segments.update().where(transcript_segments.c.segment_id == segment_id).values(**values)
+                )
+        changed = not already_warned
+        if changed:
+            _log.warning("transcript record truncated", segment_id=segment_id, reason=reason)
+        return changed
+
+    def stop_transcript_segment_shipping(self, segment_id: str, *, reason: str) -> bool:
+        with self._begin() as conn:
+            # `IS NULL` guard: a segment already stopped keeps its first reason.
+            result = conn.execute(
+                transcript_segments.update()
+                .where(transcript_segments.c.segment_id == segment_id)
+                .where(transcript_segments.c.shipping_stopped_reason.is_(None))
+                .values(shipping_stopped_reason=reason)
+            )
+        changed = result.rowcount > 0
+        if changed:
+            _log.warning("transcript segment stopped shipping", segment_id=segment_id, reason=reason)
+        return changed
+
+    def mark_sidechain_dropped_warned(self, segment_id: str, *, agent_id: str | None) -> bool:
+        with self._begin() as conn:
+            row = conn.execute(
+                select(transcript_segments.c.sidechain_warned_agents).where(
+                    transcript_segments.c.segment_id == segment_id
+                )
+            ).first()
+            warned: list[str | None] = json.loads(row[0]) if row is not None and row[0] is not None else []
+            if agent_id in warned:
+                return False
+            warned.append(agent_id)
+            conn.execute(
+                transcript_segments.update()
+                .where(transcript_segments.c.segment_id == segment_id)
+                .values(sidechain_warned_agents=json.dumps(warned))
+            )
+        _log.warning("transcript segment dropped an unlinked sidechain", segment_id=segment_id, agent_id=agent_id)
+        return True
+
+    def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:
+        with self._begin() as conn:
+            # Non-final rows are pruned outright, nothing reading an acked one; a final
+            # marker stays, acked in place — its row is the exactly-once receipt.
+            conn.execute(
+                transcript_outbound_buffer.delete()
+                .where(transcript_outbound_buffer.c.seq == seq)
+                .where(transcript_outbound_buffer.c.final.is_(False))
+            )
+            conn.execute(
+                transcript_outbound_buffer.update()
+                .where(transcript_outbound_buffer.c.seq == seq)
+                .where(transcript_outbound_buffer.c.final.is_(True))
+                .values(acked_at=acked_at)
+            )
+
+    def record_transcript_deltas(
+        self,
+        *,
+        segment_id: str,
+        chunk_id: str,
+        cursor: str | None,
+        shipped_bytes: int,
+        shipped_turns: int,
+        normalizer_version: str,
+        harness_version: str | None,
+        payloads: list[str],
+        created_at: datetime,
+    ) -> list[int]:
+        with self._begin() as conn:
+            conn.execute(
+                transcript_segments.update()
+                .where(transcript_segments.c.segment_id == segment_id)
+                .values(
+                    cursor=cursor,
+                    shipped_bytes=shipped_bytes,
+                    shipped_turns=shipped_turns,
+                    normalizer_version=normalizer_version,
+                    harness_version=harness_version,
+                )
+            )
+            seqs: list[int] = []
+            for payload in payloads:
+                result = conn.execute(
+                    transcript_outbound_buffer.insert().values(
+                        segment_id=segment_id,
+                        chunk_id=chunk_id,
+                        final=False,
+                        payload=payload,
+                        created_at=created_at,
+                    )
+                )
+                key = result.inserted_primary_key
+                seqs.append(int(key[0]) if key is not None else 0)
+        return seqs
+
+    def advance_transcript_cursor(
+        self, segment_id: str, *, cursor: str, normalizer_version: str, harness_version: str | None
+    ) -> None:
+        with self._begin() as conn:
+            conn.execute(
+                transcript_segments.update()
+                .where(transcript_segments.c.segment_id == segment_id)
+                .values(cursor=cursor, normalizer_version=normalizer_version, harness_version=harness_version)
+            )
 
     def record_ask(
         self,
@@ -1144,6 +1425,27 @@ class SqlAlchemyRunnerStore:
         _log.info("external subscription usage attempt recorded", sampled=payload is not None)
 
     # --- plumbing -----------------------------------------------------------
+
+    @staticmethod
+    def _row_to_transcript_segment(r) -> TranscriptSegmentLedgerRow:  # type: ignore[no-untyped-def]
+        return TranscriptSegmentLedgerRow(
+            segment_id=str(r.segment_id),
+            chunk_id=str(r.chunk_id),
+            node_id=str(r.node_id),
+            epoch=int(r.epoch),
+            generation=int(r.generation),
+            lease_id=str(r.lease_id),
+            session_id=str(r.session_id),
+            cursor=str(r.cursor) if r.cursor is not None else None,
+            shipped_bytes=int(r.shipped_bytes),
+            shipped_turns=int(r.shipped_turns),
+            normalizer_version=str(r.normalizer_version),
+            harness_version=str(r.harness_version) if r.harness_version is not None else None,
+            truncated_reason=str(r.truncated_reason) if r.truncated_reason is not None else None,
+            shipping_stopped_reason=str(r.shipping_stopped_reason) if r.shipping_stopped_reason is not None else None,
+            finalized_at=r.finalized_at,
+            stamped_at=r.stamped_at,
+        )
 
     @staticmethod
     def _row_to_ask(r) -> AskRecord:  # type: ignore[no-untyped-def]

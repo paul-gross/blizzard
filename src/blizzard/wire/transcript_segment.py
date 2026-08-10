@@ -20,6 +20,9 @@ class ToolCallSegmentView(BaseModel):
     tool_use_id: str | None
     output: str | None
     output_truncated: bool
+    # Defaulted like `TranscriptSegmentRecord.record_truncated`: a turn stored before this field
+    # existed must still validate on read-back through `_content_view`.
+    input_truncated: bool = False
 
 
 class SidechainSegmentView(BaseModel):
@@ -35,7 +38,9 @@ class SidechainSegmentView(BaseModel):
 
 class TurnSegmentView(BaseModel):
     """One normalized turn, carried in full. ``index`` is **segment-relative** and minted
-    by the producer (D9), so it is stable across the batches a segment arrives in."""
+    by the producer (D9), stable across the batches a segment arrives in — EXCEPT under
+    ``sidechain.turns``, where it counts within that one sidechain instead, restarting at
+    0 for each rather than offset by the enclosing segment's own stream."""
 
     index: int
     kind: str  # env | asst | tool | thinking
@@ -51,9 +56,10 @@ SidechainSegmentView.model_rebuild()
 
 
 class TranscriptSegmentRecord(BaseModel):
-    """One shipped turn-range slice of a segment (D1). ``final=True`` marks the one
-    record that closes the segment out — the hub never infers completeness from a
-    transition (product plan, ``epic:transcripts``)."""
+    """One shipped turn-range slice of a segment (D1). ``final=True`` marks the one record
+    that closes the segment out. ``record_truncated`` is the runner's own declaration that
+    THIS record lost content it would otherwise carry — shrunk, an incomplete source read,
+    or (only when neither closes the gap) ``turns`` emptied — distinct from ``rejected``."""
 
     seq: int
     segment_id: str
@@ -66,6 +72,7 @@ class TranscriptSegmentRecord(BaseModel):
     final: bool
     normalizer_version: str
     harness_version: str | None
+    record_truncated: bool = False
     turns: list[TurnSegmentView]
 
 
@@ -93,8 +100,9 @@ class TranscriptSegmentAck(BaseModel):
 
 class TranscriptSegmentIndexEntry(BaseModel):
     """One segment's metadata row (D12) — byte counts and completion state, never turn
-    content. ``truncated`` marks a segment the per-segment cap rejected part of (D5), so a
-    consumer can tell an incomplete segment from a short one without fetching it."""
+    content. ``truncated`` is true iff any record was cap-rejected (D5) OR the runner
+    itself declared ``record_truncated`` on one, so a consumer can tell an incomplete
+    segment from a short one without fetching it."""
 
     segment_id: str
     node_id: str

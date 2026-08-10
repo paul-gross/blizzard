@@ -16,8 +16,7 @@ from blizzard.foundation.logging import get_logger
 
 _log = get_logger("blizzard.hub.transcripts")
 
-#: A natural-key lookup's outcome (D8) — ``"rejected"`` re-adjudicates, never applies
-#: outright (review:F1).
+#: A natural-key lookup's outcome (D8) — ``"rejected"`` re-adjudicates, never applies outright.
 NaturalKeyState = Literal["absent", "accepted", "rejected"]
 
 #: A single record's raw-turn-bytes ceiling — above the epic's measured p99 whole-session
@@ -39,8 +38,8 @@ REJECTED_RUNNER_DAILY_RATE_EXCEEDED = "runner_daily_rate_exceeded"
 @dataclass(frozen=True)
 class SegmentRecord:
     """One shipped turn-range slice, store-shaped: ``turns_json`` is the record's turns,
-    already serialized by the caller — the domain never depends on the wire's pydantic
-    turn views (``bzh:domain-core``), and the store confines the compression codec."""
+    already serialized by the caller (``bzh:domain-core``). ``record_truncated`` is the
+    runner's OWN cap declaration, distinct from this hub's own ``rejected`` (below)."""
 
     segment_id: str
     chunk_id: str
@@ -53,14 +52,15 @@ class SegmentRecord:
     final: bool
     normalizer_version: str
     harness_version: str | None
+    record_truncated: bool
     turns_json: str
 
 
 @dataclass(frozen=True)
 class SegmentIndexRow:
-    """One segment's aggregated metadata (D12) — every stored/rejected record folded
-    into its owning segment. ``truncated`` is true iff any of the segment's records were
-    cap-rejected (plan-review F2)."""
+    """One segment's aggregated metadata (D12) — every stored/rejected record folded into
+    its owning segment. ``truncated`` is true iff any record was cap-rejected OR declared
+    its own ``record_truncated``, a runner-side loss the hub's own caps never see."""
 
     segment_id: str
     node_id: str
@@ -78,14 +78,16 @@ class SegmentIndexRow:
 
 @dataclass(frozen=True)
 class SegmentRecordContent:
-    """One record's decompressed turns, in the order the content route concatenates
-    them. ``rejected`` records carry ``turns_json="[]"`` — the content route's own
-    truncation signal, since a segment can be cap-rejected mid-stream."""
+    """One record's decompressed turns, in the order the content route concatenates them.
+    ``rejected`` records carry ``turns_json="[]"``. ``record_truncated`` is the runner's
+    own declaration that THIS record lost content — ``turns_json`` is often non-empty
+    content the runner shrunk, not always ``"[]"``."""
 
     turn_range_start: int
     turn_range_end: int
     final: bool
     rejected: bool
+    record_truncated: bool
     turns_json: str
 
 
@@ -152,7 +154,27 @@ class TranscriptIngestService:
 
         for seq, record in sorted(records, key=lambda pair: pair[0]):
             if seq <= mark:
-                already.append(seq)
+                # A replayed already-decided seq must still report its cap outcome: the
+                # natural key (D8) is the durable record of that decision, not the ack.
+                state = self._store.natural_key_state(record.segment_id, record.turn_range_start)
+                if state == "rejected":
+                    capped.append(seq)
+                    continue
+                if state == "accepted":
+                    already.append(seq)
+                    continue
+                # Under the mark with no row: the mark outran the store. Reporting idempotency
+                # would have the runner ack and delete the only copy, so store it instead.
+                _log.warning(
+                    "transcript high-water is ahead of the stored record — applying it anyway",
+                    runner_id=runner_id,
+                    seq=seq,
+                    segment_id=record.segment_id,
+                )
+                if self._apply(record, at=now):
+                    applied.append(seq)
+                else:
+                    capped.append(seq)
                 continue
             # Every reachable outcome advances the mark (D6) — no contract-mismatch
             # rejection exists here, unlike the fact lane; every field is wire-validated.

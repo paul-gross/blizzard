@@ -95,6 +95,25 @@ class OutboundFacts:
             },
         )
 
+    def transcript_truncated(self, *, chunk_id: str, segment_id: str, reason: str, at: datetime) -> None:
+        """A transcript segment stopped shipping content (D4, issue #246), surfaced as a
+        ``warning`` operational event on the FACT lane — the issue-#125 precedent.
+        Truncation is never silent: it is also a field on the segment itself."""
+        self.event(
+            chunk_id=chunk_id,
+            lease_id=None,
+            at=at,
+            payload={
+                "severity": "warning",
+                "kind": "transcript-truncated",
+                "chunk_id": chunk_id,
+                "lease_id": None,
+                "node_name": None,
+                "message": f"transcript segment {segment_id} truncated — {reason}",
+                "detail": {"segment_id": segment_id, "reason": reason},
+            },
+        )
+
     def event(self, *, chunk_id: str | None, lease_id: str | None, payload: Mapping[str, object], at: datetime) -> None:
         self._enqueue(EVENT_RECORDED, chunk_id, lease_id, payload, at)
 

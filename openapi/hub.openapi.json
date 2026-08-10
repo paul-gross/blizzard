@@ -3923,6 +3923,11 @@
             "title": "Input Shape",
             "type": "string"
           },
+          "input_truncated": {
+            "default": false,
+            "title": "Input Truncated",
+            "type": "boolean"
+          },
           "input_unparsed": {
             "anyOf": [
               {
@@ -4075,7 +4080,7 @@
         "type": "object"
       },
       "TranscriptSegmentIndexEntry": {
-        "description": "One segment's metadata row (D12) \u2014 byte counts and completion state, never turn\ncontent. ``truncated`` marks a segment the per-segment cap rejected part of (D5), so a\nconsumer can tell an incomplete segment from a short one without fetching it.",
+        "description": "One segment's metadata row (D12) \u2014 byte counts and completion state, never turn\ncontent. ``truncated`` is true iff any record was cap-rejected (D5) OR the runner\nitself declared ``record_truncated`` on one, so a consumer can tell an incomplete\nsegment from a short one without fetching it.",
         "properties": {
           "byte_count": {
             "title": "Byte Count",
@@ -4173,7 +4178,7 @@
         "type": "object"
       },
       "TranscriptSegmentRecord": {
-        "description": "One shipped turn-range slice of a segment (D1). ``final=True`` marks the one\nrecord that closes the segment out \u2014 the hub never infers completeness from a\ntransition (product plan, ``epic:transcripts``).",
+        "description": "One shipped turn-range slice of a segment (D1). ``final=True`` marks the one record\nthat closes the segment out. ``record_truncated`` is the runner's own declaration that\nTHIS record lost content it would otherwise carry \u2014 shrunk, an incomplete source read,\nor (only when neither closes the gap) ``turns`` emptied \u2014 distinct from ``rejected``.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -4205,6 +4210,11 @@
           "normalizer_version": {
             "title": "Normalizer Version",
             "type": "string"
+          },
+          "record_truncated": {
+            "default": false,
+            "title": "Record Truncated",
+            "type": "boolean"
           },
           "segment_id": {
             "title": "Segment Id",
@@ -4344,7 +4354,7 @@
         "type": "object"
       },
       "TurnSegmentView-Input": {
-        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and minted\nby the producer (D9), so it is stable across the batches a segment arrives in.",
+        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and minted\nby the producer (D9), stable across the batches a segment arrives in \u2014 EXCEPT under\n``sidechain.turns``, where it counts within that one sidechain instead, restarting at\n0 for each rather than offset by the enclosing segment's own stream.",
         "properties": {
           "index": {
             "title": "Index",
@@ -4412,7 +4422,7 @@
         "type": "object"
       },
       "TurnSegmentView-Output": {
-        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and minted\nby the producer (D9), so it is stable across the batches a segment arrives in.",
+        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and minted\nby the producer (D9), stable across the batches a segment arrives in \u2014 EXCEPT under\n``sidechain.turns``, where it counts within that one sidechain instead, restarting at\n0 for each rather than offset by the enclosing segment's own stream.",
         "properties": {
           "index": {
             "title": "Index",

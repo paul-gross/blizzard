@@ -89,6 +89,180 @@ def test_gapped_outbound_seq_is_a_violation(tmp_path: Path) -> None:
     assert "runner:gapless-outbound-seq" in slugs
 
 
+def test_gapped_transcript_outbound_seq_is_a_violation(tmp_path: Path) -> None:
+    """The transcript lane's own gapless-seq check — never `outbound_buffer`'s (D3)."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        for seq in (1, 2, 4):  # 3 is missing — a hole in the FIFO buffer
+            conn.execute(
+                insert(runner.transcript_outbound_buffer).values(
+                    seq=seq, final=False, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+                )
+            )
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:gapless-transcript-outbound-seq" in slugs
+    # A fact-lane gap does not trip the transcript lane's own check, and vice versa.
+    assert "runner:gapless-outbound-seq" not in slugs
+
+
+def test_an_acked_and_pruned_transcript_seq_between_two_retained_rows_is_not_a_violation(tmp_path: Path) -> None:
+    """review F2: an acked non-final row prunes outright, so a healthy drain routinely
+    leaves an older retained final marker beside a newer surviving row with a gap between
+    — seq 2 here, acked and deleted. The ordinary case, not a lost record."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.transcript_outbound_buffer).values(
+                seq=1,
+                final=True,
+                segment_id="seg_1",
+                chunk_id="ch_1",
+                payload="{}",
+                created_at=_NOW,
+                acked_at=_NOW,
+            )
+        )
+        # seq 2 is deliberately absent — the acked-and-pruned non-final row it once was.
+        conn.execute(
+            insert(runner.transcript_outbound_buffer).values(
+                seq=3, final=False, segment_id="seg_2", chunk_id="ch_1", payload="{}", created_at=_NOW
+            )
+        )
+    assert RunnerInvariants(engine).run() == []
+
+
+def test_a_pending_gap_among_only_unacked_transcript_rows_is_still_a_violation(tmp_path: Path) -> None:
+    """The rescoped check (review F2) still catches a real hole in the pending window — an
+    unacked seq that never arrived is exactly the lost-record case the check exists for,
+    whether or not an older acked row happens to sit further back."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.transcript_outbound_buffer).values(
+                seq=1,
+                final=True,
+                segment_id="seg_1",
+                chunk_id="ch_1",
+                payload="{}",
+                created_at=_NOW,
+                acked_at=_NOW,
+            )
+        )
+        for seq in (2, 4):  # 3 is missing from the still-pending (unacked) window
+            conn.execute(
+                insert(runner.transcript_outbound_buffer).values(
+                    seq=seq, final=False, segment_id="seg_2", chunk_id="ch_1", payload="{}", created_at=_NOW
+                )
+            )
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:gapless-transcript-outbound-seq" in slugs
+
+
+def _segment_row(**overrides: object) -> dict:
+    row: dict = {
+        "segment_id": "seg_1",
+        "chunk_id": "ch_1",
+        "node_id": "nd_build",
+        "epoch": 1,
+        "generation": 1,
+        "lease_id": "lease_1",
+        "session_id": "sess_1",
+        "cursor": None,
+        "shipped_bytes": 0,
+        "shipped_turns": 0,
+        # The source seam's own "never ran" sentinel (`""`) — a real spawn always has SOME
+        # normalizer_version to declare, never `None` (issue #246).
+        "normalizer_version": "",
+        "harness_version": None,
+        "truncated_reason": None,
+        "shipping_stopped_reason": None,
+        "finalized_at": None,
+        "stamped_at": _NOW,
+    }
+    row.update(overrides)
+    return row
+
+
+def test_finalized_segment_with_no_final_marker_is_a_violation(tmp_path: Path) -> None:
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=_NOW)))
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:transcript-segment-finalized-exactly-once" in slugs
+
+
+def test_finalized_segment_with_a_duplicated_final_marker_is_a_violation(tmp_path: Path) -> None:
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=_NOW)))
+        for seq in (1, 2):
+            conn.execute(
+                insert(runner.transcript_outbound_buffer).values(
+                    seq=seq,
+                    final=True,
+                    segment_id="seg_1",
+                    chunk_id="ch_1",
+                    payload="{}",
+                    created_at=_NOW,
+                )
+            )
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:transcript-segment-finalized-exactly-once" in slugs
+
+
+def test_finalized_segment_with_exactly_one_final_marker_is_not_a_violation(tmp_path: Path) -> None:
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=_NOW)))
+        conn.execute(
+            insert(runner.transcript_outbound_buffer).values(
+                seq=1, final=True, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+            )
+        )
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:transcript-segment-finalized-exactly-once" not in slugs
+
+
+def test_pending_non_final_records_do_not_count_as_final_markers(tmp_path: Path) -> None:
+    """The check counts `final` rows only: a finalized segment normally still has undrained
+    content records beside its one marker, and counting those fires on a healthy store —
+    unseen by every tier, which runs `[transcripts] ship` at its default."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=_NOW)))
+        for seq, final in ((1, False), (2, False), (3, True)):
+            conn.execute(
+                insert(runner.transcript_outbound_buffer).values(
+                    seq=seq, final=final, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+                )
+            )
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:transcript-segment-finalized-exactly-once" not in slugs
+
+
+def test_a_finalized_segment_with_only_non_final_records_is_a_violation(tmp_path: Path) -> None:
+    """The same filter from the other side: content records are not a close-out."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=_NOW)))
+        conn.execute(
+            insert(runner.transcript_outbound_buffer).values(
+                seq=1, final=False, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
+            )
+        )
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:transcript-segment-finalized-exactly-once" in slugs
+
+
+def test_an_open_segment_needs_no_final_marker(tmp_path: Path) -> None:
+    """`finalized_at IS NULL` (still open) is not checked — only a finalized segment must
+    have carried its marker."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=None)))
+    assert RunnerInvariants(engine).run() == []
+
+
 def _usage_row(*, generation: int = 1, kind: str = "spawn") -> dict:
     return {
         "lease_id": "lease_1",

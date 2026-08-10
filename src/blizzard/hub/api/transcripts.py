@@ -55,6 +55,7 @@ def to_domain_record(record: TranscriptSegmentRecord, *, runner_id: str) -> Segm
         final=record.final,
         normalizer_version=record.normalizer_version,
         harness_version=record.harness_version,
+        record_truncated=record.record_truncated,
         turns_json=turns_json,
     )
 
@@ -95,7 +96,9 @@ def _content_view(segment_id: str, records: list[SegmentRecordContent]) -> Trans
     return TranscriptSegmentContentView(
         segment_id=segment_id,
         final=any(record.final for record in records),
-        truncated=any(record.rejected for record in records),
+        # A cap rejection (this hub's own) OR a runner-declared `record_truncated` — an
+        # accepted record the runner itself had to ship turns-empty.
+        truncated=any(record.rejected or record.record_truncated for record in records),
         turns=turns,
     )
 
