@@ -945,8 +945,11 @@ doors that clear a hand-issued pause. `blizzard hub status` names the reason on 
 ceiling-engaged runner so you can tell it apart from a hand-issued pause.
 
 With no daemon running, the verbs report that rather than reading the store behind its
-back — the store is reached only through the daemon that owns it, in every case. What you
-see depends on how the daemon left:
+back — a **client** verb reaches the store only through the daemon that owns it. The
+exceptions are the offline maintenance verbs, which open the store themselves and are
+therefore run with the daemon *stopped*: `migrate`, `tick`, and
+[`transcript backfill`](#shipping-transcript-content-to-the-hub--the-outbound-lane-off-by-default),
+whose own refusal enforces it. What you see from a client verb depends on how the daemon left:
 
 | How it stopped | On disk | What a local verb reports |
 |----------------|---------|---------------------------|
@@ -1404,6 +1407,44 @@ ship = false
   (`GET /api/chunks/{id}/transcripts` and its per-segment content route) requires the
   `transcript:read` permission, `contributor` role and above — a runner's own fleet-plane
   token can push to the ingest route but can never read one back.
+- **History predating the lane is imported by hand**, with `blizzard runner transcript
+  backfill` (blizzard#250). It walks this runner's own lease records — never a sweep of the
+  harness directory, which on a working machine is mostly the operator's own sessions —
+  opens a segment per session whose file it can still read, and enqueues it onto the same
+  outbound lane as an ordinary segment. Rerunnable by design: a session that already holds
+  a segment is skipped, and a session this run could not finish stays open for the next run
+  to resume rather than being closed out, so a rerun costs the hub a duplicate turn range
+  at worst — its natural key discards that.
+
+  **Run it as the runner's own user, with the runner's own environment, and with the daemon
+  stopped.** All three are load-bearing under the unit this document prescribes
+  (`User=blizzard`, `EnvironmentFile=`, `--dir`), and only the last is enforced:
+
+  - **Daemon stopped** — the verb writes the store, which is single-writer. It refuses
+    while anything holds the runtime's socket, and fails *closed*: a daemon that is wedged
+    or answers unhealthily still counts as holding it.
+  - **The runner's user** — with no `transcripts_root` set, transcripts are read from
+    `$HOME/.claude/projects`. Run as anyone else and every session reads as *gone*.
+  - **The runner's environment** — the hub token comes from the process environment. Without
+    it every flush is refused, and the sessions stay buffered rather than reaching the hub.
+
+  `--dry-run` classifies without opening, draining or shipping anything; its counts are what
+  a real run would *attempt*, not a promise (a real run flushes between sessions, so
+  backpressure moves the line). `--limit N` bounds one run — worth using on a long history,
+  since the hub enforces a 2 GB/runner/day rate and content past it is rejected rather than
+  queued. The verb refuses outright while `ship = false`.
+
+  The counts mean: *imported* — read and enqueued to the outbound lane, which is not the
+  same as accepted by the hub; *capped* — the subset of those the hub refused or the runner
+  stopped shipping, reported separately for exactly that reason; *gone* — no readable
+  transcript found for that session by **this run** (usually a file the harness rotated
+  away, but a wrong root or user reads identically, and nothing is written either way, so a
+  rerun retries it); *deferred* — left for a rerun, whether by `--limit`, by outbound
+  backpressure, or because the session could not be read to its end this time.
+
+  One imperfection is accepted rather than worked around: a pre-lane session resumed in
+  place recorded no resume offsets, so it imports as one merged segment attributed to the
+  lease its session began on, rather than splitting at its resume seams.
 
 ## Operational visibility — the event log
 

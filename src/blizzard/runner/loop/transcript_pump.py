@@ -39,12 +39,12 @@ CHUNK_TRANSCRIPT_MAX_BYTES = 64 * 1024 * 1024
 
 #: Backpressure cap on total unacked bytes across the WHOLE outbound buffer, distinct
 #: from `CHUNK_TRANSCRIPT_MAX_BYTES`'s per-chunk shipped total — self-clears as the drain catches up.
-_MAX_BUFFERED_BYTES = 256 * 1024 * 1024
+MAX_BUFFERED_BYTES = 256 * 1024 * 1024
 
 #: Bounds :meth:`TranscriptPump.pump_lease`'s pre-closure read — matches `TranscriptDrain`'s own.
 PUMP_LEASE_MAX_SECONDS = 5.0
 
-#: Safety valve on :meth:`TranscriptPump._drain_segment` — bounds a source that never
+#: Safety valve on :meth:`TranscriptPump.drain_segment` — bounds a source that never
 #: reports ``complete=True`` from looping forever if ``deadline`` is ever ``None``.
 _PUMP_LEASE_MAX_ITERATIONS = 1000
 
@@ -60,13 +60,18 @@ _SOURCE_READ_TRUNCATED = "source_read_truncated"
 #: deadline — distinct from `_SOURCE_READ_TRUNCATED`, this tick's own incomplete read.
 _LEASE_CLOSURE_INCOMPLETE = "lease_closure_incomplete"
 
+#: The same loss on the backfill's own drain (blizzard#250) — named apart because no lease
+#: closure is involved, ranked alike because the content is gone either way.
+BACKFILL_INCOMPLETE = "backfill_incomplete"
+
 #: Explicit worst-of ranking, mildest first — see `mark_transcript_record_truncated`.
-#: Public: `transcript_drain.py` extends it with its own `_HUB_CAPPED` reason.
+#: Public: `transcript_drain.py` extends it with its own `HUB_CAPPED` reason.
 TRUNCATION_REASON_SEVERITY: dict[str, int] = {
     _SOURCE_READ_TRUNCATED: 0,
     _RECORD_CAP_EXCEEDED: 1,
     _RECORD_UNSHIPPABLE: 2,
     _LEASE_CLOSURE_INCOMPLETE: 3,
+    BACKFILL_INCOMPLETE: 3,
 }
 
 #: `_pump_one`'s outcome — see its own docstring for each value.
@@ -112,28 +117,35 @@ class TranscriptPump:
                 for remaining in segments[i:]:
                     self._mark_record_truncated(remaining, _LEASE_CLOSURE_INCOMPLETE)
                 return
-            self._drain_segment(segment.segment_id, deadline=deadline)
+            self.drain_segment(segment.segment_id, deadline=deadline)
 
-    def _drain_segment(self, segment_id: str, *, deadline: datetime | None) -> None:
+    def drain_segment(
+        self, segment_id: str, *, deadline: datetime | None, incomplete_reason: str = _LEASE_CLOSURE_INCOMPLETE
+    ) -> bool:
+        """Read one segment forward until it is caught up, ``deadline`` passes, or reading
+        again would gain nothing — marking ``incomplete_reason`` in the latter two cases.
+        ``True`` iff the source was read to its end: a caller that closes the segment out
+        must not do so on ``False``, or content it never read is sealed away."""
         for _ in range(_PUMP_LEASE_MAX_ITERATIONS):
             segment = self.ctx.store.transcript_segment(segment_id)
             if segment is None:
-                return  # the segment vanished from under us — nothing left to drain
+                return False  # the segment vanished from under us — nothing left to drain
             outcome = self._pump_one_safe(segment)
             if outcome == _CAUGHT_UP:
-                return  # caught up — nothing more to gain from reading again right now
+                return True  # caught up — nothing more to gain from reading again right now
             if outcome in (_NOT_ATTEMPTED, _STUCK):
                 # Retrying gains nothing for either outcome — mark and stop.
-                self._mark_record_truncated(segment, _LEASE_CLOSURE_INCOMPLETE)
-                return
+                self._mark_record_truncated(segment, incomplete_reason)
+                return False
             if deadline is not None and self.ctx.clock.now() >= deadline:
-                self._mark_record_truncated(segment, _LEASE_CLOSURE_INCOMPLETE)
-                return
+                self._mark_record_truncated(segment, incomplete_reason)
+                return False
         # The safety valve: a source that never reports `complete=True` across this many
         # reads is misbehaving — stop and mark, rather than spin forever.
         segment = self.ctx.store.transcript_segment(segment_id)
         if segment is not None:
-            self._mark_record_truncated(segment, _LEASE_CLOSURE_INCOMPLETE)
+            self._mark_record_truncated(segment, incomplete_reason)
+        return False
 
     def _pump_one_safe(self, segment: TranscriptSegmentLedgerRow) -> _PumpOutcome:
         """One segment's own failure must not abort the loop. Returns
@@ -162,14 +174,17 @@ class TranscriptPump:
         if budget_before >= CHUNK_TRANSCRIPT_MAX_BYTES:
             self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
             return _CAUGHT_UP
-        if self.ctx.store.outstanding_transcript_buffer_bytes() >= _MAX_BUFFERED_BYTES:
+        if self.ctx.store.outstanding_transcript_buffer_bytes() >= MAX_BUFFERED_BYTES:
             # Transient backpressure, not a latch — self-clears once the drain catches up.
             return _NOT_ATTEMPTED
 
         bindings = self.ctx.store.bindings_for_chunk(segment.chunk_id)
         spawn_cwd = SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
         source = self.ctx.transcripts
-        assert source is not None  # guarded in run()
+        if source is None:
+            # A conditional, not an `assert`: `run`/`pump_lease` guard this, but `drain_segment`
+            # is public, and `python -O` would strip the guard into an opaque `AttributeError`.
+            return _NOT_ATTEMPTED
         since = TranscriptPosition(segment.cursor) if segment.cursor is not None else None
         batch = source.turns_since(segment.session_id, spawn_cwd=spawn_cwd, since=since)
         if not batch.available:

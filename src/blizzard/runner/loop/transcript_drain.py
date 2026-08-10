@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
@@ -26,11 +26,12 @@ _CP_BEFORE_SUBMIT = crashpoint("transcript.before-submit", "fact at head of the 
 _CP_AFTER_SUBMIT = crashpoint("transcript.after-submit.before-ack", "hub applied the fact; ack not recorded")
 
 #: The reason `_deliver` marks on a hub-cap-rejected record — distinct from `transcript_pump.py`'s own.
-_HUB_CAPPED = "hub_capped"
+#: Public: the backfill (blizzard#250) reports a capped segment apart from a whole one.
+HUB_CAPPED = "hub_capped"
 
 #: Worse than every pump-side reason: unlike those, this one means the
 #: content was already read, shipped, and hub-confirmed lost, never merely unattempted.
-_HUB_CAPPED_SEVERITY = max(TRUNCATION_REASON_SEVERITY.values()) + 1
+HUB_CAPPED_SEVERITY = max(TRUNCATION_REASON_SEVERITY.values()) + 1
 
 #: Bounds this drain's own per-``run()`` work — checked only BETWEEN deliveries, so the
 #: REAL worst case is this constant PLUS one in-flight delivery's own push timeout.
@@ -72,14 +73,23 @@ class TranscriptDrain:
             )
         if self.ctx.clock.now() >= deadline:
             return  # the pump alone exhausted the shared bound; the flush catches up next tick
-        # `limit` bounds the query itself, and is this run's ONLY count bound — a second,
+        self.flush(limit=_MAX_RECORDS_PER_RUN, deadline=deadline)
+
+    def flush(self, *, limit: int, deadline: datetime | None) -> int:
+        """Deliver buffered records FIFO until ``limit``, ``deadline``, or the first that
+        will not deliver, returning how many landed. Zero reads the same either way — an
+        empty buffer or a hub that refused the head — which is all a caller needs to stop."""
+        # `limit` bounds the query itself, and is this call's ONLY count bound — a second,
         # loop-level guard would be dead code below this line's cap.
-        pending = self.ctx.store.pending_transcript_outbound(limit=_MAX_RECORDS_PER_RUN)
+        pending = self.ctx.store.pending_transcript_outbound(limit=limit)
+        delivered = 0
         for delta in pending:
-            if self.ctx.clock.now() >= deadline:
+            if deadline is not None and self.ctx.clock.now() >= deadline:
                 break  # this run's wall-clock bound reached — retry the rest next tick
             if not self._deliver(delta):
                 break  # transport failure — stop; retry the backlog next tick
+            delivered += 1
+        return delivered
 
     def _deliver(self, delta: BufferedTranscriptDelta) -> bool:
         record = self._render(delta)
@@ -96,11 +106,11 @@ class TranscriptDrain:
             _log.error("hub capped buffered transcript record", seq=delta.seq, segment_id=delta.segment_id)
             # Never silent — the same segment-field/fact-lane pair the pump's own paths use.
             changed = self.ctx.store.mark_transcript_record_truncated(
-                delta.segment_id, reason=_HUB_CAPPED, severity=_HUB_CAPPED_SEVERITY
+                delta.segment_id, reason=HUB_CAPPED, severity=HUB_CAPPED_SEVERITY
             )
             if changed:
                 OutboundFacts(self.ctx).transcript_truncated(
-                    chunk_id=delta.chunk_id, segment_id=delta.segment_id, reason=_HUB_CAPPED, at=self.ctx.clock.now()
+                    chunk_id=delta.chunk_id, segment_id=delta.segment_id, reason=HUB_CAPPED, at=self.ctx.clock.now()
                 )
         self.ctx.store.ack_transcript_outbound(delta.seq, acked_at=self.ctx.clock.now())
         return True

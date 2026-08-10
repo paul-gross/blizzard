@@ -31,6 +31,7 @@ from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.loop.session import SessionResolver
 from blizzard.runner.loop.steps import ResumeIntents
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.loop.transcript_backfill import TranscriptBackfill, TranscriptBackfillReport
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
@@ -141,6 +142,14 @@ class LoopWiring:
         config = self.config
         with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
             tick(self.context(HttpHubClient(client)))
+
+    def backfill_transcripts(self, *, dry_run: bool, limit: int | None = None) -> TranscriptBackfillReport:
+        """Run one transcript-backfill pass (blizzard#250) — the operator verb's own entry,
+        wired here rather than at the CLI so the composition root stays the one place a
+        context is built."""
+        config = self.config
+        with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
+            return TranscriptBackfill(self.context(HttpHubClient(client))).run(dry_run=dry_run, limit=limit)
 
 
 @dataclass(frozen=True)

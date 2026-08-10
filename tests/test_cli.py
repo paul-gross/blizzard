@@ -8,12 +8,18 @@ not the daemon runtime (``host`` blocks on a server and is not driven here).
 from __future__ import annotations
 
 import shutil
+import socket
+import threading
+import time
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
 from blizzard.cli.main import blizzard
+from blizzard.runner.cli import _daemon_holding
+from blizzard.runner.cli_daemon import LOCAL_CLIENT_TIMEOUT
+from blizzard.runner.config import RunnerConfig
 
 pytestmark = pytest.mark.unit
 
@@ -51,7 +57,7 @@ def test_hub_removed_flat_verbs_are_unknown() -> None:
 def test_runner_lists_its_verbs() -> None:
     result = CliRunner().invoke(blizzard, ["runner", "--help"])
     assert result.exit_code == 0
-    for verb in ("init", "migrate", "host", "heartbeat", "ask", "takeover", "requeue"):
+    for verb in ("init", "migrate", "host", "heartbeat", "ask", "takeover", "requeue", "transcript"):
         assert verb in result.output
 
 
@@ -308,6 +314,114 @@ def test_runner_status_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -> 
 
     assert result.exit_code != 0
     assert "no runner daemon is serving" in result.output
+
+
+def _serve_on(sock_path: Path, reply: bytes | None) -> socket.socket:
+    """A minimal UDS listener the liveness probe can reach. ``reply is None`` accepts the
+    connection and never answers — the wedged-daemon case."""
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(str(sock_path))
+    server.listen(1)
+
+    def _answer() -> None:
+        conn, _ = server.accept()
+        with conn:
+            conn.recv(4096)
+            if reply is not None:
+                conn.sendall(reply)
+            else:
+                time.sleep(LOCAL_CLIENT_TIMEOUT * 3)
+
+    threading.Thread(target=_answer, daemon=True).start()
+    return server
+
+
+_OK = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}"
+_UNAVAILABLE = b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 2\r\n\r\n{}"
+
+
+def test_a_stale_socket_file_is_not_a_serving_daemon(tmp_path: Path) -> None:
+    """The single-writer guard probes rather than stats: a socket an ungraceful exit left
+    behind must not refuse a verb nothing is actually holding."""
+    root = tmp_path / "runner"
+    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    RunnerConfig.socket_path_for(root).write_bytes(b"")
+
+    assert _daemon_holding(RunnerConfig.load(root)) is None
+
+
+def test_a_daemon_answering_its_socket_is_holding_the_store(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    server = _serve_on(RunnerConfig.socket_path_for(root), _OK)
+
+    try:
+        assert _daemon_holding(RunnerConfig.load(root)) is not None
+    finally:
+        server.close()
+
+
+@pytest.mark.parametrize(("reply", "expected"), [(None, "did not answer"), (_UNAVAILABLE, "503")])
+def test_an_ambiguous_liveness_answer_fails_closed(reply: bytes | None, expected: str, tmp_path: Path) -> None:
+    """A wedged or unhealthy daemon still HOLDS the single-writer store. Resolving either
+    ambiguity toward "nothing there" would let the verb write concurrently with it."""
+    root = tmp_path / "runner"
+    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    server = _serve_on(RunnerConfig.socket_path_for(root), reply)
+
+    try:
+        holding = _daemon_holding(RunnerConfig.load(root))
+    finally:
+        server.close()
+
+    assert holding is not None and expected in holding
+
+
+def test_runner_transcript_backfill_refuses_while_the_lane_is_off(tmp_path: Path) -> None:
+    # `[transcripts] ship` is false in a scaffolded config (issue #246, D5), and a backfill
+    # into a lane the operator has switched off would ship content they never enabled.
+    root = tmp_path / "runner"
+    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+
+    result = CliRunner().invoke(blizzard, ["runner", "transcript", "backfill", "--dir", str(root)])
+
+    assert result.exit_code != 0
+    assert "[transcripts] ship is false" in result.output
+
+
+def _enable_transcript_shipping(root: Path) -> None:
+    config_path = root / "blizzard-runner.toml"
+    config_path.write_text(config_path.read_text().replace("ship = false", "ship = true"))
+
+
+def test_runner_transcript_backfill_drives_its_whole_production_route(tmp_path: Path) -> None:
+    """`bzh:gating-tier-pins-production-paths`: the component tier constructs the service
+    directly, so without this the composition-root wiring the operator actually runs
+    (CLI -> LoopWiring.backfill_transcripts -> the report line) is named by no gating test."""
+    root = tmp_path / "runner"
+    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    _enable_transcript_shipping(root)
+
+    result = CliRunner().invoke(blizzard, ["runner", "transcript", "backfill", "--dir", str(root), "--dry-run"])
+
+    assert result.exit_code == 0, result.output
+    assert "would import 0, already present 0, gone 0" in result.output
+
+
+def test_runner_transcript_backfill_refuses_while_a_daemon_holds_the_store(tmp_path: Path) -> None:
+    """The single-writer guard, exercised through the verb rather than the helper alone."""
+    root = tmp_path / "runner"
+    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    _enable_transcript_shipping(root)
+    server = _serve_on(RunnerConfig.socket_path_for(root), _OK)
+
+    try:
+        result = CliRunner().invoke(blizzard, ["runner", "transcript", "backfill", "--dir", str(root)])
+    finally:
+        server.close()
+
+    assert result.exit_code != 0
+    assert "single-writer" in result.output
 
 
 def test_runner_takeover_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -> None:

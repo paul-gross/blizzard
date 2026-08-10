@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 import click
+import httpx
 import uvicorn
 
 from blizzard.cli.host_directory import HostDirectory
@@ -24,7 +25,7 @@ from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.runner.app import build_hosted_app
-from blizzard.runner.cli_daemon import RunnerDaemon
+from blizzard.runner.cli_daemon import LOCAL_CLIENT_TIMEOUT, RunnerDaemon
 from blizzard.runner.cli_worker import WorkerCall
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
@@ -282,6 +283,76 @@ def session_end() -> None:
     worker = WorkerCall.hook("session-end")
     if worker is not None:
         worker.soft_post(worker.leased("session-end"), failure="could not reach the runner")
+
+
+def _daemon_holding(config: RunnerConfig) -> str | None:
+    """What is holding this runtime's socket, or ``None`` when nothing is — the single-writer
+    guard's probe. **Fail-closed**: only an absent socket or a refused connection is nothing
+    there; a timeout or an error answer means something is on the far end, and a guard whose
+    ambiguous case resolves toward "safe to write" inverts the property it protects."""
+    sock = RunnerConfig.socket_path_for(config.root)
+    if not sock.exists():
+        return None
+    transport = httpx.HTTPTransport(uds=str(sock))
+    try:
+        with httpx.Client(transport=transport, base_url="http://runner", timeout=LOCAL_CLIENT_TIMEOUT) as client:
+            response = client.get("/api/health")
+    except httpx.ConnectError:
+        return None  # a socket file an ungraceful exit left behind — nothing is listening on the corpse
+    except httpx.HTTPError as exc:
+        return f"something holds {sock} but did not answer its health probe ({exc})"
+    if response.status_code != 200:
+        return f"something holds {sock} and answered its health probe {response.status_code}"
+    return f"a runner daemon is serving at {sock}"
+
+
+@runner.group("transcript")
+def transcript_group() -> None:
+    """Operator: maintenance over this runner's own transcript lane (blizzard#250)."""
+
+
+@transcript_group.command("backfill")
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
+@click.option("--dry-run", is_flag=True, help="Report what would import; open, drain and ship nothing.")
+@click.option("--limit", type=int, default=None, help="Import at most this many sessions; defer the rest.")
+def transcript_backfill(directory: str, dry_run: bool, limit: int | None) -> None:
+    """Import worker transcripts predating the outbound lane, best-effort.
+
+    Driven from this runner's own lease records, never a sweep of the harness directory. Rerunnable:
+    an already-imported session is skipped, and one left unfinished resumes. Writes the store
+    directly, so run it as the runner's own user with its environment, and with the daemon stopped."""
+    try:
+        config = RunnerConfig.load(Path(directory))
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if limit is not None and limit < 1:
+        raise click.UsageError("--limit must be at least 1")
+    if not config.transcripts_ship:
+        raise click.ClickException("[transcripts] ship is false — enable the lane before backfilling into it")
+    holding = _daemon_holding(config)
+    if holding is not None:
+        raise click.ClickException(f"{holding} — stop it first: this verb writes the store, which is single-writer")
+    try:
+        ensure_current_revision(config)
+    except RevisionMismatchError as exc:
+        raise click.ClickException(str(exc)) from exc
+    report = LoopWiring.of(config).backfill_transcripts(dry_run=dry_run, limit=limit)
+    prefix = "would import" if dry_run else "imported"
+    click.echo(f"{prefix} {report.imported}, already present {report.already_present}, gone {report.gone}")
+    if report.deferred:
+        click.echo(f"note: {report.deferred} session(s) deferred — rerun to pick them up")
+    if report.capped:
+        click.echo(
+            f"warning: {report.capped} imported session(s) lost content to a cap — "
+            "the hub refused it or the chunk budget is spent; see the event log",
+            err=True,
+        )
 
 
 @runner.command()

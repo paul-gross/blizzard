@@ -25,8 +25,8 @@ from blizzard.runner.harness.transcript import (
 from blizzard.runner.loop.attempt import FAILED, Attempt
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.transcript_pump import (
-    _MAX_BUFFERED_BYTES,
     CHUNK_TRANSCRIPT_MAX_BYTES,
+    MAX_BUFFERED_BYTES,
     PUMP_LEASE_MAX_SECONDS,
     TRANSCRIPT_RECORD_MAX_BYTES,
     TranscriptPump,
@@ -38,6 +38,7 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeTranscriptSource,
+    StubbedBufferBytesStore,
     make_context,
     make_store,
 )
@@ -1647,22 +1648,6 @@ def test_pump_shrinking_a_multi_edit_input_never_mutates_the_sources_own_turn() 
 # --- review round 7 F8: backpressure against an already-unbounded outbound buffer ----
 
 
-class _StoreWithStubbedOutstandingBytes:
-    """Wraps a real store, overriding only ``outstanding_transcript_buffer_bytes`` —
-    avoids materializing hundreds of MB of real buffered payload just to cross F8's cap
-    in a test."""
-
-    def __init__(self, inner: object, *, outstanding_bytes: int) -> None:
-        self._inner = inner
-        self._outstanding_bytes = outstanding_bytes
-
-    def outstanding_transcript_buffer_bytes(self) -> int:
-        return self._outstanding_bytes
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self._inner, name)
-
-
 def test_pump_gates_on_outstanding_buffered_bytes_before_reading_a_new_batch() -> None:
     """review round 7 F8: a prolonged hub outage leaves buffered content resident
     indefinitely — the pump must not pile more onto it. Transient backpressure, not a
@@ -1671,7 +1656,7 @@ def test_pump_gates_on_outstanding_buffered_bytes_before_reading_a_new_batch() -
     segment_id = _spawn_one_segment(ctx)
     over_cap_ctx = replace(
         ctx,
-        store=_StoreWithStubbedOutstandingBytes(ctx.store, outstanding_bytes=_MAX_BUFFERED_BYTES),  # type: ignore[arg-type]
+        store=StubbedBufferBytesStore(ctx.store, MAX_BUFFERED_BYTES),  # type: ignore[arg-type]
     )
 
     TranscriptPump(over_cap_ctx).run()
@@ -1684,7 +1669,7 @@ def test_pump_gates_on_outstanding_buffered_bytes_before_reading_a_new_batch() -
 
     under_cap_ctx = replace(
         ctx,
-        store=_StoreWithStubbedOutstandingBytes(ctx.store, outstanding_bytes=_MAX_BUFFERED_BYTES - 1),  # type: ignore[arg-type]
+        store=StubbedBufferBytesStore(ctx.store, MAX_BUFFERED_BYTES - 1),  # type: ignore[arg-type]
     )
     TranscriptPump(under_cap_ctx).run()
 
@@ -1708,7 +1693,7 @@ def test_pump_lease_marks_incomplete_when_backpressure_gates_the_close_time_read
     assert lease is not None
     gated_ctx = replace(
         ctx,
-        store=_StoreWithStubbedOutstandingBytes(ctx.store, outstanding_bytes=_MAX_BUFFERED_BYTES),  # type: ignore[arg-type]
+        store=StubbedBufferBytesStore(ctx.store, MAX_BUFFERED_BYTES),  # type: ignore[arg-type]
     )
 
     TranscriptPump(gated_ctx).pump_lease(lease.lease_id, deadline=_NOW + timedelta(seconds=PUMP_LEASE_MAX_SECONDS))

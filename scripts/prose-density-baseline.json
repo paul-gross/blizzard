@@ -1843,9 +1843,9 @@
    "total": 82
   },
   "blizzard/runner/cli.py": {
-   "comments": 27,
-   "docstrings": 116,
-   "total": 792
+   "comments": 28,
+   "docstrings": 126,
+   "total": 863
   },
   "blizzard/runner/cli_daemon.py": {
    "comments": 4,
@@ -2019,8 +2019,8 @@
   },
   "blizzard/runner/loop/build.py": {
    "comments": 14,
-   "docstrings": 28,
-   "total": 213
+   "docstrings": 31,
+   "total": 222
   },
   "blizzard/runner/loop/checks.py": {
    "comments": 2,
@@ -2132,15 +2132,20 @@
    "docstrings": 6,
    "total": 44
   },
+  "blizzard/runner/loop/transcript_backfill.py": {
+   "comments": 11,
+   "docstrings": 20,
+   "total": 156
+  },
   "blizzard/runner/loop/transcript_drain.py": {
-   "comments": 25,
-   "docstrings": 11,
-   "total": 138
+   "comments": 26,
+   "docstrings": 14,
+   "total": 148
   },
   "blizzard/runner/loop/transcript_pump.py": {
-   "comments": 63,
-   "docstrings": 52,
-   "total": 522
+   "comments": 66,
+   "docstrings": 56,
+   "total": 537
   },
   "blizzard/runner/loop/usage.py": {
    "comments": 4,
@@ -2208,9 +2213,9 @@
    "total": 1
   },
   "blizzard/runner/store/internal/sqlalchemy_store.py": {
-   "comments": 83,
+   "comments": 87,
    "docstrings": 27,
-   "total": 1590
+   "total": 1673
   },
   "blizzard/runner/store/migrations/__init__.py": {
    "comments": 0,
@@ -2374,8 +2379,8 @@
   },
   "blizzard/runner/store/repository.py": {
    "comments": 4,
-   "docstrings": 383,
-   "total": 983
+   "docstrings": 395,
+   "total": 1025
   },
   "blizzard/runner/store/schema.py": {
    "comments": 132,
@@ -2726,8 +2731,8 @@
   },
   "runner_fakes.py": {
    "comments": 53,
-   "docstrings": 43,
-   "total": 744
+   "docstrings": 52,
+   "total": 782
   },
   "service/__init__.py": {
    "comments": 0,
@@ -2980,9 +2985,9 @@
    "total": 83
   },
   "test_cli.py": {
-   "comments": 19,
-   "docstrings": 31,
-   "total": 388
+   "comments": 21,
+   "docstrings": 41,
+   "total": 502
   },
   "test_cli_login_api.py": {
    "comments": 2,
@@ -4014,6 +4019,11 @@
    "docstrings": 11,
    "total": 105
   },
+  "test_transcript_backfill.py": {
+   "comments": 12,
+   "docstrings": 35,
+   "total": 398
+  },
   "test_transcript_drain.py": {
    "comments": 41,
    "docstrings": 50,
@@ -4026,8 +4036,8 @@
   },
   "test_transcript_pump.py": {
    "comments": 167,
-   "docstrings": 173,
-   "total": 1810
+   "docstrings": 170,
+   "total": 1795
   },
   "test_transcript_segment_store.py": {
    "comments": 7,

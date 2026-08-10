@@ -166,6 +166,20 @@ class BufferedTranscriptDelta:
 
 
 @dataclass(frozen=True)
+class TranscriptBackfillLease:
+    """One session-bearing lease the backfill may import (blizzard#250), with whether that
+    session already holds a segment. The dedupe key is the *session*: a pre-epic session
+    resumed across leases left one merged file, which imports once."""
+
+    lease_id: str
+    chunk_id: str
+    node_id: str
+    epoch: int
+    session_id: str
+    has_segment: bool
+
+
+@dataclass(frozen=True)
 class AskRecord:
     """The worker's local open-ask fact.
 
@@ -426,6 +440,12 @@ class IReadRunnerStore(Protocol):
         ``limit`` bounds the query itself, not just what the caller iterates — a large
         backlog's full payload set (up to the per-record cap each) is otherwise materialized
         before any per-run bound the caller applies is ever consulted."""
+        ...
+
+    def transcript_backfill_leases(self) -> list[TranscriptBackfillLease]:
+        """Every lease that ever recorded a session id, oldest first — the backfill's work
+        list (blizzard#250). This store is the only source: the harness directory holds the
+        operator's own sessions too, and a sweep of it could never tell them apart."""
         ...
 
     def unforwarded_ask(self, lease_id: str) -> AskRecord | None:
@@ -757,6 +777,28 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         ``len(payloads)`` buffer rows (issue #246; F1) — ONE transaction, so a batch split
         into several records still advances the cursor exactly once, and a crash loses
         neither the cursor advance nor any record. Returns their seqs, in payload order."""
+        ...
+
+    def open_transcript_segment(
+        self,
+        *,
+        chunk_id: str,
+        node_id: str,
+        epoch: int,
+        generation: int,
+        lease_id: str,
+        session_id: str,
+        stamped_at: datetime,
+    ) -> str:
+        """Stamp a segment boundary outside a spawn and return its id (blizzard#250), cursor
+        unset so the pump reads the session from the start. Every boundary the *live* lane
+        stamps stays :meth:`record_spawn`'s; this one is the backfill's alone."""
+        ...
+
+    def finalize_transcript_segment(self, segment_id: str, *, finalized_at: datetime) -> bool:
+        """Close one segment out on its own, enqueuing its single final marker in the same
+        transaction — :meth:`record_closure`'s per-segment half, for a segment whose lease
+        closed long before it existed. ``False`` when it was already finalized."""
         ...
 
     def advance_transcript_cursor(

@@ -36,6 +36,7 @@ from blizzard.runner.store.repository import (
     PoolHead,
     RunnerStoreError,
     TakeoverRecord,
+    TranscriptBackfillLease,
     TranscriptSegmentLedgerRow,
     UsageTotals,
 )
@@ -434,6 +435,32 @@ class SqlAlchemyRunnerStore:
             .limit(1)
         )
         return bool(self._all(stmt))
+
+    def transcript_backfill_leases(self) -> list[TranscriptBackfillLease]:
+        # Correlated EXISTS on the session, not the lease: several leases share one
+        # resumed session, and any segment for it means the session is already imported.
+        has_segment = (
+            select(transcript_segments.c.segment_id)
+            .where(transcript_segments.c.session_id == leases.c.session_id)
+            .exists()
+        )
+        stmt = (
+            self._lease_select()
+            .add_columns(has_segment.label("has_segment"))
+            .where(leases.c.session_id.is_not(None))
+            .order_by(leases.c.created_at, leases.c.lease_id)
+        )
+        return [
+            TranscriptBackfillLease(
+                lease_id=str(r.lease_id),
+                chunk_id=str(r.chunk_id),
+                node_id=str(r.node_id),
+                epoch=int(r.epoch),
+                session_id=str(r.session_id),
+                has_segment=bool(r.has_segment),
+            )
+            for r in self._all(stmt)
+        ]
 
     def pending_transcript_outbound(self, *, limit: int | None = None) -> list[BufferedTranscriptDelta]:
         stmt = (
@@ -1040,6 +1067,62 @@ class SqlAlchemyRunnerStore:
                 key = result.inserted_primary_key
                 seqs.append(int(key[0]) if key is not None else 0)
         return seqs
+
+    def open_transcript_segment(
+        self,
+        *,
+        chunk_id: str,
+        node_id: str,
+        epoch: int,
+        generation: int,
+        lease_id: str,
+        session_id: str,
+        stamped_at: datetime,
+    ) -> str:
+        segment_id = Id.mint_at(SEGMENT_PREFIX, stamped_at).value
+        with self._begin() as conn:
+            conn.execute(
+                transcript_segments.insert().values(
+                    segment_id=segment_id,
+                    chunk_id=chunk_id,
+                    node_id=node_id,
+                    epoch=epoch,
+                    generation=generation,
+                    lease_id=lease_id,
+                    session_id=session_id,
+                    cursor=None,
+                    shipped_bytes=0,
+                    shipped_turns=0,
+                    normalizer_version=_NO_NORMALIZER_VERSION,
+                    harness_version=None,
+                    truncated_reason=None,
+                    shipping_stopped_reason=None,
+                    finalized_at=None,
+                    stamped_at=stamped_at,
+                )
+            )
+        _log.info("transcript segment opened", segment_id=segment_id, lease_id=lease_id, session_id=session_id)
+        return segment_id
+
+    def finalize_transcript_segment(self, segment_id: str, *, finalized_at: datetime) -> bool:
+        with self._begin() as conn:
+            # The open-only guard and the marker share this transaction, so a second call
+            # can neither re-finalize nor enqueue a second final row.
+            segment = conn.execute(
+                select(transcript_segments)
+                .where(transcript_segments.c.segment_id == segment_id)
+                .where(transcript_segments.c.finalized_at.is_(None))
+            ).one_or_none()
+            if segment is None:
+                return False
+            conn.execute(
+                transcript_segments.update()
+                .where(transcript_segments.c.segment_id == segment_id)
+                .values(finalized_at=finalized_at)
+            )
+            _enqueue_transcript_final(conn, segment, at=finalized_at)
+        _log.info("transcript segment finalized", segment_id=segment_id)
+        return True
 
     def advance_transcript_cursor(
         self, segment_id: str, *, cursor: str, normalizer_version: str, harness_version: str | None

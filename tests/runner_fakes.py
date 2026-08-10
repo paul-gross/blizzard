@@ -14,6 +14,7 @@ from sqlalchemy import MetaData
 
 from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.store.invariants import RunnerInvariants, Violation
 from blizzard.hub.domain.graph import SessionMode
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.environments.provider import (
@@ -39,6 +40,7 @@ from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import IReadRunnerStore, IWriteRunnerStore
 from blizzard.runner.store.schema import metadata as runner_metadata
+from blizzard.runner.store.schema import transcript_outbound_buffer, transcript_segments
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, RouteView
 from blizzard.wire.completion import CompletionSubmission
@@ -61,6 +63,40 @@ def make_store(tmp_path_url: str) -> SqlAlchemyRunnerStore:
 
 def _create_all(md: MetaData, engine: object) -> None:
     md.create_all(engine)  # type: ignore[arg-type]
+
+
+def strip_transcript_segments(store: IWriteRunnerStore) -> None:
+    """Erase the segment ledger and its lane buffer — the pre-lane store shape the
+    blizzard#250 backfill exists for. Unreachable through the write API, whose only
+    session-id writer stamps a segment in the same transaction."""
+    assert isinstance(store, SqlAlchemyRunnerStore)
+    with store._engine.begin() as conn:
+        conn.execute(transcript_outbound_buffer.delete())
+        conn.execute(transcript_segments.delete())
+
+
+class StubbedBufferBytesStore:
+    """A real store reading a scripted ``outstanding_transcript_buffer_bytes`` — the pump's
+    backpressure cap, crossed without materializing hundreds of MB of real payload. Values
+    are consumed one per call and the last repeats, so a test can let one read pass the cap
+    and a later one trip it."""
+
+    def __init__(self, inner: object, *outstanding_bytes: int) -> None:
+        self._inner = inner
+        self._values = list(outstanding_bytes)
+
+    def outstanding_transcript_buffer_bytes(self) -> int:
+        return self._values.pop(0) if len(self._values) > 1 else self._values[0]
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)
+
+
+def runner_invariant_violations(store: IWriteRunnerStore) -> list[Violation]:
+    """The runner store's durable invariants, asserted over this store's own engine — the
+    checker the crash sweep runs, reachable from a component test."""
+    assert isinstance(store, SqlAlchemyRunnerStore)
+    return RunnerInvariants(store._engine).run()
 
 
 class FakeHub:
@@ -310,6 +346,7 @@ class FakeTranscriptSource:
         self._lines = lines_by_session or {}
         self._sizes = sizes_by_session or {}
         self.turns_since_calls: list[tuple[str, str | None, TranscriptPosition | None]] = []
+        self.size_bytes_calls: list[str] = []
 
     def turns_since(
         self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None
@@ -335,6 +372,7 @@ class FakeTranscriptSource:
         return list(self._lines.get(session_id, []))
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        self.size_bytes_calls.append(session_id)
         return self._sizes.get(session_id)
 
 
