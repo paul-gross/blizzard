@@ -5,10 +5,12 @@ turn-range wire shape."""
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -602,6 +604,16 @@ def test_pump_shrinks_many_medium_tool_inputs_instead_of_emptying_the_record() -
     assert segment.cursor == "pos-1"
 
 
+def _assert_skipped_not_raised(logs: Sequence[Mapping[str, object]]) -> None:
+    """Pins the cursor-advance guard's FORM, not just its existence: a bare `assert` (the
+    pre-F3 code, and what `python -O` strips) is indistinguishable by outcome alone —
+    `_pump_one_safe`'s own per-segment catch (F2) swallows the `AssertionError`, leaving
+    the same empty buffer and unadvanced cursor. Only the log tells them apart: the skip
+    line fired, the isolation's failure line did not."""
+    assert [e for e in logs if "cursor did not advance" in str(e["event"])] != []
+    assert [e for e in logs if "failed to pump segment" in str(e["event"])] == []
+
+
 def test_pump_skips_rather_than_silently_re_shipping_when_turns_carry_no_next_position() -> None:
     """review round 6 F3: `IHarnessTranscriptSource` permits a batch with turns but no
     `next_position` — the pump must not enqueue a record it can never advance the cursor
@@ -624,8 +636,10 @@ def test_pump_skips_rather_than_silently_re_shipping_when_turns_carry_no_next_po
     ctx, _source = _ctx(ship=True, batches={"sess-a": stuck})
     segment_id = _spawn_one_segment(ctx)
 
-    TranscriptPump(ctx).run()  # must return cleanly, not raise
+    with capture_logs() as logs:
+        TranscriptPump(ctx).run()  # must return cleanly, not raise
 
+    _assert_skipped_not_raised(logs)
     assert ctx.store.pending_transcript_outbound() == []  # never enqueued
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
@@ -658,8 +672,10 @@ def test_pump_skips_when_an_already_pumped_segments_cursor_would_not_advance() -
         harness_version=None,
     )
 
-    TranscriptPump(ctx).run()  # must return cleanly, not raise
+    with capture_logs() as logs:
+        TranscriptPump(ctx).run()  # must return cleanly, not raise
 
+    _assert_skipped_not_raised(logs)
     assert len(ctx.store.pending_transcript_outbound()) == 1  # only the first pump's record
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None

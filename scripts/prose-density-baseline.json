@@ -3991,8 +3991,8 @@
   },
   "test_transcript_pump.py": {
    "comments": 104,
-   "docstrings": 112,
-   "total": 1121
+   "docstrings": 117,
+   "total": 1136
   },
   "test_transcript_segment_store.py": {
    "comments": 6,
