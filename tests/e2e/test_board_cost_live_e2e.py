@@ -162,21 +162,14 @@ def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_a
                 expect(card.get_by_test_id("card-cost")).to_have_text("$0.42")
                 expect(page.get_by_test_id("spend-today-value")).to_have_text("$0.42")
 
-                # --- Detail dock: header total + expandable token breakdown -------------
+                # --- Detail dock: header total + the token line --------------------------
                 card.click()
                 expect(page.get_by_test_id("chunk-detail")).to_be_visible()
                 expect(page.get_by_test_id("cost-total-usd")).to_contain_text("$0.42")
                 expect(page.get_by_test_id("cost-partial-badge")).to_have_count(0)
 
-                # Collapsed by default: the total, not the per-class breakdown.
-                expect(page.get_by_test_id("tokens-total")).to_contain_text("2.4k")
-                expect(page.get_by_test_id("tokens-breakdown")).to_have_count(0)
-                page.get_by_test_id("tokens-expand-toggle").click()
-                expect(page.get_by_test_id("tokens-breakdown")).to_have_count(1)
-                expect(page.get_by_test_id("tokens-input")).to_contain_text("1.2k")
-                expect(page.get_by_test_id("tokens-output")).to_contain_text("800")
-                expect(page.get_by_test_id("tokens-cache-read")).to_contain_text("300")
-                expect(page.get_by_test_id("tokens-cache-create")).to_contain_text("100")
+                # All four token classes inline, no expand toggle (issue #182); the line is pinned whole.
+                expect(page.get_by_test_id("fact-tokens")).to_have_text("1.2k I, 800 O, 300 CR, 100 CC")
 
                 # A cost-absent (crash/reap-path) fact makes the total a lower bound; the
                 # partial marker must appear live everywhere it renders.
