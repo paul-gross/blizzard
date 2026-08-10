@@ -71,6 +71,33 @@ describe('TranscriptViewer', () => {
     expect(turns[2].textContent).toContain('running…');
   });
 
+  it('renders the tool output once it resolves, replacing the running placeholder (review:F8)', async () => {
+    const { el } = await render([
+      {
+        index: 0,
+        kind: 'tool',
+        timestamp: null,
+        text: '',
+        tool: {
+          name: 'Bash',
+          input: { command: 'pytest' },
+          input_unparsed: null,
+          input_shape: 'object',
+          tool_use_id: 't1',
+          output: 'ok — 12 passed',
+          output_truncated: false,
+        },
+        thinking_redacted: false,
+        sidechain: null,
+        truncated: false,
+      },
+    ]);
+
+    const output = el.querySelector('.tc-out');
+    expect(output?.textContent).toContain('ok — 12 passed');
+    expect(output?.textContent).not.toContain('running…');
+  });
+
   it('caps a tool call’s rendered input preview rather than dumping the whole structured value (review:F8)', async () => {
     const { el } = await render([
       {
@@ -98,7 +125,7 @@ describe('TranscriptViewer', () => {
     expect(preview?.textContent).toContain('…');
   });
 
-  it('renders a thinking turn collapsed by default, expanding in place', async () => {
+  it('renders a thinking turn collapsed by default, expanding in place to its own body (review:F7)', async () => {
     const { el } = await render([
       {
         index: 0,
@@ -110,15 +137,31 @@ describe('TranscriptViewer', () => {
         sidechain: null,
         truncated: false,
       },
+      {
+        index: 1,
+        kind: 'thinking',
+        timestamp: '2026-07-16T11:00:05+00:00',
+        text: 'reconsidering, differently',
+        tool: null,
+        thinking_redacted: false,
+        sidechain: null,
+        truncated: false,
+      },
     ]);
 
-    const details = el.querySelector('.thinking') as HTMLDetailsElement;
-    expect(details).not.toBeNull();
-    expect(details.open).toBe(false);
-    expect(details.textContent).toContain('considering the options');
+    const detailsList = el.querySelectorAll('.thinking');
+    expect(detailsList).toHaveLength(2);
+    const [first, second] = Array.from(detailsList) as HTMLDetailsElement[];
+    expect(first.open).toBe(false);
+    expect(second.open).toBe(false);
 
-    details.open = true;
-    expect(details.open).toBe(true);
+    // "Expanding in place" is the component's own claim: opening one turn's
+    // `<details>` reveals that turn's own body, distinguishable from a sibling
+    // turn's — not just any `<details>` element's native open/close mechanics.
+    first.open = true;
+    expect(first.querySelector('.th-body')?.textContent).toContain('considering the options');
+    expect(second.querySelector('.th-body')?.textContent).toContain('reconsidering, differently');
+    expect(first.querySelector('.th-body')?.textContent).not.toContain('reconsidering, differently');
   });
 
   it('shows a presence placeholder, not prose, for a redacted thinking turn', async () => {
