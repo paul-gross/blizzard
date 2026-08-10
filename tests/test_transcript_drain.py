@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
+import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
@@ -27,6 +28,8 @@ from tests.runner_fakes import (
     make_context,
     make_store,
 )
+
+pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
