@@ -757,7 +757,9 @@ class SqlAlchemyRunnerStore:
                 select(transcript_segments)
                 .where(transcript_segments.c.chunk_id == context_row.chunk_id)
                 .where(transcript_segments.c.session_id == session_id)
-                .order_by(transcript_segments.c.stamped_at.desc())
+                # `segment_id` tie-breaks `stamped_at` — a same-instant pair would otherwise
+                # pick nondeterministically across backends (review F5, `bzh:sql-portable`).
+                .order_by(transcript_segments.c.stamped_at.desc(), transcript_segments.c.segment_id.desc())
                 .limit(1)
             ).one_or_none()
             carried_cursor: str | None = None
@@ -928,6 +930,25 @@ class SqlAlchemyRunnerStore:
         if changed:
             _log.warning("transcript segment stopped shipping", segment_id=segment_id, reason=reason)
         return changed
+
+    def mark_sidechain_dropped_warned(self, segment_id: str, *, agent_id: str | None) -> bool:
+        with self._begin() as conn:
+            row = conn.execute(
+                select(transcript_segments.c.sidechain_warned_agents).where(
+                    transcript_segments.c.segment_id == segment_id
+                )
+            ).first()
+            warned: list[str | None] = json.loads(row[0]) if row is not None and row[0] is not None else []
+            if agent_id in warned:
+                return False
+            warned.append(agent_id)
+            conn.execute(
+                transcript_segments.update()
+                .where(transcript_segments.c.segment_id == segment_id)
+                .values(sidechain_warned_agents=json.dumps(warned))
+            )
+        _log.warning("transcript segment dropped an unlinked sidechain", segment_id=segment_id, agent_id=agent_id)
+        return True
 
     def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:
         with self._begin() as conn:

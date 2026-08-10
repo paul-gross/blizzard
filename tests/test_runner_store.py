@@ -698,6 +698,54 @@ def test_record_spawn_carries_the_cursor_forward_on_a_cross_lease_resume(tmp_pat
 
 
 @pytest.mark.unit
+def test_record_spawn_breaks_a_stamped_at_tie_by_segment_id(tmp_path):  # type: ignore[no-untyped-def]
+    """review F5 (`bzh:sql-portable`): two finalized segments sharing an identical
+    ``stamped_at`` must resolve deterministically — sqlite's incidental rowid order would
+    hide a missing tie-break; postgres does not guarantee it."""
+    store = _store(tmp_path)
+    _mint(store, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1")
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-a", spawned_at=_NOW)
+    seg1 = store.open_transcript_segments()[0]
+    store.record_transcript_delta(
+        segment_id=seg1.segment_id,
+        chunk_id="ch_1",
+        cursor="tok-1",
+        shipped_bytes=1,
+        shipped_turns=1,
+        normalizer_version="v1",
+        harness_version=None,
+        payload="{}",
+        created_at=_NOW,
+    )
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+
+    _mint(store, chunk="ch_1", node="nd_build", epoch=2, lease="lease_2")
+    # SAME instant as lease_1's own spawn (not advanced) — manufactures the tie.
+    store.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-a", spawned_at=_NOW)
+    seg2 = store.open_transcript_segments()[0]
+    store.record_transcript_delta(
+        segment_id=seg2.segment_id,
+        chunk_id="ch_1",
+        cursor="tok-2",
+        shipped_bytes=1,
+        shipped_turns=1,
+        normalizer_version="v1",
+        harness_version=None,
+        payload="{}",
+        created_at=_NOW,
+    )
+    store.record_closure(lease_id="lease_2", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+    assert seg1.stamped_at == seg2.stamped_at  # the tie the fix must break
+
+    _mint(store, chunk="ch_1", node="nd_build", epoch=3, lease="lease_3")
+    store.record_spawn("lease_3", pid=3, process_start_time="3", session_id="sess-a", spawned_at=_NOW)
+
+    gen3 = store.open_transcript_segments()[0]
+    winner_cursor = "tok-1" if seg1.segment_id > seg2.segment_id else "tok-2"
+    assert gen3.cursor == winner_cursor  # the greater segment_id wins the tie, every time
+
+
+@pytest.mark.unit
 def test_record_spawn_stamps_one_segment_per_lease_at_its_own_epoch(tmp_path):  # type: ignore[no-untyped-def]
     """Two leases (e.g. two retries at fresh epochs) each stamp their own generation-1
     segment — the epoch is part of the key, so the two are never confused."""

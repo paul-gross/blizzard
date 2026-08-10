@@ -46,10 +46,11 @@ class TranscriptPump:
     ctx: LoopContext
 
     def run(self, *, deadline: datetime | None = None) -> None:
-        """Pump every open segment. ``deadline`` — the wall-clock instant (via the injected
-        clock, not a raw monotonic read) this run must yield by — bounds this method's own
-        unbounded-by-segment-count work the same way ``TranscriptDrain`` bounds its flush;
-        ``TranscriptDrain.run`` computes one deadline and shares it across both halves."""
+        """Pump every open segment. ``deadline`` bounds only how many ADDITIONAL segments a
+        run attempts once one is already in flight (review F3) — never the duration of the
+        one being read, which the harness source's own ``MAX_BATCH_BYTES`` window bounds
+        instead, not wall-clock. ``TranscriptDrain.run`` shares one deadline across both
+        this and its own flush."""
         if not self.ctx.config.transcripts_ship or self.ctx.transcripts is None:
             return
         for segment in self.ctx.store.open_transcript_segments():
@@ -59,10 +60,10 @@ class TranscriptPump:
 
     def pump_lease(self, lease_id: str, *, deadline: datetime | None = None) -> None:
         """Read whatever a single lease's own still-open segment(s) have to ship, right
-        before that lease closes — finalization excludes a segment from every later
-        tick's ``run()``, so without this, content since the last pump would never be
-        read. ``deadline`` bounds this call the same way ``run``'s does (review F4);
-        ``Attempt.close`` also wraps it in its own exception isolation."""
+        before that lease closes — finalization excludes a segment from every later tick's
+        ``run()``, so without this, content since the last pump would never be read.
+        ``deadline`` bounds this call the same way ``run``'s does — in the ordinary case of
+        one open segment, not at all (review F3, ``run``'s own docstring)."""
         if not self.ctx.config.transcripts_ship or self.ctx.transcripts is None:
             return
         for segment in self.ctx.store.open_transcript_segments():
@@ -88,9 +89,13 @@ class TranscriptPump:
         if not batch.available:
             return  # source unavailable this tick — retry from the same cursor next time
         new_cursor = batch.next_position.token if batch.next_position is not None else segment.cursor
-        # A subagent conversation whose parent turn is outside the window surfaces here, not
-        # in `batch.turns` — never silently dropped, so it always reaches a warning.
-        dropped_sidechains = len(batch.unlinked_sidechains)
+        # Never silently dropped: a parent-out-of-window subagent surfaces here, latched
+        # per (segment, agent_id) rather than re-warned every tick (review F2).
+        newly_dropped_sidechains = [
+            sc.agent_id
+            for sc in batch.unlinked_sidechains
+            if self.ctx.store.mark_sidechain_dropped_warned(segment.segment_id, agent_id=sc.agent_id)
+        ]
 
         if not batch.turns:
             if new_cursor != segment.cursor:
@@ -101,8 +106,8 @@ class TranscriptPump:
                     normalizer_version=batch.normalizer_version,
                     harness_version=batch.harness_version,
                 )
-            if dropped_sidechains:
-                self._warn_sidechains_dropped(segment, dropped_sidechains)
+            if newly_dropped_sidechains:
+                self._warn_sidechains_dropped(segment, newly_dropped_sidechains)
             return
 
         turn_range_start = segment.shipped_turns
@@ -124,6 +129,9 @@ class TranscriptPump:
         record_truncated = False
         if len(payload.encode("utf-8")) > TRANSCRIPT_RECORD_MAX_BYTES:
             record = _shrink_to_cap(record)
+            # Wire-visible even when shrinking alone closes the gap (review F7) — the
+            # local flag below only reaches the wire through the still-over-cap branch.
+            record["record_truncated"] = True
             payload = json.dumps(record)
             record_truncated = True
 
@@ -147,8 +155,8 @@ class TranscriptPump:
                 created_at=self.ctx.clock.now(),
             )
             self._mark_record_truncated(segment, _RECORD_UNSHIPPABLE)
-            if dropped_sidechains:
-                self._warn_sidechains_dropped(segment, dropped_sidechains)
+            if newly_dropped_sidechains:
+                self._warn_sidechains_dropped(segment, newly_dropped_sidechains)
             return
 
         delta_bytes = len(payload.encode("utf-8"))
@@ -156,8 +164,8 @@ class TranscriptPump:
             self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
             # review F13: this branch already read a real batch — any dropped sidechain
             # must still warn, not vanish silently along with the tipping record.
-            if dropped_sidechains:
-                self._warn_sidechains_dropped(segment, dropped_sidechains)
+            if newly_dropped_sidechains:
+                self._warn_sidechains_dropped(segment, newly_dropped_sidechains)
             return
 
         self.ctx.store.record_transcript_delta(
@@ -173,8 +181,8 @@ class TranscriptPump:
         )
         if record_truncated:
             self._mark_record_truncated(segment, _RECORD_CAP_EXCEEDED)
-        if dropped_sidechains:
-            self._warn_sidechains_dropped(segment, dropped_sidechains)
+        if newly_dropped_sidechains:
+            self._warn_sidechains_dropped(segment, newly_dropped_sidechains)
 
     def _stop_shipping(self, segment: TranscriptSegmentLedgerRow, reason: str) -> None:
         changed = self.ctx.store.stop_transcript_segment_shipping(segment.segment_id, reason=reason)
@@ -193,9 +201,9 @@ class TranscriptPump:
             chunk_id=segment.chunk_id, segment_id=segment.segment_id, reason=reason, at=self.ctx.clock.now()
         )
 
-    def _warn_sidechains_dropped(self, segment: TranscriptSegmentLedgerRow, count: int) -> None:
-        # Never latching (unlike truncation, this claims no turn range on the wire lane at
-        # all) — every occurrence is its own fact-lane warning, one per pump call that hits it.
+    def _warn_sidechains_dropped(self, segment: TranscriptSegmentLedgerRow, agent_ids: list[str | None]) -> None:
+        # Latched per (segment, agent_id) via the store (review F2) — a fact-lane warning
+        # for an agent this segment hasn't already warned about, not once per tick it recurs.
         OutboundFacts(self.ctx).event(
             chunk_id=segment.chunk_id,
             lease_id=None,
@@ -206,8 +214,8 @@ class TranscriptPump:
                 "chunk_id": segment.chunk_id,
                 "lease_id": None,
                 "node_name": None,
-                "message": f"transcript segment {segment.segment_id} dropped {count} unlinked sidechain(s)",
-                "detail": {"segment_id": segment.segment_id, "count": count},
+                "message": f"transcript segment {segment.segment_id} dropped {len(agent_ids)} unlinked sidechain(s)",
+                "detail": {"segment_id": segment.segment_id, "agent_ids": agent_ids},
             },
         )
 
@@ -279,9 +287,9 @@ def _shrink_candidates(record: dict[str, Any]) -> list[tuple[dict[str, Any], str
 #: only bounds pathological cases (heavy unicode escaping, many tiny fields) from looping.
 _SHRINK_MAX_PASSES = 20
 
-#: Cut a bit more than the measured overshoot demands each pass, since JSON's per-field
-#: overhead (quotes, commas, escaped unicode) makes byte count non-linear in text length.
+#: Margin applied to the target size a pass cuts down to, not the cut fraction (review F1).
 _SHRINK_OVERCUT = 1.15
+_SHRINK_TARGET_BYTES = int(TRANSCRIPT_RECORD_MAX_BYTES / _SHRINK_OVERCUT)
 
 
 def _shrink_to_cap(record: dict[str, Any]) -> dict[str, Any]:
@@ -298,8 +306,10 @@ def _shrink_to_cap(record: dict[str, Any]) -> dict[str, Any]:
         shrinkable = sum(len(holder[field]) for holder, field in candidates)
         if not candidates or shrinkable == 0:
             break  # nothing left to shrink; the cap stays exceeded by structure alone
-        overshoot = size - TRANSCRIPT_RECORD_MAX_BYTES
-        keep_fraction = max(0.0, 1 - (overshoot / shrinkable) * _SHRINK_OVERCUT)
+        # A window many times over cap still keeps the fraction the budget allows, rather
+        # than emptying every field in the first pass.
+        overshoot = size - _SHRINK_TARGET_BYTES
+        keep_fraction = max(0.0, (shrinkable - overshoot) / shrinkable)
         for holder, field in candidates:
             text = holder[field]
             new_len = int(len(text) * keep_fraction)

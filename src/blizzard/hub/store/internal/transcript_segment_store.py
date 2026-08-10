@@ -163,6 +163,7 @@ class TranscriptSegmentStore:
                     codec=codec,
                     content=self._compress(record.turns_json, codec),
                     received_at=at,
+                    record_truncated=record.record_truncated,  # review F10: not the first offer's, stale
                 )
             )
 
@@ -175,7 +176,12 @@ class TranscriptSegmentStore:
                     s.transcript_segments.c.turn_range_start == record.turn_range_start,
                     s.transcript_segments.c.rejected.is_(True),
                 )
-                .values(rejection_reason=reason, byte_count=byte_count, received_at=at)
+                .values(
+                    rejection_reason=reason,
+                    byte_count=byte_count,
+                    received_at=at,
+                    record_truncated=record.record_truncated,  # review F10: not the first offer's, stale
+                )
             )
 
     # --- helpers ------------------------------------------------------------

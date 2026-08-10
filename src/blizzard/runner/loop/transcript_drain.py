@@ -45,6 +45,13 @@ class TranscriptDrain:
     ctx: LoopContext
 
     def run(self) -> None:
+        # Not last in `tick` (review F4) — an uncaught raise must not skip a later step.
+        try:
+            self._run_unsafe()
+        except Exception:
+            _log.exception("transcript drain failed — continuing the tick", runner_id=self.ctx.config.runner_id)
+
+    def _run_unsafe(self) -> None:
         deadline = self.ctx.clock.now() + timedelta(seconds=_MAX_SECONDS_PER_RUN)
         TranscriptPump(self.ctx).run(deadline=deadline)
         # `limit` bounds the query itself, and is this run's ONLY count bound (review

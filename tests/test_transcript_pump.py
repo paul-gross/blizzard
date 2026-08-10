@@ -345,7 +345,11 @@ def test_pump_shrinks_tool_output_not_just_top_level_text() -> None:
     assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
     body = json.loads(pending[0].payload)
     assert body["turns"] != []  # shrunk, not emptied — genuine content still shipped
-    assert body["record_truncated"] is False  # review F5: not the accepted-but-empty case
+    # review F6: mildly over cap shrinks by a sliver, not to near-nothing.
+    assert len(body["turns"][0]["tool"]["output"]) > len(huge_output) * 0.8
+    # review F7: shrinking alone (not just the still-over-cap empty-slice case) is a real
+    # loss too — the wire flag must say so, not just the local variable that drove it.
+    assert body["record_truncated"] is True
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "record_cap_exceeded"
@@ -366,6 +370,9 @@ def test_pump_shrinks_a_nested_sidechain_turns_text() -> None:
     pending = ctx.store.pending_transcript_outbound()
     assert len(pending) == 1
     assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
+    body = json.loads(pending[0].payload)
+    # review F6: mildly over cap shrinks by a sliver, not to near-nothing.
+    assert len(body["turns"][0]["sidechain"]["turns"][0]["text"]) > len(huge) * 0.8
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "record_cap_exceeded"
@@ -416,6 +423,35 @@ def test_pump_shrinks_a_batch_with_many_large_shrinkable_fields() -> None:
     assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
     body = json.loads(pending[0].payload)
     assert len(body["turns"]) == len(many_turns)  # every turn survives, shrunk, not dropped
+    # review F6: every turn present with its content wiped to "" also passes the assertion
+    # above — assert real bytes survive, not just turn count.
+    retained = sum(len(t["tool"]["output"]) for t in body["turns"])
+    assert retained > 0
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "record_cap_exceeded"
+    assert segment.cursor == "pos-1"
+
+
+def test_pump_shrinks_a_severely_oversized_batch_without_emptying_every_field() -> None:
+    """review F1: a window many times over cap — the ordinary shape of a real catch-up
+    read, not a pathological one — must retain a share of its content, never empty every
+    field in the first pass. Mirrors the finding's own ~8 MB / 50-turn measurement."""
+    window_turns = [_tool_turn(i, output="x" * 160_000) for i in range(50)]  # ~8 MB of output
+    ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(window_turns, next_token="pos-1")})
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    pending = ctx.store.pending_transcript_outbound()
+    assert len(pending) == 1
+    assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
+    body = json.loads(pending[0].payload)
+    assert len(body["turns"]) == len(window_turns)  # never drops a turn
+    retained = sum(len(t["tool"]["output"]) for t in body["turns"])
+    # Not literally 0, and not a token sliver either — the budget allows roughly cap-many
+    # bytes of content; demand at least a tenth of the cap survives, not just a nonzero byte.
+    assert retained > TRANSCRIPT_RECORD_MAX_BYTES * 0.1
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason == "record_cap_exceeded"
@@ -681,7 +717,7 @@ def test_pump_warns_on_an_unlinked_sidechain_dropped_alongside_a_normal_record()
     assert len(fact_events) == 1
     warning = json.loads(fact_events[0].payload)
     assert warning["kind"] == "transcript-sidechain-dropped"
-    assert warning["detail"]["count"] == 1
+    assert warning["detail"]["agent_ids"] == ["sub_1"]
 
 
 def test_pump_warns_on_an_unlinked_sidechain_dropped_with_no_turns() -> None:
@@ -702,4 +738,36 @@ def test_pump_warns_on_an_unlinked_sidechain_dropped_with_no_turns() -> None:
     assert len(fact_events) == 1
     warning = json.loads(fact_events[0].payload)
     assert warning["kind"] == "transcript-sidechain-dropped"
-    assert warning["detail"]["count"] == 1
+    assert warning["detail"]["agent_ids"] == ["sub_1"]
+
+
+def test_pump_warns_only_once_per_segment_per_agent_across_ticks() -> None:
+    """review F2: an unlinked subagent stays unlinked every tick until it attaches or the
+    segment closes — the fact-lane warning must latch per (segment, agent_id), not fire on
+    every tick it recurs."""
+    ctx, source = _ctx(
+        ship=True,
+        batches={
+            "sess-a": _batch([_turn(0, "hi")], next_token="pos-1", unlinked_sidechains=[_unlinked_sidechain("sub_1")])
+        },
+    )
+    _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+    source._batches["sess-a"] = _batch(
+        [_turn(1, "again")], next_token="pos-2", unlinked_sidechains=[_unlinked_sidechain("sub_1")]
+    )
+    TranscriptPump(ctx).run()
+    # A second, distinct subagent still gets its own first warning.
+    source._batches["sess-a"] = _batch(
+        [_turn(2, "again")],
+        next_token="pos-3",
+        unlinked_sidechains=[_unlinked_sidechain("sub_1"), _unlinked_sidechain("sub_2")],
+    )
+    TranscriptPump(ctx).run()
+
+    assert len(ctx.store.pending_transcript_outbound()) == 3  # every tick still shipped its own record
+    fact_events = ctx.store.pending_outbound()
+    assert len(fact_events) == 2  # sub_1 once (tick 1), sub_2 once (tick 3) — never sub_1 again
+    warnings = [json.loads(e.payload) for e in fact_events]
+    assert [w["detail"]["agent_ids"] for w in warnings] == [["sub_1"], ["sub_2"]]

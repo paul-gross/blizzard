@@ -475,6 +475,8 @@ transcript_segments = Table(
     # Two fields, not one (review F1): `truncated_reason` never latches; `shipping_stopped_reason` does.
     Column("truncated_reason", String, nullable=True),  # NULL = no record ever shrunk
     Column("shipping_stopped_reason", String, nullable=True),  # NULL = still shipping (D4)
+    # JSON array of subagent `agent_id`s already warned about on the fact lane (review F2).
+    Column("sidechain_warned_agents", Text, nullable=True),  # NULL = none warned yet
     Column("finalized_at", UtcDateTime, nullable=True),  # NULL = still open; set by step close
     Column("stamped_at", UtcDateTime, nullable=False),
 )

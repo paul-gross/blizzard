@@ -34,6 +34,9 @@ _log = get_logger("blizzard.runner.hub")
 #: The prefix every runner->hub call in this client goes under (issue #87).
 _FLEET_API = "/api/fleet"
 
+#: Overrides the shared client's own default timeout for this one call (review F3, #246).
+_TRANSCRIPT_PUSH_TIMEOUT_SECONDS = 5.0
+
 
 class HttpHubClient:
     """The runner's hub API client over an injected ``httpx.Client``."""
@@ -75,7 +78,9 @@ class HttpHubClient:
         return RunnerFactAck.model_validate(resp.json())
 
     def push_transcripts(self, batch: TranscriptSegmentBatch) -> TranscriptSegmentAck:
-        resp = self._post(f"{_FLEET_API}/transcripts", batch.model_dump(mode="json"))
+        resp = self._post(
+            f"{_FLEET_API}/transcripts", batch.model_dump(mode="json"), timeout=_TRANSCRIPT_PUSH_TIMEOUT_SECONDS
+        )
         return TranscriptSegmentAck.model_validate(resp.json())
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
@@ -156,9 +161,12 @@ class HttpHubClient:
         self._raise_for_status(resp, f"GET {path}", not_found_as=not_found_as)
         return resp
 
-    def _post(self, path: str, body: object) -> httpx.Response:
+    def _post(self, path: str, body: object, *, timeout: float | None = None) -> httpx.Response:
         try:
-            resp = self._client.post(path, json=body)
+            if timeout is not None:
+                resp = self._client.post(path, json=body, timeout=timeout)
+            else:
+                resp = self._client.post(path, json=body)
         except httpx.HTTPError as exc:
             raise self._wrap(exc, f"POST {path}") from exc
         self._raise_for_status(resp, f"POST {path}")

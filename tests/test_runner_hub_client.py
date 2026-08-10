@@ -158,6 +158,47 @@ def test_push_transcripts_posts_to_its_own_route_not_events() -> None:
 
 
 @pytest.mark.unit
+def test_push_transcripts_overrides_the_shared_clients_default_timeout() -> None:
+    """review F3, issue #246: `TranscriptDrain.run`'s own 5 s bound is meaningless while
+    this call can run to the shared client's much longer default — it needs its own short
+    override, distinct from every other route on this client."""
+    seen_timeouts = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_timeouts.append(request.extensions["timeout"]["read"])
+        return httpx.Response(200, json={"runner_id": "r1", "high_water": 1, "applied": [1], "already_applied": []})
+
+    transport = httpx.MockTransport(handler)
+    # A much longer default than the transcript route's own override, so the two are
+    # unambiguously distinguishable in what the transport actually receives.
+    client = HttpHubClient(httpx.Client(base_url="http://hub.test", transport=transport, timeout=30.0))
+    batch = TranscriptSegmentBatch(
+        runner_id="r1",
+        records=[
+            TranscriptSegmentRecord(
+                seq=1,
+                segment_id="seg_1",
+                chunk_id="ch_1",
+                node_id="nd_build",
+                epoch=1,
+                spawn_generation=1,
+                turn_range_start=0,
+                turn_range_end=0,
+                final=False,
+                normalizer_version="v1",
+                harness_version=None,
+                turns=[],
+            )
+        ],
+    )
+    client.push_transcripts(batch)
+    client.peek_queue()  # a plain route, to prove it still rides the client's own default
+
+    assert seen_timeouts[0] == 5.0  # the transcript route's own short override
+    assert seen_timeouts[1] == 30.0  # every other route: unaffected, still the shared default
+
+
+@pytest.mark.unit
 def test_hub_advance_posts_to_the_fleet_path() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/api/fleet/chunks/ch_1/hub-advance"

@@ -4,8 +4,10 @@ ack-on-already-applied, and the per-run bound."""
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+
+from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -350,3 +352,49 @@ def test_drain_bounds_its_own_per_run_wall_clock() -> None:
 
     assert hub.transcripts_pushed == []  # the wall-clock bound was already past on the first check
     assert len(ctx.store.pending_transcript_outbound()) == 2
+
+
+class _RaisingTranscriptSource:
+    """review F4: a `turns_since` that always raises — the isolation case no scripted
+    :class:`FakeTranscriptSource` batch can trigger."""
+
+    def turns_since(self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None):  # type: ignore[no-untyped-def]
+        raise RuntimeError("transcript source unavailable (scripted)")
+
+    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+        return []
+
+    def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return None
+
+
+def test_drain_run_survives_a_raising_pump_and_recovers_next_run() -> None:
+    """review F4: `TranscriptDrain.run` is not the last step in `tick` — an uncaught raise
+    must not propagate past it, or every later tick step goes unrun for as long as the
+    condition persists."""
+    hub = FakeHub()
+    store = make_store("sqlite://")
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1"),
+        verdict=None,
+        transcript_source=_RaisingTranscriptSource(),
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+    )
+    _spawn_one_segment(ctx)
+
+    with capture_logs() as logs:
+        TranscriptDrain(ctx).run()  # must not raise
+
+    failures = [e for e in logs if "transcript drain failed" in e["event"]]
+    assert len(failures) == 1
+
+    # The condition ending (a healthy tick) recovers on the very next run — nothing wedged.
+    healthy_ctx = replace(ctx, transcripts=FakeTranscriptSource())
+    TranscriptDrain(healthy_ctx).run()  # must not raise either

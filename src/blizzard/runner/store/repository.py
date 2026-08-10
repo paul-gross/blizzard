@@ -716,6 +716,13 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         keeps its first reason. Returns whether this call actually set the field."""
         ...
 
+    def mark_sidechain_dropped_warned(self, segment_id: str, *, agent_id: str | None) -> bool:
+        """Latch the dropped-sidechain fact-lane warning per (segment, agent_id) — review F2:
+        a subagent conversation outliving one pump window is the ordinary case, not a rare
+        anomaly, so it must not re-warn every tick it stays unlinked. Returns whether this
+        call is the first time this segment has warned about this agent."""
+        ...
+
     def record_transcript_delta(
         self,
         *,
