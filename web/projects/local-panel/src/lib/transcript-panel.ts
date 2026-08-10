@@ -81,7 +81,7 @@ import { injectTranscriptQuery } from './transcript.query';
     } @else {
       <div data-testid="transcript-turns">
         @if (transcript()?.truncated) {
-          <p class="banner" data-testid="transcript-truncated">TRUNCATED — SHOWING THE MOST RECENT TURNS</p>
+          <p class="banner" data-testid="transcript-truncated">TRUNCATED — SOME CONTENT WAS DROPPED</p>
         }
         <fleet-transcript-viewer [turns]="transcript()?.turns ?? []" />
       </div>
