@@ -1239,8 +1239,8 @@
   },
   "blizzard/hub/domain/work.py": {
    "comments": 44,
-   "docstrings": 429,
-   "total": 1513
+   "docstrings": 430,
+   "total": 1515
   },
   "blizzard/hub/domain/work_closure.py": {
    "comments": 4,
@@ -1314,8 +1314,8 @@
   },
   "blizzard/hub/store/internal/chunk_store.py": {
    "comments": 56,
-   "docstrings": 107,
-   "total": 1993
+   "docstrings": 116,
+   "total": 2001
   },
   "blizzard/hub/store/internal/graph_store.py": {
    "comments": 9,
@@ -2128,9 +2128,9 @@
    "total": 225
   },
   "blizzard/runner/loop/steps.py": {
-   "comments": 52,
-   "docstrings": 78,
-   "total": 536
+   "comments": 53,
+   "docstrings": 83,
+   "total": 560
   },
   "blizzard/runner/loop/tick.py": {
    "comments": 12,
@@ -2218,9 +2218,9 @@
    "total": 1
   },
   "blizzard/runner/store/internal/sqlalchemy_store.py": {
-   "comments": 94,
+   "comments": 98,
    "docstrings": 24,
-   "total": 1716
+   "total": 1741
   },
   "blizzard/runner/store/migrations/__init__.py": {
    "comments": 0,
@@ -2387,6 +2387,11 @@
    "docstrings": 6,
    "total": 33
   },
+  "blizzard/runner/store/migrations/versions/20260811_1400_escalation_closures.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "total": 33
+  },
   "blizzard/runner/store/migrations/versions/__init__.py": {
    "comments": 0,
    "docstrings": 0,
@@ -2394,13 +2399,13 @@
   },
   "blizzard/runner/store/repository.py": {
    "comments": 7,
-   "docstrings": 401,
-   "total": 1056
+   "docstrings": 405,
+   "total": 1062
   },
   "blizzard/runner/store/schema.py": {
-   "comments": 139,
+   "comments": 142,
    "docstrings": 5,
-   "total": 530
+   "total": 542
   },
   "blizzard/runner/transcripts/__init__.py": {
    "comments": 0,
@@ -2600,14 +2605,14 @@
    "total": 74
   },
   "crash/support.py": {
-   "comments": 20,
-   "docstrings": 53,
-   "total": 579
+   "comments": 22,
+   "docstrings": 58,
+   "total": 636
   },
   "crash/test_kill9_sweep.py": {
-   "comments": 202,
-   "docstrings": 117,
-   "total": 2124
+   "comments": 214,
+   "docstrings": 132,
+   "total": 2317
   },
   "e2e/__init__.py": {
    "comments": 0,
@@ -2975,9 +2980,9 @@
    "total": 50
   },
   "test_chunk_status_derivation.py": {
-   "comments": 66,
+   "comments": 72,
    "docstrings": 23,
-   "total": 745
+   "total": 798
   },
   "test_chunk_stop.py": {
    "comments": 5,
@@ -3125,9 +3130,9 @@
    "total": 166
   },
   "test_event_log.py": {
-   "comments": 18,
+   "comments": 24,
    "docstrings": 12,
-   "total": 280
+   "total": 309
   },
   "test_events.py": {
    "comments": 16,
@@ -3545,9 +3550,9 @@
    "total": 177
   },
   "test_pin_runner_store.py": {
-   "comments": 6,
-   "docstrings": 18,
-   "total": 165
+   "comments": 8,
+   "docstrings": 20,
+   "total": 193
   },
   "test_pin_wire.py": {
    "comments": 2,
@@ -3645,9 +3650,9 @@
    "total": 60
   },
   "test_restated_invariants.py": {
-   "comments": 40,
+   "comments": 45,
    "docstrings": 13,
-   "total": 598
+   "total": 636
   },
   "test_review_cycle.py": {
    "comments": 19,
@@ -3758,6 +3763,11 @@
    "comments": 10,
    "docstrings": 7,
    "total": 160
+  },
+  "test_runner_escalation_closure.py": {
+   "comments": 15,
+   "docstrings": 7,
+   "total": 154
   },
   "test_runner_event_emission.py": {
    "comments": 34,

@@ -48,6 +48,7 @@ from tests.crash.support import (
     migrate_source_yaml,
     migrate_target_yaml,
     nudge_graph_yaml,
+    pre_declare_build_script,
     start_hub,
     start_runner,
     terminate,
@@ -892,9 +893,70 @@ def test_kill9_at_checks_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         terminate(hub_proc)
 
 
-def test_kill9_runner_daemon_mid_flight(crash_env: CrashEnv, tmp_path: Path) -> None:
-    """An external ``kill -9`` of the runner daemon while a chunk is in flight converges."""
-    landed_file = "LANDED-runner-mid-flight.md"
+def _pre_declare_graph_yaml(landed_file: str, pushed_marker: Path, go_marker: Path) -> str:
+    """:func:`graph_yaml`'s ``build -> deliver`` shape, with
+    :func:`tests.crash.support.pre_declare_build_script` in place of :func:`build_script` — the
+    pre-declaration-window scenario's build node (``bzh:crash-sweep`` D2, case 2)."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": pre_declare_build_script(landed_file, pushed_marker, go_marker),
+                "produces": [{"name": "commit", "kind": "git_commit"}],
+                "judgement": {
+                    "prompt": "verdict('pass', 'the mock harness committed the change; checks are green')\n",
+                    "choices": {
+                        "pass": {
+                            "description": "The change is committed and the node's checks are green.",
+                            "to": "deliver",
+                        }
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": LAND_STEP}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+def _ingest_pre_declare_chunk(
+    hub: httpx.Client, forge: httpx.Client, landed_file: str, pushed_marker: Path, go_marker: Path
+) -> str:
+    """Mint the pre-declaration-window graph and ingest a fresh issue against it to a ready chunk."""
+    minted = hub.post(
+        "/api/graphs", json={"definition_yaml": _pre_declare_graph_yaml(landed_file, pushed_marker, go_marker)}
+    )
+    assert minted.status_code == 201, minted.text
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a pre-declaration-window chunk"})
+    assert issue.status_code == 201, issue.text
+    number = issue.json()["number"]
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    return chunk_id
+
+
+def test_kill9_runner_daemon_after_session_end(crash_env: CrashEnv, tmp_path: Path) -> None:
+    """External ``kill -9`` of the runner daemon strictly AFTER the worker's commit is
+    declared and its ``SessionEnd`` is durable — the exit-is-done recovery path
+    (``_crash_orphaned``'s ``ended`` skip), pinned deterministically (``bzh:crash-sweep`` D2)."""
+    landed_file = "LANDED-runner-after-session-end.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
 
@@ -909,18 +971,104 @@ def test_kill9_runner_daemon_mid_flight(crash_env: CrashEnv, tmp_path: Path) -> 
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
-        # Let the chunk get claimed and in flight, then kill -9 the whole runner daemon.
-        assert wait_status(hub, chunk_id, {"running", "delivering", "done"}) in {"running", "delivering", "done"}
+        assert wait_status(hub, chunk_id, {"running"}) == "running"
+        lease_id, epoch, session_id, worker_pid = _lease_for_chunk(runner_dir, chunk_id)
+
+        # Fence: wait for the durable SessionEnd fact — the runner stays alive throughout,
+        # so both the declare and the session-end POST land before the kill.
+        _wait_session_ended(runner_dir, lease_id)
+        # Property 2: the window is provably open at the kill instant, not merely hoped for.
+        assert _git_commit_declared(runner_dir, lease_id), "session ended before its commit was declared"
+        pre_kill_status = hub.get(f"/api/chunks/{chunk_id}").json()["status"]
+        assert pre_kill_status != "done", "the original daemon already judged the chunk before the kill landed"
+
+        pid_before = runner_proc.pid
         runner_proc.kill()
         runner_proc.wait(timeout=10)
 
-        _assert_invariants(runner_dir, hub_dir, when="after external kill -9 of the runner daemon")
+        _assert_invariants(runner_dir, hub_dir, when="after external kill -9 following the worker's session-end")
 
         runner_proc = start_runner(runner_dir, crash_point=None)
+        assert runner_proc.pid != pid_before
         assert wait_status(hub, chunk_id, {"done"}) == "done", "chunk did not converge after runner kill -9"
         _assert_invariants(runner_dir, hub_dir, when="after runner-daemon recovery")
+
+        after = _leases_for_chunk(runner_dir, chunk_id)
+        assert len(after) == 1, f"exit-is-done recovery minted an extra lease (a retry, not a direct judge): {after}"
+        assert after[0][:3] == (lease_id, epoch, session_id)
+        # Mutation-sensitive (`bzh:mutation-review-selection`): a restart-resume respawns
+        # under a NEW pid; judging an already-declared-done lease directly never does.
+        assert after[0][3] == worker_pid, (
+            f"the exit-is-done lease was respawned (pid {worker_pid} -> {after[0][3]}) — "
+            "the `ended` skip did not fire; it went through restart-resume instead"
+        )
+        assert _open_resume_intents(runner_dir) == set()
+
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
-        assert len([ln for ln in tree.splitlines() if ln.strip()]) == 1
+        commits = [line for line in tree.splitlines() if line.strip()]
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+def test_kill9_runner_daemon_before_commit_declared(crash_env: CrashEnv, tmp_path: Path) -> None:
+    """External ``kill -9`` of the runner daemon precisely BEFORE the worker declares its
+    commit — issue #284's pre-declaration race, pinned deterministically — must never land
+    ``done`` with an empty delivery. D1's empty-delivery refusal is what this proves."""
+    landed_file = "LANDED-runner-pre-declare.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+    pushed_marker = tmp_path / "pushed.marker"
+    go_marker = tmp_path / "go.marker"
+
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id = _ingest_pre_declare_chunk(hub, crash_env.forge, landed_file, pushed_marker, go_marker)
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        assert wait_status(hub, chunk_id, {"running"}) == "running"
+        lease_id, _epoch, _session_id, worker_pid = _lease_for_chunk(runner_dir, chunk_id)
+
+        # Fence: wait for the push, strictly before the declare — an in-test fence
+        # (``bzh:crash-sweep`` D2 property 3), not a race against the worker's pace.
+        _await_marker(pushed_marker)
+        # Property 2: the pre-declaration window is provably open at the kill instant.
+        assert not _git_commit_declared(runner_dir, lease_id), "the commit was already declared before the kill"
+
+        runner_proc.kill()
+        runner_proc.wait(timeout=10)
+
+        # Release the fence: the orphaned worker's declare now fails against a dead
+        # runner and it exits — issue #284's race, pinned rather than timed.
+        go_marker.write_text("go\n")
+        _wait_pid_gone(worker_pid)
+
+        assert _session_ends(runner_dir) == set(), "the orphan recorded a session-end against a dead runner"
+        assert not _git_commit_declared(runner_dir, lease_id), "the orphan's declare succeeded against a dead runner"
+        _assert_invariants(runner_dir, hub_dir, when="after kill -9 in the pre-declaration window")
+
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        status = wait_status(hub, chunk_id, {"done", "needs_human"})
+        assert status in {"done", "needs_human"}, f"chunk did not converge after runner kill -9: {status}"
+        _assert_invariants(runner_dir, hub_dir, when="after runner-daemon recovery")
+
+        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+        commits = [line for line in tree.splitlines() if line.strip()]
+        if status == "done":
+            # D1's refusal worked through a retried build, not a silent empty delivery — against
+            # the unmodified LAND_STEP this assertion fails: `done` with `commits == []`.
+            assert len(commits) == 1, f"landed `done` with an empty delivery: {landed_file} is on main {len(commits)}x"
+        else:
+            # The refusal escalated instead of silently converging — never a landed file.
+            assert len(commits) == 0, f"escalated to needs_human but {landed_file} still landed on main:\n{tree}"
     finally:
         hub.close()
         terminate(runner_proc)
@@ -1017,6 +1165,52 @@ def _open_resume_intents(runner_dir: Path) -> set[str]:
         return store.resume_intent_lease_ids()
     finally:
         engine.dispose()
+
+
+def _lease_for_chunk(runner_dir: Path, chunk_id: str, *, timeout: float = 30.0) -> tuple[str, int, str, int]:
+    """Poll until ``chunk_id`` has exactly one spawned lease, and return
+    ``(lease_id, epoch, session_id, pid)`` — the identity a deterministic-kill case pins against."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        rows = _leases_for_chunk(runner_dir, chunk_id)
+        if len(rows) == 1 and rows[0][2] is not None and rows[0][3] is not None:
+            lease_id, epoch, session_id, pid = rows[0]
+            assert session_id is not None and pid is not None
+            return lease_id, epoch, session_id, pid
+        time.sleep(0.1)
+    raise AssertionError(f"chunk {chunk_id} never got a spawned lease within {timeout}s")
+
+
+def _wait_session_ended(runner_dir: Path, lease_id: str, *, timeout: float = 30.0) -> None:
+    """Block until ``lease_id``'s ``SessionEnd`` fact is durable."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if lease_id in _session_ends(runner_dir):
+            return
+        time.sleep(0.05)
+    raise AssertionError(f"lease {lease_id} never recorded a session-end within {timeout}s")
+
+
+def _git_commit_declared(runner_dir: Path, lease_id: str) -> bool:
+    """Whether ``lease_id`` has a durable ``git_commit`` declaration."""
+    store, engine = _runner_store(runner_dir)
+    try:
+        return bool(store.git_commit_declarations_for_lease(lease_id))
+    finally:
+        engine.dispose()
+
+
+def _wait_pid_gone(pid: int, *, timeout: float = 30.0) -> None:
+    """Block until ``pid`` is no longer a live process — an orphaned worker's exit, observed
+    directly rather than inferred from a durable fact it may never get to write."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except (ProcessLookupError, PermissionError):
+            return
+        time.sleep(0.05)
+    raise AssertionError(f"orphaned worker pid {pid} did not exit within {timeout}s")
 
 
 def _await_committed(runner_dir: Path, chunk_id: str, landed_file: str, *, timeout: float = 30.0) -> None:

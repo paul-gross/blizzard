@@ -197,6 +197,19 @@
      "reason": "The runner cannot import the hub's constant across the daemon boundary, so its own cap must restate which side of the ordering it is on; test_record_caps.py asserts the gap."
     }
    ]
+  },
+  {
+   "id": "crash-sweep-whole-process-case",
+   "statement": "A whole-process case is a crash-sweep case that signals a whole daemon process or process group rather than arming a single registry crash point; a graceful SIGTERM qualifies as readily as a kill -9.",
+   "owner": "blizzard-context:/verification/blizzard/commands.md#blizzardcrash-sweep",
+   "owner_kind": "doc-section",
+   "owner_assert": {
+    "quote": "signals a whole daemon process or process group rather than arming a single registry crash point"
+   },
+   "markers": [
+    "signals a whole daemon process or process group"
+   ],
+   "sites": []
   }
  ]
 }

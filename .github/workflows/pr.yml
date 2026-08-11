@@ -20,7 +20,7 @@
 # The FULL 22-point kill-9 sweep runs ~130s locally and multiples of that on a 2-core
 # GitHub runner, so this workflow runs the sweep's bounded CI profile
 # (BLIZZARD_CRASH_SWEEP_CI=1 — a representative crash point per boundary family plus the
-# two whole-process cases and the recovery-critical windows); the FULL sweep stays the
+# whole-process cases and the recovery-critical windows); the FULL sweep stays the
 # documented local command (`mise run crash-sweep`) and runs in the tag `release`
 # workflow. The e2e acceptance loop (`mise run e2e`, incl. the Playwright board scenario)
 # remains a local + tag-only tier, not a `pr`/`push` gate (build.md).

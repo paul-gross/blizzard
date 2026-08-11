@@ -19,7 +19,7 @@
 # The FULL 22-point kill-9 sweep runs ~130s locally and multiples of that on a 2-core
 # GitHub runner, so the pr/push callers run the sweep's bounded CI profile
 # (`crash_sweep_ci: "1"` — a representative crash point per boundary family plus the
-# two whole-process cases and the recovery-critical windows); the FULL sweep stays the
+# whole-process cases and the recovery-critical windows); the FULL sweep stays the
 # documented local command (`mise run crash-sweep`) and runs in the tag `release`
 # workflow's own job. `crash_sweep_ci` is an explicit input — nothing varies between
 # today's two callers, but a future FULL-sweep caller of this reusable workflow can

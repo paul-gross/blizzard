@@ -128,21 +128,76 @@ def build_script(landed_file: str) -> str:
     )
 
 
+def pre_declare_build_script(landed_file: str, pushed_marker: Path, go_marker: Path) -> str:
+    """:func:`build_script`'s commit + push, then an in-test fence (``bzh:crash-sweep`` D2):
+    write ``pushed_marker`` once pushed, then block on ``go_marker`` before declaring — pinning
+    the pre-declaration window deterministically. The commit is idempotent (only if dirty): a
+    retried attempt reuses the same workdir, which already carries the first attempt's commit,
+    and a plain ``git commit`` there would find nothing to commit and raise."""
+    return (
+        "import subprocess, pathlib, time\n"
+        f"repo = {REPO_NAME!r}\n"
+        f"(pathlib.Path(repo) / {landed_file!r}).write_text('landed by the crash sweep\\n')\n"
+        'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
+        "_dirty = subprocess.run(\n"
+        '    ["git", "-C", repo, "status", "--porcelain"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        "if _dirty:\n"
+        "    subprocess.run(\n"
+        '        ["git", "-C", repo,\n'
+        '         "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
+        '         "commit", "-m", "feat: land a change from the crash sweep"],\n'
+        "        check=True,\n"
+        "    )\n"
+        "_branch = subprocess.run(\n"
+        '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        "_commit = subprocess.run(\n"
+        '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        'subprocess.run(["git", "-C", repo, "push", "--force-with-lease", "origin", _branch], check=True)\n'
+        f"pathlib.Path({str(pushed_marker)!r}).write_text('pushed\\n')\n"
+        f"_go = pathlib.Path({str(go_marker)!r})\n"
+        "while not _go.exists():\n"
+        "    time.sleep(0.05)\n"
+        "subprocess.run(\n"
+        '    ["blizzard", "runner", "artifact", "commit",\n'
+        '     "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
+        "    check=True,\n"
+        ")\n"
+    )
+
+
 _JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
+
+#: The ``git_commit`` ``produces:`` every genuinely-committing build node declares (D1,
+#: ``bzh:crash-sweep``) — arms ``LAND_STEP``'s empty-delivery refusal via ``Graph.declares_git_commit``.
+_GIT_COMMIT_PRODUCES = [{"name": "commit", "kind": "git_commit"}]
 
 # The migrate scenario's source-graph judgement (#90): the build node hands the chunk to
 # the `triage-delivery` graph instead of delivering in place.
 _MIGRATE_JUDGEMENT_SCRIPT = "verdict('migrate', 'hand the chunk to the triage-delivery graph')\n"
 
 
-# Merges each submitted branch to base by pinned SHA against the mock forge; idempotent
-# by construction, so a crash-recovery re-run lands nothing twice.
+# Merges each submitted branch to base by pinned SHA against the mock forge; idempotent by
+# construction, and refuses an empty delivery like production's ``LandRun.pending()`` (D1).
 LAND_STEP = """python3 - <<'PYEOF'
-import json, os, urllib.error, urllib.request
+import json, os, sys, urllib.error, urllib.request
 
 forge = os.environ["BZ_FORGE_URL"]
 base = os.environ.get("BZ_HUB_BASE_BRANCH", "main")
 commits = json.loads(os.environ.get("BZ_HUB_GIT_COMMITS") or "[]")
+
+if not commits and os.environ.get("BZ_HUB_EXPECT_GIT_COMMITS", "1") != "0":
+    print(
+        "no git commits to deliver: this chunk submitted no git_commit artifact, so there "
+        "is nothing to open a PR for.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 def call(method, path, payload):
@@ -190,6 +245,7 @@ def graph_yaml(landed_file: str) -> str:
             "build": {
                 "executor": "runner",
                 "prompt": build_script(landed_file),
+                "produces": _GIT_COMMIT_PRODUCES,
                 "judgement": {
                     "prompt": _JUDGEMENT_SCRIPT,
                     "choices": {
@@ -231,6 +287,7 @@ def checks_graph_yaml(landed_file: str) -> str:
             "build": {
                 "executor": "runner",
                 "prompt": build_script(landed_file),
+                "produces": _GIT_COMMIT_PRODUCES,
                 "checks": ["true"],
                 "judgement": {
                     "prompt": _JUDGEMENT_SCRIPT,
@@ -276,7 +333,7 @@ def nudge_graph_yaml(landed_file: str) -> str:
             "build": {
                 "executor": "runner",
                 "prompt": build_script(landed_file),
-                "produces": [NUDGE_PRODUCES_NAME],
+                "produces": [NUDGE_PRODUCES_NAME, *_GIT_COMMIT_PRODUCES],
                 "judgement": {
                     "prompt": _JUDGEMENT_SCRIPT,
                     "choices": {
@@ -346,10 +403,10 @@ def migrate_hub_source_yaml() -> str:
 
 def migrate_hub_target_yaml() -> str:
     """The hub-landing migration target (`triage-hub`, issue #111): its **entry** node
-    `build` — which name-matches the source's migrating `build`, so the migration lands
-    there — is **hub-executed**, not a runner node. It reuses :data:`LAND_STEP`, which with
-    no submitted branches (the source committed nothing) is a clean no-op that prints its
-    success line and routes the default `success` edge to `done`."""
+    `build` name-matches the source's migrating `build`, so the migration lands there, and
+    is **hub-executed** via :data:`LAND_STEP`. This graph declares no `git_commit` `produces:`,
+    so D1's empty-delivery refusal never arms here — with nothing submitted, the step stays a
+    clean no-op that prints its success line and routes to `done`."""
     import yaml
 
     graph = {

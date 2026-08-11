@@ -31,7 +31,7 @@ WorkingDirectory=/var/lib/blizzard/runner
 # machine reboot, systemd brings the supervisor back and its FIRST tick is REAP —
 # it reaps the leases stranded by the crash, re-reads its environment bindings from
 # the store, and continues each chunk at the node the hub last recorded; nothing is
-# worked twice (proven by tests/crash/test_kill9_sweep.py::test_kill9_runner_daemon_mid_flight).
+# worked twice (proven by tests/crash/test_kill9_sweep.py::test_kill9_runner_daemon_after_session_end).
 #
 # A GRACEFUL restart (`systemctl restart`, or stop→start on a wheel upgrade) is stronger:
 # the SIGTERM lets the daemon run its shutdown path, which marks every in-flight lease
