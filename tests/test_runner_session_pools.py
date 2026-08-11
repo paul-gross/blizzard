@@ -432,8 +432,9 @@ def test_a_head_under_every_declared_bound_is_resumed(tmp_path):  # type: ignore
     head = _seed_head(store)
     _seed_usage(store, tokens=10)
     env = _bounded(SessionMode.RESUME, _rotate(max_context_tokens=1000, max_invocations=10))
+    source = FakeTranscriptSource(context_tokens_by_session={head: 10})
 
-    assert _resolve(store, env) == head
+    assert _resolve(store, env, transcript_source=source) == head
 
 
 @pytest.mark.component
@@ -456,10 +457,26 @@ def test_max_context_tokens_fires_strictly_over_the_bound(tmp_path, tokens, boun
     """At the bound is still under it — a threshold is a ceiling, not a trigger point."""
     store = _store(tmp_path)
     head = _seed_head(store)
-    _seed_usage(store, tokens=tokens)
     env = _bounded(SessionMode.RESUME, _rotate(max_context_tokens=bound))
+    source = FakeTranscriptSource(context_tokens_by_session={head: tokens})
 
-    assert _resolve(store, env) == (head if resumed else None)
+    assert _resolve(store, env, transcript_source=source) == (head if resumed else None)
+
+
+@pytest.mark.component
+def test_the_context_bound_reads_the_transcript_not_the_usage_facts(tmp_path):  # type: ignore[no-untyped-def]
+    """The regression this bound was rebuilt for. A usage fact carries one invocation's
+    CUMULATIVE tokens, which on a long session runs orders of magnitude above the context
+    that session actually ends holding — a real head measured 246M against a true 680k.
+    Sourcing the bound from usage rotated a head whose context was nowhere near the line."""
+    store = _store(tmp_path)
+    head = _seed_head(store)
+    _seed_usage(store, tokens=246_000_000)  # what the old signal would have compared
+    env = _bounded(SessionMode.RESUME, _rotate(max_context_tokens=1_000_000))
+    source = FakeTranscriptSource(context_tokens_by_session={head: 680_409})
+
+    assert _resolve(store, env, transcript_source=source) == head
+    assert source.context_tokens_calls == [head]
 
 
 @pytest.mark.component
@@ -498,12 +515,15 @@ def test_max_transcript_bytes_fires_strictly_over_the_bound(tmp_path, size, boun
 
 @pytest.mark.component
 def test_an_unreadable_context_signal_is_not_a_breach(tmp_path):  # type: ignore[no-untyped-def]
-    """A freshly minted head has no usage fact yet. Reading that as 0 would be right by
-    accident; reading it as a breach would make every new head instantly ineligible."""
+    """A head whose transcript cannot be read — not yet written, or gone — measures `None`.
+    Reading that as 0 would be right by accident; reading it as a breach would make every
+    freshly minted head instantly ineligible. A harness with no source scripted at all
+    (the default) is the same case, and so is a runner wired without one."""
     store = _store(tmp_path)
-    head = _seed_head(store)  # no usage seeded at all
+    head = _seed_head(store)
     env = _bounded(SessionMode.RESUME, _rotate(max_context_tokens=1))
 
+    assert _resolve(store, env, transcript_source=FakeTranscriptSource(context_tokens_by_session={})) == head
     assert _resolve(store, env) == head
 
 

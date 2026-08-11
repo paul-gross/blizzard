@@ -47,12 +47,26 @@ sessions:
     effort: high
   code:
     model: ["blizzard:basic"]
+    # All three numbers are set from the same measured distribution — 757 fleet sessions,
+    # every figure below observed rather than assumed.
     rotate:
       # Harness INVOCATIONS, not node-steps: one node-step burns two or three (a spawn
-      # plus a judge, plus any nudge), so this is roughly ten node-steps, not thirty.
-      max_invocations: 30
+      # plus a judge, plus any nudge), so this is roughly five node-steps, not twelve.
+      # Observed p99 is 10 and the most any session ever reached is 21, so this bounds the
+      # tail without touching the body — but it IS the bound that rotates a real lineage
+      # first, since `code` spans build -> verify -> pre-push -> resolve and exists to
+      # accumulate across the review-fail loop: expect it around one bounce.
+      max_invocations: 12
+      # The context the next resume starts from, in tokens — measured off the pool head's
+      # last main-chain turn, so it is the conversation's SIZE, not spend accumulated
+      # across it. Sits around the 93rd percentile of observed session context: an
+      # outlier cut, not routine churn.
       max_context_tokens: 300000
-      max_transcript_bytes: 50000000
+      # The main transcript file, sidecars excluded — the same quantity `max_context_tokens`
+      # measures, since a resume re-reads neither a subagent's context nor its bytes. A
+      # backstop under the context bound rather than a peer of it: bytes track context only
+      # loosely, and the largest main file ever observed is 5.2MB, so this is ~2x the tail.
+      max_transcript_bytes: 10000000
   gate:
     model: ["blizzard:basic"]
 

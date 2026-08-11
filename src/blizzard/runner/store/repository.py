@@ -198,6 +198,16 @@ class AskRecord:
 
 
 @dataclass(frozen=True)
+class ContextSampleState:
+    """What a lease's recorded context samples establish so far — the sampler's own memory."""
+
+    #: The newest sample's stamp: the cadence anchor, derived rather than a stored column.
+    last_sampled_at: datetime
+    #: The highest context measured, or ``None`` when no attempt measured one — the warn dedupe.
+    max_context_tokens: int | None
+
+
+@dataclass(frozen=True)
 class UsageTotals:
     """A summed window of usage facts (issue #58). ``cost_partial`` carries the
     lower-bound contract on ``cost_usd``: a caller must check it before treating
@@ -318,14 +328,6 @@ class IReadRunnerStore(Protocol):
         The newest session-bearing lease whose ``lease_context.session_name`` matches;
         derived, never a column. **Runner-local**: a chunk reclaimed elsewhere mints fresh.
         """
-        ...
-
-    def session_context_tokens(self, session_id: str) -> int | None:
-        """The session's **latest invocation's** context size in tokens, or ``None``.
-
-        The signal behind a declared ``rotate.max_context_tokens`` (issue #144):
-        ``cache_read + cache_create + input`` on the newest ``usage_facts`` row for this
-        session. Telemetry-derived, so ``None`` is *unknown*."""
         ...
 
     def session_invocation_count(self, session_id: str) -> int:
@@ -625,6 +627,14 @@ class IReadRunnerStore(Protocol):
     def usage_since(self, at: datetime) -> UsageTotals:
         """Sum every local usage fact recorded at or after ``at`` (issue #58) — see
         :class:`UsageTotals` for the lower-bound + PARTIAL contract on ``cost_usd``."""
+        ...
+
+    def context_sample_state(self, lease_id: str) -> ContextSampleState | None:
+        """What this lease's context samples already establish, or ``None`` if none exist.
+
+        One read answering both of the sampler's questions — when it last sampled (the
+        cadence anchor) and the highest context it has seen (whether the warn line has
+        already been crossed, so the warning fires once rather than every sample)."""
         ...
 
     def last_external_usage_attempt_at(self) -> datetime | None:
@@ -939,6 +949,23 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
         Keyed on ``(lease_id, generation, sample.kind)``: a resume within the same lease
         is a genuinely new row; an exact replay writes nothing and buffers nothing."""
+        ...
+
+    def record_context_sample(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        session_id: str,
+        context_tokens: int | None,
+        sampled_at: datetime,
+        report_kind: str = "",
+        report_payload: str = "",
+    ) -> None:
+        """Append one context-sample attempt, and buffer its outbound report when one is given,
+        atomically. ``context_tokens is None`` records an attempt that measured nothing, which
+        still advances the cadence anchor. An empty ``report_kind`` records the sample alone —
+        the ordinary case, since only a first crossing reports."""
         ...
 
     def record_external_usage_attempt(

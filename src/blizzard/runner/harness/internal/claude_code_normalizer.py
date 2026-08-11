@@ -49,6 +49,14 @@ _CONTROL_TYPES = frozenset(
 #: Raw CSI ANSI escape sequences, including the private-mode `?` prefix (`\x1b[?25l`).
 _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
+#: One request's prompt: a cached prompt token is still a prompt token, so both cache fields count.
+_CONTEXT_USAGE_FIELDS = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
+
+
+def _as_int(value: object) -> int:
+    """``value`` as a count, or ``0`` — a malformed usage field degrades, never crashes."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
 
 @dataclass(frozen=True)
 class Text:
@@ -173,6 +181,19 @@ class Record:
         result = self.raw.get("toolUseResult")
         value = result.get("agentId") if isinstance(result, dict) else None
         return value if isinstance(value, str) and value else None
+
+    @property
+    def context_tokens(self) -> int | None:
+        """This turn's **prompt size** — ``input + cache_read + cache_creation`` of ``message.usage``.
+
+        The conversation's SIZE here, not spend summed across turns. ``None`` when the record
+        measures nothing: an all-zero ``usage`` is what an API-error turn writes, and no real
+        prompt is empty, so zero means *unmeasured* — never a size comfortably under bound."""
+        message = self.raw.get("message")
+        usage = message.get("usage") if isinstance(message, dict) else None
+        if not isinstance(usage, dict):
+            return None
+        return sum(_as_int(usage.get(field)) for field in _CONTEXT_USAGE_FIELDS) or None
 
 
 @dataclass(frozen=True, eq=False)

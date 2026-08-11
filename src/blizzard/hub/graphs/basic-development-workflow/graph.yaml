@@ -62,9 +62,11 @@ sessions:
     model: ["blizzard:basic"]
     rotate:
       # Harness INVOCATIONS, not node-steps: one node-step burns two or three.
-      max_invocations: 30
+      max_invocations: 12
+      # The conversation's SIZE at the next resume, not spend accumulated across it —
+      # see `advanced-development-workflow` for where these three numbers come from.
       max_context_tokens: 300000
-      max_transcript_bytes: 50000000
+      max_transcript_bytes: 10000000
   gate:
     model: ["blizzard:basic"]
 

@@ -1053,6 +1053,9 @@ class _RaisingTranscriptSource:
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         return None
 
+    def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return None
+
 
 def test_lease_close_survives_a_raising_transcript_source() -> None:
     """review F4: ``Attempt.close`` funnels every closure path through its own
@@ -1135,6 +1138,9 @@ class _PartiallyRaisingTranscriptSource:
         return []
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return None
+
+    def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         return None
 
 
@@ -1419,6 +1425,9 @@ class _SequencedTranscriptSource:
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         return None
 
+    def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return None
+
 
 def test_pump_lease_drains_a_segment_across_several_incomplete_reads() -> None:
     """review round 7 F2: `TranscriptBatch.complete=False` means more remains RIGHT NOW —
@@ -1482,6 +1491,9 @@ class _ClockAdvancingAfterNCallsSource:
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         return self.inner.size_bytes(session_id, spawn_cwd=spawn_cwd)
+
+    def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return self.inner.context_tokens(session_id, spawn_cwd=spawn_cwd)
 
 
 def test_pump_lease_marks_incomplete_when_its_deadline_expires_mid_drain() -> None:
@@ -1566,6 +1578,9 @@ class _AdvanceClockAfterSessionSource:
         return []
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return None
+
+    def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         return None
 
 

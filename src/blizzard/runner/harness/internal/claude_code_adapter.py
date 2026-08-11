@@ -408,6 +408,10 @@ class ClaudeCodeAdapter:
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
         input_tokens = output_tokens = cache_read_tokens = cache_create_tokens = 0
         resolved = model or self._model
+        # A reply carrying several content blocks is written as several records that each
+        # repeat their message's ONE usage, so summing per record overcounts (measured 1.7x
+        # against the billed figure on a long session). Every field here is per-message.
+        counted: set[str] = set()
         for raw_line in lines:
             line = raw_line.strip()
             if not line.startswith("{"):
@@ -427,6 +431,13 @@ class ClaudeCodeAdapter:
             usage = message.get("usage")
             if not isinstance(usage, dict):
                 continue
+            message_id = message.get("id")
+            if isinstance(message_id, str) and message_id:
+                if message_id in counted:
+                    continue
+                counted.add(message_id)
+            # An id-less record cannot be collapsed, so it is counted — an unidentifiable
+            # message is more likely one message than a repeat of the last.
             input_tokens += int(usage.get("input_tokens") or 0)
             output_tokens += int(usage.get("output_tokens") or 0)
             cache_read_tokens += int(usage.get("cache_read_input_tokens") or 0)

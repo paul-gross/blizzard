@@ -11,7 +11,7 @@ import json
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from blizzard.runner.harness.internal.claude_code_normalizer import NORMALIZER_VERSION, NormalizedFile
+from blizzard.runner.harness.internal.claude_code_normalizer import NORMALIZER_VERSION, NormalizedFile, Record
 from blizzard.runner.harness.transcript import (
     IHarnessTranscriptSource,
     NormalizedTurn,
@@ -29,6 +29,10 @@ MAX_FILE_BYTES = 64 * 1024 * 1024
 #: One forward read's total bytes, also spent as a cold read's sidecar fan-out gate —
 #: checked before admitting a sidecar, not debited as it reads.
 MAX_BATCH_BYTES = 8 * 1024 * 1024
+
+#: The first tail window a context read scans, and the factor it widens by when it held no turn.
+CONTEXT_TAIL_BYTES = 1024 * 1024
+_CONTEXT_WIDEN = 8
 
 
 @dataclass(frozen=True)
@@ -342,8 +346,9 @@ class ClaudeCodeTranscriptSource:
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         """``stat().st_size`` on the located transcript, or ``None`` when there is none.
 
-        Deliberately a ``stat``, not a read: the file this measures is the one that
-        has grown too large to keep resuming into."""
+        Deliberately a ``stat``, not a read: this is the file that has grown too large to keep
+        resuming into. Subagent sidecars are excluded for the same reason
+        :meth:`context_tokens` excludes them — a resume re-reads neither."""
         matches = self._matches(session_id)
         if not matches:
             return None
@@ -353,6 +358,55 @@ class ClaudeCodeTranscriptSource:
             # Recovered, not a boundary failure — see `read_raw_lines` above.
             self._errors.from_io_recovered(exc, f"transcript unreadable: {session_id}", session_id=session_id)
             return None
+
+    def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        """The last **main-chain** turn's :attr:`Record.context_tokens`, or ``None``.
+
+        Subagents are excluded because a subagent's context never returns to the parent — only
+        its closing report does — so counting it overstates what a resume pays for."""
+        matches = self._matches(session_id)
+        if not matches:
+            self._errors.not_found(session_id=session_id, projects_root=str(self._projects_root))
+            return None
+        try:
+            path = self._locate(matches, spawn_cwd)
+            size = path.stat().st_size
+            # Bounded by the module's per-file read cap, not by file size: a newest measurable
+            # turn beyond it reads as unmeasurable, which the seam already models.
+            ceiling = min(size, MAX_FILE_BYTES)
+            window = min(CONTEXT_TAIL_BYTES, ceiling)
+            while True:
+                tokens = self._newest_context_tokens(path, size=size, window=window)
+                if tokens is not None or window >= ceiling:
+                    return tokens
+                window = min(window * _CONTEXT_WIDEN, ceiling)
+        except OSError as exc:
+            # Recovered, not a boundary failure — see `read_raw_lines` above.
+            self._errors.from_io_recovered(exc, f"transcript unreadable: {session_id}", session_id=session_id)
+            return None
+
+    @staticmethod
+    def _newest_context_tokens(path: Path, *, size: int, window: int) -> int | None:
+        """The last ``window`` bytes scanned backward for the newest usage-bearing main turn —
+        bounded, so a five-megabyte transcript costs one small read instead of a full parse."""
+        begin = max(0, size - window)
+        with path.open("rb") as f:
+            f.seek(begin)
+            raw = f.read()
+        lines = raw.decode("utf-8", errors="replace").splitlines()
+        if begin and lines:
+            lines = lines[1:]  # a mid-file seek can land mid-line — drop the fragment
+        # A record measuring nothing yields None (an API-error turn's all-zero `usage`, which
+        # 1.3% of real sessions END on), so the walk continues rather than accepting it.
+        for record in reversed(Record.parse(lines)):
+            # `is_sidechain` is the pre-sidecar shape's marker: current Claude Code writes a
+            # subagent to its own file under `<session>/subagents/`, which this never opens.
+            if record.type != "assistant" or record.is_sidechain:
+                continue
+            tokens = record.context_tokens
+            if tokens is not None:
+                return tokens
+        return None
 
     def _matches(self, session_id: str) -> list[Path]:
         return sorted(self._projects_root.glob(f"*/{session_id}.jsonl"))

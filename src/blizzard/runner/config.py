@@ -70,6 +70,8 @@ DEFAULT_RUNNER_CEILING_WINDOW_HOURS = 24.0
 # How often the tick re-samples the harness's rate-limit windows (issue #218) — a
 # diagnostic, best-effort read, not a spend control.
 DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS = 300
+# Well under the minutes a context takes to move; each read is a bounded tail read.
+DEFAULT_CONTEXT_SAMPLE_INTERVAL_SECONDS = 60
 DEFAULT_AUTH_HUB_ROLE = "mirror"
 
 
@@ -162,6 +164,30 @@ class Spend:
         """Defaulted whether or not a ceiling is set alongside it."""
         hours = self.table.real("window_hours")
         return DEFAULT_RUNNER_CEILING_WINDOW_HOURS if hours is None else hours
+
+
+@dataclass(frozen=True)
+class Context:
+    """The ``[context]`` table — the live session-context warn lane.
+
+    Config rather than graph content on purpose: this observes, a graph's ``rotate`` block
+    decides. So the line is re-aimed without re-minting every graph declaring a bound."""
+
+    table: Table
+
+    @classmethod
+    def of(cls, raw: object) -> Context:
+        return cls(Table.of(raw))
+
+    @property
+    def warn_tokens(self) -> int | None:
+        """The line a running session's context is warned about crossing; absent = no lane,
+        and nothing is sampled at all."""
+        return self.table.count("warn_tokens", 0) or None
+
+    @property
+    def sample_interval_seconds(self) -> int:
+        return self.table.count("sample_interval_seconds", DEFAULT_CONTEXT_SAMPLE_INTERVAL_SECONDS)
 
 
 @dataclass(frozen=True)
@@ -280,6 +306,10 @@ class RunnerConfig:
     #: An override for the credential file the external-usage sampler reads (issue #218);
     #: ``None`` means the adapter's own default.
     external_usage_credentials_path: str | None = None
+    #: The session-context warn line; ``None`` disables the lane — nothing is sampled, nothing gated.
+    context_warn_tokens: int | None = None
+    #: How often a running lease's context is re-read — unused while the lane is off.
+    context_sample_interval_seconds: int = DEFAULT_CONTEXT_SAMPLE_INTERVAL_SECONDS
     #: The declared extension to the worker spawn-environment allowlist (issue #88) — a
     #: worker's env is that allowlist, never a full ``os.environ`` copy.
     worker_env_passthrough: tuple[str, ...] = ()
@@ -518,6 +548,19 @@ class RunnerConfig:
                 else "# runner_ceiling_usd = 50.0\n"
             )
             + f"window_hours = {self.runner_ceiling_window_hours}\n"
+            + (
+                "\n# The live session-context warn lane; absent = off, and nothing is sampled.\n"
+                "# `warn_tokens` is the context a RUNNING worker's session is warned about\n"
+                "# crossing — observation only, distinct from a graph's own `rotate` bounds,\n"
+                "# which decide whether the NEXT node-step resumes that session at all.\n"
+                "[context]\n"
+            )
+            + (
+                f"warn_tokens = {self.context_warn_tokens}\n"
+                if self.context_warn_tokens is not None
+                else "# warn_tokens = 300000\n"
+            )
+            + f"sample_interval_seconds = {self.context_sample_interval_seconds}\n"
             + "\n# How often (seconds) the tick re-samples the harness's own subscription rate-limit\n"
             + "# windows (issue #218) — a diagnostic, best-effort read, not a spend control.\n"
             + "[external_subscription_usage]\n"
@@ -564,6 +607,7 @@ class RunnerConfig:
         token_env = str(raw.get("token_env", DEFAULT_TOKEN_ENV))
         spend = Spend.of(raw.get("cost"))
         usage = ExternalUsage.of(raw.get("external_subscription_usage"))
+        context = Context.of(raw.get("context"))
         auth = Auth.of(raw.get("auth"))
         transcripts = Transcripts.of(raw.get("transcripts"))
         return cls(
@@ -599,6 +643,8 @@ class RunnerConfig:
             runner_ceiling_window_hours=spend.window_hours,
             external_usage_sample_interval_seconds=usage.sample_interval_seconds,
             external_usage_credentials_path=usage.credentials_path,
+            context_warn_tokens=context.warn_tokens,
+            context_sample_interval_seconds=context.sample_interval_seconds,
             worker_env_passthrough=Table.of(raw.get("worker")).names("env_passthrough"),
             public_urls=PublicOrigins.entries(raw.get("public_url"), ConfigError),
             auth_superuser=auth.superuser,

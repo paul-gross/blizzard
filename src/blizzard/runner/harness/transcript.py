@@ -142,10 +142,12 @@ class TranscriptErrorFactory:
 
 
 class IHarnessTranscriptSource(Protocol):
-    """The per-harness transcript source seam. Three operations, all reads: ``turns_since`` collapses
+    """The per-harness transcript source seam. Four operations, all reads: ``turns_since`` collapses
     the harness's raw session records into :class:`NormalizedTurn`\\ s, reading forward from ``since``
-    (``None`` for "from the start"); ``read_raw_lines``/``size_bytes`` sit here too, so the
-    file-location knowledge this seam carries is never duplicated outside it."""
+    (``None`` for "from the start"); ``read_raw_lines``/``size_bytes``/``context_tokens`` sit here
+    too, so the file-location knowledge this seam carries is never duplicated outside it. The last
+    two are the measurable rotation bounds, answering ``None`` for *unmeasurable* — never a zero
+    reading as "under bound"."""
 
     def turns_since(
         self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None
@@ -160,9 +162,16 @@ class IHarnessTranscriptSource(Protocol):
         ...
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
-        """The session transcript's size on disk, or ``None`` when it cannot be read —
-        an *unknown*, never a zero, so an unmeasurable transcript never reads as
-        "well under bound" (the rotation check's own signal)."""
+        """The main session transcript's size on disk, subagent sidecars excluded, or ``None``
+        when it cannot be read — an *unknown*, never a zero, so an unmeasurable transcript never
+        reads as "well under bound" (the rotation check's own signal)."""
+        ...
+
+    def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        """The session's context size in tokens as of its newest turn, or ``None``.
+
+        The other rotation signal: the conversation's SIZE, which a resume pays for again —
+        never spend accumulated across turns. ``None`` is *unknown*, as for :meth:`size_bytes`."""
         ...
 
 
@@ -197,6 +206,9 @@ class NullTranscriptSource:
         return []
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return None
+
+    def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         return None
 
 

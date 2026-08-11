@@ -18,6 +18,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import Liveness, as_utc
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
+from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.attempt import (
     REAPED,
     Attempt,
@@ -35,6 +36,7 @@ from blizzard.runner.store.repository import (
     LeaseRecord,
 )
 from blizzard.wire.facts import (
+    EVENT_RECORDED,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     RUNNER_LOCALLY_PAUSED,
 )
@@ -42,6 +44,7 @@ from blizzard.wire.facts import (
 #: This module's public API — the loop steps it owns, in tick order.
 __all__ = [
     "Advance",
+    "ContextSample",
     "ExternalUsageSample",
     "Fill",
     "Pull",
@@ -72,6 +75,10 @@ _CP_RESUME_BEFORE = crashpoint("resume.before-reattach", "entered RESUME with ma
 # PULL — the single outbound flusher (store-and-forward drain).
 _CP_PULL_BEFORE = crashpoint("pull.before-flush", "entered PULL; registry synced, buffer not drained")
 _CP_PULL_AFTER = crashpoint("pull.after-flush", "PULL done; buffer drained as far as it could")
+
+# The crossing rides `event.recorded`, not a fact kind of its own — both hubs already ingest that
+# lane. `(severity, kind)` as `attempt.py` classifies; the kind is the EVENT's, never a fact's.
+_CONTEXT_WARNED = ("warning", "worker-context-warned")
 
 
 @dataclass(frozen=True)
@@ -391,6 +398,90 @@ class Advance(Step):
             judgement.run()
 
         # Every other shape keeps its binding and is polled again next tick.
+
+
+class ContextSample(Step):
+    """Every running lease's live session context, sampled and warned on — never enforced.
+
+    A graph's `rotate` bounds are evaluated at SPAWN time, leaving a long invocation's inside
+    unobserved — where a runaway session spends. This closes that gap, not the enforcement one."""
+
+    def run(self) -> None:
+        """Sample each active lease's context, warning the first time one crosses.
+
+        No configured line means no transcript reads at all, so a runner that never opts in
+        pays nothing. Per-lease failures are isolated: one unreadable transcript must not cost
+        the other leases their samples."""
+        ctx = self.ctx
+        warn_tokens = ctx.config.context_warn_tokens
+        if warn_tokens is None or ctx.transcripts is None:
+            return
+        try:
+            leases = ctx.store.list_active_leases()
+        except Exception as exc:  # this step is not last in the tick — see ExternalUsageSample
+            _log.warning("context sample step failed", detail=str(exc))
+            return
+        for lease in leases:
+            try:
+                self._sample(lease, warn_tokens)
+            except Exception as exc:  # one lease's read must not end the sweep
+                _log.warning("context sample failed", lease_id=lease.lease_id, detail=str(exc))
+
+    def _sample(self, lease: LeaseRecord, warn_tokens: int) -> None:
+        ctx = self.ctx
+        if lease.session_id is None or ctx.transcripts is None:
+            return  # a lease whose spawn has not yet minted a session has nothing to read
+        state = ctx.store.context_sample_state(lease.lease_id)
+        now = ctx.clock.now()
+        if state is not None and now - state.last_sampled_at < timedelta(
+            seconds=ctx.config.context_sample_interval_seconds
+        ):
+            return
+        tokens = ctx.transcripts.context_tokens(lease.session_id, spawn_cwd=self._spawn_cwd(lease))
+        # Only the FIRST crossing reports: the warning is a state change, not a level, and a
+        # lease past the line samples on for the curve without re-reporting every minute.
+        crossing = (
+            tokens is not None
+            and tokens > warn_tokens
+            and not (state is not None and (state.max_context_tokens or 0) > warn_tokens)
+        )
+        ctx.store.record_context_sample(
+            lease_id=lease.lease_id,
+            chunk_id=lease.chunk_id,
+            session_id=lease.session_id,
+            # `None` is *unmeasured*, recorded as an attempt so the cadence anchor still advances
+            # — else an unreadable transcript is re-read every tick instead of every interval.
+            context_tokens=tokens,
+            sampled_at=now,
+            report_kind=EVENT_RECORDED if crossing else "",
+            report_payload=json.dumps(self._event(lease, tokens, warn_tokens, now)) if crossing else "",
+        )
+
+    @staticmethod
+    def _event(lease: LeaseRecord, tokens: int | None, warn_tokens: int, now: datetime) -> dict[str, object]:
+        """The ``event.recorded`` payload one crossing surfaces, in the shape the hub ingests."""
+        severity, kind = _CONTEXT_WARNED
+        return {
+            "severity": severity,
+            "kind": kind,
+            "chunk_id": lease.chunk_id,
+            "lease_id": lease.lease_id,
+            "node_name": lease.node_name,
+            "message": f"session context {tokens} tokens crossed the {warn_tokens} warn line",
+            "detail": {
+                "session_id": lease.session_id,
+                "context_tokens": tokens,
+                "warn_tokens": warn_tokens,
+                "sampled_at": iso_utc(now),
+            },
+        }
+
+    def _spawn_cwd(self, lease: LeaseRecord) -> str | None:
+        """The lease's worktree, the transcript locator's multi-match tie-break — never its key.
+
+        Resolved exactly as the transcript pump resolves it, so both lanes read the same file."""
+        bindings = self.ctx.store.bindings_for_chunk(lease.chunk_id)
+        return SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
 
 
 class ExternalUsageSample(Step):

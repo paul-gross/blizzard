@@ -24,6 +24,48 @@ def assistant_text(text: str, *, ts: str = "2026-07-16T10:00:01Z", uuid: str = "
     )
 
 
+def assistant_usage(
+    *,
+    input_tokens: int = 0,
+    cache_read: int = 0,
+    cache_create: int = 0,
+    output_tokens: int = 0,
+    message_id: str = "msg-1",
+    model: str = "sonnet",
+    ts: str = "2026-07-16T10:00:01Z",
+    uuid: str = "a1",
+    sidechain: bool = False,
+    api_error: bool = False,
+) -> str:
+    """An assistant record carrying `message.usage` — what the context and usage reads see.
+
+    `message_id` is deliberately a parameter rather than derived from `uuid`: the two are
+    NOT one-to-one in a real transcript, and every test of the collapse depends on being
+    able to write several distinct records under one message id."""
+    record: dict[str, Any] = {
+        "type": "assistant",
+        "message": {
+            "role": "assistant",
+            "id": message_id,
+            "model": model,
+            "content": [{"type": "text", "text": "..."}],
+            "usage": {
+                "input_tokens": input_tokens,
+                "cache_read_input_tokens": cache_read,
+                "cache_creation_input_tokens": cache_create,
+                "output_tokens": output_tokens,
+            },
+        },
+        "timestamp": ts,
+        "uuid": uuid,
+    }
+    if sidechain:
+        record["isSidechain"] = True
+    if api_error:
+        record["isApiErrorMessage"] = True
+    return _line(record)
+
+
 def assistant_tool_use(
     tool_use_id: str,
     name: str,

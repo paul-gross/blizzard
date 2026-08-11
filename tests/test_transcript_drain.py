@@ -495,6 +495,9 @@ class _RaisingTranscriptSource:
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         return None
 
+    def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return None
+
 
 def test_drain_run_survives_a_raising_pump_and_recovers_next_run() -> None:
     """`TranscriptDrain.run` is not the last step in `tick`, so an uncaught raise must not

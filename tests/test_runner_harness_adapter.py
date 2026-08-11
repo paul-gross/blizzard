@@ -714,6 +714,55 @@ def test_sum_transcript_usage_sums_multiple_assistant_messages() -> None:
 
 
 @pytest.mark.unit
+def test_sum_transcript_usage_counts_one_message_once_however_many_records_carry_it() -> None:
+    """A reply with several content blocks is written as several records that each repeat
+    their message's ONE usage. Summing per record inflated the fallback by ~1.7x against the
+    billed figure on a real long session (406 of its 629 messages were split in two)."""
+    usage = {
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "cache_read_input_tokens": 1_000,
+        "cache_creation_input_tokens": 20,
+    }
+    message = {"role": "assistant", "id": "msg_split", "model": "claude-sonnet-5", "usage": usage}
+    lines = [
+        json.dumps({"type": "assistant", "message": {**message, "content": [{"type": "thinking"}]}, "uuid": "a1"}),
+        json.dumps({"type": "assistant", "message": {**message, "content": [{"type": "text"}]}, "uuid": "a2"}),
+        json.dumps({"type": "assistant", "message": {**message, "content": [{"type": "tool_use"}]}, "uuid": "a3"}),
+    ]
+
+    sample = ClaudeCodeAdapter().sum_transcript_usage(lines, "spawn")
+
+    assert (sample.input_tokens, sample.output_tokens) == (10, 5)
+    assert (sample.cache_read_tokens, sample.cache_create_tokens) == (1_000, 20)
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_counts_an_id_less_record_rather_than_collapsing_it() -> None:
+    """An unidentifiable message cannot be collapsed against anything, and is more likely one
+    message than a repeat of the last — undercounting spend is the worse failure here."""
+
+    def _record(message_id: str | None, tokens: int) -> str:
+        message: dict[str, object] = {
+            "role": "assistant",
+            "model": "claude-sonnet-5",
+            "usage": {
+                "input_tokens": tokens,
+                "output_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+            },
+        }
+        if message_id is not None:
+            message["id"] = message_id
+        return json.dumps({"type": "assistant", "message": message})
+
+    sample = ClaudeCodeAdapter().sum_transcript_usage([_record(None, 7), _record(None, 11)], "spawn")
+
+    assert sample.input_tokens == 18
+
+
+@pytest.mark.unit
 def test_sum_transcript_usage_ignores_non_assistant_and_malformed_lines() -> None:
     lines = [
         "",

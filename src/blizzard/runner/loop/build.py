@@ -109,6 +109,8 @@ class LoopWiring:
             runner_ceiling_usd=config.runner_ceiling_usd,
             runner_ceiling_window_hours=config.runner_ceiling_window_hours,
             external_usage_sample_interval_seconds=config.external_usage_sample_interval_seconds,
+            context_warn_tokens=config.context_warn_tokens,
+            context_sample_interval_seconds=config.context_sample_interval_seconds,
             runner_dir=str(config.root),
             transcripts_ship=config.transcripts_ship,
         )

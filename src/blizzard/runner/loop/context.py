@@ -71,6 +71,10 @@ class LoopConfig:
     #: The external-subscription-usage sample step's cadence in seconds (issue #218) —
     #: seconds that must elapse since the runner's last sampling attempt.
     external_usage_sample_interval_seconds: int = 300
+    #: The session-context warn line; ``None`` disables the lane, reading no transcript at all.
+    context_warn_tokens: int | None = None
+    #: The context sample step's per-lease cadence in seconds; unused while the lane is off.
+    context_sample_interval_seconds: int = 60
     #: This runner's runtime directory (``RunnerConfig.root``), absolute; empty means
     #: unresolved, and readers compose nothing from it rather than guessing (issue #251).
     runner_dir: str = ""

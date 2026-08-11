@@ -911,6 +911,108 @@ def test_size_bytes_of_a_missing_transcript_is_unknown_not_zero(tmp_path: Path) 
 
 
 @pytest.mark.unit
+def test_size_bytes_excludes_the_subagent_sidecars(tmp_path: Path) -> None:
+    """The same reason `context_tokens` excludes them: a resume re-reads neither. Counting them
+    made the bound fire on delegating sessions whose own context had ample headroom."""
+    path = _write_main(tmp_path, [fx.user_env("hello")])
+    sidecars = path.parent / "sess-1" / "subagents"
+    sidecars.mkdir(parents=True)
+    (sidecars / "agent-a.jsonl").write_text(fx.sidecar_record("a subagent's whole conversation") + "\n")
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    assert source.size_bytes("sess-1", spawn_cwd="/home/user/workspace") == path.stat().st_size
+
+
+# context_tokens — the conversation's SIZE, not spend accumulated across it
+
+
+@pytest.mark.unit
+def test_context_tokens_is_the_last_turns_prompt_size_not_the_sum_across_turns(tmp_path: Path) -> None:
+    """The distinction the bound was rebuilt on. Three turns of a growing session: the answer is
+    the LAST one's prompt, 180_000 — not 330_000, the sum, which is a spend figure."""
+    _write_main(
+        tmp_path,
+        [
+            fx.assistant_usage(cache_read=40_000, cache_create=10_000, message_id="m1", uuid="a1"),
+            fx.assistant_usage(cache_read=90_000, cache_create=10_000, message_id="m2", uuid="a2"),
+            fx.assistant_usage(input_tokens=2, cache_read=175_000, cache_create=4_998, message_id="m3", uuid="a3"),
+        ],
+    )
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    assert source.context_tokens("sess-1", spawn_cwd="/home/user/workspace") == 180_000
+
+
+@pytest.mark.unit
+def test_context_tokens_ignores_an_inline_sidechain_turn(tmp_path: Path) -> None:
+    """A subagent's context never returns to the parent — only its closing report does — so
+    counting it overstates what a resume pays for. The inline marker is the pre-sidecar shape;
+    current Claude Code writes subagents to sidecar files this never opens."""
+    _write_main(
+        tmp_path,
+        [
+            fx.assistant_usage(cache_read=120_000, message_id="m1", uuid="a1"),
+            fx.assistant_usage(cache_read=500_000, message_id="m2", uuid="a2", sidechain=True),
+        ],
+    )
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    assert source.context_tokens("sess-1", spawn_cwd="/home/user/workspace") == 120_000
+
+
+@pytest.mark.unit
+def test_context_tokens_widens_past_a_tail_window_holding_no_assistant_turn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The read is a bounded tail, so a huge trailing tool result can fill the first window
+    entirely. Widening is what keeps the answer correct rather than merely cheap."""
+    monkeypatch.setattr(source_module, "CONTEXT_TAIL_BYTES", 64)
+    _write_main(
+        tmp_path,
+        [
+            fx.assistant_usage(cache_read=120_000, message_id="m1", uuid="a1"),
+            fx.tool_result("t1", "x" * 4_000),
+        ],
+    )
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    assert source.context_tokens("sess-1", spawn_cwd="/home/user/workspace") == 120_000
+
+
+@pytest.mark.unit
+def test_context_tokens_walks_past_an_api_error_turn_whose_usage_is_all_zero(tmp_path: Path) -> None:
+    """The shape 1.3% of 1046 real sessions END on: an `isApiErrorMessage` turn whose `usage`
+    is all zeros. Read as a real 0, `0 > max_context_tokens` is false — so the bound went inert
+    precisely on the interrupted long sessions it exists for."""
+    _write_main(
+        tmp_path,
+        [
+            fx.assistant_usage(input_tokens=2, cache_read=194_000, cache_create=461, message_id="m1", uuid="a1"),
+            fx.assistant_usage(message_id="m2", uuid="a2", api_error=True),
+        ],
+    )
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    assert source.context_tokens("sess-1", spawn_cwd="/home/user/workspace") == 194_463
+
+
+@pytest.mark.unit
+def test_context_tokens_of_a_transcript_with_no_usage_bearing_turn_is_unknown(tmp_path: Path) -> None:
+    """Not zero: a freshly spawned session that has not answered yet is unmeasured, and a 0
+    would read as comfortably under every bound."""
+    _write_main(tmp_path, [fx.user_env("hello")])
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    assert source.context_tokens("sess-1", spawn_cwd="/home/user/workspace") is None
+
+
+@pytest.mark.unit
+def test_context_tokens_of_a_missing_transcript_is_unknown_not_zero(tmp_path: Path) -> None:
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+    assert source.context_tokens("no-such-session", spawn_cwd="/home/user/workspace") is None
+
+
+@pytest.mark.unit
 def test_size_bytes_measures_a_transcript_far_larger_than_the_read_cap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

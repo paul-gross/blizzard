@@ -1353,6 +1353,37 @@ sample_interval_seconds = 300
 See the runner panel on the board for a paced-window bar per sampled window (`5h`/`7d` for
 Claude Code), rendered only when a runner has a non-stale sample to show.
 
+## Warning on a worker's session context — the warn lane (off by default)
+
+A graph's `rotate` bounds are evaluated when a node-step is about to *start*, against the
+session it would resume. That leaves the inside of a long-running invocation unobserved,
+which is where a session's context actually grows. The warn lane samples a **running**
+lease's session context on a cadence and reports the first time it crosses a line you set:
+
+```toml
+[context]
+warn_tokens = 300000
+sample_interval_seconds = 60
+```
+
+- **Absent `warn_tokens`, the lane is off entirely** — no transcript is read at all, so a
+  runner that never opts in pays nothing for it. `sample_interval_seconds` alone does not
+  turn it on; it is inert until `warn_tokens` is set.
+- It **observes, and gates nothing.** No worker is stopped, no chunk is parked, and no
+  session is rotated by anything here — that decision belongs to a graph's `rotate` block.
+  The spend controls that *do* intervene are `[cost]` above.
+- The warning fires **once per lease**, on the first crossing, not once per sample. A
+  session past the line goes on being sampled without re-reporting.
+- The measurement is the conversation's size — the prompt size of the session's newest
+  turn, what a resume of it would pay for again — not tokens accumulated across the run.
+
+A crossing surfaces as a `worker-context-warned` entry in the operational event feed — the
+board's event log, and `GET /api/events` below — carrying the lease, node, measured
+context, and the configured line. The runner also logs it locally at WARNING. Unlike
+`[external_subscription_usage]`, this lane ships no read-only probe verb: to confirm it is
+sampling before waiting on a crossing, read the runner's journal, or the `context_samples`
+table in `runner.db` directly.
+
 ## Shipping transcript content to the hub — the outbound lane (off by default)
 
 Alongside the fact lane (`lease.minted`, completions, and the rest), the runner carries a

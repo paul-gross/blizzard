@@ -17,6 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.store.repository import (
@@ -25,6 +26,7 @@ from blizzard.runner.store.repository import (
     BufferedTranscriptDelta,
     CheckResultRecord,
     ClosedLeaseRecord,
+    ContextSampleState,
     EnvBindingRecord,
     EscalationRecord,
     GitCommitDeclarationRecord,
@@ -46,6 +48,7 @@ from blizzard.runner.store.schema import (
     binding_releases,
     check_results,
     checks_ran,
+    context_samples,
     daemon_liveness,
     env_bindings,
     external_usage_samples,
@@ -244,27 +247,6 @@ class SqlAlchemyRunnerStore:
             resolved_model=row.resolved_model,
             resolved_effort=row.resolved_effort,
         )
-
-    def session_context_tokens(self, session_id: str) -> int | None:
-        """The newest usage fact for any lease running ``session_id``, summed to its
-        context size. Joined through ``leases.session_id`` — ``usage_facts`` carries no
-        session id of its own."""
-        stmt = (
-            select(
-                usage_facts.c.cache_read_tokens,
-                usage_facts.c.cache_create_tokens,
-                usage_facts.c.input_tokens,
-            )
-            .join(leases, leases.c.lease_id == usage_facts.c.lease_id)
-            .where(leases.c.session_id == session_id)
-            .order_by(usage_facts.c.recorded_at.desc(), usage_facts.c.id.desc())
-            .limit(1)
-        )
-        rows = self._all(stmt)
-        if not rows:
-            return None
-        row = rows[0]
-        return int(row.cache_read_tokens) + int(row.cache_create_tokens) + int(row.input_tokens)
 
     def session_invocation_count(self, session_id: str) -> int:
         stmt = (
@@ -1503,6 +1485,64 @@ class SqlAlchemyRunnerStore:
             kind=sample.kind,
             cost_usd=sample.cost_usd,
         )
+
+    def context_sample_state(self, lease_id: str) -> ContextSampleState | None:
+        stmt = select(
+            func.max(context_samples.c.sampled_at).label("last_sampled_at"),
+            func.max(context_samples.c.context_tokens).label("max_context_tokens"),
+        ).where(context_samples.c.lease_id == lease_id)
+        rows = self._all(stmt)
+        # An aggregate over no rows is one row of NULLs, not zero rows — the NULL is the
+        # "never sampled" signal here, never a `0` that would read as a real measurement.
+        if not rows or rows[0].last_sampled_at is None:
+            return None
+        row = rows[0]
+        return ContextSampleState(
+            last_sampled_at=as_utc(row.last_sampled_at),  # the anchor is subtracted from `now`
+            # NULL here means every attempt so far measured nothing — `MAX` skips NULLs, so this
+            # is only NULL when no row carries a measurement at all.
+            max_context_tokens=int(row.max_context_tokens) if row.max_context_tokens is not None else None,
+        )
+
+    def record_context_sample(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        session_id: str,
+        context_tokens: int | None,
+        sampled_at: datetime,
+        report_kind: str = "",
+        report_payload: str = "",
+    ) -> None:
+        # The sample row and any outbound report land in ONE transaction, as the external
+        # usage sampler below does — a warning buffered without its sample would re-fire.
+        with self._begin() as conn:
+            conn.execute(
+                context_samples.insert().values(
+                    lease_id=lease_id,
+                    session_id=session_id,
+                    context_tokens=context_tokens,
+                    sampled_at=sampled_at,
+                )
+            )
+            if report_kind:
+                conn.execute(
+                    outbound_buffer.insert().values(
+                        kind=report_kind,
+                        chunk_id=chunk_id,
+                        lease_id=lease_id,
+                        payload=report_payload,
+                        created_at=sampled_at,
+                    )
+                )
+        if report_kind:
+            _log.warning(
+                "session context crossed the warn line",
+                lease_id=lease_id,
+                session_id=session_id,
+                context_tokens=context_tokens,
+            )
 
     def record_external_usage_attempt(
         self, *, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str

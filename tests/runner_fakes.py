@@ -331,9 +331,9 @@ class FakeProvider:
 
 
 class FakeTranscriptSource:
-    """A scriptable :class:`IHarnessTranscriptSource`: canned batches, raw lines, and
-    sizes by session id (blizzard#245). An unscripted session reads as ``not_found``, so
-    a test only names the sessions it cares about.
+    """A scriptable :class:`IHarnessTranscriptSource`: canned batches, raw lines, sizes, and
+    context sizes by session id (blizzard#245). An unscripted session reads as ``not_found``
+    for turns and as *unmeasurable* for both bounds, so a test only names what it cares about.
     """
 
     def __init__(
@@ -341,12 +341,15 @@ class FakeTranscriptSource:
         batches_by_session: dict[str, TranscriptBatch] | None = None,
         lines_by_session: dict[str, list[str]] | None = None,
         sizes_by_session: dict[str, int] | None = None,
+        context_tokens_by_session: dict[str, int] | None = None,
     ) -> None:
         self._batches = batches_by_session or {}
         self._lines = lines_by_session or {}
         self._sizes = sizes_by_session or {}
+        self._context_tokens = context_tokens_by_session or {}
         self.turns_since_calls: list[tuple[str, str | None, TranscriptPosition | None]] = []
         self.size_bytes_calls: list[str] = []
+        self.context_tokens_calls: list[str] = []
 
     def turns_since(
         self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None
@@ -374,6 +377,10 @@ class FakeTranscriptSource:
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         self.size_bytes_calls.append(session_id)
         return self._sizes.get(session_id)
+
+    def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        self.context_tokens_calls.append(session_id)
+        return self._context_tokens.get(session_id)
 
 
 class FakeArchivedTranscriptRepository:

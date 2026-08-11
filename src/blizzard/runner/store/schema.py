@@ -450,6 +450,23 @@ external_usage_samples = Table(
     Column("payload", Text, nullable=True),  # NULL = this attempt sampled nothing
 )
 
+# --- Live session-context samples (the warn lane) ----------------------------
+# Append-only, one row per successful sample of a running lease's session context.
+# Observation only: nothing reads these to gate a spawn — `rotate.max_context_tokens`
+# measures the pool head at spawn time instead. What these add is the curve WITHIN an
+# invocation, which is what a future enforcement line would be set from.
+
+context_samples = Table(
+    "context_samples",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False, index=True),
+    Column("session_id", String, nullable=False),
+    # The last main-chain turn's prompt size; NULL = attempted but unmeasurable.
+    Column("context_tokens", Integer, nullable=True),
+    Column("sampled_at", UtcDateTime, nullable=False),
+)
+
 # --- Transcript segments (the segment ledger — issue #246, D2) ---------------
 # Mutable, like `leases`, not append-only; keyed `(chunk_id, node_id, epoch, generation)`.
 

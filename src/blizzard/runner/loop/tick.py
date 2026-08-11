@@ -1,4 +1,4 @@
-"""The tick driver — CEILING → REAP → RESUME → PULL → FILL → ADVANCE → TRANSCRIPT DRAIN → SAMPLE.
+"""The tick driver — CEILING → REAP → RESUME → PULL → FILL → ADVANCE → TRANSCRIPT DRAIN → CONTEXT → SAMPLE.
 
 ``tick`` composes the steps in order — the single synchronous pass both the CLI verb and
 the periodic daemon driver call. Order is load-bearing throughout — each step's own inline
@@ -10,6 +10,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import (
     Advance,
+    ContextSample,
     ExternalUsageSample,
     Fill,
     Pull,
@@ -38,6 +39,10 @@ def tick(ctx: LoopContext) -> None:
     # After every fact-lane-draining step (D3, issue #246) — bounded (F7: the real bound
     # is `transcript_drain.py`'s own, see there), so it delays nothing fleet-truth-bearing.
     TranscriptDrain(ctx).run()
+    # Observation only, so its position is not load-bearing: it gates nothing and nothing
+    # reads its samples. Placed after ADVANCE so a lease that finished this tick is already
+    # closed and not sampled one last time on its way out.
+    ContextSample(ctx).run()
     # Last (issue #218) — its own docstring reserves this position; still safe to run
     # before or after TranscriptDrain, since either's fact-lane enqueue waits for PULL anyway.
     ExternalUsageSample(ctx).run()

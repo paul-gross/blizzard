@@ -79,8 +79,10 @@ class SessionResolver:
         if rotate is None:
             return None  # the declaration bounds nothing
 
-        if rotate.max_context_tokens is not None:
-            tokens = self.store.session_context_tokens(head.session_id)
+        if rotate.max_context_tokens is not None and self.transcripts is not None:
+            # The transcript, never the usage facts: only it records per-turn prompt sizes, and
+            # a usage row's cumulative figure is not this quantity (`Record.context_tokens`).
+            tokens = self.transcripts.context_tokens(head.session_id, spawn_cwd=spawn_cwd)
             if tokens is not None and tokens > rotate.max_context_tokens:
                 return "max_context_tokens"
 
