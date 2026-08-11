@@ -292,8 +292,8 @@ def stop_chunk(
     """Terminally abandon CHUNK — the operator's last-resort verb (issue #118).
 
     Records the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never
-    re-derives ``ready``, and releases any live route in the same operation. 409 when
-    the chunk is already ``done`` or ``stopped`` — stopping is not retroactive."""
+    re-derives ``ready``, releases any live route, and supersedes any open escalation. 409
+    when the chunk is already ``done`` or ``stopped`` — stopping is not retroactive."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")

@@ -233,8 +233,8 @@ export const resumeChunkApiChunksChunkIdResumePost = <ThrowOnError extends boole
  * Terminally abandon CHUNK — the operator's last-resort verb (issue #118).
  *
  * Records the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never
- * re-derives ``ready``, and releases any live route in the same operation. 409 when
- * the chunk is already ``done`` or ``stopped`` — stopping is not retroactive.
+ * re-derives ``ready``, releases any live route, and supersedes any open escalation. 409
+ * when the chunk is already ``done`` or ``stopped`` — stopping is not retroactive.
  */
 export const stopChunkApiChunksChunkIdStopPost = <ThrowOnError extends boolean = false>(options: Options<StopChunkApiChunksChunkIdStopPostData, ThrowOnError>): RequestResult<StopChunkApiChunksChunkIdStopPostResponses, StopChunkApiChunksChunkIdStopPostErrors, ThrowOnError> => (options.client ?? client).post<StopChunkApiChunksChunkIdStopPostResponses, StopChunkApiChunksChunkIdStopPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/stop',

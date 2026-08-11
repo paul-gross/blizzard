@@ -51,6 +51,7 @@ from blizzard.runner.store.schema import (
     context_samples,
     daemon_liveness,
     env_bindings,
+    escalation_closures,
     external_usage_samples,
     git_commit_declarations,
     heartbeats,
@@ -123,6 +124,9 @@ class Unclosed:
         return self.key.not_in(select(self.closers))
 
 
+# Every predicate below answers "what closes this?" — and a new one must answer it for a chunk
+# the HUB ends terminally too, not only for runner-local events (`bzh:open-facts-declare-closure`).
+
 # Pinned by tests/test_pin_runner_store.py::test_a_rebind_after_a_release_reads_as_held.
 HELD_BINDING = Unsuperseded(
     binding_releases.c.id,
@@ -156,6 +160,16 @@ _LATER_LEASE = leases.alias("later_escalation_leases")
 LIVE_ESCALATION = Unsuperseded(
     _LATER_LEASE.c.lease_id,
     (_LATER_LEASE.c.chunk_id == leases.c.chunk_id, _LATER_LEASE.c.epoch > leases.c.epoch),
+)
+
+# Strict ``>``, not ``>=`` (#292) — pinned by
+# tests/test_pin_runner_store.py::test_a_same_instant_escalation_closure_does_not_mask_its_escalation.
+UNRESOLVED_ESCALATION = Unsuperseded(
+    escalation_closures.c.id,
+    (
+        escalation_closures.c.chunk_id == lease_closures.c.chunk_id,
+        escalation_closures.c.closed_at > lease_closures.c.closed_at,
+    ),
 )
 
 # ``>=``: a mint at the mark's own instant is the spawn the mark itself triggered
@@ -527,7 +541,12 @@ class SqlAlchemyRunnerStore:
         ]
 
     def open_escalations(self) -> list[EscalationRecord]:
-        stmt = self._escalation_select().where(LIVE_ESCALATION.clause).order_by(lease_closures.c.closed_at.desc())
+        stmt = (
+            self._escalation_select()
+            .where(LIVE_ESCALATION.clause)
+            .where(UNRESOLVED_ESCALATION.clause)
+            .order_by(lease_closures.c.closed_at.desc())
+        )
         return [self._row_to_escalation(r) for r in self._all(stmt)]
 
     def open_escalation_for_chunk(self, chunk_id: str) -> EscalationRecord | None:
@@ -535,6 +554,7 @@ class SqlAlchemyRunnerStore:
             self._escalation_select()
             .where(lease_closures.c.chunk_id == chunk_id)
             .where(LIVE_ESCALATION.clause)
+            .where(UNRESOLVED_ESCALATION.clause)
             .order_by(lease_closures.c.closed_at.desc())
         )
         rows = self._all(stmt)
@@ -1409,6 +1429,11 @@ class SqlAlchemyRunnerStore:
         with self._begin() as conn:
             conn.execute(requeues.insert().values(chunk_id=chunk_id, requeued_at=at))
         _log.info("chunk requeued locally", chunk_id=chunk_id)
+
+    def record_escalation_closure(self, *, chunk_id: str, reason: str, at: datetime) -> None:
+        with self._begin() as conn:
+            conn.execute(escalation_closures.insert().values(chunk_id=chunk_id, reason=reason, closed_at=at))
+        _log.info("escalation closed by the hub", chunk_id=chunk_id, reason=reason)
 
     def record_usage(
         self,

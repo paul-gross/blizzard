@@ -514,8 +514,8 @@ def chunk_stop(cli: CliContext, chunk_id: str, by: str) -> None:
     """Terminally abandon CHUNK — the operator's last-resort verb (issue #118).
 
     A pure client of ``POST /api/chunks/{id}/stop``. The chunk derives ``stopped`` and
-    never re-derives ``ready``; any live route is released in the same operation. 409
-    when the chunk is already done/stopped. There is no ``un-stop``."""
+    never re-derives ``ready``; any live route is released and any open escalation closed
+    in the same operation. 409 when already done/stopped. There is no ``un-stop``."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/stop",
         "POST /chunks/{id}/stop",

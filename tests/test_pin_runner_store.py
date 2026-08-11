@@ -39,6 +39,34 @@ def test_a_rebind_after_a_release_reads_as_held(tmp_path):  # type: ignore[no-un
 
 
 @pytest.mark.unit
+def test_a_same_instant_escalation_closure_does_not_mask_its_escalation(tmp_path):  # type: ignore[no-untyped-def]
+    """``>``, not ``>=``: a mark stamped at the escalation's own instant must not close it
+    — the sweep always stamps a later tick, and a tie would mask a fresh escalation."""
+    store = _store(tmp_path)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+    store.record_escalation_closure(chunk_id="ch_1", reason="stopped", at=_NOW)  # the same instant
+
+    assert [e.lease_id for e in store.open_escalations()] == ["lease_1"]
+
+    store.record_escalation_closure(chunk_id="ch_1", reason="stopped", at=_NOW + timedelta(seconds=1))
+
+    assert store.open_escalations() == []
+
+
+@pytest.mark.unit
 def test_a_same_instant_mint_consumes_its_requeue_mark(tmp_path):  # type: ignore[no-untyped-def]
     """``>=``, not ``>``: a spawn that stamps its lease at the requeue mark's own
     instant still consumes it — a ``>`` comparison would leave it pending forever."""

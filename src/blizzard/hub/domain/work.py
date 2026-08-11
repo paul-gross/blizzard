@@ -363,6 +363,15 @@ class EscalationOpen:
     takeover_command: str
 
 
+def escalation_superseded(recorded_at: datetime, superseding: Iterable[datetime | None]) -> bool:
+    """Whether anything recorded after ``recorded_at`` supersedes an escalation (#292).
+
+    The one owner of the rule: a later lease mint or ``requeue.recorded`` hands the work back
+    to the fleet, and a later ``chunk.stopped`` is an operator resolving it out-of-band.
+    Shared by both readers, so a further arm cannot land in one and not the other."""
+    return any(at is not None and at > recorded_at for at in superseding)
+
+
 #: Default cap on ``list_events`` — an unbounded read of an append-only table is an unbounded response.
 DEFAULT_EVENT_LIST_LIMIT = 200
 
@@ -516,7 +525,7 @@ class ChunkFacts:
     minted: bool
     promoted: bool = False
     stopped: bool = False
-    # ``chunk.stopped``'s own instant (issue #173) — render-only; ``None`` exactly when not stopped.
+    # ``chunk.stopped``'s own instant (issue #173); ``None`` exactly when not stopped.
     stopped_at: datetime | None = None
     # ``delivery.landed`` — the whole-chunk terminal fact, informational only
     # (``bzh:facts-not-status``): DONE derives from the terminal transition, not this.
@@ -676,19 +685,19 @@ class ChunkFacts:
         return terminal_transition.recorded_at
 
     def open_escalation(self) -> EscalationFact | None:
-        """The newest escalation not yet closed by a later lease mint, or ``None``.
+        """The newest escalation nothing later superseded, or ``None``.
 
-        Requeue/takeover close an escalation by **supersession** — a later lease mint or a
-        later ``requeue.recorded`` fact, never a resolution fact — so an escalation stays
-        open exactly while nothing was recorded after it."""
+        Closed by supersession, never a resolution fact — :func:`escalation_superseded` owns
+        which facts close one, shared with the fleet-wide reader."""
         if not self.escalations:
             return None
         newest = max(self.escalations, key=lambda e: e.recorded_at)
-        if any(lease.minted_at > newest.recorded_at for lease in self.leases):
-            return None
-        if any(rq.requeued_at > newest.recorded_at for rq in self.requeues):
-            return None
-        return newest
+        superseding = (
+            *(lease.minted_at for lease in self.leases),
+            *(rq.requeued_at for rq in self.requeues),
+            self.stopped_at,
+        )
+        return None if escalation_superseded(newest.recorded_at, superseding) else newest
 
     def open_questions(self) -> list[QuestionFact]:
         """The chunk's unanswered questions, oldest first.
@@ -727,7 +736,7 @@ class ChunkFacts:
         return bool(self.pr_opened) and not self.pr_closed
 
     def _has_open_escalation(self) -> bool:
-        """An escalation with no later lease mint — supersession, not resolution."""
+        """An escalation nothing later superseded — supersession, not resolution."""
         return self.open_escalation() is not None
 
     def _is_waiting_on_human(self) -> bool:
@@ -1137,9 +1146,10 @@ class IReadChunkRepository(Protocol):
         ...
 
     def list_open_escalations(self) -> list[EscalationOpen]:
-        """Every currently-open escalation, **fleet-wide** — the same supersession rule
-        :meth:`ChunkFacts.open_escalation` applies per-chunk, applied across every chunk at once
-        (issue #125). Escalations are low-volume, so this is a full scan."""
+        """Every currently-open escalation, **fleet-wide** (issue #125).
+
+        Folds :func:`escalation_superseded` across every chunk at once, the same owner
+        :meth:`ChunkFacts.open_escalation` reads. Low-volume, so this is a full scan."""
         ...
 
     def activity_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
@@ -1262,7 +1272,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         wrapped_takeover_command: str = "",
     ) -> int:
         """Record an ``escalation.recorded`` fact — the chunk derives ``needs_human``
-        until a later lease mint supersedes it. The takeover command rides along so the
+        until something supersedes it. The takeover command rides along so the
         parked session is resumable (`blizzard-context:/domain/humans.md`). ``decision_id``,
         when set, closes a gate decision no transition or migration will (issue #110)."""
         ...

@@ -1,6 +1,6 @@
 """The runner-local escalations list — ``GET /api/escalations`` (issue #51).
 
-Every chunk escalated to needs-human and not yet superseded by a later lease mint, each with
+Every chunk escalated to needs-human and not yet superseded, each with
 its ready-to-paste resume command. Derived at read time, with that command **recomputed**
 rather than read back off the outbound buffer, which holds only the unacked tail."""
 
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api", tags=["runner"])
 
 @router.get("/escalations", response_model=EscalationListResponse)
 def list_escalations(request: Request) -> EscalationListResponse:
-    """Every escalation still open — no later lease mint has superseded it."""
+    """Every escalation still open — neither a later lease mint nor a hub-side stop closed it."""
     service = RunnerWiring.of(request).status()
     return EscalationListResponse(
         items=[

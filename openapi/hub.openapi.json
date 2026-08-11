@@ -1513,7 +1513,7 @@
         "type": "object"
       },
       "EscalationView": {
-        "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) for the parked session,\npresent only while the escalation is open; a later lease mint supersedes it.\n``wrapped_takeover_command`` is optional, empty when none was composed.",
+        "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) for the parked session,\npresent only while the escalation is open \u2014 a later lease mint, requeue, or stop supersedes it.\n``wrapped_takeover_command`` is optional, empty when none was composed.",
         "properties": {
           "epoch": {
             "title": "Epoch",
@@ -5889,7 +5889,7 @@
     },
     "/api/chunks/{chunk_id}/stop": {
       "post": {
-        "description": "Terminally abandon CHUNK \u2014 the operator's last-resort verb (issue #118).\n\nRecords the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never\nre-derives ``ready``, and releases any live route in the same operation. 409 when\nthe chunk is already ``done`` or ``stopped`` \u2014 stopping is not retroactive.",
+        "description": "Terminally abandon CHUNK \u2014 the operator's last-resort verb (issue #118).\n\nRecords the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never\nre-derives ``ready``, releases any live route, and supersedes any open escalation. 409\nwhen the chunk is already ``done`` or ``stopped`` \u2014 stopping is not retroactive.",
         "operationId": "stop_chunk_api_chunks__chunk_id__stop_post",
         "parameters": [
           {

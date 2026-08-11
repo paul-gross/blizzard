@@ -97,7 +97,7 @@ class EscalationView(BaseModel):
 
 
 class EscalationListResponse(BaseModel):
-    """Every escalation still open — no later lease mint has superseded it."""
+    """Every escalation still open — neither a later lease mint nor a hub-side stop closed it."""
 
     items: list[EscalationView] = []
 

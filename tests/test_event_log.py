@@ -132,8 +132,10 @@ def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> 
 
 def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    with store._engine.begin() as conn:  # seed a third chunk for the requeue case
+    with store._engine.begin() as conn:  # seed the requeue and stop cases' chunks
         seed_chunk(conn, "ch_c", graph_id="gr_1", at=_T0)
+        seed_chunk(conn, "ch_d", graph_id="gr_1", at=_T0)
+        seed_chunk(conn, "ch_e", graph_id="gr_1", at=_T0)
 
     # ch_a: escalation, nothing after it -> OPEN.
     store.record_escalation("ch_a", epoch=1, takeover_command="cd a && resume", at=_at(10))
@@ -143,10 +145,17 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
     # ch_c: escalation then a LATER requeue -> superseded (closed).
     store.record_escalation("ch_c", epoch=1, takeover_command="cd c && resume", at=_at(10))
     store.record_requeue("ch_c", at=_at(20))
+    # ch_d: escalation then a LATER stop -> superseded (#292). This read feeds the critical
+    # `needs-human` row in `GET /api/events`, so a stopped chunk must leave it.
+    store.record_escalation("ch_d", epoch=1, takeover_command="cd d && resume", at=_at(10))
+    store.record_stop("ch_d", by="operator", at=_at(20))
+    # ch_e: stop then a LATER escalation -> still OPEN; supersession is ordered, not a flag.
+    store.record_stop("ch_e", by="operator", at=_at(10))
+    store.record_escalation("ch_e", epoch=1, takeover_command="cd e && resume", at=_at(20))
 
     opens = store.list_open_escalations()
-    assert [e.chunk_id for e in opens] == ["ch_a"]
-    assert opens[0].takeover_command == "cd a && resume"
+    assert sorted(e.chunk_id for e in opens) == ["ch_a", "ch_e"]
+    assert next(e.takeover_command for e in opens if e.chunk_id == "ch_a") == "cd a && resume"
 
 
 def test_event_feed_sorts_severity_then_recency() -> None:

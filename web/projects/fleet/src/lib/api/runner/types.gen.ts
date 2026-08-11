@@ -341,7 +341,7 @@ export type EnvironmentView = {
 /**
  * EscalationListResponse
  *
- * Every escalation still open — no later lease mint has superseded it.
+ * Every escalation still open — neither a later lease mint nor a hub-side stop closed it.
  */
 export type EscalationListResponse = {
     /**

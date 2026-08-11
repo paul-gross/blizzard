@@ -930,7 +930,7 @@ export type EscalationReport = {
  * EscalationView
  *
  * An open escalation on a ``needs_human`` chunk — the takeover command(s) for the parked session,
- * present only while the escalation is open; a later lease mint supersedes it.
+ * present only while the escalation is open — a later lease mint, requeue, or stop supersedes it.
  * ``wrapped_takeover_command`` is optional, empty when none was composed.
  */
 export type EscalationView = {

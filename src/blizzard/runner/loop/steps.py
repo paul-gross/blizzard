@@ -73,7 +73,9 @@ _CP_REAP_AFTER = crashpoint("reap.after-expire", "REAP done; stale leases expire
 _CP_RESUME_BEFORE = crashpoint("resume.before-reattach", "entered RESUME with marked intents; none re-attached yet")
 
 # PULL — the single outbound flusher (store-and-forward drain).
-_CP_PULL_BEFORE = crashpoint("pull.before-flush", "entered PULL; registry synced, buffer not drained")
+_CP_PULL_BEFORE = crashpoint(
+    "pull.before-flush", "entered PULL; registry synced, leases and escalations reconciled, buffer not drained"
+)
 _CP_PULL_AFTER = crashpoint("pull.after-flush", "PULL done; buffer drained as far as it could")
 
 # The crossing rides `event.recorded`, not a fact kind of its own — both hubs already ingest that
@@ -267,6 +269,7 @@ class Pull(Step):
         """Exchange facts with the hub: sync the registry, reconcile ownership, drain the buffer."""
         self._sync_registry()
         self._reconcile_leases()
+        self._reconcile_escalations()
         _CP_PULL_BEFORE.reached()
         OutboundDrain(self.ctx).run()
         _CP_PULL_AFTER.reached()
@@ -317,6 +320,27 @@ class Pull(Step):
                 Attempt(ctx, lease).abandon(via="pull")
             elif detail.pause is not None and lease.lease_id not in pause_parked:
                 Attempt(ctx, lease).park_paused(via="pull")
+
+    def _reconcile_escalations(self) -> None:
+        """Close a local escalation the hub has since stopped (#292) — one ``get_chunk`` each.
+
+        An escalated lease is already closed, so ``_reconcile_leases`` above never sees it, and
+        the only local supersession is a later lease mint a stopped chunk never gets. The mark
+        is what keeps the read hub-free (``bzh:facts-not-status``)."""
+        ctx = self.ctx
+        for escalation in ctx.store.open_escalations():
+            try:
+                detail = ctx.hub.get_chunk(escalation.chunk_id)
+            except HubClientError as exc:
+                # Covers ChunkNotFoundError: an unknown chunk is not a resolution.
+                _log.debug("escalation left open — hub unreadable", chunk_id=escalation.chunk_id, error=str(exc))
+                continue
+            if detail.status != ChunkStatus.STOPPED:
+                _log.debug("escalation left open", chunk_id=escalation.chunk_id, hub_status=detail.status.value)
+                continue
+            ctx.store.record_escalation_closure(
+                chunk_id=escalation.chunk_id, reason=detail.status.value, at=ctx.clock.now()
+            )
 
 
 class Fill(Step):

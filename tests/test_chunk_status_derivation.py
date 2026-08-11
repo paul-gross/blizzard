@@ -333,6 +333,31 @@ def test_escalation_closed_by_later_lease_is_no_longer_needs_human() -> None:
     assert facts.status() is ChunkStatus.RUNNING
 
 
+def test_escalation_closed_by_a_later_stop_is_no_longer_open() -> None:
+    # The operator resolved it out-of-band and abandoned the chunk (#292); no lease
+    # mint ever follows a stop, so this is the only supersession available.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(4))],
+        stopped=True,
+        stopped_at=_at(6),
+    )
+    assert facts.open_escalation() is None
+
+
+def test_a_stop_preceding_the_escalation_leaves_it_open() -> None:
+    # Supersession is ordered: an earlier stop is not a resolution of a later hold.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(6))],
+        stopped=True,
+        stopped_at=_at(4),
+    )
+    assert facts.open_escalation() is not None
+
+
 def test_open_question_is_waiting_on_human_over_a_live_route() -> None:
     # An open ask parks the chunk: a live route would derive running,
     # but the unanswered question wins the higher-precedence waiting_on_human slot.

@@ -55,6 +55,7 @@ from blizzard.hub.domain.work import (
     UsageFact,
     WorkItemCloseOutcome,
     WorkRef,
+    escalation_superseded,
 )
 from blizzard.hub.store import schema as s
 
@@ -648,8 +649,8 @@ class ChunkStore:
             ]
 
     def list_open_escalations(self) -> list[EscalationOpen]:
-        # Escalations are low-volume, so a full table scan joined in Python is fine;
-        # the supersession rule is `open_escalation`'s.
+        # Escalations are low-volume, so a full table scan joined in Python is fine; which facts
+        # supersede one is `escalation_superseded`'s, shared with the per-chunk derivation.
         with self._engine.connect() as conn:
             escalation_rows = conn.execute(select(s.escalations)).all()
             if not escalation_rows:
@@ -662,17 +663,26 @@ class ChunkStore:
             chunk_ids = list(newest_by_chunk)
             lease_rows = conn.execute(select(s.lease_facts).where(s.lease_facts.c.chunk_id.in_(chunk_ids))).all()
             requeue_rows = conn.execute(select(s.requeues).where(s.requeues.c.chunk_id.in_(chunk_ids))).all()
+            stopped_rows = conn.execute(select(s.chunk_stopped).where(s.chunk_stopped.c.chunk_id.in_(chunk_ids))).all()
             leases_by_chunk = {}
             for lease in lease_rows:
                 leases_by_chunk.setdefault(lease.chunk_id, []).append(lease)
             requeues_by_chunk = {}
             for rq in requeue_rows:
                 requeues_by_chunk.setdefault(rq.chunk_id, []).append(rq)
+            stopped_by_chunk: dict[str, datetime] = {}
+            for row in stopped_rows:
+                current_stop = stopped_by_chunk.get(row.chunk_id)
+                if current_stop is None or row.stopped_at > current_stop:
+                    stopped_by_chunk[row.chunk_id] = row.stopped_at
             open_escalations: list[EscalationOpen] = []
             for chunk_id, newest in newest_by_chunk.items():
-                if any(lease.minted_at > newest.recorded_at for lease in leases_by_chunk.get(chunk_id, [])):
-                    continue
-                if any(rq.requeued_at > newest.recorded_at for rq in requeues_by_chunk.get(chunk_id, [])):
+                superseding = (
+                    *(lease.minted_at for lease in leases_by_chunk.get(chunk_id, [])),
+                    *(rq.requeued_at for rq in requeues_by_chunk.get(chunk_id, [])),
+                    stopped_by_chunk.get(chunk_id),
+                )
+                if escalation_superseded(newest.recorded_at, superseding):
                     continue
                 open_escalations.append(
                     EscalationOpen(

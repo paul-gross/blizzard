@@ -1013,10 +1013,14 @@ claim: keep it (`chunk pause`), give it away (`detach`), or end it for good (`st
   any live route, so the holding runner frees the environments on its own next tick —
   no separate `detach` call needed. Unlike `detach`, a live route is not required:
   stop is allowed on `not_ready`, `ready`, and an already-detached chunk alike — the
-  route release is conditional, not required. Refused (`409`) only when the chunk is
-  already `done` or `stopped` — not retroactive un-delivery, and not a lever for
-  clearing a `delivering`/`waiting_on_human`/`needs_human` chunk back to a fresh
-  state, only for ending it. See `blizzard hub chunk stop --help` for the CLI's full
+  route release is conditional, not required. Stopping an escalated chunk also **closes
+  its escalation** (issue #292): the chunk leaves the critical `needs-human` feed below and
+  the holding runner drops it from `blizzard runner status` and its panel on the next PULL
+  — so the composed resume command for the parked session goes with it, which on a
+  terminal, irreversible verb is worth knowing before you reach for it. Refused (`409`)
+  only when the chunk is already `done` or `stopped` — not retroactive un-delivery, and
+  not a lever for clearing a `delivering`/`waiting_on_human`/`needs_human` chunk back to a
+  fresh state, only for ending it. See `blizzard hub chunk stop --help` for the CLI's full
   contract.
 - **`blizzard hub runner pause <runner_id>` / `runner resume <runner_id>`** (the hub brake)
   and **`runner pause` / `runner start`**, or the runner panel's own Pause/Resume
@@ -1098,7 +1102,8 @@ so on a split deployment run the verb on the runner's own host first: the wrong 
 refuses with the not-held message even while the session is alive elsewhere. Only
 when no runner can enter the session does resolving the escalation mean acting on
 the chunk directly (reading its bounce history or migration guidance) and requeuing,
-not taking anything over.
+not taking anything over — or, when the work has been finished outside the fleet
+entirely, stopping the chunk, which closes the escalation with it (see the stop verb above).
 
 A taken-over session also installs **no** heartbeat or session-end hooks: quitting it
 must not record a done-signal against the lease, so liveness reporting stays a
@@ -1532,7 +1537,8 @@ command that failed on a missing environment var, a stall past the liveness wind
 - **`GET /api/events`** returns the log newest-and-most-severe first, filterable by
   `severity` / `runner_id` / `chunk_id` / `since`, with a bounded default page. Existing
   escalations appear in the *same* feed as a `needs-human` event kind — `needs_human` is one row in
-  one surface, not a place to look separately.
+  one surface, not a place to look separately. A row leaves the feed when its escalation is
+  superseded: a requeue, the next attempt's lease, or a `chunk stop` (see the stop verb above).
 - **The board's Events tab** renders the feed live: new events fan out over the existing SSE spine
   (`/api/events/stream`), so an open board updates without polling. Each row links to its chunk.
 - **`GET /api/activity`** is a second, differently-shaped operator read: the board's Event log rail

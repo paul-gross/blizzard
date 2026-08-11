@@ -235,8 +235,8 @@ class ParkRecord:
 class EscalationRecord:
     """A closed-``escalated`` lease not yet superseded — the status view's read (issue #51).
 
-    Open until a later lease is minted for the same chunk — the highest ``epoch`` still
-    being this one's *is* that fact, so no resolution flag is stored."""
+    Open until a later lease is minted for the chunk, or the hub resolves it terminally and
+    PULL records an ``escalation_closures`` mark (#292) — two supersessions, no flag."""
 
     lease_id: str
     chunk_id: str
@@ -500,7 +500,7 @@ class IReadRunnerStore(Protocol):
         ...
 
     def open_escalations(self) -> list[EscalationRecord]:
-        """Every escalated chunk not yet superseded by a later lease mint (issue #51).
+        """Every escalated chunk still unsuperseded (issue #51).
 
         See :class:`EscalationRecord` for what "open" means here."""
         ...
@@ -932,6 +932,12 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         Recorded before anything else runs (``bzh:crash-correctness``): the fact alone is
         durable the instant this returns, and is read back via
         :meth:`pending_requeue_chunk_ids` — this call never spawns anything itself."""
+
+    def record_escalation_closure(self, *, chunk_id: str, reason: str, at: datetime) -> None:
+        """Mirror the hub having stopped a chunk this runner holds an escalation for (#292).
+
+        The supersession no lease mint can supply: a stopped chunk is never claimed again.
+        ``reason`` is the hub status observed — today always ``stopped``, the only arm swept."""
 
     def record_usage(
         self,

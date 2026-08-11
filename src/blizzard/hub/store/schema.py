@@ -425,7 +425,7 @@ escalations = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("epoch", Integer, nullable=False),  # closed by a later lease mint, not a resolution
+    Column("epoch", Integer, nullable=False),  # closed by supersession, not a resolution
     Column("takeover_command", Text, nullable=False, server_default=""),  # the pasteable resume command
     # The runner-composed ``blizzard runner takeover`` invocation, beside the raw
     # harness-resume ``takeover_command``. Stored pre-composed; empty when none was.
@@ -523,7 +523,7 @@ decision_resolutions = Table(
 )
 
 # --- Requeue facts (close needs_human by supersession) ------------------------
-# An escalation is closed by supersession — a later lease mint or requeue — never resolved.
+# `escalation_superseded` owns which facts close one; there is no resolution fact.
 
 requeues = Table(
     "requeues",

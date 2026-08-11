@@ -515,7 +515,7 @@
         "type": "object"
       },
       "EscalationListResponse": {
-        "description": "Every escalation still open \u2014 no later lease mint has superseded it.",
+        "description": "Every escalation still open \u2014 neither a later lease mint nor a hub-side stop closed it.",
         "properties": {
           "items": {
             "default": [],
@@ -2571,7 +2571,7 @@
     },
     "/api/escalations": {
       "get": {
-        "description": "Every escalation still open \u2014 no later lease mint has superseded it.",
+        "description": "Every escalation still open \u2014 neither a later lease mint nor a hub-side stop closed it.",
         "operationId": "list_escalations_api_escalations_get",
         "responses": {
           "200": {
