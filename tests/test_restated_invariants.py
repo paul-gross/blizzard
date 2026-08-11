@@ -469,6 +469,44 @@ def test_unresolvable_root_exits_nonzero_via_cli(tmp_path: Path) -> None:
     assert ri.main(["discover", missing]) == 2
 
 
+# A single-file root — `blizzard/README.md`, the one bound surface that is not a
+# tree (blizzard#274). `rglob` on a file yields nothing, so a root that resolved
+# but swept zero files would report permanently clean.
+
+
+def test_a_single_file_root_is_actually_swept(tmp_path: Path) -> None:
+    readme = tmp_path / "README.md"
+    readme.write_text("# T\n\nprose\n")
+    assert ri.iter_files([str(readme)]) == [readme]
+    spans, skipped = ri.collect_spans([str(readme)])
+    assert spans and skipped == 0
+
+
+def test_a_file_root_that_is_itself_excluded_is_refused(tmp_path: Path) -> None:
+    # An excluded file root resolves and then sweeps nothing — a permanent green,
+    # which is exactly what RootResolutionError exists to refuse.
+    generated = tmp_path / "openapi" / "hub.md"
+    generated.parent.mkdir(parents=True)
+    generated.write_text("# generated\n")
+    with pytest.raises(ri.RootResolutionError):
+        ri.iter_files([str(generated)])
+
+
+def test_a_file_root_of_an_unswept_extension_is_refused(tmp_path: Path) -> None:
+    other = tmp_path / "mise.toml"
+    other.write_text("[tasks]\n")
+    with pytest.raises(ri.RootResolutionError):
+        ri.iter_files([str(other)])
+
+
+def test_a_file_root_reports_a_restatement_the_registry_does_not_declare(tmp_path: Path) -> None:
+    readme = tmp_path / "README.md"
+    readme.write_text("# T\n\nThis file carries a marker phrase of its own.\n")
+    exit_code, findings = ri.check([str(readme)], _registry([_fact()]))
+    assert exit_code == 1
+    assert any(f.kind == "new" for f in findings)
+
+
 # Case 16 — a `.py` file that fails to parse yields no spans rather than raising
 # (the `tokenize.TokenizeError` typo — the real name is `TokenError`).
 

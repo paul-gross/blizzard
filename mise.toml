@@ -45,7 +45,7 @@ run = "uv run python scripts/prose_density.py check src tests ../blizzard-mock/s
 
 [tasks.restatement-check]
 description = "blizzard:restatement-sweep — fail when a fact is stated at an undeclared site (new), a declared site is no longer observed (stale), a declared non-owner site carries no reason, or a designated owner does not actually state its fact"
-run = "uv run python scripts/restated_invariants.py check --strict --owners --context-root ../blizzard-context src tests docs web/projects ../blizzard-mock/src"
+run = "uv run python scripts/restated_invariants.py check --strict --owners --context-root ../blizzard-context src tests docs README.md web/projects ../blizzard-mock/src"
 
 [tasks.lint]
 description = "Lint with ruff"

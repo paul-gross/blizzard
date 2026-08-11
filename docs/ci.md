@@ -4,8 +4,8 @@ How `blizzard` code becomes checked, built, and released — the GitHub Actions
 workflows, the one build entrypoint, and the exact local commands that equal the
 merge gate. The policy behind this (branch/release model, one repo one wheel,
 the four test tiers) is owned by the harness
-(`blizzard-context:/verification/blizzard.md`); this file is the in-repo operator
-reference for running it.
+([`blizzard-context`'s `verification/blizzard.md`](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard.md));
+this file is the in-repo operator reference for running it.
 
 ## Workflows
 

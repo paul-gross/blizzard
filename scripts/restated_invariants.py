@@ -61,8 +61,9 @@ class OwnerResolutionError(Exception):
 
 
 class RootResolutionError(Exception):
-    """An argv root that does not resolve to an existing directory — refused, never skipped,
-    so a typo'd root in `mise.toml` cannot report a permanently-clean sweep."""
+    """An argv root that does not resolve to an existing directory, or to a single file of a
+    swept extension — refused, never skipped, so a typo'd root in `mise.toml` cannot report a
+    permanently-clean sweep."""
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,21 @@ def iter_files(roots: list[str]) -> list[Path]:
         root_path = Path(root)
         if not root_path.exists():
             raise RootResolutionError(f"root {root!r} does not resolve")
+        if root_path.is_file():
+            # A single-file root — `blizzard/README.md` is one, the only bound
+            # surface that is not a tree. `rglob` on a file yields nothing, so
+            # without this branch such a root sweeps zero files and reports
+            # permanently clean, the failure this class exists to refuse.
+            if root_path.suffix not in _EXTS:
+                raise RootResolutionError(f"file root {root!r} is not one of {', '.join(_EXTS)}")
+            if _is_excluded(root_path):
+                # Silently contributing nothing is the very failure this class refuses:
+                # the root resolves, the sweep reads zero files, and the report is a
+                # permanent green. A directory root may legitimately contain excluded
+                # files; a file root that IS one is a mistake in the argument.
+                raise RootResolutionError(f"file root {root!r} is an excluded generated-output path")
+            files.add(root_path)
+            continue
         for ext in _EXTS:
             for f in root_path.rglob(f"*{ext}"):
                 if f.is_file() and not _is_excluded(f):

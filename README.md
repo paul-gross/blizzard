@@ -98,38 +98,16 @@ Every delivery scenario holds at **both ends** — git truth on the bare origin 
 ## The service tier (`mise run service-test`)
 
 `mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest tests/service/`) is the
-**service tier** (`blizzard-context` `verification/blizzard.md`): one **running daemon's
-HTTP API exercised from outside the process** with its counterpart bound to the mock
-fleet — distinct from the e2e tier, which drives the whole loop with every seam real. It
-lives in its own `tests/service/` package and, like e2e, is **skipped unless
-`BLIZZARD_SERVICE=1`** and the sibling `blizzard-mock` worktree is provisioned, so the
-default `uv run pytest` gate stays hermetic.
+**service tier**: one **running daemon's HTTP API exercised from outside the process**
+with its counterpart bound to the mock fleet — distinct from the e2e tier, which drives
+the whole loop with every seam real. It lives in its own `tests/service/` package and,
+like e2e, is **skipped unless `BLIZZARD_SERVICE=1`** and the sibling `blizzard-mock`
+worktree is provisioned, so the default `uv run pytest` gate stays hermetic.
 
-- **Runner service tests** (`test_runner_service.py`) drive the **real runner** loop
-  (one synchronous tick at a time) against the **mock hub** (`blizzard-mock-hub`, run as
-  its own subprocess), pulling its levers to manufacture states a real hub could only be
-  contrived into: an **unreachable hub** proves the completion is store-and-forward
-  buffered and lands on recovery; a **dropped ack** proves the re-flush re-applies
-  idempotently through to done; a **stale envelope** is tolerated because the
-  runner fences on its own lease epoch.
-- **Hub service tests** (`test_hub_service.py`) drive the **real hub** with the **mock
-  runner** (`blizzard-mock-runner`, a levered driver) and the **mock forge** as its
-  counterparts, asserting over the wire: a claim + completion advances the chunk; the
-  runner's `stale_epoch` lever gets the completion **rejected**; queue **grouping +
-  reorder** are reflected in the ready queue (`GET /api/queue`); `GET /api/events/stream` serves the
-  **SSE contract** an `EventSource` subscribes to; and a subscriber connected before the
-  act receives `queue-changed` **live** the instant a fresh cross-graph migration
-  re-queues a chunk — exactly once across that migration and its duplicate-delivery
-  replay. (The board's own Event log rail no longer relies on this stream alone for
-  what it shows on load: it seeds from `GET /api/activity` — recent history derived
-  from durable facts, bounded to the last 24h/200 rows — then continues live over this
-  same `/api/events/stream`, deduped against the backfill by each frame's fact-identity
-  `key` rather than by timestamp; see `test_event_log_service.py` and
-  `test_event_log_e2e.py`. The **field-level shape** of that SSE contract — as opposed to
-  this tier's count-and-timing proof of live delivery — is gated separately by
-  `mise run sse-contract` (`blizzard:sse-contract`) against the golden corpus at
-  `contracts/sse/`, read by both a Python producer/parse suite and the board's own
-  transport spec.)
+What this tier proves — the levers each side is driven with, and what each one
+establishes — is stated in
+[`verification/blizzard/commands.md`](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard/commands.md#blizzardservice-test),
+which is its authoritative account. Read there rather than here.
 
 The counterpart mocks and their lever surfaces live in the `blizzard-mock` repo
 (`blizzard_mock.mock_hub` / `blizzard_mock.mock_runner`). sqlite only, no tokens, no

@@ -20,7 +20,8 @@ prose documentation, and aren't routed here.)
 
 - [`packaging/docker/README.md`](../packaging/docker/README.md) — the container
   image's own mount and environment-variable reference.
-- The `blizzard-context` repo's verification matrix (`blizzard-context:/verification/blizzard.md`)
-  and `bzh:release` (`blizzard-context:/workflows/release.md`) — how a change is
-  proven, and the release-cut sequence these documents are the operator-facing
-  half of.
+- The `blizzard-context` repo's
+  [verification matrix](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard.md)
+  and [`bzh:release`](https://github.com/paul-gross/blizzard-context/blob/master/workflows/release.md) — how a
+  change is proven, and the release-cut sequence these documents are the
+  operator-facing half of.

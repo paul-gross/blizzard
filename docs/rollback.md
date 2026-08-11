@@ -8,9 +8,9 @@ against a live compose deployment ([`docs/install.md`](./install.md)): the
 previous image tag, plus a `migrate --down` to the matching revision.
 
 Registered as the manual method `blizzard:manual-rollback-drill` in the
-`blizzard-context` repo's verification matrix
-(`blizzard-context:/verification/blizzard.md`) — run this end to end at least
-once against the compose stack, not just read.
+`blizzard-context` repo's
+[verification matrix](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard.md) — run
+this end to end at least once against the compose stack, not just read.
 
 ## Why the downgrade runs on the *new* image, not the old one
 
