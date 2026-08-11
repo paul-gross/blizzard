@@ -824,9 +824,15 @@ it is set explicitly here:
 proxy_set_header Host              $host;
 proxy_set_header X-Forwarded-Proto $scheme;
 proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+client_max_body_size               16m;
 ```
 
-Caddy's `reverse_proxy` and Tailscale's `tailscale serve` set all three automatically. Only
+`client_max_body_size` is there for the transcript lane, not for headers: one shipped record
+may reach the hub's 10 MB per-record cap, and nginx's own default is **1 MB**, so a proxy
+left at that default rejects a large record with a 413 before the hub ever adjudicates it.
+Raise it whenever the hub's record cap rises. Caddy has no equivalent default limit.
+
+Caddy's `reverse_proxy` and Tailscale's `tailscale serve` set all three headers automatically. Only
 `X-Forwarded-*` is honored — `Forwarded` (RFC 7239) and proxy-protocol framing are not
 consulted, and no `X-Forwarded-Host` is read, so a rewritten `Host` cannot be recovered.
 
@@ -947,8 +953,8 @@ ceiling-engaged runner so you can tell it apart from a hand-issued pause.
 With no daemon running, the verbs report that rather than reading the store behind its
 back — a **client** verb reaches the store only through the daemon that owns it. The
 exceptions are the offline maintenance verbs, which open the store themselves and are
-therefore run with the daemon *stopped*: `migrate`, `tick`, and
-[`transcript backfill`](#shipping-transcript-content-to-the-hub--the-outbound-lane-off-by-default),
+therefore run with the daemon *stopped*: `migrate`, `tick`, and the two transcript verbs
+[`transcript backfill` and `transcript reship`](#shipping-transcript-content-to-the-hub--the-outbound-lane-off-by-default),
 whose own refusal enforces it. What you see from a client verb depends on how the daemon left:
 
 | How it stopped | On disk | What a local verb reports |
@@ -1389,7 +1395,7 @@ ship = false
   with `ship = false`: a content-free row (`turn_range_start=0, turn_range_end=-1,
   turns=[], truncated=false`) per chunk closure. Its presence alone does not mean real
   transcript content was captured; it means only that the lease closed.
-- **Capped at both ends, independently.** The runner enforces its own 1 MB per-record cap
+- **Capped at both ends, independently.** The runner enforces its own 8 MB per-record cap
   and 64 MB per-chunk budget as the well-behaved case (D4): an oversized turn's own text,
   its tool call's output, its tool call's input (any nested sidechain turn's, too), are all
   shrunk in place rather than dropped, so the runner's read position still advances past it.
@@ -1397,9 +1403,11 @@ ship = false
   ships instead as an empty-turns slice over
   the same claimed range, never as an over-cap body. Past the 64 MB chunk budget, the runner
   stops shipping that chunk's content but still ships every open segment's final record. The
-  hub enforces its own, independent caps as the rogue case — 4 MB/record, 64 MB/chunk,
+  hub enforces its own, independent caps as the rogue case — 10 MB/record, 64 MB/chunk,
   2 GB/runner/day — rejecting an over-cap record but still acknowledging it, so a misbehaving
-  runner wastes its own budget without wedging its lane. Every runner-side outcome above is
+  runner wastes its own budget without wedging its lane. The hub's per-record cap sits
+  deliberately *above* the runner's: over the runner's, content is shrunk and every turn
+  survives; over the hub's, the whole record's turns are rejected and stored as `[]`. Every runner-side outcome above is
   recorded on the segment and surfaced as a `warning` operational event (see
   [the event log](#operational-visibility--the-event-log) below), the same way a captured
   command failure is.
@@ -1445,6 +1453,29 @@ ship = false
   One imperfection is accepted rather than worked around: a pre-lane session resumed in
   place recorded no resume offsets, so it imports as one merged segment attributed to the
   lease its session began on, rather than splitting at its resume seams.
+
+- **A segment already shipped can be sent again**, with `blizzard runner transcript reship
+  SEGMENT_ID`. It is for a segment the hub holds in a form this runner has since outgrown —
+  most often one an older, smaller per-record cap shrank. It carries **the same three run
+  conditions as `backfill` above** (runner's user, runner's environment, daemon stopped),
+  enforced by the same refusal.
+
+  **It supersedes rather than corrects, and the duplicate is the mechanism, not a bug.** The
+  hub's ingest is idempotent on `(segment_id, turn_range_start)` and never overwrites a
+  record it already accepted, so a short segment cannot be fixed in place — only followed by
+  a second one carrying the same lease's content. Both then stand: the chunk board's
+  Transcripts tab lists **two** segments for that lease, and the source is deliberately left
+  exactly as it shipped so the record of what the hub was once told stays honest. Decide that
+  is what you want before running it.
+
+  A rerun resumes the same superseding segment rather than opening a third; the verb refuses
+  a segment whose lease is still active, because a live lease's segment belongs to the
+  running pump. Three warnings can follow the report line, and each means something
+  different: *shipping is stopped for this chunk* — nothing was sent at all, and note that a
+  re-ship spends the 64 MB per-chunk budget a **second** time; *the source was not read to
+  its end* — the new segment stays open, rerun to resume it; *the new segment is itself
+  marked truncated* — check the reason in the event log, since only some reasons are about
+  the cap.
 
 ## Operational visibility — the event log
 

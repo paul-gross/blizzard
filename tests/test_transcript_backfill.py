@@ -13,8 +13,8 @@ import pytest
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, TranscriptPosition
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.transcript_backfill import TranscriptBackfill
-from blizzard.runner.loop.transcript_pump import MAX_BUFFERED_BYTES
+from blizzard.runner.loop.transcript_backfill import TranscriptBackfill, TranscriptReshipError
+from blizzard.runner.loop.transcript_pump import CHUNK_TRANSCRIPT_MAX_BYTES, MAX_BUFFERED_BYTES
 from blizzard.runner.store.repository import NewLease
 from tests.runner_fakes import (
     FakeHarness,
@@ -396,3 +396,184 @@ def test_the_ship_switch_is_held_in_the_domain_not_only_at_the_cli() -> None:
 
     assert (report.imported, report.already_present, report.gone) == (0, 0, 0)
     assert source.size_bytes_calls == []
+
+
+# --- the operator re-ship (supersede an already-imported segment) ---------------
+
+
+def _import_one(ctx, *, session_id: str = "sess-a") -> str:  # type: ignore[no-untyped-def]
+    """Backfill a single historical session and return the segment id it landed under."""
+    _historical_lease(ctx, lease_id="lease_1", session_id=session_id, epoch=1)
+    strip_transcript_segments(ctx.store)
+    TranscriptBackfill(ctx).run()
+    content = [b for b in _shipped_bodies(ctx) if not b["final"]]
+    assert len(content) == 1
+    return str(content[0]["segment_id"])
+
+
+def test_reship_sends_the_session_again_under_a_new_segment_id() -> None:
+    """The hub never overwrites a record it already accepted, so superseding one means a
+    SECOND segment carrying the same lease's content — the duplicate is the mechanism."""
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello"), _turn(1, "world")]})
+    first = _import_one(ctx)
+
+    report = TranscriptBackfill(ctx).reship(first)
+
+    assert report.segment_id != first
+    assert (report.source_segment_id, report.session_id, report.complete) == (first, "sess-a", True)
+    assert (report.turns, report.truncated_reason) == (2, None)
+    content = [b for b in _shipped_bodies(ctx) if not b["final"]]
+    assert len(content) == 2
+    # Same lease coordinates, so the board files both under the one node/epoch.
+    assert {(b["chunk_id"], b["node_id"], b["epoch"]) for b in content} == {("ch_1", "nd_build", 1)}
+    assert [t["text"] for t in content[1]["turns"]] == ["hello", "world"]
+    assert runner_invariant_violations(ctx.store) == []
+
+
+def test_reship_leaves_the_original_segment_exactly_as_it_shipped() -> None:
+    """The record of what the hub was once told stays honest — a re-ship adds, never edits."""
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    first = _import_one(ctx)
+    before = ctx.store.transcript_segment(first)
+
+    TranscriptBackfill(ctx).reship(first)
+
+    assert ctx.store.transcript_segment(first) == before
+
+
+def test_reship_closes_its_new_segment_out_and_ships_a_final_marker() -> None:
+    """A superseding segment is an ordinary one — left open, the board would render it as
+    a lease still streaming, and a later backfill would try to resume it."""
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    first = _import_one(ctx)
+
+    report = TranscriptBackfill(ctx).reship(first)
+
+    assert ctx.store.open_transcript_segments() == []
+    final = [b for b in _shipped_bodies(ctx) if b["final"]]
+    assert {b["segment_id"] for b in final} == {first, report.segment_id}
+
+
+def test_reship_refuses_an_unknown_segment_id() -> None:
+    """A typo must not silently open a segment against nothing."""
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    _import_one(ctx)
+
+    with pytest.raises(TranscriptReshipError, match="no such transcript segment"):
+        TranscriptBackfill(ctx).reship("seg_nope")
+
+    assert len(_shipped_bodies(ctx)) == 2  # the original import's content + final marker only
+
+
+def test_reship_refuses_a_session_no_longer_readable() -> None:
+    """Nothing is written on this path, so a rerun retries once the transcripts root is
+    right — an opened-then-empty segment would instead supersede real content with none."""
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    first = _import_one(ctx)
+    # The batch is still scriptable; only the on-disk probe is gone — exactly the rotated-away
+    # shape, where a bare `turns_since` would still answer and quietly ship an empty segment.
+    rotated = replace(
+        ctx,
+        transcripts=FakeTranscriptSource(
+            batches_by_session={"sess-a": _batch("sess-a", [_turn(0, "hello")])}, sizes_by_session={}
+        ),
+    )
+
+    with pytest.raises(TranscriptReshipError, match="not readable by this runner"):
+        TranscriptBackfill(rotated).reship(first)
+
+    assert ctx.store.open_transcript_segments() == []
+
+
+def test_the_reship_ship_switch_is_held_in_the_domain_not_only_at_the_cli() -> None:
+    """`LoopWiring.reship_transcript` is a public entry — the same gate the backfill holds."""
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    first = _import_one(ctx)
+    off = replace(ctx, config=replace(ctx.config, transcripts_ship=False))
+
+    with pytest.raises(TranscriptReshipError, match="ship is false"):
+        TranscriptBackfill(off).reship(first)
+
+
+def test_reship_reports_a_chunk_budget_stop_rather_than_a_clean_zero_byte_run() -> None:
+    """The pump treats a shipping-stopped segment as caught up, so this path returns
+    `complete=True` with zero counts — indistinguishable from a whole re-ship unless the
+    stop reason is carried, and re-shipping spends the per-chunk budget a second time."""
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    first = _import_one(ctx)
+    ctx.store.record_transcript_deltas(
+        segment_id=first,
+        chunk_id="ch_1",
+        cursor="spent",
+        shipped_bytes=CHUNK_TRANSCRIPT_MAX_BYTES,
+        shipped_turns=1,
+        normalizer_version="fake/1",
+        harness_version="claude/9",
+        payloads=[],
+        created_at=_NOW,
+    )
+
+    report = TranscriptBackfill(ctx).reship(first)
+
+    assert report.shipping_stopped_reason == "chunk_budget_exceeded"
+    assert (report.turns, report.shipped_bytes) == (0, 0)
+
+
+def test_reship_resumes_its_own_unfinished_segment_instead_of_stranding_it() -> None:
+    """Rerunning is what the incomplete-read warning tells the operator to do. Opening a
+    fresh segment each time would strand the last one open forever, and the board renders an
+    open segment as a lease still streaming."""
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    first = _import_one(ctx)
+    stalled = replace(ctx, transcripts=FakeTranscriptSource(sizes_by_session={"sess-a": 1024}))
+
+    incomplete = TranscriptBackfill(stalled).reship(first)  # source unreadable mid-drain -> stays open
+    assert not incomplete.complete
+    second = TranscriptBackfill(ctx).reship(first)
+
+    assert second.segment_id == incomplete.segment_id  # resumed, not a third segment
+    assert second.complete
+    assert ctx.store.open_transcript_segments() == []
+
+
+def test_reship_refuses_a_segment_whose_lease_is_still_active() -> None:
+    """`run`'s own rule: a live lease's segment belongs to the tick's pump. Re-shipping one
+    races it, leaving two segments reading the same session from different offsets."""
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    first = _import_one(ctx)
+    ctx.store.record_lease(
+        NewLease(
+            lease_id="lease_live",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=9,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    ctx.store.record_spawn("lease_live", pid=2, process_start_time="2", session_id="sess-live", spawned_at=_NOW)
+    live = next(s for s in ctx.store.open_transcript_segments() if s.lease_id == "lease_live")
+
+    with pytest.raises(TranscriptReshipError, match="still active"):
+        TranscriptBackfill(ctx).reship(live.segment_id)
+
+    assert first  # the closed-lease segment above is untouched by the refusal
+
+
+def test_reship_points_its_new_segment_at_the_one_it_supersedes() -> None:
+    """The hub's lease read is keyed on the lease, not the segment, so the pointer is what
+    keeps a re-ship from rendering the conversation twice. Every record carries it — the
+    final marker too, since a segment whose content was capped ships only that."""
+    ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    first = _import_one(ctx)
+
+    report = TranscriptBackfill(ctx).reship(first)
+
+    bodies = [b for b in _shipped_bodies(ctx) if b["segment_id"] == report.segment_id]
+    assert bodies and all(b["supersedes"] == first for b in bodies)
+    assert any(b["final"] for b in bodies)  # including the closing marker
+    # The original's own records claim to supersede nothing, or the hub drops them both.
+    assert all(b["supersedes"] is None for b in _shipped_bodies(ctx) if b["segment_id"] == first)

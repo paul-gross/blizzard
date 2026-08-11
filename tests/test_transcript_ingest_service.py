@@ -227,9 +227,9 @@ def test_an_oversized_record_is_rejected_acked_and_advances_the_high_water(tmp_p
     assert entry.truncated is True
 
 
-def test_the_three_caps_are_the_magnitudes_the_epic_declares() -> None:
-    """AC3: every cap-behavior test below monkeypatches these to tens of bytes, so the
-    shipped magnitudes — 4 MB a record, 64 MB a chunk, 2 GB a runner-day — are pinned here."""
+def test_the_three_caps_are_the_magnitudes_that_govern_today() -> None:
+    """Every cap-behavior test below monkeypatches these to tens of bytes, so the shipped
+    magnitudes — 10 MB a record (the backstop, not the epic's 4 MB), 64 MB, 2 GB — pin here."""
     mb = 1024 * 1024
     gb = 1024 * mb
     shipped = (
@@ -238,7 +238,7 @@ def test_the_three_caps_are_the_magnitudes_the_epic_declares() -> None:
         transcripts_domain.RUNNER_DAILY_RATE_MAX_BYTES,
     )
 
-    assert shipped == (4 * mb, 64 * mb, 2 * gb)
+    assert shipped == (10 * mb, 64 * mb, 2 * gb)
 
 
 def test_the_chunk_budget_cap_rejects_independently_of_the_other_two(

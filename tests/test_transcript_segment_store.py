@@ -297,6 +297,34 @@ def test_records_for_lease_spans_every_spawn_generation_but_not_other_leases(tmp
     assert [r.turn_range_start for r in records] == [0, 1]
 
 
+def test_records_for_lease_drops_a_segment_another_one_supersedes(tmp_path: Path) -> None:
+    """A re-ship reuses its source's whole lease key, and this read is keyed on the lease —
+    so without the pointer it concatenates both copies and renders the conversation twice."""
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(engine)
+    original = _record(segment_id="sg_old", turn_range_start=0, turn_range_end=0, record_truncated=True)
+    reship = _record(segment_id="sg_new", turn_range_start=0, turn_range_end=0, supersedes="sg_old")
+    for record in (original, reship):
+        store.insert_accepted(record, byte_count=10, codec="zlib", at=_NOW)
+
+    records = store.records_for_lease("ch_1", "nd_build", 1, "r1")
+
+    assert len(records) == 1  # the superseded copy is gone, not merely ordered after
+    assert records[0].record_truncated is False  # and its truncation no longer taints the read
+
+
+def test_records_for_lease_keeps_a_segment_superseded_only_on_a_different_lease(tmp_path: Path) -> None:
+    """The pointer is scoped to its own lease: a same-named segment under another node or
+    epoch must not vanish because an unrelated lease named that id."""
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(engine)
+    store.insert_accepted(_record(segment_id="sg_old"), byte_count=10, codec="zlib", at=_NOW)
+    elsewhere = _record(segment_id="sg_new", node_id="nd_other", supersedes="sg_old")
+    store.insert_accepted(elsewhere, byte_count=10, codec="zlib", at=_NOW)
+
+    assert len(store.records_for_lease("ch_1", "nd_build", 1, "r1")) == 1
+
+
 def test_records_for_lease_confines_to_the_declared_runner(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptSegmentStore(engine)

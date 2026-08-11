@@ -19,9 +19,9 @@ _log = get_logger("blizzard.hub.transcripts")
 #: A natural-key lookup's outcome (D8) — ``"rejected"`` re-adjudicates, never applies outright.
 NaturalKeyState = Literal["absent", "accepted", "rejected"]
 
-#: A single record's raw-turn-bytes ceiling — above the epic's measured p99 whole-session
-#: size (≈3.3 MB), since one shipped record may carry most of a segment.
-RECORD_MAX_BYTES = 4 * 1024 * 1024
+#: A single record's raw-turn-bytes ceiling — the rogue-runner backstop, not the working
+#: limit: held above `TRANSCRIPT_RECORD_MAX_BYTES`, since over THIS one turns are lost whole.
+RECORD_MAX_BYTES = 10 * 1024 * 1024
 
 #: Per-chunk transcript budget (product plan: "fifty p90 sessions' worth of conversation").
 CHUNK_BUDGET_MAX_BYTES = 64 * 1024 * 1024
@@ -54,6 +54,8 @@ class SegmentRecord:
     harness_version: str | None
     record_truncated: bool
     turns_json: str
+    #: Re-ship only: the segment this replaces, which a lease read drops (blizzard#250).
+    supersedes: str | None = None
 
 
 @dataclass(frozen=True)

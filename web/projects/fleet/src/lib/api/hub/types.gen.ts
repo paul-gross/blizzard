@@ -2796,6 +2796,10 @@ export type TranscriptSegmentRecord = {
      */
     spawn_generation: number;
     /**
+     * Supersedes
+     */
+    supersedes?: string | null;
+    /**
      * Turn Range End
      */
     turn_range_end: number;

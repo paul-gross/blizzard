@@ -29,9 +29,9 @@ from blizzard.runner.store.repository import TranscriptSegmentLedgerRow
 
 _log = get_logger("blizzard.runner.loop")
 
-#: The runner's own per-record cap (D4) — the well-behaved half of #247's two-sided
-#: enforcement, deliberately below the hub's own 4 MB rogue-case `RECORD_MAX_BYTES`.
-TRANSCRIPT_RECORD_MAX_BYTES = 1024 * 1024
+#: The runner's own per-record cap (D4) — held below the hub's `RECORD_MAX_BYTES`, which
+#: REJECTS what this one merely shrinks; `test_record_caps.py` asserts that ordering.
+TRANSCRIPT_RECORD_MAX_BYTES = 8 * 1024 * 1024
 
 #: The per-chunk budget (D4) — the sum of `shipped_bytes` across the chunk's segments, which
 #: counts whole serialized records and so overcounts what the hub bills (its turns payload alone).
@@ -365,9 +365,26 @@ def _record_envelope(
         "normalizer_version": batch.normalizer_version,
         "harness_version": batch.harness_version,
         "record_truncated": False,
+        "supersedes": segment.supersedes,
         "turns": [],
     }
 
+
+def _record_overhead(
+    segment: TranscriptSegmentLedgerRow, batch: TranscriptBatch, *, turn_range_start: int, turn_count: int
+) -> int:
+    """The envelope's serialized cost with BOTH range fields at the widest value any group
+    here can claim — they are decimal integers, and one measurement budgets every group, so
+    widening only one still under-counts a later group's other field. Under-count those
+    digits and a group packs to exactly the cap, lands over it, and is shrunk — for tiny
+    turns with nothing shrinkable, emptied outright."""
+    widest = turn_range_start + turn_count
+    envelope = _record_envelope(segment, batch, turn_range_start=widest, turn_range_end=widest)
+    return len(json.dumps(envelope).encode("utf-8"))
+
+
+#: `json.dumps` separates array items with `", "` — real for every turn but a group's first.
+_ARRAY_SEPARATOR_BYTES = 2
 
 #: A group's fitting outcome: `"ok"` as read, `"shrunk"` fit only after `_shrink_to_cap`,
 #: `"unshippable"` stayed over cap even shrunk to nothing.
@@ -384,11 +401,7 @@ def _build_records(
     Returns ``(records, any_shrunk, any_unshippable)`` for the caller's own worse-last mark."""
     wire_turns = [_turn_wire(t, turn_range_start + i) for i, t in enumerate(batch.turns)]
     turn_costs = [len(json.dumps(wt).encode("utf-8")) for wt in wire_turns]
-    overhead = len(
-        json.dumps(
-            _record_envelope(segment, batch, turn_range_start=turn_range_start, turn_range_end=turn_range_start)
-        ).encode("utf-8")
-    )
+    overhead = _record_overhead(segment, batch, turn_range_start=turn_range_start, turn_count=len(wire_turns))
 
     records: list[dict[str, Any]] = []
     outcomes: list[_GroupOutcome] = []
@@ -414,9 +427,6 @@ def _build_records(
         records.append(record)
         outcomes.append(outcome)
 
-    # `json.dumps` separates array items with `", "` (2 bytes) — real for every turn but
-    # the group's first, so the estimate must include it or many-small-turn groups undercount.
-    _ARRAY_SEPARATOR_BYTES = 2
     group_start = 0
     running = overhead
     for i, cost in enumerate(turn_costs):

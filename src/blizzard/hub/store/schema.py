@@ -787,6 +787,8 @@ transcript_segments = Table(
     Column("harness_version", String, nullable=True),
     # The runner's OWN cap declaration, distinct from `rejected` above; nullable, no backfill.
     Column("record_truncated", Boolean, nullable=True),
+    # Re-ship only: the segment this replaces, which `_records_for_lease_stmt` then drops.
+    Column("supersedes", String, nullable=True),
     # Hub-stamped receipt instant — the D3 rolling 24h window anchors here, never on the runner's.
     Column("received_at", UtcDateTime, nullable=False),
     UniqueConstraint("segment_id", "turn_range_start", name="uq_transcript_segments_segment_turn_start"),

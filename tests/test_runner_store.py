@@ -919,7 +919,7 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
     with engine.connect() as conn:
         remaining = conn.execute(sa.select(transcript_outbound_buffer.c.seq)).scalars().all()
-    # An acked `delta` row is pruned outright, not merely marked — up to 1 MB each.
+    # An acked `delta` row is pruned outright, not merely marked — up to the per-record cap each.
     assert list(remaining) == [t2]
 
 

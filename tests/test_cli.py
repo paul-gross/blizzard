@@ -408,6 +408,37 @@ def test_runner_transcript_backfill_drives_its_whole_production_route(tmp_path: 
     assert "would import 0, already present 0, gone 0" in result.output
 
 
+def test_runner_transcript_reship_drives_its_whole_production_route(tmp_path: Path) -> None:
+    """`bzh:gating-tier-pins-production-paths`, for the second verb: the component tier
+    constructs the service directly, so the CLI -> `LoopWiring.reship_transcript` ->
+    `TranscriptReshipError` -> `ClickException` route is otherwise named by no gating test."""
+    root = tmp_path / "runner"
+    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    _enable_transcript_shipping(root)
+
+    result = CliRunner().invoke(blizzard, ["runner", "transcript", "reship", "seg_nope", "--dir", str(root)])
+
+    assert result.exit_code != 0
+    assert "no such transcript segment: seg_nope" in result.output
+
+
+def test_runner_transcript_reship_refuses_while_a_daemon_holds_the_store(tmp_path: Path) -> None:
+    """The shared `_transcript_config` guard reaches the second verb too — the whole reason
+    it was extracted, and a regression here is silent store corruption, not a failed command."""
+    root = tmp_path / "runner"
+    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    _enable_transcript_shipping(root)
+    server = _serve_on(RunnerConfig.socket_path_for(root), _OK)
+
+    try:
+        result = CliRunner().invoke(blizzard, ["runner", "transcript", "reship", "seg_x", "--dir", str(root)])
+    finally:
+        server.close()
+
+    assert result.exit_code != 0
+    assert "single-writer" in result.output
+
+
 def test_runner_transcript_backfill_refuses_while_a_daemon_holds_the_store(tmp_path: Path) -> None:
     """The single-writer guard, exercised through the verb rather than the helper alone."""
     root = tmp_path / "runner"

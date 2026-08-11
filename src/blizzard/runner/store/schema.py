@@ -484,6 +484,7 @@ transcript_segments = Table(
     # JSON array of truncation `reason`s warned about — the warn-once latch,
     # independent of `truncated_reason`'s own worst-of display value.
     Column("truncated_reasons_warned", Text, nullable=True),  # NULL = none warned yet
+    Column("supersedes", String, nullable=True),  # re-ship only: the segment this replaces
     Column("finalized_at", UtcDateTime, nullable=True),  # NULL = still open; set by step close
     Column("stamped_at", UtcDateTime, nullable=False),
 )

@@ -144,5 +144,6 @@ def _final_record(seq: int, segment: TranscriptSegmentLedgerRow) -> TranscriptSe
         normalizer_version=segment.normalizer_version,
         harness_version=segment.harness_version,
         record_truncated=record_truncated,
+        supersedes=segment.supersedes,
         turns=[],
     )

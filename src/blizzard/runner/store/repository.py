@@ -146,6 +146,8 @@ class TranscriptSegmentLedgerRow:
     harness_version: str | None
     truncated_reason: str | None
     shipping_stopped_reason: str | None
+    #: Set only on a re-ship (blizzard#250): the segment this one replaces on the hub.
+    supersedes: str | None
     finalized_at: datetime | None
     stamped_at: datetime
 
@@ -741,7 +743,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         ...
 
     def mark_transcript_record_truncated(self, segment_id: str, *, reason: str, severity: int) -> bool:
-        """Note that one shipped record was shrunk in place (D4's 1 MB per-record cap) —
+        """Note that one shipped record was shrunk in place (D4's per-record cap) —
         informational only. Latches per ``(segment_id, reason)`` (F2): the SAME reason
         recurring never re-warns; a DIFFERENT one always does, regardless of what currently
         displays. ``severity`` ranks ``reason`` against this method's other callers — the
@@ -789,10 +791,12 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         lease_id: str,
         session_id: str,
         stamped_at: datetime,
+        supersedes: str | None = None,
     ) -> str:
         """Stamp a segment boundary outside a spawn and return its id (blizzard#250), cursor
         unset so the pump reads the session from the start. Every boundary the *live* lane
-        stamps stays :meth:`record_spawn`'s; this one is the backfill's alone."""
+        stamps stays :meth:`record_spawn`'s; this one is the backfill's alone. ``supersedes``
+        is the re-ship's own pointer at the segment this one replaces on the hub."""
         ...
 
     def finalize_transcript_segment(self, segment_id: str, *, finalized_at: datetime) -> bool:
@@ -813,7 +817,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:
         """Ack a buffered transcript row — the drain's own ack (D3). A ``delta`` row is
-        pruned outright (up to the 1 MB cap each, nothing reads one acked); a ``final`` row
+        pruned outright (up to the per-record cap each, nothing reads one acked); a ``final`` row
         stays, marked acked — its own tiny row is the exactly-once receipt
         :class:`~blizzard.foundation.store.invariants.TranscriptSegmentFinalizedExactlyOnce`
         checks for."""

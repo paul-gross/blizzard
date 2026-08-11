@@ -76,6 +76,8 @@ class TranscriptSegmentRecord(BaseModel):
     normalizer_version: str
     harness_version: str | None
     record_truncated: bool = False
+    #: Re-ship only: the segment this replaces, which the lease key alone cannot distinguish.
+    supersedes: str | None = None
     turns: list[TurnSegmentView]
 
 

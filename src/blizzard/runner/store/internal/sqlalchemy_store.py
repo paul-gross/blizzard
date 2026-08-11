@@ -1078,6 +1078,7 @@ class SqlAlchemyRunnerStore:
         lease_id: str,
         session_id: str,
         stamped_at: datetime,
+        supersedes: str | None = None,
     ) -> str:
         segment_id = Id.mint_at(SEGMENT_PREFIX, stamped_at).value
         with self._begin() as conn:
@@ -1097,6 +1098,7 @@ class SqlAlchemyRunnerStore:
                     harness_version=None,
                     truncated_reason=None,
                     shipping_stopped_reason=None,
+                    supersedes=supersedes,
                     finalized_at=None,
                     stamped_at=stamped_at,
                 )
@@ -1536,6 +1538,7 @@ class SqlAlchemyRunnerStore:
             harness_version=str(r.harness_version) if r.harness_version is not None else None,
             truncated_reason=str(r.truncated_reason) if r.truncated_reason is not None else None,
             shipping_stopped_reason=str(r.shipping_stopped_reason) if r.shipping_stopped_reason is not None else None,
+            supersedes=str(r.supersedes) if r.supersedes is not None else None,
             finalized_at=r.finalized_at,
             stamped_at=r.stamped_at,
         )

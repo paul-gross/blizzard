@@ -41,6 +41,7 @@ def _identity_values(record: SegmentRecord) -> dict[str, object]:
         "normalizer_version": record.normalizer_version,
         "harness_version": record.harness_version,
         "record_truncated": record.record_truncated,
+        "supersedes": record.supersedes,
     }
 
 
@@ -75,7 +76,28 @@ def _lease_runner_ids_stmt(chunk_id: str, node_id: str, epoch: int) -> Select[An
     )
 
 
+def _superseded_segment_ids(chunk_id: str, node_id: str, epoch: int, runner_id: str) -> Select[Any]:
+    """Every segment id some OTHER segment of this lease declares it replaces (blizzard#250).
+    Scoped to the lease rather than global: a pointer only ever names a sibling of its own.
+    Deliberately not named ``_stmt`` — it is only ever a subquery, never executed on its own,
+    and the compile sweep enumerates exactly the builders the store executes."""
+    return (
+        select(s.transcript_segments.c.supersedes)
+        .where(
+            s.transcript_segments.c.chunk_id == chunk_id,
+            s.transcript_segments.c.node_id == node_id,
+            s.transcript_segments.c.epoch == epoch,
+            s.transcript_segments.c.runner_id == runner_id,
+            s.transcript_segments.c.supersedes.is_not(None),
+        )
+        .distinct()
+    )
+
+
 def _records_for_lease_stmt(chunk_id: str, node_id: str, epoch: int, runner_id: str) -> Select[Any]:
+    """A lease's records, superseded segments dropped. The key here is the LEASE, not the
+    segment, so a re-ship — which reuses its source's whole lease key — would otherwise
+    concatenate both copies and leave `truncated` true forever off the replaced one."""
     return (
         select(s.transcript_segments)
         .where(
@@ -83,6 +105,7 @@ def _records_for_lease_stmt(chunk_id: str, node_id: str, epoch: int, runner_id: 
             s.transcript_segments.c.node_id == node_id,
             s.transcript_segments.c.epoch == epoch,
             s.transcript_segments.c.runner_id == runner_id,
+            s.transcript_segments.c.segment_id.not_in(_superseded_segment_ids(chunk_id, node_id, epoch, runner_id)),
         )
         .order_by(
             s.transcript_segments.c.spawn_generation,
@@ -178,6 +201,7 @@ def _update_to_accepted_stmt(
         content=content,
         received_at=at,
         record_truncated=record.record_truncated,  # the re-offer's own value, not the first
+        supersedes=record.supersedes,
     )
 
 
@@ -187,6 +211,7 @@ def _update_still_rejected_stmt(record: SegmentRecord, *, byte_count: int, reaso
         byte_count=byte_count,
         received_at=at,
         record_truncated=record.record_truncated,  # the re-offer's own value, not the first
+        supersedes=record.supersedes,
     )
 
 

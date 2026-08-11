@@ -1,6 +1,6 @@
-"""The transcript lane's pump (component tier, issue #246) — cursor advance, the 1 MB
-per-record and 64 MB per-chunk caps (D4), the ``ship`` off-switch (D5), and blizzard#247's
-turn-range wire shape."""
+"""The transcript lane's pump (component tier, issue #246) — cursor advance, the per-record
+and 64 MB per-chunk caps (D4), the ``ship`` off-switch (D5), and blizzard#247's turn-range
+wire shape."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.transcripts import RECORD_MAX_BYTES as HUB_RECORD_MAX_BYTES
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.transcript import (
     NormalizedTurn,
@@ -25,13 +26,17 @@ from blizzard.runner.harness.transcript import (
 from blizzard.runner.loop.attempt import FAILED, Attempt
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.transcript_pump import (
+    _ARRAY_SEPARATOR_BYTES,
     CHUNK_TRANSCRIPT_MAX_BYTES,
     MAX_BUFFERED_BYTES,
     PUMP_LEASE_MAX_SECONDS,
     TRANSCRIPT_RECORD_MAX_BYTES,
     TranscriptPump,
+    _record_envelope,
+    _record_overhead,
+    _turn_wire,
 )
-from blizzard.runner.store.repository import BufferedTranscriptDelta, NewLease
+from blizzard.runner.store.repository import BufferedTranscriptDelta, NewLease, TranscriptSegmentLedgerRow
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -46,6 +51,52 @@ from tests.runner_fakes import (
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
+
+
+def _cap_share(fraction: float) -> int:
+    """A byte count that is ``fraction`` of the live per-record cap. Every split/shrink test
+    below sizes content through this, never in literal bytes: the cap has already moved once,
+    and a batch written as "~1.5 MB, over cap" is simply under the new one — green, asserting
+    nothing. The magnitude itself is pinned in `test_record_caps.py`, not here."""
+    return max(1, int(TRANSCRIPT_RECORD_MAX_BYTES * fraction))
+
+
+def _turns_over_cap(fraction: float) -> int:
+    """How many no-text turns sum past ``fraction`` of the cap, MEASURED off the real wire
+    shape. A hard-coded byte figure here drifted 3x unnoticed and silently tripled every
+    batch derived from it — the count a test wants is a function of the shape, not a literal."""
+    per_turn = len(json.dumps(_turn_wire(_turn(0, ""), 0)).encode("utf-8")) + _ARRAY_SEPARATOR_BYTES
+    return _cap_share(fraction) // per_turn
+
+
+def _empty_edits_over_cap(fraction: float) -> int:
+    """The same, for `MultiEdit`-shaped `{"old_string": "", "new_string": ""}` entries."""
+    per_edit = len(json.dumps({"old_string": "", "new_string": ""}).encode("utf-8")) + _ARRAY_SEPARATOR_BYTES
+    return _cap_share(fraction) // per_edit
+
+
+def _ledger_row_stub() -> TranscriptSegmentLedgerRow:
+    """The ledger fields `_build_records` reads off a segment. Typed as the real row so a
+    field added to that seam fails `blizzard:typecheck`, not at runtime inside a test."""
+    return TranscriptSegmentLedgerRow(
+        segment_id="seg_x",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        lease_id="lease_1",
+        session_id="sess-a",
+        cursor=None,
+        shipped_bytes=0,
+        shipped_turns=0,
+        normalizer_version="fake/1",
+        harness_version="claude/9",
+        truncated_reason=None,
+        shipping_stopped_reason=None,
+        supersedes=None,
+        finalized_at=None,
+        stamped_at=_NOW,
+    )
 
 
 def _turn(index: int, text: str) -> NormalizedTurn:
@@ -332,7 +383,7 @@ def test_pump_advances_the_cursor_on_a_turnless_batch() -> None:
 
 
 def test_pump_truncates_a_single_record_that_alone_exceeds_the_cap() -> None:
-    """D4: a single turn over the 1 MB cap is truncated in place, not dropped. review F1:
+    """D4: a single turn over the cap is truncated in place, not dropped. review F1:
     the TRANSIENT reason — ``truncated_reason``, never ``shipping_stopped_reason``."""
     huge = "x" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, huge)], next_token="pos-1")})
@@ -470,13 +521,30 @@ def test_pump_shrinks_a_nested_sidechain_turns_text() -> None:
     assert segment.cursor == "pos-1"
 
 
+def test_record_overhead_bounds_every_group_envelope_the_batch_can_produce() -> None:
+    """One overhead measurement budgets every group, so it must be an UPPER bound on all of
+    them — over BOTH range fields, since a later group's start widens just as its end does,
+    and a bound over one axis alone leaves the other's digits under-counted."""
+    segment = _ledger_row_stub()
+    batch = _batch([_turn(0, "")], next_token="pos-1")
+    turn_count = 100_000
+
+    budgeted = _record_overhead(segment, batch, turn_range_start=0, turn_count=turn_count)
+
+    # Every (start, end) a group of this batch can close on, both fields varied independently.
+    for start in (0, 9, 99, 9_999, turn_count):
+        for end in (start, start + 9, turn_count):
+            envelope = _record_envelope(segment, batch, turn_range_start=start, turn_range_end=end)
+            assert len(json.dumps(envelope).encode("utf-8")) <= budgeted, f"under-counted at {start}..{end}"
+
+
 def test_pump_splits_many_small_turns_instead_of_emptying_the_whole_batch() -> None:
     """review round 7 F1: before the fix, a WHOLE batch whose structural overhead alone
     exceeded the cap got emptied in one explicit-empty record. Splitting into several
     under-cap records instead needs no shrinking and drops nothing."""
     # Each turn's own JSON overhead (index/kind/timestamp/tool=None/…) is small but not
-    # zero; enough turns with no shrinkable text still sums past the 1 MB cap.
-    many_turns = [_turn(i, "") for i in range(20_000)]
+    # zero; enough turns with no shrinkable text still sums past the cap.
+    many_turns = [_turn(i, "") for i in range(_turns_over_cap(1.5))]
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(many_turns, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
 
@@ -501,7 +569,7 @@ def test_pump_splits_a_batch_with_many_large_shrinkable_fields_instead_of_shrink
     """A batch whose oversized content spans many turns — a real catch-up window's shape —
     now splits into several under-cap records with every byte intact (review round 7 F1),
     rather than shrinking one combined record's content down to fit."""
-    many_turns = [_tool_turn(i, output="x" * 30_000) for i in range(300)]
+    many_turns = [_tool_turn(i, output="x" * _cap_share(0.03)) for i in range(60)]  # ~1.8 caps' worth
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(many_turns, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
 
@@ -514,7 +582,7 @@ def test_pump_splits_a_batch_with_many_large_shrinkable_fields_instead_of_shrink
     bodies = _assert_gapless_contiguous(pending, total_turns=len(many_turns))
     outputs = [t["tool"]["output"] for body in bodies for t in body["turns"]]
     assert len(outputs) == len(many_turns)  # every turn survives, not just some
-    assert all(len(o) == 30_000 for o in outputs)  # every byte survives — nothing shrunk
+    assert all(len(o) == _cap_share(0.03) for o in outputs)  # every byte survives — nothing shrunk
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason is None  # splitting alone closed the gap
@@ -523,9 +591,9 @@ def test_pump_splits_a_batch_with_many_large_shrinkable_fields_instead_of_shrink
 
 def test_pump_splits_a_severely_oversized_batch_instead_of_shrinking_every_field() -> None:
     """review round 7 F1: a window many times over cap — a real catch-up read's ordinary
-    shape — splits into several fully-intact records. Mirrors the finding's own ~8 MB /
-    50-turn measurement, which used to require lossy shrinking; splitting needs none."""
-    window_turns = [_tool_turn(i, output="x" * 160_000) for i in range(50)]  # ~8 MB of output
+    shape — splits into several fully-intact records. Mirrors the finding's own 50-turn
+    measurement, which used to require lossy shrinking; splitting needs none."""
+    window_turns = [_tool_turn(i, output="x" * _cap_share(0.06)) for i in range(50)]  # ~3 caps' worth
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(window_turns, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
 
@@ -538,7 +606,7 @@ def test_pump_splits_a_severely_oversized_batch_instead_of_shrinking_every_field
     bodies = _assert_gapless_contiguous(pending, total_turns=len(window_turns))
     outputs = [t["tool"]["output"] for body in bodies for t in body["turns"]]
     assert len(outputs) == len(window_turns)  # never drops a turn
-    assert all(len(o) == 160_000 for o in outputs)  # never shrinks one either
+    assert all(len(o) == _cap_share(0.06) for o in outputs)  # never shrinks one either
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason is None
@@ -575,7 +643,7 @@ def test_pump_shrinks_an_oversized_tool_input_value_instead_of_emptying_the_reco
 def test_pump_shrinks_non_ascii_content_by_a_real_fraction_not_to_near_zero() -> None:
     """Summing ``shrinkable`` in raw ``len()`` against a budget in escaped bytes clamps
     ``keep_fraction`` to 0.0 on CJK content, emptying a field only ~18% over cap."""
-    huge_content = "文" * 206_000  # ~1.24 MB serialized (escaped) — ~18% over the 1 MB cap
+    huge_content = "文" * (_cap_share(1.18) // 6)  # each `文` escapes to 6 bytes; ~18% over cap
     ctx, _source = _ctx(
         ship=True, batches={"sess-a": _batch([_input_tool_turn(0, content=huge_content)], next_token="pos-1")}
     )
@@ -628,7 +696,7 @@ def test_pump_splits_many_medium_tool_inputs_instead_of_emptying_the_record() ->
     """Many ordinary `Edit`-shaped calls, each individually under cap, summing well over it
     — the batch splits into several under-cap records, each fully intact (review round 7
     F1), not a single shrunk-or-emptied one."""
-    edits = [_input_tool_turn(i, content="e" * 20_000) for i in range(60)]  # 60 * 20 KB > 1 MB
+    edits = [_input_tool_turn(i, content="e" * _cap_share(0.03)) for i in range(60)]  # ~1.8 caps' worth
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(edits, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
 
@@ -641,7 +709,7 @@ def test_pump_splits_many_medium_tool_inputs_instead_of_emptying_the_record() ->
     bodies = _assert_gapless_contiguous(pending, total_turns=len(edits))
     contents = [t["tool"]["input"]["content"] for body in bodies for t in body["turns"]]
     assert len(contents) == len(edits)  # every turn survives, not just some
-    assert all(len(c) == 20_000 for c in contents)  # nothing shrunk
+    assert all(len(c) == _cap_share(0.03) for c in contents)  # nothing shrunk
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
     assert segment.truncated_reason is None  # splitting alone closed the gap
@@ -1207,10 +1275,12 @@ def test_pump_warns_only_once_per_segment_per_agent_across_ticks() -> None:
 
 
 def test_pump_splits_a_batch_within_the_hub_cap_but_over_the_runner_cap() -> None:
-    """review round 7 F1: a batch within the hub's own 4 MB record cap but over the
-    runner's 1 MB one splits into multiple records, each within cap, none emptied — the
-    cursor advances exactly once, and the split records' ranges are contiguous, gapless."""
-    turns = [_tool_turn(i, output="x" * 300_000) for i in range(5)]  # ~1.5 MB total
+    """review round 7 F1: a batch within the hub's own record cap but over the runner's
+    smaller one splits into multiple records, each within cap, none emptied — the cursor
+    advances exactly once, and the split records' ranges are contiguous, gapless."""
+    # The midpoint of the two caps — in the band by construction, however either moves.
+    per_turn = (TRANSCRIPT_RECORD_MAX_BYTES + HUB_RECORD_MAX_BYTES) // 2 // 5
+    turns = [_tool_turn(i, output="x" * per_turn) for i in range(5)]
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(turns, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
 
@@ -1224,7 +1294,7 @@ def test_pump_splits_a_batch_within_the_hub_cap_but_over_the_runner_cap() -> Non
     assert all(body["turns"] != [] for body in bodies)  # none emptied
     outputs = [t["tool"]["output"] for body in bodies for t in body["turns"]]
     assert len(outputs) == len(turns)
-    assert all(len(o) == 300_000 for o in outputs)  # nothing shrunk either
+    assert all(len(o) == per_turn for o in outputs)  # nothing shrunk either
     segment = ctx.store.transcript_segment(segment_id)
     assert segment is not None
     assert segment.cursor == "pos-1"  # advanced exactly once, past the WHOLE batch
@@ -1234,9 +1304,9 @@ def test_pump_splits_a_batch_within_the_hub_cap_but_over_the_runner_cap() -> Non
 
 def _unshrinkable_tool_turn(index: int) -> NormalizedTurn:
     """A `MultiEdit`-shaped turn with no shrinkable content at all (every string value is
-    empty) whose sheer structural bulk alone still exceeds the 1 MB cap, even shrunk to
+    empty) whose sheer structural bulk alone still exceeds the cap, even shrunk to
     nothing — the single pathological turn F1(b) needs, isolated from any sibling."""
-    edits = [{"old_string": "", "new_string": ""} for _ in range(40_000)]
+    edits = [{"old_string": "", "new_string": ""} for _ in range(_empty_edits_over_cap(1.5))]
     return NormalizedTurn(
         index=index,
         kind="tool",

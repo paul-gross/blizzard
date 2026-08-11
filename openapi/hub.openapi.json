@@ -4265,6 +4265,17 @@
             "title": "Spawn Generation",
             "type": "integer"
           },
+          "supersedes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes"
+          },
           "turn_range_end": {
             "title": "Turn Range End",
             "type": "integer"
