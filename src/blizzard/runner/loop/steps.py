@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.domain.work import ChunkStatus
+from blizzard.hub.domain.work import TERMINAL_STATUSES, ChunkStatus
 from blizzard.runner.domain.leases import Liveness, as_utc
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -322,7 +322,7 @@ class Pull(Step):
                 Attempt(ctx, lease).park_paused(via="pull")
 
     def _reconcile_escalations(self) -> None:
-        """Close a local escalation the hub has since stopped (#292) — one ``get_chunk`` each.
+        """Close a local escalation whose chunk the hub ended (#292, #293) — one ``get_chunk`` each.
 
         An escalated lease is already closed, so ``_reconcile_leases`` above never sees it, and
         the only local supersession is a later lease mint a stopped chunk never gets. The mark
@@ -335,7 +335,7 @@ class Pull(Step):
                 # Covers ChunkNotFoundError: an unknown chunk is not a resolution.
                 _log.debug("escalation left open — hub unreadable", chunk_id=escalation.chunk_id, error=str(exc))
                 continue
-            if detail.status != ChunkStatus.STOPPED:
+            if detail.status not in TERMINAL_STATUSES:
                 _log.debug("escalation left open", chunk_id=escalation.chunk_id, hub_status=detail.status.value)
                 continue
             ctx.store.record_escalation_closure(

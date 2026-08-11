@@ -934,10 +934,10 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         :meth:`pending_requeue_chunk_ids` — this call never spawns anything itself."""
 
     def record_escalation_closure(self, *, chunk_id: str, reason: str, at: datetime) -> None:
-        """Mirror the hub having stopped a chunk this runner holds an escalation for (#292).
+        """Mirror the hub having ended a chunk this runner holds an escalation for (#292, #293).
 
-        The supersession no lease mint can supply: a stopped chunk is never claimed again.
-        ``reason`` is the hub status observed — today always ``stopped``, the only arm swept."""
+        The supersession no lease mint can supply: a terminal chunk is never claimed again.
+        ``reason`` is the hub status observed — ``stopped`` or ``done``."""
 
     def record_usage(
         self,

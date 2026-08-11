@@ -341,7 +341,7 @@ export type EnvironmentView = {
 /**
  * EscalationListResponse
  *
- * Every escalation still open — neither a later lease mint nor a hub-side stop closed it.
+ * Every escalation still open — no later lease mint, and the hub has not ended the chunk.
  */
 export type EscalationListResponse = {
     /**

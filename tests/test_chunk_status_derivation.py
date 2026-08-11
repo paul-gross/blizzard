@@ -358,6 +358,34 @@ def test_a_stop_preceding_the_escalation_leaves_it_open() -> None:
     assert facts.open_escalation() is not None
 
 
+def test_escalation_closed_by_reaching_done_is_no_longer_open() -> None:
+    # A chunk requeued away, claimed elsewhere and landed mints no later lease here (#293),
+    # so completion is the only thing that can supersede its escalation.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(4))],
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(6))
+        ],
+    )
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.open_escalation() is None
+
+
+def test_a_completion_preceding_the_escalation_leaves_it_open() -> None:
+    # Ordered, like every other arm: an earlier landing is not a resolution of a later hold.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(4))
+        ],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(6))],
+    )
+    assert facts.open_escalation() is not None
+
+
 def test_open_question_is_waiting_on_human_over_a_live_route() -> None:
     # An open ask parks the chunk: a live route would derive running,
     # but the unanswered question wins the higher-precedence waiting_on_human slot.

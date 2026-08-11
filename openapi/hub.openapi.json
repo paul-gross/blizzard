@@ -1513,7 +1513,7 @@
         "type": "object"
       },
       "EscalationView": {
-        "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) for the parked session,\npresent only while the escalation is open \u2014 a later lease mint, requeue, or stop supersedes it.\n``wrapped_takeover_command`` is optional, empty when none was composed.",
+        "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) for the parked session,\npresent only while the escalation is open \u2014 a later lease mint, requeue, or completion supersedes it.\n``wrapped_takeover_command`` is optional, empty when none was composed.",
         "properties": {
           "epoch": {
             "title": "Epoch",

@@ -14,7 +14,8 @@ import pytest
 from sqlalchemy import insert, select
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.work import EscalationOpen, EventFeed, EventRow
+from blizzard.hub.domain.graph import RESERVED_TERMINAL
+from blizzard.hub.domain.work import ChunkStatus, EscalationOpen, EventFeed, EventRow
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from tests.support import migrate_to, seed_chunk, seed_graph
@@ -136,6 +137,7 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
         seed_chunk(conn, "ch_c", graph_id="gr_1", at=_T0)
         seed_chunk(conn, "ch_d", graph_id="gr_1", at=_T0)
         seed_chunk(conn, "ch_e", graph_id="gr_1", at=_T0)
+        seed_chunk(conn, "ch_f", graph_id="gr_1", at=_T0)
 
     # ch_a: escalation, nothing after it -> OPEN.
     store.record_escalation("ch_a", epoch=1, takeover_command="cd a && resume", at=_at(10))
@@ -152,6 +154,24 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
     # ch_e: stop then a LATER escalation -> still OPEN; supersession is ordered, not a flag.
     store.record_stop("ch_e", by="operator", at=_at(10))
     store.record_escalation("ch_e", epoch=1, takeover_command="cd e && resume", at=_at(20))
+    # ch_f: escalation then the chunk REACHES DONE elsewhere -> superseded (#293). No later
+    # lease is minted here, so completion is the only arm that can close it.
+    store.record_escalation("ch_f", epoch=1, takeover_command="cd f && resume", at=_at(10))
+    store.record_transition(
+        transition_id="tr_f1",
+        chunk_id="ch_f",
+        from_node_id=None,
+        to_node_id=RESERVED_TERMINAL,
+        choice_name="pass",
+        epoch=1,
+        runner_id="r1",
+        at=_at(20),
+        artifacts=[],
+    )
+
+    # ch_f drops because it DERIVES done, not incidentally — pin the mechanism, not the count.
+    ch_f_facts = store.load_facts("ch_f")
+    assert ch_f_facts is not None and ch_f_facts.status() is ChunkStatus.DONE
 
     opens = store.list_open_escalations()
     assert sorted(e.chunk_id for e in opens) == ["ch_a", "ch_e"]

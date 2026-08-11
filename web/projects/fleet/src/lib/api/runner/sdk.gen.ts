@@ -143,7 +143,7 @@ export const listEnvironmentsApiEnvironmentsGet = <ThrowOnError extends boolean 
 /**
  * List Escalations
  *
- * Every escalation still open — neither a later lease mint nor a hub-side stop closed it.
+ * Every escalation still open — no later lease mint, and the hub has not ended the chunk.
  */
 export const listEscalationsApiEscalationsGet = <ThrowOnError extends boolean = false>(options?: Options<ListEscalationsApiEscalationsGetData, ThrowOnError>): RequestResult<ListEscalationsApiEscalationsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListEscalationsApiEscalationsGetResponses, unknown, ThrowOnError>({ url: '/api/escalations', ...options });
 

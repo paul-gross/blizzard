@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api", tags=["runner"])
 
 @router.get("/escalations", response_model=EscalationListResponse)
 def list_escalations(request: Request) -> EscalationListResponse:
-    """Every escalation still open — neither a later lease mint nor a hub-side stop closed it."""
+    """Every escalation still open — no later lease mint, and the hub has not ended the chunk."""
     service = RunnerWiring.of(request).status()
     return EscalationListResponse(
         items=[

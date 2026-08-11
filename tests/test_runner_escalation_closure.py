@@ -90,6 +90,20 @@ def test_pull_closes_an_escalation_the_hub_stopped(tmp_path):  # type: ignore[no
 
 
 @pytest.mark.unit
+def test_pull_closes_an_escalation_whose_chunk_the_hub_landed(tmp_path):  # type: ignore[no-untyped-def]
+    # The chunk was requeued away and landed by another runner (#293): no later lease is
+    # minted here, so `done` is the only arm that can close this box's escalation.
+    store = _store(tmp_path)
+    _seed_escalated(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _chunk(status=ChunkStatus.DONE)
+
+    Pull(_ctx(store, hub, clock=FixedClock(_NOW + timedelta(minutes=5)))).run()
+
+    assert store.open_escalations() == []
+
+
+@pytest.mark.unit
 def test_pull_leaves_an_escalation_the_hub_still_holds(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_escalated(store)

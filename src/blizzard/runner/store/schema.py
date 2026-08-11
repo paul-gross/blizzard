@@ -299,15 +299,15 @@ requeues = Table(
     Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
 )
 
-# --- Escalation closures (the hub stopped a chunk this box escalated — #292) -
-# The one supersession no local lease mint can supply: a stop is never re-claimed.
+# --- Escalation closures (the hub ended a chunk this box escalated — #292) ---
+# The one supersession no local lease mint can supply: a terminal chunk is never re-claimed.
 
 escalation_closures = Table(
     "escalation_closures",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, nullable=False),
-    Column("reason", String, nullable=False),  # the hub status observed; today only `stopped`
+    Column("reason", String, nullable=False),  # the hub status observed: `stopped` or `done`
     Column("closed_at", UtcDateTime, nullable=False),
 )
 

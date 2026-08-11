@@ -363,15 +363,6 @@ class EscalationOpen:
     takeover_command: str
 
 
-def escalation_superseded(recorded_at: datetime, superseding: Iterable[datetime | None]) -> bool:
-    """Whether anything recorded after ``recorded_at`` supersedes an escalation (#292).
-
-    The one owner of the rule: a later lease mint or ``requeue.recorded`` hands the work back
-    to the fleet, and a later ``chunk.stopped`` is an operator resolving it out-of-band.
-    Shared by both readers, so a further arm cannot land in one and not the other."""
-    return any(at is not None and at > recorded_at for at in superseding)
-
-
 #: Default cap on ``list_events`` — an unbounded read of an append-only table is an unbounded response.
 DEFAULT_EVENT_LIST_LIMIT = 200
 
@@ -687,17 +678,18 @@ class ChunkFacts:
     def open_escalation(self) -> EscalationFact | None:
         """The newest escalation nothing later superseded, or ``None``.
 
-        Closed by supersession, never a resolution fact — :func:`escalation_superseded` owns
-        which facts close one, shared with the fleet-wide reader."""
+        Closed by supersession, never a resolution fact: a later lease mint or
+        ``requeue.recorded`` hands the work back to the fleet, and a later **completion** —
+        stopped or done — is the chunk ending without one (#292, #293)."""
         if not self.escalations:
             return None
         newest = max(self.escalations, key=lambda e: e.recorded_at)
         superseding = (
             *(lease.minted_at for lease in self.leases),
             *(rq.requeued_at for rq in self.requeues),
-            self.stopped_at,
+            self.completed_at(),
         )
-        return None if escalation_superseded(newest.recorded_at, superseding) else newest
+        return None if any(at is not None and at > newest.recorded_at for at in superseding) else newest
 
     def open_questions(self) -> list[QuestionFact]:
         """The chunk's unanswered questions, oldest first.
@@ -1148,8 +1140,8 @@ class IReadChunkRepository(Protocol):
     def list_open_escalations(self) -> list[EscalationOpen]:
         """Every currently-open escalation, **fleet-wide** (issue #125).
 
-        Folds :func:`escalation_superseded` across every chunk at once, the same owner
-        :meth:`ChunkFacts.open_escalation` reads. Low-volume, so this is a full scan."""
+        Each decided by :meth:`ChunkFacts.open_escalation` — the rule's one implementation
+        (#293). Low-volume, so the candidate scan is full."""
         ...
 
     def activity_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:

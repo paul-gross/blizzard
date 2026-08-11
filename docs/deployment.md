@@ -1014,7 +1014,7 @@ claim: keep it (`chunk pause`), give it away (`detach`), or end it for good (`st
   no separate `detach` call needed. Unlike `detach`, a live route is not required:
   stop is allowed on `not_ready`, `ready`, and an already-detached chunk alike — the
   route release is conditional, not required. Stopping an escalated chunk also **closes
-  its escalation** (issue #292): the chunk leaves the critical `needs-human` feed below and
+  its escalation** (issue #292; reaching `done` does the same): the chunk leaves the critical `needs-human` feed below and
   the holding runner drops it from `blizzard runner status` and its panel on the next PULL
   — so the composed resume command for the parked session goes with it, which on a
   terminal, irreversible verb is worth knowing before you reach for it. Refused (`409`)
@@ -1538,7 +1538,7 @@ command that failed on a missing environment var, a stall past the liveness wind
   `severity` / `runner_id` / `chunk_id` / `since`, with a bounded default page. Existing
   escalations appear in the *same* feed as a `needs-human` event kind — `needs_human` is one row in
   one surface, not a place to look separately. A row leaves the feed when its escalation is
-  superseded: a requeue, the next attempt's lease, or a `chunk stop` (see the stop verb above).
+  superseded: a requeue, the next attempt's lease, or the chunk ending — stopped or done.
 - **The board's Events tab** renders the feed live: new events fan out over the existing SSE spine
   (`/api/events/stream`), so an open board updates without polling. Each row links to its chunk.
 - **`GET /api/activity`** is a second, differently-shaped operator read: the board's Event log rail
