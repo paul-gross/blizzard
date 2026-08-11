@@ -13,10 +13,16 @@ Every finding recorded in a `plan-findings` or `review-findings` asset carries:
 
 - **id** — stable *within this asset submission*: `F1`, `F2`, … A fresh cold-eyes pass after a bounce is a new
   submission, so it restarts at `F1`; it does not continue a prior round's numbering.
-- **severity** — exactly `blocking` or `should-fix`. (`plan-review.md` calls its blocking tier "must-fix" in
+- **severity** — `blocking` or `should-fix`; a `plan-findings` entry may instead carry `folded`, an
+  improvement-tier finding the gate already fixed in the `reviewed-plan` it published under an
+  `acceptable` verdict. Recording `folded` is itself the closure — no node ever owes it a disposition.
+  On a `must-fix` verdict no fold survives the verbatim republish, so an improvement-tier finding is
+  recorded `should-fix` there, never `folded`. (`plan-review.md` calls its blocking tier "must-fix" in
   prose — same value, `blocking`, in the entry.)
 - **anchor** — `<repo>/<path>:<line>` or `<repo>/<path>::<symbol>`. The repo prefix matters once a chunk spans
-  more than one repo; a bare `file:line` is ambiguous there.
+  more than one repo; a bare `file:line` is ambiguous there. A finding whose target is a chunk asset rather
+  than a repo file — the plan-apparatus case — anchors as `<asset-name>::<section>`, e.g.
+  `plan::Acceptance criteria`.
 - a one- or two-sentence description, specific and actionable — what's wrong, not just where.
 
 Example, inside a `review-findings` asset:
@@ -83,6 +89,10 @@ lines). Each disposition:
   - `filed-as-issue` — plus the issue URL.
   - `accepted-wont-fix` — plus a one-line reason.
 
+A `folded` finding is the one exception: the gate that recorded it already fixed it in the `reviewed-plan`
+it published, so no node records a disposition for it — the fold table carries `folded` in its disposition
+column, closed by construction.
+
 Disposing every `blocking` finding is already required to clear the bounce (unchanged). Disposing a
 `should-fix` finding is optional — fix it if the fix is cheap, otherwise leave it undisposed. But:
 a superseded round's undisposed findings are abandoned by design (see below), so leaving one undisposed
@@ -117,6 +127,9 @@ against disposition records recorded anywhere in the chunk's node `retrospective
   like any other id: the outcome above is keyed on the finding's **target**, not on which node produced
   it, so a `plan-findings` id anchored at a real repo file and describing a defect still present in the
   change files exactly like the bullet above.
+- an id with severity `folded` is closed by construction — the gate already fixed it in the `reviewed-plan`
+  it published. Carry it into the fold table with `folded` in the disposition column; it is never open and
+  never filed.
 - an unmatched `blocking` id should not occur — a blocking finding does not survive into the newest asset
   without a bounce that resolved it. If one somehow does, treat it exactly like an open should-fix id: file it,
   and say in the fold table that it was found still blocking.

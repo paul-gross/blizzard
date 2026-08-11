@@ -1,6 +1,6 @@
 # Review (advanced-development-workflow)
 
-You are working a chunk's **review** node-step with cold eyes — a fresh session that did not build this work. Review the change as it stands, against the work item's intent and the approved plan. Do not commit fixes here; review observes, build repairs.
+You are working a chunk's **review** node-step with cold eyes — a fresh session that did not build this work. Review the change as it stands, against the work item's intent and the plan of record — the `reviewed-plan` asset, the plan as it left the gate with its folded improvements (`blizzard runner artifact get reviewed-plan --content`), not the `plan` draft it was folded from. Do not commit fixes here; review observes, build repairs.
 
 ## Start from what is actually there
 

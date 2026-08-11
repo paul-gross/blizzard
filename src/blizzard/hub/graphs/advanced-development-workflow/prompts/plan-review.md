@@ -1,6 +1,6 @@
 # Plan review (advanced-development-workflow)
 
-You are working a chunk's **plan-review** node-step with cold eyes — a fresh session that did not author this plan. Review the plan against the work item's intent and the project's conventions. Do not edit the plan; record findings and let the plan node revise.
+You are working a chunk's **plan-review** node-step with cold eyes — a fresh session that did not author this plan. Review the plan against the work item's intent and the project's conventions. Review first, with the plan exactly as its author left it. Then act on your own verdict: a plan with no must-fix finding is **yours to finish** — fold your improvement-tier findings into it and publish the result as the `reviewed-plan` asset. The bounce back to the plan node is reserved for must-fix findings alone.
 
 ## Start from what is already there
 
@@ -40,12 +40,21 @@ At any size, check that every owed surface — code, agent-facing context, publi
 
 ## Anchor severity to the change, not the document
 
-A finding is must-fix only when building the plan as written would produce a wrong, unverifiable, or architecture-violating change.
+A finding is must-fix only when building the plan as written would produce a wrong, unverifiable, or architecture-violating change **and** repairing it means remaking a decision the plan's author owns — the shape of the change, a phase boundary, a technical approach.
 
-A defect confined to the plan's own apparatus — an acceptance criterion's wording, a guard command's pattern, a self-consistency inventory — is should-fix at most. Record it and let it ride forward for the build node to absorb. You are reviewing the change the plan would build, not perfecting the plan's prose.
+Everything below that bar is an improvement-tier finding — yours to fold in, not to bounce over. A defect confined to the plan's own apparatus — an acceptance criterion's wording, a guard command's pattern, a verification binding that names the wrong method, a stale enumeration, prose the work's scale does not warrant — is exactly the class you fix yourself before publishing. You know what the corrected text should say; describing it, bouncing the plan, and having another session transcribe your description is a round-trip that buys nothing.
+
+## Fold the improvements in, then publish the plan of record
+
+Your last act before the verdict is publishing the `reviewed-plan` asset — run `blizzard runner artifact create --name reviewed-plan` with the full plan text on stdin. What that text is depends on the verdict:
+
+- **Verdict `acceptable`** — the plan with your improvement-tier findings folded in. Fetch the subject to a file in your scratch directory (below) with `blizzard runner artifact get plan --content`, edit there, and pipe the result back in — never retype a plan from memory. Edit surgically: correct, delete, tighten. A folded edit is a correction or a reduction, never an expansion — if fixing a finding seems to need a new section or a defense of a choice, the finding was must-fix territory or the addition is not needed. Do not reshape decisions, phases, or the change itself — that is the must-fix tier, and it bounces. Do not add review commentary to the plan: the published plan reads as though it were written right the first time, and every edit you made is recorded as a `folded` finding in `plan-findings`, not annotated inline.
+- **Verdict `must-fix`** — the plan under review, **verbatim and unedited**: republish by pipe, `blizzard runner artifact get plan --content | blizzard runner artifact create --name reviewed-plan`, never by retyping. The plan node owns the revision; your findings ride to it in `plan-findings`. Publishing the unchanged text keeps this node's contract uniform — `reviewed-plan` is always the plan of record as it left the gate — without ever mixing your edits into a plan that is going back to its author.
+
+Either way, publish before you render the verdict. The build node implements `reviewed-plan`, not `plan` — an unpublished asset means build finds nothing to build.
 
 ## Submit
 
 Keep drafts and notes somewhere disposable: a path outside every repository working tree *and* outside the workspace directory the fleet spawned you in — both are git working trees, and nothing sweeps a loose file in either. A per-chunk directory under the machine's temporary space satisfies this; use `$BLIZZARD_CHUNK_ID` to name it. If this workspace declares a scratch location of its own, prefer that.
 
-Submit your findings as the node's `plan-findings` asset before you declare done: run `blizzard runner artifact create --name plan-findings` with the content on stdin — what you checked, what passed, and every finding, docket-formatted per [../docket.md](../docket.md): a stable id, a severity (`blocking` for must-fix, `should-fix` for the apparatus-only defects above), and a `file:line` or `file::symbol` anchor. Record should-fix findings too, not just blocking ones — a finding you let ride forward only reaches a disposition if it is written down.
+Submit your findings as the node's `plan-findings` asset before you declare done: run `blizzard runner artifact create --name plan-findings` with the content on stdin — what you checked, what passed, and every finding, docket-formatted per [../docket.md](../docket.md): a stable id, a severity, and an anchor in one of the docket's declared forms. Severity is `blocking` for must-fix; on an `acceptable` verdict, `folded` for an improvement-tier finding you fixed in `reviewed-plan` and `should-fix` for one you are letting ride to build instead. `folded` never appears with a `must-fix` verdict — no fold survives the verbatim republish, so there every improvement-tier finding is `should-fix`, riding to the plan node. Recording `folded` is itself the finding's closure ([../docket.md](../docket.md) owns this) — record it so the trail from finding to edit survives.

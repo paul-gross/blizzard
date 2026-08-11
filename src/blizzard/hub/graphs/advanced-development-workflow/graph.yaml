@@ -7,7 +7,9 @@
 # rebase: rebase every ahead repo onto the current base branch, resolve conflicts
 # inside the rebase, run lint plus judgement-scoped unit tests, and triage severity —
 # clean proceeds to delivery, insignificant conflicts re-enter review, semantic
-# conflict resolutions re-earn verification. Every backward edge carries its
+# conflict resolutions re-earn verification. The plan gate folds its own
+# improvement-tier findings into the reviewed-plan it publishes — the asset build
+# implements — and bounces to plan only on must-fix. Every backward edge carries its
 # findings asset into the node it re-enters — a bounce is contention, not failure.
 # Delivery is authored as graph content: `deliver` is a generic hub command node
 # running the packaged land_pr_ci script — the PR + CI-watch delivery policy, which
@@ -68,6 +70,9 @@ sessions:
       # loosely, and the largest main file ever observed is 5.2MB, so this is ~2x the tail.
       max_transcript_bytes: 10000000
   gate:
+    # The plan gate's fold stays basic-tier deliberately: it transcribes the gate's own
+    # already-rendered findings into the plan text — editing, not authoring. The
+    # judgement-heavy authoring stays in `planning`.
     model: ["blizzard:basic"]
 
 nodes:
@@ -103,12 +108,20 @@ nodes:
     session: fresh:gate  # cold eyes for the gate; the default is resume
     produces:
       - plan-findings
+      # The plan of record as it leaves the gate (see prompts/plan-review.md): on
+      # `acceptable` the gate folds its own improvement-tier findings into the plan and
+      # publishes the result here — build implements this asset, not `plan`. On
+      # `must-fix` the gate republishes the plan under review verbatim, unedited. A
+      # distinct name rather than a second `plan`: the envelope keeps one artifact per
+      # (name, producing node), so a second `plan` would turn every bare
+      # `artifact get plan` into a 409.
+      - reviewed-plan
       - retrospective
     judgement:
       prompt: ./prompts/plan-review.judgement.md
       choices:
-        pass:
-          description: The plan clears the verifiability and architecture gates with no must-fix findings.
+        acceptable:
+          description: The plan clears the verifiability and architecture gates with no must-fix finding; the gate's improvement-tier findings are folded into the published reviewed-plan asset, which build implements.
           to: build
         must-fix:
           description: The gate found blocking findings, recorded in the plan-findings asset.
@@ -136,7 +149,7 @@ nodes:
       prompt: ./prompts/build.judgement.md
       choices:
         pass:
-          description: The plan is fully implemented — every phase in order where it is phased — committed and pushed.
+          description: The reviewed-plan is fully implemented — every phase in order where it is phased — committed and pushed.
           to: verify
         fail:
           description: The work does not yet meet the plan; the failure output is attached.

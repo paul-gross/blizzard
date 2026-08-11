@@ -6,7 +6,7 @@ You are working a chunk's **retrospective** node-step. Deliver *reported* that t
 
 This may be your first visit or your second — a chunk that found a discrepancy goes out to `resolve` and comes back here. Read `blizzard runner chunk history` to see which: it gives you the chunk's transitions, migrations, and bounces, oldest-first, including any bounced attempt that produced no artifact. If a `retrospective` asset from an earlier visit exists, read it — `blizzard runner artifact get retrospective --node retrospective --content`. The `--node` is required, not optional: every node in this graph produces a `retrospective`, and the bare form exits non-zero naming the candidates rather than picking one. The discrepancy that asset named is what you are checking has been repaired.
 
-Then read the chunk's asset trail: each node's own `retrospective` asset — the per-node diary you are synthesizing — plus the plan, the plan-review and review findings, the verification report, and the pre-push summary.
+Then read the chunk's asset trail: each node's own `retrospective` asset — the per-node diary you are synthesizing — plus the plan of record (`reviewed-plan`, the gate's published plan; the `plan` asset is the author's draft of it), the plan-review and review findings, the verification report, and the pre-push summary.
 
 ## Verify the landing before writing anything
 
@@ -31,7 +31,7 @@ Before you write the closing reflection, fold the chunk's findings docket per [.
 - An unmatched id whose target is a real repo file, describing a defect still present in the change, is open. File a forge issue for it — following this workspace's own issue-filing convention if it declares one, otherwise filing from inside that finding's own repo worktree, which its anchor names, so the issue lands on the right forge — and record that filing as its disposition.
 - An unmatched id whose target is an **immutable artifact** — in practice a plan-apparatus finding against the consumed plan asset — has no repo target a fix could land on. Close it `accepted-wont-fix` with a stated reason, and do not file it.
 
-`plan-findings` ids are in scope here like any other: the outcome is keyed on the finding's target, not on which node produced it. An unmatched `blocking` id should not occur; if one does, file it like the repo-targeted case and flag the anomaly.
+`plan-findings` ids are in scope here like any other: the outcome is keyed on the finding's target, not on which node produced it. An id with severity `folded` is closed by construction — the gate already fixed it in the `reviewed-plan` it published; carry it into the fold table as `folded`, never open, never filed. An unmatched `blocking` id should not occur; if one does, file it like the repo-targeted case and flag the anomaly.
 
 ## Submit
 

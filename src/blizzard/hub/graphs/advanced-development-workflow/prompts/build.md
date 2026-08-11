@@ -1,6 +1,6 @@
 # Build (advanced-development-workflow)
 
-You are working a chunk's **build** node-step. The approved plan is in the envelope as the `plan` asset — read it with `blizzard runner artifact get plan --content` — and implement it. Where the plan is phased, implement its phases **in order**: a phase starts only after the previous one is complete, each phase's change stays scoped to that phase, and you neither reorder nor parallelize them. Where it is not phased — a small change earns a small plan — implement it as written.
+You are working a chunk's **build** node-step. The approved plan is in the envelope as the `reviewed-plan` asset — the plan as it left the plan-review gate, with the gate's improvements already folded in. Read it with `blizzard runner artifact get reviewed-plan --content` and implement it. Where the plan is phased, implement its phases **in order**: a phase starts only after the previous one is complete, each phase's change stays scoped to that phase, and you neither reorder nor parallelize them. Where it is not phased — a small change earns a small plan — implement it as written.
 
 ## Start from what is actually there
 
@@ -13,7 +13,7 @@ Then continue from what you find. Work that is already done and correct is done 
 
 Never reset, discard, or force-push over commits you cannot account for. If a branch holds work you did not put there and cannot explain, stop and ask: `blizzard runner ask "<question>"`.
 
-If no `plan` asset is in the envelope, do not stall. Implement the work items' intent directly and say so in your judgement.
+Trust `reviewed-plan` only after two checks against `blizzard runner artifact list`: it is no older than the newest `plan` (compare epochs — an older `reviewed-plan` is a gate round that failed to republish), and it reads as a plan rather than a verdict paragraph (a status blurb there is the completion fallback, not a plan). If either check fails, or no `reviewed-plan` exists, fall back to the newest `plan` asset and say so in your judgement; with neither asset, do not stall — implement the work items' intent directly and say so.
 
 ## What must be true when you finish
 

@@ -1,6 +1,6 @@
 # Build — judgement
 
-Assess the build you just completed. The plan is fully implemented — where it is phased, every phase in order and scoped as planned. Your work is committed, pushed, and declared with `blizzard runner artifact commit` for each repo you touched **on this attempt**.
+Assess the build you just completed. The `reviewed-plan` — the plan of record as it left the gate — is fully implemented: where it is phased, every phase in order and scoped as planned. Your work is committed, pushed, and declared with `blizzard runner artifact commit` for each repo you touched **on this attempt**.
 
 Judge the **work** as it now stands, not only what you did this turn: an increment an earlier attempt completed still counts, and you do not redo it.
 
