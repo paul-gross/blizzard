@@ -131,23 +131,27 @@ def sidecar_record(
     role: str = "assistant",
     session_id: str = "parent-session",
     agent_id: str = "agent-1",
+    agent_type: str | None = None,
     ts: str = "2026-07-16T10:05:00Z",
     uuid: str = "sc1",
 ) -> str:
     """One record of a sidecar file (the corpus-primary sidechain shape). Every real
-    sidecar record carries `isSidechain: true`, `sessionId`, and `agentId`."""
+    sidecar record carries `isSidechain: true`, `sessionId`, and `agentId`. `agent_type`
+    stamps `agentType`, route 1's `subagent_type`-less fallback (route 2-4's `Run.agent_type`
+    twin)."""
     content: Any = [{"type": "text", "text": text}] if role == "assistant" else text
-    return _line(
-        {
-            "type": role,
-            "message": {"role": role, "content": content},
-            "isSidechain": True,
-            "sessionId": session_id,
-            "agentId": agent_id,
-            "timestamp": ts,
-            "uuid": uuid,
-        }
-    )
+    record: dict[str, Any] = {
+        "type": role,
+        "message": {"role": role, "content": content},
+        "isSidechain": True,
+        "sessionId": session_id,
+        "agentId": agent_id,
+        "timestamp": ts,
+        "uuid": uuid,
+    }
+    if agent_type is not None:
+        record["agentType"] = agent_type
+    return _line(record)
 
 
 def sidechain_run_record(

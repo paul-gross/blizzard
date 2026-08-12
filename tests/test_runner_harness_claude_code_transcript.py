@@ -2,8 +2,8 @@
 (blizzard#245). Unit tier, hermetic under ``tmp_path`` as ``projects_root``.
 
 Covers forward incremental reads from a minted position, the shared batch-budget cap,
-and sidecar-backed sidechain nesting (link route 1).
-"""
+and sidecar discovery/read I/O — the agent-id join itself is filesystem-free coverage
+in ``test_runner_harness_claude_code_normalizer.py``."""
 
 from __future__ import annotations
 
@@ -340,38 +340,6 @@ def test_read_forward_a_live_appended_partial_line_within_the_budget_waits(tmp_p
 
 
 @pytest.mark.unit
-def test_sidecar_join_preserves_an_already_attached_inline_sidechain(tmp_path: Path) -> None:
-    """A sidecar (route 1) join must not silently discard an inline sidechain (route
-    2/3) already resolved onto the same tool turn — the displaced conversation
-    surfaces on `unlinked_sidechains`, re-stamped `link="unlinked"`, not lost."""
-    main_lines = [
-        fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}, uuid="a1"),
-        fx.sidechain_run_record("inline chatter", uuid="inline-1", parent_uuid="a1"),
-        fx.tool_result("t1", "subagent finished", agent_id="agent-abc"),
-    ]
-    project_dir = "-home-user-workspace"
-    _write_main(tmp_path, main_lines, project_dir=project_dir)
-
-    subagents_dir = tmp_path / project_dir / "sess-1" / "subagents"
-    subagents_dir.mkdir(parents=True)
-    sidecar_lines = [fx.sidecar_record("sidecar chatter", agent_id="agent-abc")]
-    (subagents_dir / "agent-agent-abc.jsonl").write_text("\n".join(sidecar_lines) + "\n")
-
-    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
-    batch = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=None)
-
-    tool_turn = next(t for t in batch.turns if t.kind == "tool")
-    assert tool_turn.sidechain is not None
-    assert tool_turn.sidechain.link == "agent-id"
-    assert [t.text for t in tool_turn.sidechain.turns] == ["sidecar chatter"]
-
-    assert len(batch.unlinked_sidechains) == 1
-    displaced = batch.unlinked_sidechains[0]
-    assert displaced.link == "unlinked"
-    assert [t.text for t in displaced.turns] == ["inline chatter"]
-
-
-@pytest.mark.unit
 def test_turns_since_batch_budget_exhaustion_returns_incomplete_with_a_next_position(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -400,37 +368,8 @@ def test_turns_since_batch_budget_exhaustion_returns_incomplete_with_a_next_posi
     assert all_texts == [f"msg-{i}" for i in range(200)]
 
 
-# Sidecar-backed sidechain nesting (link route 1)
-
-
-@pytest.mark.unit
-def test_sidecar_backed_sidechain_nests_under_its_spawning_tool_call_by_agent_id(tmp_path: Path) -> None:
-    main_lines = [
-        fx.assistant_tool_use("t1", "Task", {"subagent_type": "explorer", "prompt": "find X"}),
-        fx.tool_result("t1", "subagent finished", agent_id="agent-abc"),
-    ]
-    project_dir = "-home-user-workspace"
-    _write_main(tmp_path, main_lines, project_dir=project_dir)
-
-    subagents_dir = tmp_path / project_dir / "sess-1" / "subagents"
-    subagents_dir.mkdir(parents=True)
-    sidecar_lines = [
-        fx.sidecar_record("starting", role="user", agent_id="agent-abc"),
-        fx.sidecar_record("found X", role="assistant", agent_id="agent-abc"),
-    ]
-    (subagents_dir / "agent-agent-abc.jsonl").write_text("\n".join(sidecar_lines) + "\n")
-
-    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
-    batch = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=None)
-
-    tool_turn = next(t for t in batch.turns if t.kind == "tool")
-    sidechain = tool_turn.sidechain
-    assert sidechain is not None
-    assert sidechain.link == "agent-id"
-    assert sidechain.agent_id == "agent-abc"
-    assert sidechain.agent_type == "explorer"
-    assert [t.text for t in sidechain.turns] == ["starting", "found X"]
-    assert batch.unlinked_sidechains == []
+# Sidecar-backed sidechain nesting (link route 1): batch-boundary I/O only — the join's
+# own behavior lives filesystem-free in test_runner_harness_claude_code_normalizer.py.
 
 
 @pytest.mark.unit

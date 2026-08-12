@@ -14,8 +14,6 @@ from pathlib import Path
 from blizzard.runner.harness.internal.claude_code_normalizer import NORMALIZER_VERSION, NormalizedFile, Record
 from blizzard.runner.harness.transcript import (
     IHarnessTranscriptSource,
-    NormalizedTurn,
-    SidechainConversation,
     TranscriptBatch,
     TranscriptErrorFactory,
     TranscriptPosition,
@@ -133,8 +131,9 @@ class FileRead:
 
 
 class _SidecarJoin:
-    """One session's subagent sidecar files, read under a shared byte budget and nested onto
-    the main file's already-normalized turns. Mutates ``normalized`` in place."""
+    """One session's subagent sidecar files, read under a shared byte budget. I/O only —
+    candidate enumeration and reading; the agent-id join itself is the normalizer's job
+    (:meth:`NormalizedFile.join_sidecars`)."""
 
     def __init__(
         self,
@@ -150,24 +149,23 @@ class _SidecarJoin:
         self._errors = errors
         self._session_id = session_id
         self._directory = directory
-        self._normalized = normalized
         self._cold = cold
         self._budget = budget
         self.offsets = dict(offsets)
         self.hit_budget = False
         self.truncated = False
         self.budget_exhausted = False
-        self._turns_by_agent_id: dict[str, list[int]] = {}
-        for index, agent_id in normalized.agent_id_by_tool_turn.items():
-            self._turns_by_agent_id.setdefault(agent_id, []).append(index)
-
-    def join(self) -> None:
         # The union of three sources, so a sidecar never falls out of consideration the
         # moment its main-file line scrolls out of the current read window.
-        candidates = sorted(
-            set(self._turns_by_agent_id) | set(self._normalized.discovered_agent_ids) | set(self.offsets)
+        self._candidates = sorted(
+            set(normalized.agent_id_by_tool_turn.values()) | set(normalized.discovered_agent_ids) | set(offsets)
         )
-        for agent_id in candidates:
+
+    def join(self) -> dict[str, list[str]]:
+        """Every candidate's successfully-read lines, keyed by agent id in read order — a
+        candidate not yet flushed to disk, or skipped under budget, contributes no entry."""
+        lines_by_agent_id: dict[str, list[str]] = {}
+        for agent_id in self._candidates:
             path = self._directory / f"agent-{agent_id}.jsonl"
             if not path.is_file():
                 # Not yet flushed to disk — still recorded as a live candidate, so a
@@ -183,7 +181,8 @@ class _SidecarJoin:
             self.hit_budget = self.hit_budget or read.hit_budget
             self.truncated = self.truncated or read.truncated
             self.offsets[agent_id] = read.next_offset
-            self._attach(agent_id, NormalizedFile.of_lines(read.lines, is_sidechain_file=True).turns)
+            lines_by_agent_id[agent_id] = read.lines
+        return lines_by_agent_id
 
     def _skip(self, agent_id: str, path: Path) -> None:
         if self._cold:
@@ -231,34 +230,6 @@ class _SidecarJoin:
             )
             return None
         return read
-
-    def _attach(self, agent_id: str, turns: list[NormalizedTurn]) -> None:
-        spawning_indices = self._turns_by_agent_id.get(agent_id)
-        if not spawning_indices:
-            # Nothing to nest under, so the conversation surfaces unlinked rather than
-            # being dropped — what `link="unlinked"` means, for every producer.
-            if turns:
-                self._normalized.unlinked_sidechains.append(
-                    SidechainConversation(agent_id=agent_id, agent_type=None, link="unlinked", turns=turns)
-                )
-            return
-        for index in spawning_indices:
-            already_attached = self._normalized.turns[index].sidechain
-            if already_attached is not None:
-                # The sidecar join is preferred, but the displaced inline conversation
-                # surfaces unlinked rather than being lost.
-                self._normalized.unlinked_sidechains.append(replace(already_attached, link="unlinked"))
-            self._normalized.turns[index] = replace(
-                self._normalized.turns[index],
-                sidechain=SidechainConversation(
-                    agent_id=agent_id, agent_type=self._agent_type(index), link="agent-id", turns=turns
-                ),
-            )
-
-    def _agent_type(self, index: int) -> str | None:
-        tool = self._normalized.turns[index].tool
-        candidate = tool.input.get("subagent_type") if tool is not None else None
-        return candidate if isinstance(candidate, str) else None
 
 
 class ClaudeCodeTranscriptSource:
@@ -315,7 +286,7 @@ class ClaudeCodeTranscriptSource:
             budget=remaining_budget,
             cold=since is None,
         )
-        sidecars.join()
+        normalized = NormalizedFile.join_sidecars(normalized, sidecars.join())
 
         hit_budget = main_read.hit_budget or sidecars.hit_budget
         return TranscriptBatch(

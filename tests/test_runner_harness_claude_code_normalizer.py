@@ -1,8 +1,9 @@
-"""``harness/internal/claude_code_normalizer.py`` (blizzard#245).
+"""``harness/internal/claude_code_normalizer.py`` (blizzard#245, blizzard#267).
 
-Unit tier: :meth:`NormalizedFile.of_lines` takes an iterable of strings and needs no
-filesystem — thinking turns, structured tool input, sidechain assembly and its
-record-level link routes, version stamps, and the widened control skip list."""
+Unit tier: :meth:`NormalizedFile.of_lines` / ``.join_sidecars`` need no filesystem —
+thinking turns, structured tool input, sidechain assembly and its record-level link
+routes including the agent-id join (route 1), version stamps, and the control skip
+list."""
 
 from __future__ import annotations
 
@@ -249,9 +250,9 @@ def test_harness_version_is_none_when_no_record_carries_one() -> None:
 
 @pytest.mark.unit
 def test_agent_id_join_candidate_surfaces_for_a_tool_result_carrying_agent_id() -> None:
-    """Route 1 (agent-id) is resolved by the sibling source module, not here — this
-    normalizer only surfaces the candidate turn index, keyed by the agentId its
-    `tool_result` carried — the exact join key the source's sidecar-file lookup uses."""
+    """Route 1 (agent-id) is resolved by :meth:`NormalizedFile.join_sidecars`, a second
+    entry point — not folded into `of_lines`, whose sidecar candidates are only known
+    after the main file collapses."""
     lines = [
         fx.assistant_tool_use("t1", "Task", {"subagent_type": "explorer", "prompt": "find X"}),
         fx.tool_result("t1", "subagent finished", agent_id="agent-abc"),
@@ -261,7 +262,7 @@ def test_agent_id_join_candidate_surfaces_for_a_tool_result_carrying_agent_id() 
     assert len(result.turns) == 1
     assert result.agent_id_by_tool_turn == {0: "agent-abc"}
     assert result.discovered_agent_ids == frozenset({"agent-abc"})
-    assert result.turns[0].sidechain is None  # not resolved here — the source's job
+    assert result.turns[0].sidechain is None  # join_sidecars not called — not resolved yet
 
 
 @pytest.mark.unit
@@ -332,6 +333,32 @@ def test_uuid_chain_route_nests_the_inline_sidechain_under_its_spawning_tool_cal
     assert sidechain.link == "uuid-chain"
     assert sidechain.agent_type == "explorer"
     assert [t.text for t in sidechain.turns] == ["Starting exploration", "Found X"]
+
+
+@pytest.mark.unit
+def test_uuid_chain_route_falls_back_to_the_runs_own_agent_type_record() -> None:
+    """The spawning tool call carries no `subagent_type` — the run's own `agentType`
+    record (`Run.agent_type`) supplies the fallback the shared inference falls through to."""
+    lines = [
+        fx.assistant_tool_use("t1", "Task", {"prompt": "go find X"}, uuid="spawn-1", ts="2026-07-16T10:00:00Z"),
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {"role": "assistant", "content": [{"type": "text", "text": "Starting exploration"}]},
+                "isSidechain": True,
+                "uuid": "sc1",
+                "parentUuid": "spawn-1",
+                "agentType": "explorer",
+                "timestamp": "2026-07-16T10:00:01Z",
+            }
+        ),
+    ]
+    result = NormalizedFile.of_lines(lines)
+
+    tool_turn = next(t for t in result.turns if t.kind == "tool")
+    sidechain = tool_turn.sidechain
+    assert sidechain is not None
+    assert sidechain.agent_type == "explorer"
 
 
 @pytest.mark.unit
@@ -504,6 +531,103 @@ def test_threading_stays_fast_under_duplicate_uuid_values() -> None:
     assert len(runs) == 1
     assert len(runs[0].records) == n + 1
     assert [r.content for r in runs[0].records[1:]] == [f"link {i}" for i in range(n)]
+
+
+# --- New: agent-id join, route 1 (`NormalizedFile.join_sidecars`, blizzard#267) ---
+
+
+@pytest.mark.unit
+def test_agent_id_join_nests_the_sidecar_under_its_spawning_tool_call() -> None:
+    main_lines = [
+        fx.assistant_tool_use("t1", "Task", {"subagent_type": "explorer", "prompt": "find X"}),
+        fx.tool_result("t1", "subagent finished", agent_id="agent-abc"),
+    ]
+    main = NormalizedFile.of_lines(main_lines)
+    sidecar_lines = [
+        fx.sidecar_record("starting", role="user", agent_id="agent-abc"),
+        fx.sidecar_record("found X", role="assistant", agent_id="agent-abc"),
+    ]
+
+    result = NormalizedFile.join_sidecars(main, {"agent-abc": sidecar_lines})
+
+    tool_turn = next(t for t in result.turns if t.kind == "tool")
+    sidechain = tool_turn.sidechain
+    assert sidechain is not None
+    assert sidechain.link == "agent-id"
+    assert sidechain.agent_id == "agent-abc"
+    assert sidechain.agent_type == "explorer"
+    assert [t.text for t in sidechain.turns] == ["starting", "found X"]
+    assert result.unlinked_sidechains == []
+
+
+@pytest.mark.unit
+def test_agent_id_join_falls_back_to_the_sidecars_own_agent_type_record() -> None:
+    """The spawning tool call carries no `subagent_type` — the sidecar file's own
+    `agentType` record supplies the fallback, mirroring routes 2-4's `Run.agent_type`."""
+    main_lines = [
+        fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}),
+        fx.tool_result("t1", "subagent finished", agent_id="agent-abc"),
+    ]
+    main = NormalizedFile.of_lines(main_lines)
+    sidecar_lines = [fx.sidecar_record("starting", agent_id="agent-abc", agent_type="explorer")]
+
+    result = NormalizedFile.join_sidecars(main, {"agent-abc": sidecar_lines})
+
+    tool_turn = next(t for t in result.turns if t.kind == "tool")
+    assert tool_turn.sidechain is not None
+    assert tool_turn.sidechain.agent_type == "explorer"
+
+
+@pytest.mark.unit
+def test_agent_id_join_preserves_an_already_attached_inline_sidechain() -> None:
+    """The sidecar (route 1) join must not silently discard an inline sidechain (route
+    2/3) already resolved onto the same tool turn — the displaced conversation
+    surfaces on `unlinked_sidechains`, re-stamped `link="unlinked"`, not lost."""
+    main_lines = [
+        fx.assistant_tool_use("t1", "Task", {"prompt": "find X"}, uuid="a1"),
+        fx.sidechain_run_record("inline chatter", uuid="inline-1", parent_uuid="a1"),
+        fx.tool_result("t1", "subagent finished", agent_id="agent-abc"),
+    ]
+    main = NormalizedFile.of_lines(main_lines)
+    sidecar_lines = [fx.sidecar_record("sidecar chatter", agent_id="agent-abc")]
+
+    result = NormalizedFile.join_sidecars(main, {"agent-abc": sidecar_lines})
+
+    tool_turn = next(t for t in result.turns if t.kind == "tool")
+    assert tool_turn.sidechain is not None
+    assert tool_turn.sidechain.link == "agent-id"
+    assert [t.text for t in tool_turn.sidechain.turns] == ["sidecar chatter"]
+
+    assert len(result.unlinked_sidechains) == 1
+    displaced = result.unlinked_sidechains[0]
+    assert displaced.link == "unlinked"
+    assert [t.text for t in displaced.turns] == ["inline chatter"]
+
+
+@pytest.mark.unit
+def test_agent_id_join_surfaces_unlinked_when_no_spawning_tool_call_matches() -> None:
+    """A sidecar candidate with no spawning tool turn to nest under — the source's
+    candidate enumeration always includes sidecars named only by a bare `discovered_agent_ids`
+    or a carried-forward offset — surfaces unlinked rather than being dropped."""
+    main = NormalizedFile.of_lines([fx.user_env("no tool call here")])
+    sidecar_lines = [fx.sidecar_record("orphaned subagent chatter", agent_id="agent-abc")]
+
+    result = NormalizedFile.join_sidecars(main, {"agent-abc": sidecar_lines})
+
+    assert result.turns == main.turns
+    assert len(result.unlinked_sidechains) == 1
+    assert result.unlinked_sidechains[0].link == "unlinked"
+    assert result.unlinked_sidechains[0].agent_id == "agent-abc"
+
+
+@pytest.mark.unit
+def test_agent_id_join_with_no_sidecars_returns_the_main_file_unchanged() -> None:
+    main = NormalizedFile.of_lines([fx.user_env("hi")])
+
+    result = NormalizedFile.join_sidecars(main, {})
+
+    assert result.turns == main.turns
+    assert result.unlinked_sidechains == main.unlinked_sidechains
 
 
 # --- New: sidecar-file normalization (is_sidechain_file=True) ---
