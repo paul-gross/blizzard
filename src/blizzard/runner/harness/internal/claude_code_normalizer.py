@@ -25,7 +25,7 @@ from blizzard.runner.harness.transcript import (
 )
 
 #: The normalizer version stamped onto every batch; bumped when this module's output changes.
-NORMALIZER_VERSION = "claude-code-jsonl/1"
+NORMALIZER_VERSION = "claude-code-jsonl/2"
 
 #: Cap each text / thinking / tool-output string block at this many characters.
 MAX_BLOCK_CHARS = 1024 * 1024
@@ -56,6 +56,27 @@ _CONTEXT_USAGE_FIELDS = ("input_tokens", "cache_read_input_tokens", "cache_creat
 def _as_int(value: object) -> int:
     """``value`` as a count, or ``0`` — a malformed usage field degrades, never crashes."""
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _first_field(records: list[Record], key: str) -> str | None:
+    """``key``'s value off the first ``records`` entry that carries one — a run's own
+    ``agentType`` (route 2-4), or a sidecar file's (route 1)."""
+    for record in records:
+        value = record.field(key)
+        if value is not None:
+            return value
+    return None
+
+
+def _infer_agent_type(tool: ToolCall | None, fallback: str | None) -> str | None:
+    """The shared agent-type inference for every link route: the spawning turn's tool
+    call's ``subagent_type`` where one resolved, else ``fallback`` — the sidechain's own
+    records' ``agentType`` (``Run.agent_type`` on routes 2-4, a sidecar file's on route 1)."""
+    if tool is not None:
+        candidate = tool.input.get("subagent_type")
+        if isinstance(candidate, str):
+            return candidate
+    return fallback
 
 
 @dataclass(frozen=True)
@@ -276,11 +297,7 @@ class Run:
         return None
 
     def _first(self, key: str) -> str | None:
-        for record in self.records:
-            value = record.field(key)
-            if value is not None:
-                return value
-        return None
+        return _first_field(self.records, key)
 
 
 @dataclass(frozen=True)
@@ -350,6 +367,50 @@ class NormalizedFile:
             discovered_agent_ids=frozenset(collapser.discovered_agent_ids),
             harness_version=harness_version,
         )
+
+    @classmethod
+    def join_sidecars(cls, main: NormalizedFile, sidecar_lines: dict[str, list[str]]) -> NormalizedFile:
+        """Route 1 (agent-id): nest each sidecar conversation in ``sidecar_lines`` — the
+        source's successfully-read sidecar files' raw lines, keyed by agent id in the order
+        the source read them — onto ``main``'s spawning tool turn. Runs after routes 2-4 by
+        construction: ``main`` already carries their attachments. Returns a **new**
+        :class:`NormalizedFile`; ``main`` is left untouched."""
+        turns = list(main.turns)
+        unlinked = list(main.unlinked_sidechains)
+        turns_by_agent_id: dict[str, list[int]] = {}
+        for index, agent_id in main.agent_id_by_tool_turn.items():
+            turns_by_agent_id.setdefault(agent_id, []).append(index)
+
+        for agent_id, lines in sidecar_lines.items():
+            conv_turns = cls.of_lines(lines, is_sidechain_file=True).turns
+            fallback_agent_type = _first_field(Record.parse(lines), "agentType")
+            spawning_indices = turns_by_agent_id.get(agent_id)
+            if not spawning_indices:
+                # Nothing to nest under, so the conversation surfaces unlinked rather
+                # than being dropped — what `link="unlinked"` means, for every producer.
+                if conv_turns:
+                    unlinked.append(
+                        SidechainConversation(
+                            agent_id=agent_id, agent_type=fallback_agent_type, link="unlinked", turns=conv_turns
+                        )
+                    )
+                continue
+            for index in spawning_indices:
+                already_attached = turns[index].sidechain
+                if already_attached is not None:
+                    # The sidecar join is preferred, but the displaced inline
+                    # conversation surfaces unlinked rather than being lost.
+                    unlinked.append(replace(already_attached, link="unlinked"))
+                turns[index] = replace(
+                    turns[index],
+                    sidechain=SidechainConversation(
+                        agent_id=agent_id,
+                        agent_type=_infer_agent_type(turns[index].tool, fallback_agent_type),
+                        link="agent-id",
+                        turns=conv_turns,
+                    ),
+                )
+        return replace(main, turns=turns, unlinked_sidechains=unlinked)
 
 
 class _TurnCollapser:
@@ -497,9 +558,10 @@ class _SidechainAssembler:
             if target_index is None:
                 link = "unlinked"
 
+            tool = self.turns[target_index].tool if target_index is not None else None
             conversation = SidechainConversation(
                 agent_id=run.agent_id,
-                agent_type=self._infer_agent_type(run, target_index),
+                agent_type=_infer_agent_type(tool, run.agent_type),
                 link=link,
                 turns=conv_turns,
             )
@@ -555,12 +617,3 @@ class _SidechainAssembler:
                 best_index = i
                 best_timestamp = turn.timestamp
         return best_index
-
-    def _infer_agent_type(self, run: Run, target_index: int | None) -> str | None:
-        if target_index is not None:
-            tool = self.turns[target_index].tool
-            if tool is not None:
-                candidate = tool.input.get("subagent_type")
-                if isinstance(candidate, str):
-                    return candidate
-        return run.agent_type
