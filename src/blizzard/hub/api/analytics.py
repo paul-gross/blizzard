@@ -153,7 +153,15 @@ def list_events(
     return _events_response(page)
 
 
-@router.get("/events/ndjson", dependencies=[Depends(require(TRANSCRIPT_READ))])
+@router.get(
+    "/events/ndjson",
+    dependencies=[Depends(require(TRANSCRIPT_READ))],
+    # Declared, not defaulted: the exported spec generates the TS client, and FastAPI's
+    # default 200 for a `StreamingResponse` claims `application/json` — a lie about the
+    # one route here that serves newline-delimited text.
+    response_class=StreamingResponse,
+    responses={200: {"content": {"application/x-ndjson": {"schema": {"type": "string"}}}}},
+)
 def stream_events(
     services: Annotated[HubServices, Depends(get_services)],
     kind: Annotated[str | None, Query()] = None,

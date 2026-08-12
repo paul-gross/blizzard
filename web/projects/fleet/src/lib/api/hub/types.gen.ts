@@ -3699,8 +3699,10 @@ export type StreamEventsApiAnalyticsEventsNdjsonGetResponses = {
     /**
      * Successful Response
      */
-    200: unknown;
+    200: string;
 };
+
+export type StreamEventsApiAnalyticsEventsNdjsonGetResponse = StreamEventsApiAnalyticsEventsNdjsonGetResponses[keyof StreamEventsApiAnalyticsEventsNdjsonGetResponses];
 
 export type ReDeriveApiAnalyticsReDerivePostData = {
     body: ReDeriveRequest;

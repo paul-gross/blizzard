@@ -6201,8 +6201,10 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {}
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "description": "Successful Response"
