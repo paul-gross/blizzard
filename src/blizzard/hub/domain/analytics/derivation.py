@@ -80,6 +80,8 @@ class EventDerivationService:
                 turn_path=event.turn_path,
                 occurrence=event.occurrence,
                 payload=json.dumps(event.payload, sort_keys=True),
+                subject=event.subject,
+                tool=event.tool,
                 chunk_id=current.chunk_id,
                 node_id=current.node_id,
                 epoch=current.epoch,

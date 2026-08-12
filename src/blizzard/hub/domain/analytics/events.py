@@ -31,6 +31,8 @@ class TranscriptEvent:
     turn_path: str
     occurrence: int
     payload: str  # JSON object text (D5, `bzh:sql-portable` — never a JSON column type)
+    subject: str | None  # denormalized projection (blizzard#255 D1) — filterable, e.g. path prefix
+    tool: str | None  # the invoking tool name (blizzard#255 D1) — filterable
     chunk_id: str
     node_id: str
     epoch: int

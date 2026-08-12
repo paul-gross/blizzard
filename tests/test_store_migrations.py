@@ -176,6 +176,7 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20260721_1400_hub_runner_redirect_uris", "auth_state", ("user_id",)),
     ("hub", "20260809_1200_hub_transcript_segments", "transcript_segments", ("record_truncated",)),
     ("hub", "20260809_1800_hub_transcript_segment_record_truncated", "transcript_segments", ("supersedes",)),
+    ("hub", "20260812_1200_hub_transcript_events", "transcript_events", ("subject", "tool")),
     # runner tree — instance 6
     (
         "runner",

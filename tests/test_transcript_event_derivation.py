@@ -18,7 +18,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.analytics.derivation import EventDerivationReconciler, EventDerivationService
-from blizzard.hub.domain.analytics.extraction import KIND_FILE_READ
+from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION, KIND_FILE_READ
 from blizzard.hub.domain.transcripts import SegmentRecord
 from blizzard.hub.domain.work import Chunk
 from blizzard.hub.runtime import migration_runner
@@ -172,14 +172,17 @@ def test_a_second_sweep_pass_writes_nothing_new(fixture: _Fixture) -> None:
     assert fixture.stored_events() == first_pass
 
 
+_NEXT_EXTRACTOR_VERSION = f"{EXTRACTOR_VERSION}-next"  # a version distinct from the current default
+
+
 def test_a_version_bump_re_derives_history_leaving_the_prior_version_intact(fixture: _Fixture) -> None:
     fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
     fixture.reconciler.sweep()
-    marker_v1 = fixture.events.derivation_marker("sg_1", "blizzard-analytics/1")
+    marker_v1 = fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION)
     assert marker_v1 is not None
 
     bumped_service = EventDerivationService(
-        events=fixture.events, chunks=fixture.chunks, clock=fixture.clock, extractor_version="blizzard-analytics/2"
+        events=fixture.events, chunks=fixture.chunks, clock=fixture.clock, extractor_version=_NEXT_EXTRACTOR_VERSION
     )
     bumped_reconciler = EventDerivationReconciler(service=bumped_service, events=fixture.events)
     bumped_reconciler.sweep()
@@ -187,21 +190,21 @@ def test_a_version_bump_re_derives_history_leaving_the_prior_version_intact(fixt
     with fixture.engine.connect() as conn:
         rows = conn.execute(select(s.transcript_events)).all()
     versions = {row.extractor_version for row in rows}
-    assert versions == {"blizzard-analytics/1", "blizzard-analytics/2"}
-    assert fixture.events.derivation_marker("sg_1", "blizzard-analytics/1") == marker_v1
+    assert versions == {EXTRACTOR_VERSION, _NEXT_EXTRACTOR_VERSION}
+    assert fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION) == marker_v1
 
 
 def test_a_superseded_segments_rows_are_dropped(fixture: _Fixture) -> None:
     fixture.segments.insert_accepted(_segment_record(segment_id="sg_old"), byte_count=10, codec="zlib", at=_NOW)
     fixture.reconciler.sweep()
-    assert fixture.events.derivation_marker("sg_old", "blizzard-analytics/1") is not None
+    assert fixture.events.derivation_marker("sg_old", EXTRACTOR_VERSION) is not None
 
     fixture.segments.insert_accepted(
         _segment_record(segment_id="sg_new", supersedes="sg_old"), byte_count=10, codec="zlib", at=_NOW
     )
     fixture.reconciler.sweep()
 
-    assert fixture.events.derivation_marker("sg_old", "blizzard-analytics/1") is None
+    assert fixture.events.derivation_marker("sg_old", EXTRACTOR_VERSION) is None
     with fixture.engine.connect() as conn:
         rows = conn.execute(select(s.transcript_events).where(s.transcript_events.c.segment_id == "sg_old")).all()
     assert rows == []
@@ -213,7 +216,7 @@ def test_a_content_hole_segment_derives_incomplete_then_re_derives_once_accepted
 
     fixture.reconciler.sweep()
 
-    marker = fixture.events.derivation_marker("sg_1", "blizzard-analytics/1")
+    marker = fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION)
     assert marker is not None
     assert marker.complete is False
     assert marker.event_count == 0
@@ -221,7 +224,7 @@ def test_a_content_hole_segment_derives_incomplete_then_re_derives_once_accepted
     fixture.segments.update_to_accepted(record, byte_count=10, codec="zlib", at=_NOW)
     fixture.reconciler.sweep()
 
-    marker_after = fixture.events.derivation_marker("sg_1", "blizzard-analytics/1")
+    marker_after = fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION)
     assert marker_after is not None
     assert marker_after.complete is True
     assert marker_after.event_count == 1

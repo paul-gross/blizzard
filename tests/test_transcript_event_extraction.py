@@ -69,6 +69,8 @@ def test_a_read_call_with_a_concrete_path_mints_a_file_read_event() -> None:
     assert event.turn_path == "0"
     assert event.occurrence == 0
     assert event.payload == {"tool_name": "Read", "path": "src/a.py"}
+    assert event.subject == "src/a.py"
+    assert event.tool == "Read"
     assert event.depth == 0
     assert event.agent_type is None
     assert event.occurred_at is not None and event.occurred_at.isoformat() == "2026-08-12T10:00:00+00:00"
@@ -91,6 +93,8 @@ def test_a_skill_call_mints_a_skill_invocation_event() -> None:
     assert len(events) == 1
     assert events[0].kind == KIND_SKILL_INVOCATION
     assert events[0].payload == {"skill_name": "wf-commit"}
+    assert events[0].subject == "wf-commit"
+    assert events[0].tool == "Skill"
 
 
 def test_a_task_call_mints_an_agent_spawn_event() -> None:
@@ -101,6 +105,8 @@ def test_a_task_call_mints_an_agent_spawn_event() -> None:
     assert len(events) == 1
     assert events[0].kind == KIND_AGENT_SPAWN
     assert events[0].payload == {"agent_type": "explorer"}
+    assert events[0].subject == "explorer"
+    assert events[0].tool == "Task"
 
 
 def test_a_task_call_with_no_subagent_type_mints_no_event() -> None:
