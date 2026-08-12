@@ -16,6 +16,7 @@ from blizzard.foundation.store.migrations import MigrationRunner, RevisionMismat
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.store import MIGRATIONS_DIR as HUB_MIGRATIONS_DIR
 from blizzard.hub.store import schema as hub_schema
+from blizzard.runner.store import MIGRATIONS_DIR as RUNNER_MIGRATIONS_DIR
 from blizzard.runner.store import schema as runner_schema
 from tests.conftest import Daemon
 
@@ -148,41 +149,70 @@ def test_migrated_store_matches_declared_schema(daemon: Daemon, tmp_path: Path) 
         declared.dispose()
 
 
-# The walking skeleton's live-imported tables (20260713_1218_walking_skeleton_facts.py, hub
-# tree) that a later revision reshapes — each entry is that revision's own parent (the id to
-# downgrade *to*, i.e. "before"), the reshaped table, and the columns that revision adds.
-_HISTORICAL_RESHAPES: list[tuple[str, str, tuple[str, ...]]] = [
-    ("20260713_1218_hub_walking_skeleton", "escalations", ("takeover_command",)),
-    ("20260713_1635_hub_runner_high_water", "graph_nodes", ("produces", "checks")),
-    ("20260718_0930_hub_runner_local_pause_reason", "graph_nodes", ("bounce_cap",)),
-    ("20260717_2345_hub_chunk_bounces", "graph_nodes", ("run",)),
-    ("20260717_2359_hub_command_nodes", "graph_nodes", ("poll_interval_seconds", "poll_timeout_seconds")),
-    ("20260720_1000_hub_chunk_intended_migration", "escalations", ("decision_id",)),
-    ("20260721_1000_hub_escalation_decision_id", "graph_nodes", ("session_source",)),
-    ("20260721_1600_hub_event_log", "artifacts", ("forge",)),
-    ("20260722_1200_hub_artifact_forge", "graph_nodes", ("checks_cwd", "checks_timeout")),
-    ("20260722_1200_hub_artifact_forge", "graph_choices", ("requires_checks",)),
-    ("20260801_1600_hub_runner_external_usage", "escalations", ("wrapped_takeover_command",)),
+# A frozen revision's table that a later revision reshapes — each entry is that later
+# revision's own parent (the id to downgrade *to*, i.e. "before"), the reshaped table, and
+# the columns that revision touches. ``direction="added"`` (the default) means the columns
+# are absent before and present after; ``"removed"`` means the reverse — a drop, as in a
+# drop-and-recreate reshape.
+_MIGRATIONS_DIRS = {"hub": HUB_MIGRATIONS_DIR, "runner": RUNNER_MIGRATIONS_DIR}
+
+_HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, str, str, tuple[str, ...], str]] = [
+    # hub tree — the walking skeleton (20260713_1218_walking_skeleton_facts.py)
+    ("hub", "20260713_1218_hub_walking_skeleton", "escalations", ("takeover_command",)),
+    ("hub", "20260713_1635_hub_runner_high_water", "graph_nodes", ("produces", "checks")),
+    ("hub", "20260718_0930_hub_runner_local_pause_reason", "graph_nodes", ("bounce_cap",)),
+    ("hub", "20260717_2345_hub_chunk_bounces", "graph_nodes", ("run",)),
+    ("hub", "20260717_2359_hub_command_nodes", "graph_nodes", ("poll_interval_seconds", "poll_timeout_seconds")),
+    ("hub", "20260720_1000_hub_chunk_intended_migration", "escalations", ("decision_id",)),
+    ("hub", "20260721_1000_hub_escalation_decision_id", "graph_nodes", ("session_source",)),
+    ("hub", "20260721_1600_hub_event_log", "artifacts", ("forge",)),
+    ("hub", "20260722_1200_hub_artifact_forge", "graph_nodes", ("checks_cwd", "checks_timeout")),
+    ("hub", "20260722_1200_hub_artifact_forge", "graph_choices", ("requires_checks",)),
+    ("hub", "20260801_1600_hub_runner_external_usage", "escalations", ("wrapped_takeover_command",)),
+    # hub tree — instances 1-5 (blizzard#299)
+    ("hub", "20260718_0030_hub_node_poll", "runner_registrations", ("token_hash",)),
+    ("hub", "20260718_1225_hub_chunk_migrations", "runner_registrations", ("env_capacity",)),
+    ("hub", "20260721_1300_hub_auth_superuser_bootstrap", "runner_registrations", ("public_url", "redirect_uris")),
+    ("hub", "20260717_2330_hub_usage_facts", "runner_local_pause_facts", ("reason",)),
+    ("hub", "20260728_1200_hub_graph_policy_facts", "chunk_migrations", ("source",)),
+    ("hub", "20260721_1400_hub_runner_redirect_uris", "auth_state", ("user_id",)),
+    ("hub", "20260809_1200_hub_transcript_segments", "transcript_segments", ("record_truncated",)),
+    ("hub", "20260809_1800_hub_transcript_segment_record_truncated", "transcript_segments", ("supersedes",)),
+    # runner tree — instance 6
+    ("runner", "20260727_1000_runner_session_preamble_facts", "lease_context", ("session_name", "resolved_model", "resolved_effort")),
+    # runner tree — instance 7 (drop-and-recreate: environment_id added, forge dropped)
+    ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("environment_id",)),
+    ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("forge",), "removed"),
 ]
 
 
+def _reshape_id(entry: tuple) -> str:
+    tree, _parent, table, columns = entry[0], entry[1], entry[2], entry[3]
+    direction = entry[4] if len(entry) > 4 else "added"
+    suffix = f".{direction}" if direction != "added" else ""
+    return f"{tree}.{table}.{columns[0]}{suffix}"
+
+
 @pytest.mark.parametrize(
-    "parent_revision,table,columns",
-    _HISTORICAL_RESHAPES,
-    ids=[f"{table}.{columns[0]}" for _, table, columns in _HISTORICAL_RESHAPES],
+    "tree,parent_revision,table,columns,direction",
+    [entry if len(entry) == 5 else (*entry, "added") for entry in _HISTORICAL_RESHAPES],
+    ids=[_reshape_id(entry) for entry in _HISTORICAL_RESHAPES],
 )
-def test_walking_skeleton_table_lacks_a_later_revisions_columns(
-    parent_revision: str, table: str, columns: tuple[str, ...], tmp_path: Path
+def test_frozen_table_lacks_a_later_revisions_columns(
+    tree: str, parent_revision: str, table: str, columns: tuple[str, ...], direction: str, tmp_path: Path
 ) -> None:
-    """Historical accuracy (Decision 5) — head equivalence alone can't tell a correct freeze
-    from one that wrongly absorbed a later column (the dependent's guard would just skip it
-    and land at the same head anyway). A store migrated **fresh, forward-only** to the
-    column's own adding revision's *parent* must lack it; migrated on to head, it must have
-    it. This must build the store forward from ``base``, never via downgrade-from-head: a
-    later revision's own ``downgrade()`` unconditionally drops its column if present, which
-    would mask a walking-skeleton table that wrongly created the column from the start."""
+    """Historical accuracy (``bzh:frozen-revisions``, Decision 5/6) — head equivalence alone
+    can't tell a correct freeze from one that wrongly absorbed a later reshape (the
+    dependent's guard would just skip it and land at the same head anyway). A store migrated
+    **fresh, forward-only** to the reshaping revision's own *parent* must show the
+    pre-reshape shape; migrated on to head, it must show the post-reshape shape. For
+    ``direction="added"`` that means absent-before/present-after; for ``"removed"`` (a
+    drop-and-recreate) it's the reverse. This must build the store forward from ``base``,
+    never via downgrade-from-head: a later revision's own ``downgrade()`` unconditionally
+    drops its column if present, which would mask a frozen table that wrongly created the
+    column from the start."""
     url = f"sqlite:///{tmp_path / 'store.db'}"
-    runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url)
+    runner = MigrationRunner(script_location=_MIGRATIONS_DIRS[tree], url=url)
 
     def _columns() -> set[str]:
         engine = create_engine_from_url(url)
@@ -193,10 +223,15 @@ def test_walking_skeleton_table_lacks_a_later_revisions_columns(
 
     runner.upgrade(parent_revision)
     before = _columns()
-    for column in columns:
-        assert column not in before
 
     runner.upgrade("head")
     after = _columns()
-    for column in columns:
-        assert column in after
+
+    if direction == "added":
+        for column in columns:
+            assert column not in before
+            assert column in after
+    else:
+        for column in columns:
+            assert column in before
+            assert column not in after
