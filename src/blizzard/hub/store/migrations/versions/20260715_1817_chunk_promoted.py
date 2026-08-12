@@ -9,15 +9,28 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 from sqlalchemy import insert, select
 
-from blizzard.hub.store.schema import chunk_promoted, chunks
+from blizzard.foundation.store.utc import UtcDateTime
+from blizzard.hub.store.schema import chunk_promoted
 
 revision: str = "20260715_1817_hub_chunk_promoted"
 down_revision: str | None = "20260714_0819_hub_delivery_pr_facts"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+
+# A read-only reference, not a create — this revision only selects from ``chunks``, so the
+# frozen shape is the narrow stub of columns the query names, not a full literal
+# (``bzh:frozen-revisions``). Never created, never dropped.
+_frozen_metadata = sa.MetaData()
+chunks = sa.Table(
+    "chunks",
+    _frozen_metadata,
+    sa.Column("chunk_id", sa.String, primary_key=True),
+    sa.Column("minted_at", UtcDateTime, nullable=False),
+)
 
 
 def upgrade() -> None:
