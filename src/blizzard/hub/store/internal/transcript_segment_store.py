@@ -22,9 +22,8 @@ from blizzard.hub.domain.transcripts import (
 )
 from blizzard.hub.store import schema as s
 
-# --- statements -------------------------------------------------------------
-# Every statement executed below comes from one of these builders and nowhere else, so
-# the unit tier compiles the real ones under both dialects (`bzh:sql-portable`).
+# --- statements: nothing below executes a statement built elsewhere, so the unit tier
+# compiles the real ones under both dialects (`bzh:sql-portable`).
 
 
 def _identity_values(record: SegmentRecord) -> dict[str, object]:
@@ -193,10 +192,8 @@ def _natural_key_rejected_row(record: SegmentRecord) -> Update:
 def _update_to_accepted_stmt(
     record: SegmentRecord, *, byte_count: int, codec: str, content: bytes, at: datetime
 ) -> Update:
-    # Re-adjudication refreshes: a re-offer's identity fields (final, turn_range_end, node_id,
-    # epoch, ...) replace the original rejected offer's, same as an insert (blizzard#290). The
-    # natural key (segment_id, turn_range_start) that WHERE-matches this row is itself part of
-    # `_identity_values` and is set to its own current value, so this is a no-op on the key.
+    # Re-adjudication refreshes: a re-offer's identity fields replace the original rejected
+    # offer's, same as an insert (blizzard#290); the WHERE-matched natural key is a no-op here.
     return _natural_key_rejected_row(record).values(
         **_identity_values(record),
         rejected=False,
@@ -209,15 +206,8 @@ def _update_to_accepted_stmt(
 
 
 def _update_still_rejected_stmt(record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> Update:
-    # Re-adjudication refreshes: see `_update_to_accepted_stmt`.
-    #
-    # `byte_count` is a plain replace, not an accumulation, deliberately (blizzard#290): a
-    # natural key's cap accounting reflects only its most recent offer. Accumulating here would
-    # double-count against `_chunk_stored_bytes_stmt`, which sums only non-rejected rows — once a
-    # rejected row that had accumulated bytes across retries flips to accepted, its single
-    # `byte_count` would carry every prior rejected attempt's size into the stored-bytes cap,
-    # which never stored that many bytes. Splitting stored-bytes accounting from window
-    # accounting would need a second column, which blizzard#290 puts out of scope.
+    # Re-adjudication refreshes: see `_update_to_accepted_stmt`. `byte_count` replaces rather than
+    # accumulates (blizzard#290) — why, in tests/test_transcript_segment_store.py.
     return _natural_key_rejected_row(record).values(
         **_identity_values(record),
         rejection_reason=reason,

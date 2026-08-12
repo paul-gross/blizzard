@@ -20,9 +20,8 @@ down_revision: str | None = "20260803_1000_hub_escalation_wrapped_takeover"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape — no ``record_truncated``/``supersedes`` columns, both
-# added by later revisions (``bzh:frozen-revisions``). The ``chunks`` entry below is an
-# FK-resolution stub: never created, never dropped.
+# This revision's own frozen shape (``bzh:frozen-revisions``). The ``chunks`` entry below
+# is an FK-resolution stub: never created, never dropped.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "chunks",

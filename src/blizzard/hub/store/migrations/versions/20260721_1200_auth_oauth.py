@@ -1,6 +1,5 @@
-"""auth_state / auth_facts — the provider-login seam (issue #92, hub store tree). Neither table carries
-a foreign key, so either order is safe; created ``checkfirst``. ``auth_state`` is a frozen local literal,
-not a ``schema.py`` import (``bzh:frozen-revisions``): a later revision adds its ``user_id`` column.
+"""auth_state / auth_facts — the provider-login seam (issue #92, hub store tree). Created ``checkfirst``;
+``auth_state`` is a frozen local literal, not a ``schema.py`` import (``bzh:frozen-revisions``).
 
 Revision ID: 20260721_1200_hub_auth_oauth
 Revises: 20260721_1100_hub_auth_identity_spine

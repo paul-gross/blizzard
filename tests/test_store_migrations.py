@@ -149,12 +149,10 @@ def test_migrated_store_matches_declared_schema(daemon: Daemon, tmp_path: Path) 
         declared.dispose()
 
 
-# A frozen revision's table that a later revision reshapes — each entry is that later
-# revision's own parent (the id to downgrade *to*, i.e. "before"), the reshaped table, and
-# the columns that revision touches. ``direction="added"`` (the default) means the columns
-# are absent before and present after; ``"removed"`` means the reverse — a drop, as in a
-# drop-and-recreate reshape.
 _MIGRATIONS_DIRS = {"hub": HUB_MIGRATIONS_DIR, "runner": RUNNER_MIGRATIONS_DIR}
+
+# Each entry: the reshaping revision's own parent (the id to migrate *to*, i.e. "before"),
+# the reshaped table, its columns, and ``direction`` — ``"added"`` (default) or ``"removed"``.
 
 _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, str, str, tuple[str, ...], str]] = [
     # hub tree — the walking skeleton (20260713_1218_walking_skeleton_facts.py)
@@ -206,16 +204,9 @@ def _reshape_id(entry: tuple) -> str:
 def test_frozen_table_lacks_a_later_revisions_columns(
     tree: str, parent_revision: str, table: str, columns: tuple[str, ...], direction: str, tmp_path: Path
 ) -> None:
-    """Historical accuracy (``bzh:frozen-revisions``, Decision 5/6) — head equivalence alone
-    can't tell a correct freeze from one that wrongly absorbed a later reshape (the
-    dependent's guard would just skip it and land at the same head anyway). A store migrated
-    **fresh, forward-only** to the reshaping revision's own *parent* must show the
-    pre-reshape shape; migrated on to head, it must show the post-reshape shape. For
-    ``direction="added"`` that means absent-before/present-after; for ``"removed"`` (a
-    drop-and-recreate) it's the reverse. This must build the store forward from ``base``,
-    never via downgrade-from-head: a later revision's own ``downgrade()`` unconditionally
-    drops its column if present, which would mask a frozen table that wrongly created the
-    column from the start."""
+    """Historical accuracy (``bzh:frozen-revisions``) — head equivalence alone can't tell a
+    correct freeze from one that wrongly absorbed a later reshape, so a store migrated to the
+    reshaping revision's parent must show the pre-reshape shape and head the post-reshape one."""
     url = f"sqlite:///{tmp_path / 'store.db'}"
     runner = MigrationRunner(script_location=_MIGRATIONS_DIRS[tree], url=url)
 
@@ -226,6 +217,8 @@ def test_frozen_table_lacks_a_later_revisions_columns(
         finally:
             engine.dispose()
 
+    # Forward from ``base``, never downgrade-from-head: the reshaping revision's own
+    # ``downgrade()`` drops the column if present, masking a freeze that wrongly created it.
     runner.upgrade(parent_revision)
     before = _columns()
 

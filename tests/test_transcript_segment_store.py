@@ -352,10 +352,9 @@ def test_update_still_rejected_refreshes_the_row_without_storing_content(tmp_pat
 
 
 def test_two_successive_still_rejected_offers_leave_only_the_latest_bytes_in_the_window(tmp_path: Path) -> None:
-    """blizzard#290: `byte_count` replaces rather than accumulates — a natural key's cap
-    accounting reflects only its most recent offer, deliberately (see
-    `_update_still_rejected_stmt`), so a second still-rejected offer must not leave the
-    first offer's bytes lingering in the runner's daily-rate window."""
+    """blizzard#290: `byte_count` replaces rather than accumulates — accumulating would double-count
+    against `_chunk_stored_bytes_stmt` once a rejected row flips to accepted, so a second
+    still-rejected offer must not leave the first's bytes in the runner's daily-rate window."""
     engine = _migrated_engine(tmp_path)
     store = TranscriptSegmentStore(engine)
     record = _record()

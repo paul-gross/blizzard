@@ -20,8 +20,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 # This revision's own frozen shape for every table it creates — no live ``schema.py``
-# import, so a later column addition there can never silently reshape this revision's
-# history (``bzh:frozen-revisions``). Declared parents-before-children so FKs resolve.
+# import (``bzh:frozen-revisions``). Declared parents-before-children so FKs resolve.
 _frozen_metadata = sa.MetaData()
 _graphs = sa.Table(
     "graphs",
@@ -32,9 +31,8 @@ _graphs = sa.Table(
     sa.Column("definition_yaml", sa.Text, nullable=False),
     sa.Column("created_at", UtcDateTime, nullable=False),
 )
-# This revision's own frozen shape — no ``produces``/``checks``/``checks_cwd``/
-# ``checks_timeout``/``bounce_cap``/``run``/``poll_interval_seconds``/
-# ``poll_timeout_seconds``/``session_source`` columns, all added by later revisions.
+# This revision's own frozen shape — none of the columns later revisions add to ``graph_nodes``
+# (``bzh:frozen-revisions``); the reshapes are enumerated in tests/test_store_migrations.py.
 _graph_nodes = sa.Table(
     "graph_nodes",
     _frozen_metadata,

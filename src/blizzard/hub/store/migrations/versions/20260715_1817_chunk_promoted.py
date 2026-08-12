@@ -21,9 +21,8 @@ down_revision: str | None = "20260714_0819_hub_delivery_pr_facts"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# A read-only reference, not a create — this revision only selects from ``chunks``, so the
-# frozen shape is the narrow stub of columns the query names, not a full literal
-# (``bzh:frozen-revisions``). Never created, never dropped.
+# A read-only reference, not a create — the frozen shape is the narrow stub of columns
+# this revision's select names (``bzh:frozen-revisions``). Never created, never dropped.
 _frozen_metadata = sa.MetaData()
 chunks = sa.Table(
     "chunks",
