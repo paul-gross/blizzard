@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import insert
@@ -53,8 +54,9 @@ def _criteria(**overrides: object) -> EventQueryCriteria:
     return EventQueryCriteria(**values)  # type: ignore[arg-type]
 
 
-@pytest.fixture
-def store(tmp_path: Path) -> AnalyticsEventQueryStore:
+def _new_store(tmp_path: Path) -> tuple[AnalyticsEventQueryStore, Any]:
+    """A migrated, empty store plus the writer its tests seed through — the write path is
+    :mod:`transcript_event_store`'s own statement, never ad-hoc SQL."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
     engine = create_engine_from_url(db_url)
@@ -63,6 +65,13 @@ def store(tmp_path: Path) -> AnalyticsEventQueryStore:
         with engine.begin() as conn:
             conn.execute(event_store_module._insert_events_stmt(segment_id, extractor_version, list(events)))
 
+    return AnalyticsEventQueryStore(engine), insert_events
+
+
+@pytest.fixture
+def store(tmp_path: Path) -> AnalyticsEventQueryStore:
+    store, insert_events = _new_store(tmp_path)
+    engine = store._engine
     insert_events(
         "sg_1",
         _event(kind="file_read", subject="src/a.py", tool="Read", node_id="nd_build", graph_id="gr_1"),
@@ -119,7 +128,7 @@ def store(tmp_path: Path) -> AnalyticsEventQueryStore:
         conn.execute(insert(s.chunk_work_refs).values(chunk_id="ch_1", source="github", ref="255"))
         conn.execute(insert(s.chunk_work_refs).values(chunk_id="ch_2", source="jira", ref="EX-1"))
 
-    return AnalyticsEventQueryStore(engine)
+    return store
 
 
 # --- events: each filter alone -------------------------------------------------
@@ -177,6 +186,23 @@ def test_filters_combine(store: AnalyticsEventQueryStore) -> None:
     assert [e.subject for e in page.events] == ["src/b.py"]
 
 
+def test_path_prefix_treats_like_wildcards_as_literal_characters(tmp_path: Path) -> None:
+    """A prefix is a prefix, not a pattern: real paths carry ``_`` constantly, so an
+    unescaped LIKE would quietly return files the caller never asked for."""
+    store, insert_events = _new_store(tmp_path)
+    insert_events(
+        "sg_1",
+        _event(subject="src/a_b.py"),
+        _event(turn_path="1", subject="src/aXb.py"),
+        _event(turn_path="2", subject="src/a%c.py"),
+        _event(turn_path="3", subject="src/azc.py"),
+    )
+
+    assert [e.subject for e in store.events(_criteria(path_prefix="src/a_b")).events] == ["src/a_b.py"]
+    assert [e.subject for e in store.events(_criteria(path_prefix="src/a%c")).events] == ["src/a%c.py"]
+    assert [r.key for r in store.counts_by_file(_criteria(path_prefix="src/a_b"))] == ["src/a_b.py"]
+
+
 # --- events: keyset paging ------------------------------------------------------
 
 
@@ -221,3 +247,16 @@ def test_counts_by_agent_type(store: AnalyticsEventQueryStore) -> None:
 def test_counts_by_node(store: AnalyticsEventQueryStore) -> None:
     rows = store.counts_by_node(_criteria())
     assert {(r.key, r.count) for r in rows} == {("nd_build", 4), ("nd_review", 1)}
+
+
+def test_counts_are_ordered_most_frequent_first(store: AnalyticsEventQueryStore) -> None:
+    assert [r.key for r in store.counts_by_node(_criteria())] == ["nd_build", "nd_review"]
+
+
+def test_a_canned_counts_own_kind_intersects_the_criteria_kind_rather_than_replacing_it(
+    store: AnalyticsEventQueryStore,
+) -> None:
+    """A caller naming a kind this count cannot serve asked for an empty scope — it must
+    not get the count's own kind back under the name it did not ask for."""
+    assert store.counts_by_file(_criteria(kind="skill_invocation")) == []
+    assert [r.key for r in store.counts_by_file(_criteria(kind="file_read"))] == ["src/a.py", "src/b.py", "src/c.py"]
