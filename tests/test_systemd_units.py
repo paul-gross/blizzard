@@ -6,7 +6,9 @@ recovery contract depends on — the *behavior* is the crash sweep's job."""
 
 from __future__ import annotations
 
+import ast
 import configparser
+import re
 import tomllib
 from pathlib import Path
 
@@ -103,3 +105,26 @@ def test_no_forge_or_work_source_credentials_are_configured_on_the_runner_unit()
     for env_file_line in [ln for ln in runner_text.splitlines() if ln.startswith("EnvironmentFile")]:
         assert "runner.env" in env_file_line, f"runner unit points at a non-runner env file: {env_file_line}"
     assert "BZ_FORGE_TOKEN" not in runner_text, "the runner unit must not reference a forge token"
+
+
+_TEST_CITATION = re.compile(r"(tests/[\w/]+\.py)::(test_\w+)")
+
+
+def _defined_test_names(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text())
+    return {node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")}
+
+
+@pytest.mark.parametrize("name", sorted(_UNITS))
+def test_a_cited_recovery_proof_is_a_real_test(name: str) -> None:
+    """Each unit's crash-recovery comment names the test that proves it (#295) — a citation
+    that outlives the test it named is worse than none, so a rename here must be caught."""
+    text = (_SYSTEMD_DIR / name).read_text()
+    citations = _TEST_CITATION.findall(text)
+    assert citations, f"{name} carries no recovery-proof citation to check"
+    for rel_path, test_name in citations:
+        cited_file = _REPO_ROOT / rel_path
+        assert cited_file.is_file(), f"{name} cites {rel_path}, which does not exist"
+        assert test_name in _defined_test_names(cited_file), (
+            f"{name} cites {rel_path}::{test_name}, which is not defined there"
+        )

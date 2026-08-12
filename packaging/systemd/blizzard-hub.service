@@ -30,7 +30,7 @@ WorkingDirectory=/var/lib/blizzard/hub
 # The reboot/crash-recovery mechanism (docs/deployment.md): after a kill -9, an
 # OOM, or a machine reboot, systemd brings the daemon back and its startup pass
 # re-reads the store and resumes from the last recorded fact — nothing lands twice
-# (proven by tests/crash/test_kill9_sweep.py::test_kill9_hub_mid_delivery). A clean
+# (proven by tests/crash/test_kill9_sweep.py::test_kill9_at_hub_command_node_crash_point). A clean
 # `systemctl stop` is exempt; every other exit restarts.
 Restart=always
 RestartSec=2
