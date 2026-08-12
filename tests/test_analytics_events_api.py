@@ -287,6 +287,36 @@ def test_counts_by_agent_type_is_empty_at_the_main_lane(tmp_path: Path) -> None:
     assert resp.json()["counts"] == []
 
 
+def test_counts_by_agent_type_counts_the_work_done_under_a_sidechain_not_the_spawn(tmp_path: Path) -> None:
+    """The discriminating case for this count's column choice: a main-lane ``Task``
+    spawning ``explorer`` whose sidechain then reads two files. Grouping on the
+    enclosing-sidechain ``agent_type`` counts the **two reads**; grouping on the spawn
+    event's own ``subject`` (also ``"explorer"``) would have counted **one**."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    token = seed_session(hub, seed_user(hub, username="ada", role=Role.CONTRIBUTOR))
+    chunk_id = _ingest_chunk(hub, headers=_cookie(token))
+    spawn = _tool_turn(0, "Task", {"subagent_type": "explorer"}, timestamp="2026-08-12T09:00:00Z")
+    spawn["sidechain"] = {
+        "agent_id": "ag_1",
+        "agent_type": "explorer",
+        "link": "resolved",
+        "turns": [
+            _tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:01:00Z"),
+            _tool_turn(1, "Read", {"file_path": "src/b.py"}, timestamp="2026-08-12T09:02:00Z"),
+        ],
+    }
+    push = hub.client.post(
+        "/api/fleet/transcripts", json={"runner_id": "r1", "records": [_record(chunk_id, turns=[spawn])]}
+    )
+    assert push.status_code == 200, push.text
+    hub.services.event_derivation.sweep()
+
+    resp = hub.client.get("/api/analytics/counts/agent-types", headers=_cookie(token))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["counts"] == [{"key": "explorer", "count": 2}]
+
+
 def test_counts_by_node(tmp_path: Path) -> None:
     hub, token, _chunk_id = _seeded_hub(tmp_path)
 
