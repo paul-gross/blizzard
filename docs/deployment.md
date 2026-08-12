@@ -1684,17 +1684,19 @@ restart-resume` as it stops.
 
 ## The recovery demo — run it and watch it hold
 
-The behavior above is exercised end-to-end by the two **whole-process** cases of
-the kill-9 crash sweep, plus the hub's own whole-process case for a generic hub
-command node's delivery. They *are* the recovery demo: each runs the real
+The behavior above is exercised end-to-end by **whole-process** cases of the
+kill-9 crash sweep — cases that signal a whole daemon process rather than arming
+a registry crash point — plus a registry-armed case for a generic hub command
+node's delivery. They *are* the recovery demo: each runs the real
 `build → deliver` scenario with the hub and runner as real subprocesses, then
 restarts a whole daemon from the same store directory (systemd's job, done by hand
 in the test) and asserts the chunk still converges and lands **exactly once**, with
 the facts-level invariant checker green after the crash and again after recovery:
 
-- `tests/crash/test_kill9_sweep.py::test_kill9_runner_daemon_mid_flight` — `kill -9`s
-  the **supervisor** mid-flight; the restart's REAP reaps the stranded lease and
-  the chunk converges.
+- `tests/crash/test_kill9_sweep.py::test_kill9_runner_daemon_after_session_end` —
+  `kill -9`s the **supervisor** strictly after the in-flight worker's commit is
+  declared and its `SessionEnd` is durably recorded; the restart reads that fact
+  directly (no resume, no re-run) and the chunk converges.
 - `tests/crash/test_kill9_sweep.py::test_kill9_at_hub_command_node_crash_point[hubnode.after-step.before-marker]`
   — `kill -9`s the **hub** mid-delivery, inside a generic hub command node's
   per-step window; the restart re-drives the executor off the re-flushed build
@@ -1709,7 +1711,7 @@ source — see the crash-sweep header):
 
 ```bash
 BLIZZARD_CRASH_SWEEP=1 uv run pytest \
-  tests/crash/test_kill9_sweep.py::test_kill9_runner_daemon_mid_flight \
+  tests/crash/test_kill9_sweep.py::test_kill9_runner_daemon_after_session_end \
   "tests/crash/test_kill9_sweep.py::test_kill9_at_hub_command_node_crash_point[hubnode.after-step.before-marker]" \
   tests/crash/test_kill9_sweep.py::test_graceful_restart_resumes_in_flight_session
 ```
