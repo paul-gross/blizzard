@@ -1,5 +1,5 @@
-"""Retries exhausted -> needs_human -> resumable takeover — scenario 3 of the standing
-e2e smoke — MVP criterion 6.
+"""Retries exhausted -> needs_human -> resumable takeover — the `test_escalation_e2e`
+scenario of the standing e2e smoke — MVP criterion 6.
 
 Skipped unless ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock`` worktree
 provisioned. Reuses the acceptance loop's live-stack scaffolding.

@@ -1,4 +1,4 @@
-"""Graph-explorer diagram browser e2e — scenario 7 of the standing e2e smoke.
+"""Graph-explorer diagram browser e2e — the `test_graphs_diagram_browser_e2e` scenario of the standing e2e smoke.
 
 A real Chromium (Playwright) over the served board asserts the ``<fleet-graph-diagram>``
 SVG DAG renders against the built bundle from real minted data — the one surface no unit
@@ -25,7 +25,7 @@ pytestmark = [
 
 
 def _graph_yaml() -> str:
-    """A valid ``build -> review -> deliver`` graph, the same shape scenario 6 mints.
+    """A valid ``build -> review -> deliver`` graph, the same shape the `test_board_browser_e2e` scenario mints.
 
     Exercises an entry node, an advance edge, a retry back-edge, a self-loop retry edge,
     mixed executors, a targeted resume (``session: resume:build``), and a three-name
@@ -93,7 +93,7 @@ _START_LANDING_JS = """
 
 
 def test_graphs_diagram_renders_in_the_browser(tmp_path: Path, chromium_available: bool) -> None:
-    """The graph explorer's static DAG diagram, rendered by a real browser (scenario 7)."""
+    """The graph explorer's static DAG diagram, rendered by a real browser (the `test_graphs_diagram_browser_e2e` scenario)."""
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     from playwright.sync_api import expect, sync_playwright

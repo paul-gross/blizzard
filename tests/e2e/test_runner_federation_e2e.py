@@ -1,4 +1,4 @@
-"""The multi-daemon SSO bounce, driven by a real browser — e2e scenario 13 (issue #95).
+"""The multi-daemon SSO bounce, driven by a real browser — the `test_runner_federation_e2e` scenario (issue #95).
 
 A real Chromium bounces through a real hub + stub IdP into runner A, then the captured
 token is replayed against runner B (rejected, audience-bound) and against runner A again

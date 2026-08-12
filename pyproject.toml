@@ -87,8 +87,9 @@ dev = [
     "pytest-xdist>=3.6.0",
     "ruff>=0.8.0",
     "pyright>=1.1.380",
-    # The e2e browser tier (blizzard-context verification/blizzard.md): scenario 6
-    # drives the served mission-control board through a real Chromium via Playwright.
+    # The e2e browser tier (blizzard-context verification/blizzard.md): the
+    # `test_board_browser_e2e` scenario drives the served mission-control board through
+    # a real Chromium via Playwright.
     # The browser binary itself is installed out of band (`uv run playwright install
     # chromium`); the e2e test skips cleanly when it is absent (see tests/e2e/conftest.py).
     "playwright>=1.49.0",

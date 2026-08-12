@@ -1,4 +1,4 @@
-"""Ask/answer park→resume round trip — scenario 4 of the e2e smoke — MVP criterion 7.
+"""Ask/answer park→resume round trip — the `test_ask_answer_e2e` scenario of the e2e smoke — MVP criterion 7.
 
 End to end: a worker asks and parks (waiting_on_human); a human answers via
 `blizzard hub question answer` and the runner resumes the dormant session to done.

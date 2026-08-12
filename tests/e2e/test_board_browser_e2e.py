@@ -1,4 +1,4 @@
-"""Board browser e2e — scenario 6 of the standing e2e smoke.
+"""Board browser e2e — the `test_board_browser_e2e` scenario of the standing e2e smoke.
 
 A real Chromium, driven by Playwright, over the served mission-control board: promote,
 live updates, the detail dock, drag-reorder, board answer, and pause/resume. Skipped
@@ -226,7 +226,7 @@ def _ingest_chunk(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
 
 
 def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chromium_available: bool) -> None:
-    """The mission-control board, driven through a real browser end to end (scenario 6)."""
+    """The mission-control board, driven through a real browser end to end (the `test_board_browser_e2e` scenario)."""
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     from playwright.sync_api import expect, sync_playwright

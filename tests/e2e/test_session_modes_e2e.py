@@ -1,4 +1,4 @@
-"""Node ``session:`` modes end to end — scenario 11 of the standing e2e smoke — issues #115, #144.
+"""Node ``session:`` modes end to end — the `test_session_modes_e2e` scenario of the standing e2e smoke — issues #115, #144.
 
 Proves a node's authored ``session:`` mode governs which harness session a node-entry
 spawn continues across a graph transition, on the real forge + hub + runner rails. The

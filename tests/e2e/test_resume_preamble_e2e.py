@@ -1,4 +1,4 @@
-"""Resume-time spawn-preamble elision end to end — scenario 15 of the e2e smoke — #149.
+"""Resume-time spawn-preamble elision end to end — the `test_resume_preamble_e2e` scenario of the e2e smoke — #149.
 
 Full-stack proof a resumed node-entry spawn is handed less than a fresh one, and told
 when its standing instructions moved — both the nothing-changed collapse and a mid-chunk

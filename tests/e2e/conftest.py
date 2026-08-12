@@ -1,4 +1,4 @@
-"""Shared fixtures for the e2e browser tier (scenario 6).
+"""Shared fixtures for the e2e browser tier.
 
 Chromium is installed out of band (``uv run playwright install chromium``); when it is
 absent the browser scenario **skips cleanly** rather than erroring.

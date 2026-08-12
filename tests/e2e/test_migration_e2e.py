@@ -1,4 +1,4 @@
-"""Cross-graph migration (issue #90) — scenario 10 of the standing e2e smoke.
+"""Cross-graph migration (issue #90) — the `test_migration_e2e` scenario of the standing e2e smoke.
 
 A worker's cross-graph judgement choice ends the source attempt, re-pins the chunk to
 the target graph, and re-queues it at the target's own `build` node; a claim under the

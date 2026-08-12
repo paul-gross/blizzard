@@ -1,4 +1,4 @@
-"""Human-gate decision park→decide→deliver — scenario 5 of the e2e smoke — MVP criterion 12.
+"""Human-gate decision park→decide→deliver — the `test_gate_decision_e2e` scenario of the e2e smoke — MVP criterion 12.
 
 A build passes into a human gate ahead of deliver: the hub opens a Decision, a human
 resolves it with the real ``blizzard hub decision`` CLI, and the holding runner's next

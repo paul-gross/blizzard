@@ -1,4 +1,4 @@
-"""The review-fail cycle end to end — scenario 2 of the standing e2e smoke — MVP criterion 9.
+"""The review-fail cycle end to end — the `test_review_cycle_e2e` scenario of the standing e2e smoke — MVP criterion 9.
 
 The happy-path `build -> review -> deliver` companion, but the scripted review fails once
 before passing: the `fail` edge carries its findings + `prompt_addendum` into build's

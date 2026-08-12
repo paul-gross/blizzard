@@ -1,4 +1,4 @@
-"""Board cost/usage live-over-SSE e2e — scenario 7 of the standing e2e smoke (issue #60).
+"""Board cost/usage live-over-SSE e2e — the `test_board_cost_live_e2e` scenario of the standing e2e smoke (issue #60).
 
 A real Chromium (Playwright) over the served board wired to a live hub, asserting
 cost/usage figures render end to end and update live with no reload when a

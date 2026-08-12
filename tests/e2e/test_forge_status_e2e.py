@@ -1,4 +1,4 @@
-"""The forge-status projection, end to end (issue #179) — scenario 16 of the standing e2e smoke.
+"""The forge-status projection, end to end (issue #179) — the `test_forge_status_e2e` scenario of the standing e2e smoke.
 
 Reuses the acceptance loop's live-stack scaffolding with a low
 ``annotation_interval_seconds``. Covers: ingested -> in-progress -> cleared on done; a

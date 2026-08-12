@@ -1,4 +1,4 @@
-"""The acceptance loop — scenario 1 of the standing e2e smoke.
+"""The acceptance loop — the `test_acceptance_loop` scenario of the standing e2e smoke.
 
 One chunk travels ingest -> acquire -> build -> review (scripted PASS) -> deliver ->
 landed, asserted at both the bare origin (git truth) and the hub's derived ``done``

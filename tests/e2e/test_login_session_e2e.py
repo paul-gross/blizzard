@@ -119,7 +119,7 @@ def _expire_session(hub_dir: Path) -> None:
 
 
 def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> None:
-    """Scenario 12: login lands `pending`; `guest` reaches the board read-only;
+    """The `test_login_session_e2e` scenario: login lands `pending`; `guest` reaches the board read-only;
     `contributor` gets the write control; a session expiring mid-SSE surfaces as a
     login redirect within one reconnect cycle."""
     from playwright.sync_api import expect, sync_playwright
