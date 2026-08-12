@@ -10,8 +10,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import httpx
+import pytest
 
 from tests.support import build_hub, pointer_token, report_lease
+
+pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "9"}
 
