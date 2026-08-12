@@ -2,9 +2,8 @@
 Phase 3).
 
 There is no finalize hook to derive from (D1/D2): the sweep is the only first-derivation
-path, and re-running it is the re-derive path — one engine, one convergence property.
-Dependency-free (``bzh:domain-core``): :meth:`sweep` is one directly-callable step
-(``bzh:steppable-loop``)."""
+path, and re-running it is the re-derive path — one engine, one convergence property
+(``bzh:domain-core``, ``bzh:steppable-loop``)."""
 
 from __future__ import annotations
 

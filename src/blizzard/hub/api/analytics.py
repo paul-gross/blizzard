@@ -1,10 +1,9 @@
 """Analytics operator-plane routes (blizzard#254 D7) — a forced re-derive over the same
 per-segment replacement unit the standing sweep runs, for an operator who needs a
 segment's events sooner than the next sweep tick, or a version bump re-derived now.
-Gated on :data:`~blizzard.auth_core.ANALYTICS_ADMIN`: this mutates, unlike the read-only
-:data:`~blizzard.auth_core.TRANSCRIPT_READ` grant. Not a ``blizzard-mock``-visible wire
-surface (``bzh:wire-change-extends-mock`` does not fire) — operator-plane, never
-``/api/fleet/...`` or a client/gateway method."""
+Gated on :data:`~blizzard.auth_core.ANALYTICS_ADMIN`, since this mutates, unlike the
+read-only :data:`~blizzard.auth_core.TRANSCRIPT_READ` grant. Operator-plane, never
+``/api/fleet/...`` — ``bzh:wire-change-extends-mock`` does not fire."""
 
 from __future__ import annotations
 

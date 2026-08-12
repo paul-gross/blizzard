@@ -2,9 +2,8 @@
 
 Reads ``transcript_segments`` directly — the same table :mod:`transcript_segment_store`
 adapts — rather than depending on that adapter: two ``internal/`` adapters sharing one
-engine and one schema module is the established shape (``bzh:screaming-architecture``),
-not a coupling between them. All ``sqlalchemy``, ``zlib``, ``hashlib``, and ``json``
-usage is confined here (``bzh:dependency-inversion``)."""
+engine and schema module is established, not a coupling between them. All
+``sqlalchemy``/``zlib``/``hashlib``/``json`` usage stays confined here (``bzh:dependency-inversion``)."""
 
 from __future__ import annotations
 
