@@ -349,3 +349,19 @@ def test_update_still_rejected_refreshes_the_row_without_storing_content(tmp_pat
     assert rows[0].byte_count == 1200
     assert rows[0].received_at == later
     assert rows[0].record_truncated is True  # review F10: the re-offer's own flag, not the first's
+
+
+def test_two_successive_still_rejected_offers_leave_only_the_latest_bytes_in_the_window(tmp_path: Path) -> None:
+    """blizzard#290: `byte_count` replaces rather than accumulates — a natural key's cap
+    accounting reflects only its most recent offer, deliberately (see
+    `_update_still_rejected_stmt`), so a second still-rejected offer must not leave the
+    first offer's bytes lingering in the runner's daily-rate window."""
+    engine = _migrated_engine(tmp_path)
+    store = TranscriptSegmentStore(engine)
+    record = _record()
+    store.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
+    assert store.runner_window_bytes("r1", since=_NOW) == 999
+
+    store.update_still_rejected(record, byte_count=1200, reason="record_too_large", at=_NOW)
+
+    assert store.runner_window_bytes("r1", since=_NOW) == 1200

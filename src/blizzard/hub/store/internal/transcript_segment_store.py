@@ -193,25 +193,36 @@ def _natural_key_rejected_row(record: SegmentRecord) -> Update:
 def _update_to_accepted_stmt(
     record: SegmentRecord, *, byte_count: int, codec: str, content: bytes, at: datetime
 ) -> Update:
+    # Re-adjudication refreshes: a re-offer's identity fields (final, turn_range_end, node_id,
+    # epoch, ...) replace the original rejected offer's, same as an insert (blizzard#290). The
+    # natural key (segment_id, turn_range_start) that WHERE-matches this row is itself part of
+    # `_identity_values` and is set to its own current value, so this is a no-op on the key.
     return _natural_key_rejected_row(record).values(
+        **_identity_values(record),
         rejected=False,
         rejection_reason=None,
         byte_count=byte_count,
         codec=codec,
         content=content,
         received_at=at,
-        record_truncated=record.record_truncated,  # the re-offer's own value, not the first
-        supersedes=record.supersedes,
     )
 
 
 def _update_still_rejected_stmt(record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> Update:
+    # Re-adjudication refreshes: see `_update_to_accepted_stmt`.
+    #
+    # `byte_count` is a plain replace, not an accumulation, deliberately (blizzard#290): a
+    # natural key's cap accounting reflects only its most recent offer. Accumulating here would
+    # double-count against `_chunk_stored_bytes_stmt`, which sums only non-rejected rows — once a
+    # rejected row that had accumulated bytes across retries flips to accepted, its single
+    # `byte_count` would carry every prior rejected attempt's size into the stored-bytes cap,
+    # which never stored that many bytes. Splitting stored-bytes accounting from window
+    # accounting would need a second column, which blizzard#290 puts out of scope.
     return _natural_key_rejected_row(record).values(
+        **_identity_values(record),
         rejection_reason=reason,
         byte_count=byte_count,
         received_at=at,
-        record_truncated=record.record_truncated,  # the re-offer's own value, not the first
-        supersedes=record.supersedes,
     )
 
 

@@ -155,6 +155,28 @@ def test_a_re_offer_of_a_previously_rejected_record_is_re_adjudicated_not_falsel
     assert entry.truncated is False
 
 
+def test_a_re_offer_that_accepts_refreshes_the_first_offers_identity_fields(tmp_path: Path) -> None:
+    """blizzard#290: re-adjudication is a refresh, not a partial update — the re-offer's own
+    `final`/`turn_range_end` replace the original rejected offer's stale values, on both the
+    stored row and the derived index row, not just the content."""
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    store = TranscriptSegmentStore(hub.engine)
+    service = TranscriptIngestService(store=store, clock=hub.clock)
+    big = "x" * (RECORD_MAX_BYTES + 1)
+    service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, final=False, turns_json=big)])
+
+    result = service.ingest("r1", [_record(99, turn_range_start=0, turn_range_end=3, final=True)])
+
+    assert result.applied == [99]
+    [content] = store.records_for_segment("ch_1", "sg_1")
+    assert content.final is True
+    assert content.turn_range_end == 3
+    [entry] = store.segments_for_chunk("ch_1")
+    assert entry.final is True
+    assert entry.turn_range_end == 3
+
+
 def test_a_re_offer_of_a_still_over_cap_record_stays_capped_not_applied(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
