@@ -88,6 +88,111 @@ export type ActivityView = {
 };
 
 /**
+ * AnalyticsCountView
+ */
+export type AnalyticsCountView = {
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Key
+     */
+    key: string;
+};
+
+/**
+ * AnalyticsCountsResponse
+ */
+export type AnalyticsCountsResponse = {
+    /**
+     * Counts
+     */
+    counts: Array<AnalyticsCountView>;
+};
+
+/**
+ * AnalyticsEventView
+ *
+ * One derived event, wire-shaped (blizzard#255) — ``payload`` is parsed from its
+ * stored JSON-text form (``bzh:sql-portable`` binds the store, not the wire) into a
+ * plain object, so a consumer never double-decodes a JSON string within JSON.
+ */
+export type AnalyticsEventView = {
+    /**
+     * Agent Type
+     */
+    agent_type: string | null;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Depth
+     */
+    depth: number;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Occurred At
+     */
+    occurred_at: string | null;
+    /**
+     * Payload
+     */
+    payload: {
+        [key: string]: unknown;
+    };
+    /**
+     * Spawn Generation
+     */
+    spawn_generation: number;
+    /**
+     * Subject
+     */
+    subject: string | null;
+    /**
+     * Tool
+     */
+    tool: string | null;
+};
+
+/**
+ * AnalyticsEventsResponse
+ *
+ * A bounded page (blizzard#255) — ``next_cursor`` is ``None`` exactly when this
+ * page is the last one; a caller drives a full bulk read by following it until absent.
+ */
+export type AnalyticsEventsResponse = {
+    /**
+     * Events
+     */
+    events: Array<AnalyticsEventView>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+};
+
+/**
  * AnswerRequest
  *
  * The body of ``POST /questions/{id}/answer`` — the human's answer.
@@ -3238,6 +3343,364 @@ export type ListActivityApiActivityGetResponses = {
 };
 
 export type ListActivityApiActivityGetResponse = ListActivityApiActivityGetResponses[keyof ListActivityApiActivityGetResponses];
+
+export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Kind
+         */
+        kind?: string | null;
+        /**
+         * Tool
+         */
+        tool?: string | null;
+        /**
+         * Path Prefix
+         */
+        path_prefix?: string | null;
+        /**
+         * Node Id
+         */
+        node_id?: string | null;
+        /**
+         * Graph Id
+         */
+        graph_id?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+        /**
+         * Extractor Version
+         */
+        extractor_version?: string | null;
+    };
+    url: '/api/analytics/counts/agent-types';
+};
+
+export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetError = CountsByAgentTypeApiAnalyticsCountsAgentTypesGetErrors[keyof CountsByAgentTypeApiAnalyticsCountsAgentTypesGetErrors];
+
+export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetResponse = CountsByAgentTypeApiAnalyticsCountsAgentTypesGetResponses[keyof CountsByAgentTypeApiAnalyticsCountsAgentTypesGetResponses];
+
+export type CountsByFileApiAnalyticsCountsFilesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Tool
+         */
+        tool?: string | null;
+        /**
+         * Path Prefix
+         */
+        path_prefix?: string | null;
+        /**
+         * Node Id
+         */
+        node_id?: string | null;
+        /**
+         * Graph Id
+         */
+        graph_id?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+        /**
+         * Extractor Version
+         */
+        extractor_version?: string | null;
+    };
+    url: '/api/analytics/counts/files';
+};
+
+export type CountsByFileApiAnalyticsCountsFilesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CountsByFileApiAnalyticsCountsFilesGetError = CountsByFileApiAnalyticsCountsFilesGetErrors[keyof CountsByFileApiAnalyticsCountsFilesGetErrors];
+
+export type CountsByFileApiAnalyticsCountsFilesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type CountsByFileApiAnalyticsCountsFilesGetResponse = CountsByFileApiAnalyticsCountsFilesGetResponses[keyof CountsByFileApiAnalyticsCountsFilesGetResponses];
+
+export type CountsByNodeApiAnalyticsCountsNodesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Kind
+         */
+        kind?: string | null;
+        /**
+         * Tool
+         */
+        tool?: string | null;
+        /**
+         * Path Prefix
+         */
+        path_prefix?: string | null;
+        /**
+         * Graph Id
+         */
+        graph_id?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+        /**
+         * Extractor Version
+         */
+        extractor_version?: string | null;
+    };
+    url: '/api/analytics/counts/nodes';
+};
+
+export type CountsByNodeApiAnalyticsCountsNodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CountsByNodeApiAnalyticsCountsNodesGetError = CountsByNodeApiAnalyticsCountsNodesGetErrors[keyof CountsByNodeApiAnalyticsCountsNodesGetErrors];
+
+export type CountsByNodeApiAnalyticsCountsNodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type CountsByNodeApiAnalyticsCountsNodesGetResponse = CountsByNodeApiAnalyticsCountsNodesGetResponses[keyof CountsByNodeApiAnalyticsCountsNodesGetResponses];
+
+export type CountsBySkillApiAnalyticsCountsSkillsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Node Id
+         */
+        node_id?: string | null;
+        /**
+         * Graph Id
+         */
+        graph_id?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+        /**
+         * Extractor Version
+         */
+        extractor_version?: string | null;
+    };
+    url: '/api/analytics/counts/skills';
+};
+
+export type CountsBySkillApiAnalyticsCountsSkillsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CountsBySkillApiAnalyticsCountsSkillsGetError = CountsBySkillApiAnalyticsCountsSkillsGetErrors[keyof CountsBySkillApiAnalyticsCountsSkillsGetErrors];
+
+export type CountsBySkillApiAnalyticsCountsSkillsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type CountsBySkillApiAnalyticsCountsSkillsGetResponse = CountsBySkillApiAnalyticsCountsSkillsGetResponses[keyof CountsBySkillApiAnalyticsCountsSkillsGetResponses];
+
+export type ListEventsApiAnalyticsEventsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Kind
+         */
+        kind?: string | null;
+        /**
+         * Tool
+         */
+        tool?: string | null;
+        /**
+         * Path Prefix
+         */
+        path_prefix?: string | null;
+        /**
+         * Node Id
+         */
+        node_id?: string | null;
+        /**
+         * Graph Id
+         */
+        graph_id?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+        /**
+         * Extractor Version
+         */
+        extractor_version?: string | null;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/analytics/events';
+};
+
+export type ListEventsApiAnalyticsEventsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListEventsApiAnalyticsEventsGetError = ListEventsApiAnalyticsEventsGetErrors[keyof ListEventsApiAnalyticsEventsGetErrors];
+
+export type ListEventsApiAnalyticsEventsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsEventsResponse;
+};
+
+export type ListEventsApiAnalyticsEventsGetResponse = ListEventsApiAnalyticsEventsGetResponses[keyof ListEventsApiAnalyticsEventsGetResponses];
+
+export type StreamEventsApiAnalyticsEventsNdjsonGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Kind
+         */
+        kind?: string | null;
+        /**
+         * Tool
+         */
+        tool?: string | null;
+        /**
+         * Path Prefix
+         */
+        path_prefix?: string | null;
+        /**
+         * Node Id
+         */
+        node_id?: string | null;
+        /**
+         * Graph Id
+         */
+        graph_id?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+        /**
+         * Extractor Version
+         */
+        extractor_version?: string | null;
+    };
+    url: '/api/analytics/events/ndjson';
+};
+
+export type StreamEventsApiAnalyticsEventsNdjsonGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StreamEventsApiAnalyticsEventsNdjsonGetError = StreamEventsApiAnalyticsEventsNdjsonGetErrors[keyof StreamEventsApiAnalyticsEventsNdjsonGetErrors];
+
+export type StreamEventsApiAnalyticsEventsNdjsonGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type ReDeriveApiAnalyticsReDerivePostData = {
     body: ReDeriveRequest;
