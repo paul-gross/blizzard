@@ -107,6 +107,15 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     # Forced transcript-event re-derivation (blizzard#254 D7) — a mutation, above the
     # read-only TRANSCRIPT_READ.
     ("POST", "/api/analytics/re-derive"): ANALYTICS_ADMIN,
+    # The read-only events/counts surfaces (blizzard#255 D2) — the events they derive
+    # from are exactly what TRANSCRIPT_READ already opens, so reads take that grant
+    # rather than a new one.
+    ("GET", "/api/analytics/events"): TRANSCRIPT_READ,
+    ("GET", "/api/analytics/events/ndjson"): TRANSCRIPT_READ,
+    ("GET", "/api/analytics/counts/files"): TRANSCRIPT_READ,
+    ("GET", "/api/analytics/counts/skills"): TRANSCRIPT_READ,
+    ("GET", "/api/analytics/counts/agent-types"): TRANSCRIPT_READ,
+    ("GET", "/api/analytics/counts/nodes"): TRANSCRIPT_READ,
 }
 
 #: Fleet plane — every route mounted under ``/api/fleet/*`` (issue #87's own
