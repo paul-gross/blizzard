@@ -255,7 +255,7 @@ def test_takeover_close_marks_it_ended(tmp_path) -> None:  # type: ignore[no-unt
     assert "ch_1" not in store.open_takeover_chunk_ids()
 
 
-def test_takeover_close_on_an_unknown_id_raises(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_takeover_close_on_a_different_open_takeover_raises(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
@@ -264,6 +264,26 @@ def test_takeover_close_on_an_unknown_id_raises(tmp_path) -> None:  # type: igno
 
     with pytest.raises(TakeoverEndedElsewhere):
         service.close("ch_1", "tko_bogus")
+
+
+def test_takeover_close_is_idempotent_once_already_ended(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Ending an already-ended takeover is the desired state (issue #291), not an error —
+    the shape the CLI's own end-PATCH ``finally`` needs when ``Pull`` closes it first."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+    service = _service(store)
+    opened = service.open("ch_1", force=False)
+    service.close("ch_1", opened.takeover_id)
+
+    service.close("ch_1", opened.takeover_id)  # does not raise
+
+
+def test_takeover_close_with_no_takeover_ever_opened_is_a_no_op(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    service = _service(store)
+
+    service.close("ch_1", "tko_bogus")  # does not raise
 
 
 # The loop guard — REAP/ADVANCE skip a chunk under an open takeover

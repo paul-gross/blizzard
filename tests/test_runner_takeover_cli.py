@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import click
+import httpx
 import pytest
 from click.testing import CliRunner
 
@@ -48,6 +49,66 @@ def _seed_parked_lease(store: SqlAlchemyRunnerStore) -> None:
     store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+
+def _seed_escalated_lease(store: SqlAlchemyRunnerStore) -> None:
+    """A closed reference lease — the needs-human shape issue #291's bug reproduced
+    against: every ``blizzard runner`` worker verb 404s once its lease is closed."""
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="runner-local",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+
+
+@pytest.mark.component
+def test_takeover_hands_the_resumed_session_a_worker_verb_that_reaches_the_runner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End-to-end proof of issue #291, over the real live socket: the resumed session's
+    forwarded env authorizes a worker verb against the SAME closed reference lease the
+    parked attempt held — no fresh lease, just the open-takeover fact widening the resolver."""
+    root = _init_runner(tmp_path)
+    store = _store(root)
+    _seed_escalated_lease(store)
+    assert store.active_lease("lease_1") is None  # the closed-lease shape the bug reproduced against
+
+    reached: dict[str, httpx.Response] = {}
+    # `BLIZZARD_RUNNER_URL` is unreachable here (`port=0` ephemeral binding), so this reaches
+    # the daemon the same way the CLI's worker-verb commands do: over the UDS socket `--dir` names.
+    transport = httpx.HTTPTransport(uds=str(RunnerConfig.socket_path_for(root)))
+
+    def fake_call(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
+        assert env is not None
+        with httpx.Client(transport=transport, base_url="http://runner", timeout=5.0) as client:
+            reached["attachments"] = client.get(
+                f"/api/leases/{env['BLIZZARD_LEASE_ID']}/attachments",
+                headers={"X-Blizzard-Lease-Token": env["BLIZZARD_LEASE_TOKEN"]},
+            )
+        return 0
+
+    monkeypatch.setattr(runner_cli.subprocess, "call", fake_call)
+
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert reached["attachments"].status_code == 200, reached["attachments"].text
+    assert reached["attachments"].json() == []
+    # list_active_leases() is unaffected — no FILL slot consumed, no fresh mint.
+    assert store.list_active_leases() == []
+    assert store.open_takeover_for_chunk("ch_1") is None  # marked ended once the child exited
 
 
 @pytest.mark.component

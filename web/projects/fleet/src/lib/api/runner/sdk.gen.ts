@@ -208,6 +208,10 @@ export const getArtifactApiLeasesLeaseIdArtifactsNameGet = <ThrowOnError extends
  * Record Ask
  *
  * Record a worker's ask against its lease, minting the question id.
+ *
+ * Token-authorized like every other worker verb (issue #291) — previously activeness was
+ * this route's whole gate, which would have widened admission with no credential behind it
+ * once an open takeover's closed reference lease qualified too.
  */
 export const recordAskApiLeasesLeaseIdAsksPost = <ThrowOnError extends boolean = false>(options: Options<RecordAskApiLeasesLeaseIdAsksPostData, ThrowOnError>): RequestResult<RecordAskApiLeasesLeaseIdAsksPostResponses, RecordAskApiLeasesLeaseIdAsksPostErrors, ThrowOnError> => (options.client ?? client).post<RecordAskApiLeasesLeaseIdAsksPostResponses, RecordAskApiLeasesLeaseIdAsksPostErrors, ThrowOnError>({
     url: '/api/leases/{lease_id}/asks',

@@ -1674,8 +1674,8 @@
   },
   "blizzard/runner/api/asks.py": {
    "comments": 0,
-   "docstrings": 14,
-   "total": 82
+   "docstrings": 18,
+   "total": 87
   },
   "blizzard/runner/api/attachments.py": {
    "comments": 0,
@@ -1739,8 +1739,8 @@
   },
   "blizzard/runner/api/lease_scope.py": {
    "comments": 0,
-   "docstrings": 4,
-   "total": 24
+   "docstrings": 5,
+   "total": 25
   },
   "blizzard/runner/api/lease_token.py": {
    "comments": 0,
@@ -1784,8 +1784,8 @@
   },
   "blizzard/runner/api/wiring.py": {
    "comments": 0,
-   "docstrings": 6,
-   "total": 105
+   "docstrings": 10,
+   "total": 113
   },
   "blizzard/runner/api/work_items.py": {
    "comments": 2,
@@ -1904,8 +1904,8 @@
   },
   "blizzard/runner/domain/takeover.py": {
    "comments": 17,
-   "docstrings": 21,
-   "total": 198
+   "docstrings": 25,
+   "total": 204
   },
   "blizzard/runner/environments/__init__.py": {
    "comments": 0,
@@ -2128,9 +2128,9 @@
    "total": 225
   },
   "blizzard/runner/loop/steps.py": {
-   "comments": 53,
-   "docstrings": 83,
-   "total": 560
+   "comments": 54,
+   "docstrings": 88,
+   "total": 580
   },
   "blizzard/runner/loop/tick.py": {
    "comments": 12,
@@ -2220,7 +2220,7 @@
   "blizzard/runner/store/internal/sqlalchemy_store.py": {
    "comments": 98,
    "docstrings": 24,
-   "total": 1741
+   "total": 1751
   },
   "blizzard/runner/store/migrations/__init__.py": {
    "comments": 0,
@@ -2399,8 +2399,8 @@
   },
   "blizzard/runner/store/repository.py": {
    "comments": 7,
-   "docstrings": 405,
-   "total": 1062
+   "docstrings": 409,
+   "total": 1069
   },
   "blizzard/runner/store/schema.py": {
    "comments": 142,
@@ -3711,8 +3711,13 @@
   },
   "test_runner_artifacts_api.py": {
    "comments": 10,
-   "docstrings": 16,
-   "total": 359
+   "docstrings": 19,
+   "total": 385
+  },
+  "test_runner_asks_api.py": {
+   "comments": 3,
+   "docstrings": 10,
+   "total": 149
   },
   "test_runner_attach_cli.py": {
    "comments": 1,
@@ -3721,8 +3726,8 @@
   },
   "test_runner_attachments_api.py": {
    "comments": 7,
-   "docstrings": 11,
-   "total": 265
+   "docstrings": 14,
+   "total": 295
   },
   "test_runner_checks.py": {
    "comments": 23,
@@ -3731,13 +3736,13 @@
   },
   "test_runner_chunk_history_api.py": {
    "comments": 12,
-   "docstrings": 16,
-   "total": 470
+   "docstrings": 19,
+   "total": 496
   },
   "test_runner_chunk_history_cli.py": {
    "comments": 1,
    "docstrings": 7,
-   "total": 137
+   "total": 139
   },
   "test_runner_config_auth.py": {
    "comments": 2,
@@ -3796,8 +3801,8 @@
   },
   "test_runner_git_commits_api.py": {
    "comments": 7,
-   "docstrings": 16,
-   "total": 250
+   "docstrings": 19,
+   "total": 278
   },
   "test_runner_harness_adapter.py": {
    "comments": 76,
@@ -3935,24 +3940,29 @@
    "total": 224
   },
   "test_runner_store.py": {
-   "comments": 113,
-   "docstrings": 70,
-   "total": 1048
+   "comments": 116,
+   "docstrings": 72,
+   "total": 1101
   },
   "test_runner_takeover.py": {
-   "comments": 68,
-   "docstrings": 22,
-   "total": 437
+   "comments": 72,
+   "docstrings": 24,
+   "total": 457
   },
   "test_runner_takeover_api.py": {
    "comments": 6,
-   "docstrings": 6,
-   "total": 156
+   "docstrings": 13,
+   "total": 193
   },
   "test_runner_takeover_cli.py": {
-   "comments": 15,
-   "docstrings": 15,
-   "total": 200
+   "comments": 20,
+   "docstrings": 20,
+   "total": 261
+  },
+  "test_runner_takeover_closure.py": {
+   "comments": 9,
+   "docstrings": 8,
+   "total": 147
   },
   "test_runner_transcripts.py": {
    "comments": 13,

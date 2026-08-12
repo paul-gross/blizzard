@@ -30,7 +30,7 @@ def record_git_commit_declaration(
     """Record a worker's explicit git-commit declaration for ``request_body.repo`` against
     its lease."""
     service = RunnerWiring.of(request).git_commits()
-    lease = RunnerWiring.of(request).active_lease(lease_id)
+    lease = RunnerWiring.of(request).worker_lease(lease_id)
     try:
         environment_id = service.declare(
             lease,

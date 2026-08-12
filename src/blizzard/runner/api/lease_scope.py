@@ -12,11 +12,12 @@ from blizzard.runner.store.repository import LeaseRecord
 
 
 def authorized_lease(lease_id: str, request: Request) -> LeaseRecord:
-    """Resolve ``lease_id`` to its active lease and check the presented token, or raise the
-    store-free ``503`` / unknown-lease ``404`` / bad-token ``403`` — before any hub call, so an
-    unauthorized caller never learns the fleet's hub-wiring state."""
+    """Resolve ``lease_id`` to its active lease — or the lease an open takeover names
+    (issue #291) — and check the presented token, or raise the store-free ``503`` /
+    unknown-lease ``404`` / bad-token ``403`` — before any hub call, so an unauthorized
+    caller never learns the fleet's hub-wiring state."""
     wiring = RunnerWiring.of(request)
-    lease = wiring.active_lease(lease_id)
+    lease = wiring.worker_lease(lease_id)
     if not LeaseToken(presented_lease_token(request), wiring.reads().lease_token_hash(lease_id)).valid:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=f"presented token does not authorize lease {lease_id}"

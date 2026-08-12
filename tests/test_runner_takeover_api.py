@@ -147,10 +147,47 @@ def test_end_marks_the_takeover_closed(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_end_an_unknown_takeover_is_404(tmp_path: Path) -> None:
+def test_end_with_no_open_takeover_on_the_chunk_succeeds_idempotently(tmp_path: Path) -> None:
+    """Ending a takeover already ended — or never opened — is the desired state (issue
+    #291): it succeeds rather than 404ing, which is what lets the CLI's own ``finally``
+    exit cleanly after ``Pull`` closes the takeover first."""
     app, _store = _app_with_takeover(tmp_path)
 
     with TestClient(app) as client:
         resp = client.patch("/api/chunks/ch_1/takeovers/tko_bogus")
 
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"takeover_id": "tko_bogus", "ended": True}
+
+
+@pytest.mark.component
+def test_end_with_a_different_takeover_open_on_the_chunk_is_404(tmp_path: Path) -> None:
+    """The real conflict this stays strict about: a *different* takeover genuinely holds
+    the chunk right now."""
+    app, store = _app_with_takeover(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    with TestClient(app) as client:
+        client.post("/api/chunks/ch_1/takeovers", json={})
+        resp = client.patch("/api/chunks/ch_1/takeovers/tko_bogus")
+
     assert resp.status_code == 404
+    assert store.open_takeover_for_chunk("ch_1") is not None
+
+
+@pytest.mark.component
+def test_end_already_ended_by_someone_else_succeeds_idempotently(tmp_path: Path) -> None:
+    """The exact race D3 fixes: something else (``Pull``, or a retried end-PATCH) already
+    closed this same takeover — ending it again is a no-op, not a 404."""
+    app, store = _app_with_takeover(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    with TestClient(app) as client:
+        opened = client.post("/api/chunks/ch_1/takeovers", json={}).json()
+        store.record_takeover_end(takeover_id=opened["takeover_id"], ended_at=_NOW)
+        resp = client.patch(f"/api/chunks/ch_1/takeovers/{opened['takeover_id']}")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"takeover_id": opened["takeover_id"], "ended": True}

@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api", tags=["runner"])
 def record_attachment(lease_id: str, request_body: AttachmentRequest, request: Request) -> AttachmentResponse:
     """Record a worker's explicit artifact for ``request_body.name`` against its lease."""
     service = RunnerWiring.of(request).attachments()
-    lease = RunnerWiring.of(request).active_lease(lease_id)
+    lease = RunnerWiring.of(request).worker_lease(lease_id)
     try:
         service.attach(
             lease,

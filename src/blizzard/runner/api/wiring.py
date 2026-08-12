@@ -53,10 +53,18 @@ class RunnerWiring:
     def reads(self) -> IReadRunnerStore:
         return self.store()
 
-    def active_lease(self, lease_id: str) -> LeaseRecord:
-        lease = self.store().active_lease(lease_id)
+    def worker_lease(self, lease_id: str) -> LeaseRecord:
+        """The lease a worker verb may act against: the active lease, or — when the ordinary
+        active lease is gone — the one an open takeover names (issue #291). An open takeover
+        is a second, independent source of worker-verb authorization, not a re-mint: the
+        resolved record's id, node and epoch are unchanged from whatever they already were."""
+        store = self.store()
+        lease = store.active_lease(lease_id) or store.lease_for_open_takeover(lease_id)
         if lease is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no active lease {lease_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no active lease or open takeover for lease {lease_id}",
+            )
         return lease
 
     def status(self) -> RunnerStatusService:

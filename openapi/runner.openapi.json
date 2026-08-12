@@ -2865,7 +2865,7 @@
     },
     "/api/leases/{lease_id}/asks": {
       "post": {
-        "description": "Record a worker's ask against its lease, minting the question id.",
+        "description": "Record a worker's ask against its lease, minting the question id.\n\nToken-authorized like every other worker verb (issue #291) \u2014 previously activeness was\nthis route's whole gate, which would have widened admission with no credential behind it\nonce an open takeover's closed reference lease qualified too.",
         "operationId": "record_ask_api_leases__lease_id__asks_post",
         "parameters": [
           {
