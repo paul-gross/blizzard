@@ -2113,6 +2113,47 @@ export type QueueReplaceRequest = {
 };
 
 /**
+ * ReDeriveRequest
+ *
+ * Scope the call to one segment (a genuine force, bypassing the candidate check),
+ * one chunk's candidates, or every candidate (both unset) — never both a segment and a
+ * chunk. ``limit`` bounds a chunk/all-scoped call; a single segment always derives
+ * exactly one, so it ignores ``limit``.
+ */
+export type ReDeriveRequest = {
+    /**
+     * Chunk Id
+     */
+    chunk_id?: string | null;
+    /**
+     * Limit
+     */
+    limit?: number;
+    /**
+     * Segment Id
+     */
+    segment_id?: string | null;
+};
+
+/**
+ * ReDeriveResponse
+ *
+ * How many segments this call derived, and how many still-candidate segments
+ * remain in scope — the caller drives to convergence by calling again while
+ * ``remaining`` is nonzero.
+ */
+export type ReDeriveResponse = {
+    /**
+     * Derived
+     */
+    derived: number;
+    /**
+     * Remaining
+     */
+    remaining: number;
+};
+
+/**
  * ReadinessResponse
  *
  * The wire shape of a readiness reading (openapi-ts consumes this).
@@ -3197,6 +3238,31 @@ export type ListActivityApiActivityGetResponses = {
 };
 
 export type ListActivityApiActivityGetResponse = ListActivityApiActivityGetResponses[keyof ListActivityApiActivityGetResponses];
+
+export type ReDeriveApiAnalyticsReDerivePostData = {
+    body: ReDeriveRequest;
+    path?: never;
+    query?: never;
+    url: '/api/analytics/re-derive';
+};
+
+export type ReDeriveApiAnalyticsReDerivePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReDeriveApiAnalyticsReDerivePostError = ReDeriveApiAnalyticsReDerivePostErrors[keyof ReDeriveApiAnalyticsReDerivePostErrors];
+
+export type ReDeriveApiAnalyticsReDerivePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ReDeriveResponse;
+};
+
+export type ReDeriveApiAnalyticsReDerivePostResponse = ReDeriveApiAnalyticsReDerivePostResponses[keyof ReDeriveApiAnalyticsReDerivePostResponses];
 
 export type AuthorizeApiAuthAuthorizeGetData = {
     body?: never;

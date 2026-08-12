@@ -7,6 +7,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.auth_core import (
+    ANALYTICS_ADMIN,
     CHUNK_CONTROL,
     CHUNK_INGEST,
     FLEET_VIEW,
@@ -41,6 +42,7 @@ def test_guest_holds_fleet_view_and_nothing_else() -> None:
         GRAPH_EDIT,
         USER_MANAGE,
         TRANSCRIPT_READ,
+        ANALYTICS_ADMIN,
     }
     guest = expand(Role.GUEST)
     assert FLEET_VIEW in guest
@@ -89,6 +91,15 @@ def test_runner_pause_and_graph_edit_are_admin_and_above() -> None:
     for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):
         assert RUNNER_PAUSE not in expand(role)
         assert GRAPH_EDIT not in expand(role)
+
+
+def test_analytics_admin_is_admin_and_above() -> None:
+    """``analytics:admin`` gates the forced re-derive route (blizzard#254 D7) — a
+    mutation, so above the read-only ``transcript:read``, not ``contributor``+."""
+    for role in (Role.ADMIN, Role.SUPERUSER):
+        assert ANALYTICS_ADMIN in expand(role)
+    for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):
+        assert ANALYTICS_ADMIN not in expand(role)
 
 
 def test_transcript_read_is_contributor_and_above() -> None:

@@ -23,6 +23,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.web import Frontend
+from blizzard.hub.api.analytics import router as analytics_router
 from blizzard.hub.api.auth_login import router as auth_login_router
 from blizzard.hub.api.chunks import router as chunks_router
 from blizzard.hub.api.decisions import router as decisions_router
@@ -56,6 +57,10 @@ DEFAULT_FORGE_OWNER = "blizzard"
 ENV_FORGE_BASE_BRANCH = "BZ_FORGE_BASE_BRANCH"
 DEFAULT_FORGE_BASE_BRANCH = "main"
 
+#: The transcript-event derivation sweep's own interval (blizzard#254 D1) — a module
+#: constant, not an operator config key, in this slice.
+EVENT_DERIVATION_INTERVAL_SECONDS = 30
+
 
 class _Sweepable(Protocol):
     """The one capability :class:`Sweep` needs — structural, so any reconciler
@@ -85,6 +90,12 @@ class Sweep:
             yield cls(annotator, interval, app.state.shutdown, "blizzard.hub.forge_status")
         if services.work_sources.closing_names():
             yield cls(services.delivery_closure, interval, app.state.shutdown, "blizzard.hub.work_closure")
+        yield cls(
+            services.event_derivation,
+            EVENT_DERIVATION_INTERVAL_SECONDS,
+            app.state.shutdown,
+            "blizzard.hub.transcript_events",
+        )
 
     async def run(self) -> None:
         """Call ``sweep()``, then wait out the interval. Races ``shutdown`` so it wakes
@@ -152,6 +163,7 @@ def create_app(
     app.include_router(spend_router)
     app.include_router(users_router)
     app.include_router(transcripts_router)
+    app.include_router(analytics_router)
     # The runner-authenticated fleet router (issue #87) — a fleet verb is authenticated
     # *because of where it is mounted*; see `blizzard.hub.api.fleet`.
     app.include_router(fleet_router)

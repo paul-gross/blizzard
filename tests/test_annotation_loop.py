@@ -99,12 +99,20 @@ class _FakeWorkSources:
 
 class _FakeServices:
     """A minimal stand-in for ``HubServices`` — only the attributes ``_lifespan``
-    reads: ``work_sources`` (the start-condition) and ``delivery_closure`` (the
-    already-built reconciler it starts or not, mirroring the composition root)."""
+    reads: ``work_sources`` (the start-condition), ``delivery_closure`` (the
+    already-built reconciler it starts or not, mirroring the composition root), and
+    ``event_derivation`` (blizzard#254 — started unconditionally, no source gate)."""
 
-    def __init__(self, *, work_sources: _FakeWorkSources, delivery_closure: _CountingReconciler) -> None:
+    def __init__(
+        self,
+        *,
+        work_sources: _FakeWorkSources,
+        delivery_closure: _CountingReconciler,
+        event_derivation: _CountingReconciler | None = None,
+    ) -> None:
         self.work_sources = work_sources
         self.delivery_closure = delivery_closure
+        self.event_derivation = event_derivation or _CountingReconciler()
         self.chunks = None  # unread unless annotating_names() is non-empty, which these tests never set
 
 
@@ -143,3 +151,17 @@ async def test_lifespan_starts_the_closure_loop_when_a_source_opts_in(tmp_path: 
         await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
 
     assert closure.calls == 1
+
+
+async def test_lifespan_starts_the_event_derivation_loop_unconditionally(tmp_path: Path) -> None:
+    """blizzard#254 D1: no work source opts a chunk's transcript events into anything —
+    the sweep is yielded and started regardless."""
+    event_derivation = _CountingReconciler()
+    services = _FakeServices(work_sources=_FakeWorkSources(), delivery_closure=_CountingReconciler())
+    services.event_derivation = event_derivation
+    app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
+
+    async with _lifespan(app):  # type: ignore[arg-type]
+        await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
+
+    assert event_derivation.calls == 1

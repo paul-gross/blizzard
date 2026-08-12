@@ -603,9 +603,9 @@
    "total": 18
   },
   "blizzard/auth_core/__init__.py": {
-   "comments": 22,
+   "comments": 24,
    "docstrings": 8,
-   "total": 89
+   "total": 92
   },
   "blizzard/cli/__init__.py": {
    "comments": 0,
@@ -752,6 +752,11 @@
    "docstrings": 6,
    "total": 8
   },
+  "blizzard/hub/api/analytics.py": {
+   "comments": 0,
+   "docstrings": 9,
+   "total": 46
+  },
   "blizzard/hub/api/auth.py": {
    "comments": 0,
    "docstrings": 16,
@@ -883,9 +888,9 @@
    "total": 69
   },
   "blizzard/hub/app.py": {
-   "comments": 14,
+   "comments": 16,
    "docstrings": 28,
-   "total": 233
+   "total": 245
   },
   "blizzard/hub/auth/__init__.py": {
    "comments": 0,
@@ -1033,9 +1038,9 @@
    "total": 38
   },
   "blizzard/hub/cli.py": {
-   "comments": 14,
-   "docstrings": 153,
-   "total": 946
+   "comments": 15,
+   "docstrings": 159,
+   "total": 976
   },
   "blizzard/hub/cli_context.py": {
    "comments": 2,
@@ -1053,9 +1058,9 @@
    "total": 244
   },
   "blizzard/hub/composition.py": {
-   "comments": 31,
+   "comments": 35,
    "docstrings": 12,
-   "total": 264
+   "total": 277
   },
   "blizzard/hub/config.py": {
    "comments": 35,
@@ -1111,6 +1116,26 @@
    "comments": 0,
    "docstrings": 6,
    "total": 8
+  },
+  "blizzard/hub/domain/analytics/__init__.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "total": 8
+  },
+  "blizzard/hub/domain/analytics/derivation.py": {
+   "comments": 1,
+   "docstrings": 22,
+   "total": 140
+  },
+  "blizzard/hub/domain/analytics/events.py": {
+   "comments": 3,
+   "docstrings": 33,
+   "total": 121
+  },
+  "blizzard/hub/domain/analytics/extraction.py": {
+   "comments": 5,
+   "docstrings": 24,
+   "total": 177
   },
   "blizzard/hub/domain/apply.py": {
    "comments": 34,
@@ -1326,6 +1351,11 @@
    "comments": 16,
    "docstrings": 15,
    "total": 308
+  },
+  "blizzard/hub/store/internal/transcript_event_store.py": {
+   "comments": 5,
+   "docstrings": 14,
+   "total": 244
   },
   "blizzard/hub/store/internal/transcript_segment_store.py": {
    "comments": 15,
@@ -1607,15 +1637,20 @@
    "docstrings": 6,
    "total": 34
   },
+  "blizzard/hub/store/migrations/versions/20260812_1200_transcript_events.py": {
+   "comments": 2,
+   "docstrings": 6,
+   "total": 82
+  },
   "blizzard/hub/store/migrations/versions/__init__.py": {
    "comments": 0,
    "docstrings": 0,
    "total": 0
   },
   "blizzard/hub/store/schema.py": {
-   "comments": 244,
+   "comments": 266,
    "docstrings": 6,
-   "total": 810
+   "total": 873
   },
   "blizzard/hub/work_sources/__init__.py": {
    "comments": 0,
@@ -2467,6 +2502,11 @@
    "docstrings": 11,
    "total": 42
   },
+  "blizzard/wire/analytics.py": {
+   "comments": 0,
+   "docstrings": 9,
+   "total": 26
+  },
   "blizzard/wire/attachments.py": {
    "comments": 0,
    "docstrings": 7,
@@ -2764,6 +2804,11 @@
    "docstrings": 38,
    "total": 367
   },
+  "service/test_analytics_service.py": {
+   "comments": 2,
+   "docstrings": 4,
+   "total": 89
+  },
   "service/test_auth_login_service.py": {
    "comments": 2,
    "docstrings": 17,
@@ -2850,9 +2895,9 @@
    "total": 371
   },
   "test_annotation_loop.py": {
-   "comments": 7,
-   "docstrings": 15,
-   "total": 145
+   "comments": 9,
+   "docstrings": 18,
+   "total": 167
   },
   "test_apps.py": {
    "comments": 5,
@@ -2881,8 +2926,8 @@
   },
   "test_auth_core.py": {
    "comments": 0,
-   "docstrings": 12,
-   "total": 113
+   "docstrings": 14,
+   "total": 124
   },
   "test_auth_identity_migration.py": {
    "comments": 2,
@@ -3008,6 +3053,11 @@
    "comments": 21,
    "docstrings": 46,
    "total": 533
+  },
+  "test_cli_analytics.py": {
+   "comments": 1,
+   "docstrings": 2,
+   "total": 88
   },
   "test_cli_login_api.py": {
    "comments": 2,
@@ -3670,14 +3720,14 @@
    "total": 359
   },
   "test_route_classification.py": {
-   "comments": 26,
+   "comments": 28,
    "docstrings": 36,
-   "total": 275
+   "total": 279
   },
   "test_route_permission_matrix.py": {
-   "comments": 8,
+   "comments": 9,
    "docstrings": 15,
-   "total": 137
+   "total": 138
   },
   "test_route_seq_concurrency.py": {
    "comments": 7,
@@ -4073,6 +4123,21 @@
    "comments": 41,
    "docstrings": 50,
    "total": 573
+  },
+  "test_transcript_event_derivation.py": {
+   "comments": 2,
+   "docstrings": 6,
+   "total": 227
+  },
+  "test_transcript_event_extraction.py": {
+   "comments": 3,
+   "docstrings": 7,
+   "total": 198
+  },
+  "test_transcript_event_store.py": {
+   "comments": 8,
+   "docstrings": 9,
+   "total": 383
   },
   "test_transcript_ingest_service.py": {
    "comments": 12,

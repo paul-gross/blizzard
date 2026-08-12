@@ -47,6 +47,9 @@ USER_MANAGE = Permission("user:manage")
 #: Read a chunk's stored transcript segments (blizzard#247, D11) — above ``fleet:view``,
 #: since a transcript carries everything a worker saw, not just the fleet's state.
 TRANSCRIPT_READ = Permission("transcript:read")
+#: Force a transcript-event re-derivation (blizzard#254 D7) — a mutation, so above the
+#: read-only :data:`TRANSCRIPT_READ`.
+ANALYTICS_ADMIN = Permission("analytics:admin")
 
 #: ``guest`` — read everything, mutate nothing.
 _GUEST_PERMISSIONS: frozenset[Permission] = frozenset({FLEET_VIEW})
@@ -66,7 +69,7 @@ _CONTRIBUTOR_PERMISSIONS: frozenset[Permission] = _GUEST_PERMISSIONS | frozenset
 #: ``admin`` adds fleet-identity/runner writes, graph-authoring, and user
 #: administration (the admin page, ``user:manage``) on top of ``contributor``.
 _ADMIN_PERMISSIONS: frozenset[Permission] = _CONTRIBUTOR_PERMISSIONS | frozenset(
-    {RUNNER_PAUSE, GRAPH_EDIT, USER_MANAGE}
+    {RUNNER_PAUSE, GRAPH_EDIT, USER_MANAGE, ANALYTICS_ADMIN}
 )
 
 #: ``superuser`` holds every permission that exists — in #91 that is exactly the

@@ -1527,6 +1527,51 @@ ship = false
   marked truncated* — check the reason in the event log, since only some reasons are about
   the cap.
 
+## Deriving events from transcripts — the analytics lane (blizzard#254)
+
+Alongside the raw transcript segments above, the hub maintains a derived, queryable
+**event stream**: one row per interesting occurrence a segment's turns hold — today,
+a file read naming a concrete path, a skill invocation, or an agent spawn — stamped
+with the node-step context the segment already carries (chunk, node, epoch, spawn
+generation), tagged with sidechain nesting depth and the nearest-enclosing agent type,
+and stamped with the extractor version that produced it.
+
+**Automatic, no configuration.** A standing in-process sweep derives every final,
+not-superseded segment's events on its own interval; there is nothing to enable and
+nothing in `[transcripts]` gates it — it runs whenever segments exist to derive,
+independent of `ship`. A segment's events typically appear within one sweep interval
+of the segment landing, with no operator action.
+
+**It is a projection, not a second source of truth.** Every row is a pure, immutable
+computation over the segment's own stored content — never itself authoritative, and
+never gating a claim, a spawn, or any admission decision. Dropping the whole table
+costs only the time to re-derive it, which the sweep does on its own the next time it
+runs; nothing else needs to change and no downtime is required. If a segment's stored
+content later changes underneath an earlier derivation (a rejected record accepted, a
+late record landing), the sweep detects it and re-derives that segment on its next
+pass.
+
+**Forcing it sooner: `blizzard hub analytics re-derive`.** The standing sweep is
+usually enough, but an operator who wants a specific segment's events immediately, or
+who bumped the extractor version and wants a chunk (or the whole fleet) re-derived
+now rather than waiting for the sweep's own cadence, can force it:
+
+```
+blizzard hub analytics re-derive --segment SEGMENT_ID
+blizzard hub analytics re-derive --chunk CHUNK_ID [--limit N]
+blizzard hub analytics re-derive [--limit N]
+```
+
+`--segment` forces that one segment regardless of whether it currently looks
+up to date. `--chunk` (or neither option, for the whole fleet) derives up to `--limit`
+(default 50) of that scope's current candidates and reports how many remain — a
+nonzero `remaining` means calling it again continues from where it left off, the same
+way the standing sweep itself converges. **No downtime**: it runs the same in-process
+reconciler already live inside the hub, driven directly rather than waiting for its
+next tick — never a `--dir` verb, and the hub is never stopped for it. It requires
+`admin`+ (`analytics:admin`), since it mutates, unlike the read-only `transcript:read`
+grant the segment routes above are gated on.
+
 ## Operational visibility — the event log
 
 The failures that cost the most are the least visible: a worker that exits without recording a
