@@ -89,8 +89,6 @@ def test_adv_dwf_deliver_authors_the_conflict_edge() -> None:
     deliver = graph.node_by_name("deliver")
     assert deliver is not None
     assert {c.name for c in deliver.choices} == {"landed", "conflict", "failure"}
-    conflict_edge = next(e for e in graph.edges_from(deliver.node_id) if e.to_node_name == "resolve")
-    assert conflict_edge.to_node_name == "resolve"
     choices_by_name = {c.name: c for c in deliver.choices}
     conflict_edges = [
         e for e in graph.edges_from(deliver.node_id) if e.choice_id == choices_by_name["conflict"].choice_id
