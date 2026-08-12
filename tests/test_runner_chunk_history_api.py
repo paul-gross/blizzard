@@ -272,6 +272,32 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
+def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The worker-authorization resolver's other half (issue #291): once an open
+    takeover names the (now closed) reference lease, its re-minted token reaches
+    this route the same as an ordinary active lease would."""
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    store.record_closure(lease_id="lease_1", chunk_id=_CHUNK, node_id="nd_build", reason="escalated", closed_at=_NOW)
+    takeover_token = "the-takeover-token"
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id=_CHUNK,
+        lease_id="lease_1",
+        session_id="sess-a",
+        workdir="/ws/e1",
+        fence_epoch=None,
+        opened_at=_NOW,
+    )
+    store.record_lease_token("lease_1", TokenHash(takeover_token).hex, _NOW)
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _DETAIL))
+
+    with TestClient(app) as client:
+        resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": takeover_token})
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.component
 def test_503_when_hub_unwired_even_for_an_authorized_lease(tmp_path: Path) -> None:
     """Authorization is resolved before the hub is consulted, so an unauthorized caller
     never learns the hub-wiring state — mirrors the artifacts proxy."""

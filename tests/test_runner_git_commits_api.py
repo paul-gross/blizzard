@@ -163,6 +163,34 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
+def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) -> None:
+    """The worker-authorization resolver's other half (issue #291): once an open
+    takeover names the (now closed) reference lease, its re-minted token reaches
+    this route the same as an ordinary active lease would."""
+    app, store = _app_with_declarations(tmp_path)
+    _seed_lease(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+    takeover_token = "the-takeover-token"
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        session_id="sess-a",
+        workdir="/ws/e1",
+        fence_epoch=None,
+        opened_at=_NOW,
+    )
+    store.record_lease_token("lease_1", TokenHash(takeover_token).hex, _NOW)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/leases/lease_1/git-commits", json=_BODY, headers={"X-Blizzard-Lease-Token": takeover_token}
+        )
+    assert resp.status_code == 200, resp.text
+    assert ("e1", "toy-api") in store.git_commit_declarations_for_lease("lease_1")
+
+
+@pytest.mark.component
 def test_400_for_a_repo_the_environment_does_not_hold(tmp_path: Path) -> None:
     """The rejection the silent drop replaces: a repo outside the env's manifest is
     refused at declare time, while the worker is still alive to re-run the verb, and the

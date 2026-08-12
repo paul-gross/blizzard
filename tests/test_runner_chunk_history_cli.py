@@ -113,11 +113,13 @@ def test_history_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail(monkeypatc
 
 
 def test_history_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "no active lease lease_9"}))
+    monkeypatch.setattr(
+        httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "no active lease or open takeover for lease_9"})
+    )
     result = CliRunner().invoke(runner_group, ["chunk", "history"], env=_ENV)
 
     assert result.exit_code != 0
-    assert "no active lease lease_9" in result.output
+    assert "no active lease or open takeover for lease_9" in result.output
 
 
 def test_chunk_history_help_names_no_chunk_naming_flag() -> None:

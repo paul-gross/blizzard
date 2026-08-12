@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from blizzard.foundation.ids import QUESTION_PREFIX, Id
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.federation import require_human_api
 from blizzard.runner.store.repository import AskRecord
@@ -38,10 +39,14 @@ class AskResponse(BaseModel):
 
 @router.post("/leases/{lease_id}/asks", response_model=AskResponse, status_code=status.HTTP_201_CREATED)
 def record_ask(lease_id: str, request_body: AskRequest, request: Request) -> AskResponse:
-    """Record a worker's ask against its lease, minting the question id."""
+    """Record a worker's ask against its lease, minting the question id.
+
+    Token-authorized like every other worker verb (issue #291) — previously activeness was
+    this route's whole gate, which would have widened admission with no credential behind it
+    once an open takeover's closed reference lease qualified too."""
     wiring = RunnerWiring.of(request)
     store, clock = wiring.store(), wiring.clock()
-    lease = wiring.active_lease(lease_id)
+    lease = authorized_lease(lease_id, request)
     question_id = Id.mint(QUESTION_PREFIX, clock).value
     store.record_ask(
         lease_id=lease_id,

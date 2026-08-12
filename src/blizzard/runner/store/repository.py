@@ -276,8 +276,10 @@ class CheckResultRecord:
 class TakeoverRecord:
     """An open operator takeover — the human-in-session fact (issue #52).
 
-    ``lease_id`` is ``None`` for the shapes whose lease already closed. ``fence_epoch``
-    is set only when a live worker was force-killed, fencing its in-flight completion."""
+    ``lease_id`` always names the reference lease :meth:`TakeoverService.open` resolved —
+    active or already closed — never ``None``; ``ChunkNotTakeable`` refuses before a
+    takeover with no reference lease is ever recorded. ``fence_epoch`` is set only when a
+    live worker was force-killed, fencing its in-flight completion."""
 
     takeover_id: str
     chunk_id: str
@@ -575,6 +577,13 @@ class IReadRunnerStore(Protocol):
         """The lease's minted capability token hash, or ``None`` if never minted
         here (issue #113, Phase 1) — what an attach authorization check compares a
         presented plaintext's hash against."""
+        ...
+
+    def lease_for_open_takeover(self, lease_id: str) -> LeaseRecord | None:
+        """The lease by id iff an open takeover names it (issue #291), regardless of the
+        lease's own closure — the worker-authorization resolver's second half, alongside
+        :meth:`active_lease`. The open-takeover fact is what authorizes a resumed session's
+        worker verbs against the reference lease it names, not the lease's own activeness."""
         ...
 
     def open_takeover_for_chunk(self, chunk_id: str) -> TakeoverRecord | None:

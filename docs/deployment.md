@@ -1076,7 +1076,12 @@ Two things ride that exec which a plain copy-paste of a resume command does not 
   deployment's venv. Opening a takeover **mints a fresh lease capability token**
   (invalidating the previous one); everything else about your shell — `TERM`, locale,
   your own variables — stays untouched, and nothing beyond that bounded set leaves
-  the daemon.
+  the daemon. What actually authorizes those verbs is the **open takeover fact
+  itself** (issue #291), not a fresh lease: the reference lease it names is very
+  often already closed — the ordinary shape for a parked or escalated chunk — and the
+  daemon resolves a worker verb's lease as that lease's own activeness *or* an open
+  takeover naming it, so the session's verbs reach the runner against the same
+  closed lease record the parked attempt held, unchanged in id, node and epoch.
 
 For a **runner-composed** escalation, this makes the takeover verb, not the escalation
 record's raw string, the supported way in. `blizzard runner status` still prints that
@@ -1108,6 +1113,15 @@ entirely, stopping the chunk, which closes the escalation with it (see the stop 
 A taken-over session also installs **no** heartbeat or session-end hooks: quitting it
 must not record a done-signal against the lease, so liveness reporting stays a
 daemon-spawned-worker concern.
+
+Ending the takeover ordinarily happens the same way it opened — a person exits the
+session and the CLI's own `finally` PATCHes it closed — but the hub itself can end it
+too (issue #291): if the chunk transitions to a terminal status while a takeover is
+still open, `PULL` closes the takeover fact on its own next tick, the same way it
+already mirrors an escalation's own hub-side close. The end-PATCH is idempotent, so a
+session stopped from the board mid-takeover still exits cleanly when its own `finally`
+reaches an already-closed takeover — it does not surface as a "could not reach the
+runner" error.
 
 ### Editing an unclaimed chunk's build config
 

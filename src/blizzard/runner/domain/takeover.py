@@ -192,7 +192,13 @@ class TakeoverService:
         )
 
     def close(self, chunk_id: str, takeover_id: str) -> None:
+        """End ``takeover_id``, idempotently (issue #291): ending one already ended — by this
+        same call racing ``Pull``'s own closer, or a retried end-PATCH — is the desired state,
+        so it succeeds rather than raising. Only a genuinely *different* takeover holding the
+        chunk is the real conflict this still refuses."""
         record = self._store.open_takeover_for_chunk(chunk_id)
-        if record is None or record.takeover_id != takeover_id:
+        if record is not None and record.takeover_id != takeover_id:
             raise TakeoverEndedElsewhere(f"takeover {takeover_id} on chunk {chunk_id} is not open")
+        if record is None:
+            return
         self._store.record_takeover_end(takeover_id=takeover_id, ended_at=self._clock.now())

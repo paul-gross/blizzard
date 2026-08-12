@@ -84,6 +84,59 @@ def test_lease_returns_none_for_an_unknown_id(tmp_path):  # type: ignore[no-unty
     assert store.lease("no-such-lease") is None
 
 
+@pytest.mark.unit
+def test_lease_for_open_takeover_resolves_a_closed_reference_lease(tmp_path):  # type: ignore[no-untyped-def]
+    """The worker-authorization resolver's second half (issue #291): an open takeover
+    names a lease, and this read resolves it regardless of the lease's own closure."""
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+    assert store.active_lease("lease_1") is None
+
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        session_id="sess-a",
+        workdir="/ws/e1",
+        fence_epoch=None,
+        opened_at=_NOW,
+    )
+
+    resolved = store.lease_for_open_takeover("lease_1")
+    assert resolved is not None
+    assert resolved.lease_id == "lease_1"
+    assert resolved.node_id == "nd_build"
+    assert resolved.epoch == 1
+
+
+@pytest.mark.unit
+def test_lease_for_open_takeover_is_none_with_no_open_takeover(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+    assert store.lease_for_open_takeover("lease_1") is None
+
+
+@pytest.mark.unit
+def test_lease_for_open_takeover_is_none_once_the_takeover_ends(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        session_id="sess-a",
+        workdir="/ws/e1",
+        fence_epoch=None,
+        opened_at=_NOW,
+    )
+    store.record_takeover_end(takeover_id="tko_1", ended_at=_NOW)
+
+    assert store.lease_for_open_takeover("lease_1") is None
+
+
 @pytest.mark.component
 def test_latest_session_id_returns_most_recent_session_bearing_lease(tmp_path):  # type: ignore[no-untyped-def]
     """Node-entry resume resolution (issue #115): ``node_name=None`` spans every

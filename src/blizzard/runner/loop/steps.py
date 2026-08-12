@@ -270,6 +270,7 @@ class Pull(Step):
         self._sync_registry()
         self._reconcile_leases()
         self._reconcile_escalations()
+        self._reconcile_takeovers()
         _CP_PULL_BEFORE.reached()
         OutboundDrain(self.ctx).run()
         _CP_PULL_AFTER.reached()
@@ -341,6 +342,25 @@ class Pull(Step):
             ctx.store.record_escalation_closure(
                 chunk_id=escalation.chunk_id, reason=detail.status.value, at=ctx.clock.now()
             )
+
+    def _reconcile_takeovers(self) -> None:
+        """Close an open takeover whose chunk the hub has ended (issue #291) — one ``get_chunk``
+        each. The takeover fact now authorizes the resumed session's worker verbs (D1), so a
+        chunk the hub ends mid-takeover must not leave that authorization standing forever; this
+        is the second, no-person-drives closer alongside the CLI's own end-PATCH. The mark is
+        what keeps the read hub-free (``bzh:facts-not-status``)."""
+        ctx = self.ctx
+        for takeover in ctx.store.open_takeovers():
+            try:
+                detail = ctx.hub.get_chunk(takeover.chunk_id)
+            except HubClientError as exc:
+                # Covers ChunkNotFoundError: an unknown chunk is not a resolution.
+                _log.debug("takeover left open — hub unreadable", chunk_id=takeover.chunk_id, error=str(exc))
+                continue
+            if detail.status not in TERMINAL_STATUSES:
+                _log.debug("takeover left open", chunk_id=takeover.chunk_id, hub_status=detail.status.value)
+                continue
+            ctx.store.record_takeover_end(takeover_id=takeover.takeover_id, ended_at=ctx.clock.now())
 
 
 class Fill(Step):

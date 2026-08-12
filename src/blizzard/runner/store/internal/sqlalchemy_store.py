@@ -226,6 +226,16 @@ class SqlAlchemyRunnerStore:
         rows = self._all(stmt)
         return self._row_to_lease(rows[0]) if rows else None
 
+    def lease_for_open_takeover(self, lease_id: str) -> LeaseRecord | None:
+        stmt = (
+            self._lease_select()
+            .join(takeovers, takeovers.c.lease_id == leases.c.lease_id)
+            .where(leases.c.lease_id == lease_id)
+            .where(OPEN_TAKEOVER.clause)
+        )
+        rows = self._all(stmt)
+        return self._row_to_lease(rows[0]) if rows else None
+
     def latest_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
         stmt = self._lease_select().where(leases.c.chunk_id == chunk_id).order_by(leases.c.created_at.desc())
         rows = self._all(stmt)
