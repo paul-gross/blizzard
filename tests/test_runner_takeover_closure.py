@@ -3,9 +3,7 @@
 Under D1 the open-takeover fact authorizes a resumed session's worker verbs, so a chunk
 the hub ends mid-takeover must not leave that authorization standing forever.
 ``Pull._reconcile_takeovers`` folds into PULL — the same shape as
-``_reconcile_escalations`` (#292) — to mirror the hub's terminal answer as a
-``takeover_ends`` mark, the second, no-person-drives closer alongside the CLI's own
-end-PATCH."""
+``_reconcile_escalations`` (#292) — the second, no-person-drives closer."""
 
 from __future__ import annotations
 

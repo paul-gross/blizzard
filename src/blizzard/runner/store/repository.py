@@ -276,10 +276,8 @@ class CheckResultRecord:
 class TakeoverRecord:
     """An open operator takeover — the human-in-session fact (issue #52).
 
-    ``lease_id`` always names the reference lease :meth:`TakeoverService.open` resolved —
-    active or already closed — never ``None``; ``ChunkNotTakeable`` refuses before a
-    takeover with no reference lease is ever recorded. ``fence_epoch`` is set only when a
-    live worker was force-killed, fencing its in-flight completion."""
+    ``lease_id`` always names the reference lease — active or already closed, never
+    ``None``. ``fence_epoch`` is set only when a live worker was force-killed."""
 
     takeover_id: str
     chunk_id: str

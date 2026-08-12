@@ -76,20 +76,17 @@ def _seed_escalated_lease(store: SqlAlchemyRunnerStore) -> None:
 def test_takeover_hands_the_resumed_session_a_worker_verb_that_reaches_the_runner(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The end-to-end proof of issue #291's fix, over the real live socket: the resumed
-    session's forwarded env authorizes a `blizzard runner` worker verb against the SAME
-    closed reference lease the parked attempt held — no fresh lease, no re-mint of the
-    lease id itself, just the open-takeover fact widening the resolver."""
+    """End-to-end proof of issue #291, over the real live socket: the resumed session's
+    forwarded env authorizes a worker verb against the SAME closed reference lease the
+    parked attempt held — no fresh lease, just the open-takeover fact widening the resolver."""
     root = _init_runner(tmp_path)
     store = _store(root)
     _seed_escalated_lease(store)
     assert store.active_lease("lease_1") is None  # the closed-lease shape the bug reproduced against
 
     reached: dict[str, httpx.Response] = {}
-    # `BLIZZARD_RUNNER_URL` derives from `config.port`, which `_serve_local_api` binds as
-    # an OS-picked ephemeral port (`port=0`) — the config value itself stays "0", so this
-    # reaches the daemon the same way the CLI's own worker-verb commands do: over the UDS
-    # socket `--dir` names, not the (here-unreliable) forwarded TCP URL.
+    # `BLIZZARD_RUNNER_URL` is unreachable here (`port=0` ephemeral binding), so this reaches
+    # the daemon the same way the CLI's worker-verb commands do: over the UDS socket `--dir` names.
     transport = httpx.HTTPTransport(uds=str(RunnerConfig.socket_path_for(root)))
 
     def fake_call(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
