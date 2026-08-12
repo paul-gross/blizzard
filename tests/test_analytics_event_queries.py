@@ -203,6 +203,17 @@ def test_path_prefix_treats_like_wildcards_as_literal_characters(tmp_path: Path)
     assert [r.key for r in store.counts_by_file(_criteria(path_prefix="src/a_b"))] == ["src/a_b.py"]
 
 
+def test_path_prefix_is_case_sensitive(tmp_path: Path) -> None:
+    """The same prefix must select the same rows whichever backend serves it, and only
+    the case-sensitive reading is available on both."""
+    store, insert_events = _new_store(tmp_path)
+    insert_events("sg_1", _event(subject="src/foo.py"))
+
+    assert store.events(_criteria(path_prefix="SRC/")).events == []
+    assert store.counts_by_file(_criteria(path_prefix="SRC/")) == []
+    assert [e.subject for e in store.events(_criteria(path_prefix="src/")).events] == ["src/foo.py"]
+
+
 # --- events: keyset paging ------------------------------------------------------
 
 

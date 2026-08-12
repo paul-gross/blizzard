@@ -33,9 +33,9 @@ def _filtered_stmt(base: Select[Any], criteria: EventQueryCriteria) -> Select[An
     if criteria.tool is not None:
         stmt = stmt.where(t.c.tool == criteria.tool)
     if criteria.path_prefix is not None:
-        # `autoescape` is load-bearing: a bare `startswith` leaves LIKE's own `_`/`%`
-        # live, and paths carry underscores constantly, so the prefix would over-match.
-        stmt = stmt.where(t.c.subject.startswith(criteria.path_prefix, autoescape=True))
+        # `substr` + `=` compares literally and case-sensitively on both dialects; LIKE
+        # would fold case on sqlite alone, making a count's value follow the backend.
+        stmt = stmt.where(func.substr(t.c.subject, 1, len(criteria.path_prefix)) == criteria.path_prefix)
     if criteria.node_id is not None:
         stmt = stmt.where(t.c.node_id == criteria.node_id)
     if criteria.graph_id is not None:
