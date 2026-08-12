@@ -77,6 +77,7 @@ jobs:
         with:
           enable-cache: true
           python-version: "3.12"
+          working-directory: blizzard
       - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
         uses: jdx/mise-action@v2
         with:
@@ -136,6 +137,7 @@ jobs:
         with:
           enable-cache: true
           python-version: "3.12"
+          working-directory: blizzard
       - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
         uses: jdx/mise-action@v2
         with:
