@@ -1,10 +1,9 @@
 """The transcript-event store seam and its domain types (blizzard#254, Phase 1).
 
 An event row is an immutable observation, never a status (``bzh:facts-not-status``): it
-is fully re-derivable from the segments that back it, nothing derives a status from it,
-and its source's mutability is bounded and *observed* rather than assumed — the
-derivation marker records what a derivation saw, so the sweep can tell a segment's
-stored content changed underneath an earlier pass."""
+is fully re-derivable from the segments that back it, and its source's mutability is
+bounded and *observed*, not assumed — the derivation marker records what a derivation
+saw, so the sweep can tell a segment's stored content changed since."""
 
 from __future__ import annotations
 
@@ -57,10 +56,9 @@ class DerivationMarker:
 @dataclass(frozen=True)
 class SegmentDerivationInput:
     """Everything a segment offers the derivation service (Phase 3): decoded once,
-    fingerprinted once. ``complete`` is ``False`` when any of the segment's records is a
-    content hole (D6's rejected-record case) — the source over which ``turns`` was
-    decoded is then a partial view, never silently indistinguishable from a session that
-    read nothing."""
+    fingerprinted once. ``complete`` is ``False`` when a record is a content hole (D6) —
+    ``turns`` is then a partial view, declared rather than indistinguishable from a
+    session that read nothing."""
 
     segment_id: str
     chunk_id: str
