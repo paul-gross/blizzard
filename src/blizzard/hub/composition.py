@@ -43,6 +43,7 @@ from blizzard.hub.delivery.internal.hub_command_runner import SubprocessHubComma
 from blizzard.hub.delivery.internal.hub_workdir import FilesystemHubWorkdir
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.delivery.workdir import IHubWorkdir
+from blizzard.hub.domain.analytics.derivation import EventDerivationReconciler, EventDerivationService
 from blizzard.hub.domain.apply import ApplyService
 from blizzard.hub.domain.claim import ClaimService
 from blizzard.hub.domain.decisions import DecisionService, RequeueService
@@ -68,6 +69,7 @@ from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
@@ -136,6 +138,9 @@ class HubServices:
     #: The transcript-segment read Protocol (blizzard#247) — the operator-plane index and
     #: content routes' own seam (``bzh:controller-read-only``).
     transcripts: IReadTranscriptSegments
+    #: The transcript-event derivation reconciler (blizzard#254) — built here because it
+    #: needs the write-capable event store, which only the composition root holds.
+    event_derivation: EventDerivationReconciler
 
 
 def build_services(
@@ -168,6 +173,10 @@ def build_services(
     graph_store = GraphStore(engine)
     registry_store = RunnerRegistryStore(engine)
     transcript_store = TranscriptSegmentStore(engine)
+    event_store = TranscriptEventStore(engine)
+    event_derivation = EventDerivationReconciler(
+        service=EventDerivationService(events=event_store, chunks=chunk_store, clock=clock), events=event_store
+    )
     marker_authority = MarkerAuthority()
     hub_node = HubNodeExecutor(
         chunks=chunk_store,
@@ -261,4 +270,5 @@ def build_services(
         signing=signing,
         trusted_proxies=trusted_proxies if trusted_proxies is not None else TrustedProxies(),
         transcripts=transcript_store,
+        event_derivation=event_derivation,
     )

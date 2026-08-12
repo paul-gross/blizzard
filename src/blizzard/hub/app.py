@@ -56,6 +56,10 @@ DEFAULT_FORGE_OWNER = "blizzard"
 ENV_FORGE_BASE_BRANCH = "BZ_FORGE_BASE_BRANCH"
 DEFAULT_FORGE_BASE_BRANCH = "main"
 
+#: The transcript-event derivation sweep's own interval (blizzard#254 D1) — a module
+#: constant, not an operator config key, in this slice.
+EVENT_DERIVATION_INTERVAL_SECONDS = 30
+
 
 class _Sweepable(Protocol):
     """The one capability :class:`Sweep` needs — structural, so any reconciler
@@ -85,6 +89,12 @@ class Sweep:
             yield cls(annotator, interval, app.state.shutdown, "blizzard.hub.forge_status")
         if services.work_sources.closing_names():
             yield cls(services.delivery_closure, interval, app.state.shutdown, "blizzard.hub.work_closure")
+        yield cls(
+            services.event_derivation,
+            EVENT_DERIVATION_INTERVAL_SECONDS,
+            app.state.shutdown,
+            "blizzard.hub.transcript_events",
+        )
 
     async def run(self) -> None:
         """Call ``sweep()``, then wait out the interval. Races ``shutdown`` so it wakes
