@@ -808,3 +808,66 @@ transcript_high_water = Table(
     Column("seq", Integer, nullable=False),
     Column("updated_at", UtcDateTime, nullable=False),
 )
+
+# --- Derived transcript events (blizzard#254) — one row per occurrence, re-derivable ---
+# from `transcript_segments` at any later extractor version (`bzh:facts-not-status`: an
+# immutable observation computed from already-durable rows, never a status).
+
+transcript_events = Table(
+    "transcript_events",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("segment_id", String, nullable=False),
+    # The extractor version that produced this row (D5/D9) — a bump re-derives history
+    # while leaving earlier-version rows untouched.
+    Column("extractor_version", String, nullable=False),
+    Column("kind", String, nullable=False),
+    # This event's location in the segment's turn tree (D8): "N" for a main-lane turn,
+    # "N.M" one sidechain deep, "N.M.K" two, and so on.
+    Column("turn_path", String, nullable=False),
+    # Disambiguates more than one event of the same kind at the same `turn_path` — 0 for
+    # every extractor today, kept general for one that could ever multi-match a turn.
+    Column("occurrence", Integer, nullable=False),
+    Column("payload", Text, nullable=False),  # JSON object, kind-shaped (D5, `bzh:sql-portable`)
+    # Denormalized node-step context (D4), stamped at derive time.
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("node_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("spawn_generation", Integer, nullable=False),
+    Column("graph_id", String, nullable=False),
+    Column("depth", Integer, nullable=False),  # 0 main lane; nesting depth otherwise (D8)
+    Column("agent_type", String, nullable=True),  # nearest-enclosing sidechain's; None at depth 0
+    # The turn's own instant, never the hub's receipt instant; nullable (Phase 1) for an
+    # untimed turn.
+    Column("occurred_at", UtcDateTime, nullable=True),
+    UniqueConstraint(
+        "segment_id",
+        "extractor_version",
+        "kind",
+        "turn_path",
+        "occurrence",
+        name="uq_transcript_events_natural_key",
+    ),
+)
+
+Index("ix_transcript_events_chunk_id", transcript_events.c.chunk_id)
+Index("ix_transcript_events_segment_id", transcript_events.c.segment_id)
+
+# --- Per-segment derivation marker (D6) — replaced, never appended: what a segment's ---
+# most recent derivation at a given extractor version saw, when, and whether it was complete.
+
+transcript_event_derivations = Table(
+    "transcript_event_derivations",
+    metadata,
+    Column("segment_id", String, primary_key=True),
+    Column("extractor_version", String, primary_key=True),
+    # A fingerprint of the segment's stored content as of this derivation (D6) — compared
+    # against the segment's current fingerprint to detect a content change (a rejected
+    # record later accepted, a late record landing) that the sweep must re-derive over.
+    Column("content_fingerprint", String, nullable=False),
+    Column("derived_at", UtcDateTime, nullable=False),
+    Column("event_count", Integer, nullable=False),
+    # False when the segment held a content hole (a rejected record) at derivation time —
+    # declared, never silently indistinguishable from a session that read nothing (D6).
+    Column("complete", Boolean, nullable=False),
+)
