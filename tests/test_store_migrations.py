@@ -179,7 +179,12 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20260809_1200_hub_transcript_segments", "transcript_segments", ("record_truncated",)),
     ("hub", "20260809_1800_hub_transcript_segment_record_truncated", "transcript_segments", ("supersedes",)),
     # runner tree — instance 6
-    ("runner", "20260727_1000_runner_session_preamble_facts", "lease_context", ("session_name", "resolved_model", "resolved_effort")),
+    (
+        "runner",
+        "20260727_1000_runner_session_preamble_facts",
+        "lease_context",
+        ("session_name", "resolved_model", "resolved_effort"),
+    ),
     # runner tree — instance 7 (drop-and-recreate: environment_id added, forge dropped)
     ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("environment_id",)),
     ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("forge",), "removed"),

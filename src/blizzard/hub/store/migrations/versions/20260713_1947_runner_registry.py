@@ -9,16 +9,30 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
-from blizzard.hub.store.schema import runner_pause_facts, runner_registrations
+from blizzard.foundation.store.utc import UtcDateTime
+from blizzard.hub.store.schema import runner_pause_facts
 
 revision: str = "20260713_1947_hub_runner_registry"
 down_revision: str | None = "20260713_1946_hub_queue_shaping"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_TABLES = [runner_registrations, runner_pause_facts]
+# This revision's own frozen shape — no ``token_hash``/``env_capacity``/``public_url``/
+# ``redirect_uris`` columns, all added by later revisions (``bzh:frozen-revisions``).
+_frozen_metadata = sa.MetaData()
+_runner_registrations = sa.Table(
+    "runner_registrations",
+    _frozen_metadata,
+    sa.Column("runner_id", sa.String, primary_key=True),
+    sa.Column("workspace_id", sa.String, nullable=False),
+    sa.Column("registered_at", UtcDateTime, nullable=False),
+    sa.Column("last_seen_at", UtcDateTime, nullable=False),
+)
+
+_TABLES = [_runner_registrations, runner_pause_facts]
 
 
 def upgrade() -> None:
