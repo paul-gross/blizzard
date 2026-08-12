@@ -829,10 +829,8 @@ transcript_events = Table(
     # every extractor today, kept general for one that could ever multi-match a turn.
     Column("occurrence", Integer, nullable=False),
     Column("payload", Text, nullable=False),  # JSON object, kind-shaped (D5, `bzh:sql-portable`)
-    # The denormalized, filterable projection of `payload` (blizzard#255 D1) — the
-    # event's principal subject (a path / skill name / spawned agent type) and the
-    # invoking tool name. Nullable: a kind with no single natural subject leaves it
-    # `None` rather than guessing (D5).
+    # `payload`'s filterable projection (blizzard#255 D1) — principal subject and
+    # invoking tool; `None` for a kind with no single natural subject, never guessed.
     Column("subject", String, nullable=True),
     Column("tool", String, nullable=True),
     # Denormalized node-step context (D4), stamped at derive time.

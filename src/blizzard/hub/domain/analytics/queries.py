@@ -1,10 +1,9 @@
 """The analytics event query seam (blizzard#255 D1/D6) — filterable events plus canned
 counts, over the projection :mod:`extraction` and :mod:`derivation` populate.
 
-New, not an extension of :mod:`events` (``bzh:controller-read-only``): ``events.py``'s
-``IReadTranscriptEvents`` carries only derivation bookkeeping — ``visible_segment_ids``,
-``derivation_marker``, and friends — never an event query. The routes (Phase 3) depend on
-this Protocol alone; no write repository backs them."""
+New, not an extension of :mod:`events` (``bzh:controller-read-only``): that module's
+``IReadTranscriptEvents`` carries derivation bookkeeping alone, never an event query.
+The routes (Phase 3) depend on this Protocol only; no write repository backs them."""
 
 from __future__ import annotations
 
@@ -16,12 +15,9 @@ from typing import Protocol
 @dataclass(frozen=True)
 class EventQueryCriteria:
     """Every filter this API owes (blizzard#255), all optional and freely combinable.
-    ``source`` is a :class:`chunk_work_refs` existence test (D1) — a chunk may carry
-    several work refs, so this is never a join, which would multiply event rows.
-    ``extractor_version`` has no default here: mixing versions double-counts the same
-    occurrence (D1), so the caller (Phase 3's route) always names one — the current
-    :data:`~blizzard.hub.domain.analytics.extraction.EXTRACTOR_VERSION` unless the
-    caller asks for an older one explicitly."""
+    ``source`` is a ``chunk_work_refs`` existence test (D1), never a join — a chunk
+    carrying several refs would multiply event rows. ``extractor_version`` has no
+    default: mixing versions double-counts an occurrence (D1), so a caller names one."""
 
     extractor_version: str
     kind: str | None = None

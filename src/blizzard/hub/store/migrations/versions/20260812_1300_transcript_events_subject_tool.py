@@ -1,7 +1,5 @@
-"""transcript_events.subject / transcript_events.tool (blizzard#255 D1) — the denormalized,
-filterable projection of a derived event's payload: its principal subject (a path / skill
-name / spawned agent type) and the invoking tool name. Existing rows stay unpopulated at
-their old extractor version; the standing sweep converges history onto the bumped one.
+"""transcript_events.subject / transcript_events.tool (blizzard#255 D1) — payload's
+filterable projection. Existing rows stay at their old extractor version until the sweep.
 
 Revision ID: 20260812_1300_hub_transcript_events_subject_tool
 Revises: 20260812_1200_hub_transcript_events

@@ -33,9 +33,8 @@ def _filtered_stmt(base: Select[Any], criteria: EventQueryCriteria) -> Select[An
     if criteria.tool is not None:
         stmt = stmt.where(t.c.tool == criteria.tool)
     if criteria.path_prefix is not None:
-        # `autoescape` is load-bearing, not decoration: a bare `startswith` leaves LIKE's
-        # own `_`/`%` live, and a path prefix carries underscores constantly
-        # (`analytics_event_query_store.py`), so an unescaped prefix silently over-matches.
+        # `autoescape` is load-bearing: a bare `startswith` leaves LIKE's own `_`/`%`
+        # live, and paths carry underscores constantly, so the prefix would over-match.
         stmt = stmt.where(t.c.subject.startswith(criteria.path_prefix, autoescape=True))
     if criteria.node_id is not None:
         stmt = stmt.where(t.c.node_id == criteria.node_id)
@@ -67,8 +66,7 @@ def _counts_stmt(criteria: EventQueryCriteria, *, group_col: Any, kind: str | No
     stmt = _filtered_stmt(select(group_col.label("key"), func.count().label("occurrences")), criteria)
     if kind is not None:
         # Intersected with `criteria.kind`, never substituted for it: a caller naming a
-        # different kind asked for an empty scope and gets one, rather than this count's
-        # own kind silently back.
+        # different kind asked for an empty scope and gets one.
         stmt = stmt.where(s.transcript_events.c.kind == kind)
     stmt = stmt.where(group_col.is_not(None)).group_by(group_col)
     # Most-frequent first, key ascending as the deterministic tiebreak.

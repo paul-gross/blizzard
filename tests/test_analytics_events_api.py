@@ -290,8 +290,7 @@ def test_counts_by_agent_type_is_empty_at_the_main_lane(tmp_path: Path) -> None:
 def test_counts_by_agent_type_counts_the_work_done_under_a_sidechain_not_the_spawn(tmp_path: Path) -> None:
     """The discriminating case for this count's column choice: a main-lane ``Task``
     spawning ``explorer`` whose sidechain then reads two files. Grouping on the
-    enclosing-sidechain ``agent_type`` counts the **two reads**; grouping on the spawn
-    event's own ``subject`` (also ``"explorer"``) would have counted **one**."""
+    sidechain's ``agent_type`` counts two; grouping on the spawn's subject, one."""
     hub = build_hub(tmp_path, auth_mode="oauth")
     token = seed_session(hub, seed_user(hub, username="ada", role=Role.CONTRIBUTOR))
     chunk_id = _ingest_chunk(hub, headers=_cookie(token))

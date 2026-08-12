@@ -1,12 +1,9 @@
-"""Analytics operator-plane routes: a forced re-derive (blizzard#254 D7) over the same
-per-segment replacement unit the standing sweep runs, for an operator who needs a
-segment's events sooner than the next sweep tick or a version bump re-derived now; and
-the read-only events/counts surfaces (blizzard#255) over the derived projection.
-Reads gate on :data:`~blizzard.auth_core.TRANSCRIPT_READ` — the events derive from
-exactly the conversations that grant already opens. ``/re-derive`` alone gates on the
-mutating :data:`~blizzard.auth_core.ANALYTICS_ADMIN`, per-route rather than for the
-whole router (blizzard#255 D2). Operator-plane, never ``/api/fleet/...`` —
-``bzh:wire-change-extends-mock`` does not fire."""
+"""Analytics operator-plane routes: a forced re-derive (blizzard#254 D7) over the
+standing sweep's own per-segment replacement unit, and the read-only events/counts
+surfaces (blizzard#255) over the derived projection. Reads gate on
+:data:`~blizzard.auth_core.TRANSCRIPT_READ`; ``/re-derive`` alone on the mutating
+:data:`~blizzard.auth_core.ANALYTICS_ADMIN`, per-route rather than router-wide
+(blizzard#255 D2). Operator-plane, never ``/api/fleet/...``."""
 
 from __future__ import annotations
 
@@ -156,9 +153,8 @@ def list_events(
 @router.get(
     "/events/ndjson",
     dependencies=[Depends(require(TRANSCRIPT_READ))],
-    # Declared, not defaulted: the exported spec generates the TS client, and FastAPI's
-    # default 200 for a `StreamingResponse` claims `application/json` — a lie about the
-    # one route here that serves newline-delimited text.
+    # Declared, not defaulted: FastAPI's default 200 for a `StreamingResponse` would
+    # claim `application/json` in the spec the TS client is generated from.
     response_class=StreamingResponse,
     responses={200: {"content": {"application/x-ndjson": {"schema": {"type": "string"}}}}},
 )

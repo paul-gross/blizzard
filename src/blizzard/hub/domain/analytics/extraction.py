@@ -30,9 +30,8 @@ _CLAUDE_CODE_DIALECTS = frozenset({"claude-code-jsonl/2"})
 class ExtractedEvent:
     """One recognized occurrence, still payload-shaped as a plain mapping — the
     derivation service (Phase 3) serializes it and stamps the node-step context this
-    layer never sees. ``subject``/``tool`` are the denormalized projection (blizzard#255
-    D1) an extractor supplies alongside its payload — ``subject`` is honestly ``None``
-    for a kind with no single natural subject, never guessed."""
+    layer never sees. ``subject``/``tool`` are the projection its extractor supplies
+    (blizzard#255 D1); ``subject`` is ``None`` for a kind with no natural one."""
 
     kind: str
     turn_path: str
@@ -46,13 +45,10 @@ class ExtractedEvent:
 
 
 class ITurnEventExtractor(Protocol):
-    """One kind's recognizer. ``kind`` and ``tool_name`` are class-level constants;
-    ``subject_key`` names the recognized payload key that is this kind's principal
-    subject (blizzard#255 D1) — ``None`` when the kind has no single natural one.
-    :meth:`recognize` returns every payload this turn mints for that kind under
-    ``normalizer_version`` — empty for "does not apply," never ``None`` (multiple
-    matches from one turn are legal even though none of today's three kinds produce
-    more than one)."""
+    """One kind's recognizer. ``kind``/``tool_name`` are class-level constants — a
+    recognizer matches exactly one tool, so its ``tool_name`` is a fact, not a guess;
+    ``subject_key`` names the payload key carrying this kind's subject (blizzard#255
+    D1). :meth:`recognize` returns every payload this turn mints, ``[]`` for none."""
 
     kind: str
     tool_name: str
