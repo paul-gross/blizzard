@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute, _IncludedRouter
 
 from blizzard.auth_core import (
+    ANALYTICS_ADMIN,
     CHUNK_CONTROL,
     CHUNK_INGEST,
     FLEET_VIEW,
@@ -103,6 +104,9 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     # FLEET_VIEW, since a transcript carries everything a worker saw.
     ("GET", "/api/chunks/{chunk_id}/transcripts"): TRANSCRIPT_READ,
     ("GET", "/api/chunks/{chunk_id}/transcripts/{segment_id}"): TRANSCRIPT_READ,
+    # Forced transcript-event re-derivation (blizzard#254 D7) — a mutation, above the
+    # read-only TRANSCRIPT_READ.
+    ("POST", "/api/analytics/re-derive"): ANALYTICS_ADMIN,
 }
 
 #: Fleet plane — every route mounted under ``/api/fleet/*`` (issue #87's own

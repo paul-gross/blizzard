@@ -30,14 +30,17 @@ from blizzard.wire.transcript_segment import TurnSegmentView
 # compiles the real ones under both dialects (`bzh:sql-portable`).
 
 
-def _visible_segment_ids_stmt() -> Select[Any]:
+def _visible_segment_ids_stmt(chunk_id: str | None = None) -> Select[Any]:
     superseded = select(s.transcript_segments.c.supersedes).where(s.transcript_segments.c.supersedes.is_not(None))
-    return (
+    stmt = (
         select(s.transcript_segments.c.segment_id)
         .where(s.transcript_segments.c.final.is_(True))
         .where(s.transcript_segments.c.segment_id.not_in(superseded))
         .distinct()
     )
+    if chunk_id is not None:
+        stmt = stmt.where(s.transcript_segments.c.chunk_id == chunk_id)
+    return stmt
 
 
 def _derived_segment_ids_stmt() -> Select[Any]:
@@ -162,9 +165,9 @@ class TranscriptEventStore:
 
     # --- reads ----------------------------------------------------------------
 
-    def visible_segment_ids(self) -> frozenset[str]:
+    def visible_segment_ids(self, *, chunk_id: str | None = None) -> frozenset[str]:
         with self._engine.connect() as conn:
-            rows = conn.execute(_visible_segment_ids_stmt()).all()
+            rows = conn.execute(_visible_segment_ids_stmt(chunk_id)).all()
         return frozenset(row.segment_id for row in rows)
 
     def derived_segment_ids(self) -> frozenset[str]:

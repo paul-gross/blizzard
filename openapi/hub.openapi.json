@@ -3297,6 +3297,61 @@
         "title": "QueueReplaceRequest",
         "type": "object"
       },
+      "ReDeriveRequest": {
+        "description": "Scope the call to one segment (a genuine force, bypassing the candidate check),\none chunk's candidates, or every candidate (both unset) \u2014 never both a segment and a\nchunk. ``limit`` bounds a chunk/all-scoped call; a single segment always derives\nexactly one, so it ignores ``limit``.",
+        "properties": {
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "limit": {
+            "default": 50,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "segment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment Id"
+          }
+        },
+        "title": "ReDeriveRequest",
+        "type": "object"
+      },
+      "ReDeriveResponse": {
+        "description": "How many segments this call derived, and how many still-candidate segments\nremain in scope \u2014 the caller drives to convergence by calling again while\n``remaining`` is nonzero.",
+        "properties": {
+          "derived": {
+            "title": "Derived",
+            "type": "integer"
+          },
+          "remaining": {
+            "title": "Remaining",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "derived",
+          "remaining"
+        ],
+        "title": "ReDeriveResponse",
+        "type": "object"
+      },
       "ReadinessResponse": {
         "description": "The wire shape of a readiness reading (openapi-ts consumes this).",
         "properties": {
@@ -4974,6 +5029,48 @@
         "summary": "List Activity",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/analytics/re-derive": {
+      "post": {
+        "description": "A segment scope forces that one segment regardless of its candidacy; a chunk or\nall scope derives up to ``limit`` of that scope's current candidates and reports how\nmany remain, so the caller drives to convergence with repeated calls.",
+        "operationId": "re_derive_api_analytics_re_derive_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReDeriveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReDeriveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Re Derive",
+        "tags": [
+          "analytics"
         ]
       }
     },

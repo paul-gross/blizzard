@@ -98,8 +98,21 @@ class _Fixture:
             at=_NOW,
             artifacts=[],
         )
-        self.reconciler = EventDerivationReconciler(
-            service=EventDerivationService(events=self.events, chunks=self.chunks, clock=self.clock), events=self.events
+        self.service = EventDerivationService(events=self.events, chunks=self.chunks, clock=self.clock)
+        self.reconciler = EventDerivationReconciler(service=self.service, events=self.events)
+
+    def mint_chunk(self, chunk_id: str, *, node_id: str = "nd_build") -> None:
+        self.chunks.mint(Chunk(chunk_id=chunk_id, graph_id="gr_mint", work_refs=[], minted_at=_NOW))
+        self.chunks.record_transition(
+            transition_id=f"tr_{chunk_id}",
+            chunk_id=chunk_id,
+            from_node_id=None,
+            to_node_id=node_id,
+            choice_name=None,
+            epoch=1,
+            runner_id="r1",
+            at=_NOW,
+            artifacts=[],
         )
 
     def stored_events(self) -> list[Any]:
@@ -132,6 +145,21 @@ def test_the_derived_events_graph_id_resolves_from_the_matching_transition(fixtu
 
     [row] = fixture.stored_events()
     assert row.graph_id == "gr_mint"  # the only transition recorded — no migration in this fixture
+
+
+def test_candidate_segment_ids_narrows_to_the_given_chunk(fixture: _Fixture) -> None:
+    """The re-derive route's chunk-scoped call (blizzard#254 D7)."""
+    fixture.mint_chunk("ch_2")
+    fixture.segments.insert_accepted(
+        _segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, codec="zlib", at=_NOW
+    )
+    fixture.segments.insert_accepted(
+        _segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, codec="zlib", at=_NOW
+    )
+
+    assert fixture.service.candidate_segment_ids(chunk_id="ch_1") == ["sg_1"]
+    assert fixture.service.candidate_segment_ids(chunk_id="ch_2") == ["sg_2"]
+    assert set(fixture.service.candidate_segment_ids()) == {"sg_1", "sg_2"}
 
 
 def test_a_second_sweep_pass_writes_nothing_new(fixture: _Fixture) -> None:

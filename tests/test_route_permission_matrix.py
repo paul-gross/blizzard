@@ -97,6 +97,7 @@ def _mutations(ids: dict[str, str]) -> list[tuple[str, str, dict[str, object]]]:
         ("POST", "/api/runners/runner-a/pause", {"by": "x"}),  # RUNNER_PAUSE
         ("POST", "/api/graphs", {"definition_yaml": _GRAPH_YAML}),  # GRAPH_EDIT
         ("GET", "/api/users", {}),  # USER_MANAGE
+        ("POST", "/api/analytics/re-derive", {"limit": 1}),  # ANALYTICS_ADMIN
     ]
 
 

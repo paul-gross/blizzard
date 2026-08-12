@@ -141,6 +141,10 @@ class HubServices:
     #: The transcript-event derivation reconciler (blizzard#254) — built here because it
     #: needs the write-capable event store, which only the composition root holds.
     event_derivation: EventDerivationReconciler
+    #: The same reconciler's own service (blizzard#254 D7) — the re-derive route's seam,
+    #: exposed separately because the route forces a scoped, bounded call rather than a
+    #: full sweep pass.
+    event_derivation_service: EventDerivationService
 
 
 def build_services(
@@ -174,9 +178,8 @@ def build_services(
     registry_store = RunnerRegistryStore(engine)
     transcript_store = TranscriptSegmentStore(engine)
     event_store = TranscriptEventStore(engine)
-    event_derivation = EventDerivationReconciler(
-        service=EventDerivationService(events=event_store, chunks=chunk_store, clock=clock), events=event_store
-    )
+    event_derivation_service = EventDerivationService(events=event_store, chunks=chunk_store, clock=clock)
+    event_derivation = EventDerivationReconciler(service=event_derivation_service, events=event_store)
     marker_authority = MarkerAuthority()
     hub_node = HubNodeExecutor(
         chunks=chunk_store,
@@ -271,4 +274,5 @@ def build_services(
         trusted_proxies=trusted_proxies if trusted_proxies is not None else TrustedProxies(),
         transcripts=transcript_store,
         event_derivation=event_derivation,
+        event_derivation_service=event_derivation_service,
     )

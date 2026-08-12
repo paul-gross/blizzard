@@ -944,3 +944,33 @@ def question_answer(cli: CliContext, question_id: str, answer_text: str, answere
         raise click.ClickException(f"already answered by {winner.get('answered_by')}: {winner.get('answer')!r}")
     cli.check(resp, "POST /questions/{id}/answers", on_status={404: f"unknown question {question_id}"})
     cli.finish(resp, f"answered {question_id}: {answer_text!r} (the runner will resume the session)")
+
+
+# `blizzard hub analytics` — blizzard#254
+
+
+@hub.group("analytics")
+def analytics_group() -> None:
+    """Operator verbs over derived transcript-event analytics."""
+
+
+@analytics_group.command("re-derive", cls=FleetCommand)
+@click.option("--segment", "segment_id", default=None, help="Force one segment, regardless of its candidacy.")
+@click.option("--chunk", "chunk_id", default=None, help="Every candidate segment of one chunk.")
+@click.option("--limit", "limit", default=50, show_default=True, help="Cap on segments derived by one call.")
+def analytics_re_derive(cli: CliContext, segment_id: str | None, chunk_id: str | None, limit: int) -> None:
+    """Force the standing derivation sweep's own replacement unit now, rather than
+    waiting for its next tick — scoped to one segment, one chunk, or every candidate
+    (neither option given). No downtime: it runs the same in-process reconciler already
+    live, just driven directly. Prints ``derived``/``remaining``; a nonzero ``remaining``
+    on a chunk/all-scoped call means running it again continues from where it left off."""
+    if segment_id is not None and chunk_id is not None:
+        raise click.ClickException("--segment and --chunk are mutually exclusive")
+    body: dict[str, object] = {"limit": limit}
+    if segment_id is not None:
+        body["segment_id"] = segment_id
+    if chunk_id is not None:
+        body["chunk_id"] = chunk_id
+    resp = cli.post("/api/analytics/re-derive", "POST /analytics/re-derive", json_body=body)
+    result = resp.json()
+    cli.show_lines(result, f"derived {result['derived']}, {result['remaining']} remaining in scope")

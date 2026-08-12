@@ -1,12 +1,10 @@
 """The per-segment replacement unit and the standing convergence sweep (blizzard#254,
 Phase 3).
 
-There is no finalize hook to derive from (D1/D2): the finalizing record carries no
-turns, and ``TranscriptIngestService`` already spans several transactions of its own. A
-converging sweep is therefore the *only* first-derivation path, and re-running the same
-engine is the re-derive path — one engine, one convergence property. Dependency-free
-(``bzh:domain-core``): every collaborator is an injected Protocol, so :meth:`sweep` is
-one complete, directly-callable step (``bzh:steppable-loop``)."""
+There is no finalize hook to derive from (D1/D2): the sweep is the only first-derivation
+path, and re-running it is the re-derive path — one engine, one convergence property.
+Dependency-free (``bzh:domain-core``): :meth:`sweep` is one directly-callable step
+(``bzh:steppable-loop``)."""
 
 from __future__ import annotations
 
@@ -30,10 +28,8 @@ _log = get_logger("blizzard.hub.transcript_events")
 class EventDerivationService:
     """The per-segment replacement unit (D6) and the candidate-set predicate (D1).
 
-    ``chunks`` resolves a node-step's ``graph_id`` (D4): the latest-by-``recorded_at``
-    ``transitions`` row matching ``(chunk_id, to_node_id, epoch)`` where one exists, else
-    the chunk's own mint pin — never the mint pin unconditionally, since a chunk can
-    migrate graphs."""
+    ``chunks`` resolves a node-step's ``graph_id`` (D4): the latest matching
+    ``transitions`` row where one exists, else the chunk's own mint pin."""
 
     def __init__(
         self,
@@ -50,12 +46,14 @@ class EventDerivationService:
         self._extractors = extractors
         self._extractor_version = extractor_version
 
-    def candidate_segment_ids(self) -> list[str]:
+    def candidate_segment_ids(self, *, chunk_id: str | None = None) -> list[str]:
         """Every visible segment (D1) lacking a current-version marker, or whose marker
         disagrees with the segment's stored content today — the two are not the same
-        set, and only the visible set governs which segments' rows the reconciler keeps."""
+        set, and only the (unscoped) visible set governs which segments' rows the
+        reconciler keeps. ``chunk_id`` narrows the visible set for the re-derive route's
+        chunk-scoped call (D7); the standing reconciler never passes it."""
         candidates: list[str] = []
-        for segment_id in self._events.visible_segment_ids():
+        for segment_id in self._events.visible_segment_ids(chunk_id=chunk_id):
             marker = self._events.derivation_marker(segment_id, self._extractor_version)
             if marker is None:
                 candidates.append(segment_id)
@@ -120,11 +118,9 @@ class EventDerivationService:
 
 
 class EventDerivationReconciler:
-    """The standing convergence pass (D1/D2), stepped by the existing ``Sweep`` driver
-    like its ``AnnotationReconciler``/``DeliveryClosureReconciler`` siblings. Drives a
-    candidate segment through :class:`EventDerivationService`, then drops the rows of any
-    segment the derived store still remembers but the visible set no longer holds — the
-    sweep's other durable write path (D6's superseded-segment edge)."""
+    """The standing convergence pass (D1/D2), stepped by the existing ``Sweep`` driver.
+    Derives each candidate through :class:`EventDerivationService`, then drops the rows
+    of any segment the store still remembers but the visible set no longer holds."""
 
     def __init__(self, *, service: EventDerivationService, events: IWriteTranscriptEvents) -> None:
         self._service = service

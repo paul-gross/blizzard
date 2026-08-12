@@ -199,6 +199,20 @@ def test_visible_segment_ids_includes_a_final_unsuperseded_segment(tmp_path: Pat
     assert store.visible_segment_ids() == frozenset({"sg_1"})
 
 
+def test_visible_segment_ids_narrows_to_the_given_chunk(tmp_path: Path) -> None:
+    """The re-derive route's chunk-scoped call (blizzard#254 D7)."""
+    engine = _migrated_engine(tmp_path)
+    segments = TranscriptSegmentStore(engine)
+    segments.insert_accepted(_segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, codec="zlib", at=_NOW)
+    segments.insert_accepted(_segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, codec="zlib", at=_NOW)
+
+    store = TranscriptEventStore(engine)
+
+    assert store.visible_segment_ids(chunk_id="ch_1") == frozenset({"sg_1"})
+    assert store.visible_segment_ids(chunk_id="ch_2") == frozenset({"sg_2"})
+    assert store.visible_segment_ids() == frozenset({"sg_1", "sg_2"})
+
+
 # --- decode ----------------------------------------------------------------
 
 

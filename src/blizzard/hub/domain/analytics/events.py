@@ -74,10 +74,11 @@ class SegmentDerivationInput:
 class IReadTranscriptEvents(Protocol):
     """Read-only operations over the derived event store and its derivation markers."""
 
-    def visible_segment_ids(self) -> frozenset[str]:
+    def visible_segment_ids(self, *, chunk_id: str | None = None) -> frozenset[str]:
         """Every segment id the hub's own read path would show today (D1) — final, not
-        superseded. The derivation service's candidate set is this, filtered against
-        :meth:`derivation_marker`; the reconciler diffs it against
+        superseded — narrowed to ``chunk_id`` when given (the re-derive route's
+        chunk-scoped call, D7). The derivation service's candidate set is this, filtered
+        against :meth:`derivation_marker`; the reconciler diffs the unscoped set against
         :meth:`derived_segment_ids` to find a segment to drop."""
         ...
 
