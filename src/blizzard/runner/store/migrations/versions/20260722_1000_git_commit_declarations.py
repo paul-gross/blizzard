@@ -9,16 +9,35 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
-from blizzard.runner.store.schema import git_commit_declarations
+from blizzard.foundation.store.utc import UtcDateTime
 
 revision: str = "20260722_1000_runner_git_commit_declarations"
 down_revision: str | None = "20260721_1500_runner_jwt_jti_seen"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_TABLES = (git_commit_declarations,)
+# This revision's own frozen shape — carries ``forge``, not ``environment_id``: a later
+# revision drops and recreates this table to swap the two (``bzh:frozen-revisions``).
+_frozen_metadata = sa.MetaData()
+_git_commit_declarations = sa.Table(
+    "git_commit_declarations",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("lease_id", sa.String, nullable=False),
+    sa.Column("chunk_id", sa.String, nullable=False),
+    sa.Column("node_id", sa.String, nullable=False),
+    sa.Column("epoch", sa.Integer, nullable=False),
+    sa.Column("forge", sa.String, nullable=False),
+    sa.Column("repo", sa.String, nullable=False),
+    sa.Column("branch", sa.String, nullable=False),
+    sa.Column("commit", sa.String, nullable=False),
+    sa.Column("declared_at", UtcDateTime, nullable=False),
+)
+
+_TABLES = (_git_commit_declarations,)
 
 
 def upgrade() -> None:
