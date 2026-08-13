@@ -23,6 +23,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
+from blizzard.hub.domain.analytics.operational import OperationalCriteria
 from blizzard.hub.domain.analytics.queries import (
     CountRow,
     EventPage,
@@ -75,13 +76,45 @@ def re_derive(request: ReDeriveRequest, services: Annotated[HubServices, Depends
 
 @dataclass(frozen=True)
 class ScopeFilters:
-    """The filter block every events and counts route exposes — which work the read
-    covers, over which window, at which extractor version."""
+    """The filter block every analytics route exposes — which work the read covers and
+    over which window (blizzard#256 D7). Shared by the events/counts routes and the
+    operational datasets alike; a route wanting the derived-event projection's own
+    ``extractor_version`` composes :class:`EventScopeFilters` on top rather than this
+    carrying a field only one projection means anything to."""
 
     graph_id: str | None
     source: str | None
     since: datetime | None
     until: datetime | None
+
+    @classmethod
+    def of(
+        cls,
+        graph_id: Annotated[str | None, Query()] = None,
+        source: Annotated[str | None, Query()] = None,
+        since: Annotated[datetime | None, Query()] = None,
+        until: Annotated[datetime | None, Query()] = None,
+    ) -> ScopeFilters:
+        return cls(graph_id, source, since, until)
+
+    def criteria(self) -> OperationalCriteria:
+        return OperationalCriteria(
+            graph_id=self.graph_id,
+            source=self.source,
+            since=as_utc(self.since) if self.since is not None else None,
+            until=as_utc(self.until) if self.until is not None else None,
+        )
+
+
+@dataclass(frozen=True)
+class EventScopeFilters:
+    """:class:`ScopeFilters` plus ``extractor_version`` — meaningless outside the
+    derived-event projection (blizzard#256 D7), so it stays off the shared block and
+    composes on top of it here instead. Takes its five query params flat, rather than
+    nesting a ``Depends(ScopeFilters.of)``, so FastAPI's per-dependant param ordering
+    reproduces the pre-split parameter order byte-for-byte (P1's zero-spec-diff bar)."""
+
+    scope: ScopeFilters
     extractor_version: str | None
 
     @classmethod
@@ -92,8 +125,8 @@ class ScopeFilters:
         since: Annotated[datetime | None, Query()] = None,
         until: Annotated[datetime | None, Query()] = None,
         extractor_version: Annotated[str | None, Query()] = None,
-    ) -> ScopeFilters:
-        return cls(graph_id, source, since, until, extractor_version)
+    ) -> EventScopeFilters:
+        return cls(ScopeFilters(graph_id, source, since, until), extractor_version)
 
     def criteria(
         self,
@@ -111,10 +144,10 @@ class ScopeFilters:
             tool=tool,
             subject_prefix=subject_prefix,
             node_id=node_id,
-            graph_id=self.graph_id,
-            source=self.source,
-            since=as_utc(self.since) if self.since is not None else None,
-            until=as_utc(self.until) if self.until is not None else None,
+            graph_id=self.scope.graph_id,
+            source=self.scope.source,
+            since=as_utc(self.scope.since) if self.scope.since is not None else None,
+            until=as_utc(self.scope.until) if self.scope.until is not None else None,
         )
 
 
@@ -123,7 +156,7 @@ class EventFilters:
     """Every filter this API owes, for a route that pins none of them: the shared scope
     plus the four that narrow by an event's own shape."""
 
-    scope: ScopeFilters
+    scope: EventScopeFilters
     kind: str | None
     tool: str | None
     subject_prefix: str | None
@@ -132,7 +165,7 @@ class EventFilters:
     @classmethod
     def of(
         cls,
-        scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)],
+        scope: Annotated[EventScopeFilters, Depends(EventScopeFilters.of)],
         kind: Annotated[str | None, Query()] = None,
         tool: Annotated[str | None, Query()] = None,
         subject_prefix: Annotated[str | None, Query()] = None,
@@ -231,7 +264,7 @@ def stream_events(
 @router.get("/counts/files", response_model=AnalyticsCountsResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
 def counts_by_file(
     services: Annotated[HubServices, Depends(get_services)],
-    scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)],
+    scope: Annotated[EventScopeFilters, Depends(EventScopeFilters.of)],
     tool: Annotated[str | None, Query()] = None,
     subject_prefix: Annotated[str | None, Query()] = None,
     node_id: Annotated[str | None, Query()] = None,
@@ -245,7 +278,7 @@ def counts_by_file(
 @router.get("/counts/skills", response_model=AnalyticsCountsResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
 def counts_by_skill(
     services: Annotated[HubServices, Depends(get_services)],
-    scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)],
+    scope: Annotated[EventScopeFilters, Depends(EventScopeFilters.of)],
     node_id: Annotated[str | None, Query()] = None,
 ) -> AnalyticsCountsResponse:
     """Occurrence counts by skill name among ``skill_invocation`` events, honoring every
@@ -272,7 +305,7 @@ def counts_by_agent_type(
 @router.get("/counts/nodes", response_model=AnalyticsCountsResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
 def counts_by_node(
     services: Annotated[HubServices, Depends(get_services)],
-    scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)],
+    scope: Annotated[EventScopeFilters, Depends(EventScopeFilters.of)],
     kind: Annotated[str | None, Query()] = None,
     tool: Annotated[str | None, Query()] = None,
     subject_prefix: Annotated[str | None, Query()] = None,
