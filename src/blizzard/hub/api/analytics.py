@@ -368,8 +368,8 @@ def _durations_response(stats: list[DurationStats]) -> AnalyticsDurationsRespons
 def durations_by_node(
     services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
 ) -> AnalyticsDurationsResponse:
-    """Completed-step duration rollups grouped by node (D2) — hub-observed wall-clock
-    latency (D3), never a runner-measured one."""
+    """Completed-step duration rollups grouped by node (D2) — see
+    ``AnalyticsDurationView`` for the wall-clock semantics (D3)."""
     return _durations_response(services.operational_analytics.durations_by_node(scope.criteria()))
 
 

@@ -6166,7 +6166,7 @@
     },
     "/api/analytics/durations/nodes": {
       "get": {
-        "description": "Completed-step duration rollups grouped by node (D2) \u2014 hub-observed wall-clock\nlatency (D3), never a runner-measured one.",
+        "description": "Completed-step duration rollups grouped by node (D2) \u2014 see\n``AnalyticsDurationView`` for the wall-clock semantics (D3).",
         "operationId": "durations_by_node_api_analytics_durations_nodes_get",
         "parameters": [
           {

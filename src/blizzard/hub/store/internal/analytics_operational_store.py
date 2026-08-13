@@ -7,12 +7,12 @@ fold this adapter only fetches and maps rows for."""
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Engine, Select, case, func, select
+from sqlalchemy import Engine, Select, case, func, select, tuple_
 
+from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.hub.domain.analytics.operational import (
     ChunkSpendPage,
     DurationStats,
@@ -34,19 +34,37 @@ from blizzard.hub.domain.graph import Executor
 from blizzard.hub.domain.work import UsageTotal
 from blizzard.hub.store import schema as s
 
-#: `spend_by_chunk`'s whole cursor format: a plain chunk id (`bzh:sql-portable`).
-_CHUNK_CURSOR = re.compile(r"ch_[0-9A-HJKMNP-TV-Z]+")
-
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`).
 
 
+def _runner_executed_or_entry(t: Any, gn: Any) -> Any:
+    """D2's runner-executed-step restriction, factored once so
+    ``_duration_window_groups_stmt`` and ``_duration_rows_stmt`` — which must agree, since
+    the first selects the groups the second fetches rows for — can't silently diverge."""
+    return (gn.c.executor == Executor.RUNNER.value) | (t.c.from_node_id.is_(None))
+
+
 def _lease_min_stmt() -> Select[Any]:
     """One row per ``(chunk_id, epoch)``, the earliest ``minted_at`` among any duplicate
-    lease rows that pair (A7) — ``record_lease`` is a bare insert with no unique
-    constraint, so a join straight to ``lease_facts`` could double-count a step."""
+    lease rows that pair (A7) — a bare insert with no unique constraint, so a join
+    straight to ``lease_facts`` could double-count a step. Deliberately unwindowed —
+    ``_candidate_lease_epochs_stmt`` dedupes fleet-wide before windowing the deduped
+    mint; a window-narrowed variant is ``_duration_lease_min_stmt``."""
     t = s.lease_facts
     return select(t.c.chunk_id, t.c.epoch, func.min(t.c.minted_at).label("minted_at")).group_by(t.c.chunk_id, t.c.epoch)
+
+
+def _duration_lease_min_stmt(criteria: OperationalCriteria) -> Select[Any]:
+    """``_lease_min_stmt``, narrowed to ``_duration_window_groups_stmt``'s own
+    window-admitted ``(chunk_id, epoch)`` groups via a correlated subquery — only those
+    groups ever feed the duration fold, so a bare fleet-wide scan on every
+    ``durations/*`` request reads far more than the caller's window ever needs."""
+    t = s.lease_facts
+    groups = _duration_window_groups_stmt(criteria).subquery()
+    stmt = select(t.c.chunk_id, t.c.epoch, func.min(t.c.minted_at).label("minted_at"))
+    stmt = stmt.where(tuple_(t.c.chunk_id, t.c.epoch).in_(select(groups.c.chunk_id, groups.c.epoch)))
+    return stmt.group_by(t.c.chunk_id, t.c.epoch)
 
 
 def _source_chunks_stmt(source: str) -> Select[Any]:
@@ -60,7 +78,7 @@ def _duration_window_groups_stmt(criteria: OperationalCriteria) -> Select[Any]:
     narrows the fold's output back down afterward."""
     t, gn = s.transitions, s.graph_nodes
     stmt = select(t.c.chunk_id, t.c.epoch).distinct().select_from(t.outerjoin(gn, t.c.from_node_id == gn.c.node_id))
-    stmt = stmt.where((gn.c.executor == Executor.RUNNER.value) | (t.c.from_node_id.is_(None)))
+    stmt = stmt.where(_runner_executed_or_entry(t, gn))
     if criteria.graph_id is not None:
         stmt = stmt.where(t.c.graph_id == criteria.graph_id)
     if criteria.source is not None:
@@ -72,17 +90,18 @@ def _duration_window_groups_stmt(criteria: OperationalCriteria) -> Select[Any]:
     return stmt
 
 
-def _duration_rows_stmt(chunk_ids: Sequence[str]) -> Select[Any]:
-    """Every completed *runner-executed* step (D2) for one of ``chunk_ids``, unwindowed
-    by time — ``_step_durations`` narrows to the window-admitted groups in Python before
-    folding. A hub-executed node's own exit shares an instant with its lease mint by
-    construction, so it never carries a real duration; outer-joined to ``graph_nodes`` so
-    an entry transition (``from_node_id`` null) is kept regardless."""
+def _duration_rows_stmt(criteria: OperationalCriteria) -> Select[Any]:
+    """Every completed *runner-executed* step (D2) for a window-admitted
+    ``(chunk_id, epoch)`` group, unwindowed by time — narrowed via a correlated subquery
+    over ``_duration_window_groups_stmt``, not a materialized id list, so the bind count
+    stays independent of the caller's chunk fan-out (``bzh:sql-portable``). Outer-joined
+    to ``graph_nodes`` so an entry transition (``from_node_id`` null) survives regardless."""
     t, gn = s.transitions, s.graph_nodes
     cols = (t.c.chunk_id, t.c.epoch, t.c.transition_id, t.c.from_node_id, t.c.to_node_id, t.c.graph_id, t.c.recorded_at)
     stmt = select(*cols).select_from(t.outerjoin(gn, t.c.from_node_id == gn.c.node_id))
-    stmt = stmt.where((gn.c.executor == Executor.RUNNER.value) | (t.c.from_node_id.is_(None)))
-    stmt = stmt.where(t.c.chunk_id.in_(chunk_ids))
+    stmt = stmt.where(_runner_executed_or_entry(t, gn))
+    groups = _duration_window_groups_stmt(criteria).subquery()
+    stmt = stmt.where(tuple_(t.c.chunk_id, t.c.epoch).in_(select(groups.c.chunk_id, groups.c.epoch)))
     return stmt.order_by(t.c.chunk_id, t.c.epoch, t.c.recorded_at, t.c.transition_id)
 
 
@@ -99,7 +118,11 @@ def _to_transition_movement(row: Any) -> TransitionMovement:
 
 
 def _decode_chunk_cursor(cursor: str) -> str:
-    if not _CHUNK_CURSOR.fullmatch(cursor):
+    """``spend_by_chunk``'s whole cursor format: a plain chunk id — validated through the
+    canonical id parser rather than a hand-rolled pattern, so a too-short or malformed
+    value 422s instead of being accepted as a keyset offset."""
+    parsed = Id.parse(cursor)
+    if parsed is None or not parsed.has_prefix(CHUNK_PREFIX):
         raise MalformedCursor(cursor)
     return cursor
 
@@ -286,11 +309,9 @@ class AnalyticsOperationalStore:
             group_rows = conn.execute(_duration_window_groups_stmt(criteria)).all()
             if not group_rows:
                 return []
-            groups = {(r.chunk_id, r.epoch) for r in group_rows}
-            chunk_ids = sorted({r.chunk_id for r in group_rows})
-            transition_rows = conn.execute(_duration_rows_stmt(chunk_ids)).all()
-            lease_rows = conn.execute(_lease_min_stmt()).all()
-        transitions = [_to_transition_movement(r) for r in transition_rows if (r.chunk_id, r.epoch) in groups]
+            transition_rows = conn.execute(_duration_rows_stmt(criteria)).all()
+            lease_rows = conn.execute(_duration_lease_min_stmt(criteria)).all()
+        transitions = [_to_transition_movement(r) for r in transition_rows]
         lease_min_by_epoch = {(r.chunk_id, r.epoch): r.minted_at for r in lease_rows}
         all_rows = fold_step_durations(transitions, lease_min_by_epoch)
         return steps_in_window(all_rows, since=criteria.since, until=criteria.until)

@@ -222,7 +222,7 @@ def test_spend_by_chunk_pages_with_a_cursor(tmp_path: Path) -> None:
     assert {first.json()["spend"][0]["chunk_id"], second.json()["spend"][0]["chunk_id"]} == {chunk_a, chunk_b}
 
 
-@pytest.mark.parametrize("cursor", ["not-a-chunk-id", "", "ch"])
+@pytest.mark.parametrize("cursor", ["not-a-chunk-id", "", "ch", "ch_A"])
 def test_spend_by_chunk_422s_on_a_malformed_cursor(tmp_path: Path, cursor: str) -> None:
     hub, token, _graph_id, _nodes = _seeded_hub(tmp_path)
 

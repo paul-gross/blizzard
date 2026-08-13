@@ -19,6 +19,7 @@ from blizzard.hub.domain.analytics.operational import (
     steps_in_window,
     summarize_durations,
 )
+from blizzard.hub.domain.graph import RESERVED_TERMINAL
 
 pytestmark = pytest.mark.unit
 
@@ -164,6 +165,77 @@ def test_a_no_movement_failure_resolves_via_the_epoch_s_own_graph_not_the_curren
     )
     # Epoch 1 ran on graph A and must resolve via A's entry, not B's (the current pin).
     assert failures == {"nd_a_entry": 1}
+
+
+def test_a_terminal_transition_is_never_read_as_a_prior_movements_node() -> None:
+    """F9: ``transitions.to_node_id`` can be ``RESERVED_TERMINAL`` ("done"), not a node
+    id — a later unresolved epoch resolving through it must fall through to the
+    no-movement case instead."""
+    failures = resolve_attempt_failures(
+        lease_epochs=[
+            LeaseEpoch(chunk_id="ch_1", epoch=1, minted_at=_at(0)),
+            LeaseEpoch(chunk_id="ch_1", epoch=2, minted_at=_at(10)),
+            LeaseEpoch(chunk_id="ch_1", epoch=3, minted_at=_at(20)),
+        ],
+        transitions=[
+            TransitionMovement(
+                chunk_id="ch_1",
+                epoch=1,
+                transition_id="tr_1",
+                from_node_id="nd_review",
+                to_node_id=RESERVED_TERMINAL,
+                graph_id="gr_1",
+                recorded_at=_at(5),
+            )
+        ],
+        migrations=[],
+        bounced=[],
+        chunk_graph={"ch_1": "gr_1"},
+        chunk_max_lease_epoch={"ch_1": 3},
+        graph_entry_node={"gr_1": "nd_entry"},
+        graph_id_filter=None,
+    )
+    assert failures == {"nd_entry": 1}  # falls through to the entry node, never "done"
+
+
+def test_a_same_instant_migration_tie_breaks_deterministically_on_migration_id() -> None:
+    """F7: the no-movement fallback's tie-break must be a total order — two later
+    migrations at the identical ``(epoch, recorded_at)`` break on their own
+    (schema-unique) ``migration_id``."""
+    later_a = MigrationMovement(
+        chunk_id="ch_1",
+        epoch=2,
+        migration_id="mg_A",
+        landed_node_id="nd_a_entry",
+        from_graph_id="gr_a",
+        to_graph_id="gr_c",
+        recorded_at=_at(15),
+    )
+    later_b = MigrationMovement(
+        chunk_id="ch_1",
+        epoch=2,
+        migration_id="mg_B",
+        landed_node_id="nd_b_entry",
+        from_graph_id="gr_b",
+        to_graph_id="gr_c",
+        recorded_at=_at(15),  # same instant as later_a
+    )
+    common = {
+        "lease_epochs": [
+            LeaseEpoch(chunk_id="ch_1", epoch=1, minted_at=_at(0)),
+            LeaseEpoch(chunk_id="ch_1", epoch=2, minted_at=_at(20)),
+        ],
+        "transitions": [],
+        "bounced": [],
+        "chunk_graph": {"ch_1": "gr_c"},
+        "chunk_max_lease_epoch": {"ch_1": 2},
+        "graph_entry_node": {"gr_a": "nd_a_entry", "gr_b": "nd_b_entry", "gr_c": "nd_c_entry"},
+        "graph_id_filter": None,
+    }
+    # mg_A sorts before mg_B, so the tie always resolves to A's from_graph_id — regardless
+    # of which order the two migrations are passed in.
+    assert resolve_attempt_failures(migrations=[later_a, later_b], **common) == {"nd_a_entry": 1}
+    assert resolve_attempt_failures(migrations=[later_b, later_a], **common) == {"nd_a_entry": 1}
 
 
 def test_a_bounced_epoch_is_excluded_outright() -> None:

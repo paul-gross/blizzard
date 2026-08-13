@@ -76,8 +76,8 @@ export const durationsByGraphApiAnalyticsDurationsGraphsGet = <ThrowOnError exte
 /**
  * Durations By Node
  *
- * Completed-step duration rollups grouped by node (D2) — hub-observed wall-clock
- * latency (D3), never a runner-measured one.
+ * Completed-step duration rollups grouped by node (D2) — see
+ * ``AnalyticsDurationView`` for the wall-clock semantics (D3).
  */
 export const durationsByNodeApiAnalyticsDurationsNodesGet = <ThrowOnError extends boolean = false>(options?: Options<DurationsByNodeApiAnalyticsDurationsNodesGetData, ThrowOnError>): RequestResult<DurationsByNodeApiAnalyticsDurationsNodesGetResponses, DurationsByNodeApiAnalyticsDurationsNodesGetErrors, ThrowOnError> => (options?.client ?? client).get<DurationsByNodeApiAnalyticsDurationsNodesGetResponses, DurationsByNodeApiAnalyticsDurationsNodesGetErrors, ThrowOnError>({ url: '/api/analytics/durations/nodes', ...options });
 

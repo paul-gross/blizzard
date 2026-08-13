@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import UsageTotal
 
 
@@ -30,9 +31,9 @@ class OperationalCriteria:
 @dataclass(frozen=True)
 class DurationStats:
     """One grouping key's step-duration rollup (D2/D3) — ``key`` is a node id or a graph
-    id, whichever route served it. Hub-observed wall-clock latency (D3), runner-executed
-    steps only — a hub step's own exit shares its synthetic lease mint's instant by
-    construction, so it never carries a real duration."""
+    id. Runner-executed steps only (a hub-executed exit carries no real duration); the
+    wall-clock semantics are :class:`~blizzard.wire.analytics.AnalyticsDurationView`'s
+    own (``bzh:one-prose-home``)."""
 
     key: str
     completed_steps: int
@@ -200,11 +201,11 @@ def resolve_attempt_failures(
     graph_entry_node: Mapping[str, str],
     graph_id_filter: str | None,
 ) -> dict[str, int]:
-    """D5: count a node for every candidate lease epoch genuinely over — bounced or
-    superseded — and unresolved by a transition/migration of its own. The node is the
-    chunk's latest movement below that epoch (a tie favors the migration), or with no
-    movement at all, the graph the chunk ran in AT that epoch — not its current pin,
-    which a later migration can have moved on from."""
+    """D5: count a node for every candidate lease epoch NOT bounced (D4), NOT resolved
+    by a transition/migration of its own, and superseded by a strictly newer lease. The
+    node is the chunk's latest movement below that epoch (a tie favors the migration),
+    or with no movement at all, the graph the chunk ran in AT that epoch — not its
+    current pin, which a later migration can have moved on from."""
     bounced_set = set(bounced)
     resolved: set[tuple[str, int]] = {(t.chunk_id, t.epoch) for t in transitions} | {
         (m.chunk_id, m.epoch) for m in migrations
@@ -226,12 +227,12 @@ def resolve_attempt_failures(
         if epoch == chunk_max_lease_epoch.get(chunk_id):
             continue
 
-        # (recorded_at, epoch, kind_rank): kind_rank breaks a same-instant tie toward
-        # the migration, mirroring ChunkFacts._latest_movement_is_migration.
+        # kind_rank breaks a same-instant tie toward the migration (mirrors
+        # ChunkFacts._latest_movement_is_migration); RESERVED_TERMINAL is excluded below.
         candidates: list[tuple[datetime, int, int, str, str]] = [
             (t.recorded_at, t.epoch, 0, t.to_node_id, t.graph_id)
             for t in transitions_by_chunk.get(chunk_id, ())
-            if t.epoch < epoch
+            if t.epoch < epoch and t.to_node_id != RESERVED_TERMINAL
         ]
         candidates += [
             (
@@ -247,11 +248,11 @@ def resolve_attempt_failures(
         if candidates:
             *_, node_id, graph_id = max(candidates)
         else:
-            # No movement: the current pin is stale if a later migration re-pinned the
-            # chunk — use that migration's own `from_graph_id` instead when one exists.
+            # No movement: use a later migration's own `from_graph_id` (never the
+            # current, already-migrated-to pin); `migration_id` breaks a same-instant tie.
             later_migrations = [m for m in migrations_by_chunk.get(chunk_id, ()) if m.epoch >= epoch]
             if later_migrations:
-                earliest_later = min(later_migrations, key=lambda m: (m.epoch, m.recorded_at))
+                earliest_later = min(later_migrations, key=lambda m: (m.epoch, m.recorded_at, m.migration_id))
                 graph_id = earliest_later.from_graph_id
             else:
                 graph_id = chunk_graph[chunk_id]

@@ -30,9 +30,10 @@ def _executed_statements() -> dict[str, ClauseElement]:
     m = store_module
     return {
         "_lease_min_stmt": m._lease_min_stmt(),
+        "_duration_lease_min_stmt": m._duration_lease_min_stmt(_CRITERIA),
         "_source_chunks_stmt": m._source_chunks_stmt("github"),
         "_duration_window_groups_stmt": m._duration_window_groups_stmt(_CRITERIA),
-        "_duration_rows_stmt": m._duration_rows_stmt(["ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B"]),
+        "_duration_rows_stmt": m._duration_rows_stmt(_CRITERIA),
         "_spend_filtered_stmt": m._spend_filtered_stmt(select(s.usage_facts), _CRITERIA),
         "_spend_group_stmt": m._spend_group_stmt(_CRITERIA, group_col=s.usage_facts.c.node_id),
         "_spend_by_node_stmt": m._spend_by_node_stmt(_CRITERIA),
@@ -54,6 +55,16 @@ def test_every_statement_the_store_executes_compiles_under_both_dialects() -> No
     for name, stmt in _executed_statements().items():
         for dialect in (postgresql.dialect(), sqlite.dialect()):
             assert str(stmt.compile(dialect=dialect)), name
+
+
+@pytest.mark.parametrize("builder_name", ["_duration_rows_stmt", "_duration_lease_min_stmt"])
+def test_duration_statements_narrow_via_a_correlated_subquery_not_a_bound_id_list(builder_name: str) -> None:
+    """F1: a materialized chunk-id list bound one host parameter per element, hitting
+    sqlite's variable ceiling at 32,767 chunks. Pinned structurally — both builders take
+    ``criteria``, not an id list, narrowing via a row-value ``IN (SELECT ...)``."""
+    stmt = getattr(store_module, builder_name)(_CRITERIA)
+    sql = str(stmt.compile(dialect=sqlite.dialect()))
+    assert "IN (SELECT" in sql
 
 
 def test_no_statement_the_store_executes_leaves_the_portable_surface() -> None:

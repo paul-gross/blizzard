@@ -1140,7 +1140,7 @@
   "blizzard/hub/domain/analytics/operational.py": {
    "comments": 6,
    "docstrings": 78,
-   "total": 308
+   "total": 309
   },
   "blizzard/hub/domain/analytics/queries.py": {
    "comments": 2,
@@ -1353,9 +1353,9 @@
    "total": 137
   },
   "blizzard/hub/store/internal/analytics_operational_store.py": {
-   "comments": 4,
-   "docstrings": 51,
-   "total": 366
+   "comments": 3,
+   "docstrings": 63,
+   "total": 387
   },
   "blizzard/hub/store/internal/chunk_store.py": {
    "comments": 56,
@@ -2950,14 +2950,14 @@
    "total": 331
   },
   "test_analytics_operational_domain.py": {
-   "comments": 5,
-   "docstrings": 23,
-   "total": 312
+   "comments": 9,
+   "docstrings": 29,
+   "total": 384
   },
   "test_analytics_operational_statements.py": {
    "comments": 4,
-   "docstrings": 6,
-   "total": 86
+   "docstrings": 9,
+   "total": 97
   },
   "test_analytics_outcomes_api.py": {
    "comments": 29,
