@@ -1,22 +1,26 @@
 """The analytics durations routes (blizzard#256, Phase 2, component tier): the
 TRANSCRIPT_READ auth triad, real completed-step rollups by node and by graph, every
 shared filter (D7), the epoch-join's resistance to a duplicate lease row (A7), a hub
-step's own exit never faking a zero, two transitions sharing one epoch chaining their
-intervals rather than double-counting, and a `since` edge inside a chained epoch."""
+step's own exit never faking a zero, two transitions chaining one epoch's intervals,
+a `since` edge inside a chained epoch, and a migrated chunk's post-migration graph
+never leaking past a pre-migration graph_id filter."""
 
 from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
+from blizzard.hub.domain.work import IWriteChunkRepository, MigrationSource
 from tests.support import (
     FakeHubCommandRunner,
     FakeHubWorkdir,
     FakeWorkSource,
+    HubHarness,
     build_hub,
     pointer_token,
     report_lease,
@@ -121,6 +125,23 @@ nodes:
           to: done
 """
 
+#: A second graph a chunk can migrate onto — named to match
+#: `tests/test_analytics_outcomes_api.py`'s own migration fixture.
+_OTHER_GRAPH_YAML = """
+name: durations-fixture-other
+entry: triage
+nodes:
+  triage:
+    executor: runner
+    prompt: Triage it.
+    judgement:
+      prompt: Assess.
+      choices:
+        pass:
+          description: Complete.
+          to: done
+"""
+
 
 def _cookie(token: str) -> dict[str, str]:
     return {"Cookie": f"bz_session={token}"}
@@ -171,6 +192,11 @@ def _complete(hub, chunk_id: str, *, epoch: int, from_node_id: str, choice: str)
         json={"choice": choice, "epoch": epoch, "runner_id": "r1", "from_node_id": from_node_id},
     )
     assert resp.status_code == 200, resp.text
+
+
+def _writable(hub: HubHarness) -> IWriteChunkRepository:
+    """A test-only cast: mirrors `tests/test_analytics_outcomes_api.py`'s own helper."""
+    return cast(IWriteChunkRepository, hub.services.chunks)
 
 
 # --- auth triad: 401 / 403 / 200, plus the runner-principal refusal ---------------
@@ -433,6 +459,55 @@ def test_durations_honor_the_graph_id_filter(tmp_path: Path) -> None:
         "/api/analytics/durations/nodes", params={"graph_id": "gr_nonexistent"}, headers=_cookie(token)
     )
     assert resp_other.json()["durations"] == []
+
+
+def test_a_migrated_chunks_post_migration_graph_never_leaks_into_a_pre_migration_graph_id_filter(
+    tmp_path: Path,
+) -> None:
+    """The group-selecting and row-fetching statements must narrow by `(chunk_id,
+    epoch)`, not `chunk_id` alone — the latter still compiles to `IN (SELECT ...)`."""
+    hub, token, graph_id, nodes = _seeded_hub(tmp_path)
+    admin_token = seed_session(hub, seed_user(hub, username="admin2", role=Role.ADMIN))
+    other = hub.client.post(
+        "/api/graphs", json={"definition_yaml": _OTHER_GRAPH_YAML}, headers=_cookie(admin_token)
+    )
+    assert other.status_code == 201, other.text
+    other_graph_id = other.json()["graph_id"]
+    other_nodes = {n["name"]: n["node_id"] for n in other.json()["nodes"]}
+
+    chunk_id = _mint_chunk(hub, token)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    hub.clock.advance(timedelta(seconds=1))
+    _complete(hub, chunk_id, epoch=1, from_node_id=nodes["build"], choice="pass")  # graph A: build -> review
+
+    _writable(hub).record_migration(
+        chunk_id,
+        from_node_id=nodes["review"],
+        from_graph_id=graph_id,
+        to_graph_id=other_graph_id,
+        landed_node_id=other_nodes["triage"],
+        choice_name="migrate",
+        model=None,
+        epoch=2,
+        at=hub.clock.now(),
+        artifacts=[],
+        source=MigrationSource.AUTHORED_EDGE,
+    )
+    report_lease(hub, chunk_id, epoch=3, seq=2)
+    hub.clock.advance(timedelta(seconds=1))
+    _complete(hub, chunk_id, epoch=3, from_node_id=other_nodes["triage"], choice="pass")  # graph B: triage -> done
+
+    resp_a = hub.client.get("/api/analytics/durations/nodes", params={"graph_id": graph_id}, headers=_cookie(token))
+    assert resp_a.json()["durations"] == [
+        {"key": nodes["build"], "completed_steps": 1, "total_seconds": 1.0, "avg_seconds": 1.0}
+    ]
+
+    resp_b = hub.client.get(
+        "/api/analytics/durations/nodes", params={"graph_id": other_graph_id}, headers=_cookie(token)
+    )
+    assert resp_b.json()["durations"] == [
+        {"key": other_nodes["triage"], "completed_steps": 1, "total_seconds": 1.0, "avg_seconds": 1.0}
+    ]
 
 
 def test_durations_honor_the_source_filter(tmp_path: Path) -> None:

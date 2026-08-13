@@ -5,6 +5,7 @@ under both dialects and stays on the portable expression surface (blizzard#256, 
 from __future__ import annotations
 
 import ast
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -59,12 +60,12 @@ def test_every_statement_the_store_executes_compiles_under_both_dialects() -> No
 
 @pytest.mark.parametrize("builder_name", ["_duration_rows_stmt", "_duration_lease_min_stmt"])
 def test_duration_statements_narrow_via_a_correlated_subquery_not_a_bound_id_list(builder_name: str) -> None:
-    """F1: a materialized chunk-id list bound one host parameter per element, hitting
-    sqlite's variable ceiling at 32,767 chunks. Pinned structurally — both builders take
-    ``criteria``, not an id list, narrowing via a row-value ``IN (SELECT ...)``."""
+    """F1: pinned structurally — a row-value ``IN (SELECT ...)`` keyed on the whole
+    ``(chunk_id, epoch)`` pair, not ``chunk_id`` alone (which still matches a bare
+    ``"IN (SELECT"`` check but leaks a migrated chunk's other-graph epoch)."""
     stmt = getattr(store_module, builder_name)(_CRITERIA)
     sql = str(stmt.compile(dialect=sqlite.dialect()))
-    assert "IN (SELECT" in sql
+    assert re.search(r"\(\w+\.chunk_id, \w+\.epoch\) IN \(SELECT", sql), sql
 
 
 def test_no_statement_the_store_executes_leaves_the_portable_surface() -> None:

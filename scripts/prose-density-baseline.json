@@ -2930,9 +2930,9 @@
    "total": 371
   },
   "test_analytics_durations_api.py": {
-   "comments": 20,
-   "docstrings": 17,
-   "total": 472
+   "comments": 24,
+   "docstrings": 21,
+   "total": 547
   },
   "test_analytics_event_queries.py": {
    "comments": 10,
@@ -2957,7 +2957,7 @@
   "test_analytics_operational_statements.py": {
    "comments": 4,
    "docstrings": 9,
-   "total": 97
+   "total": 98
   },
   "test_analytics_outcomes_api.py": {
    "comments": 29,
