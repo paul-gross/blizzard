@@ -1,0 +1,117 @@
+"""The analytics event query seam (blizzard#255 D1/D6) — filterable events plus canned
+counts, over the projection :mod:`extraction` and :mod:`derivation` populate.
+
+New, not an extension of :mod:`events` (``bzh:controller-read-only``): that module's
+``IReadTranscriptEvents`` carries derivation bookkeeping alone, never an event query.
+The routes (Phase 3) depend on this Protocol only; no write repository backs them."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Protocol
+
+
+@dataclass(frozen=True)
+class EventQueryCriteria:
+    """Every filter this API owes (blizzard#255), all optional and freely combinable.
+    ``source`` is a ``chunk_work_refs`` existence test (D1), never a join — a chunk
+    carrying several refs would multiply event rows. ``extractor_version`` has no
+    default: mixing versions double-counts an occurrence (D1), so a caller names one."""
+
+    extractor_version: str
+    kind: str | None = None
+    tool: str | None = None
+    # A prefix of the ``subject`` column, whatever that kind's subject is — a path only where it is one.
+    subject_prefix: str | None = None
+    node_id: str | None = None
+    graph_id: str | None = None
+    source: str | None = None
+    # An untimed event (no ``occurred_at``) falls outside every range, ``since``/``until`` alike.
+    since: datetime | None = None
+    until: datetime | None = None
+
+
+@dataclass(frozen=True)
+class EventRecord:
+    """One event row as the query layer renders it — the wire layer (Phase 3) shapes
+    this further for the two encodings. ``payload`` stays raw JSON object text
+    (``bzh:sql-portable``: never parsed or filtered on here)."""
+
+    id: int
+    kind: str
+    subject: str | None
+    tool: str | None
+    payload: str
+    chunk_id: str
+    node_id: str
+    epoch: int
+    spawn_generation: int
+    graph_id: str
+    depth: int
+    agent_type: str | None
+    occurred_at: datetime | None
+
+
+@dataclass(frozen=True)
+class EventPage:
+    """A bounded, keyset-paginated page (blizzard#255) — ``next_cursor`` is ``None``
+    exactly when this page is the last one under ``criteria``'s ordering, so a caller
+    drives a full bulk read by following it until absent."""
+
+    events: list[EventRecord]
+    next_cursor: str | None
+
+
+@dataclass(frozen=True)
+class CountRow:
+    """One grouping key's count — the four canned aggregations share this shape."""
+
+    key: str
+    count: int
+
+
+class MalformedCursor(ValueError):
+    """A cursor a page never minted (blizzard#255) — the declared type callers depend
+    on, so a route can tell it from any other failure inside a read."""
+
+    def __init__(self, cursor: str) -> None:
+        super().__init__(f"malformed cursor {cursor!r}")
+        self.cursor = cursor
+
+
+class IReadAnalyticsEventQueries(Protocol):
+    """Read-only event query Protocol (blizzard#255 D6) — the routes' own seam
+    (``bzh:controller-read-only``, ``bzh:repository-split``). Every ``counts_by_*``
+    orders its rows most-frequent first, key ascending as the tiebreak — the order a
+    top-N reader takes a prefix of, and one two identical calls agree on."""
+
+    def events(self, criteria: EventQueryCriteria, *, cursor: str | None = None, limit: int) -> EventPage:
+        """At most ``limit`` (at least 1, else ``ValueError``) events matching ``criteria``,
+        in one total order (``bzh:sql-portable``) both encodings share; absent a concurrent
+        re-derive replacing rows, a cursor walk repeats and skips nothing. ``cursor`` is a
+        prior :attr:`EventPage.next_cursor`: any other value raises :class:`MalformedCursor`."""
+        ...
+
+    def counts_by_file(self, criteria: EventQueryCriteria) -> list[CountRow]:
+        """Occurrence counts grouped by ``subject`` among ``file_read`` events matching
+        ``criteria`` — ``criteria.kind`` is honored if it further narrows the scope, but
+        this method's own ``file_read`` restriction always applies."""
+        ...
+
+    def counts_by_skill(self, criteria: EventQueryCriteria) -> list[CountRow]:
+        """Occurrence counts grouped by ``subject`` among ``skill_invocation`` events
+        matching ``criteria`` — see :meth:`counts_by_file` for the kind-restriction rule."""
+        ...
+
+    def counts_by_agent_type(self, criteria: EventQueryCriteria) -> list[CountRow]:
+        """Occurrence counts grouped by the enclosing-sidechain ``agent_type`` column,
+        across every kind matching ``criteria`` — "how much activity happened under which
+        agent type," not narrowed to ``agent_spawn`` (a caller after spawn counts alone
+        gets there with ``criteria.kind="agent_spawn"``, grouped by that kind's own
+        ``subject`` via the raw :meth:`events` read)."""
+        ...
+
+    def counts_by_node(self, criteria: EventQueryCriteria) -> list[CountRow]:
+        """Occurrence counts grouped by ``node_id``, across every kind matching ``criteria``."""
+        ...

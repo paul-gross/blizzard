@@ -12,15 +12,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
+from blizzard.hub.domain.analytics.events import KIND_AGENT_SPAWN, KIND_FILE_READ, KIND_SKILL_INVOCATION
 from blizzard.wire.transcript_segment import TurnSegmentView
 
 #: Bumped when recognition changes — the sweep re-derives history, leaving earlier
 #: rows untouched (D5/D9).
-EXTRACTOR_VERSION = "blizzard-analytics/1"
-
-KIND_FILE_READ = "file_read"
-KIND_SKILL_INVOCATION = "skill_invocation"
-KIND_AGENT_SPAWN = "agent_spawn"
+EXTRACTOR_VERSION = "blizzard-analytics/2"
 
 #: The one dialect this build's extractors know (A1) — Claude Code's own normalizer stamp.
 _CLAUDE_CODE_DIALECTS = frozenset({"claude-code-jsonl/2"})
@@ -30,26 +27,35 @@ _CLAUDE_CODE_DIALECTS = frozenset({"claude-code-jsonl/2"})
 class ExtractedEvent:
     """One recognized occurrence, still payload-shaped as a plain mapping — the
     derivation service (Phase 3) serializes it and stamps the node-step context this
-    layer never sees."""
+    layer never sees. ``subject``/``tool`` are the projection its extractor supplies
+    (blizzard#255 D1); ``subject`` is ``None`` for a kind with no natural one."""
 
     kind: str
     turn_path: str
     occurrence: int
     payload: dict[str, object]
+    subject: str | None
+    tool: str | None
     depth: int
     agent_type: str | None
     occurred_at: datetime | None
 
 
 class ITurnEventExtractor(Protocol):
-    """One kind's recognizer. ``kind`` is a class-level constant; :meth:`recognize`
-    returns every payload this turn mints for that kind under ``normalizer_version`` —
-    empty for "does not apply," never ``None`` (multiple matches from one turn are legal
-    even though none of today's three kinds produce more than one)."""
+    """One kind's recognizer. ``kind``/``tool_name`` are class-level constants — a
+    recognizer matches exactly one tool, so its ``tool_name`` is a fact, not a guess.
+    :meth:`recognize` returns every payload this turn mints, ``[]`` for none;
+    :meth:`subject` reads that payload's own subject (blizzard#255 D1)."""
 
     kind: str
+    tool_name: str
 
     def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]: ...
+
+    def subject(self, payload: dict[str, object]) -> str | None:
+        """This kind's subject within one of :meth:`recognize`'s own payloads —
+        ``None`` for a kind with no natural one."""
+        ...
 
 
 class FileReadExtractor:
@@ -57,6 +63,11 @@ class FileReadExtractor:
     (``Grep``/``Glob``) is a different act and is not one."""
 
     kind = KIND_FILE_READ
+    tool_name = "Read"
+
+    def subject(self, payload: dict[str, object]) -> str | None:
+        path = payload.get("path")
+        return path if isinstance(path, str) else None
 
     def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
         if normalizer_version not in _CLAUDE_CODE_DIALECTS:
@@ -73,6 +84,11 @@ class SkillInvocationExtractor:
     """A ``Skill`` call naming which skill it invoked."""
 
     kind = KIND_SKILL_INVOCATION
+    tool_name = "Skill"
+
+    def subject(self, payload: dict[str, object]) -> str | None:
+        skill_name = payload.get("skill_name")
+        return skill_name if isinstance(skill_name, str) else None
 
     def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
         if normalizer_version not in _CLAUDE_CODE_DIALECTS:
@@ -89,6 +105,11 @@ class AgentSpawnExtractor:
     """A ``Task`` call naming the subagent type it spawned."""
 
     kind = KIND_AGENT_SPAWN
+    tool_name = "Task"
+
+    def subject(self, payload: dict[str, object]) -> str | None:
+        agent_type = payload.get("agent_type")
+        return agent_type if isinstance(agent_type, str) else None
 
     def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
         if normalizer_version not in _CLAUDE_CODE_DIALECTS:
@@ -158,6 +179,8 @@ def _walk(
                         turn_path=turn_path,
                         occurrence=occurrence,
                         payload=payload,
+                        subject=extractor.subject(payload),
+                        tool=extractor.tool_name,
                         depth=depth,
                         agent_type=agent_type,
                         occurred_at=_parse_occurred_at(turn.timestamp),

@@ -79,6 +79,8 @@ def _event(**overrides: object) -> TranscriptEvent:
         "turn_path": "0",
         "occurrence": 0,
         "payload": json.dumps({"tool_name": "Read", "path": "a.py"}),
+        "subject": "a.py",
+        "tool": "Read",
         "chunk_id": "ch_1",
         "node_id": "nd_build",
         "epoch": 1,

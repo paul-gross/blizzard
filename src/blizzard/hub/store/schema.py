@@ -829,6 +829,10 @@ transcript_events = Table(
     # every extractor today, kept general for one that could ever multi-match a turn.
     Column("occurrence", Integer, nullable=False),
     Column("payload", Text, nullable=False),  # JSON object, kind-shaped (D5, `bzh:sql-portable`)
+    # `payload`'s filterable projection (blizzard#255 D1) — principal subject and
+    # invoking tool; `None` for a kind with no single natural subject, never guessed.
+    Column("subject", String, nullable=True),
+    Column("tool", String, nullable=True),
     # Denormalized node-step context (D4), stamped at derive time.
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("node_id", String, nullable=False),
@@ -852,6 +856,8 @@ transcript_events = Table(
 
 Index("ix_transcript_events_chunk_id", transcript_events.c.chunk_id)
 Index("ix_transcript_events_segment_id", transcript_events.c.segment_id)
+Index("ix_transcript_events_subject", transcript_events.c.subject)
+Index("ix_transcript_events_tool", transcript_events.c.tool)
 
 # --- Per-segment derivation marker (D6) — replaced, never appended: what a segment's ---
 # most recent derivation at a given extractor version saw, when, and whether it was complete.

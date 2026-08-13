@@ -85,6 +85,8 @@ def _insert_events_stmt(segment_id: str, extractor_version: str, events: list[Tr
                 "turn_path": event.turn_path,
                 "occurrence": event.occurrence,
                 "payload": event.payload,
+                "subject": event.subject,
+                "tool": event.tool,
                 "chunk_id": event.chunk_id,
                 "node_id": event.node_id,
                 "epoch": event.epoch,
