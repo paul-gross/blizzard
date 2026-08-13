@@ -1022,6 +1022,19 @@ claim: keep it (`chunk pause`), give it away (`detach`), or end it for good (`st
   not a lever for clearing a `delivering`/`waiting_on_human`/`needs_human` chunk back to a
   fresh state, only for ending it. See `blizzard hub chunk stop --help` for the CLI's full
   contract.
+
+  **`stop` is not how a chunk reaches `done`, and nothing else you can run is either.**
+  The two are separate terminals — `stopped` records that an operator ended the chunk,
+  `done` that the graph finished it — and a chunk never leaves whichever one it reaches
+  first. `done` is written only by a graph transition whose choice points at the reserved
+  terminal (`to: done`), which in the shipped graphs is the `retrospective` node's
+  `recorded` choice, at the end of `deliver` → `retrospective`. There is no operator verb,
+  API route, or board control that sets it: an operator's only terminal is `stop`. So a
+  chunk whose work you landed by hand, outside the fleet, ends at `stopped` — that is the
+  truthful record for it, not a second-best one, because the graph genuinely did not
+  deliver it. If you want a chunk to read `done`, it has to walk its own graph to that
+  terminal, and the decision to let it has to come **before** you stop it, since `stop`
+  forecloses the option permanently.
 - **`blizzard hub runner pause <runner_id>` / `runner resume <runner_id>`** (the hub brake)
   and **`runner pause` / `runner start`**, or the runner panel's own Pause/Resume
   control (the runner's own local brake, issue #45 and issue #133 — see "The runner's
