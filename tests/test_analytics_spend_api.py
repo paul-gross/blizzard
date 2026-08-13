@@ -12,8 +12,9 @@ from pathlib import Path
 import pytest
 
 from blizzard.auth_core import Role
-from blizzard.hub.api.analytics import ScopeFilters, chunk_spend_ndjson_lines
+from blizzard.hub.api.analytics import chunk_spend_ndjson_lines
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
+from blizzard.hub.domain.analytics.operational import OperationalCriteria
 from blizzard.hub.domain.work import UsageFact, UsageTotal
 from tests.support import FakeWorkSource, build_hub, pointer_token, seed_session, seed_user
 from tests.test_fleet_auth import _seed_enrolled
@@ -254,7 +255,7 @@ def test_the_ndjson_stream_carries_its_cursor_across_batches(tmp_path: Path) -> 
     chunk_b = _mint_chunk(hub, token, ref="2")
     _push_usage(hub, chunk_id=chunk_a, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
     _push_usage(hub, chunk_id=chunk_b, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.1)
-    criteria = ScopeFilters(None, None, None, None).criteria()
+    criteria = OperationalCriteria()
 
     body = b"".join(chunk_spend_ndjson_lines(hub.services.operational_analytics, criteria, batch_size=1)).decode()
     lines = [json.loads(line) for line in body.splitlines()]

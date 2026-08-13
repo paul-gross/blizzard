@@ -7,16 +7,17 @@ fold this adapter only fetches and maps rows for."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Engine, Select, case, func, select, tuple_
+from sqlalchemy import CompoundSelect, Engine, Select, case, func, select, tuple_, union
 
 from blizzard.foundation.ids import CHUNK_PREFIX, Id
+from blizzard.hub.domain.analytics import MalformedCursor
 from blizzard.hub.domain.analytics.operational import (
     ChunkSpendPage,
     DurationStats,
     IReadOperationalAnalytics,
+    JudgedChoiceRow,
     LeaseEpoch,
     MigrationMovement,
     OperationalCriteria,
@@ -25,11 +26,12 @@ from blizzard.hub.domain.analytics.operational import (
     StepDuration,
     TransitionMovement,
     fold_step_durations,
+    group_judged_choices,
     resolve_attempt_failures,
     steps_in_window,
     summarize_durations,
+    summarize_outcomes,
 )
-from blizzard.hub.domain.analytics.queries import MalformedCursor
 from blizzard.hub.domain.graph import Executor
 from blizzard.hub.domain.work import UsageTotal
 from blizzard.hub.store import schema as s
@@ -83,7 +85,7 @@ def _duration_window_groups_stmt(criteria: OperationalCriteria) -> Select[Any]:
         stmt = stmt.where(t.c.graph_id == criteria.graph_id)
     if criteria.source is not None:
         stmt = stmt.where(t.c.chunk_id.in_(_source_chunks_stmt(criteria.source)))
-    if criteria.since is not None:
+    if criteria.since is not None:  # the half-open [since, until) bound `steps_in_window` owns, in SQL form
         stmt = stmt.where(t.c.recorded_at >= criteria.since)
     if criteria.until is not None:
         stmt = stmt.where(t.c.recorded_at < criteria.until)
@@ -285,9 +287,24 @@ def _chunks_graph_stmt(criteria: OperationalCriteria) -> Select[Any]:
     return select(c.c.chunk_id, c.c.graph_id).where(c.c.chunk_id.in_(_candidate_chunk_ids_stmt(criteria)))
 
 
-def _graph_entry_nodes_stmt(graph_ids: Sequence[str]) -> Select[Any]:
+def _candidate_graph_ids_stmt(criteria: OperationalCriteria) -> CompoundSelect[Any]:
+    """Every graph id the outcomes fold might index into — a candidate chunk's own pin,
+    or a migration's ``to``/``from_graph_id`` (D5's no-movement fallback can resolve via
+    the latter) — as a correlated subquery, not a materialized id list, mirroring
+    ``_candidate_chunk_ids_stmt``'s own reason: `graphs.graph_id` is a per-mint id, so an
+    unwindowed request binds one parameter per graph version any chunk has ever run."""
+    c, m = s.chunks, s.chunk_migrations
+    chunk_ids = _candidate_chunk_ids_stmt(criteria)
+    return union(
+        select(c.c.graph_id).where(c.c.chunk_id.in_(chunk_ids)),
+        select(m.c.to_graph_id).where(m.c.chunk_id.in_(_candidate_chunk_ids_stmt(criteria))),
+        select(m.c.from_graph_id).where(m.c.chunk_id.in_(_candidate_chunk_ids_stmt(criteria))),
+    )
+
+
+def _graph_entry_nodes_stmt(criteria: OperationalCriteria) -> Select[Any]:
     g = s.graphs
-    return select(g.c.graph_id, g.c.entry_node_id).where(g.c.graph_id.in_(graph_ids))
+    return select(g.c.graph_id, g.c.entry_node_id).where(g.c.graph_id.in_(_candidate_graph_ids_stmt(criteria)))
 
 
 class AnalyticsOperationalStore:
@@ -305,16 +322,16 @@ class AnalyticsOperationalStore:
         return summarize_durations(rows, key="graph")
 
     def _step_durations(self, criteria: OperationalCriteria) -> list[StepDuration]:
+        """F6 (review round 4): no separate group-existence probe — an empty admitted-
+        group set makes both statements below's correlated subquery empty too, so
+        ``fold_step_durations`` already returns ``[]`` without a dedicated early-out."""
         with self._engine.connect() as conn:
-            group_rows = conn.execute(_duration_window_groups_stmt(criteria)).all()
-            if not group_rows:
-                return []
             transition_rows = conn.execute(_duration_rows_stmt(criteria)).all()
             lease_rows = conn.execute(_duration_lease_min_stmt(criteria)).all()
         transitions = [_to_transition_movement(r) for r in transition_rows]
         lease_min_by_epoch = {(r.chunk_id, r.epoch): r.minted_at for r in lease_rows}
         all_rows = fold_step_durations(transitions, lease_min_by_epoch)
-        return steps_in_window(all_rows, since=criteria.since, until=criteria.until)
+        return steps_in_window(all_rows, since=criteria.since, until=criteria.until, graph_id=criteria.graph_id)
 
     def spend_by_node(self, criteria: OperationalCriteria) -> list[SpendStats]:
         with self._engine.connect() as conn:
@@ -344,17 +361,14 @@ class AnalyticsOperationalStore:
             migration_rows = conn.execute(_chunk_migrations_stmt(criteria)).all()
             bounce_rows = conn.execute(_chunk_bounces_stmt(criteria)).all()
             chunk_graph_rows = conn.execute(_chunks_graph_stmt(criteria)).all()
-            # `from_graph_id` too: D5's no-movement fallback can resolve via it.
-            graph_ids = sorted(
-                {row.graph_id for row in chunk_graph_rows}
-                | {row.to_graph_id for row in migration_rows}
-                | {row.from_graph_id for row in migration_rows}
-            )
-            graph_entry_rows = conn.execute(_graph_entry_nodes_stmt(graph_ids)).all() if graph_ids else []
+            graph_entry_rows = conn.execute(_graph_entry_nodes_stmt(criteria)).all()
 
-        judged: dict[str, dict[str, int]] = {}
-        for row in judged_rows:
-            judged.setdefault(row.from_node_id, {})[row.choice_name] = row.occurrences
+        judged = group_judged_choices(
+            [
+                JudgedChoiceRow(from_node_id=r.from_node_id, choice_name=r.choice_name, occurrences=r.occurrences)
+                for r in judged_rows
+            ]
+        )
         failures = resolve_attempt_failures(
             lease_epochs=[LeaseEpoch(chunk_id=r.chunk_id, epoch=r.epoch, minted_at=r.minted_at) for r in lease_rows],
             transitions=[_to_transition_movement(r) for r in transition_rows],
@@ -376,11 +390,7 @@ class AnalyticsOperationalStore:
             graph_entry_node={r.graph_id: r.entry_node_id for r in graph_entry_rows},
             graph_id_filter=criteria.graph_id,
         )
-        nodes = set(judged) | set(failures)
-        return [
-            OutcomeStats(node_id=n, choice_counts=judged.get(n, {}), attempt_failures=failures.get(n, 0))
-            for n in sorted(nodes)
-        ]
+        return summarize_outcomes(judged, failures)
 
 
 def _conforms_analytics_operational_store(x: AnalyticsOperationalStore) -> IReadOperationalAnalytics:

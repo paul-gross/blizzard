@@ -10,14 +10,19 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.hub.domain.analytics.operational import (
+    JudgedChoiceRow,
     LeaseEpoch,
     MigrationMovement,
+    MissingGraphFact,
+    OutcomeStats,
     StepDuration,
     TransitionMovement,
     fold_step_durations,
+    group_judged_choices,
     resolve_attempt_failures,
     steps_in_window,
     summarize_durations,
+    summarize_outcomes,
 )
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 
@@ -167,6 +172,23 @@ def test_a_no_movement_failure_resolves_via_the_epoch_s_own_graph_not_the_curren
     assert failures == {"nd_a_entry": 1}
 
 
+def test_a_graph_id_missing_from_the_preload_raises_a_named_error_not_a_keyerror() -> None:
+    """F14: the adapter preloads exactly the graph ids the fold's own indexing needs —
+    a miss (e.g. a `chunk_migrations` row whose graph id no longer has a `graphs` row,
+    unenforced by any FK) must surface as a diagnosable error, not a bare KeyError."""
+    with pytest.raises(MissingGraphFact):
+        resolve_attempt_failures(
+            lease_epochs=[LeaseEpoch(chunk_id="ch_1", epoch=1, minted_at=_at(0))],
+            transitions=[],
+            migrations=[],
+            bounced=[],
+            chunk_graph={},  # missing: no entry for "ch_1"
+            chunk_max_lease_epoch={"ch_1": 2},
+            graph_entry_node={},
+            graph_id_filter=None,
+        )
+
+
 def test_a_terminal_transition_is_never_read_as_a_prior_movements_node() -> None:
     """F9: ``transitions.to_node_id`` can be ``RESERVED_TERMINAL`` ("done"), not a node
     id — a later unresolved epoch resolving through it must fall through to the
@@ -239,13 +261,18 @@ def test_a_same_instant_migration_tie_breaks_deterministically_on_migration_id()
 
 
 def test_a_bounced_epoch_is_excluded_outright() -> None:
+    """F1 (round 4): the bounced epoch must be superseded by a strictly newer lease, or
+    the unrelated in-flight guard excludes it first and masks the ``bounced_set`` check."""
     failures = resolve_attempt_failures(
-        lease_epochs=[LeaseEpoch(chunk_id="ch_1", epoch=1, minted_at=_at(0))],
+        lease_epochs=[
+            LeaseEpoch(chunk_id="ch_1", epoch=1, minted_at=_at(0)),
+            LeaseEpoch(chunk_id="ch_1", epoch=2, minted_at=_at(10)),
+        ],
         transitions=[],
         migrations=[],
         bounced=[("ch_1", 1)],
         chunk_graph={"ch_1": "gr_1"},
-        chunk_max_lease_epoch={"ch_1": 1},
+        chunk_max_lease_epoch={"ch_1": 2},
         graph_entry_node={"gr_1": "nd_entry"},
         graph_id_filter=None,
     )
@@ -353,6 +380,19 @@ def test_steps_in_window_keeps_only_rows_whose_own_transition_is_inside_it() -> 
     assert steps_in_window(rows, since=None, until=None) == rows
 
 
+def test_steps_in_window_re_checks_graph_id_too() -> None:
+    """F9 (review round 4): the store's fetch narrows by ``(chunk_id, epoch)`` group,
+    not by graph — this re-check is what actually enforces a ``graph_id`` filter
+    against a hand-built input that violates the one-group-one-graph invariant."""
+    rows = [
+        StepDuration(from_node_id="nd_a", graph_id="gr_a", seconds=1.0, recorded_at=_at(1)),
+        StepDuration(from_node_id="nd_b", graph_id="gr_b", seconds=2.0, recorded_at=_at(2)),
+    ]
+
+    assert steps_in_window(rows, since=None, until=None, graph_id="gr_a") == [rows[0]]
+    assert steps_in_window(rows, since=None, until=None, graph_id=None) == rows
+
+
 def test_fold_step_durations_then_steps_in_window_does_not_break_a_chained_epoch() -> None:
     """A window edge between two transitions sharing one epoch must not drop the
     earlier one from the fold's own input — the survivor still measures from its true
@@ -382,3 +422,29 @@ def test_fold_step_durations_then_steps_in_window_does_not_break_a_chained_epoch
     windowed = steps_in_window(all_rows, since=_at(11), until=None)
 
     assert [(r.from_node_id, r.seconds) for r in windowed] == [("nd_gate", 100.0)]
+
+
+def test_group_judged_choices_groups_by_node_then_choice() -> None:
+    """F3: the judged-distribution grouping is a domain fold, not adapter-only logic."""
+    rows = [
+        JudgedChoiceRow(from_node_id="nd_build", choice_name="pass", occurrences=3),
+        JudgedChoiceRow(from_node_id="nd_build", choice_name="fail", occurrences=1),
+        JudgedChoiceRow(from_node_id="nd_review", choice_name="pass", occurrences=2),
+    ]
+
+    assert group_judged_choices(rows) == {
+        "nd_build": {"pass": 3, "fail": 1},
+        "nd_review": {"pass": 2},
+    }
+
+
+def test_summarize_outcomes_merges_both_halves_and_never_drops_a_node_with_only_one() -> None:
+    """F3: D4's own merge rule (a node with neither a judged choice nor an attempt
+    failure never appears) as a domain fold, node id ascending."""
+    judged = {"nd_b": {"pass": 1}}
+    failures = {"nd_a": 2}
+
+    assert summarize_outcomes(judged, failures) == [
+        OutcomeStats(node_id="nd_a", choice_counts={}, attempt_failures=2),
+        OutcomeStats(node_id="nd_b", choice_counts={"pass": 1}, attempt_failures=0),
+    ]

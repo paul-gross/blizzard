@@ -20,6 +20,7 @@ from blizzard.hub.graphs.scripts import land_pr_ci
 from tests.support import (
     FakeHubCommandRunner,
     FakeHubWorkdir,
+    FakeWorkSource,
     HubHarness,
     build_hub,
     pointer_token,
@@ -98,8 +99,8 @@ def _writable(hub: HubHarness) -> IWriteChunkRepository:
     return cast(IWriteChunkRepository, hub.services.chunks)
 
 
-def _seeded_hub(tmp_path: Path):  # type: ignore[no-untyped-def]
-    hub = build_hub(tmp_path, auth_mode="oauth")
+def _seeded_hub(tmp_path: Path, *, work_sources: dict[str, FakeWorkSource] | None = None):  # type: ignore[no-untyped-def]
+    hub = build_hub(tmp_path, auth_mode="oauth", work_sources=work_sources)
     admin = seed_user(hub, username="admin", role=Role.ADMIN)
     admin_token = seed_session(hub, admin)
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}, headers=_cookie(admin_token))
@@ -117,9 +118,9 @@ def _seeded_hub(tmp_path: Path):  # type: ignore[no-untyped-def]
     return hub, token, graph_id, nodes, other_graph_id, other_nodes
 
 
-def _mint_chunk(hub, token: str, *, ref: str = "1") -> str:  # type: ignore[no-untyped-def]
+def _mint_chunk(hub, token: str, *, source: str = "default", ref: str = "1") -> str:  # type: ignore[no-untyped-def]
     resp = hub.client.post(
-        "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": ref})]}, headers=_cookie(token)
+        "/api/chunks", json={"tokens": [pointer_token({"source": source, "ref": ref})]}, headers=_cookie(token)
     )
     assert resp.status_code == 201, resp.text
     return str(resp.json()["chunk_id"])
@@ -192,10 +193,14 @@ def test_an_attempt_with_no_transition_counts_as_an_attempt_failure(tmp_path: Pa
 
 
 def test_a_bounce_counts_as_neither(tmp_path: Path) -> None:
+    """F1 (review round 4): the bounced epoch must be superseded by a strictly newer
+    lease, or the unrelated in-flight guard excludes it first and this test can never
+    detect the bounce-exclusion guard being deleted."""
     hub, token, _graph_id, _nodes, _og, _on = _seeded_hub(tmp_path)
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)
     _writable(hub).record_bounce(chunk_id, epoch=1, cause="conflict", envelope="{}", at=hub.clock.now())
+    report_lease(hub, chunk_id, epoch=2, seq=2)  # supersedes epoch 1, proving it's over
 
     resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
 
@@ -369,6 +374,30 @@ def test_outcomes_honor_the_graph_id_filter_on_a_derived_attempt_failure(tmp_pat
 
     other = hub.client.get("/api/analytics/outcomes/nodes", params={"graph_id": other_graph_id}, headers=_cookie(token))
     assert other.json()["outcomes"] == []
+
+
+def test_outcomes_honor_the_source_filter_on_both_halves(tmp_path: Path) -> None:
+    """F12 (review round 4): `source` applies to both the judged-choice half (a
+    completion) and the attempt-failure half (a no-movement crash) — durations/spend
+    each carry a dedicated `source` test, outcomes did not."""
+    hub, token, _graph_id, nodes, _og, _on = _seeded_hub(
+        tmp_path, work_sources={"default": FakeWorkSource(), "other": FakeWorkSource(name="other")}
+    )
+    judged_chunk = _mint_chunk(hub, token, source="default", ref="1")
+    report_lease(hub, judged_chunk, epoch=1, seq=1)
+    _complete(hub, judged_chunk, epoch=1, from_node_id=nodes["build"], choice="pass")
+
+    failed_chunk = _mint_chunk(hub, token, source="other", ref="2")
+    report_lease(hub, failed_chunk, epoch=1, seq=2)  # a crash/reap — never completed
+    report_lease(hub, failed_chunk, epoch=2, seq=3)  # proves epoch 1 is over
+
+    matching = hub.client.get("/api/analytics/outcomes/nodes", params={"source": "other"}, headers=_cookie(token))
+    assert matching.json()["outcomes"] == [{"node_id": nodes["build"], "choice_counts": {}, "attempt_failures": 1}]
+
+    other = hub.client.get("/api/analytics/outcomes/nodes", params={"source": "default"}, headers=_cookie(token))
+    assert other.json()["outcomes"] == [
+        {"node_id": nodes["build"], "choice_counts": {"pass": 1}, "attempt_failures": 0}
+    ]
 
 
 def test_outcomes_honor_the_time_range_filter_at_the_lease_mints_own_boundary(tmp_path: Path) -> None:

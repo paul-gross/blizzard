@@ -754,8 +754,8 @@
   },
   "blizzard/hub/api/analytics.py": {
    "comments": 11,
-   "docstrings": 69,
-   "total": 510
+   "docstrings": 72,
+   "total": 515
   },
   "blizzard/hub/api/auth.py": {
    "comments": 0,
@@ -1119,8 +1119,8 @@
   },
   "blizzard/hub/domain/analytics/__init__.py": {
    "comments": 0,
-   "docstrings": 6,
-   "total": 8
+   "docstrings": 9,
+   "total": 18
   },
   "blizzard/hub/domain/analytics/derivation.py": {
    "comments": 1,
@@ -1139,13 +1139,13 @@
   },
   "blizzard/hub/domain/analytics/operational.py": {
    "comments": 6,
-   "docstrings": 78,
-   "total": 309
+   "docstrings": 88,
+   "total": 356
   },
   "blizzard/hub/domain/analytics/queries.py": {
    "comments": 2,
-   "docstrings": 38,
-   "total": 117
+   "docstrings": 37,
+   "total": 109
   },
   "blizzard/hub/domain/apply.py": {
    "comments": 34,
@@ -1354,8 +1354,8 @@
   },
   "blizzard/hub/store/internal/analytics_operational_store.py": {
    "comments": 3,
-   "docstrings": 63,
-   "total": 387
+   "docstrings": 71,
+   "total": 397
   },
   "blizzard/hub/store/internal/chunk_store.py": {
    "comments": 56,
@@ -2937,7 +2937,7 @@
   "test_analytics_event_queries.py": {
    "comments": 10,
    "docstrings": 15,
-   "total": 324
+   "total": 325
   },
   "test_analytics_event_query_statements.py": {
    "comments": 2,
@@ -2950,24 +2950,24 @@
    "total": 331
   },
   "test_analytics_operational_domain.py": {
-   "comments": 9,
-   "docstrings": 29,
-   "total": 384
+   "comments": 10,
+   "docstrings": 40,
+   "total": 450
   },
   "test_analytics_operational_statements.py": {
    "comments": 4,
-   "docstrings": 9,
-   "total": 98
+   "docstrings": 12,
+   "total": 107
   },
   "test_analytics_outcomes_api.py": {
-   "comments": 29,
-   "docstrings": 26,
-   "total": 391
+   "comments": 32,
+   "docstrings": 32,
+   "total": 418
   },
   "test_analytics_spend_api.py": {
    "comments": 13,
    "docstrings": 4,
-   "total": 356
+   "total": 357
   },
   "test_annotation_loop.py": {
    "comments": 9,

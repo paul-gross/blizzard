@@ -71,15 +71,6 @@ class CountRow:
     count: int
 
 
-class MalformedCursor(ValueError):
-    """A cursor a page never minted (blizzard#255) — the declared type callers depend
-    on, so a route can tell it from any other failure inside a read."""
-
-    def __init__(self, cursor: str) -> None:
-        super().__init__(f"malformed cursor {cursor!r}")
-        self.cursor = cursor
-
-
 class IReadAnalyticsEventQueries(Protocol):
     """Read-only event query Protocol (blizzard#255 D6) — the routes' own seam
     (``bzh:controller-read-only``, ``bzh:repository-split``). Every ``counts_by_*``
@@ -90,7 +81,8 @@ class IReadAnalyticsEventQueries(Protocol):
         """At most ``limit`` (at least 1, else ``ValueError``) events matching ``criteria``,
         in one total order (``bzh:sql-portable``) both encodings share; absent a concurrent
         re-derive replacing rows, a cursor walk repeats and skips nothing. ``cursor`` is a
-        prior :attr:`EventPage.next_cursor`: any other value raises :class:`MalformedCursor`."""
+        prior :attr:`EventPage.next_cursor`: any other value raises
+        :class:`~blizzard.hub.domain.analytics.MalformedCursor`."""
         ...
 
     def counts_by_file(self, criteria: EventQueryCriteria) -> list[CountRow]:

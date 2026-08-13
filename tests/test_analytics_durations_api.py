@@ -468,9 +468,7 @@ def test_a_migrated_chunks_post_migration_graph_never_leaks_into_a_pre_migration
     epoch)`, not `chunk_id` alone — the latter still compiles to `IN (SELECT ...)`."""
     hub, token, graph_id, nodes = _seeded_hub(tmp_path)
     admin_token = seed_session(hub, seed_user(hub, username="admin2", role=Role.ADMIN))
-    other = hub.client.post(
-        "/api/graphs", json={"definition_yaml": _OTHER_GRAPH_YAML}, headers=_cookie(admin_token)
-    )
+    other = hub.client.post("/api/graphs", json={"definition_yaml": _OTHER_GRAPH_YAML}, headers=_cookie(admin_token))
     assert other.status_code == 201, other.text
     other_graph_id = other.json()["graph_id"]
     other_nodes = {n["name"]: n["node_id"] for n in other.json()["nodes"]}

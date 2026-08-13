@@ -1611,7 +1611,7 @@ page is still streaming. Field-by-field shapes are the committed
 `openapi/hub.openapi.json`'s own record — the wire models that generate it are each
 dataset's one prose home, not restated here.
 
-Five callouts worth an operator's attention rather than a field's own doc comment:
+Seven callouts worth an operator's attention rather than a field's own doc comment:
 
 - A duration is hub-observed wall-clock time, not runner-measured — see the
   `AnalyticsDurationView` wire model (`openapi/hub.openapi.json`) for the parked-gate vs.
@@ -1632,6 +1632,16 @@ Five callouts worth an operator's attention rather than a field's own doc commen
   overlapping fact tables. A deliberate, still-open deferral: an unfiltered call costs a
   full scan of whatever it reads, acceptable at today's real fleet volumes but not
   bounded by anything this namespace enforces.
+- The chunk-spend NDJSON export (`spend/chunks/ndjson`) pages through `usage_facts` —
+  the hub's highest-cardinality fact table, with no index on `chunk_id` — 500 rows at a
+  time, re-scanning the full table on every page. Exporting the fleet's whole per-chunk
+  spend costs `ceil(N/500)` such scans; a deliberate deferral alongside the unbounded
+  window above, not yet paired with an additive index.
+- Every analytics read shares the hub's default connection pool (5 + 10 overflow) with
+  the fleet's own write path — no dedicated budget is carved out. A burst of concurrent
+  unfiltered analytics calls can hold enough connections to make an unrelated write wait
+  out the pool's checkout timeout; a deliberate, undeclared deferral, not a magnitude
+  this namespace bounds today.
 
 ## Operational visibility — the event log
 

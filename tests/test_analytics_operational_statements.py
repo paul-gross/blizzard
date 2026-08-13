@@ -48,7 +48,8 @@ def _executed_statements() -> dict[str, ClauseElement]:
         "_chunk_migrations_stmt": m._chunk_migrations_stmt(_CRITERIA),
         "_chunk_bounces_stmt": m._chunk_bounces_stmt(_CRITERIA),
         "_chunks_graph_stmt": m._chunks_graph_stmt(_CRITERIA),
-        "_graph_entry_nodes_stmt": m._graph_entry_nodes_stmt(["gr_1"]),
+        "_candidate_graph_ids_stmt": m._candidate_graph_ids_stmt(_CRITERIA),
+        "_graph_entry_nodes_stmt": m._graph_entry_nodes_stmt(_CRITERIA),
     }
 
 
@@ -66,6 +67,14 @@ def test_duration_statements_narrow_via_a_correlated_subquery_not_a_bound_id_lis
     stmt = getattr(store_module, builder_name)(_CRITERIA)
     sql = str(stmt.compile(dialect=sqlite.dialect()))
     assert re.search(r"\(\w+\.chunk_id, \w+\.epoch\) IN \(SELECT", sql), sql
+
+
+def test_graph_entry_nodes_narrows_via_a_correlated_subquery_not_a_bound_id_list() -> None:
+    """F2: ``graphs.graph_id`` is a per-mint id, so a materialized list bound one host
+    parameter per graph version any chunk has ever run — pinned structurally, mirroring
+    F1's fix shape."""
+    sql = str(store_module._graph_entry_nodes_stmt(_CRITERIA).compile(dialect=sqlite.dialect()))
+    assert "graph_id IN (SELECT" in sql, sql
 
 
 def test_no_statement_the_store_executes_leaves_the_portable_surface() -> None:
@@ -88,9 +97,9 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
         for node in ast.walk(source)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "execute"
     ]
-    # 3 durations (window groups, group rows, lease min) + 3 spend + outcomes' own
-    # 8-query fan-out — one `.execute()` site each.
-    assert len(executed) == 14
+    # 2 durations (rows, lease min — F6, review round 4: no separate group-existence
+    # probe) + 3 spend + outcomes' own 8-query fan-out — one `.execute()` site each.
+    assert len(executed) == 13
     for arg in executed:
         built_by_a_builder = (
             isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name) and arg.func.id.endswith("_stmt")

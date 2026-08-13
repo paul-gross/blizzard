@@ -299,9 +299,9 @@ export type AnalyticsEventsResponse = {
  * AnalyticsOutcomeView
  *
  * One node's judged-choice distribution and attempt-failure count (blizzard#256 D4),
- * never blended — a judged failure consumes no retry budget, an ended attempt does; a
- * kick-back counts as neither. The two counts' differing time windows are documented in
- * ``docs/deployment.md``.
+ * never blended — a judged failure consumes no retry budget, an ended (superseded by a
+ * strictly newer lease) attempt does; a still-open final attempt counts as neither, nor
+ * does a kick-back. The two counts' differing time windows are in ``docs/deployment.md``.
  */
 export type AnalyticsOutcomeView = {
     /**

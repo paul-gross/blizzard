@@ -158,16 +158,18 @@ def fold_step_durations(
 
 
 def steps_in_window(
-    rows: Sequence[StepDuration], *, since: datetime | None, until: datetime | None
+    rows: Sequence[StepDuration], *, since: datetime | None, until: datetime | None, graph_id: str | None = None
 ) -> list[StepDuration]:
-    """Keep only :func:`fold_step_durations`' rows whose own transition falls in
-    ``[since, until)`` — applied AFTER the fold chains a group's full history, so a window
-    edge inside a multi-transition epoch drops the excluded row's *output* only, never
-    its place in the chain."""
+    """Keep only :func:`fold_step_durations`' rows in ``[since, until)`` and, when
+    given, matching ``graph_id`` — applied AFTER the fold, so a window edge mid-epoch
+    drops only the excluded row's *output*. ``graph_id`` re-checks what the fetch only
+    narrows by *group*, so one group spanning two graphs can't leak past it."""
     return [
         row
         for row in rows
-        if (since is None or row.recorded_at >= since) and (until is None or row.recorded_at < until)
+        if (since is None or row.recorded_at >= since)
+        and (until is None or row.recorded_at < until)
+        and (graph_id is None or row.graph_id == graph_id)
     ]
 
 
@@ -188,6 +190,19 @@ def summarize_durations(rows: Sequence[StepDuration], *, key: str) -> list[Durat
         DurationStats(key=k, completed_steps=counts[k], total_seconds=totals[k], avg_seconds=totals[k] / counts[k])
         for k in sorted(counts)
     ]
+
+
+class MissingGraphFact(RuntimeError):
+    """A graph id :func:`resolve_attempt_failures` needed had no preloaded entry-node
+    or chunk-pin row — the adapter's candidate query and this fold's own indexing have
+    drifted apart, or a referenced ``graphs`` row is gone (no FK enforces it, D5)."""
+
+
+def _require(mapping: Mapping[str, str], key: str, what: str) -> str:
+    try:
+        return mapping[key]
+    except KeyError:
+        raise MissingGraphFact(f"no {what} preloaded for graph {key!r}") from None
 
 
 def resolve_attempt_failures(
@@ -239,7 +254,9 @@ def resolve_attempt_failures(
                 m.recorded_at,
                 m.epoch,
                 1,
-                m.landed_node_id if m.landed_node_id is not None else graph_entry_node[m.to_graph_id],
+                m.landed_node_id
+                if m.landed_node_id is not None
+                else _require(graph_entry_node, m.to_graph_id, "entry node"),
                 m.to_graph_id,
             )
             for m in migrations_by_chunk.get(chunk_id, ())
@@ -255,13 +272,43 @@ def resolve_attempt_failures(
                 earliest_later = min(later_migrations, key=lambda m: (m.epoch, m.recorded_at, m.migration_id))
                 graph_id = earliest_later.from_graph_id
             else:
-                graph_id = chunk_graph[chunk_id]
-            node_id = graph_entry_node[graph_id]
+                graph_id = _require(chunk_graph, chunk_id, "chunk graph pin")
+            node_id = _require(graph_entry_node, graph_id, "entry node")
 
         if graph_id_filter is not None and graph_id != graph_id_filter:
             continue
         failures[node_id] = failures.get(node_id, 0) + 1
     return failures
+
+
+@dataclass(frozen=True)
+class JudgedChoiceRow:
+    """One ``(from_node_id, choice_name)`` occurrence count from the judged-distribution
+    query — ungrouped, as the adapter fetches it."""
+
+    from_node_id: str
+    choice_name: str
+    occurrences: int
+
+
+def group_judged_choices(rows: Sequence[JudgedChoiceRow]) -> dict[str, dict[str, int]]:
+    """D4's judged half: each node's choice-name distribution, grouped from the
+    ungrouped per-``(node, choice)`` rows the adapter fetches."""
+    judged: dict[str, dict[str, int]] = {}
+    for row in rows:
+        judged.setdefault(row.from_node_id, {})[row.choice_name] = row.occurrences
+    return judged
+
+
+def summarize_outcomes(judged: Mapping[str, dict[str, int]], failures: Mapping[str, int]) -> list[OutcomeStats]:
+    """D4's two-half merge: a node appears if it has a judged choice, an attempt
+    failure, or both — never neither — node id ascending, the total order every
+    ``/api/analytics/*`` response shares."""
+    nodes = set(judged) | set(failures)
+    return [
+        OutcomeStats(node_id=n, choice_counts=judged.get(n, {}), attempt_failures=failures.get(n, 0))
+        for n in sorted(nodes)
+    ]
 
 
 class IReadOperationalAnalytics(Protocol):
@@ -299,7 +346,7 @@ class IReadOperationalAnalytics(Protocol):
         rollups matching ``criteria``, ordered by ``chunk_id`` ascending — a total order
         two identical calls agree on. ``cursor`` is a prior
         :attr:`ChunkSpendPage.next_cursor`: any other value raises
-        :class:`~blizzard.hub.domain.analytics.queries.MalformedCursor`."""
+        :class:`~blizzard.hub.domain.analytics.MalformedCursor`."""
         ...
 
     def outcomes_by_node(self, criteria: OperationalCriteria) -> list[OutcomeStats]:

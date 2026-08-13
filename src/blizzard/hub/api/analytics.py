@@ -22,6 +22,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
+from blizzard.hub.domain.analytics import MalformedCursor
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.analytics.operational import (
     DurationStats,
@@ -36,7 +37,6 @@ from blizzard.hub.domain.analytics.queries import (
     EventQueryCriteria,
     EventRecord,
     IReadAnalyticsEventQueries,
-    MalformedCursor,
 )
 from blizzard.wire.analytics import (
     AnalyticsChunkSpendResponse,
@@ -104,8 +104,8 @@ class NormalizedScope:
 class ScopeFilters:
     """The filter block every analytics route exposes — which work the read covers and
     over which window (blizzard#256 D7). A route wanting the derived-event projection's
-    own ``extractor_version`` composes :class:`EventScopeFilters` on top rather than
-    this carrying a field only one projection means anything to."""
+    own ``extractor_version`` composes :class:`EventScopeFilters` on top. Mints only
+    :meth:`normalized`, not either family's own domain-criteria type."""
 
     graph_id: str | None
     source: str | None
@@ -130,9 +130,13 @@ class ScopeFilters:
             until=as_utc(self.until) if self.until is not None else None,
         )
 
-    def criteria(self) -> OperationalCriteria:
-        n = self.normalized()
-        return OperationalCriteria(graph_id=n.graph_id, source=n.source, since=n.since, until=n.until)
+
+def _operational_criteria(scope: ScopeFilters) -> OperationalCriteria:
+    """The operational routes' own reading of :meth:`ScopeFilters.normalized` — minted
+    here, not on :class:`ScopeFilters` itself, so the shared type stays shared rather
+    than carrying one family's domain-criteria type as though every consumer used it."""
+    n = scope.normalized()
+    return OperationalCriteria(graph_id=n.graph_id, source=n.source, since=n.since, until=n.until)
 
 
 @dataclass(frozen=True)
@@ -370,7 +374,7 @@ def durations_by_node(
 ) -> AnalyticsDurationsResponse:
     """Completed-step duration rollups grouped by node (D2) — see
     ``AnalyticsDurationView`` for the wall-clock semantics (D3)."""
-    return _durations_response(services.operational_analytics.durations_by_node(scope.criteria()))
+    return _durations_response(services.operational_analytics.durations_by_node(_operational_criteria(scope)))
 
 
 @router.get(
@@ -381,7 +385,7 @@ def durations_by_graph(
 ) -> AnalyticsDurationsResponse:
     """The same rollup grouped by the graph the step happened in (D2) — the transition's
     own ``graph_id``, never the chunk's current pin."""
-    return _durations_response(services.operational_analytics.durations_by_graph(scope.criteria()))
+    return _durations_response(services.operational_analytics.durations_by_graph(_operational_criteria(scope)))
 
 
 def _spend_response(stats: list[SpendStats]) -> AnalyticsSpendResponse:
@@ -407,7 +411,7 @@ def spend_by_node(
 ) -> AnalyticsSpendResponse:
     """Usage/cost rollups grouped by node (D6) — the same lower-bound + PARTIAL contract
     ``GET /api/spend`` publishes."""
-    return _spend_response(services.operational_analytics.spend_by_node(scope.criteria()))
+    return _spend_response(services.operational_analytics.spend_by_node(_operational_criteria(scope)))
 
 
 @router.get("/spend/graphs", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
@@ -417,7 +421,7 @@ def spend_by_graph(
     """The same rollup grouped by each usage fact's chunk's *current* graph pin — a
     chunk that migrated attributes every usage fact it ever recorded to where it lives
     today (D6)."""
-    return _spend_response(services.operational_analytics.spend_by_graph(scope.criteria()))
+    return _spend_response(services.operational_analytics.spend_by_graph(_operational_criteria(scope)))
 
 
 def _chunk_spend_view(record: SpendStats) -> AnalyticsChunkSpendView:
@@ -464,7 +468,7 @@ def spend_by_chunk(
     wide window, unlike the per-node/per-graph groupings, so this takes a cursor rather
     than a single envelope."""
     try:
-        page = services.operational_analytics.spend_by_chunk(scope.criteria(), cursor=cursor, limit=limit)
+        page = services.operational_analytics.spend_by_chunk(_operational_criteria(scope), cursor=cursor, limit=limit)
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
     return AnalyticsChunkSpendResponse(spend=[_chunk_spend_view(r) for r in page.records], next_cursor=page.next_cursor)
@@ -484,7 +488,8 @@ def stream_chunk_spend(
     """Every chunk's spend rollup matching the same filters as the paginated route,
     streamed one JSON object per line in the same order."""
     return StreamingResponse(
-        chunk_spend_ndjson_lines(services.operational_analytics, scope.criteria()), media_type="application/x-ndjson"
+        chunk_spend_ndjson_lines(services.operational_analytics, _operational_criteria(scope)),
+        media_type="application/x-ndjson",
     )
 
 
@@ -507,4 +512,4 @@ def outcomes_by_node(
     a judged failure edge and a retry-consuming attempt failure reported separately,
     never blended into one rate. A delivery kick-back (``chunk_bounces``) counts as
     neither."""
-    return _outcomes_response(services.operational_analytics.outcomes_by_node(scope.criteria()))
+    return _outcomes_response(services.operational_analytics.outcomes_by_node(_operational_criteria(scope)))
