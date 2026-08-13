@@ -157,6 +157,62 @@ class EventListing(Listing):
         return f"{occurred}  {row['kind']:<16} chunk={row['chunk_id']} node={row['node_id']}{tool}{subject}"
 
 
+class CountsListing(Listing):
+    empty = "no counts"
+
+    def line(self, row: Any) -> str:
+        return f"{row['key']}: {row['count']}"
+
+
+class DurationsListing(Listing):
+    empty = "no durations"
+
+    def line(self, row: Any) -> str:
+        return (
+            f"{row['key']}  steps={row['completed_steps']}  "
+            f"total={row['total_seconds']:.1f}s  avg={row['avg_seconds']:.1f}s"
+        )
+
+
+@dataclass(frozen=True)
+class SpendRow:
+    """One grouping key's spend rollup — the key column varies (``key`` for
+    node/graph, ``chunk_id`` for the per-chunk dataset), so the caller names it."""
+
+    row: dict[str, Any]
+    key_field: str = "key"
+
+    def line(self) -> str:
+        row = self.row
+        cost = Cost(row["cost_usd"], row["cost_partial"]).rendered
+        return (
+            f"{row[self.key_field]}  {cost}  in={row['input_tokens']} out={row['output_tokens']} "
+            f"cache_read={row['cache_read_tokens']} cache_create={row['cache_create_tokens']}"
+        )
+
+
+class SpendListing(Listing):
+    empty = "no spend rollups"
+
+    def line(self, row: Any) -> str:
+        return SpendRow(row).line()
+
+
+class ChunkSpendListing(Listing):
+    empty = "no chunk spend rollups"
+
+    def line(self, row: Any) -> str:
+        return SpendRow(row, key_field="chunk_id").line()
+
+
+class OutcomesListing(Listing):
+    empty = "no outcomes"
+
+    def line(self, row: Any) -> str:
+        choices = ", ".join(f"{name}={count}" for name, count in row["choice_counts"].items())
+        return f"{row['node_id']}  choices=[{choices}]  attempt_failures={row['attempt_failures']}"
+
+
 class WorkItemListing(Listing):
     empty = "no work items"
 

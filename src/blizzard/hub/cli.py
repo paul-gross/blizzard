@@ -31,17 +31,23 @@ from blizzard.hub.cli_context import CLIENT_TIMEOUT, DEFAULT_HUB_URL, ENV_HUB_UR
 from blizzard.hub.cli_views import (
     ChunkDetail,
     ChunkListing,
+    ChunkSpendListing,
+    CountsListing,
     DecisionListing,
+    DurationsListing,
     EventListing,
     FleetStatus,
     GraphDetail,
     GraphListing,
     GraphSyncListing,
+    Listing,
     MigrationIntent,
+    OutcomesListing,
     QuestionListing,
     QueueListing,
     RunnerDetail,
     RunnerListing,
+    SpendListing,
     WorkItemListing,
 )
 from blizzard.hub.config import ConfigError, HubConfig
@@ -1134,3 +1140,178 @@ def analytics_events(
     params["limit"] = str(limit if limit is not None else 200)
     body = cli.get("/api/analytics/events", "GET /analytics/events", params=params).json()
     cli.show(body, EventListing(body["events"]))
+
+
+# `blizzard hub analytics summary` — blizzard#257 D1/D2: one verb over the ten read
+# rollup routes, an explicit dataset→route table (a `-`↔`/` rule would 404 on
+# `agent-types`), and an explicit per-dataset filter-applicability table — a filter
+# inapplicable to the chosen dataset is refused, never silently dropped.
+
+#: The four scope filters every dataset takes — the common ground D2 builds each
+#: dataset's own applicable set on top of.
+_SCOPE_FILTERS = frozenset({"graph_id", "source", "since", "until"})
+
+#: The flag each filter's dest name renders as, for a per-dataset applicability error.
+_FLAG_NAMES = {
+    "graph_id": "--graph",
+    "source": "--source",
+    "since": "--since",
+    "until": "--until",
+    "extractor_version": "--extractor-version",
+    "kind": "--kind",
+    "tool": "--tool",
+    "subject_prefix": "--subject-prefix",
+    "node_id": "--node",
+}
+
+
+@dataclass(frozen=True)
+class _Dataset:
+    """One ``summary`` choice: its route, the key its envelope carries the rows under,
+    the view that renders them, and which of the shared filters it honors. Only
+    ``spend-chunks`` paginates or streams — the one rollup with a bulk-export sibling."""
+
+    path: str
+    response_key: str
+    view: type[Listing]
+    filters: frozenset[str]
+    paginated: bool = False
+    streamable: bool = False
+
+
+#: Mints the ten read rollup routes' own criteria types, mirroring each route's own
+#: declared query params (``api/analytics.py``) — not derived from the path, so a
+#: hyphenated route (``counts/agent-types``) never round-trips through a naive rule.
+_DATASETS: dict[str, _Dataset] = {
+    "counts-files": _Dataset(
+        "/api/analytics/counts/files",
+        "counts",
+        CountsListing,
+        _SCOPE_FILTERS | {"extractor_version", "tool", "subject_prefix", "node_id"},
+    ),
+    "counts-skills": _Dataset(
+        "/api/analytics/counts/skills", "counts", CountsListing, _SCOPE_FILTERS | {"extractor_version", "node_id"}
+    ),
+    "counts-agent-types": _Dataset(
+        "/api/analytics/counts/agent-types",
+        "counts",
+        CountsListing,
+        _SCOPE_FILTERS | {"extractor_version", "kind", "tool", "subject_prefix", "node_id"},
+    ),
+    "counts-nodes": _Dataset(
+        "/api/analytics/counts/nodes",
+        "counts",
+        CountsListing,
+        _SCOPE_FILTERS | {"extractor_version", "kind", "tool", "subject_prefix"},
+    ),
+    "durations-nodes": _Dataset("/api/analytics/durations/nodes", "durations", DurationsListing, _SCOPE_FILTERS),
+    "durations-graphs": _Dataset("/api/analytics/durations/graphs", "durations", DurationsListing, _SCOPE_FILTERS),
+    "spend-nodes": _Dataset("/api/analytics/spend/nodes", "spend", SpendListing, _SCOPE_FILTERS),
+    "spend-graphs": _Dataset("/api/analytics/spend/graphs", "spend", SpendListing, _SCOPE_FILTERS),
+    "spend-chunks": _Dataset(
+        "/api/analytics/spend/chunks",
+        "spend",
+        ChunkSpendListing,
+        _SCOPE_FILTERS,
+        paginated=True,
+        streamable=True,
+    ),
+    "outcomes-nodes": _Dataset("/api/analytics/outcomes/nodes", "outcomes", OutcomesListing, _SCOPE_FILTERS),
+}
+
+_SPEND_CHUNKS_NDJSON_PATH = "/api/analytics/spend/chunks/ndjson"
+
+
+@analytics_group.command("summary", cls=FleetCommand)
+@click.argument("dataset", type=click.Choice(sorted(_DATASETS)))
+@_graph_option
+@_source_option
+@_since_option
+@_until_option
+@_extractor_version_option
+@_kind_option
+@_tool_option
+@_subject_prefix_option
+@_node_option
+@click.option("--cursor", default=None, help="Resume from a prior page's next_cursor (spend-chunks only).")
+@click.option(
+    "--limit", default=None, type=int, help="Max rows in one page (spend-chunks only). Illegal with --ndjson."
+)
+@click.option(
+    "--ndjson",
+    is_flag=True,
+    default=False,
+    help="Stream spend-chunks as NDJSON to stdout, unpaged (spend-chunks only). "
+    "Incompatible with --json/--cursor/--limit.",
+)
+def analytics_summary(
+    cli: CliContext,
+    dataset: str,
+    graph_id: str | None,
+    source: str | None,
+    since: datetime | None,
+    until: datetime | None,
+    extractor_version: str | None,
+    kind: str | None,
+    tool: str | None,
+    subject_prefix: str | None,
+    node_id: str | None,
+    cursor: str | None,
+    limit: int | None,
+    ndjson: bool,
+) -> None:
+    """Read one of the canned counts or operational-dataset rollups (blizzard#255/#256):
+    the four DATASET counts (counts-files, counts-skills, counts-agent-types,
+    counts-nodes) and the six operational datasets (durations-nodes, durations-graphs,
+    spend-nodes, spend-graphs, spend-chunks, outcomes-nodes). Only spend-chunks pages
+    or streams; a filter DATASET's own route does not expose is refused."""
+    spec = _DATASETS[dataset]
+    given = {
+        "graph_id": graph_id,
+        "source": source,
+        "since": since,
+        "until": until,
+        "extractor_version": extractor_version,
+        "kind": kind,
+        "tool": tool,
+        "subject_prefix": subject_prefix,
+        "node_id": node_id,
+    }
+    for name, value in given.items():
+        if value is not None and name not in spec.filters:
+            raise click.UsageError(f"{_FLAG_NAMES[name]} does not apply to dataset {dataset!r}")
+    if cursor is not None and not spec.paginated:
+        raise click.UsageError(f"--cursor does not apply to dataset {dataset!r}")
+    if limit is not None and not spec.paginated:
+        raise click.UsageError(f"--limit does not apply to dataset {dataset!r}")
+    if ndjson and not spec.streamable:
+        raise click.UsageError(f"--ndjson does not apply to dataset {dataset!r}")
+    if ndjson:
+        if cli.as_json:
+            raise click.UsageError("--ndjson is incompatible with --json")
+        if cursor is not None:
+            raise click.UsageError("--ndjson is incompatible with --cursor")
+        if limit is not None:
+            raise click.UsageError("--ndjson is incompatible with --limit")
+    params = _scope_params(
+        graph_id=graph_id,
+        source=source,
+        since=since,
+        until=until,
+        extractor_version=extractor_version,
+        kind=kind,
+        tool=tool,
+        subject_prefix=subject_prefix,
+        node_id=node_id,
+    )
+    if ndjson:
+        for line in cli.stream(_SPEND_CHUNKS_NDJSON_PATH, "GET /analytics/spend/chunks/ndjson", params=params):
+            click.echo(line)
+        return
+    if cursor is not None:
+        params["cursor"] = cursor
+    if spec.paginated:
+        params["limit"] = str(limit if limit is not None else 200)
+    operation = f"GET {spec.path.removeprefix('/api')}"
+    body = cli.get(spec.path, operation, params=params).json()
+    cli.show(body, spec.view(body[spec.response_key]))
