@@ -147,6 +147,16 @@ class DecisionListing(Listing):
         return f"{row['decision_id']}  chunk={row['chunk_id']}  node={row['node_name']}  choices=[{choices}]"
 
 
+class EventListing(Listing):
+    empty = "no events"
+
+    def line(self, row: Any) -> str:
+        occurred = row.get("occurred_at") or "-"
+        tool = f"  tool={row['tool']}" if row.get("tool") else ""
+        subject = f"  {row['subject']}" if row.get("subject") else ""
+        return f"{occurred}  {row['kind']:<16} chunk={row['chunk_id']} node={row['node_id']}{tool}{subject}"
+
+
 class WorkItemListing(Listing):
     empty = "no work items"
 
