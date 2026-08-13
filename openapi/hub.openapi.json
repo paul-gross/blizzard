@@ -173,6 +173,7 @@
         "type": "object"
       },
       "AnalyticsCountView": {
+        "description": "One grouping key and how many events fell under it (blizzard#255). ``key`` is\nwhichever column the counts endpoint serving it groups by \u2014 a file path, a skill\nname, an agent type, or a node id.",
         "properties": {
           "count": {
             "title": "Count",
@@ -191,6 +192,7 @@
         "type": "object"
       },
       "AnalyticsCountsResponse": {
+        "description": "Every grouping key matching the filters, most-frequent first with the key\nascending as the tiebreak \u2014 a total order two identical calls agree on.",
         "properties": {
           "counts": {
             "items": {
@@ -5237,7 +5239,7 @@
           },
           {
             "in": "query",
-            "name": "path_prefix",
+            "name": "subject_prefix",
             "required": false,
             "schema": {
               "anyOf": [
@@ -5248,7 +5250,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Path Prefix"
+              "title": "Subject Prefix"
             }
           },
           {
@@ -5380,7 +5382,7 @@
     },
     "/api/analytics/counts/files": {
       "get": {
-        "description": "Occurrence counts by file path among ``file_read`` events, honoring every other\nfilter \u2014 ``kind`` is not offered here, since this count is always scoped to\n``file_read``.",
+        "description": "Occurrence counts by file path among ``file_read`` events, honoring every other\nfilter. ``kind`` is not offered: this count fixes it to ``file_read``.",
         "operationId": "counts_by_file_api_analytics_counts_files_get",
         "parameters": [
           {
@@ -5401,7 +5403,7 @@
           },
           {
             "in": "query",
-            "name": "path_prefix",
+            "name": "subject_prefix",
             "required": false,
             "schema": {
               "anyOf": [
@@ -5412,7 +5414,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Path Prefix"
+              "title": "Subject Prefix"
             }
           },
           {
@@ -5544,7 +5546,7 @@
     },
     "/api/analytics/counts/nodes": {
       "get": {
-        "description": "Occurrence counts by node id, across every kind matching the filters.",
+        "description": "Occurrence counts by node id, across every kind matching the filters.\n``node_id`` is not offered: it would select a single group, not narrow the count.",
         "operationId": "counts_by_node_api_analytics_counts_nodes_get",
         "parameters": [
           {
@@ -5581,7 +5583,7 @@
           },
           {
             "in": "query",
-            "name": "path_prefix",
+            "name": "subject_prefix",
             "required": false,
             "schema": {
               "anyOf": [
@@ -5592,7 +5594,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Path Prefix"
+              "title": "Subject Prefix"
             }
           },
           {
@@ -5708,7 +5710,7 @@
     },
     "/api/analytics/counts/skills": {
       "get": {
-        "description": "Occurrence counts by skill name among ``skill_invocation`` events, honoring every\nother filter \u2014 ``kind``/``tool``/``path_prefix`` are not offered: the kind is fixed\nand a skill invocation carries no path.",
+        "description": "Occurrence counts by skill name among ``skill_invocation`` events, honoring every\nother filter. ``kind`` is not offered (this count fixes it), nor ``tool`` (that kind\nalways records ``Skill``), nor ``subject_prefix`` \u2014 a skill name is a flat name, so a\nprefix of one narrows nothing a caller could not name outright.",
         "operationId": "counts_by_skill_api_analytics_counts_skills_get",
         "parameters": [
           {
@@ -5877,7 +5879,7 @@
           },
           {
             "in": "query",
-            "name": "path_prefix",
+            "name": "subject_prefix",
             "required": false,
             "schema": {
               "anyOf": [
@@ -5888,7 +5890,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Path Prefix"
+              "title": "Subject Prefix"
             }
           },
           {
@@ -6085,7 +6087,7 @@
           },
           {
             "in": "query",
-            "name": "path_prefix",
+            "name": "subject_prefix",
             "required": false,
             "schema": {
               "anyOf": [
@@ -6096,7 +6098,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Path Prefix"
+              "title": "Subject Prefix"
             }
           },
           {

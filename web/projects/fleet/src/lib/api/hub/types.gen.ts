@@ -89,6 +89,10 @@ export type ActivityView = {
 
 /**
  * AnalyticsCountView
+ *
+ * One grouping key and how many events fell under it (blizzard#255). ``key`` is
+ * whichever column the counts endpoint serving it groups by — a file path, a skill
+ * name, an agent type, or a node id.
  */
 export type AnalyticsCountView = {
     /**
@@ -103,6 +107,9 @@ export type AnalyticsCountView = {
 
 /**
  * AnalyticsCountsResponse
+ *
+ * Every grouping key matching the filters, most-frequent first with the key
+ * ascending as the tiebreak — a total order two identical calls agree on.
  */
 export type AnalyticsCountsResponse = {
     /**
@@ -3357,9 +3364,9 @@ export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetData = {
          */
         tool?: string | null;
         /**
-         * Path Prefix
+         * Subject Prefix
          */
-        path_prefix?: string | null;
+        subject_prefix?: string | null;
         /**
          * Node Id
          */
@@ -3415,9 +3422,9 @@ export type CountsByFileApiAnalyticsCountsFilesGetData = {
          */
         tool?: string | null;
         /**
-         * Path Prefix
+         * Subject Prefix
          */
-        path_prefix?: string | null;
+        subject_prefix?: string | null;
         /**
          * Node Id
          */
@@ -3477,9 +3484,9 @@ export type CountsByNodeApiAnalyticsCountsNodesGetData = {
          */
         tool?: string | null;
         /**
-         * Path Prefix
+         * Subject Prefix
          */
-        path_prefix?: string | null;
+        subject_prefix?: string | null;
         /**
          * Graph Id
          */
@@ -3585,9 +3592,9 @@ export type ListEventsApiAnalyticsEventsGetData = {
          */
         tool?: string | null;
         /**
-         * Path Prefix
+         * Subject Prefix
          */
-        path_prefix?: string | null;
+        subject_prefix?: string | null;
         /**
          * Node Id
          */
@@ -3655,9 +3662,9 @@ export type StreamEventsApiAnalyticsEventsNdjsonGetData = {
          */
         tool?: string | null;
         /**
-         * Path Prefix
+         * Subject Prefix
          */
-        path_prefix?: string | null;
+        subject_prefix?: string | null;
         /**
          * Node Id
          */

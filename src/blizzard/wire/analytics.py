@@ -37,11 +37,18 @@ class AnalyticsEventsResponse(BaseModel):
 
 
 class AnalyticsCountView(BaseModel):
+    """One grouping key and how many events fell under it (blizzard#255). ``key`` is
+    whichever column the counts endpoint serving it groups by — a file path, a skill
+    name, an agent type, or a node id."""
+
     key: str
     count: int
 
 
 class AnalyticsCountsResponse(BaseModel):
+    """Every grouping key matching the filters, most-frequent first with the key
+    ascending as the tiebreak — a total order two identical calls agree on."""
+
     counts: list[AnalyticsCountView]
 
 

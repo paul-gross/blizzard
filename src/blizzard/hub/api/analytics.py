@@ -68,12 +68,15 @@ def re_derive(request: ReDeriveRequest, services: Annotated[HubServices, Depends
 
 # --- read-only events/counts (blizzard#255) --------------------------------------
 
+# A count omits the query param for a field its own scope already pins, and the one that
+# would select a single group rather than narrow the count; each route states which.
+
 
 def _criteria(
     *,
     kind: str | None,
     tool: str | None,
-    path_prefix: str | None,
+    subject_prefix: str | None,
     node_id: str | None,
     graph_id: str | None,
     source: str | None,
@@ -85,7 +88,7 @@ def _criteria(
         extractor_version=extractor_version or EXTRACTOR_VERSION,
         kind=kind,
         tool=tool,
-        path_prefix=path_prefix,
+        subject_prefix=subject_prefix,
         node_id=node_id,
         graph_id=graph_id,
         source=source,
@@ -125,7 +128,7 @@ def list_events(
     services: Annotated[HubServices, Depends(get_services)],
     kind: Annotated[str | None, Query()] = None,
     tool: Annotated[str | None, Query()] = None,
-    path_prefix: Annotated[str | None, Query()] = None,
+    subject_prefix: Annotated[str | None, Query()] = None,
     node_id: Annotated[str | None, Query()] = None,
     graph_id: Annotated[str | None, Query()] = None,
     source: Annotated[str | None, Query()] = None,
@@ -141,7 +144,7 @@ def list_events(
     criteria = _criteria(
         kind=kind,
         tool=tool,
-        path_prefix=path_prefix,
+        subject_prefix=subject_prefix,
         node_id=node_id,
         graph_id=graph_id,
         source=source,
@@ -168,7 +171,7 @@ def stream_events(
     services: Annotated[HubServices, Depends(get_services)],
     kind: Annotated[str | None, Query()] = None,
     tool: Annotated[str | None, Query()] = None,
-    path_prefix: Annotated[str | None, Query()] = None,
+    subject_prefix: Annotated[str | None, Query()] = None,
     node_id: Annotated[str | None, Query()] = None,
     graph_id: Annotated[str | None, Query()] = None,
     source: Annotated[str | None, Query()] = None,
@@ -183,7 +186,7 @@ def stream_events(
     criteria = _criteria(
         kind=kind,
         tool=tool,
-        path_prefix=path_prefix,
+        subject_prefix=subject_prefix,
         node_id=node_id,
         graph_id=graph_id,
         source=source,
@@ -209,7 +212,7 @@ def stream_events(
 def counts_by_file(
     services: Annotated[HubServices, Depends(get_services)],
     tool: Annotated[str | None, Query()] = None,
-    path_prefix: Annotated[str | None, Query()] = None,
+    subject_prefix: Annotated[str | None, Query()] = None,
     node_id: Annotated[str | None, Query()] = None,
     graph_id: Annotated[str | None, Query()] = None,
     source: Annotated[str | None, Query()] = None,
@@ -218,12 +221,11 @@ def counts_by_file(
     extractor_version: Annotated[str | None, Query()] = None,
 ) -> AnalyticsCountsResponse:
     """Occurrence counts by file path among ``file_read`` events, honoring every other
-    filter — ``kind`` is not offered here, since this count is always scoped to
-    ``file_read``."""
+    filter. ``kind`` is not offered: this count fixes it to ``file_read``."""
     criteria = _criteria(
         kind=None,
         tool=tool,
-        path_prefix=path_prefix,
+        subject_prefix=subject_prefix,
         node_id=node_id,
         graph_id=graph_id,
         source=source,
@@ -245,12 +247,13 @@ def counts_by_skill(
     extractor_version: Annotated[str | None, Query()] = None,
 ) -> AnalyticsCountsResponse:
     """Occurrence counts by skill name among ``skill_invocation`` events, honoring every
-    other filter — ``kind``/``tool``/``path_prefix`` are not offered: the kind is fixed
-    and a skill invocation carries no path."""
+    other filter. ``kind`` is not offered (this count fixes it), nor ``tool`` (that kind
+    always records ``Skill``), nor ``subject_prefix`` — a skill name is a flat name, so a
+    prefix of one narrows nothing a caller could not name outright."""
     criteria = _criteria(
         kind=None,
         tool=None,
-        path_prefix=None,
+        subject_prefix=None,
         node_id=node_id,
         graph_id=graph_id,
         source=source,
@@ -268,7 +271,7 @@ def counts_by_agent_type(
     services: Annotated[HubServices, Depends(get_services)],
     kind: Annotated[str | None, Query()] = None,
     tool: Annotated[str | None, Query()] = None,
-    path_prefix: Annotated[str | None, Query()] = None,
+    subject_prefix: Annotated[str | None, Query()] = None,
     node_id: Annotated[str | None, Query()] = None,
     graph_id: Annotated[str | None, Query()] = None,
     source: Annotated[str | None, Query()] = None,
@@ -283,7 +286,7 @@ def counts_by_agent_type(
     criteria = _criteria(
         kind=kind,
         tool=tool,
-        path_prefix=path_prefix,
+        subject_prefix=subject_prefix,
         node_id=node_id,
         graph_id=graph_id,
         source=source,
@@ -299,18 +302,19 @@ def counts_by_node(
     services: Annotated[HubServices, Depends(get_services)],
     kind: Annotated[str | None, Query()] = None,
     tool: Annotated[str | None, Query()] = None,
-    path_prefix: Annotated[str | None, Query()] = None,
+    subject_prefix: Annotated[str | None, Query()] = None,
     graph_id: Annotated[str | None, Query()] = None,
     source: Annotated[str | None, Query()] = None,
     since: Annotated[datetime | None, Query()] = None,
     until: Annotated[datetime | None, Query()] = None,
     extractor_version: Annotated[str | None, Query()] = None,
 ) -> AnalyticsCountsResponse:
-    """Occurrence counts by node id, across every kind matching the filters."""
+    """Occurrence counts by node id, across every kind matching the filters.
+    ``node_id`` is not offered: it would select a single group, not narrow the count."""
     criteria = _criteria(
         kind=kind,
         tool=tool,
-        path_prefix=path_prefix,
+        subject_prefix=subject_prefix,
         node_id=None,
         graph_id=graph_id,
         source=source,

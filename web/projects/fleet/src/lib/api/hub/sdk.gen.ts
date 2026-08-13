@@ -43,8 +43,7 @@ export const countsByAgentTypeApiAnalyticsCountsAgentTypesGet = <ThrowOnError ex
  * Counts By File
  *
  * Occurrence counts by file path among ``file_read`` events, honoring every other
- * filter — ``kind`` is not offered here, since this count is always scoped to
- * ``file_read``.
+ * filter. ``kind`` is not offered: this count fixes it to ``file_read``.
  */
 export const countsByFileApiAnalyticsCountsFilesGet = <ThrowOnError extends boolean = false>(options?: Options<CountsByFileApiAnalyticsCountsFilesGetData, ThrowOnError>): RequestResult<CountsByFileApiAnalyticsCountsFilesGetResponses, CountsByFileApiAnalyticsCountsFilesGetErrors, ThrowOnError> => (options?.client ?? client).get<CountsByFileApiAnalyticsCountsFilesGetResponses, CountsByFileApiAnalyticsCountsFilesGetErrors, ThrowOnError>({ url: '/api/analytics/counts/files', ...options });
 
@@ -52,6 +51,7 @@ export const countsByFileApiAnalyticsCountsFilesGet = <ThrowOnError extends bool
  * Counts By Node
  *
  * Occurrence counts by node id, across every kind matching the filters.
+ * ``node_id`` is not offered: it would select a single group, not narrow the count.
  */
 export const countsByNodeApiAnalyticsCountsNodesGet = <ThrowOnError extends boolean = false>(options?: Options<CountsByNodeApiAnalyticsCountsNodesGetData, ThrowOnError>): RequestResult<CountsByNodeApiAnalyticsCountsNodesGetResponses, CountsByNodeApiAnalyticsCountsNodesGetErrors, ThrowOnError> => (options?.client ?? client).get<CountsByNodeApiAnalyticsCountsNodesGetResponses, CountsByNodeApiAnalyticsCountsNodesGetErrors, ThrowOnError>({ url: '/api/analytics/counts/nodes', ...options });
 
@@ -59,8 +59,9 @@ export const countsByNodeApiAnalyticsCountsNodesGet = <ThrowOnError extends bool
  * Counts By Skill
  *
  * Occurrence counts by skill name among ``skill_invocation`` events, honoring every
- * other filter — ``kind``/``tool``/``path_prefix`` are not offered: the kind is fixed
- * and a skill invocation carries no path.
+ * other filter. ``kind`` is not offered (this count fixes it), nor ``tool`` (that kind
+ * always records ``Skill``), nor ``subject_prefix`` — a skill name is a flat name, so a
+ * prefix of one narrows nothing a caller could not name outright.
  */
 export const countsBySkillApiAnalyticsCountsSkillsGet = <ThrowOnError extends boolean = false>(options?: Options<CountsBySkillApiAnalyticsCountsSkillsGetData, ThrowOnError>): RequestResult<CountsBySkillApiAnalyticsCountsSkillsGetResponses, CountsBySkillApiAnalyticsCountsSkillsGetErrors, ThrowOnError> => (options?.client ?? client).get<CountsBySkillApiAnalyticsCountsSkillsGetResponses, CountsBySkillApiAnalyticsCountsSkillsGetErrors, ThrowOnError>({ url: '/api/analytics/counts/skills', ...options });
 

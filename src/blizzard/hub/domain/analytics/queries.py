@@ -22,7 +22,8 @@ class EventQueryCriteria:
     extractor_version: str
     kind: str | None = None
     tool: str | None = None
-    path_prefix: str | None = None
+    # A prefix of the ``subject`` column, whatever that kind's subject is — a path only where it is one.
+    subject_prefix: str | None = None
     node_id: str | None = None
     graph_id: str | None = None
     source: str | None = None
@@ -81,7 +82,9 @@ class MalformedCursor(ValueError):
 
 class IReadAnalyticsEventQueries(Protocol):
     """Read-only event query Protocol (blizzard#255 D6) — the routes' own seam
-    (``bzh:controller-read-only``, ``bzh:repository-split``)."""
+    (``bzh:controller-read-only``, ``bzh:repository-split``). Every ``counts_by_*``
+    orders its rows most-frequent first, key ascending as the tiebreak — the order a
+    top-N reader takes a prefix of, and one two identical calls agree on."""
 
     def events(self, criteria: EventQueryCriteria, *, cursor: str | None = None, limit: int) -> EventPage:
         """At most ``limit`` (at least 1, else ``ValueError``) events matching ``criteria``,

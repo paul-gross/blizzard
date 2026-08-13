@@ -183,10 +183,10 @@ def test_events_filters_by_tool(tmp_path: Path) -> None:
     assert [e["subject"] for e in resp.json()["events"]] == ["explorer"]
 
 
-def test_events_filters_by_path_prefix(tmp_path: Path) -> None:
+def test_events_filters_by_subject_prefix(tmp_path: Path) -> None:
     hub, token, _chunk_id = _seeded_hub(tmp_path)
 
-    resp = hub.client.get("/api/analytics/events", params={"path_prefix": "src/"}, headers=_cookie(token))
+    resp = hub.client.get("/api/analytics/events", params={"subject_prefix": "src/"}, headers=_cookie(token))
 
     assert [e["subject"] for e in resp.json()["events"]] == ["src/a.py"]
 

@@ -37,10 +37,10 @@ def _filtered_stmt(base: Select[Any], criteria: EventQueryCriteria) -> Select[An
         stmt = stmt.where(t.c.kind == criteria.kind)
     if criteria.tool is not None:
         stmt = stmt.where(t.c.tool == criteria.tool)
-    if criteria.path_prefix is not None:
+    if criteria.subject_prefix is not None:
         # `substr` + `=` compares literally and case-sensitively on both dialects; LIKE
         # would fold case on sqlite alone, making a count's value follow the backend.
-        stmt = stmt.where(func.substr(t.c.subject, 1, len(criteria.path_prefix)) == criteria.path_prefix)
+        stmt = stmt.where(func.substr(t.c.subject, 1, len(criteria.subject_prefix)) == criteria.subject_prefix)
     if criteria.node_id is not None:
         stmt = stmt.where(t.c.node_id == criteria.node_id)
     if criteria.graph_id is not None:
@@ -82,7 +82,6 @@ def _counts_stmt(criteria: EventQueryCriteria, *, group_col: Any, kind: str | No
         # different kind asked for an empty scope and gets one.
         stmt = stmt.where(s.transcript_events.c.kind == kind)
     stmt = stmt.where(group_col.is_not(None)).group_by(group_col)
-    # Most-frequent first, key ascending as the deterministic tiebreak.
     return stmt.order_by(func.count().desc(), group_col.asc())
 
 

@@ -155,8 +155,8 @@ def test_tool_filters_events(store: AnalyticsEventQueryStore) -> None:
     assert [e.subject for e in page.events] == ["explorer"]
 
 
-def test_path_prefix_filters_events_by_subject(store: AnalyticsEventQueryStore) -> None:
-    page = store.events(_criteria(path_prefix="src/"), limit=_LIMIT)
+def test_subject_prefix_filters_events_by_subject(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(subject_prefix="src/"), limit=_LIMIT)
     assert {e.subject for e in page.events} == {"src/a.py", "src/b.py", "src/c.py"}
 
 
@@ -200,11 +200,11 @@ def test_an_untimed_event_falls_outside_every_time_range(tmp_path: Path) -> None
 
 
 def test_filters_combine(store: AnalyticsEventQueryStore) -> None:
-    page = store.events(_criteria(kind="file_read", node_id="nd_build", path_prefix="src/b"), limit=_LIMIT)
+    page = store.events(_criteria(kind="file_read", node_id="nd_build", subject_prefix="src/b"), limit=_LIMIT)
     assert [e.subject for e in page.events] == ["src/b.py"]
 
 
-def test_path_prefix_treats_like_wildcards_as_literal_characters(tmp_path: Path) -> None:
+def test_subject_prefix_treats_like_wildcards_as_literal_characters(tmp_path: Path) -> None:
     """A prefix is a prefix, not a pattern: real paths carry ``_`` constantly, so an
     unescaped LIKE would quietly return files the caller never asked for."""
     store, insert_events = _new_store(tmp_path)
@@ -216,20 +216,20 @@ def test_path_prefix_treats_like_wildcards_as_literal_characters(tmp_path: Path)
         _event(turn_path="3", subject="src/azc.py"),
     )
 
-    assert [e.subject for e in store.events(_criteria(path_prefix="src/a_b"), limit=_LIMIT).events] == ["src/a_b.py"]
-    assert [e.subject for e in store.events(_criteria(path_prefix="src/a%c"), limit=_LIMIT).events] == ["src/a%c.py"]
-    assert [r.key for r in store.counts_by_file(_criteria(path_prefix="src/a_b"))] == ["src/a_b.py"]
+    assert [e.subject for e in store.events(_criteria(subject_prefix="src/a_b"), limit=_LIMIT).events] == ["src/a_b.py"]
+    assert [e.subject for e in store.events(_criteria(subject_prefix="src/a%c"), limit=_LIMIT).events] == ["src/a%c.py"]
+    assert [r.key for r in store.counts_by_file(_criteria(subject_prefix="src/a_b"))] == ["src/a_b.py"]
 
 
-def test_path_prefix_is_case_sensitive(tmp_path: Path) -> None:
+def test_subject_prefix_is_case_sensitive(tmp_path: Path) -> None:
     """The same prefix must select the same rows whichever backend serves it, and only
     the case-sensitive reading is available on both."""
     store, insert_events = _new_store(tmp_path)
     insert_events("sg_1", _event(subject="src/foo.py"))
 
-    assert store.events(_criteria(path_prefix="SRC/"), limit=_LIMIT).events == []
-    assert store.counts_by_file(_criteria(path_prefix="SRC/")) == []
-    assert [e.subject for e in store.events(_criteria(path_prefix="src/"), limit=_LIMIT).events] == ["src/foo.py"]
+    assert store.events(_criteria(subject_prefix="SRC/"), limit=_LIMIT).events == []
+    assert store.counts_by_file(_criteria(subject_prefix="SRC/")) == []
+    assert [e.subject for e in store.events(_criteria(subject_prefix="src/"), limit=_LIMIT).events] == ["src/foo.py"]
 
 
 # --- events: keyset paging ------------------------------------------------------
