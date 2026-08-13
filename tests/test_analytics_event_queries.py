@@ -183,6 +183,22 @@ def test_time_range_filters_events(store: AnalyticsEventQueryStore) -> None:
     assert {e.subject for e in page.events} == {"src/a.py", "wf-commit", "explorer"}
 
 
+def test_an_untimed_event_falls_outside_every_time_range(tmp_path: Path) -> None:
+    """A turn can carry no timestamp at all, and a real fleet's transcripts do: such an
+    event is filtered out by a range rather than counted as unbounded, and never errors."""
+    store, insert_events = _new_store(tmp_path)
+    insert_events(
+        "sg_1",
+        _event(subject="src/untimed.py", occurred_at=None),
+        _event(turn_path="1", subject="src/timed.py"),
+    )
+
+    assert len(store.events(_criteria(), limit=_LIMIT).events) == 2
+    for criteria in (_criteria(since=_NOW.replace(hour=1)), _criteria(until=_NOW.replace(hour=23))):
+        assert [e.subject for e in store.events(criteria, limit=_LIMIT).events] == ["src/timed.py"]
+        assert [r.key for r in store.counts_by_file(criteria)] == ["src/timed.py"]
+
+
 def test_filters_combine(store: AnalyticsEventQueryStore) -> None:
     page = store.events(_criteria(kind="file_read", node_id="nd_build", path_prefix="src/b"), limit=_LIMIT)
     assert [e.subject for e in page.events] == ["src/b.py"]
