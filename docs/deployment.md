@@ -1585,6 +1585,49 @@ next tick — never a `--dir` verb, and the hub is never stopped for it. It requ
 `admin`+ (`analytics:admin`), since it mutates, unlike the read-only `transcript:read`
 grant the segment routes above are gated on.
 
+### Reading events and counts — `blizzard hub analytics events`/`summary` (blizzard#255, #257)
+
+Two operator verbs read the derived event stream above — `blizzard hub analytics
+events` for the raw per-occurrence rows, `blizzard hub analytics summary` for four
+canned occurrence counts — thin wrappers over `GET /api/analytics/events` and `GET
+/api/analytics/counts/*`, gated on the same `transcript:read` grant the segment routes
+above use:
+
+```
+blizzard hub analytics events [FILTERS] [--cursor CURSOR] [--limit N] [--ndjson]
+blizzard hub analytics summary counts-files       [FILTERS]
+blizzard hub analytics summary counts-skills      [FILTERS]
+blizzard hub analytics summary counts-agent-types [FILTERS]
+blizzard hub analytics summary counts-nodes       [FILTERS]
+```
+
+`FILTERS` is the shared vocabulary every event-projection route understands: `--graph`,
+`--source`, `--since`, `--until` (the four fields every analytics dataset in this doc
+shares), `--extractor-version` (defaults to the version the standing sweep currently
+derives; naming an older one reads that version's own rows rather than mixing them,
+since mixing would double-count the same occurrence), and the four event-shape filters
+`--kind`, `--tool`, `--subject-prefix`, `--node`. Each `summary` counts dataset only
+takes the subset its own route exposes — `counts-files` skips `--kind` (fixed to
+`file_read`), `counts-skills` takes only `--extractor-version`/`--node` of the six (a
+skill name is already flat, so a prefix or tool narrows nothing), and `counts-nodes`
+skips `--node` (naming one would select a single group rather than narrow the count).
+A flag a chosen dataset does not expose is refused with a `does not apply to dataset`
+error, never silently dropped.
+
+`events` has three output modes: a human table by default; `--json`, which prints the
+raw single-page envelope including its `next_cursor` — the same page `GET
+/api/analytics/events` itself returns; and `--ndjson`, which streams every matching
+event from `GET /api/analytics/events/ndjson` to stdout, one JSON object per line,
+unbounded and unpaged — incompatible with `--json`, `--cursor`, and `--limit`, since
+the streaming route takes neither. `--since`/`--until` are read in the operator's own
+local wall clock and converted to UTC before crossing the wire, not merely relabeled —
+a bare `--since 10:00` means 10am the operator's own clock, whatever timezone the hub
+process itself runs in.
+
+A bare 401 gets the `blizzard hub login` hint; a bare 403 (missing `transcript:read`,
+or a runner token presented on an operator verb) surfaces the API's own `detail`
+message unchanged, rather than a generic refusal.
+
 ### The operational datasets — durations, spend, outcomes (blizzard#256)
 
 Alongside the derived event stream, the same namespace exports the fleet's operational
@@ -1593,36 +1636,43 @@ outcomes — the numbers already computable from board-serving reads, reshaped f
 export rather than a per-chunk detail view. No new facts are stored; every dataset is
 derived at read time from primary sources — `transitions`, `lease_facts`, `usage_facts`,
 `chunk_bounces`, and `chunk_migrations` — joined against `chunks`, `graphs`, `graph_nodes`,
-and `chunk_work_refs` for graph/source resolution.
+and `chunk_work_refs` for graph/source resolution. `blizzard hub analytics summary` reads
+all six, one dataset per call:
 
 ```
-GET /api/analytics/durations/nodes   GET /api/analytics/durations/graphs
-GET /api/analytics/spend/nodes       GET /api/analytics/spend/graphs
-GET /api/analytics/spend/chunks      GET /api/analytics/spend/chunks/ndjson
-GET /api/analytics/outcomes/nodes
+blizzard hub analytics summary durations-nodes  [FILTERS]
+blizzard hub analytics summary durations-graphs [FILTERS]
+blizzard hub analytics summary spend-nodes      [FILTERS]
+blizzard hub analytics summary spend-graphs     [FILTERS]
+blizzard hub analytics summary spend-chunks     [FILTERS] [--cursor CURSOR] [--limit N] [--ndjson]
+blizzard hub analytics summary outcomes-nodes   [FILTERS]
 ```
 
-Every route takes the same `graph_id` / `source` / `since` / `until` query params the
-events/counts routes above use, and the same `transcript:read` gate — no separate grant,
-and strictly narrower than the `fleet:view` gate the same spend numbers already sit
-behind on the board. What `graph_id` narrows *by* differs per dataset, though, so two
-datasets' numbers for one `graph_id` are not directly comparable for a chunk that has
-migrated: durations and outcomes' judged half filter by the transition's own graph,
-spend filters by the chunk's *current* graph pin, and outcomes' failure half uses the
-failed attempt's own derived graph — each dataset's own wire model states its
-resolution; this is not one shared meaning. Per-node and per-graph groupings return one
-JSON envelope each, with no cursor of their own — `node_id`/`graph_id` are per-graph-
-*version* ids, so the *ceiling* on either envelope's size grows every time a graph is
-minted, whatever the fleet has or hasn't run; the size a caller actually receives does
-not, since a grouping only emits keys with matching activity — an unrun graph mint adds
-zero rows to what ships. Per-chunk spend is unbounded in a wide window regardless, so it
-takes the same cursor-paged JSON plus
-NDJSON shape `/events` uses — and unlike `/events`' NDJSON export, the chunk-spend one is
-not a point-in-time snapshot: each page's sums are recomputed at page-fetch time, so a
-chunk emitted on an early page can be invalidated by a usage fact recorded while a later
-page is still streaming. Field-by-field shapes are the committed
-`openapi/hub.openapi.json`'s own record — the wire models that generate it are each
-dataset's one prose home, not restated here.
+Every dataset here takes only the shared `--graph`/`--source`/`--since`/`--until`
+filters the events/counts datasets above also share — no `--kind`/`--tool`/
+`--subject-prefix`/`--node`, since this family groups over `transitions`/`usage_facts`/
+etc., not the event projection — and the same `transcript:read` gate, strictly
+narrower than the `fleet:view` gate the same spend numbers already sit behind on the
+board. What `--graph` narrows *by* differs per dataset, though, so two datasets'
+numbers for one graph are not directly comparable for a chunk that has migrated:
+durations and outcomes' judged half filter by the transition's own graph, spend filters
+by the chunk's *current* graph pin, and outcomes' failure half uses the failed
+attempt's own derived graph — each dataset's own wire model states its resolution;
+this is not one shared meaning. `spend-chunks` is the one dataset that pages or
+streams: `--cursor`/`--limit` (default 200) page the human/`--json` output, and
+`--ndjson` streams the whole filtered set from `GET /api/analytics/spend/chunks/ndjson`
+to stdout instead — the same `--json`/`--cursor`/`--limit` incompatibility `events`'
+own `--ndjson` carries, since the streaming route takes neither either. Per-node and
+per-graph groupings return one JSON envelope each, with no cursor of their own —
+`node_id`/`graph_id` are per-graph-*version* ids, so the *ceiling* on either envelope's
+size grows every time a graph is minted, whatever the fleet has or hasn't run; the size
+a caller actually receives does not, since a grouping only emits keys with matching
+activity — an unrun graph mint adds zero rows to what ships. Unlike `events`' own
+NDJSON export, the chunk-spend one is not a point-in-time snapshot: each page's sums
+are recomputed at page-fetch time, so a chunk emitted on an early page can be
+invalidated by a usage fact recorded while a later page is still streaming.
+Field-by-field shapes are the committed `openapi/hub.openapi.json`'s own record — the
+wire models that generate it are each dataset's one prose home, not restated here.
 
 Seven callouts worth an operator's attention rather than a field's own doc comment:
 
