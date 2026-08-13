@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.auth_core import Role
+from blizzard.hub.api.analytics import ScopeFilters, ndjson_lines
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
 from tests.support import build_hub, seed_session, seed_user
@@ -254,6 +255,20 @@ def test_ndjson_serves_the_same_events_in_the_same_order_as_json(tmp_path: Path)
     lines = [json.loads(line) for line in ndjson_resp.text.strip().split("\n")]
     assert [e["id"] for e in lines] == [e["id"] for e in json_resp.json()["events"]]
     assert [e["subject"] for e in lines] == [e["subject"] for e in json_resp.json()["events"]]
+
+
+def test_the_ndjson_stream_carries_its_cursor_across_batches(tmp_path: Path) -> None:
+    """The batch boundary is the stream's only moving part, and the default 500 puts it
+    out of reach of any fixture — so the body is served here one event per batch."""
+    hub, token, _chunk_id = _seeded_hub(tmp_path)
+    criteria = ScopeFilters(None, None, None, None, None).criteria()
+
+    body = b"".join(ndjson_lines(hub.services.analytics_events, criteria, batch_size=1)).decode()
+    lines = [json.loads(line) for line in body.splitlines()]
+
+    whole = hub.client.get("/api/analytics/events", headers=_cookie(token)).json()["events"]
+    assert [e["id"] for e in lines] == [e["id"] for e in whole]
+    assert len(lines) == 3
 
 
 # --- the four canned counts, honoring filters ----------------------------------------

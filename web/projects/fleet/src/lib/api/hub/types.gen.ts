@@ -3584,6 +3584,14 @@ export type ListEventsApiAnalyticsEventsGetData = {
     path?: never;
     query?: {
         /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
          * Kind
          */
         kind?: string | null;
@@ -3619,14 +3627,6 @@ export type ListEventsApiAnalyticsEventsGetData = {
          * Extractor Version
          */
         extractor_version?: string | null;
-        /**
-         * Cursor
-         */
-        cursor?: string | null;
-        /**
-         * Limit
-         */
-        limit?: number;
     };
     url: '/api/analytics/events';
 };
