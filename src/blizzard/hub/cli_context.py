@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -25,6 +25,9 @@ CLIENT_TIMEOUT = 15.0
 
 #: The actionable hint a verb's own unnamed 401 maps to (issue #96).
 _LOGIN_HINT = "not authenticated — run `blizzard hub login`"
+
+#: The fallback a verb's own unnamed 403 falls back to when the body carries no ``detail``.
+_FORBIDDEN_FALLBACK = "forbidden"
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,32 @@ class CliContext:
     ) -> httpx.Response:
         return self._verb("put", path, operation, json_body=json_body, on_status=on_status)
 
+    def stream(
+        self,
+        path: str,
+        operation: str,
+        *,
+        params: dict[str, str] | None = None,
+        on_status: dict[int, str] | None = None,
+    ) -> Iterator[str]:
+        """A ``GET`` read one decoded line at a time — the NDJSON bulk-export seam (D4).
+        Dispatches through ``httpx``'s module-level ``stream`` context manager, mirroring
+        :meth:`send`'s module-level dispatch so a test's ``monkeypatch.setattr`` still
+        intercepts it. A refusal is resolved — status and, where needed, body — before any
+        line is yielded, so it surfaces exactly like the buffered path's :meth:`check`
+        rather than partway through the caller's iteration."""
+        full_url = f"{self.hub_url.rstrip('/')}{path}"
+        try:
+            with httpx.stream(
+                "get", full_url, params=params, headers=self._headers() or None, timeout=CLIENT_TIMEOUT
+            ) as resp:
+                if resp.status_code >= 400:
+                    resp.read()
+                self.check(resp, operation, on_status=on_status)
+                yield from resp.iter_lines()
+        except httpx.HTTPError as exc:
+            raise self.failed(operation, exc) from exc
+
     def send(
         self, method: str, path: str, *, json_body: object | None = None, params: dict[str, str] | None = None
     ) -> httpx.Response:
@@ -87,11 +116,14 @@ class CliContext:
         """Map a handful of status codes to a ``ClickException`` reading the body's own
         ``detail`` (falling back to the per-code default named in ``on_status``); anything
         else still errors via ``raise_for_status``. A bare 401 not named in ``on_status``
-        gets the actionable login hint (issue #96)."""
+        gets the actionable login hint (issue #96); a bare 403 not named in ``on_status``
+        surfaces the server's own ``detail`` (D5)."""
         if on_status and resp.status_code in on_status:
             raise click.ClickException(self.detail(resp, on_status[resp.status_code]))
         if resp.status_code == httpx.codes.UNAUTHORIZED:
             raise click.ClickException(_LOGIN_HINT)
+        if resp.status_code == httpx.codes.FORBIDDEN:
+            raise click.ClickException(self.detail(resp, _FORBIDDEN_FALLBACK))
         try:
             resp.raise_for_status()
         except httpx.HTTPError as exc:
