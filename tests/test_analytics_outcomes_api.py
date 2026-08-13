@@ -229,6 +229,41 @@ def test_a_bounced_transitions_own_routing_edge_counts_as_neither(tmp_path: Path
     assert nodes["deliver"] not in outcomes
 
 
+def test_the_bounce_exclusion_reaches_the_kick_backs_own_epoch_and_no_further(tmp_path: Path) -> None:
+    """The exclusion's grain is ``(chunk_id, epoch)``, and the next node-step's own
+    judged choice on the SAME chunk still counts — the hub step claims a synthetic lease
+    at its epoch, so the runner's next lease mints strictly above it and never collides."""
+    runner = FakeHubCommandRunner()
+    runner.arm(_LAND_COMMAND, CommandResult(exit_code=0, stdout=f"doing stuff\n{land_pr_ci._CONFLICT}\n", stderr=""))
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    chunk_id, nodes = _mint_and_claim(hub)
+    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    assert hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()["outcome_choice"] == "conflict"
+
+    envelope = hub.client.get(f"/api/fleet/chunks/{chunk_id}/envelope").json()
+    assert envelope["node"]["node_name"] == "resolve"
+    next_epoch = envelope["epoch"] + 1  # what `Spawner._mint` derives, above the hub step's own
+    report_lease(hub, chunk_id, epoch=next_epoch, seq=2)
+    completed = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={
+            "choice": "resolved",
+            "epoch": next_epoch,
+            "runner_id": "r1",
+            "from_node_id": nodes["resolve"],
+            "artifacts": [],
+        },
+    )
+    assert completed.status_code == 200, completed.text
+
+    resp = hub.client.get("/api/analytics/outcomes/nodes")
+
+    outcomes = {o["node_id"]: o for o in resp.json()["outcomes"]}
+    assert nodes["deliver"] not in outcomes  # still excluded
+    assert outcomes[nodes["resolve"]]["choice_counts"] == {"resolved": 1}  # ...and no wider
+
+
 # --- D5: the migration-derived base case -----------------------------------------------
 
 
@@ -287,6 +322,35 @@ def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(
     assert resp.status_code == 200, resp.text
     outcomes = {o["node_id"]: o for o in resp.json()["outcomes"]}
     assert outcomes[other_nodes["triage"]]["attempt_failures"] == 1
+
+
+def test_a_pre_migration_no_movement_failure_resolves_via_the_graph_it_ran_in(tmp_path: Path) -> None:
+    """The store half of the same rule the domain fold owns: a real
+    ``chunk_migrations`` row's ``from_graph_id`` must reach the fold, so an epoch that
+    crashed before ever moving is attributed to the graph it ran in, not the later pin."""
+    hub, token, graph_id, nodes, other_graph_id, other_nodes = _seeded_hub(tmp_path)
+    chunk_id = _mint_chunk(hub, token)
+    report_lease(hub, chunk_id, epoch=1, seq=1)  # crashed on graph A, no transition of its own
+    report_lease(hub, chunk_id, epoch=2, seq=2)
+    _writable(hub).record_migration(
+        chunk_id,
+        from_node_id=nodes["build"],
+        from_graph_id=graph_id,
+        to_graph_id=other_graph_id,
+        landed_node_id=other_nodes["triage"],
+        choice_name="pass",
+        model=None,
+        epoch=2,
+        at=hub.clock.now(),
+        artifacts=[],
+        source=MigrationSource.AUTHORED_EDGE,
+    )
+
+    resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
+
+    outcomes = {o["node_id"]: o for o in resp.json()["outcomes"]}
+    assert outcomes[nodes["build"]]["attempt_failures"] == 1  # graph A's entry
+    assert other_nodes["triage"] not in outcomes  # never graph B's, the current pin
 
 
 # --- the shared filter vocabulary (D7) -----------------------------------------------

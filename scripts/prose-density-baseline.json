@@ -2960,9 +2960,9 @@
    "total": 86
   },
   "test_analytics_outcomes_api.py": {
-   "comments": 23,
-   "docstrings": 20,
-   "total": 327
+   "comments": 29,
+   "docstrings": 26,
+   "total": 391
   },
   "test_analytics_spend_api.py": {
    "comments": 13,
