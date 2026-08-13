@@ -161,11 +161,13 @@ def test_a_judged_failure_edge_counts_as_a_choice_not_an_attempt_failure(tmp_pat
 
 
 def test_an_attempt_with_no_transition_counts_as_an_attempt_failure(tmp_path: Path) -> None:
-    """Also D5's second base case: the chunk's very first epoch, so there is no prior
-    movement at all — the node resolves to the pinned graph's own entry node."""
+    """Also D5's second base case: no prior movement, so the node resolves to the
+    pinned graph's entry. Epoch 2's lease is epoch 1's positive end-of-attempt evidence
+    (review round 1 F1); epoch 2 itself, still the newest, counts as none."""
     hub, token, _graph_id, nodes, _og, _on = _seeded_hub(tmp_path)
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)  # a crash/reap — never completed
+    report_lease(hub, chunk_id, epoch=2, seq=2)  # proves epoch 1 is over; itself in-flight
 
     resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
 
@@ -205,6 +207,7 @@ def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_n
         source=MigrationSource.AUTHORED_EDGE,
     )
     report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed node — never completed
+    report_lease(hub, chunk_id, epoch=3, seq=3)  # proves epoch 2 is over (review round 1 F1)
 
     resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
 
@@ -212,3 +215,32 @@ def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_n
     outcomes = {o["node_id"]: o for o in resp.json()["outcomes"]}
     assert outcomes[other_nodes["triage"]]["attempt_failures"] == 1
     assert nodes["build"] not in outcomes
+
+
+def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(tmp_path: Path) -> None:
+    """``landed_node_id`` null means "target entry" — must resolve via the migration's
+    own ``to_graph_id`` rather than crash on a raw ``None`` (review round 1 F7)."""
+    hub, token, graph_id, nodes, other_graph_id, other_nodes = _seeded_hub(tmp_path)
+    chunk_id = _mint_chunk(hub, token)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    _writable(hub).record_migration(
+        chunk_id,
+        from_node_id=nodes["build"],
+        from_graph_id=graph_id,
+        to_graph_id=other_graph_id,
+        landed_node_id=None,
+        choice_name="pass",
+        model=None,
+        epoch=1,
+        at=hub.clock.now(),
+        artifacts=[],
+        source=MigrationSource.AUTHORED_EDGE,
+    )
+    report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed (entry) node
+    report_lease(hub, chunk_id, epoch=3, seq=3)  # proves epoch 2 is over (review round 1 F1)
+
+    resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
+
+    assert resp.status_code == 200, resp.text
+    outcomes = {o["node_id"]: o for o in resp.json()["outcomes"]}
+    assert outcomes[other_nodes["triage"]]["attempt_failures"] == 1

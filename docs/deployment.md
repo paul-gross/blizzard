@@ -1588,20 +1588,29 @@ GET /api/analytics/spend/chunks      GET /api/analytics/spend/chunks/ndjson
 GET /api/analytics/outcomes/nodes
 ```
 
-Every route shares the same `graph_id` / `source` / `since` / `until` filter vocabulary
-the events/counts routes above use, and the same `transcript:read` gate — no separate
-grant, and strictly narrower than the `fleet:view` gate the same spend numbers already
-sit behind on the board. Per-node and per-graph groupings return one bounded JSON
-envelope, same as the counts routes; per-chunk spend is unbounded in a wide window, so it
-takes the same cursor-paged JSON plus NDJSON shape `/events` uses. Field-by-field shapes
-are the committed `openapi/hub.openapi.json`'s own record — the wire models that generate
-it are each dataset's one prose home, not restated here.
+Every route takes the same `graph_id` / `source` / `since` / `until` query params the
+events/counts routes above use, and the same `transcript:read` gate — no separate grant,
+and strictly narrower than the `fleet:view` gate the same spend numbers already sit
+behind on the board. What `graph_id` narrows *by* differs per dataset, though, so two
+datasets' numbers for one `graph_id` are not directly comparable for a chunk that has
+migrated: durations and outcomes' judged half filter by the transition's own graph,
+spend filters by the chunk's *current* graph pin, and outcomes' failure half uses the
+failed attempt's own derived graph — each dataset's own wire model states its
+resolution; this is not one shared meaning. Per-node and per-graph groupings return one
+bounded JSON envelope, same as the counts routes; per-chunk spend is unbounded in a wide
+window, so it takes the same cursor-paged JSON plus NDJSON shape `/events` uses.
+Field-by-field shapes are the committed `openapi/hub.openapi.json`'s own record — the
+wire models that generate it are each dataset's one prose home, not restated here.
 
-Two callouts worth an operator's attention rather than a field's own doc comment: a
+Three callouts worth an operator's attention rather than a field's own doc comment: a
 duration is hub-observed wall-clock time, not runner-measured, so a parked gate or ask
-stretches it past a step's actual work time; and outcomes reports a judged-choice
-distribution and a retry-consuming attempt-failure count as two separate numbers, never
-one blended failure rate — a delivery kick-back counts as neither.
+stretches it past a step's actual work time, and it covers runner-executed steps only —
+a hub-executed node's own exit transition has no measurable wall-clock interval of its
+own; outcomes reports a judged-choice distribution and a retry-consuming attempt-failure
+count as two separate numbers, never one blended failure rate, a delivery kick-back
+counting as neither; and outcomes' two counts window on different instants (the judging
+transition's own vs. the failed attempt's lease mint), so a boundary case can count on
+one side only.
 
 ## Operational visibility — the event log
 

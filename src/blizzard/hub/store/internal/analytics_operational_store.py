@@ -1,9 +1,9 @@
 """SQLAlchemy adapter for the operational analytics query seam (package-private,
 blizzard#256). Reads ``transitions``/``lease_facts``/``usage_facts``/``chunk_migrations``
 directly, the same tables :mod:`chunk_store` writes — two ``internal/`` adapters sharing
-one engine is established, not a coupling (see :mod:`analytics_event_query_store`).
-Filtering stays portable SQL (``bzh:sql-portable``); a duration's datetime subtraction has
-no dialect-independent SQL form here, so it happens in Python instead."""
+one engine is established (see :mod:`analytics_event_query_store`). Filtering stays
+portable SQL (``bzh:sql-portable``); D2/D5's own business rules live in the domain-owned
+fold this adapter only fetches and maps rows for (review round 1 F5)."""
 
 from __future__ import annotations
 
@@ -15,18 +15,24 @@ from sqlalchemy import Engine, Select, case, func, select
 
 from blizzard.hub.domain.analytics.operational import (
     ChunkSpendPage,
-    ChunkSpendRecord,
     DurationStats,
     IReadOperationalAnalytics,
+    LeaseEpoch,
+    MigrationMovement,
     OperationalCriteria,
     OutcomeStats,
     SpendStats,
+    TransitionMovement,
+    fold_step_durations,
+    resolve_attempt_failures,
+    summarize_durations,
 )
 from blizzard.hub.domain.analytics.queries import MalformedCursor
+from blizzard.hub.domain.graph import Executor
+from blizzard.hub.domain.work import UsageTotal
 from blizzard.hub.store import schema as s
 
-#: The whole cursor format `spend_by_chunk` mints: a chunk id, plain (a ULID sorts
-#: chronologically as a string, `bzh:sql-portable`).
+#: `spend_by_chunk`'s whole cursor format: a plain chunk id (`bzh:sql-portable`).
 _CHUNK_CURSOR = re.compile(r"ch_[0-9A-HJKMNP-TV-Z]+")
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
@@ -46,17 +52,15 @@ def _source_chunks_stmt(source: str) -> Select[Any]:
 
 
 def _duration_rows_stmt(criteria: OperationalCriteria) -> Select[Any]:
-    """Every completed step matching ``criteria`` (D2) — one row per transition with an
-    attributable ``from_node_id``, paired to the lease that fenced the attempt producing
-    it. A transition with no matching lease row (never expected — a transition never
-    accepts without a live lease) is silently excluded by the inner join, same as it
-    would be by any join naming that pair."""
-    t = s.transitions
-    lease_min = _lease_min_stmt().subquery()
-    stmt = select(t.c.from_node_id, t.c.graph_id, t.c.recorded_at, lease_min.c.minted_at).select_from(
-        t.join(lease_min, (t.c.chunk_id == lease_min.c.chunk_id) & (t.c.epoch == lease_min.c.epoch))
-    )
-    stmt = stmt.where(t.c.from_node_id.is_not(None))
+    """Every completed *runner-executed* step matching ``criteria`` (D2, review round 1
+    F2) — a hub-executed node's own exit transition shares an instant with its own
+    synthetic lease mint by construction, so it never carries a real duration.
+    Outer-joined to ``graph_nodes`` so an entry transition (``from_node_id`` null) is
+    kept regardless — there is no node to look its executor up by."""
+    t, gn = s.transitions, s.graph_nodes
+    cols = (t.c.chunk_id, t.c.epoch, t.c.transition_id, t.c.from_node_id, t.c.to_node_id, t.c.graph_id, t.c.recorded_at)
+    stmt = select(*cols).select_from(t.outerjoin(gn, t.c.from_node_id == gn.c.node_id))
+    stmt = stmt.where((gn.c.executor == Executor.RUNNER.value) | (t.c.from_node_id.is_(None)))
     if criteria.graph_id is not None:
         stmt = stmt.where(t.c.graph_id == criteria.graph_id)
     if criteria.source is not None:
@@ -65,24 +69,19 @@ def _duration_rows_stmt(criteria: OperationalCriteria) -> Select[Any]:
         stmt = stmt.where(t.c.recorded_at >= criteria.since)
     if criteria.until is not None:
         stmt = stmt.where(t.c.recorded_at < criteria.until)
-    return stmt
+    return stmt.order_by(t.c.chunk_id, t.c.epoch, t.c.recorded_at, t.c.transition_id)
 
 
-def _duration_stats(rows: Sequence[Any], *, key: str) -> list[DurationStats]:
-    """Group already-fetched ``(from_node_id, graph_id, recorded_at, minted_at)`` rows by
-    ``key`` (``"node"`` or ``"graph"``) and roll each group up — the aggregation Python
-    side, alongside the seconds subtraction itself (see module docstring)."""
-    totals: dict[str, float] = {}
-    counts: dict[str, int] = {}
-    for row in rows:
-        group_key = row.from_node_id if key == "node" else row.graph_id
-        seconds = (row.recorded_at - row.minted_at).total_seconds()
-        totals[group_key] = totals.get(group_key, 0.0) + seconds
-        counts[group_key] = counts.get(group_key, 0) + 1
-    return [
-        DurationStats(key=k, completed_steps=counts[k], total_seconds=totals[k], avg_seconds=totals[k] / counts[k])
-        for k in sorted(counts)
-    ]
+def _to_transition_movement(row: Any) -> TransitionMovement:
+    return TransitionMovement(
+        chunk_id=row.chunk_id,
+        epoch=row.epoch,
+        transition_id=row.transition_id,
+        from_node_id=row.from_node_id,
+        to_node_id=row.to_node_id,
+        graph_id=row.graph_id,
+        recorded_at=row.recorded_at,
+    )
 
 
 def _decode_chunk_cursor(cursor: str) -> str:
@@ -110,11 +109,11 @@ def _spend_filtered_stmt(base: Select[Any], criteria: OperationalCriteria) -> Se
 
 
 def _spend_group_stmt(criteria: OperationalCriteria, *, group_col: Any) -> Select[Any]:
-    """Usage/cost summed in SQL, grouped by ``group_col`` (D6) — ``UsageTotal.of``'s own
-    lower-bound + PARTIAL contract, reproduced here rather than imported: a null
-    ``cost_usd`` is skipped from the sum (``coalesce`` never substitutes a fabricated
-    zero into the total itself), and ``null_cost_rows`` counts how many of the group's
-    rows lacked one, so the store can render ``cost_partial`` without re-reading rows."""
+    """Usage/cost summed in SQL, grouped by ``group_col`` (D6) — the sums
+    :meth:`~blizzard.hub.domain.work.UsageTotal.of_grouped_sums` applies the lower-bound
+    + PARTIAL contract to (review round 1 F6): a null ``cost_usd`` is skipped from the
+    sum (``coalesce`` never substitutes a fabricated zero into the total itself), and
+    ``null_cost_rows`` counts how many of the group's rows lacked one."""
     u = s.usage_facts
     stmt = select(
         group_col.label("key"),
@@ -146,26 +145,22 @@ def _spend_by_chunk_stmt(criteria: OperationalCriteria, *, cursor: str | None, l
 
 
 def _to_spend_stats(row: Any) -> SpendStats:
+    total = UsageTotal.of_grouped_sums(
+        input_tokens=row.input_tokens,
+        output_tokens=row.output_tokens,
+        cache_read_tokens=row.cache_read_tokens,
+        cache_create_tokens=row.cache_create_tokens,
+        cost_usd_sum=row.cost_usd,
+        null_cost_rows=row.null_cost_rows,
+    )
     return SpendStats(
         key=row.key,
-        input_tokens=row.input_tokens,
-        output_tokens=row.output_tokens,
-        cache_read_tokens=row.cache_read_tokens,
-        cache_create_tokens=row.cache_create_tokens,
-        cost_usd=row.cost_usd,
-        cost_partial=row.null_cost_rows > 0,
-    )
-
-
-def _to_chunk_spend_record(row: Any) -> ChunkSpendRecord:
-    return ChunkSpendRecord(
-        chunk_id=row.key,
-        input_tokens=row.input_tokens,
-        output_tokens=row.output_tokens,
-        cache_read_tokens=row.cache_read_tokens,
-        cache_create_tokens=row.cache_create_tokens,
-        cost_usd=row.cost_usd,
-        cost_partial=row.null_cost_rows > 0,
+        input_tokens=total.input_tokens,
+        output_tokens=total.output_tokens,
+        cache_read_tokens=total.cache_read_tokens,
+        cache_create_tokens=total.cache_create_tokens,
+        cost_usd=total.cost_usd,
+        cost_partial=total.cost_partial,
     )
 
 
@@ -189,97 +184,67 @@ def _judged_distribution_stmt(criteria: OperationalCriteria) -> Select[Any]:
 
 def _candidate_lease_epochs_stmt(criteria: OperationalCriteria) -> Select[Any]:
     """Every deduped ``(chunk_id, epoch, minted_at)`` (A7) whose chunk matches ``source``
-    and whose mint falls in the window — the attempts D5 must resolve a node for. The
-    graph filter is not pushed here: a failed attempt carries no graph of its own, so it
-    is applied in Python once D5 has derived one (see :func:`_attempt_failures`)."""
-    t = s.lease_facts
-    stmt = _lease_min_stmt()
+    and whose *deduped* mint falls in the window — filtered after the A7 dedup via the
+    subquery wrap below, not before it, so the window can't pick a different duplicate as
+    "earliest mint" than the dedupe alone would (review round 1 F11). The graph filter is
+    not pushed here: it applies once D5 has derived a failed attempt's own graph."""
+    sub = _lease_min_stmt().subquery()
+    stmt = select(sub.c.chunk_id, sub.c.epoch, sub.c.minted_at)
     if criteria.source is not None:
-        stmt = stmt.where(t.c.chunk_id.in_(_source_chunks_stmt(criteria.source)))
+        stmt = stmt.where(sub.c.chunk_id.in_(_source_chunks_stmt(criteria.source)))
     if criteria.since is not None:
-        stmt = stmt.where(t.c.minted_at >= criteria.since)
+        stmt = stmt.where(sub.c.minted_at >= criteria.since)
     if criteria.until is not None:
-        stmt = stmt.where(t.c.minted_at < criteria.until)
+        stmt = stmt.where(sub.c.minted_at < criteria.until)
     return stmt
 
 
-def _chunk_transitions_stmt(chunk_ids: Sequence[str]) -> Select[Any]:
-    """Every transition ever recorded for ``chunk_ids`` — unfiltered by ``criteria``'s
-    own window/graph: D5 resolves a failed attempt's node from whatever movement came
-    before it, which can predate the window a caller asked about."""
+def _candidate_chunk_ids_stmt(criteria: OperationalCriteria) -> Select[Any]:
+    """The candidate lease epochs' own distinct chunk ids, as a correlated subquery
+    rather than a materialized id list (review round 1 F8) — avoids binding one host
+    parameter per id, unbounded by a caller's window with no `since`/`until`."""
+    sub = _candidate_lease_epochs_stmt(criteria).subquery()
+    return select(sub.c.chunk_id.distinct())
+
+
+def _chunk_max_lease_epoch_stmt(criteria: OperationalCriteria) -> Select[Any]:
+    """Each candidate chunk's own newest lease epoch, deliberately unwindowed by
+    ``criteria`` (review round 1 F1) — a lease minted after ``until`` (or before
+    ``since``) still proves an in-window candidate epoch is not yet superseded, so
+    whether it is over cannot itself be decided from inside the window."""
+    t = s.lease_facts
+    stmt = select(t.c.chunk_id, func.max(t.c.epoch).label("max_epoch"))
+    return stmt.where(t.c.chunk_id.in_(_candidate_chunk_ids_stmt(criteria))).group_by(t.c.chunk_id)
+
+
+def _chunk_transitions_stmt(criteria: OperationalCriteria) -> Select[Any]:
+    """Every transition ever recorded for a candidate chunk — unfiltered by
+    ``criteria``'s own window/graph: D5 resolves a failed attempt's node from whatever
+    movement came before it, which can predate the window a caller asked about."""
     t = s.transitions
-    return select(t.c.chunk_id, t.c.epoch, t.c.to_node_id, t.c.graph_id).where(t.c.chunk_id.in_(chunk_ids))
+    cols = (t.c.chunk_id, t.c.epoch, t.c.transition_id, t.c.from_node_id, t.c.to_node_id, t.c.graph_id, t.c.recorded_at)
+    return select(*cols).where(t.c.chunk_id.in_(_candidate_chunk_ids_stmt(criteria)))
 
 
-def _chunk_migrations_stmt(chunk_ids: Sequence[str]) -> Select[Any]:
+def _chunk_migrations_stmt(criteria: OperationalCriteria) -> Select[Any]:
     m = s.chunk_migrations
-    return select(m.c.chunk_id, m.c.epoch, m.c.landed_node_id, m.c.to_graph_id).where(m.c.chunk_id.in_(chunk_ids))
+    cols = (m.c.chunk_id, m.c.epoch, m.c.migration_id, m.c.landed_node_id, m.c.to_graph_id, m.c.recorded_at)
+    return select(*cols).where(m.c.chunk_id.in_(_candidate_chunk_ids_stmt(criteria)))
 
 
-def _chunk_bounces_stmt(chunk_ids: Sequence[str]) -> Select[Any]:
+def _chunk_bounces_stmt(criteria: OperationalCriteria) -> Select[Any]:
     b = s.chunk_bounces
-    return select(b.c.chunk_id, b.c.epoch).where(b.c.chunk_id.in_(chunk_ids))
+    return select(b.c.chunk_id, b.c.epoch).where(b.c.chunk_id.in_(_candidate_chunk_ids_stmt(criteria)))
 
 
-def _chunks_graph_stmt(chunk_ids: Sequence[str]) -> Select[Any]:
+def _chunks_graph_stmt(criteria: OperationalCriteria) -> Select[Any]:
     c = s.chunks
-    return select(c.c.chunk_id, c.c.graph_id).where(c.c.chunk_id.in_(chunk_ids))
+    return select(c.c.chunk_id, c.c.graph_id).where(c.c.chunk_id.in_(_candidate_chunk_ids_stmt(criteria)))
 
 
 def _graph_entry_nodes_stmt(graph_ids: Sequence[str]) -> Select[Any]:
     g = s.graphs
     return select(g.c.graph_id, g.c.entry_node_id).where(g.c.graph_id.in_(graph_ids))
-
-
-def _attempt_failures(
-    lease_rows: Sequence[Any],
-    transition_rows: Sequence[Any],
-    migration_rows: Sequence[Any],
-    bounce_rows: Sequence[Any],
-    chunk_graph_rows: Sequence[Any],
-    graph_entry_rows: Sequence[Any],
-    graph_id_filter: str | None,
-) -> dict[str, int]:
-    """D5: derive and count a node for every lease epoch with neither a transition nor a
-    migration (a ``chunk_bounces`` epoch is excluded outright, D4) — the destination of
-    the chunk's latest movement below that epoch, or the pinned graph's own entry node
-    when there is none. That fallback is exact only because a chunk with zero movements
-    has never migrated (a migration is itself a movement), so its graph pin is its first."""
-    transitions_by_chunk: dict[str, list[tuple[int, str, str]]] = {}
-    for row in transition_rows:
-        transitions_by_chunk.setdefault(row.chunk_id, []).append((row.epoch, row.to_node_id, row.graph_id))
-    migrations_by_chunk: dict[str, list[tuple[int, str, str]]] = {}
-    for row in migration_rows:
-        migrations_by_chunk.setdefault(row.chunk_id, []).append((row.epoch, row.landed_node_id, row.to_graph_id))
-    resolved_epochs_by_chunk: dict[str, set[int]] = {}
-    for row in transition_rows:
-        resolved_epochs_by_chunk.setdefault(row.chunk_id, set()).add(row.epoch)
-    for row in migration_rows:
-        resolved_epochs_by_chunk.setdefault(row.chunk_id, set()).add(row.epoch)
-    bounced_epochs_by_chunk: dict[str, set[int]] = {}
-    for row in bounce_rows:
-        bounced_epochs_by_chunk.setdefault(row.chunk_id, set()).add(row.epoch)
-    chunk_graph: dict[str, str] = {row.chunk_id: row.graph_id for row in chunk_graph_rows}
-    graph_entry_node: dict[str, str] = {row.graph_id: row.entry_node_id for row in graph_entry_rows}
-
-    failures: dict[str, int] = {}
-    for row in lease_rows:
-        chunk_id, epoch = row.chunk_id, row.epoch
-        if epoch in bounced_epochs_by_chunk.get(chunk_id, ()):
-            continue
-        if epoch in resolved_epochs_by_chunk.get(chunk_id, ()):
-            continue
-        movements = [(e, node, graph) for e, node, graph in transitions_by_chunk.get(chunk_id, []) if e < epoch]
-        movements += [(e, node, graph) for e, node, graph in migrations_by_chunk.get(chunk_id, []) if e < epoch]
-        if movements:
-            _, node_id, graph_id = max(movements, key=lambda m: m[0])
-        else:
-            graph_id = chunk_graph[chunk_id]
-            node_id = graph_entry_node[graph_id]
-        if graph_id_filter is not None and graph_id != graph_id_filter:
-            continue
-        failures[node_id] = failures.get(node_id, 0) + 1
-    return failures
 
 
 class AnalyticsOperationalStore:
@@ -289,14 +254,20 @@ class AnalyticsOperationalStore:
         self._engine = engine
 
     def durations_by_node(self, criteria: OperationalCriteria) -> list[DurationStats]:
-        with self._engine.connect() as conn:
-            rows = conn.execute(_duration_rows_stmt(criteria)).all()
-        return _duration_stats(rows, key="node")
+        rows = self._step_durations(criteria)
+        return summarize_durations(rows, key="node")
 
     def durations_by_graph(self, criteria: OperationalCriteria) -> list[DurationStats]:
+        rows = self._step_durations(criteria)
+        return summarize_durations(rows, key="graph")
+
+    def _step_durations(self, criteria: OperationalCriteria):  # type: ignore[no-untyped-def]
         with self._engine.connect() as conn:
-            rows = conn.execute(_duration_rows_stmt(criteria)).all()
-        return _duration_stats(rows, key="graph")
+            transition_rows = conn.execute(_duration_rows_stmt(criteria)).all()
+            lease_rows = conn.execute(_lease_min_stmt()).all()
+        transitions = [_to_transition_movement(r) for r in transition_rows]
+        lease_min_by_epoch = {(r.chunk_id, r.epoch): r.minted_at for r in lease_rows}
+        return fold_step_durations(transitions, lease_min_by_epoch)
 
     def spend_by_node(self, criteria: OperationalCriteria) -> list[SpendStats]:
         with self._engine.connect() as conn:
@@ -315,31 +286,42 @@ class AnalyticsOperationalStore:
             rows = conn.execute(_spend_by_chunk_stmt(criteria, cursor=cursor, limit=limit)).all()
         page_rows = rows[:limit]
         next_cursor = page_rows[-1].key if len(rows) > limit else None
-        return ChunkSpendPage(records=[_to_chunk_spend_record(row) for row in page_rows], next_cursor=next_cursor)
+        return ChunkSpendPage(records=[_to_spend_stats(row) for row in page_rows], next_cursor=next_cursor)
 
     def outcomes_by_node(self, criteria: OperationalCriteria) -> list[OutcomeStats]:
         with self._engine.connect() as conn:
             judged_rows = conn.execute(_judged_distribution_stmt(criteria)).all()
             lease_rows = conn.execute(_candidate_lease_epochs_stmt(criteria)).all()
-            chunk_ids = sorted({row.chunk_id for row in lease_rows})
-            transition_rows = conn.execute(_chunk_transitions_stmt(chunk_ids)).all() if chunk_ids else []
-            migration_rows = conn.execute(_chunk_migrations_stmt(chunk_ids)).all() if chunk_ids else []
-            bounce_rows = conn.execute(_chunk_bounces_stmt(chunk_ids)).all() if chunk_ids else []
-            chunk_graph_rows = conn.execute(_chunks_graph_stmt(chunk_ids)).all() if chunk_ids else []
+            max_epoch_rows = conn.execute(_chunk_max_lease_epoch_stmt(criteria)).all()
+            transition_rows = conn.execute(_chunk_transitions_stmt(criteria)).all()
+            migration_rows = conn.execute(_chunk_migrations_stmt(criteria)).all()
+            bounce_rows = conn.execute(_chunk_bounces_stmt(criteria)).all()
+            chunk_graph_rows = conn.execute(_chunks_graph_stmt(criteria)).all()
             graph_ids = sorted({row.graph_id for row in chunk_graph_rows} | {row.to_graph_id for row in migration_rows})
             graph_entry_rows = conn.execute(_graph_entry_nodes_stmt(graph_ids)).all() if graph_ids else []
 
         judged: dict[str, dict[str, int]] = {}
         for row in judged_rows:
             judged.setdefault(row.from_node_id, {})[row.choice_name] = row.occurrences
-        failures = _attempt_failures(
-            lease_rows,
-            transition_rows,
-            migration_rows,
-            bounce_rows,
-            chunk_graph_rows,
-            graph_entry_rows,
-            criteria.graph_id,
+        failures = resolve_attempt_failures(
+            lease_epochs=[LeaseEpoch(chunk_id=r.chunk_id, epoch=r.epoch, minted_at=r.minted_at) for r in lease_rows],
+            transitions=[_to_transition_movement(r) for r in transition_rows],
+            migrations=[
+                MigrationMovement(
+                    chunk_id=r.chunk_id,
+                    epoch=r.epoch,
+                    migration_id=r.migration_id,
+                    landed_node_id=r.landed_node_id,
+                    to_graph_id=r.to_graph_id,
+                    recorded_at=r.recorded_at,
+                )
+                for r in migration_rows
+            ],
+            bounced=[(r.chunk_id, r.epoch) for r in bounce_rows],
+            chunk_graph={r.chunk_id: r.graph_id for r in chunk_graph_rows},
+            chunk_max_lease_epoch={r.chunk_id: r.max_epoch for r in max_epoch_rows},
+            graph_entry_node={r.graph_id: r.entry_node_id for r in graph_entry_rows},
+            graph_id_filter=criteria.graph_id,
         )
         nodes = set(judged) | set(failures)
         return [

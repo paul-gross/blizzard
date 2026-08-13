@@ -460,7 +460,7 @@
         "type": "object"
       },
       "AnalyticsOutcomeView": {
-        "description": "One node's judged-choice distribution and attempt-failure count (blizzard#256 D4)\n\u2014 two distinct quantities, never blended: a judged failure edge consumes no retry\nbudget, while a crash, verdict-less exit, or reap does. A delivery kick-back\n(``chunk_bounces``) counts as neither.",
+        "description": "One node's judged-choice distribution and attempt-failure count (blizzard#256 D4),\nnever blended \u2014 a judged failure consumes no retry budget, an ended attempt does; a\nkick-back counts as neither. The two counts' differing time windows are documented in\n``docs/deployment.md`` (review round 1 F10).",
         "properties": {
           "attempt_failures": {
             "title": "Attempt Failures",

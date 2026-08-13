@@ -24,7 +24,6 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.analytics.operational import (
-    ChunkSpendRecord,
     DurationStats,
     IReadOperationalAnalytics,
     OperationalCriteria,
@@ -150,17 +149,21 @@ class EventScopeFilters:
         node_id: str | None = None,
     ) -> EventQueryCriteria:
         """A route passes exactly the narrowing filters it exposes; one it does not
-        offer goes unnamed here, rather than named as an explicit ``None``."""
+        offer goes unnamed here, rather than named as an explicit ``None``. Built off
+        :meth:`ScopeFilters.criteria`'s own normalization rather than re-deriving it
+        (review round 1 F13) — the D7 split's byte-identical-spec constraint binds the
+        parameter declarations, not this conversion."""
+        scope = self.scope.criteria()
         return EventQueryCriteria(
             extractor_version=self.extractor_version or EXTRACTOR_VERSION,
             kind=kind,
             tool=tool,
             subject_prefix=subject_prefix,
             node_id=node_id,
-            graph_id=self.scope.graph_id,
-            source=self.scope.source,
-            since=as_utc(self.scope.since) if self.scope.since is not None else None,
-            until=as_utc(self.scope.until) if self.scope.until is not None else None,
+            graph_id=scope.graph_id,
+            source=scope.source,
+            since=scope.since,
+            until=scope.until,
         )
 
 
@@ -401,9 +404,9 @@ def spend_by_graph(
     return _spend_response(services.operational_analytics.spend_by_graph(scope.criteria()))
 
 
-def _chunk_spend_view(record: ChunkSpendRecord) -> AnalyticsChunkSpendView:
+def _chunk_spend_view(record: SpendStats) -> AnalyticsChunkSpendView:
     return AnalyticsChunkSpendView(
-        chunk_id=record.chunk_id,
+        chunk_id=record.key,
         input_tokens=record.input_tokens,
         output_tokens=record.output_tokens,
         cache_read_tokens=record.cache_read_tokens,

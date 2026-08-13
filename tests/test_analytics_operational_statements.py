@@ -39,10 +39,12 @@ def _executed_statements() -> dict[str, ClauseElement]:
         "_spend_by_chunk_stmt": m._spend_by_chunk_stmt(_CRITERIA, cursor="ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B", limit=200),
         "_judged_distribution_stmt": m._judged_distribution_stmt(_CRITERIA),
         "_candidate_lease_epochs_stmt": m._candidate_lease_epochs_stmt(_CRITERIA),
-        "_chunk_transitions_stmt": m._chunk_transitions_stmt(["ch_1"]),
-        "_chunk_migrations_stmt": m._chunk_migrations_stmt(["ch_1"]),
-        "_chunk_bounces_stmt": m._chunk_bounces_stmt(["ch_1"]),
-        "_chunks_graph_stmt": m._chunks_graph_stmt(["ch_1"]),
+        "_candidate_chunk_ids_stmt": m._candidate_chunk_ids_stmt(_CRITERIA),
+        "_chunk_max_lease_epoch_stmt": m._chunk_max_lease_epoch_stmt(_CRITERIA),
+        "_chunk_transitions_stmt": m._chunk_transitions_stmt(_CRITERIA),
+        "_chunk_migrations_stmt": m._chunk_migrations_stmt(_CRITERIA),
+        "_chunk_bounces_stmt": m._chunk_bounces_stmt(_CRITERIA),
+        "_chunks_graph_stmt": m._chunks_graph_stmt(_CRITERIA),
         "_graph_entry_nodes_stmt": m._graph_entry_nodes_stmt(["gr_1"]),
     }
 
@@ -73,8 +75,8 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
         for node in ast.walk(source)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "execute"
     ]
-    # 2 durations + 3 spend + outcomes' own 7-query fan-out — one `.execute()` site each.
-    assert len(executed) == 12
+    # 2 durations + 3 spend + outcomes' own 8-query fan-out — one `.execute()` site each.
+    assert len(executed) == 13
     for arg in executed:
         built_by_a_builder = (
             isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name) and arg.func.id.endswith("_stmt")

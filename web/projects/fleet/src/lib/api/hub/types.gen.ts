@@ -296,10 +296,10 @@ export type AnalyticsEventsResponse = {
 /**
  * AnalyticsOutcomeView
  *
- * One node's judged-choice distribution and attempt-failure count (blizzard#256 D4)
- * — two distinct quantities, never blended: a judged failure edge consumes no retry
- * budget, while a crash, verdict-less exit, or reap does. A delivery kick-back
- * (``chunk_bounces``) counts as neither.
+ * One node's judged-choice distribution and attempt-failure count (blizzard#256 D4),
+ * never blended — a judged failure consumes no retry budget, an ended attempt does; a
+ * kick-back counts as neither. The two counts' differing time windows are documented in
+ * ``docs/deployment.md`` (review round 1 F10).
  */
 export type AnalyticsOutcomeView = {
     /**
