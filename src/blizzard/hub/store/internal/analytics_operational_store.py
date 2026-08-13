@@ -1,16 +1,9 @@
 """SQLAlchemy adapter for the operational analytics query seam (package-private,
-blizzard#256).
-
-Reads ``transitions``, ``lease_facts``, ``usage_facts``, and ``chunk_migrations``
-directly — the same tables :mod:`chunk_store` writes — rather than depending on that
-adapter: two ``internal/`` adapters sharing one engine and schema module is established,
-not a coupling between them (see :mod:`analytics_event_query_store`'s own docstring for
-the precedent). All ``sqlalchemy`` usage stays confined here (``bzh:dependency-inversion``).
-
-Filtering and joining stay on the portable SQL surface (``bzh:sql-portable``); the
-datetime arithmetic a duration needs has no dialect-independent SQL form in this
-codebase's established style (:mod:`analytics_event_query_store` avoids it too), so a
-duration's own subtraction happens in Python, once per matching row."""
+blizzard#256). Reads ``transitions``/``lease_facts``/``usage_facts``/``chunk_migrations``
+directly, the same tables :mod:`chunk_store` writes — two ``internal/`` adapters sharing
+one engine is established, not a coupling (see :mod:`analytics_event_query_store`).
+Filtering stays portable SQL (``bzh:sql-portable``); a duration's datetime subtraction has
+no dialect-independent SQL form here, so it happens in Python instead."""
 
 from __future__ import annotations
 
@@ -247,14 +240,11 @@ def _attempt_failures(
     graph_entry_rows: Sequence[Any],
     graph_id_filter: str | None,
 ) -> dict[str, int]:
-    """D5: derive a node for every lease epoch that produced neither a transition nor a
-    migration — the crashes, verdict-less exits, and reaps that consume a node's retry
-    budget — and count them per node. A ``chunk_bounces`` epoch is excluded outright
-    (D4: contention, not failure). The derived node is the destination of the chunk's
-    latest movement below that epoch — a transition's ``to_node_id`` or a migration's
-    ``landed_node_id`` — or the chunk's pinned graph's own entry node when there is none;
-    that fallback is exact only because a chunk with zero movements has never migrated
-    (a migration is itself a movement), so its current graph pin is still its first."""
+    """D5: derive and count a node for every lease epoch with neither a transition nor a
+    migration (a ``chunk_bounces`` epoch is excluded outright, D4) — the destination of
+    the chunk's latest movement below that epoch, or the pinned graph's own entry node
+    when there is none. That fallback is exact only because a chunk with zero movements
+    has never migrated (a migration is itself a movement), so its graph pin is its first."""
     transitions_by_chunk: dict[str, list[tuple[int, str, str]]] = {}
     for row in transition_rows:
         transitions_by_chunk.setdefault(row.chunk_id, []).append((row.epoch, row.to_node_id, row.graph_id))

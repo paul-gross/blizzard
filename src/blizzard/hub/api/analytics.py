@@ -1,10 +1,9 @@
-"""Analytics operator-plane routes: a forced re-derive (blizzard#254 D7) over the
-standing sweep's own per-segment replacement unit, the read-only events/counts surfaces
-(blizzard#255) over the derived projection, and the operational datasets (blizzard#256)
-— durations, spend, outcomes — over facts the hub already holds. Reads gate on
+"""Analytics operator-plane routes: a forced re-derive (blizzard#254 D7), the read-only
+events/counts surfaces (blizzard#255) over the derived projection, and the operational
+datasets (blizzard#256) over facts the hub already holds. Reads gate on
 :data:`~blizzard.auth_core.TRANSCRIPT_READ`; ``/re-derive`` alone on the mutating
-:data:`~blizzard.auth_core.ANALYTICS_ADMIN`, per-route rather than router-wide
-(blizzard#255 D2). Operator-plane, never ``/api/fleet/...``."""
+:data:`~blizzard.auth_core.ANALYTICS_ADMIN`, per-route (blizzard#255 D2). Operator-plane,
+never ``/api/fleet/...``."""
 
 from __future__ import annotations
 
@@ -93,10 +92,9 @@ def re_derive(request: ReDeriveRequest, services: Annotated[HubServices, Depends
 @dataclass(frozen=True)
 class ScopeFilters:
     """The filter block every analytics route exposes — which work the read covers and
-    over which window (blizzard#256 D7). Shared by the events/counts routes and the
-    operational datasets alike; a route wanting the derived-event projection's own
-    ``extractor_version`` composes :class:`EventScopeFilters` on top rather than this
-    carrying a field only one projection means anything to."""
+    over which window (blizzard#256 D7). A route wanting the derived-event projection's
+    own ``extractor_version`` composes :class:`EventScopeFilters` on top rather than
+    this carrying a field only one projection means anything to."""
 
     graph_id: str | None
     source: str | None
@@ -125,10 +123,9 @@ class ScopeFilters:
 @dataclass(frozen=True)
 class EventScopeFilters:
     """:class:`ScopeFilters` plus ``extractor_version`` — meaningless outside the
-    derived-event projection (blizzard#256 D7), so it stays off the shared block and
-    composes on top of it here instead. Takes its five query params flat, rather than
-    nesting a ``Depends(ScopeFilters.of)``, so FastAPI's per-dependant param ordering
-    reproduces the pre-split parameter order byte-for-byte (P1's zero-spec-diff bar)."""
+    derived-event projection (blizzard#256 D7). Takes its five query params flat rather
+    than nesting a ``Depends(ScopeFilters.of)``, so FastAPI's per-dependant param
+    ordering reproduces the pre-split parameter order byte-for-byte."""
 
     scope: ScopeFilters
     extractor_version: str | None
@@ -332,11 +329,7 @@ def counts_by_node(
     return _counts_response(services.analytics_events.counts_by_node(criteria))
 
 
-# --- operational datasets: durations, spend, outcomes (blizzard#256) ---------------
-# Grouped by node or by graph, bounded by the graph's size (D8): the same single-envelope
-# JSON shape the counts routes use, no cursor, no NDJSON variant. Per-chunk spend is the
-# one exception — unbounded in a wide window, so it takes the cursor-paged JSON plus
-# NDJSON shape `/events` uses instead.
+# --- operational datasets: durations, spend, outcomes (blizzard#256 D8) -----------
 
 
 def _durations_response(stats: list[DurationStats]) -> AnalyticsDurationsResponse:

@@ -282,7 +282,7 @@
         "type": "object"
       },
       "AnalyticsDurationView": {
-        "description": "One grouping key's step-duration rollup (blizzard#256 D2/D3) \u2014 ``key`` is a node\nid or a graph id, whichever dataset served it. The seconds fields are hub-observed\nwall-clock latency, named that way because a runner-measured instant is not what a\ncaller gets \u2014 a store-and-forward flush after a disconnect compresses the interval,\nand a gate or ask parks a step's clock running while a human is elsewhere (D3).",
+        "description": "One grouping key's step-duration rollup (blizzard#256 D2/D3) \u2014 ``key`` is a node\nid or a graph id, whichever dataset served it. The seconds fields are hub-observed\nwall-clock latency, not a runner-measured instant: a store-and-forward flush or a\nparked gate/ask both stretch it past the step's actual work time (D3).",
         "properties": {
           "avg_seconds": {
             "title": "Avg Seconds",
@@ -460,7 +460,7 @@
         "type": "object"
       },
       "AnalyticsOutcomeView": {
-        "description": "One node's judged-choice distribution and attempt-failure count (blizzard#256 D4)\n\u2014 two distinct quantities, never blended. ``choice_counts`` is the judged\ndistribution (a judged failure edge consumes no retry budget); ``attempt_failures``\nis the count of attempts that ended with no transition at all \u2014 the crashes,\nverdict-less exits, and reaps that do consume it. A delivery kick-back\n(``chunk_bounces``) contributes to neither.",
+        "description": "One node's judged-choice distribution and attempt-failure count (blizzard#256 D4)\n\u2014 two distinct quantities, never blended: a judged failure edge consumes no retry\nbudget, while a crash, verdict-less exit, or reap does. A delivery kick-back\n(``chunk_bounces``) counts as neither.",
         "properties": {
           "attempt_failures": {
             "title": "Attempt Failures",

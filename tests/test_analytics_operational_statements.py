@@ -61,10 +61,9 @@ def test_no_statement_the_store_executes_leaves_the_portable_surface() -> None:
 
 
 def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> None:
-    """Every ``_stmt`` builder has a compile-test entry (whether or not it is itself the
-    direct argument of a ``.execute()`` call — a shared piece like ``_spend_group_stmt``
-    is worth compiling too), and every actual ``.execute()`` call site in the module is
-    built by one of them — no inline, unbuilt statement bypasses the sweep."""
+    """Every ``_stmt`` builder has a compile-test entry, even a shared piece never itself
+    the direct ``.execute()`` argument, and every actual call site is built by one of
+    them — no inline, unbuilt statement bypasses the sweep."""
     builders = {name for name in vars(store_module) if name.endswith("_stmt")}
     assert builders == set(_executed_statements())
 
@@ -74,9 +73,7 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
         for node in ast.walk(source)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "execute"
     ]
-    # durations_by_node/graph, spend_by_node/graph/chunk, and outcomes_by_node's own
-    # seven-query fan-out (judged, leases, transitions, migrations, bounces, chunk
-    # graphs, graph entries) — one `.execute()` site each.
+    # 2 durations + 3 spend + outcomes' own 7-query fan-out — one `.execute()` site each.
     assert len(executed) == 12
     for arg in executed:
         built_by_a_builder = (

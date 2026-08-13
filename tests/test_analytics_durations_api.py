@@ -20,10 +20,8 @@ pytestmark = pytest.mark.component
 #: Every route this module holds to the auth triad — one list, three sweeps over it.
 _ROUTES = ["/api/analytics/durations/nodes", "/api/analytics/durations/graphs"]
 
-#: Named to match the packaged default graph's own name (`src/blizzard/hub/graphs/default/graph.yaml`)
-#: so `POST /api/chunks` mints onto *this* graph instead of freshly minting the packaged
-#: one — `GraphMintService.ensure_default` is idempotent by name, established by
-#: `tests/test_chunk_detail_aggregate.py`.
+#: Named to match the packaged default graph's own name, so `POST /api/chunks` mints
+#: onto *this* graph — `GraphMintService.ensure_default` is idempotent by name.
 _GRAPH_YAML = """
 name: default-delivery
 entry: build
@@ -180,10 +178,9 @@ def test_an_attempt_with_no_transition_contributes_no_duration(tmp_path: Path) -
 
 
 def test_a_duplicate_lease_row_does_not_fan_out_the_join(tmp_path: Path) -> None:
-    """A7: ``record_lease`` is a bare insert with no unique constraint on
-    ``(chunk_id, epoch)`` — a runner retrying its own ``lease.minted`` report at the same
-    epoch must not double the step this join sees, nor drift its duration off the
-    earliest mint."""
+    """A7: ``record_lease`` is a bare insert with no unique constraint, so a retried
+    ``lease.minted`` report must not double the step this join sees, nor drift its
+    duration off the earliest mint."""
     hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)

@@ -1,11 +1,7 @@
 """The operational analytics query seam (blizzard#256) — durations, spend, and outcomes
-derived at query time (D1, ``bzh:facts-not-status``) over facts the hub already holds:
-``transitions``, ``lease_facts``, ``usage_facts``, and ``chunk_migrations``.
-
-New, not an extension of :mod:`queries` (``bzh:controller-read-only``): that module's
-``IReadAnalyticsEventQueries`` reads the derived-event projection alone, never a
-transition or a usage fact. The routes (Phase 2-4) depend on this Protocol only; no
-write repository backs them."""
+derived at query time (D1, ``bzh:facts-not-status``) over facts the hub already holds.
+New, not an extension of :mod:`queries` (``bzh:controller-read-only``): that module reads
+the derived-event projection alone, never a transition or a usage fact."""
 
 from __future__ import annotations
 
@@ -29,10 +25,9 @@ class OperationalCriteria:
 @dataclass(frozen=True)
 class DurationStats:
     """One grouping key's step-duration rollup (D2/D3) — ``key`` is a node id or a graph
-    id, whichever route served it. ``avg_seconds`` is undefined (0.0) when
-    ``completed_steps`` is zero, which never happens: a key with zero completed steps
-    never appears in the result at all, so no caller divides by zero. The seconds are the
-    hub-observed wall-clock latency D3 names, not a runner-measured one."""
+    id, whichever route served it. A key with zero completed steps never appears, so
+    ``avg_seconds`` never divides by zero. Hub-observed wall-clock latency (D3), not a
+    runner-measured one."""
 
     key: str
     completed_steps: int
@@ -83,10 +78,9 @@ class ChunkSpendPage:
 @dataclass(frozen=True)
 class OutcomeStats:
     """One node's judged-choice distribution and attempt-failure count (D4) — two
-    distinct quantities, never blended. ``choice_counts`` is the judged distribution (a
-    judged failure edge consumes no retry budget); ``attempt_failures`` is the count of
-    attempts that ended with no transition at all — the crashes, verdict-less exits, and
-    reaps that do consume it. ``chunk_bounces`` contributes to neither (D4)."""
+    distinct quantities, never blended: a judged failure edge consumes no retry budget,
+    while a crash, verdict-less exit, or reap does. A delivery kick-back
+    (``chunk_bounces``) counts as neither."""
 
     node_id: str
     choice_counts: dict[str, int]

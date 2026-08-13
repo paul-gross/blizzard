@@ -177,9 +177,8 @@ export type AnalyticsCountsResponse = {
  *
  * One grouping key's step-duration rollup (blizzard#256 D2/D3) — ``key`` is a node
  * id or a graph id, whichever dataset served it. The seconds fields are hub-observed
- * wall-clock latency, named that way because a runner-measured instant is not what a
- * caller gets — a store-and-forward flush after a disconnect compresses the interval,
- * and a gate or ask parks a step's clock running while a human is elsewhere (D3).
+ * wall-clock latency, not a runner-measured instant: a store-and-forward flush or a
+ * parked gate/ask both stretch it past the step's actual work time (D3).
  */
 export type AnalyticsDurationView = {
     /**
@@ -298,11 +297,9 @@ export type AnalyticsEventsResponse = {
  * AnalyticsOutcomeView
  *
  * One node's judged-choice distribution and attempt-failure count (blizzard#256 D4)
- * — two distinct quantities, never blended. ``choice_counts`` is the judged
- * distribution (a judged failure edge consumes no retry budget); ``attempt_failures``
- * is the count of attempts that ended with no transition at all — the crashes,
- * verdict-less exits, and reaps that do consume it. A delivery kick-back
- * (``chunk_bounces``) contributes to neither.
+ * — two distinct quantities, never blended: a judged failure edge consumes no retry
+ * budget, while a crash, verdict-less exit, or reap does. A delivery kick-back
+ * (``chunk_bounces``) counts as neither.
  */
 export type AnalyticsOutcomeView = {
     /**

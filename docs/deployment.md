@@ -1572,6 +1572,37 @@ next tick — never a `--dir` verb, and the hub is never stopped for it. It requ
 `admin`+ (`analytics:admin`), since it mutates, unlike the read-only `transcript:read`
 grant the segment routes above are gated on.
 
+### The operational datasets — durations, spend, outcomes (blizzard#256)
+
+Alongside the derived event stream, the same namespace exports the fleet's operational
+numbers as read-shaped datasets: step durations, tokens and spend, and node failure/retry
+outcomes — the numbers already computable from board-serving reads, reshaped for bulk
+export rather than a per-chunk detail view. No new facts are stored; every dataset is
+derived at read time from `transitions`, `lease_facts`, `usage_facts`, and
+`chunk_migrations`.
+
+```
+GET /api/analytics/durations/nodes   GET /api/analytics/durations/graphs
+GET /api/analytics/spend/nodes       GET /api/analytics/spend/graphs
+GET /api/analytics/spend/chunks      GET /api/analytics/spend/chunks/ndjson
+GET /api/analytics/outcomes/nodes
+```
+
+Every route shares the same `graph_id` / `source` / `since` / `until` filter vocabulary
+the events/counts routes above use, and the same `transcript:read` gate — no separate
+grant, and strictly narrower than the `fleet:view` gate the same spend numbers already
+sit behind on the board. Per-node and per-graph groupings return one bounded JSON
+envelope, same as the counts routes; per-chunk spend is unbounded in a wide window, so it
+takes the same cursor-paged JSON plus NDJSON shape `/events` uses. Field-by-field shapes
+are the committed `openapi/hub.openapi.json`'s own record — the wire models that generate
+it are each dataset's one prose home, not restated here.
+
+Two callouts worth an operator's attention rather than a field's own doc comment: a
+duration is hub-observed wall-clock time, not runner-measured, so a parked gate or ask
+stretches it past a step's actual work time; and outcomes reports a judged-choice
+distribution and a retry-consuming attempt-failure count as two separate numbers, never
+one blended failure rate — a delivery kick-back counts as neither.
+
 ## Operational visibility — the event log
 
 The failures that cost the most are the least visible: a worker that exits without recording a
