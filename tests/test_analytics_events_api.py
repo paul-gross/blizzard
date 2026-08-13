@@ -18,6 +18,16 @@ from tests.test_fleet_auth import _seed_enrolled
 
 pytestmark = pytest.mark.component
 
+#: Every route this module holds to the auth triad — one list, three sweeps over it.
+_ROUTES = [
+    "/api/analytics/events",
+    "/api/analytics/events/ndjson",
+    "/api/analytics/counts/files",
+    "/api/analytics/counts/skills",
+    "/api/analytics/counts/agent-types",
+    "/api/analytics/counts/nodes",
+]
+
 
 def _cookie(token: str) -> dict[str, str]:
     return {"Cookie": f"bz_session={token}"}
@@ -94,34 +104,14 @@ def _seeded_hub(tmp_path: Path):  # type: ignore[no-untyped-def]
 # --- auth triad: 401 / 403 / 200, plus the runner-principal refusal ---------------
 
 
-@pytest.mark.parametrize(
-    "path",
-    [
-        "/api/analytics/events",
-        "/api/analytics/events/ndjson",
-        "/api/analytics/counts/files",
-        "/api/analytics/counts/skills",
-        "/api/analytics/counts/agent-types",
-        "/api/analytics/counts/nodes",
-    ],
-)
+@pytest.mark.parametrize("path", _ROUTES)
 def test_every_route_is_401_with_no_session(tmp_path: Path, path: str) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
     resp = hub.client.get(path)
     assert resp.status_code == 401
 
 
-@pytest.mark.parametrize(
-    "path",
-    [
-        "/api/analytics/events",
-        "/api/analytics/events/ndjson",
-        "/api/analytics/counts/files",
-        "/api/analytics/counts/skills",
-        "/api/analytics/counts/agent-types",
-        "/api/analytics/counts/nodes",
-    ],
-)
+@pytest.mark.parametrize("path", _ROUTES)
 def test_every_route_is_403_below_transcript_read(tmp_path: Path, path: str) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
     guest = seed_user(hub, username="grace", role=Role.GUEST)
@@ -131,17 +121,7 @@ def test_every_route_is_403_below_transcript_read(tmp_path: Path, path: str) -> 
     assert resp.status_code == 403
 
 
-@pytest.mark.parametrize(
-    "path",
-    [
-        "/api/analytics/events",
-        "/api/analytics/events/ndjson",
-        "/api/analytics/counts/files",
-        "/api/analytics/counts/skills",
-        "/api/analytics/counts/agent-types",
-        "/api/analytics/counts/nodes",
-    ],
-)
+@pytest.mark.parametrize("path", _ROUTES)
 def test_every_route_refuses_a_runner_principal(tmp_path: Path, path: str) -> None:
     token = _seed_enrolled(tmp_path, runner_id="runner-a")
     hub = build_hub(tmp_path, auth_mode="oauth", runner_auth_mode=RUNNER_AUTH_ENFORCE)

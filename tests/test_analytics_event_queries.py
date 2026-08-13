@@ -6,10 +6,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import pytest
-from sqlalchemy import insert
+from sqlalchemy import Engine, insert
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
@@ -17,8 +17,8 @@ from blizzard.hub.domain.analytics.events import TranscriptEvent
 from blizzard.hub.domain.analytics.queries import EventQueryCriteria, MalformedCursor
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal import transcript_event_store as event_store_module
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
+from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 
 pytestmark = pytest.mark.component
 
@@ -56,24 +56,32 @@ def _criteria(**overrides: object) -> EventQueryCriteria:
     return EventQueryCriteria(**values)  # type: ignore[arg-type]
 
 
-def _new_store(tmp_path: Path) -> tuple[AnalyticsEventQueryStore, Any]:
-    """A migrated, empty store plus the writer its tests seed through — the write path is
-    :mod:`transcript_event_store`'s own statement, never ad-hoc SQL."""
+class _Fixture(NamedTuple):
+    """A migrated, empty store, the engine behind it, and the writer its tests seed
+    through — the write path is the event store's own, never ad-hoc SQL."""
+
+    store: AnalyticsEventQueryStore
+    engine: Engine
+    insert_events: Any
+
+
+def _new_store(tmp_path: Path) -> _Fixture:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
     engine = create_engine_from_url(db_url)
+    writer = TranscriptEventStore(engine)
 
     def insert_events(segment_id: str, *events: TranscriptEvent, extractor_version: str = _VERSION) -> None:
-        with engine.begin() as conn:
-            conn.execute(event_store_module._insert_events_stmt(segment_id, extractor_version, list(events)))
+        writer.replace_segment_events(
+            segment_id, extractor_version, list(events), complete=True, content_fingerprint="fp", at=_NOW
+        )
 
-    return AnalyticsEventQueryStore(engine), insert_events
+    return _Fixture(AnalyticsEventQueryStore(engine), engine, insert_events)
 
 
 @pytest.fixture
 def store(tmp_path: Path) -> AnalyticsEventQueryStore:
-    store, insert_events = _new_store(tmp_path)
-    engine = store._engine
+    store, engine, insert_events = _new_store(tmp_path)
     insert_events(
         "sg_1",
         _event(kind="file_read", subject="src/a.py", tool="Read", node_id="nd_build", graph_id="gr_1"),
@@ -186,7 +194,7 @@ def test_time_range_filters_events(store: AnalyticsEventQueryStore) -> None:
 def test_an_untimed_event_falls_outside_every_time_range(tmp_path: Path) -> None:
     """A turn can carry no timestamp at all, and a real fleet's transcripts do: such an
     event is filtered out by a range rather than counted as unbounded, and never errors."""
-    store, insert_events = _new_store(tmp_path)
+    store, _engine, insert_events = _new_store(tmp_path)
     insert_events(
         "sg_1",
         _event(subject="src/untimed.py", occurred_at=None),
@@ -207,7 +215,7 @@ def test_filters_combine(store: AnalyticsEventQueryStore) -> None:
 def test_subject_prefix_treats_like_wildcards_as_literal_characters(tmp_path: Path) -> None:
     """A prefix is a prefix, not a pattern: real paths carry ``_`` constantly, so an
     unescaped LIKE would quietly return files the caller never asked for."""
-    store, insert_events = _new_store(tmp_path)
+    store, _engine, insert_events = _new_store(tmp_path)
     insert_events(
         "sg_1",
         _event(subject="src/a_b.py"),
@@ -224,7 +232,7 @@ def test_subject_prefix_treats_like_wildcards_as_literal_characters(tmp_path: Pa
 def test_subject_prefix_is_case_sensitive(tmp_path: Path) -> None:
     """The same prefix must select the same rows whichever backend serves it, and only
     the case-sensitive reading is available on both."""
-    store, insert_events = _new_store(tmp_path)
+    store, _engine, insert_events = _new_store(tmp_path)
     insert_events("sg_1", _event(subject="src/foo.py"))
 
     assert store.events(_criteria(subject_prefix="SRC/"), limit=_LIMIT).events == []
