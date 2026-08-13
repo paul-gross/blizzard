@@ -1,6 +1,7 @@
 """Analytics operator-plane routes: a forced re-derive (blizzard#254 D7) over the
-standing sweep's own per-segment replacement unit, and the read-only events/counts
-surfaces (blizzard#255) over the derived projection. Reads gate on
+standing sweep's own per-segment replacement unit, the read-only events/counts surfaces
+(blizzard#255) over the derived projection, and the operational datasets (blizzard#256)
+— durations, spend, outcomes — over facts the hub already holds. Reads gate on
 :data:`~blizzard.auth_core.TRANSCRIPT_READ`; ``/re-derive`` alone on the mutating
 :data:`~blizzard.auth_core.ANALYTICS_ADMIN`, per-route rather than router-wide
 (blizzard#255 D2). Operator-plane, never ``/api/fleet/...``."""
@@ -23,7 +24,13 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
-from blizzard.hub.domain.analytics.operational import OperationalCriteria
+from blizzard.hub.domain.analytics.operational import (
+    ChunkSpendRecord,
+    DurationStats,
+    IReadOperationalAnalytics,
+    OperationalCriteria,
+    SpendStats,
+)
 from blizzard.hub.domain.analytics.queries import (
     CountRow,
     EventPage,
@@ -33,10 +40,16 @@ from blizzard.hub.domain.analytics.queries import (
     MalformedCursor,
 )
 from blizzard.wire.analytics import (
+    AnalyticsChunkSpendResponse,
+    AnalyticsChunkSpendView,
     AnalyticsCountsResponse,
     AnalyticsCountView,
+    AnalyticsDurationsResponse,
+    AnalyticsDurationView,
     AnalyticsEventsResponse,
     AnalyticsEventView,
+    AnalyticsSpendResponse,
+    AnalyticsSpendView,
     ReDeriveRequest,
     ReDeriveResponse,
 )
@@ -314,3 +327,147 @@ def counts_by_node(
     ``node_id`` is not offered: it would select a single group, not narrow the count."""
     criteria = scope.criteria(kind=kind, tool=tool, subject_prefix=subject_prefix)
     return _counts_response(services.analytics_events.counts_by_node(criteria))
+
+
+# --- operational datasets: durations, spend, outcomes (blizzard#256) ---------------
+# Grouped by node or by graph, bounded by the graph's size (D8): the same single-envelope
+# JSON shape the counts routes use, no cursor, no NDJSON variant. Per-chunk spend is the
+# one exception — unbounded in a wide window, so it takes the cursor-paged JSON plus
+# NDJSON shape `/events` uses instead.
+
+
+def _durations_response(stats: list[DurationStats]) -> AnalyticsDurationsResponse:
+    return AnalyticsDurationsResponse(
+        durations=[
+            AnalyticsDurationView(
+                key=s.key, completed_steps=s.completed_steps, total_seconds=s.total_seconds, avg_seconds=s.avg_seconds
+            )
+            for s in stats
+        ]
+    )
+
+
+@router.get(
+    "/durations/nodes", response_model=AnalyticsDurationsResponse, dependencies=[Depends(require(TRANSCRIPT_READ))]
+)
+def durations_by_node(
+    services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+) -> AnalyticsDurationsResponse:
+    """Completed-step duration rollups grouped by node (D2) — hub-observed wall-clock
+    latency (D3), never a runner-measured one."""
+    return _durations_response(services.operational_analytics.durations_by_node(scope.criteria()))
+
+
+@router.get(
+    "/durations/graphs", response_model=AnalyticsDurationsResponse, dependencies=[Depends(require(TRANSCRIPT_READ))]
+)
+def durations_by_graph(
+    services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+) -> AnalyticsDurationsResponse:
+    """The same rollup grouped by the graph the step happened in (D2) — the transition's
+    own ``graph_id``, never the chunk's current pin."""
+    return _durations_response(services.operational_analytics.durations_by_graph(scope.criteria()))
+
+
+def _spend_response(stats: list[SpendStats]) -> AnalyticsSpendResponse:
+    return AnalyticsSpendResponse(
+        spend=[
+            AnalyticsSpendView(
+                key=s.key,
+                input_tokens=s.input_tokens,
+                output_tokens=s.output_tokens,
+                cache_read_tokens=s.cache_read_tokens,
+                cache_create_tokens=s.cache_create_tokens,
+                cost_usd=s.cost_usd,
+                cost_partial=s.cost_partial,
+            )
+            for s in stats
+        ]
+    )
+
+
+@router.get("/spend/nodes", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
+def spend_by_node(
+    services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+) -> AnalyticsSpendResponse:
+    """Usage/cost rollups grouped by node (D6) — the same lower-bound + PARTIAL contract
+    ``GET /api/spend`` publishes."""
+    return _spend_response(services.operational_analytics.spend_by_node(scope.criteria()))
+
+
+@router.get("/spend/graphs", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
+def spend_by_graph(
+    services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+) -> AnalyticsSpendResponse:
+    """The same rollup grouped by each usage fact's chunk's *current* graph pin — a
+    chunk that migrated attributes every usage fact it ever recorded to where it lives
+    today (D6)."""
+    return _spend_response(services.operational_analytics.spend_by_graph(scope.criteria()))
+
+
+def _chunk_spend_view(record: ChunkSpendRecord) -> AnalyticsChunkSpendView:
+    return AnalyticsChunkSpendView(
+        chunk_id=record.chunk_id,
+        input_tokens=record.input_tokens,
+        output_tokens=record.output_tokens,
+        cache_read_tokens=record.cache_read_tokens,
+        cache_create_tokens=record.cache_create_tokens,
+        cost_usd=record.cost_usd,
+        cost_partial=record.cost_partial,
+    )
+
+
+def chunk_spend_ndjson_lines(
+    operational: IReadOperationalAnalytics,
+    criteria: OperationalCriteria,
+    *,
+    batch_size: int = _STREAM_BATCH_SIZE,
+) -> Iterator[bytes]:
+    """One line per chunk's spend rollup, read a batch at a time and carrying each
+    batch's cursor into the next — the per-chunk spend dataset's bulk-export encoding,
+    mirroring :func:`ndjson_lines`."""
+    cursor: str | None = None
+    while True:
+        page = operational.spend_by_chunk(criteria, cursor=cursor, limit=batch_size)
+        for record in page.records:
+            yield (_chunk_spend_view(record).model_dump_json() + "\n").encode()
+        if page.next_cursor is None:
+            return
+        cursor = page.next_cursor
+
+
+@router.get(
+    "/spend/chunks", response_model=AnalyticsChunkSpendResponse, dependencies=[Depends(require(TRANSCRIPT_READ))]
+)
+def spend_by_chunk(
+    services: Annotated[HubServices, Depends(get_services)],
+    scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)],
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+) -> AnalyticsChunkSpendResponse:
+    """A bounded, keyset-paginated page of per-chunk spend rollups (D8) — unbounded in a
+    wide window, unlike the per-node/per-graph groupings, so this takes a cursor rather
+    than a single envelope."""
+    try:
+        page = services.operational_analytics.spend_by_chunk(scope.criteria(), cursor=cursor, limit=limit)
+    except MalformedCursor as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+    return AnalyticsChunkSpendResponse(spend=[_chunk_spend_view(r) for r in page.records], next_cursor=page.next_cursor)
+
+
+@router.get(
+    "/spend/chunks/ndjson",
+    dependencies=[Depends(require(TRANSCRIPT_READ))],
+    # Declared, not defaulted: FastAPI's default 200 for a `StreamingResponse` would
+    # claim `application/json` in the spec the TS client is generated from.
+    response_class=StreamingResponse,
+    responses={200: {"content": {"application/x-ndjson": {"schema": {"type": "string"}}}}},
+)
+def stream_chunk_spend(
+    services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+) -> StreamingResponse:
+    """Every chunk's spend rollup matching the same filters as the paginated route,
+    streamed one JSON object per line in the same order."""
+    return StreamingResponse(
+        chunk_spend_ndjson_lines(services.operational_analytics, scope.criteria()), media_type="application/x-ndjson"
+    )

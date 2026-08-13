@@ -172,6 +172,79 @@
         "title": "ActivityView",
         "type": "object"
       },
+      "AnalyticsChunkSpendResponse": {
+        "description": "A bounded page (blizzard#256 D8) \u2014 ``next_cursor`` is ``None`` exactly when this\npage is the last one; a caller drives a full bulk read by following it until absent.",
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "spend": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsChunkSpendView"
+            },
+            "title": "Spend",
+            "type": "array"
+          }
+        },
+        "required": [
+          "spend",
+          "next_cursor"
+        ],
+        "title": "AnalyticsChunkSpendResponse",
+        "type": "object"
+      },
+      "AnalyticsChunkSpendView": {
+        "description": "One chunk's own usage/cost rollup (blizzard#256 D8) \u2014 the per-chunk grouping's\nunbounded, cursor-paged row.",
+        "properties": {
+          "cache_create_tokens": {
+            "title": "Cache Create Tokens",
+            "type": "integer"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "cost_partial": {
+            "title": "Cost Partial",
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "input_tokens",
+          "output_tokens",
+          "cache_read_tokens",
+          "cache_create_tokens",
+          "cost_usd",
+          "cost_partial"
+        ],
+        "title": "AnalyticsChunkSpendView",
+        "type": "object"
+      },
       "AnalyticsCountView": {
         "description": "One grouping key and how many events fell under it (blizzard#255). ``key`` is\nwhichever column the counts endpoint serving it groups by \u2014 a file path, a skill\nname, an agent type, or a node id.",
         "properties": {
@@ -206,6 +279,52 @@
           "counts"
         ],
         "title": "AnalyticsCountsResponse",
+        "type": "object"
+      },
+      "AnalyticsDurationView": {
+        "description": "One grouping key's step-duration rollup (blizzard#256 D2/D3) \u2014 ``key`` is a node\nid or a graph id, whichever dataset served it. The seconds fields are hub-observed\nwall-clock latency, named that way because a runner-measured instant is not what a\ncaller gets \u2014 a store-and-forward flush after a disconnect compresses the interval,\nand a gate or ask parks a step's clock running while a human is elsewhere (D3).",
+        "properties": {
+          "avg_seconds": {
+            "title": "Avg Seconds",
+            "type": "number"
+          },
+          "completed_steps": {
+            "title": "Completed Steps",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "total_seconds": {
+            "title": "Total Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "completed_steps",
+          "total_seconds",
+          "avg_seconds"
+        ],
+        "title": "AnalyticsDurationView",
+        "type": "object"
+      },
+      "AnalyticsDurationsResponse": {
+        "description": "Every grouping key matching the filters, key ascending \u2014 a total order two\nidentical calls agree on, the same convention the counts responses use.",
+        "properties": {
+          "durations": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsDurationView"
+            },
+            "title": "Durations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "durations"
+        ],
+        "title": "AnalyticsDurationsResponse",
         "type": "object"
       },
       "AnalyticsEventView": {
@@ -338,6 +457,67 @@
           "next_cursor"
         ],
         "title": "AnalyticsEventsResponse",
+        "type": "object"
+      },
+      "AnalyticsSpendResponse": {
+        "description": "Every grouping key matching the filters, key ascending \u2014 a total order two\nidentical calls agree on, the same convention the durations/counts responses use.",
+        "properties": {
+          "spend": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsSpendView"
+            },
+            "title": "Spend",
+            "type": "array"
+          }
+        },
+        "required": [
+          "spend"
+        ],
+        "title": "AnalyticsSpendResponse",
+        "type": "object"
+      },
+      "AnalyticsSpendView": {
+        "description": "One grouping key's usage/cost rollup (blizzard#256 D6) \u2014 ``key`` is a node id or\na graph id, whichever dataset served it. The same lower-bound + PARTIAL contract\n``GET /api/spend`` publishes: ``cost_usd`` sums only the rows that carried a cost\nenvelope, and ``cost_partial`` is ``True`` iff any summed row lacked one.",
+        "properties": {
+          "cache_create_tokens": {
+            "title": "Cache Create Tokens",
+            "type": "integer"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cost_partial": {
+            "title": "Cost Partial",
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "input_tokens",
+          "output_tokens",
+          "cache_read_tokens",
+          "cache_create_tokens",
+          "cost_usd",
+          "cost_partial"
+        ],
+        "title": "AnalyticsSpendView",
         "type": "object"
       },
       "AnswerRequest": {
@@ -5840,6 +6020,206 @@
         ]
       }
     },
+    "/api/analytics/durations/graphs": {
+      "get": {
+        "description": "The same rollup grouped by the graph the step happened in (D2) \u2014 the transition's\nown ``graph_id``, never the chunk's current pin.",
+        "operationId": "durations_by_graph_api_analytics_durations_graphs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "graph_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Graph Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsDurationsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Durations By Graph",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/durations/nodes": {
+      "get": {
+        "description": "Completed-step duration rollups grouped by node (D2) \u2014 hub-observed wall-clock\nlatency (D3), never a runner-measured one.",
+        "operationId": "durations_by_node_api_analytics_durations_nodes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "graph_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Graph Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsDurationsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Durations By Node",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
     "/api/analytics/events": {
       "get": {
         "description": "A bounded, keyset-paginated page of events, every filter combinable, defaulting\nto the current extractor version \u2014 a caller wanting an older one names it, since\nmixing versions would double-count the same occurrence.",
@@ -6265,6 +6645,434 @@
           }
         },
         "summary": "Re Derive",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/spend/chunks": {
+      "get": {
+        "description": "A bounded, keyset-paginated page of per-chunk spend rollups (D8) \u2014 unbounded in a\nwide window, unlike the per-node/per-graph groupings, so this takes a cursor rather\nthan a single envelope.",
+        "operationId": "spend_by_chunk_api_analytics_spend_chunks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "graph_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Graph Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsChunkSpendResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Spend By Chunk",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/spend/chunks/ndjson": {
+      "get": {
+        "description": "Every chunk's spend rollup matching the same filters as the paginated route,\nstreamed one JSON object per line in the same order.",
+        "operationId": "stream_chunk_spend_api_analytics_spend_chunks_ndjson_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "graph_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Graph Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Chunk Spend",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/spend/graphs": {
+      "get": {
+        "description": "The same rollup grouped by each usage fact's chunk's *current* graph pin \u2014 a\nchunk that migrated attributes every usage fact it ever recorded to where it lives\ntoday (D6).",
+        "operationId": "spend_by_graph_api_analytics_spend_graphs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "graph_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Graph Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsSpendResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Spend By Graph",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/spend/nodes": {
+      "get": {
+        "description": "Usage/cost rollups grouped by node (D6) \u2014 the same lower-bound + PARTIAL contract\n``GET /api/spend`` publishes.",
+        "operationId": "spend_by_node_api_analytics_spend_nodes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "graph_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Graph Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsSpendResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Spend By Node",
         "tags": [
           "analytics"
         ]

@@ -1,7 +1,8 @@
 """Analytics wire bodies — the forced re-derive verb's request and response over
-``POST /api/analytics/re-derive`` (blizzard#254 D7), plus the read-only events and
-counts surfaces over ``GET /api/analytics/events`` and ``GET /api/analytics/counts/*``
-(blizzard#255)."""
+``POST /api/analytics/re-derive`` (blizzard#254 D7), the read-only events and counts
+surfaces over ``GET /api/analytics/events`` and ``GET /api/analytics/counts/*``
+(blizzard#255), and the operational datasets over ``GET /api/analytics/durations/*``,
+``.../spend/*``, and ``.../outcomes/*`` (blizzard#256)."""
 
 from __future__ import annotations
 
@@ -50,6 +51,69 @@ class AnalyticsCountsResponse(BaseModel):
     ascending as the tiebreak — a total order two identical calls agree on."""
 
     counts: list[AnalyticsCountView]
+
+
+class AnalyticsDurationView(BaseModel):
+    """One grouping key's step-duration rollup (blizzard#256 D2/D3) — ``key`` is a node
+    id or a graph id, whichever dataset served it. The seconds fields are hub-observed
+    wall-clock latency, named that way because a runner-measured instant is not what a
+    caller gets — a store-and-forward flush after a disconnect compresses the interval,
+    and a gate or ask parks a step's clock running while a human is elsewhere (D3)."""
+
+    key: str
+    completed_steps: int
+    total_seconds: float
+    avg_seconds: float
+
+
+class AnalyticsDurationsResponse(BaseModel):
+    """Every grouping key matching the filters, key ascending — a total order two
+    identical calls agree on, the same convention the counts responses use."""
+
+    durations: list[AnalyticsDurationView]
+
+
+class AnalyticsSpendView(BaseModel):
+    """One grouping key's usage/cost rollup (blizzard#256 D6) — ``key`` is a node id or
+    a graph id, whichever dataset served it. The same lower-bound + PARTIAL contract
+    ``GET /api/spend`` publishes: ``cost_usd`` sums only the rows that carried a cost
+    envelope, and ``cost_partial`` is ``True`` iff any summed row lacked one."""
+
+    key: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_create_tokens: int
+    cost_usd: float
+    cost_partial: bool
+
+
+class AnalyticsSpendResponse(BaseModel):
+    """Every grouping key matching the filters, key ascending — a total order two
+    identical calls agree on, the same convention the durations/counts responses use."""
+
+    spend: list[AnalyticsSpendView]
+
+
+class AnalyticsChunkSpendView(BaseModel):
+    """One chunk's own usage/cost rollup (blizzard#256 D8) — the per-chunk grouping's
+    unbounded, cursor-paged row."""
+
+    chunk_id: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_create_tokens: int
+    cost_usd: float
+    cost_partial: bool
+
+
+class AnalyticsChunkSpendResponse(BaseModel):
+    """A bounded page (blizzard#256 D8) — ``next_cursor`` is ``None`` exactly when this
+    page is the last one; a caller drives a full bulk read by following it until absent."""
+
+    spend: list[AnalyticsChunkSpendView]
+    next_cursor: str | None
 
 
 class ReDeriveRequest(BaseModel):
