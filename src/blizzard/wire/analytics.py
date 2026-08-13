@@ -116,6 +116,26 @@ class AnalyticsChunkSpendResponse(BaseModel):
     next_cursor: str | None
 
 
+class AnalyticsOutcomeView(BaseModel):
+    """One node's judged-choice distribution and attempt-failure count (blizzard#256 D4)
+    — two distinct quantities, never blended. ``choice_counts`` is the judged
+    distribution (a judged failure edge consumes no retry budget); ``attempt_failures``
+    is the count of attempts that ended with no transition at all — the crashes,
+    verdict-less exits, and reaps that do consume it. A delivery kick-back
+    (``chunk_bounces``) contributes to neither."""
+
+    node_id: str
+    choice_counts: dict[str, int]
+    attempt_failures: int
+
+
+class AnalyticsOutcomesResponse(BaseModel):
+    """Every node matching the filters, node id ascending — a total order two identical
+    calls agree on, the same convention the durations/spend responses use."""
+
+    outcomes: list[AnalyticsOutcomeView]
+
+
 class ReDeriveRequest(BaseModel):
     """Scope the call to one segment (a genuine force, bypassing the candidate check),
     one chunk's candidates, or every candidate (both unset) — never both a segment and a

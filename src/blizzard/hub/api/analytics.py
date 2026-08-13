@@ -29,6 +29,7 @@ from blizzard.hub.domain.analytics.operational import (
     DurationStats,
     IReadOperationalAnalytics,
     OperationalCriteria,
+    OutcomeStats,
     SpendStats,
 )
 from blizzard.hub.domain.analytics.queries import (
@@ -48,6 +49,8 @@ from blizzard.wire.analytics import (
     AnalyticsDurationView,
     AnalyticsEventsResponse,
     AnalyticsEventView,
+    AnalyticsOutcomesResponse,
+    AnalyticsOutcomeView,
     AnalyticsSpendResponse,
     AnalyticsSpendView,
     ReDeriveRequest,
@@ -471,3 +474,25 @@ def stream_chunk_spend(
     return StreamingResponse(
         chunk_spend_ndjson_lines(services.operational_analytics, scope.criteria()), media_type="application/x-ndjson"
     )
+
+
+def _outcomes_response(stats: list[OutcomeStats]) -> AnalyticsOutcomesResponse:
+    return AnalyticsOutcomesResponse(
+        outcomes=[
+            AnalyticsOutcomeView(node_id=s.node_id, choice_counts=s.choice_counts, attempt_failures=s.attempt_failures)
+            for s in stats
+        ]
+    )
+
+
+@router.get(
+    "/outcomes/nodes", response_model=AnalyticsOutcomesResponse, dependencies=[Depends(require(TRANSCRIPT_READ))]
+)
+def outcomes_by_node(
+    services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
+) -> AnalyticsOutcomesResponse:
+    """Judged-choice distribution and attempt-failure counts grouped by node (D4/D5) —
+    a judged failure edge and a retry-consuming attempt failure reported separately,
+    never blended into one rate. A delivery kick-back (``chunk_bounces``) counts as
+    neither."""
+    return _outcomes_response(services.operational_analytics.outcomes_by_node(scope.criteria()))

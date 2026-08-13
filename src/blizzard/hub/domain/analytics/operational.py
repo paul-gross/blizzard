@@ -80,6 +80,19 @@ class ChunkSpendPage:
     next_cursor: str | None
 
 
+@dataclass(frozen=True)
+class OutcomeStats:
+    """One node's judged-choice distribution and attempt-failure count (D4) — two
+    distinct quantities, never blended. ``choice_counts`` is the judged distribution (a
+    judged failure edge consumes no retry budget); ``attempt_failures`` is the count of
+    attempts that ended with no transition at all — the crashes, verdict-less exits, and
+    reaps that do consume it. ``chunk_bounces`` contributes to neither (D4)."""
+
+    node_id: str
+    choice_counts: dict[str, int]
+    attempt_failures: int
+
+
 class IReadOperationalAnalytics(Protocol):
     """Read-only operational-datasets query Protocol (blizzard#256 D1) — the durations,
     spend, and outcomes routes' own seam (``bzh:controller-read-only``,
@@ -116,4 +129,10 @@ class IReadOperationalAnalytics(Protocol):
         two identical calls agree on. ``cursor`` is a prior
         :attr:`ChunkSpendPage.next_cursor`: any other value raises
         :class:`~blizzard.hub.domain.analytics.queries.MalformedCursor`."""
+        ...
+
+    def outcomes_by_node(self, criteria: OperationalCriteria) -> list[OutcomeStats]:
+        """Judged-choice distribution and attempt-failure counts grouped by node (D4/D5),
+        ordered by ``node_id`` ascending — a node with neither a judged choice nor an
+        attempt failure matching ``criteria`` never appears."""
         ...

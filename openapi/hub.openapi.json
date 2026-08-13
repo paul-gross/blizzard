@@ -459,6 +459,50 @@
         "title": "AnalyticsEventsResponse",
         "type": "object"
       },
+      "AnalyticsOutcomeView": {
+        "description": "One node's judged-choice distribution and attempt-failure count (blizzard#256 D4)\n\u2014 two distinct quantities, never blended. ``choice_counts`` is the judged\ndistribution (a judged failure edge consumes no retry budget); ``attempt_failures``\nis the count of attempts that ended with no transition at all \u2014 the crashes,\nverdict-less exits, and reaps that do consume it. A delivery kick-back\n(``chunk_bounces``) contributes to neither.",
+        "properties": {
+          "attempt_failures": {
+            "title": "Attempt Failures",
+            "type": "integer"
+          },
+          "choice_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Choice Counts",
+            "type": "object"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_id",
+          "choice_counts",
+          "attempt_failures"
+        ],
+        "title": "AnalyticsOutcomeView",
+        "type": "object"
+      },
+      "AnalyticsOutcomesResponse": {
+        "description": "Every node matching the filters, node id ascending \u2014 a total order two identical\ncalls agree on, the same convention the durations/spend responses use.",
+        "properties": {
+          "outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsOutcomeView"
+            },
+            "title": "Outcomes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "outcomes"
+        ],
+        "title": "AnalyticsOutcomesResponse",
+        "type": "object"
+      },
       "AnalyticsSpendResponse": {
         "description": "Every grouping key matching the filters, key ascending \u2014 a total order two\nidentical calls agree on, the same convention the durations/counts responses use.",
         "properties": {
@@ -6603,6 +6647,106 @@
           }
         },
         "summary": "Stream Events",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/outcomes/nodes": {
+      "get": {
+        "description": "Judged-choice distribution and attempt-failure counts grouped by node (D4/D5) \u2014\na judged failure edge and a retry-consuming attempt failure reported separately,\nnever blended into one rate. A delivery kick-back (``chunk_bounces``) counts as\nneither.",
+        "operationId": "outcomes_by_node_api_analytics_outcomes_nodes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "graph_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Graph Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsOutcomesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Outcomes By Node",
         "tags": [
           "analytics"
         ]

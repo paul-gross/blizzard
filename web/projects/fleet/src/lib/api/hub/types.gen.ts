@@ -295,6 +295,46 @@ export type AnalyticsEventsResponse = {
 };
 
 /**
+ * AnalyticsOutcomeView
+ *
+ * One node's judged-choice distribution and attempt-failure count (blizzard#256 D4)
+ * — two distinct quantities, never blended. ``choice_counts`` is the judged
+ * distribution (a judged failure edge consumes no retry budget); ``attempt_failures``
+ * is the count of attempts that ended with no transition at all — the crashes,
+ * verdict-less exits, and reaps that do consume it. A delivery kick-back
+ * (``chunk_bounces``) contributes to neither.
+ */
+export type AnalyticsOutcomeView = {
+    /**
+     * Attempt Failures
+     */
+    attempt_failures: number;
+    /**
+     * Choice Counts
+     */
+    choice_counts: {
+        [key: string]: number;
+    };
+    /**
+     * Node Id
+     */
+    node_id: string;
+};
+
+/**
+ * AnalyticsOutcomesResponse
+ *
+ * Every node matching the filters, node id ascending — a total order two identical
+ * calls agree on, the same convention the durations/spend responses use.
+ */
+export type AnalyticsOutcomesResponse = {
+    /**
+     * Outcomes
+     */
+    outcomes: Array<AnalyticsOutcomeView>;
+};
+
+/**
  * AnalyticsSpendResponse
  *
  * Every grouping key matching the filters, key ascending — a total order two
@@ -3941,6 +3981,48 @@ export type StreamEventsApiAnalyticsEventsNdjsonGetResponses = {
 };
 
 export type StreamEventsApiAnalyticsEventsNdjsonGetResponse = StreamEventsApiAnalyticsEventsNdjsonGetResponses[keyof StreamEventsApiAnalyticsEventsNdjsonGetResponses];
+
+export type OutcomesByNodeApiAnalyticsOutcomesNodesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Graph Id
+         */
+        graph_id?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/analytics/outcomes/nodes';
+};
+
+export type OutcomesByNodeApiAnalyticsOutcomesNodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type OutcomesByNodeApiAnalyticsOutcomesNodesGetError = OutcomesByNodeApiAnalyticsOutcomesNodesGetErrors[keyof OutcomesByNodeApiAnalyticsOutcomesNodesGetErrors];
+
+export type OutcomesByNodeApiAnalyticsOutcomesNodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsOutcomesResponse;
+};
+
+export type OutcomesByNodeApiAnalyticsOutcomesNodesGetResponse = OutcomesByNodeApiAnalyticsOutcomesNodesGetResponses[keyof OutcomesByNodeApiAnalyticsOutcomesNodesGetResponses];
 
 export type ReDeriveApiAnalyticsReDerivePostData = {
     body: ReDeriveRequest;

@@ -123,6 +123,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/analytics/spend/graphs"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/spend/chunks"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/spend/chunks/ndjson"): TRANSCRIPT_READ,
+    ("GET", "/api/analytics/outcomes/nodes"): TRANSCRIPT_READ,
 }
 
 #: Fleet plane — every route mounted under ``/api/fleet/*`` (issue #87's own

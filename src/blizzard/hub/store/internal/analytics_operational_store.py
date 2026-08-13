@@ -26,6 +26,7 @@ from blizzard.hub.domain.analytics.operational import (
     DurationStats,
     IReadOperationalAnalytics,
     OperationalCriteria,
+    OutcomeStats,
     SpendStats,
 )
 from blizzard.hub.domain.analytics.queries import MalformedCursor
@@ -175,6 +176,122 @@ def _to_chunk_spend_record(row: Any) -> ChunkSpendRecord:
     )
 
 
+def _judged_distribution_stmt(criteria: OperationalCriteria) -> Select[Any]:
+    """One row per ``(node, choice)`` matching ``criteria``, with its occurrence count
+    (D4) — a *judged* outcome, so only rows carrying a ``choice_name`` (a gate's
+    decision-only migration and every failed attempt carry none)."""
+    t = s.transitions
+    stmt = select(t.c.from_node_id, t.c.choice_name, func.count().label("occurrences"))
+    stmt = stmt.where(t.c.from_node_id.is_not(None), t.c.choice_name.is_not(None))
+    if criteria.graph_id is not None:
+        stmt = stmt.where(t.c.graph_id == criteria.graph_id)
+    if criteria.source is not None:
+        stmt = stmt.where(t.c.chunk_id.in_(_source_chunks_stmt(criteria.source)))
+    if criteria.since is not None:
+        stmt = stmt.where(t.c.recorded_at >= criteria.since)
+    if criteria.until is not None:
+        stmt = stmt.where(t.c.recorded_at < criteria.until)
+    return stmt.group_by(t.c.from_node_id, t.c.choice_name)
+
+
+def _candidate_lease_epochs_stmt(criteria: OperationalCriteria) -> Select[Any]:
+    """Every deduped ``(chunk_id, epoch, minted_at)`` (A7) whose chunk matches ``source``
+    and whose mint falls in the window — the attempts D5 must resolve a node for. The
+    graph filter is not pushed here: a failed attempt carries no graph of its own, so it
+    is applied in Python once D5 has derived one (see :func:`_attempt_failures`)."""
+    t = s.lease_facts
+    stmt = _lease_min_stmt()
+    if criteria.source is not None:
+        stmt = stmt.where(t.c.chunk_id.in_(_source_chunks_stmt(criteria.source)))
+    if criteria.since is not None:
+        stmt = stmt.where(t.c.minted_at >= criteria.since)
+    if criteria.until is not None:
+        stmt = stmt.where(t.c.minted_at < criteria.until)
+    return stmt
+
+
+def _chunk_transitions_stmt(chunk_ids: Sequence[str]) -> Select[Any]:
+    """Every transition ever recorded for ``chunk_ids`` — unfiltered by ``criteria``'s
+    own window/graph: D5 resolves a failed attempt's node from whatever movement came
+    before it, which can predate the window a caller asked about."""
+    t = s.transitions
+    return select(t.c.chunk_id, t.c.epoch, t.c.to_node_id, t.c.graph_id).where(t.c.chunk_id.in_(chunk_ids))
+
+
+def _chunk_migrations_stmt(chunk_ids: Sequence[str]) -> Select[Any]:
+    m = s.chunk_migrations
+    return select(m.c.chunk_id, m.c.epoch, m.c.landed_node_id, m.c.to_graph_id).where(m.c.chunk_id.in_(chunk_ids))
+
+
+def _chunk_bounces_stmt(chunk_ids: Sequence[str]) -> Select[Any]:
+    b = s.chunk_bounces
+    return select(b.c.chunk_id, b.c.epoch).where(b.c.chunk_id.in_(chunk_ids))
+
+
+def _chunks_graph_stmt(chunk_ids: Sequence[str]) -> Select[Any]:
+    c = s.chunks
+    return select(c.c.chunk_id, c.c.graph_id).where(c.c.chunk_id.in_(chunk_ids))
+
+
+def _graph_entry_nodes_stmt(graph_ids: Sequence[str]) -> Select[Any]:
+    g = s.graphs
+    return select(g.c.graph_id, g.c.entry_node_id).where(g.c.graph_id.in_(graph_ids))
+
+
+def _attempt_failures(
+    lease_rows: Sequence[Any],
+    transition_rows: Sequence[Any],
+    migration_rows: Sequence[Any],
+    bounce_rows: Sequence[Any],
+    chunk_graph_rows: Sequence[Any],
+    graph_entry_rows: Sequence[Any],
+    graph_id_filter: str | None,
+) -> dict[str, int]:
+    """D5: derive a node for every lease epoch that produced neither a transition nor a
+    migration — the crashes, verdict-less exits, and reaps that consume a node's retry
+    budget — and count them per node. A ``chunk_bounces`` epoch is excluded outright
+    (D4: contention, not failure). The derived node is the destination of the chunk's
+    latest movement below that epoch — a transition's ``to_node_id`` or a migration's
+    ``landed_node_id`` — or the chunk's pinned graph's own entry node when there is none;
+    that fallback is exact only because a chunk with zero movements has never migrated
+    (a migration is itself a movement), so its current graph pin is still its first."""
+    transitions_by_chunk: dict[str, list[tuple[int, str, str]]] = {}
+    for row in transition_rows:
+        transitions_by_chunk.setdefault(row.chunk_id, []).append((row.epoch, row.to_node_id, row.graph_id))
+    migrations_by_chunk: dict[str, list[tuple[int, str, str]]] = {}
+    for row in migration_rows:
+        migrations_by_chunk.setdefault(row.chunk_id, []).append((row.epoch, row.landed_node_id, row.to_graph_id))
+    resolved_epochs_by_chunk: dict[str, set[int]] = {}
+    for row in transition_rows:
+        resolved_epochs_by_chunk.setdefault(row.chunk_id, set()).add(row.epoch)
+    for row in migration_rows:
+        resolved_epochs_by_chunk.setdefault(row.chunk_id, set()).add(row.epoch)
+    bounced_epochs_by_chunk: dict[str, set[int]] = {}
+    for row in bounce_rows:
+        bounced_epochs_by_chunk.setdefault(row.chunk_id, set()).add(row.epoch)
+    chunk_graph: dict[str, str] = {row.chunk_id: row.graph_id for row in chunk_graph_rows}
+    graph_entry_node: dict[str, str] = {row.graph_id: row.entry_node_id for row in graph_entry_rows}
+
+    failures: dict[str, int] = {}
+    for row in lease_rows:
+        chunk_id, epoch = row.chunk_id, row.epoch
+        if epoch in bounced_epochs_by_chunk.get(chunk_id, ()):
+            continue
+        if epoch in resolved_epochs_by_chunk.get(chunk_id, ()):
+            continue
+        movements = [(e, node, graph) for e, node, graph in transitions_by_chunk.get(chunk_id, []) if e < epoch]
+        movements += [(e, node, graph) for e, node, graph in migrations_by_chunk.get(chunk_id, []) if e < epoch]
+        if movements:
+            _, node_id, graph_id = max(movements, key=lambda m: m[0])
+        else:
+            graph_id = chunk_graph[chunk_id]
+            node_id = graph_entry_node[graph_id]
+        if graph_id_filter is not None and graph_id != graph_id_filter:
+            continue
+        failures[node_id] = failures.get(node_id, 0) + 1
+    return failures
+
+
 class AnalyticsOperationalStore:
     """Read-only operational-analytics query adapter over the hub store engine."""
 
@@ -209,6 +326,36 @@ class AnalyticsOperationalStore:
         page_rows = rows[:limit]
         next_cursor = page_rows[-1].key if len(rows) > limit else None
         return ChunkSpendPage(records=[_to_chunk_spend_record(row) for row in page_rows], next_cursor=next_cursor)
+
+    def outcomes_by_node(self, criteria: OperationalCriteria) -> list[OutcomeStats]:
+        with self._engine.connect() as conn:
+            judged_rows = conn.execute(_judged_distribution_stmt(criteria)).all()
+            lease_rows = conn.execute(_candidate_lease_epochs_stmt(criteria)).all()
+            chunk_ids = sorted({row.chunk_id for row in lease_rows})
+            transition_rows = conn.execute(_chunk_transitions_stmt(chunk_ids)).all() if chunk_ids else []
+            migration_rows = conn.execute(_chunk_migrations_stmt(chunk_ids)).all() if chunk_ids else []
+            bounce_rows = conn.execute(_chunk_bounces_stmt(chunk_ids)).all() if chunk_ids else []
+            chunk_graph_rows = conn.execute(_chunks_graph_stmt(chunk_ids)).all() if chunk_ids else []
+            graph_ids = sorted({row.graph_id for row in chunk_graph_rows} | {row.to_graph_id for row in migration_rows})
+            graph_entry_rows = conn.execute(_graph_entry_nodes_stmt(graph_ids)).all() if graph_ids else []
+
+        judged: dict[str, dict[str, int]] = {}
+        for row in judged_rows:
+            judged.setdefault(row.from_node_id, {})[row.choice_name] = row.occurrences
+        failures = _attempt_failures(
+            lease_rows,
+            transition_rows,
+            migration_rows,
+            bounce_rows,
+            chunk_graph_rows,
+            graph_entry_rows,
+            criteria.graph_id,
+        )
+        nodes = set(judged) | set(failures)
+        return [
+            OutcomeStats(node_id=n, choice_counts=judged.get(n, {}), attempt_failures=failures.get(n, 0))
+            for n in sorted(nodes)
+        ]
 
 
 def _conforms_analytics_operational_store(x: AnalyticsOperationalStore) -> IReadOperationalAnalytics:
