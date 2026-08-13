@@ -217,12 +217,14 @@ def test_events_pages_with_a_cursor(tmp_path: Path) -> None:
     assert second.json()["events"][0]["id"] != first.json()["events"][0]["id"]
 
 
-def test_events_422s_on_a_malformed_cursor(tmp_path: Path) -> None:
+@pytest.mark.parametrize("cursor", ["not-an-id", " 2 ", "+3", "1_0", "-1", "", "2.0"])
+def test_events_422s_on_a_malformed_cursor(tmp_path: Path, cursor: str) -> None:
     hub, token, _chunk_id = _seeded_hub(tmp_path)
 
-    resp = hub.client.get("/api/analytics/events", params={"cursor": "not-an-id"}, headers=_cookie(token))
+    resp = hub.client.get("/api/analytics/events", params={"cursor": cursor}, headers=_cookie(token))
 
-    assert resp.status_code == 422
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"] == "malformed cursor"
 
 
 def test_a_prior_extractor_version_finds_nothing_under_the_current_one(tmp_path: Path) -> None:

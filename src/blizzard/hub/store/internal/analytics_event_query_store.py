@@ -7,6 +7,7 @@ own docstring). All ``sqlalchemy`` usage stays confined here (``bzh:dependency-i
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from sqlalchemy import Engine, Select, func, select
@@ -18,8 +19,12 @@ from blizzard.hub.domain.analytics.queries import (
     EventQueryCriteria,
     EventRecord,
     IReadAnalyticsEventQueries,
+    MalformedCursor,
 )
 from blizzard.hub.store import schema as s
+
+#: The whole cursor format this adapter mints: a row id, plain and unsigned.
+_CURSOR = re.compile(r"[0-9]+")
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
 # compiles the real ones under both dialects (`bzh:sql-portable`).
@@ -50,11 +55,19 @@ def _filtered_stmt(base: Select[Any], criteria: EventQueryCriteria) -> Select[An
     return stmt
 
 
+def _decode_cursor(cursor: str) -> int:
+    """``int`` alone would take ``" 2 "``, ``"+3"``, and ``"1_0"`` — Python's own literal
+    syntax, not this cursor's format."""
+    if not _CURSOR.fullmatch(cursor):
+        raise MalformedCursor(cursor)
+    return int(cursor)
+
+
 def _events_stmt(criteria: EventQueryCriteria, *, cursor: str | None, limit: int) -> Select[Any]:
     t = s.transcript_events
     stmt = _filtered_stmt(select(t), criteria)
     if cursor is not None:
-        stmt = stmt.where(t.c.id > int(cursor))
+        stmt = stmt.where(t.c.id > _decode_cursor(cursor))
     # An explicit total order (`bzh:sql-portable`) — `id` alone, since it is already a
     # total order over the table and needs no tiebreak, unlike the nullable `occurred_at`.
     return stmt.order_by(t.c.id).limit(limit + 1)
@@ -97,7 +110,9 @@ class AnalyticsEventQueryStore:
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
 
-    def events(self, criteria: EventQueryCriteria, *, cursor: str | None = None, limit: int = 200) -> EventPage:
+    def events(self, criteria: EventQueryCriteria, *, cursor: str | None = None, limit: int) -> EventPage:
+        if limit < 1:
+            raise ValueError(f"limit must be at least 1, got {limit}")
         with self._engine.connect() as conn:
             rows = conn.execute(_events_stmt(criteria, cursor=cursor, limit=limit)).all()
         page_rows = rows[:limit]

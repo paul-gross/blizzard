@@ -14,7 +14,7 @@ from sqlalchemy import insert
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.analytics.events import TranscriptEvent
-from blizzard.hub.domain.analytics.queries import EventQueryCriteria
+from blizzard.hub.domain.analytics.queries import EventQueryCriteria, MalformedCursor
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import transcript_event_store as event_store_module
@@ -25,6 +25,8 @@ pytestmark = pytest.mark.component
 _VERSION = "blizzard-analytics/2"
 _OTHER_VERSION = "blizzard-analytics/1"
 _NOW = datetime(2026, 8, 12, 12, 0, tzinfo=UTC)
+#: Comfortably over any fixture here, so a page bound never shapes what a filter returns.
+_LIMIT = 50
 
 
 def _event(**overrides: object) -> TranscriptEvent:
@@ -135,54 +137,54 @@ def store(tmp_path: Path) -> AnalyticsEventQueryStore:
 
 
 def test_extractor_version_scopes_reads_to_one_version(store: AnalyticsEventQueryStore) -> None:
-    page = store.events(_criteria())
+    page = store.events(_criteria(), limit=_LIMIT)
     assert len(page.events) == 5
     assert all(e.tool != "" for e in page.events)
 
-    page_other = store.events(_criteria(extractor_version=_OTHER_VERSION))
+    page_other = store.events(_criteria(extractor_version=_OTHER_VERSION), limit=_LIMIT)
     assert len(page_other.events) == 1
 
 
 def test_kind_filters_events(store: AnalyticsEventQueryStore) -> None:
-    page = store.events(_criteria(kind="skill_invocation"))
+    page = store.events(_criteria(kind="skill_invocation"), limit=_LIMIT)
     assert [e.subject for e in page.events] == ["wf-commit"]
 
 
 def test_tool_filters_events(store: AnalyticsEventQueryStore) -> None:
-    page = store.events(_criteria(tool="Task"))
+    page = store.events(_criteria(tool="Task"), limit=_LIMIT)
     assert [e.subject for e in page.events] == ["explorer"]
 
 
 def test_path_prefix_filters_events_by_subject(store: AnalyticsEventQueryStore) -> None:
-    page = store.events(_criteria(path_prefix="src/"))
+    page = store.events(_criteria(path_prefix="src/"), limit=_LIMIT)
     assert {e.subject for e in page.events} == {"src/a.py", "src/b.py", "src/c.py"}
 
 
 def test_node_id_filters_events(store: AnalyticsEventQueryStore) -> None:
-    page = store.events(_criteria(node_id="nd_review"))
+    page = store.events(_criteria(node_id="nd_review"), limit=_LIMIT)
     assert [e.subject for e in page.events] == ["src/c.py"]
 
 
 def test_graph_id_filters_events(store: AnalyticsEventQueryStore) -> None:
-    page = store.events(_criteria(graph_id="gr_2"))
+    page = store.events(_criteria(graph_id="gr_2"), limit=_LIMIT)
     assert [e.subject for e in page.events] == ["src/c.py"]
 
 
 def test_source_filters_by_chunk_work_ref_existence(store: AnalyticsEventQueryStore) -> None:
-    page = store.events(_criteria(source="jira"))
+    page = store.events(_criteria(source="jira"), limit=_LIMIT)
     assert {e.chunk_id for e in page.events} == {"ch_2"}
 
 
 def test_time_range_filters_events(store: AnalyticsEventQueryStore) -> None:
-    page = store.events(_criteria(since=_NOW.replace(hour=12, minute=30)))
+    page = store.events(_criteria(since=_NOW.replace(hour=12, minute=30)), limit=_LIMIT)
     assert {e.subject for e in page.events} == {"src/b.py", "src/c.py"}
 
-    page = store.events(_criteria(until=_NOW.replace(hour=12, minute=30)))
+    page = store.events(_criteria(until=_NOW.replace(hour=12, minute=30)), limit=_LIMIT)
     assert {e.subject for e in page.events} == {"src/a.py", "wf-commit", "explorer"}
 
 
 def test_filters_combine(store: AnalyticsEventQueryStore) -> None:
-    page = store.events(_criteria(kind="file_read", node_id="nd_build", path_prefix="src/b"))
+    page = store.events(_criteria(kind="file_read", node_id="nd_build", path_prefix="src/b"), limit=_LIMIT)
     assert [e.subject for e in page.events] == ["src/b.py"]
 
 
@@ -198,8 +200,8 @@ def test_path_prefix_treats_like_wildcards_as_literal_characters(tmp_path: Path)
         _event(turn_path="3", subject="src/azc.py"),
     )
 
-    assert [e.subject for e in store.events(_criteria(path_prefix="src/a_b")).events] == ["src/a_b.py"]
-    assert [e.subject for e in store.events(_criteria(path_prefix="src/a%c")).events] == ["src/a%c.py"]
+    assert [e.subject for e in store.events(_criteria(path_prefix="src/a_b"), limit=_LIMIT).events] == ["src/a_b.py"]
+    assert [e.subject for e in store.events(_criteria(path_prefix="src/a%c"), limit=_LIMIT).events] == ["src/a%c.py"]
     assert [r.key for r in store.counts_by_file(_criteria(path_prefix="src/a_b"))] == ["src/a_b.py"]
 
 
@@ -209,9 +211,9 @@ def test_path_prefix_is_case_sensitive(tmp_path: Path) -> None:
     store, insert_events = _new_store(tmp_path)
     insert_events("sg_1", _event(subject="src/foo.py"))
 
-    assert store.events(_criteria(path_prefix="SRC/")).events == []
+    assert store.events(_criteria(path_prefix="SRC/"), limit=_LIMIT).events == []
     assert store.counts_by_file(_criteria(path_prefix="SRC/")) == []
-    assert [e.subject for e in store.events(_criteria(path_prefix="src/")).events] == ["src/foo.py"]
+    assert [e.subject for e in store.events(_criteria(path_prefix="src/"), limit=_LIMIT).events] == ["src/foo.py"]
 
 
 # --- events: keyset paging ------------------------------------------------------
@@ -230,6 +232,31 @@ def test_paging_covers_the_result_set_exactly_once_with_no_repeats(store: Analyt
     assert cursor is None
     assert sorted(seen) == seen  # ordered
     assert len(seen) == len(set(seen)) == 5
+
+
+@pytest.mark.parametrize("cursor", ["not-an-id", " 2 ", "+3", "1_0", "-1", "", "2.0"])
+def test_a_cursor_no_page_minted_is_refused_by_the_seam_that_mints_them(
+    store: AnalyticsEventQueryStore, cursor: str
+) -> None:
+    """``int`` alone accepts whitespace, a sign, and Python's digit separator, none of
+    which a ``next_cursor`` ever carries."""
+    with pytest.raises(MalformedCursor):
+        store.events(_criteria(), cursor=cursor, limit=_LIMIT)
+
+
+def test_a_cursor_a_page_minted_is_accepted(store: AnalyticsEventQueryStore) -> None:
+    first = store.events(_criteria(), limit=1)
+    assert first.next_cursor is not None
+
+    assert store.events(_criteria(), cursor=first.next_cursor, limit=_LIMIT).events
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_a_limit_below_one_is_refused_rather_than_crashing_on_an_empty_page(
+    store: AnalyticsEventQueryStore, limit: int
+) -> None:
+    with pytest.raises(ValueError):
+        store.events(_criteria(), limit=limit)
 
 
 # --- counts: honor the same filters ---------------------------------------------

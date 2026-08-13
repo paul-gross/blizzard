@@ -22,7 +22,13 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION
-from blizzard.hub.domain.analytics.queries import CountRow, EventPage, EventQueryCriteria, EventRecord
+from blizzard.hub.domain.analytics.queries import (
+    CountRow,
+    EventPage,
+    EventQueryCriteria,
+    EventRecord,
+    MalformedCursor,
+)
 from blizzard.wire.analytics import (
     AnalyticsCountsResponse,
     AnalyticsCountView,
@@ -145,7 +151,7 @@ def list_events(
     )
     try:
         page = services.analytics_events.events(criteria, cursor=cursor, limit=limit)
-    except ValueError as exc:
+    except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
     return _events_response(page)
 
