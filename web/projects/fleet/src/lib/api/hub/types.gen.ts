@@ -88,6 +88,62 @@ export type ActivityView = {
 };
 
 /**
+ * AnalyticsChunkSpendResponse
+ *
+ * A bounded page (blizzard#256 D8) — ``next_cursor`` is ``None`` exactly when this
+ * is the last page. Not a point-in-time snapshot: each page's sums are recomputed at
+ * fetch time, so an earlier page's chunk can be invalidated by a usage fact recorded
+ * while a later page still streams.
+ */
+export type AnalyticsChunkSpendResponse = {
+    /**
+     * Next Cursor
+     */
+    next_cursor: string | null;
+    /**
+     * Spend
+     */
+    spend: Array<AnalyticsChunkSpendView>;
+};
+
+/**
+ * AnalyticsChunkSpendView
+ *
+ * One chunk's own usage/cost rollup (blizzard#256 D8) — the per-chunk grouping's
+ * unbounded, cursor-paged row.
+ */
+export type AnalyticsChunkSpendView = {
+    /**
+     * Cache Create Tokens
+     */
+    cache_create_tokens: number;
+    /**
+     * Cache Read Tokens
+     */
+    cache_read_tokens: number;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Cost Partial
+     */
+    cost_partial: boolean;
+    /**
+     * Cost Usd
+     */
+    cost_usd: number;
+    /**
+     * Input Tokens
+     */
+    input_tokens: number;
+    /**
+     * Output Tokens
+     */
+    output_tokens: number;
+};
+
+/**
  * AnalyticsCountView
  *
  * One grouping key and how many events fell under it (blizzard#255). ``key`` is
@@ -116,6 +172,46 @@ export type AnalyticsCountsResponse = {
      * Counts
      */
     counts: Array<AnalyticsCountView>;
+};
+
+/**
+ * AnalyticsDurationView
+ *
+ * One grouping key's step-duration rollup (blizzard#256 D2/D3) — ``key`` is a node
+ * id or a graph id. Hub-observed wall-clock, not runner-measured (D3): a parked gate
+ * stretches it, a delayed store-and-forward mint-report *flush* compresses it toward
+ * zero instead.
+ */
+export type AnalyticsDurationView = {
+    /**
+     * Avg Seconds
+     */
+    avg_seconds: number;
+    /**
+     * Completed Steps
+     */
+    completed_steps: number;
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Total Seconds
+     */
+    total_seconds: number;
+};
+
+/**
+ * AnalyticsDurationsResponse
+ *
+ * Every grouping key matching the filters, key ascending — a total order two
+ * identical calls agree on, the same convention the counts responses use.
+ */
+export type AnalyticsDurationsResponse = {
+    /**
+     * Durations
+     */
+    durations: Array<AnalyticsDurationView>;
 };
 
 /**
@@ -197,6 +293,96 @@ export type AnalyticsEventsResponse = {
      * Next Cursor
      */
     next_cursor: string | null;
+};
+
+/**
+ * AnalyticsOutcomeView
+ *
+ * One node's judged-choice distribution and attempt-failure count (blizzard#256 D4),
+ * never blended — a judged failure consumes no retry budget, an ended (superseded by a
+ * strictly newer lease) attempt does; a still-open final attempt counts as neither, nor
+ * does a kick-back. The two counts' differing time windows are in ``docs/deployment.md``.
+ */
+export type AnalyticsOutcomeView = {
+    /**
+     * Attempt Failures
+     */
+    attempt_failures: number;
+    /**
+     * Choice Counts
+     */
+    choice_counts: {
+        [key: string]: number;
+    };
+    /**
+     * Node Id
+     */
+    node_id: string;
+};
+
+/**
+ * AnalyticsOutcomesResponse
+ *
+ * Every node matching the filters, node id ascending — a total order two identical
+ * calls agree on, the same convention the durations/spend responses use.
+ */
+export type AnalyticsOutcomesResponse = {
+    /**
+     * Outcomes
+     */
+    outcomes: Array<AnalyticsOutcomeView>;
+};
+
+/**
+ * AnalyticsSpendResponse
+ *
+ * Every grouping key matching the filters, key ascending — a total order two
+ * identical calls agree on, the same convention the durations/counts responses use.
+ */
+export type AnalyticsSpendResponse = {
+    /**
+     * Spend
+     */
+    spend: Array<AnalyticsSpendView>;
+};
+
+/**
+ * AnalyticsSpendView
+ *
+ * One grouping key's usage/cost rollup (blizzard#256 D6) — ``key`` is a node id or
+ * a graph id, whichever dataset served it. The same lower-bound + PARTIAL contract
+ * ``GET /api/spend`` publishes: ``cost_usd`` sums only the rows that carried a cost
+ * envelope, and ``cost_partial`` is ``True`` iff any summed row lacked one.
+ */
+export type AnalyticsSpendView = {
+    /**
+     * Cache Create Tokens
+     */
+    cache_create_tokens: number;
+    /**
+     * Cache Read Tokens
+     */
+    cache_read_tokens: number;
+    /**
+     * Cost Partial
+     */
+    cost_partial: boolean;
+    /**
+     * Cost Usd
+     */
+    cost_usd: number;
+    /**
+     * Input Tokens
+     */
+    input_tokens: number;
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Output Tokens
+     */
+    output_tokens: number;
 };
 
 /**
@@ -3579,6 +3765,90 @@ export type CountsBySkillApiAnalyticsCountsSkillsGetResponses = {
 
 export type CountsBySkillApiAnalyticsCountsSkillsGetResponse = CountsBySkillApiAnalyticsCountsSkillsGetResponses[keyof CountsBySkillApiAnalyticsCountsSkillsGetResponses];
 
+export type DurationsByGraphApiAnalyticsDurationsGraphsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Graph Id
+         */
+        graph_id?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/analytics/durations/graphs';
+};
+
+export type DurationsByGraphApiAnalyticsDurationsGraphsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DurationsByGraphApiAnalyticsDurationsGraphsGetError = DurationsByGraphApiAnalyticsDurationsGraphsGetErrors[keyof DurationsByGraphApiAnalyticsDurationsGraphsGetErrors];
+
+export type DurationsByGraphApiAnalyticsDurationsGraphsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsDurationsResponse;
+};
+
+export type DurationsByGraphApiAnalyticsDurationsGraphsGetResponse = DurationsByGraphApiAnalyticsDurationsGraphsGetResponses[keyof DurationsByGraphApiAnalyticsDurationsGraphsGetResponses];
+
+export type DurationsByNodeApiAnalyticsDurationsNodesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Graph Id
+         */
+        graph_id?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/analytics/durations/nodes';
+};
+
+export type DurationsByNodeApiAnalyticsDurationsNodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DurationsByNodeApiAnalyticsDurationsNodesGetError = DurationsByNodeApiAnalyticsDurationsNodesGetErrors[keyof DurationsByNodeApiAnalyticsDurationsNodesGetErrors];
+
+export type DurationsByNodeApiAnalyticsDurationsNodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsDurationsResponse;
+};
+
+export type DurationsByNodeApiAnalyticsDurationsNodesGetResponse = DurationsByNodeApiAnalyticsDurationsNodesGetResponses[keyof DurationsByNodeApiAnalyticsDurationsNodesGetResponses];
+
 export type ListEventsApiAnalyticsEventsGetData = {
     body?: never;
     path?: never;
@@ -3711,6 +3981,48 @@ export type StreamEventsApiAnalyticsEventsNdjsonGetResponses = {
 
 export type StreamEventsApiAnalyticsEventsNdjsonGetResponse = StreamEventsApiAnalyticsEventsNdjsonGetResponses[keyof StreamEventsApiAnalyticsEventsNdjsonGetResponses];
 
+export type OutcomesByNodeApiAnalyticsOutcomesNodesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Graph Id
+         */
+        graph_id?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/analytics/outcomes/nodes';
+};
+
+export type OutcomesByNodeApiAnalyticsOutcomesNodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type OutcomesByNodeApiAnalyticsOutcomesNodesGetError = OutcomesByNodeApiAnalyticsOutcomesNodesGetErrors[keyof OutcomesByNodeApiAnalyticsOutcomesNodesGetErrors];
+
+export type OutcomesByNodeApiAnalyticsOutcomesNodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsOutcomesResponse;
+};
+
+export type OutcomesByNodeApiAnalyticsOutcomesNodesGetResponse = OutcomesByNodeApiAnalyticsOutcomesNodesGetResponses[keyof OutcomesByNodeApiAnalyticsOutcomesNodesGetResponses];
+
 export type ReDeriveApiAnalyticsReDerivePostData = {
     body: ReDeriveRequest;
     path?: never;
@@ -3735,6 +4047,182 @@ export type ReDeriveApiAnalyticsReDerivePostResponses = {
 };
 
 export type ReDeriveApiAnalyticsReDerivePostResponse = ReDeriveApiAnalyticsReDerivePostResponses[keyof ReDeriveApiAnalyticsReDerivePostResponses];
+
+export type SpendByChunkApiAnalyticsSpendChunksGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Graph Id
+         */
+        graph_id?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/analytics/spend/chunks';
+};
+
+export type SpendByChunkApiAnalyticsSpendChunksGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SpendByChunkApiAnalyticsSpendChunksGetError = SpendByChunkApiAnalyticsSpendChunksGetErrors[keyof SpendByChunkApiAnalyticsSpendChunksGetErrors];
+
+export type SpendByChunkApiAnalyticsSpendChunksGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsChunkSpendResponse;
+};
+
+export type SpendByChunkApiAnalyticsSpendChunksGetResponse = SpendByChunkApiAnalyticsSpendChunksGetResponses[keyof SpendByChunkApiAnalyticsSpendChunksGetResponses];
+
+export type StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Graph Id
+         */
+        graph_id?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/analytics/spend/chunks/ndjson';
+};
+
+export type StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetError = StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetErrors[keyof StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetErrors];
+
+export type StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: string;
+};
+
+export type StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetResponse = StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetResponses[keyof StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetResponses];
+
+export type SpendByGraphApiAnalyticsSpendGraphsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Graph Id
+         */
+        graph_id?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/analytics/spend/graphs';
+};
+
+export type SpendByGraphApiAnalyticsSpendGraphsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SpendByGraphApiAnalyticsSpendGraphsGetError = SpendByGraphApiAnalyticsSpendGraphsGetErrors[keyof SpendByGraphApiAnalyticsSpendGraphsGetErrors];
+
+export type SpendByGraphApiAnalyticsSpendGraphsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsSpendResponse;
+};
+
+export type SpendByGraphApiAnalyticsSpendGraphsGetResponse = SpendByGraphApiAnalyticsSpendGraphsGetResponses[keyof SpendByGraphApiAnalyticsSpendGraphsGetResponses];
+
+export type SpendByNodeApiAnalyticsSpendNodesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Graph Id
+         */
+        graph_id?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/analytics/spend/nodes';
+};
+
+export type SpendByNodeApiAnalyticsSpendNodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SpendByNodeApiAnalyticsSpendNodesGetError = SpendByNodeApiAnalyticsSpendNodesGetErrors[keyof SpendByNodeApiAnalyticsSpendNodesGetErrors];
+
+export type SpendByNodeApiAnalyticsSpendNodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsSpendResponse;
+};
+
+export type SpendByNodeApiAnalyticsSpendNodesGetResponse = SpendByNodeApiAnalyticsSpendNodesGetResponses[keyof SpendByNodeApiAnalyticsSpendNodesGetResponses];
 
 export type AuthorizeApiAuthAuthorizeGetData = {
     body?: never;

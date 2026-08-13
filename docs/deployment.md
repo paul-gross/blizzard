@@ -1572,6 +1572,77 @@ next tick — never a `--dir` verb, and the hub is never stopped for it. It requ
 `admin`+ (`analytics:admin`), since it mutates, unlike the read-only `transcript:read`
 grant the segment routes above are gated on.
 
+### The operational datasets — durations, spend, outcomes (blizzard#256)
+
+Alongside the derived event stream, the same namespace exports the fleet's operational
+numbers as read-shaped datasets: step durations, tokens and spend, and node failure/retry
+outcomes — the numbers already computable from board-serving reads, reshaped for bulk
+export rather than a per-chunk detail view. No new facts are stored; every dataset is
+derived at read time from primary sources — `transitions`, `lease_facts`, `usage_facts`,
+`chunk_bounces`, and `chunk_migrations` — joined against `chunks`, `graphs`, `graph_nodes`,
+and `chunk_work_refs` for graph/source resolution.
+
+```
+GET /api/analytics/durations/nodes   GET /api/analytics/durations/graphs
+GET /api/analytics/spend/nodes       GET /api/analytics/spend/graphs
+GET /api/analytics/spend/chunks      GET /api/analytics/spend/chunks/ndjson
+GET /api/analytics/outcomes/nodes
+```
+
+Every route takes the same `graph_id` / `source` / `since` / `until` query params the
+events/counts routes above use, and the same `transcript:read` gate — no separate grant,
+and strictly narrower than the `fleet:view` gate the same spend numbers already sit
+behind on the board. What `graph_id` narrows *by* differs per dataset, though, so two
+datasets' numbers for one `graph_id` are not directly comparable for a chunk that has
+migrated: durations and outcomes' judged half filter by the transition's own graph,
+spend filters by the chunk's *current* graph pin, and outcomes' failure half uses the
+failed attempt's own derived graph — each dataset's own wire model states its
+resolution; this is not one shared meaning. Per-node and per-graph groupings return one
+JSON envelope each, with no cursor of their own — `node_id`/`graph_id` are per-graph-
+*version* ids, so the *ceiling* on either envelope's size grows every time a graph is
+minted, whatever the fleet has or hasn't run; the size a caller actually receives does
+not, since a grouping only emits keys with matching activity — an unrun graph mint adds
+zero rows to what ships. Per-chunk spend is unbounded in a wide window regardless, so it
+takes the same cursor-paged JSON plus
+NDJSON shape `/events` uses — and unlike `/events`' NDJSON export, the chunk-spend one is
+not a point-in-time snapshot: each page's sums are recomputed at page-fetch time, so a
+chunk emitted on an early page can be invalidated by a usage fact recorded while a later
+page is still streaming. Field-by-field shapes are the committed
+`openapi/hub.openapi.json`'s own record — the wire models that generate it are each
+dataset's one prose home, not restated here.
+
+Seven callouts worth an operator's attention rather than a field's own doc comment:
+
+- A duration is hub-observed wall-clock time, not runner-measured — see the
+  `AnalyticsDurationView` wire model (`openapi/hub.openapi.json`) for the parked-gate vs.
+  delayed-flush directions this doesn't restate here.
+- Durations and the judged-choice distribution cover a step completed by an ordinary
+  transition only — a hub-executed node's own exit transition has no measurable
+  wall-clock interval of its own, so durations excludes it, and a step completed via a
+  cross-graph migration (an authored edge, an intent, or follow-latest) is invisible to
+  both, since neither reads `chunk_migrations`. A documented gap, not a silent one.
+- Outcomes reports a judged-choice distribution and a retry-consuming attempt-failure
+  count as two separate numbers, never one blended failure rate — a delivery kick-back
+  counts as neither, including the kick-back's own routing transition, which shares the
+  bounce's epoch and is excluded from the judged count for exactly that reason.
+- Outcomes' two counts window on different instants (the judging transition's own vs.
+  the failed attempt's lease mint), so a boundary case can count on one side only.
+- None of the seven routes defaults or requires a `since`/`until` window — unlike
+  `/api/spend` (which requires `since`) or `/api/activity` (which defaults to 24h) over
+  overlapping fact tables. A deliberate, still-open deferral: an unfiltered call costs a
+  full scan of whatever it reads, acceptable at today's real fleet volumes but not
+  bounded by anything this namespace enforces.
+- The chunk-spend NDJSON export (`spend/chunks/ndjson`) pages through `usage_facts` —
+  the hub's highest-cardinality fact table, with no index on `chunk_id` — 500 rows at a
+  time, re-scanning the full table on every page. Exporting the fleet's whole per-chunk
+  spend costs `ceil(N/500)` such scans; a deliberate deferral alongside the unbounded
+  window above, not yet paired with an additive index.
+- Every analytics read shares the hub's default connection pool (5 + 10 overflow) with
+  the fleet's own write path — no dedicated budget is carved out. A burst of concurrent
+  unfiltered analytics calls can hold enough connections to make an unrelated write wait
+  out the pool's checkout timeout; a deliberate, undeclared deferral, not a magnitude
+  this namespace bounds today.
+
 ## Operational visibility — the event log
 
 The failures that cost the most are the least visible: a worker that exits without recording a

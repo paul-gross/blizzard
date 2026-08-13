@@ -950,6 +950,31 @@ class UsageTotal:
             cost_partial=any(u.cost_usd is None for u in rows),
         )
 
+    @classmethod
+    def of_grouped_sums(
+        cls,
+        *,
+        input_tokens: int,
+        output_tokens: int,
+        cache_read_tokens: int,
+        cache_create_tokens: int,
+        cost_usd_sum: float,
+        null_cost_rows: int,
+    ) -> UsageTotal:
+        """Build from sums a caller already grouped in SQL (blizzard#256 D6), applying
+        this same lower-bound + PARTIAL contract over them rather than a second,
+        independent one: ``cost_usd_sum`` is the caller's own skip-null sum (e.g.
+        ``COALESCE(SUM(cost_usd), 0)`` over the group's non-null rows), and
+        ``null_cost_rows`` is how many of the group's rows lacked a cost envelope."""
+        return cls(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_create_tokens=cache_create_tokens,
+            cost_usd=cost_usd_sum,
+            cost_partial=null_cost_rows > 0,
+        )
+
 
 @dataclass(frozen=True)
 class FleetSummary:

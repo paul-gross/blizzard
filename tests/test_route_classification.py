@@ -114,6 +114,16 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/analytics/counts/skills"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/counts/agent-types"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/counts/nodes"): TRANSCRIPT_READ,
+    # The operational datasets (blizzard#256 D9) — durations, spend, outcomes — no
+    # grant of their own, strictly narrower than the FLEET_VIEW the same numbers
+    # already sit behind at /api/spend and on every board card.
+    ("GET", "/api/analytics/durations/nodes"): TRANSCRIPT_READ,
+    ("GET", "/api/analytics/durations/graphs"): TRANSCRIPT_READ,
+    ("GET", "/api/analytics/spend/nodes"): TRANSCRIPT_READ,
+    ("GET", "/api/analytics/spend/graphs"): TRANSCRIPT_READ,
+    ("GET", "/api/analytics/spend/chunks"): TRANSCRIPT_READ,
+    ("GET", "/api/analytics/spend/chunks/ndjson"): TRANSCRIPT_READ,
+    ("GET", "/api/analytics/outcomes/nodes"): TRANSCRIPT_READ,
 }
 
 #: Fleet plane — every route mounted under ``/api/fleet/*`` (issue #87's own
