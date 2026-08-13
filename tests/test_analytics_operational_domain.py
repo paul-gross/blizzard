@@ -12,9 +12,11 @@ import pytest
 from blizzard.hub.domain.analytics.operational import (
     LeaseEpoch,
     MigrationMovement,
+    StepDuration,
     TransitionMovement,
     fold_step_durations,
     resolve_attempt_failures,
+    summarize_durations,
 )
 
 pytestmark = pytest.mark.unit
@@ -220,3 +222,16 @@ def test_fold_step_durations_excludes_a_transition_with_no_matching_lease() -> N
         lease_min_by_epoch={},
     )
     assert rows == []
+
+
+def test_a_node_less_row_is_skipped_from_the_node_rollup_but_counted_in_the_graph_one() -> None:
+    rows = [
+        StepDuration(from_node_id=None, graph_id="gr_1", seconds=10.0),
+        StepDuration(from_node_id="nd_build", graph_id="gr_1", seconds=30.0),
+    ]
+
+    by_node = summarize_durations(rows, key="node")
+    assert [(r.key, r.completed_steps, r.total_seconds) for r in by_node] == [("nd_build", 1, 30.0)]
+
+    by_graph = summarize_durations(rows, key="graph")
+    assert [(r.key, r.completed_steps, r.total_seconds, r.avg_seconds) for r in by_graph] == [("gr_1", 2, 40.0, 20.0)]
