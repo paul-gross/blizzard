@@ -56,8 +56,6 @@ def _filtered_stmt(base: Select[Any], criteria: EventQueryCriteria) -> Select[An
 
 
 def _decode_cursor(cursor: str) -> int:
-    """``int`` alone would take ``" 2 "``, ``"+3"``, and ``"1_0"`` — Python's own literal
-    syntax, not this cursor's format."""
     if not _CURSOR.fullmatch(cursor):
         raise MalformedCursor(cursor)
     return int(cursor)
@@ -68,8 +66,7 @@ def _events_stmt(criteria: EventQueryCriteria, *, cursor: str | None, limit: int
     stmt = _filtered_stmt(select(t), criteria)
     if cursor is not None:
         stmt = stmt.where(t.c.id > _decode_cursor(cursor))
-    # An explicit total order (`bzh:sql-portable`) — `id` alone, since it is already a
-    # total order over the table and needs no tiebreak, unlike the nullable `occurred_at`.
+    # `id` alone is already total (`bzh:sql-portable`), unlike the nullable `occurred_at`.
     return stmt.order_by(t.c.id).limit(limit + 1)
 
 

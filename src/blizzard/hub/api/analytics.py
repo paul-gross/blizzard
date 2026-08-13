@@ -42,8 +42,7 @@ from blizzard.wire.analytics import (
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"], dependencies=[Depends(reject_runner_principal)])
 
-#: Batch size the NDJSON stream pages internally — independent of any client-visible
-#: page size, so a bulk export never holds the whole result set in memory at once.
+#: Default internal page size for the NDJSON stream — never the whole result set at once.
 _STREAM_BATCH_SIZE = 500
 
 
