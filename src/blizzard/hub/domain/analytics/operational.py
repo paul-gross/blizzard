@@ -2,8 +2,8 @@
 derived at query time (D1, ``bzh:facts-not-status``) over facts the hub already holds.
 New, not an extension of :mod:`queries` (``bzh:controller-read-only``): that module reads
 the derived-event projection alone. The D2/D5 folds below are pure functions over
-already-loaded facts (``bzh:domain-core``, review round 1 F5) — the adapter fetches and
-maps, this module decides."""
+already-loaded facts (``bzh:domain-core``) — the adapter fetches and maps, this module
+decides."""
 
 from __future__ import annotations
 
@@ -11,6 +11,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
+
+from blizzard.hub.domain.work import UsageTotal
 
 
 @dataclass(frozen=True)
@@ -29,8 +31,8 @@ class OperationalCriteria:
 class DurationStats:
     """One grouping key's step-duration rollup (D2/D3) — ``key`` is a node id or a graph
     id, whichever route served it. Hub-observed wall-clock latency (D3), runner-executed
-    steps only (review round 1 F2 — a hub step's own exit shares its synthetic lease
-    mint's instant by construction, so it never carries a real duration)."""
+    steps only — a hub step's own exit shares its synthetic lease mint's instant by
+    construction, so it never carries a real duration."""
 
     key: str
     completed_steps: int
@@ -41,17 +43,12 @@ class DurationStats:
 @dataclass(frozen=True)
 class SpendStats:
     """One grouping key's usage/cost rollup (D6, D8) — ``key`` is a node, graph, or chunk
-    id, whichever dataset served it (review round 1 F14: one shape for all three). Built
-    via :meth:`~blizzard.hub.domain.work.UsageTotal.of_grouped_sums`, so the lower-bound
-    + PARTIAL contract keeps its one owner even though this sums in SQL (review round 1 F6)."""
+    id (one shape for all three). Holds a
+    :class:`~blizzard.hub.domain.work.UsageTotal`, not its fields flattened apart, so the
+    lower-bound + PARTIAL contract keeps its one owner (``canon:one-owner``)."""
 
     key: str
-    input_tokens: int
-    output_tokens: int
-    cache_read_tokens: int
-    cache_create_tokens: int
-    cost_usd: float
-    cost_partial: bool
+    total: UsageTotal
 
 
 @dataclass(frozen=True)
@@ -76,7 +73,7 @@ class OutcomeStats:
     attempt_failures: int
 
 
-# --- D2/D5 pure folds (review round 1 F5) — typed facts in, decided rows out ----------
+# --- D2/D5 pure folds — typed facts in, decided rows out ------------------------------
 
 
 @dataclass(frozen=True)
@@ -96,12 +93,15 @@ class TransitionMovement:
 
 @dataclass(frozen=True)
 class MigrationMovement:
-    """One ``chunk_migrations`` row narrowed the same way as :class:`TransitionMovement`."""
+    """One ``chunk_migrations`` row narrowed the same way as :class:`TransitionMovement`.
+    ``from_graph_id`` is the only record of what graph an *earlier* attempt ran in once a
+    later migration re-pins the chunk elsewhere."""
 
     chunk_id: str
     epoch: int
     migration_id: str
     landed_node_id: str | None
+    from_graph_id: str
     to_graph_id: str
     recorded_at: datetime
 
@@ -118,23 +118,25 @@ class LeaseEpoch:
 
 @dataclass(frozen=True)
 class StepDuration:
-    """One measured step interval (D2/D3) — the chained-interval fold's own row: the
-    node the step exited (``None`` for the very first movement out of entry, review
-    round 1 F12), the graph it happened in, and its measured seconds."""
+    """One measured step interval (D2/D3): the exited node (``None`` for the first
+    movement out of entry), the graph, its seconds, and the exiting transition's own
+    ``recorded_at`` — the last carried through so :func:`steps_in_window` can filter the
+    fold's output by it."""
 
     from_node_id: str | None
     graph_id: str
     seconds: float
+    recorded_at: datetime
 
 
 def fold_step_durations(
     transitions: Sequence[TransitionMovement], lease_min_by_epoch: Mapping[tuple[str, int], datetime]
 ) -> list[StepDuration]:
     """D2/D3: one interval per transition, chained within its own ``(chunk_id, epoch)``
-    group (two or more can share one, e.g. a gate's entry and its later resolution) rather
-    than always measured from that epoch's lease mint (review round 1 F3) — the first
-    transition in a group measures from the mint, each later one from its predecessor.
-    Ordered by ``(recorded_at, transition_id)``, a real total order (review round 1 F4)."""
+    group (two+ can share one, e.g. a gate's entry and later resolution) — the first
+    measures from the lease mint, each later one from its predecessor. Needs each
+    group's WHOLE history: window by narrowing which groups are fetched, or by filtering
+    the output with :func:`steps_in_window` — never by narrowing ``transitions`` itself."""
     by_group: dict[tuple[str, int], list[TransitionMovement]] = {}
     for t in transitions:
         by_group.setdefault((t.chunk_id, t.epoch), []).append(t)
@@ -145,16 +147,34 @@ def fold_step_durations(
             continue
         for t in sorted(rows, key=lambda t: (t.recorded_at, t.transition_id)):
             seconds = (t.recorded_at - start).total_seconds()
-            out.append(StepDuration(from_node_id=t.from_node_id, graph_id=t.graph_id, seconds=seconds))
+            out.append(
+                StepDuration(
+                    from_node_id=t.from_node_id, graph_id=t.graph_id, seconds=seconds, recorded_at=t.recorded_at
+                )
+            )
             start = t.recorded_at
     return out
+
+
+def steps_in_window(
+    rows: Sequence[StepDuration], *, since: datetime | None, until: datetime | None
+) -> list[StepDuration]:
+    """Keep only :func:`fold_step_durations`' rows whose own transition falls in
+    ``[since, until)`` — applied AFTER the fold chains a group's full history, so a window
+    edge inside a multi-transition epoch drops the excluded row's *output* only, never
+    its place in the chain."""
+    return [
+        row
+        for row in rows
+        if (since is None or row.recorded_at >= since) and (until is None or row.recorded_at < until)
+    ]
 
 
 def summarize_durations(rows: Sequence[StepDuration], *, key: str) -> list[DurationStats]:
     """Roll :func:`fold_step_durations`' rows up by ``"node"`` or ``"graph"``. A row with
     no node (the first movement out of entry, ``from_node_id`` is ``None``) is skipped
-    from the node rollup but still counted in the graph one (review round 1 F12) — it
-    happened in a graph even though it has no exiting node to attribute to."""
+    from the node rollup but still counted in the graph one — it happened in a graph even
+    though it has no exiting node to attribute to."""
     totals: dict[str, float] = {}
     counts: dict[str, int] = {}
     for row in rows:
@@ -180,11 +200,11 @@ def resolve_attempt_failures(
     graph_entry_node: Mapping[str, str],
     graph_id_filter: str | None,
 ) -> dict[str, int]:
-    """D5: count a node for every candidate lease epoch genuinely over — bounced, or
-    superseded by a strictly newer chunk lease (review round 1 F1) — and unresolved by a
-    transition/migration of its own. The node is the chunk's latest movement below that
-    epoch (a same-instant tie favors the migration, F4; a null landing resolves via its
-    own ``to_graph_id``, F7), or the pinned graph's entry with no movement at all."""
+    """D5: count a node for every candidate lease epoch genuinely over — bounced or
+    superseded — and unresolved by a transition/migration of its own. The node is the
+    chunk's latest movement below that epoch (a tie favors the migration), or with no
+    movement at all, the graph the chunk ran in AT that epoch — not its current pin,
+    which a later migration can have moved on from."""
     bounced_set = set(bounced)
     resolved: set[tuple[str, int]] = {(t.chunk_id, t.epoch) for t in transitions} | {
         (m.chunk_id, m.epoch) for m in migrations
@@ -227,7 +247,14 @@ def resolve_attempt_failures(
         if candidates:
             *_, node_id, graph_id = max(candidates)
         else:
-            graph_id = chunk_graph[chunk_id]
+            # No movement: the current pin is stale if a later migration re-pinned the
+            # chunk — use that migration's own `from_graph_id` instead when one exists.
+            later_migrations = [m for m in migrations_by_chunk.get(chunk_id, ()) if m.epoch >= epoch]
+            if later_migrations:
+                earliest_later = min(later_migrations, key=lambda m: (m.epoch, m.recorded_at))
+                graph_id = earliest_later.from_graph_id
+            else:
+                graph_id = chunk_graph[chunk_id]
             node_id = graph_entry_node[graph_id]
 
         if graph_id_filter is not None and graph_id != graph_id_filter:

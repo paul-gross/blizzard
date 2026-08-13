@@ -31,7 +31,8 @@ def _executed_statements() -> dict[str, ClauseElement]:
     return {
         "_lease_min_stmt": m._lease_min_stmt(),
         "_source_chunks_stmt": m._source_chunks_stmt("github"),
-        "_duration_rows_stmt": m._duration_rows_stmt(_CRITERIA),
+        "_duration_window_groups_stmt": m._duration_window_groups_stmt(_CRITERIA),
+        "_duration_rows_stmt": m._duration_rows_stmt(["ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B"]),
         "_spend_filtered_stmt": m._spend_filtered_stmt(select(s.usage_facts), _CRITERIA),
         "_spend_group_stmt": m._spend_group_stmt(_CRITERIA, group_col=s.usage_facts.c.node_id),
         "_spend_by_node_stmt": m._spend_by_node_stmt(_CRITERIA),
@@ -75,8 +76,9 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
         for node in ast.walk(source)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "execute"
     ]
-    # 2 durations + 3 spend + outcomes' own 8-query fan-out — one `.execute()` site each.
-    assert len(executed) == 13
+    # 3 durations (window groups, group rows, lease min) + 3 spend + outcomes' own
+    # 8-query fan-out — one `.execute()` site each.
+    assert len(executed) == 14
     for arg in executed:
         built_by_a_builder = (
             isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name) and arg.func.id.endswith("_stmt")

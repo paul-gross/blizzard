@@ -1,8 +1,8 @@
 """The analytics durations routes (blizzard#256, Phase 2, component tier): the
 TRANSCRIPT_READ auth triad, real completed-step rollups by node and by graph, every
 shared filter (D7), the epoch-join's resistance to a duplicate lease row (A7), a hub
-step's own exit never faking a zero (review round 1 F2), and two transitions sharing
-one epoch chaining their intervals rather than double-counting (review round 1 F3/F4)."""
+step's own exit never faking a zero, two transitions sharing one epoch chaining their
+intervals rather than double-counting, and a `since` edge inside a chained epoch."""
 
 from __future__ import annotations
 
@@ -367,6 +367,54 @@ def test_two_transitions_sharing_one_epoch_chain_their_intervals(tmp_path: Path)
 
 
 # --- the shared filter vocabulary (D7) -----------------------------------------------
+
+
+def test_the_time_range_filter_does_not_break_a_chained_epoch(tmp_path: Path) -> None:
+    """A window edge between two transitions sharing one epoch must not re-anchor the
+    survivor to the epoch's mint — its interval still measures from its true
+    predecessor, and the excluded transition's own row simply does not appear."""
+    hub, token, _graph_id, nodes = _seeded_hub(tmp_path, graph_yaml=_GATE_GRAPH_YAML)
+    chunk_id = _mint_chunk(hub, token)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    hub.clock.advance(timedelta(seconds=10))
+    entering = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": nodes["build"], "artifacts": []},
+    )
+    assert entering.status_code == 200, entering.text
+    decision_id = hub.client.get(f"/api/chunks/{chunk_id}", headers=_cookie(token)).json()["decision"]["decision_id"]
+
+    hub.clock.advance(timedelta(milliseconds=1))
+    since = hub.clock.now().isoformat()  # strictly after `build`'s own transition
+    hub.clock.advance(timedelta(seconds=99, milliseconds=999))  # 100s after it, total
+
+    resolve = hub.client.post(
+        f"/api/decisions/{decision_id}/resolutions", json={"choice": "pass"}, headers=_cookie(token)
+    )
+    assert resolve.status_code == 200, resolve.text
+    resolving = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={
+            "choice": "pass",
+            "epoch": 1,
+            "runner_id": "r1",
+            "from_node_id": nodes["approve"],
+            "decision_id": decision_id,
+            "artifacts": [],
+        },
+    )
+    assert resolving.status_code == 200, resolving.text
+
+    resp = hub.client.get("/api/analytics/durations/nodes", params={"since": since}, headers=_cookie(token))
+
+    by_node = {row["key"]: row for row in resp.json()["durations"]}
+    assert nodes["build"] not in by_node  # its own exit transition predates the window
+    assert by_node[nodes["approve"]] == {
+        "key": nodes["approve"],
+        "completed_steps": 1,
+        "total_seconds": 100.0,
+        "avg_seconds": 100.0,
+    }
 
 
 def test_durations_honor_the_graph_id_filter(tmp_path: Path) -> None:

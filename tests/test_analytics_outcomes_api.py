@@ -1,11 +1,12 @@
 """The analytics outcomes route (blizzard#256, Phase 4, component tier): the
 TRANSCRIPT_READ auth triad, the three cases D4 separates — a judged failure edge, an
-attempt that recorded no transition, and a delivery kick-back (bounce) — and D5's two
-positional base cases: a chunk whose node position is established by a migration, and a
-chunk failing at its entry node with neither a transition nor a migration recorded."""
+attempt that recorded no transition, and a delivery kick-back (bounce) — D5's two
+positional base cases, a no-movement failure resolving via the epoch's own graph, and
+the shared filter vocabulary (D7)."""
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 from typing import cast
 
@@ -13,8 +14,24 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
+from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.domain.work import IWriteChunkRepository, MigrationSource
-from tests.support import HubHarness, build_hub, pointer_token, report_lease, seed_session, seed_user
+from blizzard.hub.graphs.scripts import land_pr_ci
+from tests.support import (
+    FakeHubCommandRunner,
+    FakeHubWorkdir,
+    HubHarness,
+    build_hub,
+    pointer_token,
+    report_lease,
+    seed_session,
+    seed_user,
+)
+from tests.test_delivery_conflict_routing import (
+    _LAND_COMMAND,
+    _mint_and_claim,
+    _seed_at_deliver_with_an_unlanded_commit,
+)
 from tests.test_fleet_auth import _seed_enrolled
 
 pytestmark = pytest.mark.component
@@ -186,6 +203,32 @@ def test_a_bounce_counts_as_neither(tmp_path: Path) -> None:
     assert resp.json()["outcomes"] == []
 
 
+def test_a_bounced_transitions_own_routing_edge_counts_as_neither(tmp_path: Path) -> None:
+    """A kick-back's own routing transition shares its epoch with the bounce fact by
+    construction (`hub_node.py` records both). Driven through the REAL hub-node delivery
+    path, not a bare bounce write, so the excluded transition actually exists."""
+    runner = FakeHubCommandRunner()
+    runner.arm(_LAND_COMMAND, CommandResult(exit_code=0, stdout=f"doing stuff\n{land_pr_ci._CONFLICT}\n", stderr=""))
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    chunk_id, nodes = _mint_and_claim(hub)
+    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+
+    advance = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
+    body = advance.json()
+    assert body["ran"] is True
+    assert body["outcome_choice"] == "conflict"
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert len(detail["bounces"]) == 1  # the kick-back landed
+    assert detail["current_node_id"] == nodes["resolve"]  # ...and so did its own transition
+
+    resp = hub.client.get("/api/analytics/outcomes/nodes")
+
+    assert resp.status_code == 200, resp.text
+    outcomes = {o["node_id"]: o for o in resp.json()["outcomes"]}
+    assert nodes["deliver"] not in outcomes
+
+
 # --- D5: the migration-derived base case -----------------------------------------------
 
 
@@ -244,3 +287,41 @@ def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(
     assert resp.status_code == 200, resp.text
     outcomes = {o["node_id"]: o for o in resp.json()["outcomes"]}
     assert outcomes[other_nodes["triage"]]["attempt_failures"] == 1
+
+
+# --- the shared filter vocabulary (D7) -----------------------------------------------
+
+
+def test_outcomes_honor_the_graph_id_filter_on_a_derived_attempt_failure(tmp_path: Path) -> None:
+    """`graph_id` applies to D5's own DERIVED graph too — a no-movement failure has no
+    transition of its own to filter by, only the graph D5 resolves it to."""
+    hub, token, graph_id, nodes, other_graph_id, _on = _seeded_hub(tmp_path)
+    chunk_id = _mint_chunk(hub, token)
+    report_lease(hub, chunk_id, epoch=1, seq=1)  # a crash/reap — never completed
+    report_lease(hub, chunk_id, epoch=2, seq=2)  # proves epoch 1 is over
+
+    matching = hub.client.get("/api/analytics/outcomes/nodes", params={"graph_id": graph_id}, headers=_cookie(token))
+    assert matching.json()["outcomes"] == [{"node_id": nodes["build"], "choice_counts": {}, "attempt_failures": 1}]
+
+    other = hub.client.get("/api/analytics/outcomes/nodes", params={"graph_id": other_graph_id}, headers=_cookie(token))
+    assert other.json()["outcomes"] == []
+
+
+def test_outcomes_honor_the_time_range_filter_at_the_lease_mints_own_boundary(tmp_path: Path) -> None:
+    """`since`/`until` window the candidate epoch's own lease MINT, not a transition's
+    timestamp — `since` inclusive of the mint instant itself, `until` exclusive."""
+    hub, token, _graph_id, nodes, _og, _on = _seeded_hub(tmp_path)
+    chunk_id = _mint_chunk(hub, token)
+    report_lease(hub, chunk_id, epoch=1, seq=1)  # a crash/reap — never completed
+    since = hub.clock.now().isoformat()  # exactly epoch 1's own mint instant
+    hub.clock.advance(timedelta(milliseconds=1))
+    until = hub.clock.now().isoformat()  # strictly after epoch 1's mint
+    report_lease(hub, chunk_id, epoch=2, seq=2)  # proves epoch 1 is over
+
+    inside = hub.client.get(
+        "/api/analytics/outcomes/nodes", params={"since": since, "until": until}, headers=_cookie(token)
+    )
+    assert inside.json()["outcomes"] == [{"node_id": nodes["build"], "choice_counts": {}, "attempt_failures": 1}]
+
+    outside = hub.client.get("/api/analytics/outcomes/nodes", params={"since": until}, headers=_cookie(token))
+    assert outside.json()["outcomes"] == []

@@ -55,9 +55,9 @@ class AnalyticsCountsResponse(BaseModel):
 
 class AnalyticsDurationView(BaseModel):
     """One grouping key's step-duration rollup (blizzard#256 D2/D3) — ``key`` is a node
-    id or a graph id, whichever dataset served it. The seconds fields are hub-observed
-    wall-clock latency, not a runner-measured instant: a store-and-forward flush or a
-    parked gate/ask both stretch it past the step's actual work time (D3)."""
+    id or a graph id. Hub-observed wall-clock, not runner-measured (D3): a parked gate
+    stretches it, a delayed store-and-forward mint-report *flush* compresses it toward
+    zero instead."""
 
     key: str
     completed_steps: int
@@ -109,7 +109,9 @@ class AnalyticsChunkSpendView(BaseModel):
 
 class AnalyticsChunkSpendResponse(BaseModel):
     """A bounded page (blizzard#256 D8) — ``next_cursor`` is ``None`` exactly when this
-    page is the last one; a caller drives a full bulk read by following it until absent."""
+    is the last page. Not a point-in-time snapshot: each page's sums are recomputed at
+    fetch time, so an earlier page's chunk can be invalidated by a usage fact recorded
+    while a later page still streams."""
 
     spend: list[AnalyticsChunkSpendView]
     next_cursor: str | None
@@ -119,7 +121,7 @@ class AnalyticsOutcomeView(BaseModel):
     """One node's judged-choice distribution and attempt-failure count (blizzard#256 D4),
     never blended — a judged failure consumes no retry budget, an ended attempt does; a
     kick-back counts as neither. The two counts' differing time windows are documented in
-    ``docs/deployment.md`` (review round 1 F10)."""
+    ``docs/deployment.md``."""
 
     node_id: str
     choice_counts: dict[str, int]

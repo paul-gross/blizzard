@@ -1597,20 +1597,34 @@ migrated: durations and outcomes' judged half filter by the transition's own gra
 spend filters by the chunk's *current* graph pin, and outcomes' failure half uses the
 failed attempt's own derived graph — each dataset's own wire model states its
 resolution; this is not one shared meaning. Per-node and per-graph groupings return one
-bounded JSON envelope, same as the counts routes; per-chunk spend is unbounded in a wide
-window, so it takes the same cursor-paged JSON plus NDJSON shape `/events` uses.
-Field-by-field shapes are the committed `openapi/hub.openapi.json`'s own record — the
-wire models that generate it are each dataset's one prose home, not restated here.
+bounded JSON envelope, but "bounded" here means bounded by graph mints, not by fleet
+activity: `node_id`/`graph_id` are per-graph-*version* ids, so both envelopes grow every
+time a graph is minted, whatever the fleet has or hasn't run. Per-chunk spend is
+unbounded in a wide window regardless, so it takes the same cursor-paged JSON plus
+NDJSON shape `/events` uses — and unlike `/events`' NDJSON export, the chunk-spend one is
+not a point-in-time snapshot: each page's sums are recomputed at page-fetch time, so a
+chunk emitted on an early page can be invalidated by a usage fact recorded while a later
+page is still streaming. Field-by-field shapes are the committed
+`openapi/hub.openapi.json`'s own record — the wire models that generate it are each
+dataset's one prose home, not restated here.
 
-Three callouts worth an operator's attention rather than a field's own doc comment: a
-duration is hub-observed wall-clock time, not runner-measured, so a parked gate or ask
-stretches it past a step's actual work time, and it covers runner-executed steps only —
-a hub-executed node's own exit transition has no measurable wall-clock interval of its
-own; outcomes reports a judged-choice distribution and a retry-consuming attempt-failure
-count as two separate numbers, never one blended failure rate, a delivery kick-back
-counting as neither; and outcomes' two counts window on different instants (the judging
-transition's own vs. the failed attempt's lease mint), so a boundary case can count on
-one side only.
+Four callouts worth an operator's attention rather than a field's own doc comment:
+
+- A duration is hub-observed wall-clock time, not runner-measured — a parked gate or ask
+  stretches it past a step's actual work time, while a delayed store-and-forward flush of
+  the lease-mint report itself compresses it toward zero instead (the mint lands later
+  than the work it is meant to bound, never later than the work itself).
+- Durations and the judged-choice distribution cover a step completed by an ordinary
+  transition only — a hub-executed node's own exit transition has no measurable
+  wall-clock interval of its own, so durations excludes it, and a step completed via a
+  cross-graph migration (an authored edge, an intent, or follow-latest) is invisible to
+  both, since neither reads `chunk_migrations`. A documented gap, not a silent one.
+- Outcomes reports a judged-choice distribution and a retry-consuming attempt-failure
+  count as two separate numbers, never one blended failure rate — a delivery kick-back
+  counts as neither, including the kick-back's own routing transition, which shares the
+  bounce's epoch and is excluded from the judged count for exactly that reason.
+- Outcomes' two counts window on different instants (the judging transition's own vs.
+  the failed attempt's lease mint), so a boundary case can count on one side only.
 
 ## Operational visibility — the event log
 

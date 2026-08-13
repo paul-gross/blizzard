@@ -89,6 +89,18 @@ def re_derive(request: ReDeriveRequest, services: Annotated[HubServices, Depends
 
 
 @dataclass(frozen=True)
+class NormalizedScope:
+    """The four shared filter fields, UTC-normalized — what every route's own criteria
+    type builds from, rather than one minting the other's type just to read four fields
+    out of it and discard the rest."""
+
+    graph_id: str | None
+    source: str | None
+    since: datetime | None
+    until: datetime | None
+
+
+@dataclass(frozen=True)
 class ScopeFilters:
     """The filter block every analytics route exposes — which work the read covers and
     over which window (blizzard#256 D7). A route wanting the derived-event projection's
@@ -110,13 +122,17 @@ class ScopeFilters:
     ) -> ScopeFilters:
         return cls(graph_id, source, since, until)
 
-    def criteria(self) -> OperationalCriteria:
-        return OperationalCriteria(
+    def normalized(self) -> NormalizedScope:
+        return NormalizedScope(
             graph_id=self.graph_id,
             source=self.source,
             since=as_utc(self.since) if self.since is not None else None,
             until=as_utc(self.until) if self.until is not None else None,
         )
+
+    def criteria(self) -> OperationalCriteria:
+        n = self.normalized()
+        return OperationalCriteria(graph_id=n.graph_id, source=n.source, since=n.since, until=n.until)
 
 
 @dataclass(frozen=True)
@@ -150,10 +166,10 @@ class EventScopeFilters:
     ) -> EventQueryCriteria:
         """A route passes exactly the narrowing filters it exposes; one it does not
         offer goes unnamed here, rather than named as an explicit ``None``. Built off
-        :meth:`ScopeFilters.criteria`'s own normalization rather than re-deriving it
-        (review round 1 F13) — the D7 split's byte-identical-spec constraint binds the
-        parameter declarations, not this conversion."""
-        scope = self.scope.criteria()
+        :meth:`ScopeFilters.normalized`'s own conversion rather than re-deriving it —
+        the D7 split's byte-identical-spec constraint binds the parameter declarations,
+        not this conversion."""
+        scope = self.scope.normalized()
         return EventQueryCriteria(
             extractor_version=self.extractor_version or EXTRACTOR_VERSION,
             kind=kind,
@@ -373,12 +389,12 @@ def _spend_response(stats: list[SpendStats]) -> AnalyticsSpendResponse:
         spend=[
             AnalyticsSpendView(
                 key=s.key,
-                input_tokens=s.input_tokens,
-                output_tokens=s.output_tokens,
-                cache_read_tokens=s.cache_read_tokens,
-                cache_create_tokens=s.cache_create_tokens,
-                cost_usd=s.cost_usd,
-                cost_partial=s.cost_partial,
+                input_tokens=s.total.input_tokens,
+                output_tokens=s.total.output_tokens,
+                cache_read_tokens=s.total.cache_read_tokens,
+                cache_create_tokens=s.total.cache_create_tokens,
+                cost_usd=s.total.cost_usd,
+                cost_partial=s.total.cost_partial,
             )
             for s in stats
         ]
@@ -407,12 +423,12 @@ def spend_by_graph(
 def _chunk_spend_view(record: SpendStats) -> AnalyticsChunkSpendView:
     return AnalyticsChunkSpendView(
         chunk_id=record.key,
-        input_tokens=record.input_tokens,
-        output_tokens=record.output_tokens,
-        cache_read_tokens=record.cache_read_tokens,
-        cache_create_tokens=record.cache_create_tokens,
-        cost_usd=record.cost_usd,
-        cost_partial=record.cost_partial,
+        input_tokens=record.total.input_tokens,
+        output_tokens=record.total.output_tokens,
+        cache_read_tokens=record.total.cache_read_tokens,
+        cache_create_tokens=record.total.cache_create_tokens,
+        cost_usd=record.total.cost_usd,
+        cost_partial=record.total.cost_partial,
     )
 
 

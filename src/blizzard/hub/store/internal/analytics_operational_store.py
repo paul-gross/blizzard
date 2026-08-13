@@ -3,7 +3,7 @@ blizzard#256). Reads ``transitions``/``lease_facts``/``usage_facts``/``chunk_mig
 directly, the same tables :mod:`chunk_store` writes — two ``internal/`` adapters sharing
 one engine is established (see :mod:`analytics_event_query_store`). Filtering stays
 portable SQL (``bzh:sql-portable``); D2/D5's own business rules live in the domain-owned
-fold this adapter only fetches and maps rows for (review round 1 F5)."""
+fold this adapter only fetches and maps rows for."""
 
 from __future__ import annotations
 
@@ -22,9 +22,11 @@ from blizzard.hub.domain.analytics.operational import (
     OperationalCriteria,
     OutcomeStats,
     SpendStats,
+    StepDuration,
     TransitionMovement,
     fold_step_durations,
     resolve_attempt_failures,
+    steps_in_window,
     summarize_durations,
 )
 from blizzard.hub.domain.analytics.queries import MalformedCursor
@@ -51,15 +53,13 @@ def _source_chunks_stmt(source: str) -> Select[Any]:
     return select(s.chunk_work_refs.c.chunk_id).where(s.chunk_work_refs.c.source == source)
 
 
-def _duration_rows_stmt(criteria: OperationalCriteria) -> Select[Any]:
-    """Every completed *runner-executed* step matching ``criteria`` (D2, review round 1
-    F2) — a hub-executed node's own exit transition shares an instant with its own
-    synthetic lease mint by construction, so it never carries a real duration.
-    Outer-joined to ``graph_nodes`` so an entry transition (``from_node_id`` null) is
-    kept regardless — there is no node to look its executor up by."""
+def _duration_window_groups_stmt(criteria: OperationalCriteria) -> Select[Any]:
+    """Every distinct ``(chunk_id, epoch)`` with a matching runner-step transition in the
+    window (D2) — which GROUPS the window admits, not which rows survive.
+    ``_duration_rows_stmt`` fetches each group's full unwindowed history; ``steps_in_window``
+    narrows the fold's output back down afterward."""
     t, gn = s.transitions, s.graph_nodes
-    cols = (t.c.chunk_id, t.c.epoch, t.c.transition_id, t.c.from_node_id, t.c.to_node_id, t.c.graph_id, t.c.recorded_at)
-    stmt = select(*cols).select_from(t.outerjoin(gn, t.c.from_node_id == gn.c.node_id))
+    stmt = select(t.c.chunk_id, t.c.epoch).distinct().select_from(t.outerjoin(gn, t.c.from_node_id == gn.c.node_id))
     stmt = stmt.where((gn.c.executor == Executor.RUNNER.value) | (t.c.from_node_id.is_(None)))
     if criteria.graph_id is not None:
         stmt = stmt.where(t.c.graph_id == criteria.graph_id)
@@ -69,6 +69,20 @@ def _duration_rows_stmt(criteria: OperationalCriteria) -> Select[Any]:
         stmt = stmt.where(t.c.recorded_at >= criteria.since)
     if criteria.until is not None:
         stmt = stmt.where(t.c.recorded_at < criteria.until)
+    return stmt
+
+
+def _duration_rows_stmt(chunk_ids: Sequence[str]) -> Select[Any]:
+    """Every completed *runner-executed* step (D2) for one of ``chunk_ids``, unwindowed
+    by time — ``_step_durations`` narrows to the window-admitted groups in Python before
+    folding. A hub-executed node's own exit shares an instant with its lease mint by
+    construction, so it never carries a real duration; outer-joined to ``graph_nodes`` so
+    an entry transition (``from_node_id`` null) is kept regardless."""
+    t, gn = s.transitions, s.graph_nodes
+    cols = (t.c.chunk_id, t.c.epoch, t.c.transition_id, t.c.from_node_id, t.c.to_node_id, t.c.graph_id, t.c.recorded_at)
+    stmt = select(*cols).select_from(t.outerjoin(gn, t.c.from_node_id == gn.c.node_id))
+    stmt = stmt.where((gn.c.executor == Executor.RUNNER.value) | (t.c.from_node_id.is_(None)))
+    stmt = stmt.where(t.c.chunk_id.in_(chunk_ids))
     return stmt.order_by(t.c.chunk_id, t.c.epoch, t.c.recorded_at, t.c.transition_id)
 
 
@@ -111,9 +125,9 @@ def _spend_filtered_stmt(base: Select[Any], criteria: OperationalCriteria) -> Se
 def _spend_group_stmt(criteria: OperationalCriteria, *, group_col: Any) -> Select[Any]:
     """Usage/cost summed in SQL, grouped by ``group_col`` (D6) — the sums
     :meth:`~blizzard.hub.domain.work.UsageTotal.of_grouped_sums` applies the lower-bound
-    + PARTIAL contract to (review round 1 F6): a null ``cost_usd`` is skipped from the
-    sum (``coalesce`` never substitutes a fabricated zero into the total itself), and
-    ``null_cost_rows`` counts how many of the group's rows lacked one."""
+    + PARTIAL contract to: a null ``cost_usd`` is skipped from the sum (``coalesce``
+    never substitutes a fabricated zero into the total itself), and ``null_cost_rows``
+    counts how many of the group's rows lacked one."""
     u = s.usage_facts
     stmt = select(
         group_col.label("key"),
@@ -137,6 +151,9 @@ def _spend_by_graph_stmt(criteria: OperationalCriteria) -> Select[Any]:
 
 
 def _spend_by_chunk_stmt(criteria: OperationalCriteria, *, cursor: str | None, limit: int) -> Select[Any]:
+    """Deliberate deferral: each page re-runs a full ``GROUP BY`` with no supporting
+    ``usage_facts.chunk_id`` index — adding one needs a migration, and this change
+    carries none (D1); left for whatever next touches this table's schema."""
     u = s.usage_facts
     stmt = _spend_group_stmt(criteria, group_col=u.c.chunk_id)
     if cursor is not None:
@@ -153,24 +170,19 @@ def _to_spend_stats(row: Any) -> SpendStats:
         cost_usd_sum=row.cost_usd,
         null_cost_rows=row.null_cost_rows,
     )
-    return SpendStats(
-        key=row.key,
-        input_tokens=total.input_tokens,
-        output_tokens=total.output_tokens,
-        cache_read_tokens=total.cache_read_tokens,
-        cache_create_tokens=total.cache_create_tokens,
-        cost_usd=total.cost_usd,
-        cost_partial=total.cost_partial,
-    )
+    return SpendStats(key=row.key, total=total)
 
 
 def _judged_distribution_stmt(criteria: OperationalCriteria) -> Select[Any]:
-    """One row per ``(node, choice)`` matching ``criteria``, with its occurrence count
-    (D4) — a *judged* outcome, so only rows carrying a ``choice_name`` (a gate's
-    decision-only migration and every failed attempt carry none)."""
-    t = s.transitions
+    """One row per ``(node, choice)`` matching ``criteria`` (D4) — only rows carrying a
+    ``choice_name``, anti-joined against ``chunk_bounces`` on ``(chunk_id, epoch)`` so a
+    kick-back's own same-epoch routing transition is excluded too (``hub_node.py``
+    records both). A migration-completed step is not counted here either — a documented
+    gap, see ``docs/deployment.md``."""
+    t, b = s.transitions, s.chunk_bounces
     stmt = select(t.c.from_node_id, t.c.choice_name, func.count().label("occurrences"))
-    stmt = stmt.where(t.c.from_node_id.is_not(None), t.c.choice_name.is_not(None))
+    stmt = stmt.select_from(t.outerjoin(b, (b.c.chunk_id == t.c.chunk_id) & (b.c.epoch == t.c.epoch)))
+    stmt = stmt.where(t.c.from_node_id.is_not(None), t.c.choice_name.is_not(None), b.c.chunk_id.is_(None))
     if criteria.graph_id is not None:
         stmt = stmt.where(t.c.graph_id == criteria.graph_id)
     if criteria.source is not None:
@@ -186,8 +198,8 @@ def _candidate_lease_epochs_stmt(criteria: OperationalCriteria) -> Select[Any]:
     """Every deduped ``(chunk_id, epoch, minted_at)`` (A7) whose chunk matches ``source``
     and whose *deduped* mint falls in the window — filtered after the A7 dedup via the
     subquery wrap below, not before it, so the window can't pick a different duplicate as
-    "earliest mint" than the dedupe alone would (review round 1 F11). The graph filter is
-    not pushed here: it applies once D5 has derived a failed attempt's own graph."""
+    "earliest mint" than the dedupe alone would. The graph filter is not pushed here: it
+    applies once D5 has derived a failed attempt's own graph."""
     sub = _lease_min_stmt().subquery()
     stmt = select(sub.c.chunk_id, sub.c.epoch, sub.c.minted_at)
     if criteria.source is not None:
@@ -201,16 +213,16 @@ def _candidate_lease_epochs_stmt(criteria: OperationalCriteria) -> Select[Any]:
 
 def _candidate_chunk_ids_stmt(criteria: OperationalCriteria) -> Select[Any]:
     """The candidate lease epochs' own distinct chunk ids, as a correlated subquery
-    rather than a materialized id list (review round 1 F8) — avoids binding one host
-    parameter per id, unbounded by a caller's window with no `since`/`until`."""
+    rather than a materialized id list — avoids binding one host parameter per id,
+    unbounded by a caller's window with no `since`/`until`."""
     sub = _candidate_lease_epochs_stmt(criteria).subquery()
     return select(sub.c.chunk_id.distinct())
 
 
 def _chunk_max_lease_epoch_stmt(criteria: OperationalCriteria) -> Select[Any]:
     """Each candidate chunk's own newest lease epoch, deliberately unwindowed by
-    ``criteria`` (review round 1 F1) — a lease minted after ``until`` (or before
-    ``since``) still proves an in-window candidate epoch is not yet superseded, so
+    ``criteria`` — a lease minted after ``until`` (or before ``since``) still proves an
+    in-window candidate epoch IS superseded (D5's positive end-of-attempt evidence), so
     whether it is over cannot itself be decided from inside the window."""
     t = s.lease_facts
     stmt = select(t.c.chunk_id, func.max(t.c.epoch).label("max_epoch"))
@@ -228,7 +240,15 @@ def _chunk_transitions_stmt(criteria: OperationalCriteria) -> Select[Any]:
 
 def _chunk_migrations_stmt(criteria: OperationalCriteria) -> Select[Any]:
     m = s.chunk_migrations
-    cols = (m.c.chunk_id, m.c.epoch, m.c.migration_id, m.c.landed_node_id, m.c.to_graph_id, m.c.recorded_at)
+    cols = (
+        m.c.chunk_id,
+        m.c.epoch,
+        m.c.migration_id,
+        m.c.landed_node_id,
+        m.c.from_graph_id,
+        m.c.to_graph_id,
+        m.c.recorded_at,
+    )
     return select(*cols).where(m.c.chunk_id.in_(_candidate_chunk_ids_stmt(criteria)))
 
 
@@ -261,13 +281,19 @@ class AnalyticsOperationalStore:
         rows = self._step_durations(criteria)
         return summarize_durations(rows, key="graph")
 
-    def _step_durations(self, criteria: OperationalCriteria):  # type: ignore[no-untyped-def]
+    def _step_durations(self, criteria: OperationalCriteria) -> list[StepDuration]:
         with self._engine.connect() as conn:
-            transition_rows = conn.execute(_duration_rows_stmt(criteria)).all()
+            group_rows = conn.execute(_duration_window_groups_stmt(criteria)).all()
+            if not group_rows:
+                return []
+            groups = {(r.chunk_id, r.epoch) for r in group_rows}
+            chunk_ids = sorted({r.chunk_id for r in group_rows})
+            transition_rows = conn.execute(_duration_rows_stmt(chunk_ids)).all()
             lease_rows = conn.execute(_lease_min_stmt()).all()
-        transitions = [_to_transition_movement(r) for r in transition_rows]
+        transitions = [_to_transition_movement(r) for r in transition_rows if (r.chunk_id, r.epoch) in groups]
         lease_min_by_epoch = {(r.chunk_id, r.epoch): r.minted_at for r in lease_rows}
-        return fold_step_durations(transitions, lease_min_by_epoch)
+        all_rows = fold_step_durations(transitions, lease_min_by_epoch)
+        return steps_in_window(all_rows, since=criteria.since, until=criteria.until)
 
     def spend_by_node(self, criteria: OperationalCriteria) -> list[SpendStats]:
         with self._engine.connect() as conn:
@@ -297,7 +323,12 @@ class AnalyticsOperationalStore:
             migration_rows = conn.execute(_chunk_migrations_stmt(criteria)).all()
             bounce_rows = conn.execute(_chunk_bounces_stmt(criteria)).all()
             chunk_graph_rows = conn.execute(_chunks_graph_stmt(criteria)).all()
-            graph_ids = sorted({row.graph_id for row in chunk_graph_rows} | {row.to_graph_id for row in migration_rows})
+            # `from_graph_id` too: D5's no-movement fallback can resolve via it.
+            graph_ids = sorted(
+                {row.graph_id for row in chunk_graph_rows}
+                | {row.to_graph_id for row in migration_rows}
+                | {row.from_graph_id for row in migration_rows}
+            )
             graph_entry_rows = conn.execute(_graph_entry_nodes_stmt(graph_ids)).all() if graph_ids else []
 
         judged: dict[str, dict[str, int]] = {}
@@ -312,6 +343,7 @@ class AnalyticsOperationalStore:
                     epoch=r.epoch,
                     migration_id=r.migration_id,
                     landed_node_id=r.landed_node_id,
+                    from_graph_id=r.from_graph_id,
                     to_graph_id=r.to_graph_id,
                     recorded_at=r.recorded_at,
                 )
