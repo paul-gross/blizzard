@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
 from blizzard.wire.runner_status import CapacitiesView, HubConnectivityView, PauseStateView, RunnerStatusView
@@ -67,7 +68,11 @@ def get_runner(request: Request) -> RunnerStatusView:
 
     Derived entirely from local store facts plus the injected clock — no hub call, so it
     is truthful with the hub unreachable. An unwired service answers 503."""
-    summary = RunnerWiring.of(request).status().summary()
+    return _runner_status_view(RunnerWiring.of(request).status())
+
+
+def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
+    summary = service.summary()
     return RunnerStatusView(
         runner_id=summary.runner_id,
         workspace_id=summary.workspace_id,

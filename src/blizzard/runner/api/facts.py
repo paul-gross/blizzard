@@ -10,6 +10,7 @@ from fastapi import APIRouter, Query, Request
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.wire.runner_status import FactListResponse, FactView
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -25,7 +26,10 @@ def list_facts(
     limit: int = Query(default=DEFAULT_FACT_LIMIT, ge=1, le=MAX_FACT_LIMIT),
 ) -> FactListResponse:
     """The newest ``limit`` hub-bound facts recorded by this runner, newest first."""
-    service = RunnerWiring.of(request).status()
+    return _fact_list(RunnerWiring.of(request).status(), limit)
+
+
+def _fact_list(service: RunnerStatusService, limit: int) -> FactListResponse:
     return FactListResponse(
         items=[
             FactView(

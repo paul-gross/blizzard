@@ -11,6 +11,7 @@ from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import (
     ChunkNotTakeable,
     LiveWorkerConflict,
@@ -54,7 +55,10 @@ def end_takeover(chunk_id: str, takeover_id: str, request: Request) -> TakeoverE
 @router.get("/takeovers", response_model=OpenTakeoverListResponse)
 def list_open_takeovers(request: Request) -> OpenTakeoverListResponse:
     """Every takeover still open — the recovery surface for a stranded one."""
-    service = RunnerWiring.of(request).status()
+    return _open_takeover_list(RunnerWiring.of(request).status())
+
+
+def _open_takeover_list(service: RunnerStatusService) -> OpenTakeoverListResponse:
     return OpenTakeoverListResponse(
         items=[
             OpenTakeoverViewWire(chunk_id=t.chunk_id, takeover_id=t.takeover_id, held_since=iso_utc(t.held_since))

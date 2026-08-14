@@ -391,6 +391,50 @@
         "title": "ChunkUsageTotalView",
         "type": "object"
       },
+      "DashboardView": {
+        "description": "``GET /api/dashboard`` \u2014 the panel's seven status reads composed into one response.\n\nRead-only over its wiring (``bzh:controller-read-only``): every section but\n``fleet_summary`` is derived from local store facts the same way its own individual\nroute is, so it degrades exactly as those do. ``fleet_summary`` alone is a hub\npass-through, so it alone is nullable \u2014 ``None`` when the hub call fails or this\nrunner is unwired, while the six local sections still populate.",
+        "properties": {
+          "asks": {
+            "$ref": "#/components/schemas/AskListResponse"
+          },
+          "environments": {
+            "$ref": "#/components/schemas/EnvironmentListResponse"
+          },
+          "escalations": {
+            "$ref": "#/components/schemas/EscalationListResponse"
+          },
+          "facts": {
+            "$ref": "#/components/schemas/FactListResponse"
+          },
+          "fleet_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FleetSummaryView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "runner": {
+            "$ref": "#/components/schemas/RunnerStatusView"
+          },
+          "takeovers": {
+            "$ref": "#/components/schemas/OpenTakeoverListResponse"
+          }
+        },
+        "required": [
+          "runner",
+          "environments",
+          "asks",
+          "escalations",
+          "takeovers",
+          "facts",
+          "fleet_summary"
+        ],
+        "title": "DashboardView",
+        "type": "object"
+      },
       "EnvelopeArtifact": {
         "description": "One artifact carried into a node-step, resolved latest-by-epoch.",
         "properties": {
@@ -2542,6 +2586,28 @@
           }
         },
         "summary": "Get Work Items",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/dashboard": {
+      "get": {
+        "description": "The panel's seven reads composed into one \u2014 the six local sections always\npopulate; ``fleet_summary`` is ``None`` on a hub outage or an unwired runner.",
+        "operationId": "get_dashboard_api_dashboard_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Dashboard",
         "tags": [
           "runner"
         ]

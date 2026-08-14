@@ -40,6 +40,7 @@ _HUMAN: set[tuple[str, str]] = {
     ("POST", "/api/chunks/{chunk_id}/takeovers"),
     ("PATCH", "/api/chunks/{chunk_id}/takeovers/{takeover_id}"),
     ("GET", "/api/takeovers"),
+    ("GET", "/api/dashboard"),
     ("POST", "/api/chunks/{chunk_id}/requeues"),
     ("GET", "/api/chunks/{chunk_id}"),
     ("POST", "/api/chunks/{chunk_id}/pause"),

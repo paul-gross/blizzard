@@ -268,6 +268,27 @@ export type ChunkUsageTotalView = {
 };
 
 /**
+ * DashboardView
+ *
+ * ``GET /api/dashboard`` — the panel's seven status reads composed into one response.
+ *
+ * Read-only over its wiring (``bzh:controller-read-only``): every section but
+ * ``fleet_summary`` is derived from local store facts the same way its own individual
+ * route is, so it degrades exactly as those do. ``fleet_summary`` alone is a hub
+ * pass-through, so it alone is nullable — ``None`` when the hub call fails or this
+ * runner is unwired, while the six local sections still populate.
+ */
+export type DashboardView = {
+    asks: AskListResponse;
+    environments: EnvironmentListResponse;
+    escalations: EscalationListResponse;
+    facts: FactListResponse;
+    fleet_summary: FleetSummaryView | null;
+    runner: RunnerStatusView;
+    takeovers: OpenTakeoverListResponse;
+};
+
+/**
  * EnvelopeArtifact
  *
  * One artifact carried into a node-step, resolved latest-by-epoch.
@@ -1691,6 +1712,22 @@ export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponses = {
 };
 
 export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponse = GetWorkItemsApiChunksChunkIdWorkItemsGetResponses[keyof GetWorkItemsApiChunksChunkIdWorkItemsGetResponses];
+
+export type GetDashboardApiDashboardGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/dashboard';
+};
+
+export type GetDashboardApiDashboardGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DashboardView;
+};
+
+export type GetDashboardApiDashboardGetResponse = GetDashboardApiDashboardGetResponses[keyof GetDashboardApiDashboardGetResponses];
 
 export type ListEnvironmentsApiEnvironmentsGetData = {
     body?: never;
