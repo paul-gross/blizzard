@@ -13,13 +13,7 @@ import { injectRunnerLeasesQuery } from './leases.query';
 import { LocalPanelLayout } from './local-panel-layout';
 import { LocalPanelMobile } from './local-panel-mobile';
 import { injectPanelSelection } from './panel-selection';
-import {
-  injectRunnerAsksQuery,
-  injectRunnerEnvironmentsQuery,
-  injectRunnerEscalationsQuery,
-  injectRunnerStatusQuery,
-  injectRunnerTakeoversQuery,
-} from './status.query';
+import { injectRunnerDashboardQuery } from './status.query';
 
 /** One row in the machine-chunks list: a chunk's newest lease plus its derived
  * machine-side status, pre-folded so the layout needs no second read. `leases`
@@ -34,11 +28,14 @@ export interface MachineChunkRow {
 
 /**
  * The runner's machine-local panel — the data-orchestration container
- * (issue #80). Owns the four local-API query injections, the one derived-status
- * fold ({@link deriveMachineChunkStatus}), and the selection — which chunk is
- * open and which attempt tab is active, both bound to the URL's query params so
- * a link is shareable and a reload keeps its place (issue #99). Every panel below
- * it (via {@link LocalPanelLayout}) is presentational or owns just its own read.
+ * (issue #80). Owns the leases query plus the one shared
+ * {@link injectRunnerDashboardQuery} (issue #311's composed `GET
+ * /api/dashboard` read, folding what were five separate query injections
+ * here), the one derived-status fold ({@link deriveMachineChunkStatus}), and
+ * the selection — which chunk is open and which attempt tab is active, both
+ * bound to the URL's query params so a link is shareable and a reload keeps
+ * its place (issue #99). Every panel below it (via {@link LocalPanelLayout})
+ * is presentational or owns just its own read.
  *
  * The fold and the selection stay here rather than in the layout, per the
  * epic's design decision: the layout takes `machineChunks`/`selected*` as
@@ -47,8 +44,8 @@ export interface MachineChunkRow {
  * and every click writes them back, never the reverse.
  *
  * The shared header's live state is folded here too (issue #131): {@link headerStats}
- * off `GET /api/runner`'s capacities and `GET /api/environments`'s pool (envs and
- * agents used/capacity), and {@link connection} off the same status read's
+ * off the dashboard's `runner.capacities` and `environments` pool (envs and
+ * agents used/capacity), and {@link connection} off the same dashboard read's
  * pending/error state — `ok` once it resolves, `offline` on a failed read, never
  * the permanently-dead placeholder the header used to carry.
  */
@@ -140,45 +137,39 @@ export class LocalPanel {
   protected readonly mode = this.viewport.mode;
 
   protected readonly leasesQuery = injectRunnerLeasesQuery();
-  protected readonly asksQuery = injectRunnerAsksQuery();
-  protected readonly escalationsQuery = injectRunnerEscalationsQuery();
-  protected readonly takeoversQuery = injectRunnerTakeoversQuery();
 
-  /** The runner's own machine-local status — capacities (agents used/max) and
-   * connection health, off `GET /api/runner`, the same 5s-polled read
-   * {@link LocalInfo} already uses. */
-  protected readonly statusQuery = injectRunnerStatusQuery();
+  /** The panel's whole machine-local status read (issue #311) — `GET
+   * /api/dashboard`, the same 5s-polled query every other rail on this panel
+   * injects; TanStack dedupes the N injections into one request. Replaces
+   * what were five separate query injections here (asks, escalations,
+   * takeovers, status, environments). */
+  protected readonly dashboardQuery = injectRunnerDashboardQuery();
 
-  /** The configured environment pool — off `GET /api/environments`, the same
-   * read {@link EnvList} already uses; envs used is derived from how many
-   * carry a `chunk_id`. */
-  protected readonly environmentsQuery = injectRunnerEnvironmentsQuery();
-
-  /** The header's connection cell (issue #131) — `ok` once the runner local
-   * API's status read resolves, `offline` on a failed read, `connecting…`
-   * for the pending gap before the first read settles. Never the dead `'—'`
-   * placeholder the header used to carry: this is real health, derived from
-   * the same query every other hub-free rail on this panel already polls. */
+  /** The header's connection cell (issue #131) — `ok` once the dashboard
+   * read resolves, `offline` on a failed read, `connecting…` for the pending
+   * gap before the first read settles. Never the dead `'—'` placeholder the
+   * header used to carry: this is real health, derived from the same query
+   * every other hub-free rail on this panel already polls. */
   protected readonly connection = computed<string>(() => {
-    if (this.statusQuery.isPending()) return 'connecting…';
-    if (this.statusQuery.isError()) return 'offline';
+    if (this.dashboardQuery.isPending()) return 'connecting…';
+    if (this.dashboardQuery.isError()) return 'offline';
     return 'ok';
   });
 
   /** The header's live stat cells (issue #131) — environments in use/capacity
-   * off the environments pool, active agent leases/capacity off the status
-   * read's `capacities`. Withheld (`[]`) until *both* reads have resolved at
-   * least once, the same stance the header's own `spendToday` cell takes
-   * rather than show a misleading `$0.00` — a confident `Envs 0/0` before the
-   * first read would be the same lie one cell over. `isPending()` is only
-   * `true` for that initial gap (never on a background 5s-poll refetch), so
-   * this withholds once, on mount, rather than flapping the cells on every
-   * poll. */
+   * off the environments pool, active agent leases/capacity off the runner
+   * section's `capacities`. Withheld (`[]`) until the dashboard read has
+   * resolved at least once, the same stance the header's own `spendToday`
+   * cell takes rather than show a misleading `$0.00` — a confident `Envs
+   * 0/0` before the first read would be the same lie one cell over.
+   * `isPending()` is only `true` for that initial gap (never on a background
+   * 5s-poll refetch), so this withholds once, on mount, rather than flapping
+   * the cells on every poll. */
   protected readonly headerStats = computed<readonly StatCell[]>(() => {
-    if (this.environmentsQuery.isPending() || this.statusQuery.isPending()) return [];
-    const envs = this.environmentsQuery.data() ?? [];
+    if (this.dashboardQuery.isPending()) return [];
+    const envs = this.dashboardQuery.data()?.environments?.items ?? [];
     const envsUsed = envs.filter((env) => env.chunk_id != null).length;
-    const capacities = this.statusQuery.data()?.capacities;
+    const capacities = this.dashboardQuery.data()?.runner?.capacities;
     return [
       { key: 'envs', label: 'Envs', value: envsUsed, capacity: envs.length },
       { key: 'agents', label: 'Agents', value: capacities?.used ?? 0, capacity: capacities?.max_agents ?? 0 },
@@ -242,10 +233,11 @@ export class LocalPanel {
    * list's newest entry.
    */
   protected readonly machineChunks = computed<MachineChunkRow[]>(() => {
+    const dashboard = this.dashboardQuery.data();
     const facts = {
-      escalatedChunkIds: new Set((this.escalationsQuery.data() ?? []).map((esc) => esc.chunk_id)),
-      takeoverChunkIds: new Set((this.takeoversQuery.data() ?? []).map((tko) => tko.chunk_id)),
-      askChunkIds: new Set((this.asksQuery.data() ?? []).map((ask) => ask.chunk_id)),
+      escalatedChunkIds: new Set((dashboard?.escalations?.items ?? []).map((esc) => esc.chunk_id)),
+      takeoverChunkIds: new Set((dashboard?.takeovers?.items ?? []).map((tko) => tko.chunk_id)),
+      askChunkIds: new Set((dashboard?.asks?.items ?? []).map((ask) => ask.chunk_id)),
     };
     // Group by chunk in server order (newest attempt first); the Map preserves
     // first-seen insertion order, so the rows keep the newest-lease-first order.
@@ -286,7 +278,7 @@ export class LocalPanel {
   });
 
   /** The open-ask count for the asks panel's header note. */
-  protected readonly openAskCount = computed(() => (this.asksQuery.data() ?? []).length);
+  protected readonly openAskCount = computed(() => (this.dashboardQuery.data()?.asks?.items ?? []).length);
 
   /**
    * The mobile bottom tab bar's items (issue #92) — Machine is this shell's
@@ -386,6 +378,6 @@ export class LocalPanel {
   protected readonly selectedEscalation = computed<runnerApi.EscalationView | null>(() => {
     const chunkId = this.selectedChunkId();
     if (chunkId === null) return null;
-    return (this.escalationsQuery.data() ?? []).find((esc) => esc.chunk_id === chunkId) ?? null;
+    return (this.dashboardQuery.data()?.escalations?.items ?? []).find((esc) => esc.chunk_id === chunkId) ?? null;
   });
 }

@@ -9,7 +9,7 @@ import {
   type runnerApi,
 } from 'fleet';
 
-import { injectRunnerFactsQuery } from './status.query';
+import { injectRunnerDashboardQuery } from './status.query';
 
 /**
  * The local fact log — "runner store": the newest hub-bound facts off the
@@ -114,9 +114,9 @@ import { injectRunnerFactsQuery } from './status.query';
   `,
 })
 export class FactLog {
-  protected readonly query = injectRunnerFactsQuery();
+  protected readonly query = injectRunnerDashboardQuery();
 
-  protected readonly facts = computed(() => this.query.data() ?? []);
+  protected readonly facts = computed(() => this.query.data()?.facts?.items ?? []);
 
   /** The async triad's resolved state — loading/error take precedence, then
    * an empty ledger, else the fact rows render. */

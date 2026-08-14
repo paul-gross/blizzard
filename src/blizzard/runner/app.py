@@ -29,6 +29,7 @@ from blizzard.runner.api.asks import router as asks_router
 from blizzard.runner.api.attachments import router as attachments_router
 from blizzard.runner.api.chunk_detail import router as chunk_detail_router
 from blizzard.runner.api.control import router as control_router
+from blizzard.runner.api.dashboard import router as dashboard_router
 from blizzard.runner.api.environments import router as environments_router
 from blizzard.runner.api.escalations import router as escalations_router
 from blizzard.runner.api.facts import router as facts_router
@@ -129,6 +130,7 @@ _HUMAN = (
     escalations_router,
     facts_router,
     takeovers_router,
+    dashboard_router,
     requeues_router,
 )
 

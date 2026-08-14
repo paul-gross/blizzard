@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.wire.fleet import FleetSummaryView
+
 
 class PauseStateView(BaseModel):
     """The pause brake's two independent surfaces, plus their effective OR."""
@@ -136,3 +138,18 @@ class FactListResponse(BaseModel):
     """The most recent hub-bound facts, newest first."""
 
     items: list[FactView] = []
+
+
+class DashboardView(BaseModel):
+    """``GET /api/dashboard`` — the panel's seven status reads composed into one response
+    (``bzh:controller-read-only``). ``fleet_summary`` alone is a hub pass-through and
+    the only nullable section — ``None`` on a hub failure or an unwired runner, while
+    the six local sections still populate."""
+
+    runner: RunnerStatusView
+    environments: EnvironmentListResponse
+    asks: AskListResponse
+    escalations: EscalationListResponse
+    takeovers: OpenTakeoverListResponse
+    facts: FactListResponse
+    fleet_summary: FleetSummaryView | None

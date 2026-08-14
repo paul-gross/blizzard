@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
+import { runnerClient, type runnerApi } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
@@ -11,8 +11,30 @@ let stub: RequestClientStub | undefined;
 
 afterEach(() => stub?.restore());
 
-async function render(route: (method: string, path: string) => unknown): Promise<{ el: HTMLElement; fixture: ComponentFixture<FactLog> }> {
-  stub = stubRequestClient(runnerClient, route);
+/** A full `DashboardView` body, `facts.items` set to `facts` and every other
+ * section its empty default — `FactLog` reads off the shared `/api/dashboard`
+ * poll (issue #311), not a `/api/facts` route of its own. */
+function dashboardBody(facts: readonly runnerApi.FactView[]): runnerApi.DashboardView {
+  return {
+    runner: {
+      runner_id: 'runner-local',
+      workspace_id: 'workspace-local',
+      pause: { local: false, hub: false, effective: false },
+      capacities: { max_agents: 4, used: 0, free: 4 },
+      hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
+      last_tick_at: null,
+    },
+    environments: { items: [] },
+    asks: { items: [] },
+    escalations: { items: [] },
+    takeovers: { items: [] },
+    fleet_summary: null,
+    facts: { items: [...facts] },
+  };
+}
+
+async function render(facts: readonly runnerApi.FactView[]): Promise<{ el: HTMLElement; fixture: ComponentFixture<FactLog> }> {
+  stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/api/dashboard' ? dashboardBody(facts) : {}));
   await TestBed.configureTestingModule({
     imports: [FactLog],
     providers: [
@@ -40,22 +62,16 @@ describe('FactLog', () => {
     });
 
     it("renders today's fact as the local time alone, no day line", async () => {
-      const { el } = await render((method, path) =>
-        method === 'GET' && path === '/api/facts'
-          ? {
-              items: [
-                {
-                  seq: 1,
-                  kind: 'chunk_claimed',
-                  created_at: '2026-07-16T11:00:00+00:00', // 07:00 EDT, same local day as "now"
-                  chunk_id: null,
-                  lease_id: null,
-                  acked_at: null,
-                },
-              ],
-            }
-          : {},
-      );
+      const { el } = await render([
+        {
+          seq: 1,
+          kind: 'chunk_claimed',
+          created_at: '2026-07-16T11:00:00+00:00', // 07:00 EDT, same local day as "now"
+          chunk_id: null,
+          lease_id: null,
+          acked_at: null,
+        },
+      ]);
 
       const row = el.querySelector('[data-testid="fact-row"]');
       expect(row?.querySelector('.t .day')).toBeNull();
@@ -64,22 +80,16 @@ describe('FactLog', () => {
     });
 
     it("renders yesterday's fact as \"Yesterday\" above the local time", async () => {
-      const { el } = await render((method, path) =>
-        method === 'GET' && path === '/api/facts'
-          ? {
-              items: [
-                {
-                  seq: 1,
-                  kind: 'chunk_claimed',
-                  created_at: '2026-07-15T23:30:00+00:00', // 19:30 EDT the day before "now"
-                  chunk_id: null,
-                  lease_id: null,
-                  acked_at: null,
-                },
-              ],
-            }
-          : {},
-      );
+      const { el } = await render([
+        {
+          seq: 1,
+          kind: 'chunk_claimed',
+          created_at: '2026-07-15T23:30:00+00:00', // 19:30 EDT the day before "now"
+          chunk_id: null,
+          lease_id: null,
+          acked_at: null,
+        },
+      ]);
 
       const row = el.querySelector('[data-testid="fact-row"]');
       expect(row?.querySelector('.t .day')?.textContent).toBe('Yesterday');
@@ -87,22 +97,16 @@ describe('FactLog', () => {
     });
 
     it('renders an older fact with its yyyy-mm-dd date above the local time', async () => {
-      const { el } = await render((method, path) =>
-        method === 'GET' && path === '/api/facts'
-          ? {
-              items: [
-                {
-                  seq: 1,
-                  kind: 'chunk_claimed',
-                  created_at: '2026-07-01T11:00:00+00:00',
-                  chunk_id: null,
-                  lease_id: null,
-                  acked_at: null,
-                },
-              ],
-            }
-          : {},
-      );
+      const { el } = await render([
+        {
+          seq: 1,
+          kind: 'chunk_claimed',
+          created_at: '2026-07-01T11:00:00+00:00',
+          chunk_id: null,
+          lease_id: null,
+          acked_at: null,
+        },
+      ]);
 
       const row = el.querySelector('[data-testid="fact-row"]');
       expect(row?.querySelector('.t .day')?.textContent).toBe('2026-07-01');

@@ -268,6 +268,24 @@ export type ChunkUsageTotalView = {
 };
 
 /**
+ * DashboardView
+ *
+ * ``GET /api/dashboard`` — the panel's seven status reads composed into one response
+ * (``bzh:controller-read-only``). ``fleet_summary`` alone is a hub pass-through and
+ * the only nullable section — ``None`` on a hub failure or an unwired runner, while
+ * the six local sections still populate.
+ */
+export type DashboardView = {
+    asks: AskListResponse;
+    environments: EnvironmentListResponse;
+    escalations: EscalationListResponse;
+    facts: FactListResponse;
+    fleet_summary: FleetSummaryView | null;
+    runner: RunnerStatusView;
+    takeovers: OpenTakeoverListResponse;
+};
+
+/**
  * EnvelopeArtifact
  *
  * One artifact carried into a node-step, resolved latest-by-epoch.
@@ -1691,6 +1709,22 @@ export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponses = {
 };
 
 export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponse = GetWorkItemsApiChunksChunkIdWorkItemsGetResponses[keyof GetWorkItemsApiChunksChunkIdWorkItemsGetResponses];
+
+export type GetDashboardApiDashboardGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/dashboard';
+};
+
+export type GetDashboardApiDashboardGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DashboardView;
+};
+
+export type GetDashboardApiDashboardGetResponse = GetDashboardApiDashboardGetResponses[keyof GetDashboardApiDashboardGetResponses];
 
 export type ListEnvironmentsApiEnvironmentsGetData = {
     body?: never;

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.wire.runner_status import EscalationListResponse
 from blizzard.wire.runner_status import EscalationView as EscalationViewWire
 
@@ -19,7 +20,10 @@ router = APIRouter(prefix="/api", tags=["runner"])
 @router.get("/escalations", response_model=EscalationListResponse)
 def list_escalations(request: Request) -> EscalationListResponse:
     """Every escalation still open — no later lease mint, and the hub has not ended the chunk."""
-    service = RunnerWiring.of(request).status()
+    return _escalation_list(RunnerWiring.of(request).status())
+
+
+def _escalation_list(service: RunnerStatusService) -> EscalationListResponse:
     return EscalationListResponse(
         items=[
             EscalationViewWire(

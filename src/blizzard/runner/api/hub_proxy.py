@@ -39,19 +39,32 @@ class HubProxy:
             )
         return cls(config, what)
 
-    def get(self, path: str, *, expect: int = status.HTTP_200_OK, **fields: object) -> httpx.Response:
-        return self.forward("GET", path, expect=expect, **fields)
+    def get(
+        self, path: str, *, expect: int = status.HTTP_200_OK, timeout: float | None = None, **fields: object
+    ) -> httpx.Response:
+        return self.forward("GET", path, expect=expect, timeout=timeout, **fields)
 
-    def post(self, path: str, *, expect: int = status.HTTP_202_ACCEPTED, **fields: object) -> httpx.Response:
-        return self.forward("POST", path, expect=expect, **fields)
+    def post(
+        self, path: str, *, expect: int = status.HTTP_202_ACCEPTED, timeout: float | None = None, **fields: object
+    ) -> httpx.Response:
+        return self.forward("POST", path, expect=expect, timeout=timeout, **fields)
 
-    def forward(self, method: str, path: str, *, expect: int, **fields: object) -> httpx.Response:
+    def forward(
+        self, method: str, path: str, *, expect: int, timeout: float | None = None, **fields: object
+    ) -> httpx.Response:
         """Forward ``method path``, or raise ``502`` unreachable / the upstream status verbatim.
 
-        ``fields`` add a structured subject to the transport-failure log line."""
+        ``timeout`` overrides the module default (``_HUB_TIMEOUT``) for this one call —
+        omitted, every route keeps today's 15s behavior. ``fields`` add a structured
+        subject to the transport-failure log line."""
         url = f"{self.config.hub_url.rstrip('/')}{path}"
         try:
-            upstream = httpx.request(method, url, headers=self.config.auth_headers(), timeout=_HUB_TIMEOUT)
+            upstream = httpx.request(
+                method,
+                url,
+                headers=self.config.auth_headers(),
+                timeout=timeout if timeout is not None else _HUB_TIMEOUT,
+            )
         except httpx.HTTPError as exc:
             self._log().error(f"{self.what} proxy could not reach the hub", url=url, error=str(exc), **fields)
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"hub unreachable: {exc}") from exc

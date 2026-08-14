@@ -322,17 +322,27 @@ describe('LocalPanelMobile', () => {
   it('derives the titlebar live dot from the runner status hub-reachable read', async () => {
     stub.restore();
     stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/api/runner') {
+      if (method === 'GET' && path === '/api/dashboard') {
         return {
-          hub: {
-            endpoint: 'http://127.0.0.1:8421',
-            reachable: true,
-            last_contact_at: null,
-            buffer_depth: 0,
+          runner: {
+            runner_id: 'runner-local',
+            workspace_id: 'workspace-local',
+            hub: {
+              endpoint: 'http://127.0.0.1:8421',
+              reachable: true,
+              last_contact_at: null,
+              buffer_depth: 0,
+            },
+            capacities: { used: 0, max_agents: 4, free: 4 },
+            pause: { local: false, hub: false, effective: false },
+            last_tick_at: null,
           },
-          capacities: { used: 0, max_agents: 4 },
-          pause: { effective: false },
-          last_tick_at: null,
+          environments: { items: [] },
+          asks: { items: [] },
+          escalations: { items: [] },
+          takeovers: { items: [] },
+          facts: { items: [] },
+          fleet_summary: null,
         };
       }
       return { items: [] };

@@ -6,7 +6,7 @@ import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { injectLocalPauseMutation } from './status.query';
-import { runnerStatusKey } from './query-keys';
+import { runnerDashboardKey } from './query-keys';
 
 /** A minimal host so the mutation — a `Component` field initializer concern —
  * runs inside a real injection context, and so `fixture.detectChanges()` can
@@ -53,7 +53,7 @@ describe('injectLocalPauseMutation (issue #133)', () => {
   it('stays pending through the post-PATCH status re-read, not just the PATCH itself', async () => {
     // The stale-read window (issue #133 review): if `onSuccess` fired the
     // invalidation fire-and-forget, `isPending()` would clear the instant the
-    // PATCH resolved — before `runnerStatusKey` re-read lands — so the toggle
+    // PATCH resolved — before `runnerDashboardKey` re-read lands — so the toggle
     // would re-enable while still showing the pre-flip label, and a fast
     // second click would compute its flip off the stale value. Holding
     // `isPending()` open until the invalidation itself settles is what
@@ -78,7 +78,7 @@ describe('injectLocalPauseMutation (issue #133)', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: runnerStatusKey });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: runnerDashboardKey });
     expect(fixture.componentInstance.mutation.isPending()).toBe(true);
 
     resolveInvalidate();

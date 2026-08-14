@@ -11,6 +11,7 @@ from fastapi import APIRouter, Request
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.wire.runner_status import EnvironmentListResponse, EnvironmentView
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -19,7 +20,10 @@ router = APIRouter(prefix="/api", tags=["runner"])
 @router.get("/environments", response_model=EnvironmentListResponse)
 def list_environments(request: Request) -> EnvironmentListResponse:
     """Every environment in this runner's configured pool, held or free."""
-    service = RunnerWiring.of(request).status()
+    return _environment_list(RunnerWiring.of(request).status())
+
+
+def _environment_list(service: RunnerStatusService) -> EnvironmentListResponse:
     return EnvironmentListResponse(
         items=[
             EnvironmentView(

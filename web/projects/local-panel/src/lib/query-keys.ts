@@ -6,36 +6,20 @@
  */
 export const runnerLeasesKey = ['runner', 'leases'] as const;
 
-/** `GET /api/runner` — identity, capacities, hub connectivity, last tick. */
-export const runnerStatusKey = ['runner', 'status'] as const;
-
-/** `GET /api/environments` — the held env bindings. */
-export const runnerEnvironmentsKey = ['runner', 'environments'] as const;
+/**
+ * `GET /api/dashboard` — the panel's seven status reads composed into one response
+ * (issue #311): `runner` (identity, capacities, hub connectivity, last tick),
+ * `environments`, `asks`, `escalations`, `takeovers`, `facts`, and `fleet_summary`.
+ * One key for every rail this panel polls, so TanStack dedupes the N components
+ * that inject it into the single shared `GET /api/dashboard` request — the same
+ * dedupe `local-info.ts` and `local-panel-mobile.ts` already relied on for their
+ * one shared `GET /api/runner` read, now extended to all seven sections.
+ */
+export const runnerDashboardKey = ['runner', 'dashboard'] as const;
 
 /** `GET /api/auth/session` — whether the surface is gated, and the signed-in
  * hub username, behind the panel's username/logout control (issue #129). */
 export const runnerSessionKey = ['runner', 'session'] as const;
-
-/** `GET /api/asks?open=true` — the open local asks. */
-export const runnerAsksKey = ['runner', 'asks'] as const;
-
-/** `GET /api/escalations` — parked escalations with their resume commands. */
-export const runnerEscalationsKey = ['runner', 'escalations'] as const;
-
-/** `GET /api/takeovers` — open operator takeovers. */
-export const runnerTakeoversKey = ['runner', 'takeovers'] as const;
-
-/** `GET /api/facts` — the local fact log off the outbound ledger. */
-export const runnerFactsKey = ['runner', 'facts'] as const;
-
-/**
- * `GET /api/fleet-summary` — the hub-rail counts strip's four bucket counts
- * (ready/running/waiting/needs), pass-through-forwarded to the hub (issue #76).
- * Its own key, distinct from the hub-free `runner`-namespaced reads: it is the one
- * rail read that depends on hub reachability, and degrades on its own error without
- * disturbing them.
- */
-export const runnerFleetSummaryKey = ['runner', 'fleet-summary'] as const;
 
 /**
  * One chunk's pass-through work items (issue title + labels), keyed by chunk id.
