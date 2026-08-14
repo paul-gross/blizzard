@@ -21,7 +21,7 @@ import { LocalIdentity } from './local-identity';
 import { LocalInfo } from './local-info';
 import type { MachineChunkRow } from './local-panel';
 import { injectRunnerSessionQuery, signedInUsername } from './auth.query';
-import { injectRunnerStatusQuery } from './status.query';
+import { injectRunnerDashboardQuery } from './status.query';
 
 /**
  * The runner local panel's mobile shell (mobile mockups, `../docs/designs/mobile/README.md`)
@@ -60,9 +60,10 @@ import { injectRunnerStatusQuery } from './status.query';
  * rebuild (issue #161) that menu's panel is declared here and passed to the
  * titlebar as a template — a `CdkMenu` finds its items by a content query,
  * which cannot cross an `<ng-content>` boundary. Its `live` input is
- * this runner's own hub-reachability read (`GET /api/runner`'s
- * `hub.reachable`, the same fact `local-info.ts`'s "link" cell renders) —
- * never a new poll, the same severable {@link injectRunnerStatusQuery} read.
+ * this runner's own hub-reachability read (`GET /api/dashboard`'s
+ * `runner.hub.reachable`, the same fact `local-info.ts`'s "link" cell
+ * renders) — never a new poll, the same severable {@link injectRunnerDashboardQuery}
+ * read.
  */
 @Component({
   selector: 'local-panel-mobile',
@@ -311,14 +312,14 @@ export class LocalPanelMobile {
   protected readonly detailOpen = computed(() => this.selectedChunkLeases().length > 0);
 
   /** The titlebar's own severable read (`local-info.ts`'s own instance dedupes
-   * on the same query key, so this is not a second poll) — `hub.reachable`
-   * off `GET /api/runner`, the same fact `local-info`'s "link" cell renders. */
-  private readonly runnerStatusQuery = injectRunnerStatusQuery();
+   * on the same query key, so this is not a second poll) — `runner.hub.reachable`
+   * off `GET /api/dashboard`, the same fact `local-info`'s "link" cell renders. */
+  private readonly dashboardQuery = injectRunnerDashboardQuery();
 
   /** Whether the hub link is reachable — the titlebar's `live` dot. A
    * malformed body (e.g. a misrouted proxy) must degrade to `false`, not
    * throw mid-render — the same guard `local-info.ts`'s own `view` takes. */
-  protected readonly hubReachable = computed(() => this.runnerStatusQuery.data()?.hub?.reachable ?? false);
+  protected readonly hubReachable = computed(() => this.dashboardQuery.data()?.runner?.hub?.reachable ?? false);
 
   private readonly sessionQuery = injectRunnerSessionQuery();
 

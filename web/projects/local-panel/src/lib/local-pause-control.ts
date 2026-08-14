@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import { errorMessage, KitBadge, KitButton } from 'fleet';
 
-import { injectLocalPauseMutation, injectRunnerStatusQuery } from './status.query';
+import { injectLocalPauseMutation, injectRunnerDashboardQuery } from './status.query';
 
 /**
  * The runner top bar's pause/unpause control (issue #133) — the local brake's
@@ -12,7 +12,7 @@ import { injectLocalPauseMutation, injectRunnerStatusQuery } from './status.quer
  * already hosts a self-fetching mini-container in (issue #131's design).
  *
  * Reads `GET /api/runner`'s `pause` triad off the same
- * {@link injectRunnerStatusQuery} every other rail on this panel already
+ * {@link injectRunnerDashboardQuery} every other rail on this panel already
  * polls — no second read, and the toggle's own mutation invalidates it so a
  * click reflects immediately rather than waiting on the 5s poll floor.
  *
@@ -84,15 +84,15 @@ import { injectLocalPauseMutation, injectRunnerStatusQuery } from './status.quer
   `,
 })
 export class LocalPauseControl {
-  private readonly statusQuery = injectRunnerStatusQuery();
+  private readonly dashboardQuery = injectRunnerDashboardQuery();
   private readonly pauseMutation = injectLocalPauseMutation();
 
   /** This runner's own brake — "I won't try". `false` before the first read
    * resolves or on a malformed body, matching {@link LocalInfo}'s guard. */
-  protected readonly localPaused = computed<boolean>(() => this.statusQuery.data()?.pause?.local ?? false);
+  protected readonly localPaused = computed<boolean>(() => this.dashboardQuery.data()?.runner?.pause?.local ?? false);
 
   /** The hub's brake, as last mirrored by PULL — untouched by this control. */
-  protected readonly hubPaused = computed<boolean>(() => this.statusQuery.data()?.pause?.hub ?? false);
+  protected readonly hubPaused = computed<boolean>(() => this.dashboardQuery.data()?.runner?.pause?.hub ?? false);
 
   /** Disables the toggle while a flip is in flight, so a double click can't
    * race two PATCHes. */

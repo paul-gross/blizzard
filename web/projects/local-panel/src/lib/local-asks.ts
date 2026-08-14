@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { ageMs, compactRef, formatHeldFor, KitAsyncState, type KitAsyncStateValue, type runnerApi } from 'fleet';
 
-import { injectRunnerAsksQuery } from './status.query';
+import { injectRunnerDashboardQuery } from './status.query';
 
 /**
  * The local-asks panel — "answers live at the hub": every ask still open on
@@ -85,9 +85,9 @@ import { injectRunnerAsksQuery } from './status.query';
   `,
 })
 export class LocalAsks {
-  protected readonly query = injectRunnerAsksQuery();
+  protected readonly query = injectRunnerDashboardQuery();
 
-  protected readonly asks = computed(() => this.query.data() ?? []);
+  protected readonly asks = computed(() => this.query.data()?.asks?.items ?? []);
 
   /** The async triad's resolved state — loading/error take precedence, then
    * no open asks, else the ask rows render. */

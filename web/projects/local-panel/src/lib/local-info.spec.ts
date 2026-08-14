@@ -1,15 +1,16 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { runnerClient, type runnerApi } from 'fleet';
+import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { LocalInfo } from './local-info';
 
-/** The runner's own hub-link facts off `GET /api/runner` — hub-free, so it resolves
- * even when the fleet-summary forward fails, letting the strip render its degraded
- * state while the rest of the panel stays lit. */
+/** The runner's own hub-link facts off `GET /api/dashboard`'s `runner` section —
+ * hub-free, so it resolves even when the fleet-summary forward fails (`fleet_summary:
+ * null`, issue #311), letting the strip render its degraded state while the rest of
+ * the panel stays lit. */
 const RUNNER_STATUS = {
   runner_id: 'runner-local',
   workspace_id: 'workspace-local',
@@ -26,13 +27,27 @@ const RUNNER_STATUS = {
 
 const COUNTS = { ready: 4, running: 3, waiting: 2, needs: 1 };
 
-/** Render `LocalInfo` with `/api/runner` resolved and `/api/fleet-summary` answered by
- * `fleetSummary` — a canned counts body, or a {@link stubError} for the degraded path. */
-async function render(fleetSummary: () => unknown) {
+/** A full `DashboardView` body — the runner section fixed to {@link RUNNER_STATUS},
+ * every other section its empty default, `fleet_summary` set to `fleetSummary`. */
+function dashboardBody(fleetSummary: runnerApi.FleetSummaryView | null): runnerApi.DashboardView {
+  return {
+    runner: RUNNER_STATUS,
+    environments: { items: [] },
+    asks: { items: [] },
+    escalations: { items: [] },
+    takeovers: { items: [] },
+    facts: { items: [] },
+    fleet_summary: fleetSummary,
+  };
+}
+
+/** Render `LocalInfo` with `/api/dashboard` answered by `fleetSummary` — the canned
+ * counts, or `null` for the degraded path (a hub outage is a 200 with a null slot
+ * under the aggregate, never a failed request). */
+async function render(fleetSummary: runnerApi.FleetSummaryView | null) {
   const stub = stubRequestClient(runnerClient, (method, path) => {
     if (method !== 'GET') return {};
-    if (path === '/api/runner') return RUNNER_STATUS;
-    if (path === '/api/fleet-summary') return fleetSummary();
+    if (path === '/api/dashboard') return dashboardBody(fleetSummary);
     return {};
   });
   await TestBed.configureTestingModule({
@@ -52,8 +67,8 @@ describe('LocalInfo fleet-summary strip', () => {
 
   afterEach(() => stub.restore());
 
-  it('reads the counts off GET /api/fleet-summary and renders the four buckets', async () => {
-    const { fixture, stub: s } = await render(() => COUNTS);
+  it('reads the counts off GET /api/dashboard and renders the four buckets', async () => {
+    const { fixture, stub: s } = await render(COUNTS);
     stub = s;
     const el = fixture.nativeElement as HTMLElement;
 
@@ -64,12 +79,12 @@ describe('LocalInfo fleet-summary strip', () => {
     // Live, not degraded.
     expect(el.querySelector('[data-testid="fleet-strip"]')?.classList.contains('stale')).toBe(false);
     expect(el.querySelector('[data-testid="fleet-age"]')?.textContent).toContain('live');
-    // It read through the runner's own pass-through, not the hub directly.
-    expect(stub.forRoute('/api/fleet-summary', 'GET').length).toBeGreaterThan(0);
+    // It read through the composed dashboard read, not the hub directly.
+    expect(stub.forRoute('/api/dashboard', 'GET').length).toBeGreaterThan(0);
   });
 
   it('renders a zero count, not a dash, for an empty bucket', async () => {
-    const { fixture, stub: s } = await render(() => ({ ready: 0, running: 0, waiting: 0, needs: 0 }));
+    const { fixture, stub: s } = await render({ ready: 0, running: 0, waiting: 0, needs: 0 });
     stub = s;
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="fleet-ready"]')?.textContent).toContain('0');
@@ -77,9 +92,10 @@ describe('LocalInfo fleet-summary strip', () => {
   });
 
   it('degrades to the last-known/dimmed state when the hub forward fails', async () => {
-    // A hub outage surfaces as the proxy's 502 — the strip dims and banners "last known",
-    // and the rest of the panel (hub-free) is unaffected.
-    const { fixture, stub: s } = await render(() => stubError(502, { detail: 'hub unreachable' }));
+    // A hub outage is a 200 `/api/dashboard` read carrying `fleet_summary: null`
+    // (issue #311) — the strip dims and banners "last known", and the rest of the
+    // panel (hub-free) is unaffected.
+    const { fixture, stub: s } = await render(null);
     stub = s;
     const el = fixture.nativeElement as HTMLElement;
 
@@ -108,7 +124,7 @@ describe('LocalInfo last-flush/tick ticking (issue #178)', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const dateNow = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-16T12:00:00.000Z'));
-      const { fixture, stub: s } = await render(() => COUNTS);
+      const { fixture, stub: s } = await render(COUNTS);
       stub = s;
       const el = fixture.nativeElement as HTMLElement;
       expect(el.querySelector('[data-testid="hub-last-flush"]')?.textContent).toContain('-30s');

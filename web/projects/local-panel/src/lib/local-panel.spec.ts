@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, type ParamMap, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient, ViewportService } from 'fleet';
+import { runnerClient, type runnerApi, ViewportService } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { BehaviorSubject } from 'rxjs';
 import { type Mock, vi } from 'vitest';
@@ -70,13 +70,43 @@ const LEASE = (overrides: Record<string, unknown> = {}) => ({
 });
 
 /**
+ * A minimal-but-complete `DashboardView` (issue #311) — every rail below
+ * `LocalPanel` now reads one shared `GET /api/dashboard` poll rather than one
+ * endpoint each, so a test overrides just the section(s) it cares about via
+ * `overrides` rather than stubbing a path of its own.
+ */
+function dashboardBody(overrides: Partial<runnerApi.DashboardView> = {}): runnerApi.DashboardView {
+  return {
+    runner: {
+      runner_id: 'runner-local',
+      workspace_id: 'workspace-local',
+      pause: { local: false, hub: false, effective: false },
+      capacities: { max_agents: 4, used: 0, free: 4 },
+      hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
+      last_tick_at: null,
+    },
+    environments: { items: [] },
+    asks: { items: [] },
+    escalations: { items: [] },
+    takeovers: { items: [] },
+    facts: { items: [] },
+    fleet_summary: null,
+    ...overrides,
+  };
+}
+
+/**
  * A route table for the shell's whole read surface. Leases come from `leases`;
- * every other local read defaults to its empty shape so a test that only cares
- * about the lease/chunk panes stays silent about the rails. Override per-path
- * via `extra` (return `undefined` to fall through to the defaults).
+ * the panel's other seven-sections-in-one read (`/api/dashboard`) defaults to
+ * {@link dashboardBody}'s empty shape, overridable per section via
+ * `dashboard`. Override any other path via `extra` (return `undefined` to
+ * fall through to the defaults) — still needed for `/api/leases/{id}
+ * /transcript` and `/api/chunks/{id}/work-items`, whose own reads are out of
+ * this issue's scope.
  */
 function routes(
   leases: unknown[],
+  dashboard: Partial<runnerApi.DashboardView> = {},
   extra: (method: string, path: string) => unknown = () => undefined,
 ): (method: string, path: string) => unknown {
   return (method, path) => {
@@ -84,6 +114,7 @@ function routes(
     if (special !== undefined) return special;
     if (method !== 'GET') return {};
     if (path === '/api/leases') return { items: leases };
+    if (path === '/api/dashboard') return dashboardBody(dashboard);
     return { items: [] };
   };
 }
@@ -133,7 +164,7 @@ describe('LocalPanel', () => {
 
   it('shows offline in the header when the runner local API is unreachable (issue #131)', async () => {
     stub = stubRequestClient(runnerClient,
-      routes([], (method, path) => (method === 'GET' && path === '/api/runner' ? stubError(503, { detail: 'down' }) : undefined)),
+      routes([], {}, (method, path) => (method === 'GET' && path === '/api/dashboard' ? stubError(503, { detail: 'down' }) : undefined)),
     );
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
@@ -143,28 +174,23 @@ describe('LocalPanel', () => {
 
   it('folds the runner status and environments reads into the header stat cells (issue #131)', async () => {
     stub = stubRequestClient(runnerClient,
-      routes([], (method, path) => {
-        if (method === 'GET' && path === '/api/runner') {
-          return {
-            runner_id: 'runner-local',
-            workspace_id: 'workspace-local',
-            pause: { local: false, hub: false, effective: false },
-            capacities: { max_agents: 2, used: 1, free: 1 },
-            hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
-            last_tick_at: null,
-          };
-        }
-        if (method === 'GET' && path === '/api/environments') {
-          return {
-            items: [
-              { environment_id: 'alpha', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', held_since: '2026-07-16T11:18:00.000Z' },
-              { environment_id: 'beta', chunk_id: null, held_since: null },
-              { environment_id: 'gamma', chunk_id: null, held_since: null },
-              { environment_id: 'delta', chunk_id: null, held_since: null },
-            ],
-          };
-        }
-        return undefined;
+      routes([], {
+        runner: {
+          runner_id: 'runner-local',
+          workspace_id: 'workspace-local',
+          pause: { local: false, hub: false, effective: false },
+          capacities: { max_agents: 2, used: 1, free: 1 },
+          hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
+          last_tick_at: null,
+        },
+        environments: {
+          items: [
+            { environment_id: 'alpha', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', held_since: '2026-07-16T11:18:00.000Z' },
+            { environment_id: 'beta', chunk_id: null, held_since: null },
+            { environment_id: 'gamma', chunk_id: null, held_since: null },
+            { environment_id: 'delta', chunk_id: null, held_since: null },
+          ],
+        },
       }),
     );
     const fixture = await render();
@@ -307,22 +333,20 @@ describe('LocalPanel', () => {
 
   it('derives NEEDS HUMAN from an open escalation, outranking the lease state — visible without checking show-all', async () => {
     stub = stubRequestClient(runnerClient,
-      routes([LEASE({ state: 'closed', closure_reason: 'escalated' })], (method, path) =>
-        method === 'GET' && path === '/api/escalations'
-          ? {
-              items: [
-                {
-                  chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-                  lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
-                  node_id: 'nd_build',
-                  epoch: 2,
-                  closed_at: '2026-07-16T11:45:00.000Z',
-                  resume_command: 'cd /ws/beta && claude --resume sess-77',
-                },
-              ],
-            }
-          : undefined,
-      ),
+      routes([LEASE({ state: 'closed', closure_reason: 'escalated' })], {
+        escalations: {
+          items: [
+            {
+              chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+              lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
+              node_id: 'nd_build',
+              epoch: 2,
+              closed_at: '2026-07-16T11:45:00.000Z',
+              resume_command: 'cd /ws/beta && claude --resume sess-77',
+            },
+          ],
+        },
+      }),
     );
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
@@ -400,22 +424,20 @@ describe('LocalPanel', () => {
 
     it('shows the escalation resume command in the dock for an escalated selected chunk', async () => {
       stub = stubRequestClient(runnerClient,
-        routes([LEASE({ state: 'closed', closure_reason: 'escalated' })], (method, path) =>
-          method === 'GET' && path === '/api/escalations'
-            ? {
-                items: [
-                  {
-                    chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-                    lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
-                    node_id: 'nd_build',
-                    epoch: 2,
-                    closed_at: '2026-07-16T11:45:00.000Z',
-                    resume_command: 'cd /ws/beta && claude --resume sess-77',
-                  },
-                ],
-              }
-            : undefined,
-        ),
+        routes([LEASE({ state: 'closed', closure_reason: 'escalated' })], {
+          escalations: {
+            items: [
+              {
+                chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+                lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
+                node_id: 'nd_build',
+                epoch: 2,
+                closed_at: '2026-07-16T11:45:00.000Z',
+                resume_command: 'cd /ws/beta && claude --resume sess-77',
+              },
+            ],
+          },
+        }),
       );
       const fixture = await render();
       const el = fixture.nativeElement as HTMLElement;
@@ -557,7 +579,7 @@ describe('LocalPanel', () => {
   describe('the work-item enrichment stays severable (issue #28)', () => {
     it('renders chunk rows on chunk_id alone when every work-items read 502s — the panel must not depend on the hub', async () => {
       stub = stubRequestClient(runnerClient,
-        routes([LEASE()], (method, path) => {
+        routes([LEASE()], {}, (method, path) => {
           if (method === 'GET' && WORK_ITEMS_ROUTE.test(path)) return stubError(502, { detail: 'stubbed route error (502)' });
           return undefined;
         }),
@@ -571,7 +593,7 @@ describe('LocalPanel', () => {
 
     it('renders the pointer label as a link to the work item when web_url arrived', async () => {
       stub = stubRequestClient(runnerClient,
-        routes([LEASE()], (method, path) =>
+        routes([LEASE()], {}, (method, path) =>
           method === 'GET' && WORK_ITEMS_ROUTE.test(path)
             ? {
                 items: [
@@ -609,25 +631,23 @@ describe('LocalPanel', () => {
   });
 
   describe('the right rail', () => {
-    it('renders the hub link panel off GET /api/runner, endpoint and board link included', async () => {
+    it('renders the hub link panel off GET /api/dashboard, endpoint and board link included', async () => {
       stub = stubRequestClient(runnerClient,
-        routes([], (method, path) =>
-          method === 'GET' && path === '/api/runner'
-            ? {
-                runner_id: 'runner-local',
-                workspace_id: 'workspace-local',
-                pause: { local: false, hub: false, effective: false },
-                capacities: { max_agents: 4, used: 1, free: 3 },
-                hub: {
-                  endpoint: 'http://127.0.0.1:8421',
-                  reachable: true,
-                  last_contact_at: '2026-07-16T11:59:30.000Z',
-                  buffer_depth: 2,
-                },
-                last_tick_at: '2026-07-16T11:59:45.000Z',
-              }
-            : undefined,
-        ),
+        routes([], {
+          runner: {
+            runner_id: 'runner-local',
+            workspace_id: 'workspace-local',
+            pause: { local: false, hub: false, effective: false },
+            capacities: { max_agents: 4, used: 1, free: 3 },
+            hub: {
+              endpoint: 'http://127.0.0.1:8421',
+              reachable: true,
+              last_contact_at: '2026-07-16T11:59:30.000Z',
+              buffer_depth: 2,
+            },
+            last_tick_at: '2026-07-16T11:59:45.000Z',
+          },
+        }),
       );
       const fixture = await render();
       const el = fixture.nativeElement as HTMLElement;
@@ -641,23 +661,21 @@ describe('LocalPanel', () => {
 
     it('renders open asks with their chunk refs and age', async () => {
       stub = stubRequestClient(runnerClient,
-        routes([], (method, path) =>
-          method === 'GET' && path === '/api/asks'
-            ? {
-                items: [
-                  {
-                    question_id: 'qn_01KXKVVF1J3D6H6VYZ3XYNQ777',
-                    chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-                    lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
-                    question: 'which branch?',
-                    options: [],
-                    session_id: 'sess-77',
-                    asked_at: '2026-07-16T11:40:00.000Z',
-                  },
-                ],
-              }
-            : undefined,
-        ),
+        routes([], {
+          asks: {
+            items: [
+              {
+                question_id: 'qn_01KXKVVF1J3D6H6VYZ3XYNQ777',
+                chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+                lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
+                question: 'which branch?',
+                options: [],
+                session_id: 'sess-77',
+                asked_at: '2026-07-16T11:40:00.000Z',
+              },
+            ],
+          },
+        }),
       );
       const fixture = await render();
       const el = fixture.nativeElement as HTMLElement;
@@ -670,30 +688,28 @@ describe('LocalPanel', () => {
 
     it('renders the fact log off the outbound ledger with flush markers', async () => {
       stub = stubRequestClient(runnerClient,
-        routes([], (method, path) =>
-          method === 'GET' && path === '/api/facts'
-            ? {
-                items: [
-                  {
-                    seq: 2,
-                    kind: 'completion.submitted',
-                    chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-                    lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
-                    created_at: '2026-07-16T11:58:00.000Z',
-                    acked_at: null,
-                  },
-                  {
-                    seq: 1,
-                    kind: 'lease.minted',
-                    chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-                    lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
-                    created_at: '2026-07-16T11:50:00.000Z',
-                    acked_at: '2026-07-16T11:50:05.000Z',
-                  },
-                ],
-              }
-            : undefined,
-        ),
+        routes([], {
+          facts: {
+            items: [
+              {
+                seq: 2,
+                kind: 'completion.submitted',
+                chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+                lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
+                created_at: '2026-07-16T11:58:00.000Z',
+                acked_at: null,
+              },
+              {
+                seq: 1,
+                kind: 'lease.minted',
+                chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+                lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
+                created_at: '2026-07-16T11:50:00.000Z',
+                acked_at: '2026-07-16T11:50:05.000Z',
+              },
+            ],
+          },
+        }),
       );
       const fixture = await render();
       const el = fixture.nativeElement as HTMLElement;
@@ -708,19 +724,17 @@ describe('LocalPanel', () => {
 
     it('renders the held environments with chunk ref and held-for age', async () => {
       stub = stubRequestClient(runnerClient,
-        routes([], (method, path) =>
-          method === 'GET' && path === '/api/environments'
-            ? {
-                items: [
-                  {
-                    environment_id: 'beta',
-                    chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-                    held_since: '2026-07-16T11:18:00.000Z',
-                  },
-                ],
-              }
-            : undefined,
-        ),
+        routes([], {
+          environments: {
+            items: [
+              {
+                environment_id: 'beta',
+                chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+                held_since: '2026-07-16T11:18:00.000Z',
+              },
+            ],
+          },
+        }),
       );
       const fixture = await render();
       const el = fixture.nativeElement as HTMLElement;
@@ -733,20 +747,18 @@ describe('LocalPanel', () => {
 
     it('renders a mixed pool — a held row throbbing amber beside a static grey unused row', async () => {
       stub = stubRequestClient(runnerClient,
-        routes([], (method, path) =>
-          method === 'GET' && path === '/api/environments'
-            ? {
-                items: [
-                  {
-                    environment_id: 'beta',
-                    chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-                    held_since: '2026-07-16T11:18:00.000Z',
-                  },
-                  { environment_id: 'gamma', chunk_id: null, held_since: null },
-                ],
-              }
-            : undefined,
-        ),
+        routes([], {
+          environments: {
+            items: [
+              {
+                environment_id: 'beta',
+                chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+                held_since: '2026-07-16T11:18:00.000Z',
+              },
+              { environment_id: 'gamma', chunk_id: null, held_since: null },
+            ],
+          },
+        }),
       );
       const fixture = await render();
       const el = fixture.nativeElement as HTMLElement;
@@ -773,9 +785,7 @@ describe('LocalPanel', () => {
     });
 
     it('renders the empty state only when the pool itself is empty', async () => {
-      stub = stubRequestClient(runnerClient,
-        routes([], (method, path) => (method === 'GET' && path === '/api/environments' ? { items: [] } : undefined)),
-      );
+      stub = stubRequestClient(runnerClient, routes([], { environments: { items: [] } }));
       const fixture = await render();
       const el = fixture.nativeElement as HTMLElement;
 
@@ -865,14 +875,13 @@ describe('LocalPanel', () => {
       const ask = {
         question_id: 'qn_1',
         chunk_id: 'ch_1',
-        runner_id: 'r1',
+        lease_id: 'lease_1',
         question: 'a?',
         options: [],
+        session_id: null,
+        asked_at: '2026-07-16T11:40:00.000Z',
       };
-      stub = stubRequestClient(
-        runnerClient,
-        routes([], (method, path) => (method === 'GET' && path === '/api/asks' ? { items: [ask] } : undefined)),
-      );
+      stub = stubRequestClient(runnerClient, routes([], { asks: { items: [ask] } }));
       await setUp();
       TestBed.inject(ViewportService).setOverride('mobile');
       const fixture = TestBed.createComponent(LocalPanel);

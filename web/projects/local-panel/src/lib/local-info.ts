@@ -1,23 +1,27 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { ageMs, formatAge, injectNowSignal, KitAsyncState, type KitAsyncStateValue } from 'fleet';
+import { ChangeDetectionStrategy, Component, computed, effect, signal } from '@angular/core';
+import { ageMs, formatAge, injectNowSignal, KitAsyncState, type KitAsyncStateValue, type runnerApi } from 'fleet';
 
-import { injectRunnerFleetSummaryQuery, injectRunnerStatusQuery } from './status.query';
+import { injectRunnerDashboardQuery } from './status.query';
 
 /**
  * The hub-link panel — the discovery mock's "hub · outbound only, nothing
  * dials in": the configured hub endpoint, derived reachability, last flush
  * (last successful PULL contact), the outbound buffer depth, and this runner's
- * own capacities/pause state. All off `GET /api/runner` — the runner's *own*
- * facts about its hub link, not a live hub read; the board link is the one
- * hand-off to the hub app, minted from the endpoint the wire now carries.
+ * own capacities/pause state. All off `GET /api/dashboard`'s `runner` section
+ * — the runner's *own* facts about its hub link, not a live hub read; the
+ * board link is the one hand-off to the hub app, minted from the endpoint the
+ * wire now carries.
  *
  * Below the link facts is the discovery mock's fleet counts strip
  * (ready/running/waiting/needs) — a fleet-level pulse. Those counts *are* a
- * hub read, so unlike the rest of this panel they arrive through the runner's
- * own `GET /api/fleet-summary` pass-through (issue #76): the hub API allows no
- * cross-origin browser read, so the runner forwards it. When that forward fails
- * (hub unreachable), the strip degrades to its last-known/dimmed state and the
- * rest of the panel — all hub-free — is unaffected.
+ * hub read, so unlike the rest of this panel they arrive through the same
+ * dashboard read's `fleet_summary` section — the runner's own `GET
+ * /api/fleet-summary` pass-through (issue #76), folded in by Phase 1 (issue
+ * #311): the hub API allows no cross-origin browser read, so the runner
+ * forwards it. `fleet_summary` is `null` exactly when that forward fails (hub
+ * unreachable or unwired) — a **200** carrying a null slot, not a failed
+ * request, so the strip's degraded/last-known state can no longer be read off
+ * the query's own `isError()`. See {@link latchedFleet}.
  */
 @Component({
   selector: 'local-info',
@@ -190,25 +194,39 @@ import { injectRunnerFleetSummaryQuery, injectRunnerStatusQuery } from './status
   `,
 })
 export class LocalInfo {
-  protected readonly query = injectRunnerStatusQuery();
-  protected readonly fleetQuery = injectRunnerFleetSummaryQuery();
+  protected readonly query = injectRunnerDashboardQuery();
 
   protected readonly view = computed(() => {
-    const data = this.query.data();
+    const data = this.query.data()?.runner;
     // A malformed body (e.g. `{}` from a misrouted proxy) must render the
     // degraded state, not throw on `hub.endpoint` mid-template.
     return data?.hub && data.capacities && data.pause ? data : null;
   });
 
-  /** The last-known fleet counts, or `null` before the first successful read.
-   * TanStack retains this across a later hub-outage error, so the strip keeps
-   * showing the last-known numbers (dimmed) rather than blanking. */
-  protected readonly fleet = computed(() => this.fleetQuery.data() ?? null);
+  /**
+   * The fleet strip's own latch (issue #311): under the composed read, a hub
+   * outage is a successful `/api/dashboard` read carrying `fleet_summary: null`
+   * — TanStack sees no error and retains nothing special about the prior
+   * counts, so without this the strip would blank instead of degrading. This
+   * `effect()` tracks the *last non-null* `fleet_summary` seen, leaving the
+   * signal untouched on a `null` read — the same "keep showing last-known"
+   * behavior the old two-query shape got for free from TanStack's own error-path
+   * data retention.
+   */
+  private readonly latchedFleet = signal<runnerApi.FleetSummaryView | null>(null);
+  private readonly latchFleetSummary = effect(() => {
+    const summary = this.query.data()?.fleet_summary;
+    if (summary != null) this.latchedFleet.set(summary);
+  });
 
-  /** The hub-summary read failed (hub unreachable / not wired) — the strip
-   * degrades to its dimmed last-known state. The rest of the panel is hub-free,
-   * so it is unaffected. */
-  protected readonly fleetStale = computed<boolean>(() => this.fleetQuery.isError());
+  /** The last-known fleet counts, or `null` before the first successful read —
+   * {@link latchedFleet}'s own latch, not TanStack's `data()`. */
+  protected readonly fleet = computed(() => this.latchedFleet());
+
+  /** The current read's `fleet_summary` slot is `null` (hub unreachable / not
+   * wired, or no read has resolved yet) — the strip degrades to its dimmed
+   * last-known state. The rest of the panel is hub-free, so it is unaffected. */
+  protected readonly fleetStale = computed<boolean>(() => this.query.data()?.fleet_summary == null);
 
   /** The async triad's resolved state — no `'empty'` case: a resolved read
    * with a malformed body renders nothing (the `view()` null-guard in the

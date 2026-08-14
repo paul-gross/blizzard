@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { ageMs, compactRef, formatHeldFor, KitAsyncState, KitBeacon, type KitAsyncStateValue, type runnerApi } from 'fleet';
 
-import { injectRunnerEnvironmentsQuery } from './status.query';
+import { injectRunnerDashboardQuery } from './status.query';
 
 /**
  * The environments rail (issue #106): one row per environment in the runner's
@@ -73,9 +73,9 @@ import { injectRunnerEnvironmentsQuery } from './status.query';
   `,
 })
 export class EnvList {
-  protected readonly query = injectRunnerEnvironmentsQuery();
+  protected readonly query = injectRunnerDashboardQuery();
 
-  protected readonly envs = computed(() => this.query.data() ?? []);
+  protected readonly envs = computed(() => this.query.data()?.environments?.items ?? []);
 
   /** The async triad's resolved state — loading/error take precedence, then
    * an empty pool (no environments configured at all), else the rows render. */

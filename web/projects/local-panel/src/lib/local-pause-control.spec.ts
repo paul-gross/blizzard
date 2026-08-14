@@ -6,14 +6,22 @@ import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fl
 
 import { LocalPauseControl } from './local-pause-control';
 
-/** Render `LocalPauseControl` with `GET /api/runner`'s pause triad answered by
- * `pause`, and `PATCH /api/runner` echoing the flipped local brake back —
- * or, when `patchError` is given, answering the PATCH with that failure
- * instead. */
+/** Render `LocalPauseControl` with `GET /api/dashboard`'s `runner.pause` triad
+ * answered by `pause`, and `PATCH /api/runner` echoing the flipped local brake
+ * back — or, when `patchError` is given, answering the PATCH with that
+ * failure instead. */
 async function render(pause: { local: boolean; hub: boolean }, patchError?: ReturnType<typeof stubError>) {
   const stub = stubRequestClient(runnerClient, (method, path) => {
-    if (method === 'GET' && path === '/api/runner') {
-      return { pause: { local: pause.local, hub: pause.hub, effective: pause.local || pause.hub } };
+    if (method === 'GET' && path === '/api/dashboard') {
+      return {
+        runner: { pause: { local: pause.local, hub: pause.hub, effective: pause.local || pause.hub } },
+        environments: { items: [] },
+        asks: { items: [] },
+        escalations: { items: [] },
+        takeovers: { items: [] },
+        facts: { items: [] },
+        fleet_summary: null,
+      };
     }
     if (method === 'PATCH' && path === '/api/runner') {
       if (patchError) return patchError;

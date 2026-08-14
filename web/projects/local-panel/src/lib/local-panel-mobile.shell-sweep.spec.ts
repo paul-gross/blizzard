@@ -71,10 +71,34 @@ const LONG_ASK = {
   ],
 };
 
+/** A full `DashboardView` body, `asks` set to `asks` and every other section a
+ * plausible/empty default (issue #311) — `LocalPanelMobile` and its children
+ * (`local-info`, `local-asks`) all read one shared `/api/dashboard` poll now, so
+ * this shell's default fallback can no longer leave them pending/malformed on
+ * an unmatched per-endpoint path. */
+function dashboardBody(asks: unknown) {
+  return {
+    runner: {
+      runner_id: 'runner-local',
+      workspace_id: 'workspace-local',
+      pause: { local: false, hub: false, effective: false },
+      capacities: { max_agents: 4, used: 0, free: 4 },
+      hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
+      last_tick_at: null,
+    },
+    environments: { items: [] },
+    asks,
+    escalations: { items: [] },
+    takeovers: { items: [] },
+    facts: { items: [] },
+    fleet_summary: null,
+  };
+}
+
 async function render(asks: unknown = { items: [] }) {
   const stub = stubRequestClient(runnerClient, (method, path) => {
     if (method === 'GET' && WORK_ITEMS_ROUTE.test(path)) return FIVE_WORK_ITEMS;
-    if (method === 'GET' && path.startsWith('/api/asks')) return asks;
+    if (method === 'GET' && path === '/api/dashboard') return dashboardBody(asks);
     return { items: [] };
   });
   await TestBed.configureTestingModule({
