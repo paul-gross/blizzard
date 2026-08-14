@@ -162,6 +162,21 @@ describe('LocalPanel', () => {
     expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('ok');
   });
 
+  it('polls GET /api/dashboard exactly once for the whole shell, and none of the seven folded-in endpoints (issue #311)', async () => {
+    // The desktop layout mounts six separate injectors of the dashboard query
+    // (LocalPanel itself, plus EnvList/FactLog/LocalAsks/LocalInfo/LocalPauseControl
+    // via LocalPanelLayout) — proving one request here is what the issue's rate
+    // criterion asks for: TanStack's query-key dedupe, not a single shared read
+    // threaded down as an input.
+    stub = stubRequestClient(runnerClient, routes([LEASE()]));
+    await render();
+
+    expect(stub.forRoute('/api/dashboard', 'GET')).toHaveLength(1);
+    for (const path of ['/api/runner', '/api/environments', '/api/asks', '/api/escalations', '/api/takeovers', '/api/facts', '/api/fleet-summary']) {
+      expect(stub.forRoute(path, 'GET')).toHaveLength(0);
+    }
+  });
+
   it('shows offline in the header when the runner local API is unreachable (issue #131)', async () => {
     stub = stubRequestClient(runnerClient,
       routes([], {}, (method, path) => (method === 'GET' && path === '/api/dashboard' ? stubError(503, { detail: 'down' }) : undefined)),
