@@ -4,4 +4,5 @@
 
 export * from './lib/local-panel';
 export * from './lib/session-recovery';
+export * from './lib/session-recovery-view';
 export * from './lib/session-recovery.provider';
