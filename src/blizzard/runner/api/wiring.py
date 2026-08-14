@@ -20,6 +20,7 @@ from blizzard.runner.domain.leases import LocalLeaseService
 from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
+from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.store.repository import IReadRunnerStore, IWriteRunnerStore, LeaseRecord
 from blizzard.runner.transcripts.service import TranscriptService
@@ -98,6 +99,12 @@ class RunnerWiring:
     def selftests(self) -> SelfTestService:
         service: SelfTestService | None = getattr(self.state, "selftests", None)
         return service if service is not None else self._refuse("selftest service")
+
+    def events(self) -> EventBroker | None:
+        """The SSE broker (D2, blizzard#317), or ``None`` on a composer with no stream to
+        feed — never refused: a mutating route publishes when one is wired and is a no-op
+        otherwise, the same degrade-safe shape the stream route itself uses (Phase 3)."""
+        return getattr(self.state, "events", None)
 
     def maybe_config(self) -> RunnerConfig | None:
         return getattr(self.state, "config", None)

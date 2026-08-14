@@ -24,6 +24,7 @@ from blizzard.runner.environments.provider import (
     RepoBinding,
     WorkspaceAcquisitionError,
 )
+from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
@@ -652,6 +653,7 @@ def make_context(
     check_runner: FakeCheckRunner | None = None,
     clock: FixedClock | None = None,
     config: LoopConfig | None = None,
+    events: EventBroker | None = None,
 ) -> LoopContext:
     """Assemble a :class:`LoopContext` from a real store and injected fakes."""
     resolved_config = config if config is not None else LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1)
@@ -686,10 +688,13 @@ def make_context(
             transcripts=harness.transcript_source(),
         ),
         sessions=SessionResolver(store=store, harness=_harness, transcripts=harness.transcript_source()),
-        env_release=EnvironmentRelease(store=store, clock=_clock, provider=_provider, worker_files=_files),
+        env_release=EnvironmentRelease(
+            store=store, clock=_clock, provider=_provider, worker_files=_files, events=events
+        ),
         # Mirrors `LoopWiring.context`'s own composition: the same source `harness`
         # itself holds, resolved once here rather than reached through `ctx.harness`.
         transcripts=harness.transcript_source(),
+        events=events,
     )
 
 

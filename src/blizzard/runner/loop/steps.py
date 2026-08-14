@@ -342,6 +342,13 @@ class Pull(Step):
             ctx.store.record_escalation_closure(
                 chunk_id=escalation.chunk_id, reason=detail.status.value, at=ctx.clock.now()
             )
+            if ctx.events is not None:
+                ctx.events.publish_escalation_changed(
+                    escalation.chunk_id,
+                    cause="closed",
+                    lease_id=escalation.lease_id,
+                    key=f"escalations:{escalation.chunk_id}",
+                )
 
     def _reconcile_takeovers(self) -> None:
         """Close an open takeover whose chunk the hub has ended (issue #291) — one ``get_chunk``
@@ -361,6 +368,10 @@ class Pull(Step):
                 _log.debug("takeover left open", chunk_id=takeover.chunk_id, hub_status=detail.status.value)
                 continue
             ctx.store.record_takeover_end(takeover_id=takeover.takeover_id, ended_at=ctx.clock.now())
+            if ctx.events is not None:
+                ctx.events.publish_takeover_changed(
+                    takeover.chunk_id, takeover.takeover_id, cause="closed", key=f"takeovers:{takeover.takeover_id}"
+                )
 
 
 class Fill(Step):

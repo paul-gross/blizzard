@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import cast
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
@@ -16,6 +17,7 @@ from blizzard.runner.loop.spawn import Environments, Spawner
 from blizzard.runner.loop.transcript_pump import PUMP_LEASE_MAX_SECONDS, TranscriptPump
 from blizzard.runner.store.repository import LeaseRecord
 from blizzard.wire.facts import EVENT_RECORDED
+from blizzard.wire.sse_runner import LeaseChangeCause
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -235,6 +237,23 @@ class Attempt:
             event_kind=EVENT_RECORDED if event else None,
             event_payload=json.dumps(event) if event else None,
         )
+        if self.ctx.events is not None:
+            lease_id = self.lease.lease_id
+            # `reason` IS the LeaseChangeCause vocabulary (D4) — every caller passes one of
+            # this module's own closure-reason constants, which are exactly its six literals.
+            self.ctx.events.publish_lease_changed(
+                lease_id,
+                self.lease.chunk_id,
+                cause=cast(LeaseChangeCause, reason),
+                node_name=self.lease.node_name,
+                key=f"leases:{lease_id}",
+            )
+            if reason == ESCALATED:
+                # `open_escalations()`'s derivation (D4) — a closed-`escalated` lease not yet
+                # superseded — begins reading open at exactly this instant.
+                self.ctx.events.publish_escalation_changed(
+                    self.lease.chunk_id, cause="opened", lease_id=lease_id, key=f"escalations:{self.lease.chunk_id}"
+                )
 
     def _pump_lease_before_close(self) -> None:
         """D3's promise applies here too, weaker: exceptions never fail the closure,

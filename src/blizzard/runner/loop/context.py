@@ -10,8 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.events.broker import EventBroker
 from blizzard.runner.environments.provider import IWorkspaceProvider
+from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.loop.checks import ICheckRunner

@@ -21,7 +21,6 @@ import httpx
 import uvicorn
 
 from blizzard.cli.host_directory import HostDirectory
-from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.events.server import EarlyShutdownServer
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.foundation.store.utc import iso_utc
@@ -30,6 +29,7 @@ from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli_daemon import LOCAL_CLIENT_TIMEOUT, RunnerDaemon
 from blizzard.runner.cli_worker import WorkerCall
 from blizzard.runner.config import ConfigError, RunnerConfig
+from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
 from blizzard.runner.loop.build import (

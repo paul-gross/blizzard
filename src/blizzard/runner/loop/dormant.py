@@ -108,6 +108,14 @@ class DormantSession:
         who = question.answered_by or "operator"
         pid, now = self._wake(f"# Answer from {who}. Continue.\n{question.answer}", bindings)
         self.ctx.store.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)
+        if self.ctx.events is not None:
+            self.ctx.events.publish_ask_changed(
+                lease.lease_id,
+                lease.chunk_id,
+                park.question_id,
+                cause="answered",
+                key=f"asks:{park.question_id}",
+            )
         OutboundFacts(self.ctx).answer_delivered(lease, park.question_id, at=now)
         _log.info("resumed dormant session with answer", chunk_id=lease.chunk_id, question_id=park.question_id, pid=pid)
 

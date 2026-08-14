@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.foundation.events.broker import EventBroker
 from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
+from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver
 from tests.runner_fakes import FakeHub

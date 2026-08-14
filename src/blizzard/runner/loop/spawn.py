@@ -184,6 +184,10 @@ class Spawner:
                 created_at=at,
             )
         )
+        if self.ctx.events is not None:
+            self.ctx.events.publish_lease_changed(
+                lease_id, chunk_id, cause="created", node_name=node.node_name, key=f"leases:{lease_id}"
+            )
         # A per-lease capability token (issue #113): only its hash is stashed durably, the
         # plaintext carried forward to the spawn preamble alone and never persisted.
         token, token_hash = LeaseToken.mint()

@@ -20,7 +20,6 @@ from fastapi.responses import RedirectResponse
 
 from blizzard import __version__
 from blizzard.foundation.clock import SystemClock
-from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -70,6 +69,7 @@ from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.environments.provider import IWorkspaceProvider
+from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
@@ -316,6 +316,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         LinuxProcessProbe(),
         # The same derivation the spawn preamble uses, so the two agree.
         local_api_url=config.local_api_url,
+        events=events,
     )
     requeue = RequeueService(runner_store, SystemClock())
     attachments = AttachmentService(runner_store, SystemClock())

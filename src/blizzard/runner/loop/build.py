@@ -14,11 +14,11 @@ from pathlib import Path
 import httpx
 
 from blizzard.foundation.clock import SystemClock
-from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
+from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptErrorFactory as HarnessTranscriptErrorFactory
@@ -142,7 +142,9 @@ class LoopWiring:
                 transcripts=harness_transcript_source,
             ),
             sessions=SessionResolver(store=store, harness=harness, transcripts=harness_transcript_source),
-            env_release=EnvironmentRelease(store=store, clock=_clock, provider=provider, worker_files=_worker_files),
+            env_release=EnvironmentRelease(
+                store=store, clock=_clock, provider=provider, worker_files=_worker_files, events=self.events
+            ),
             # The same source injected into `harness` above, declared here too so the loop's
             # direct readers don't reach through `ctx.harness` for it.
             transcripts=harness_transcript_source,
