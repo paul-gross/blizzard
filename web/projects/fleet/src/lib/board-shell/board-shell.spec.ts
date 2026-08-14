@@ -6,6 +6,7 @@ import { By } from '@angular/platform-browser';
 import type { ChunkSummary } from '../api/hub';
 import { compactRef } from '../compact-ref';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
+import { KitPanel } from '../kit/kit-panel';
 import { BoardShell } from './board-shell';
 
 const READY = (suffix: string): ChunkSummary => ({
@@ -65,6 +66,15 @@ describe('BoardShell', () => {
     expect(el.querySelector('[data-col="notready"]')).toBeTruthy();
     expect(el.querySelector('[data-col="ready"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="empty-state"]')?.textContent).toContain('NO CHUNKS');
+  });
+
+  it("suppresses the board panel's own scrolling — each lane scrolls itself instead (issue #309)", async () => {
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('state', 'ready');
+    await fixture.whenStable();
+
+    const panel = fixture.debugElement.query(By.directive(KitPanel));
+    expect(panel.componentInstance.bodyScroll()).toBe(false);
   });
 
   it('shows a loading indicator instead of the empty state while the chunks read is pending (AC 1)', async () => {

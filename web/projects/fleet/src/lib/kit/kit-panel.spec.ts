@@ -7,7 +7,13 @@ import { KitPanel } from './kit-panel';
   selector: 'fleet-test-host',
   imports: [KitPanel],
   template: `
-    <fleet-kit-panel [label]="label()" [count]="count()" [countTestid]="'the-count'" [accent]="accent()">
+    <fleet-kit-panel
+      [label]="label()"
+      [count]="count()"
+      [countTestid]="'the-count'"
+      [accent]="accent()"
+      [bodyScroll]="bodyScroll()"
+    >
       @if (withHeaderExtra()) {
         <span header data-testid="extra-header">extra</span>
       }
@@ -20,6 +26,7 @@ class TestHost {
   readonly count = signal<number | string | null>(null);
   readonly withHeaderExtra = signal(false);
   readonly accent = signal<string | null>(null);
+  readonly bodyScroll = signal(true);
 }
 
 describe('KitPanel', () => {
@@ -89,5 +96,22 @@ describe('KitPanel', () => {
     const labels = el.querySelectorAll('.lbl');
     expect((labels[0] as HTMLElement).style.color).toBe('var(--red)');
     expect(labels[1].classList.contains('cnt-accent')).toBe(true);
+  });
+
+  it("leaves .p-body scrolling by default — every existing consumer's behavior", async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('.p-body')?.classList.contains('p-body--noscroll')).toBe(false);
+  });
+
+  it('suppresses .p-body scrolling when bodyScroll is false (issue #309)', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.bodyScroll.set(false);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('.p-body')?.classList.contains('p-body--noscroll')).toBe(true);
   });
 });

@@ -35,7 +35,7 @@ export type { BoardCard, BoardReposition };
   imports: [BoardColumn, KitPanel, KitAsyncState, KitSkeleton],
   template: `
     <div class="mc" data-testid="board-shell">
-      <fleet-kit-panel class="board-panel" aria-label="Chunk board" label="Chunk board">
+      <fleet-kit-panel class="board-panel" aria-label="Chunk board" label="Chunk board" [bodyScroll]="false">
         <span header class="col-lbl">all workflows</span>
         <div class="board" data-testid="board">
           @for (col of columns; track col.key) {
@@ -116,13 +116,24 @@ export type { BoardCard, BoardReposition };
     }
     /* One equal track per lane, laid out by flow rather than a repeat() count —
        LANES is the single owner of how many lanes there are (issue #137 added
-       READY), and a hard-coded count here is a second place to forget. */
+       READY), and a hard-coded count here is a second place to forget.
+       grid-auto-rows: 100% constrains the (only) implicit row to the grid's own
+       height instead of the tallest lane's content (issue #309) — each column
+       host then resolves to the panel's height rather than stretching past it,
+       so BoardColumn's own .b-col-body (overflow-y: auto) is what scrolls, one
+       lane at a time, instead of a single outer scrollbar dragging all six. */
     .board {
       display: grid;
       grid-auto-flow: column;
       grid-auto-columns: 1fr;
+      grid-auto-rows: 100%;
       gap: 1px;
       background: var(--line);
+      /* .p-body (bodyScroll false) is a plain block box, not a flex/grid
+         container, so flex: 1 alone never gave this a definite height — an
+         explicit height against .p-body's own (flex-resolved, but definite)
+         height is what grid-auto-rows: 100% needs to measure against. */
+      height: 100%;
       flex: 1;
       min-height: 0;
     }

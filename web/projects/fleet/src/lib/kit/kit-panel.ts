@@ -23,6 +23,14 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  * headers, `../../../hub/src/app/board/glance/glance-view.ts`) — `null`
  * (the default) leaves both exactly as every existing consumer already
  * renders them, so this is additive, not a restyle.
+ *
+ * `bodyScroll` (default `true`, today's behavior) gates whether `.p-body`
+ * itself scrolls. The runners, asks, and event log rails leave it at the
+ * default — a single scrolling body is right for them. The board panel
+ * (issue #309) sets it `false`: its content manages its own per-lane
+ * scrolling internally, and a second scroll container one level up is the
+ * bug, not a feature — `.p-body` instead clips to the panel's height so its
+ * content can resolve a real height to lay out against.
  */
 @Component({
   selector: 'fleet-kit-panel',
@@ -35,7 +43,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       }
       <ng-content select="[header]" />
     </div>
-    <div class="p-body">
+    <div class="p-body" [class.p-body--noscroll]="!bodyScroll()">
       <ng-content />
     </div>
   `,
@@ -81,6 +89,12 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       flex: 1;
       min-height: 0;
     }
+    /* bodyScroll(false): this panel's content owns its own scrolling, so
+       .p-body only clips — a second auto scrollbar here is exactly the bug
+       (issue #309): it grabs the drag instead of the content's own scroller. */
+    .p-body--noscroll {
+      overflow: hidden;
+    }
   `,
 })
 export class KitPanel {
@@ -99,6 +113,11 @@ export class KitPanel {
    * of the default `--label` grey, and that flips the count span to
    * `--snow` — `null` (the default) is the panel's existing look, unchanged. */
   readonly accent = input<string | null>(null);
+
+  /** Whether `.p-body` scrolls itself — `true` (the default) is every existing
+   * consumer's current behavior; a panel whose projected content manages its
+   * own scrolling sets this `false` instead. */
+  readonly bodyScroll = input(true);
 
   protected hasCount(): boolean {
     const c = this.count();
