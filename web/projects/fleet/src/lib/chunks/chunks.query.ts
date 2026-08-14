@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { listChunksApiChunksGet, type ChunkSummary } from '../api/hub';
+import { LIVE_COVERED_POLL_BACKSTOP_MS } from '../polling';
 import { hubChunksKey } from '../query-keys';
 
 /**
@@ -19,6 +20,9 @@ export function injectHubChunksQuery() {
       if (error) throw error;
       return data ?? [];
     },
-    refetchInterval: 3000,
+    // Covered by chunk-changed, question-asked/-answered, and decision-opened/-resolved
+    // (EVENT_INVALIDATION_REGISTRY, sse/fleet-live.ts) — this is the backstop, not the
+    // primary freshness path. See LIVE_COVERED_POLL_BACKSTOP_MS.
+    refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
 }

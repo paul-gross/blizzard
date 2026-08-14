@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { type EventView, listEventsApiEventsGet } from '../api/hub';
+import { LIVE_COVERED_POLL_BACKSTOP_MS } from '../polling';
 import { hubEventsKey } from '../query-keys';
 
 /** The event feed's filter axes — `null`/`undefined` on any of them means
@@ -19,7 +20,8 @@ export interface HubEventsFilters {
  * entry — same idiom as {@link injectHubFleetSpendQuery}'s `since` window.
  *
  * The live-update service re-reads this on `event-logged`, and on an
- * escalation-bearing `chunk-changed`; the poll is the floor.
+ * escalation-bearing `chunk-changed`; the poll is a backstop (issue #316), not the
+ * primary freshness path.
  */
 export function injectHubEventsQuery(filters: () => HubEventsFilters = () => ({})) {
   return injectQuery(() => {
@@ -38,7 +40,9 @@ export function injectHubEventsQuery(filters: () => HubEventsFilters = () => ({}
         if (error) throw error;
         return data?.events ?? [];
       },
-      refetchInterval: 5000,
+      // Covered by event-logged and an escalation-bearing chunk-changed
+      // (EVENT_INVALIDATION_REGISTRY, sse/fleet-live.ts). See LIVE_COVERED_POLL_BACKSTOP_MS.
+      refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
     };
   });
 }

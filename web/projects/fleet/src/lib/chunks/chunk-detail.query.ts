@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { getChunkApiChunksChunkIdGet, type ChunkDetail } from '../api/hub';
+import { LIVE_COVERED_POLL_BACKSTOP_MS } from '../polling';
 import { hubChunkKey } from '../query-keys';
 
 /**
@@ -30,7 +31,10 @@ export function injectHubChunkDetailQuery(chunkId: () => string | null) {
         if (error) throw error;
         return data!;
       },
-      refetchInterval: 3000,
+      // Covered by chunk-changed, question-asked/-answered, decision-opened/-resolved,
+      // and event-logged when named (EVENT_INVALIDATION_REGISTRY, sse/fleet-live.ts).
+      // See LIVE_COVERED_POLL_BACKSTOP_MS.
+      refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
     };
   });
 }

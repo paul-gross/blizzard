@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { fleetSpendApiSpendGet, type FleetSpendView } from '../api/hub';
+import { LIVE_COVERED_POLL_BACKSTOP_MS } from '../polling';
 import { hubFleetSpendKey } from '../query-keys';
 
 /**
@@ -28,6 +29,8 @@ export function injectHubFleetSpendQuery(since: () => string, until: () => strin
       if (error) throw error;
       return data as FleetSpendView;
     },
-    refetchInterval: 3000,
+    // Covered by chunk-changed (EVENT_INVALIDATION_REGISTRY, sse/fleet-live.ts) — usage
+    // rides the same fact a chunk-changed frame reports. See LIVE_COVERED_POLL_BACKSTOP_MS.
+    refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
 }

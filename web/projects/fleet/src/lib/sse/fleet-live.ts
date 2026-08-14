@@ -15,6 +15,17 @@ import { type SseHandle, type SseStatus, SseService } from './sse.service';
 /** The hub's SSE stream endpoint (deliberately not in OpenAPI — native EventSource). */
 export const HUB_EVENT_STREAM_URL = '/api/events/stream';
 
+/**
+ * How long {@link FleetLiveUpdates.dispatch} accumulates invalidation keys before
+ * flushing them as one pass (issue #310). A burst of frames — a batch promote, a
+ * runner claiming several chunks — would otherwise fire one `invalidateQueries` call
+ * per key per frame; this window lets the overlapping key sets from a burst collapse
+ * into a single pass instead. 250ms: short enough that a quiet stream's lone event
+ * still reads as prompt, long enough that same-tick bursts (the common case for a
+ * hub emitting several events off one transition) actually overlap in the window.
+ */
+export const INVALIDATION_COALESCE_WINDOW_MS = 250;
+
 /** The named event types the hub broadcasts. */
 export const HUB_EVENT_TYPES = [
   'chunk-changed',
@@ -220,7 +231,10 @@ const LOG_LIMIT = 256;
  * the {@link SseService} transport to the query cache — the one place SSE meets reads.
  *
  * `dispatch` is a lookup into {@link EVENT_INVALIDATION_REGISTRY}, not a per-event
- * branch — see that registry's doc for what each event type stales.
+ * branch — see that registry's doc for what each event type stales. The keys it looks
+ * up are not invalidated immediately: they accumulate into a pending set that flushes
+ * once per {@link INVALIDATION_COALESCE_WINDOW_MS} (issue #310), so a burst of frames
+ * whose key sets overlap collapses to one invalidation pass per distinct key.
  *
  * Gap recovery is reconnect-then-re-GET: on every reconnect the service invalidates
  * the whole `hub` tree, so any events missed while the socket was down are closed by
@@ -242,6 +256,11 @@ export class FleetLiveUpdates {
   private handle: SseHandle<HubEventPayload> | null = null;
   private seq = 0;
   private readonly _log = signal<readonly LoggedEvent[]>([]);
+  /** Keys queued by {@link dispatch} since the last flush, keyed by their serialized
+   * form so a repeated key collapses to one entry regardless of how many frames named
+   * it. */
+  private readonly pendingInvalidations = new Map<string, readonly unknown[]>();
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Connection lifecycle for the header status, or `idle` before {@link start}. */
   get status(): Signal<SseStatus> {
@@ -304,6 +323,10 @@ export class FleetLiveUpdates {
       sub.unsubscribe();
       ref.destroy();
       handle.close();
+      if (this.flushTimer !== null) {
+        clearTimeout(this.flushTimer);
+        this.flushTimer = null;
+      }
       this.handle = null;
     });
   }
@@ -320,8 +343,25 @@ export class FleetLiveUpdates {
     });
   }
 
+  /** Queue this frame's keys for the next flush rather than invalidating them
+   * immediately — see {@link INVALIDATION_COALESCE_WINDOW_MS}. Reconnect-driven
+   * whole-tree invalidation (the `reopens()` watcher in {@link start}) bypasses this
+   * entirely and stays synchronous. */
   private dispatch(type: string, data: HubEventPayload): void {
     const keys = EVENT_INVALIDATION_REGISTRY[type as HubEventType]?.(data) ?? [];
+    for (const queryKey of keys) {
+      this.pendingInvalidations.set(JSON.stringify(queryKey), queryKey);
+    }
+    if (keys.length > 0 && this.flushTimer === null) {
+      this.flushTimer = setTimeout(() => this.flushInvalidations(), INVALIDATION_COALESCE_WINDOW_MS);
+    }
+  }
+
+  /** Invalidate every key accumulated since the last flush, once each. */
+  private flushInvalidations(): void {
+    this.flushTimer = null;
+    const keys = [...this.pendingInvalidations.values()];
+    this.pendingInvalidations.clear();
     for (const queryKey of keys) {
       void this.queryClient.invalidateQueries({ queryKey });
     }

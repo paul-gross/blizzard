@@ -16,6 +16,7 @@ export {
   FleetLiveUpdates,
   HUB_EVENT_STREAM_URL,
   HUB_EVENT_TYPES,
+  INVALIDATION_COALESCE_WINDOW_MS,
   type LoggedEvent,
   type RunnerChangeKind,
 } from './fleet-live';

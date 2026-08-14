@@ -5,7 +5,7 @@ import { vi } from 'vitest';
 
 import { hubChunkTranscriptSegmentKey, hubChunkTranscriptsKey } from '../query-keys';
 import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource } from './sse.service';
-import { FleetLiveUpdates } from './fleet-live';
+import { FleetLiveUpdates, INVALIDATION_COALESCE_WINDOW_MS } from './fleet-live';
 
 /** EventSource stand-in with named-listener support — jsdom ships none. */
 class FakeEventSource {
@@ -47,6 +47,10 @@ describe('FleetLiveUpdates', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
+    // Fake timers throughout: dispatch's coalescing window (issue #310) is a real
+    // setTimeout, so every test that emits a frame and checks invalidateQueries needs
+    // to advance past it.
+    vi.useFakeTimers();
     FakeEventSource.instances.length = 0;
     queryClient = new QueryClient();
     const factory: EventSourceFactory = (url) => new FakeEventSource(url) as unknown as FleetEventSource;
@@ -57,6 +61,10 @@ describe('FleetLiveUpdates', () => {
         { provide: EVENT_SOURCE_FACTORY, useValue: factory },
       ],
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('invalidates the fleet list, the chunk detail, the queue, the fleet spend read, and the events feed on a chunk-changed event', () => {
@@ -72,6 +80,7 @@ describe('FleetLiveUpdates', () => {
     const source = FakeEventSource.instances[0];
     source.open();
     source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'running' }), '1');
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(['hub', 'chunks']);
@@ -79,6 +88,52 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
     expect(keys).toContainEqual(['hub', 'fleet-spend']);
     expect(keys).toContainEqual(['hub', 'events']);
+  });
+
+  it('collapses duplicate keys from multiple frames in one window into a single invalidation (issue #310)', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    // Two runner-changed frames in the same window both stale ['hub', 'runners'].
+    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'paused' }));
+    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_2', kind: 'resumed' }));
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+
+    const registryHits = invalidate.mock.calls.filter((call) => call[0]?.queryKey?.[1] === 'runners');
+    expect(registryHits).toHaveLength(1);
+  });
+
+  it('preserves distinct keys from different frames in the same window (issue #310)', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('queue-changed', JSON.stringify({}));
+    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'paused' }));
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toContainEqual(['hub', 'queue']);
+    expect(keys).toContainEqual(['hub', 'runners']);
+    expect(keys).toHaveLength(2);
+  });
+
+  it('flushes a lone event within the coalesce window bound on an otherwise quiet stream (issue #310)', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('queue-changed', JSON.stringify({}));
+
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS - 1);
+    expect(invalidate).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toContainEqual(['hub', 'queue']);
   });
 
   it('refetches the transcript-segment index but not an already-fetched final segment’s content on chunk-changed (review:F6)', () => {
@@ -96,6 +151,7 @@ describe('FleetLiveUpdates', () => {
     const source = FakeEventSource.instances[0];
     source.open();
     source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'running' }), '1');
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     expect(queryClient.getQueryState(hubChunkTranscriptsKey('ch_live'))?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(hubChunkTranscriptSegmentKey('ch_live', 'sg_1', true))?.isInvalidated).toBe(false);
@@ -112,6 +168,7 @@ describe('FleetLiveUpdates', () => {
     const source = FakeEventSource.instances[0];
     source.open();
     source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'running' }), '1');
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     expect(queryClient.getQueryState(hubChunkTranscriptSegmentKey('ch_live', 'sg_2', false))?.isInvalidated).toBe(true);
   });
@@ -127,6 +184,7 @@ describe('FleetLiveUpdates', () => {
       JSON.stringify({ severity: 'critical', kind: 'escalation-opened', chunk_id: 'ch_live', runner_id: 'rn_1' }),
       '1',
     );
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(['hub', 'events']);
@@ -145,9 +203,13 @@ describe('FleetLiveUpdates', () => {
     const source = FakeEventSource.instances[0];
     source.open();
     source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'running' }), '1');
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
     invalidate.mockClear();
     // The same status a second time — what a delivery on a running chunk actually sends.
+    // A separate window from the first flush, so this frame's keys are not swallowed
+    // by the earlier flush's dedup.
     source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'running' }), '2');
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
@@ -161,6 +223,7 @@ describe('FleetLiveUpdates', () => {
     source.open();
     source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'paused', by: 'alice' }));
     source.emitNamed('queue-changed', JSON.stringify({}));
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(['hub', 'runners']);
@@ -169,14 +232,18 @@ describe('FleetLiveUpdates', () => {
 
   it('re-reads the registry on every runner-changed kind, including the muted ones', () => {
     // Issue #151: muting is the *feed's* concern only. The liveness column refreshes off
-    // the heartbeat flood, so a mute that reached dispatch would freeze it.
+    // the heartbeat flood, so a mute that reached dispatch would freeze it. Each kind is
+    // emitted in its own coalesce window (issue #310 collapses same-window duplicates),
+    // so a per-kind flush still shows up as its own invalidation here.
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
     source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'registered' }));
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
     source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'heartbeat' }));
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     const registryHits = invalidate.mock.calls.filter((call) => call[0]?.queryKey?.[1] === 'runners');
     expect(registryHits).toHaveLength(2);

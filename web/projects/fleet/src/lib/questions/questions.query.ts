@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { type QuestionView, listOpenQuestionsApiQuestionsGet } from '../api/hub';
+import { LIVE_COVERED_POLL_BACKSTOP_MS } from '../polling';
 import { hubQuestionsKey } from '../query-keys';
 
 /**
@@ -11,7 +12,7 @@ import { hubQuestionsKey } from '../query-keys';
  * rail must surface an ask on a chunk nobody has selected.
  *
  * The live-update service re-reads this on `question-asked` / `question-answered`;
- * the poll is the floor.
+ * the poll is a backstop (issue #316), not the primary freshness path.
  */
 export function injectHubQuestionsQuery() {
   return injectQuery(() => ({
@@ -21,6 +22,8 @@ export function injectHubQuestionsQuery() {
       if (error) throw error;
       return data ?? [];
     },
-    refetchInterval: 5000,
+    // Covered by question-asked/question-answered (EVENT_INVALIDATION_REGISTRY,
+    // sse/fleet-live.ts). See LIVE_COVERED_POLL_BACKSTOP_MS.
+    refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
 }

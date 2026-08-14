@@ -19,7 +19,7 @@ import { injectHubEventsQuery } from './events.query';
  * `questions-panel.ts`: a standalone `fleet-`prefixed, OnPush container over the
  * generated hub client (bzh:generated-client) via TanStack Query. The live-update
  * service re-reads this on `event-logged` and on an escalation-bearing
- * `chunk-changed`; the poll is the floor.
+ * `chunk-changed`; the poll is a backstop (issue #316), not the primary freshness path.
  *
  * The runner and chunk filter axes are open sets, so their chip **universe** is
  * derived here (`runnerIds`/`chunkIds`) rather than in the view. It comes from a
