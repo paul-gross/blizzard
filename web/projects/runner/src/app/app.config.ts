@@ -1,6 +1,7 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { provideSessionRecovery } from 'local-panel';
 
 import { routes } from './app.routes';
 
@@ -15,5 +16,8 @@ export const appConfig: ApplicationConfig = {
     // `LocalPanel` reads and writes them through the router. See `app.routes.ts`
     // for why a single catch-all route is all the table needs.
     provideRouter(routes),
+    // Session reacquisition on a 401 (issue #312) — the runner client's own
+    // interceptor, mirroring the hub app's `provideAuthInterceptor()`.
+    provideSessionRecovery(),
   ],
 };

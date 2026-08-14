@@ -1,8 +1,17 @@
-import { inject } from '@angular/core';
+import { inject, signal } from '@angular/core';
 import { injectMutation, injectQuery, QueryClient } from '@tanstack/angular-query-experimental';
 import { runnerApi } from 'fleet';
 
 import { runnerSessionKey } from './query-keys';
+
+const logoutInFlightSignal = signal(false);
+
+/** Whether `POST /api/auth/logout` is currently in flight (issue #312) — set for
+ * the duration of {@link injectRunnerLogoutMutation}'s call, the panel's only
+ * logout driver. The session-recovery seam (`session-recovery.ts`) suspends on
+ * this: a `401` arriving mid-logout is the deliberate session clear, not an
+ * expiry to renew, and logout already drives its own navigation once it settles. */
+export const runnerLogoutInFlight = logoutInFlightSignal.asReadonly();
 
 /**
  * `GET /api/auth/session` (issue #129) — the panel's own-identity read behind its
@@ -57,6 +66,8 @@ export function injectRunnerLogoutMutation() {
       const { error } = await runnerApi.logoutApiAuthLogoutPost({ throwOnError: false });
       if (error) throw error;
     },
+    onMutate: () => logoutInFlightSignal.set(true),
+    onSettled: () => logoutInFlightSignal.set(false),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: runnerSessionKey });
     },

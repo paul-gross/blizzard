@@ -18,7 +18,7 @@
  *
  *   npm run shell-sweep   (from web/)
  *
- * The six specs:
+ * The seven specs:
  *   - projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts — the hub
  *     board shell (BoardHeader + AppNavMenu), swept over width only (no
  *     username is ever shown there): never lets the profile menu drift
@@ -52,6 +52,11 @@
  *     archived badge + truncation banner render with no horizontal overflow,
  *     and the hub-unreachable degrade banner wraps rather than pushing past
  *     the viewport under `nowrap`.
+ *   - projects/local-panel/src/lib/session-recovery-view.shell-sweep.spec.ts —
+ *     the runner's session-recovery surface (blizzard#312), which replaces the
+ *     whole panel while a bounce could not be silently completed: the
+ *     headline, detail copy, and retry control hold their layout with no
+ *     horizontal overflow at phone widths.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -63,6 +68,7 @@ const SWEEPS = [
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-panel-mobile.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/runners/runner-view.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/transcript-panel.shell-sweep.spec.ts' },
+  { project: 'local-panel', spec: 'projects/local-panel/src/lib/session-recovery-view.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {
@@ -85,7 +91,7 @@ function main() {
     return;
   }
 
-  console.log('\nshell-sweep: all six specs clean.\n');
+  console.log('\nshell-sweep: all seven specs clean.\n');
 }
 
 main();

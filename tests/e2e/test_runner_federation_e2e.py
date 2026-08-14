@@ -99,8 +99,27 @@ def _oauth_hub(hub_dir: Path, idp_port: int, port: int) -> Iterator[httpx.Client
         _terminate(proc)
 
 
+def _spawn_runner(runner_dir: Path, *, port: int) -> subprocess.Popen[str]:
+    """Launch `blizzard-runner host` against an already-`init`ed/registered directory —
+    the restart half of issue #312's scenario, which relaunches on the same port with no
+    re-`init` and no re-registration, exactly as a redeploy would."""
+    log = runner_dir / "daemon.log"
+    proc = subprocess.Popen(
+        [_runner_bin(), "host", "--dir", str(runner_dir), "--host", "127.0.0.1", "--port", str(port)],
+        stdout=daemon_log_sink(log),
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    try:
+        _await_http(proc, client, "/api/health", log=log)
+    finally:
+        client.close()
+    return proc
+
+
 @contextlib.contextmanager
-def _federated_runner(runner_dir: Path, *, hub_port: int, port: int, runner_id: str) -> Iterator[None]:
+def _federated_runner(runner_dir: Path, *, hub_port: int, port: int, runner_id: str) -> Iterator[subprocess.Popen[str]]:
     public_url = f"http://127.0.0.1:{port}"
     subprocess.run(
         [_runner_bin(), "init", str(runner_dir)],
@@ -135,19 +154,10 @@ def _federated_runner(runner_dir: Path, *, hub_port: int, port: int, runner_id: 
     finally:
         reg_client.close()
 
-    log = runner_dir / "daemon.log"
-    proc = subprocess.Popen(
-        [_runner_bin(), "host", "--dir", str(runner_dir), "--host", "127.0.0.1", "--port", str(port)],
-        stdout=daemon_log_sink(log),
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    client = httpx.Client(base_url=public_url, timeout=15.0)
+    proc = _spawn_runner(runner_dir, port=port)
     try:
-        _await_http(proc, client, "/api/health", log=log)
-        yield
+        yield proc
     finally:
-        client.close()
         _terminate(proc)
 
 
@@ -263,3 +273,62 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
                 assert any(c.get("name") == "bz_runner_session" for c in context.cookies(runner_b_url))
             finally:
                 browser.close()
+
+
+def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
+    """The runner's session-recovery seam (issue #312): restarting the runner (its
+    session secret is minted per start) invalidates an open tab's session with no
+    reload and no touch to the hub's own session; the SPA must re-federate on its own."""
+    from playwright.sync_api import expect, sync_playwright
+
+    bin_dir = require_stub_idp()
+    idp_port = _free_port()
+    hub_port = _free_port()
+    runner_port = _free_port()
+    runner_url = f"http://127.0.0.1:{runner_port}"
+    runner_dir = tmp_path / "runner"
+
+    with sync_playwright() as pw, stub_idp(bin_dir, idp_port) as idp:
+        idp.put(
+            "/_levers/profile",
+            json={"subject": "6001", "handle": "session-op", "email": _PROFILE_EMAIL, "email_verified": True},
+        )
+
+        with (
+            _oauth_hub(tmp_path / "hub", idp_port, hub_port),
+            _federated_runner(runner_dir, hub_port=hub_port, port=runner_port, runner_id="runner-e2e-session") as proc,
+        ):
+            browser = pw.chromium.launch(headless=True)
+            context = browser.new_context()
+            page = context.new_page()
+            expect.set_options(timeout=20_000)
+            new_proc: subprocess.Popen[str] | None = None
+
+            try:
+                # 1. Authenticate into the panel, same dance as scenario 1 above.
+                page.goto(f"{runner_url}/", wait_until="load")
+                expect(page).to_have_title(re.compile("blizzard runner"))
+                expect(page.locator('[data-testid="identity-username"]')).to_be_visible()
+                before_cookie = next(
+                    c.get("value") for c in context.cookies(runner_url) if c.get("name") == "bz_runner_session"
+                )
+
+                # 2. Restart in place (same dir/port, no re-`init`) — a redeploy.
+                _terminate(proc)
+                new_proc = _spawn_runner(runner_dir, port=runner_port)
+
+                # 3. No goto/reload here: wait for the seam's own bounce request — a
+                # DOM check can't tell (same username before/after, recovery is fast).
+                page.wait_for_event(
+                    "request", predicate=lambda r: "/api/auth/login?return_to=" in r.url, timeout=20_000
+                )
+                page.wait_for_load_state("load")
+                expect(page.locator('[data-testid="identity-username"]')).to_be_visible()
+                after_cookie = next(
+                    c.get("value") for c in context.cookies(runner_url) if c.get("name") == "bz_runner_session"
+                )
+                assert after_cookie != before_cookie, "the session cookie never changed — no fresh bounce happened"
+            finally:
+                browser.close()
+                if new_proc is not None:
+                    _terminate(new_proc)
