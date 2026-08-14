@@ -1,10 +1,9 @@
 """The composed dashboard read — ``GET /api/dashboard`` (issue #311).
 
-Folds the panel's seven status polls into one response. Proves the six local sections
-populate from real store facts the same way their own individual routes do, and that
-``fleet_summary`` alone degrades to ``None`` on a hub outage or an unwired runner rather
-than failing the whole read — plus the bounded, below-the-poll-floor timeout on this
-route's own hub call, distinct from ``/api/fleet-summary``'s untouched 15s default."""
+Proves the six local sections populate the same way their own individual routes do,
+``fleet_summary`` alone degrades to ``None`` on a hub outage or an unwired runner, and
+this route's own hub call carries a bounded, below-the-poll-floor timeout distinct from
+``/api/fleet-summary``'s untouched 15s default."""
 
 from __future__ import annotations
 

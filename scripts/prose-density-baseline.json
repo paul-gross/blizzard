@@ -1735,7 +1735,7 @@
   "blizzard/runner/api/asks.py": {
    "comments": 0,
    "docstrings": 18,
-   "total": 87
+   "total": 91
   },
   "blizzard/runner/api/attachments.py": {
    "comments": 0,
@@ -1750,27 +1750,32 @@
   "blizzard/runner/api/control.py": {
    "comments": 6,
    "docstrings": 18,
-   "total": 96
+   "total": 101
+  },
+  "blizzard/runner/api/dashboard.py": {
+   "comments": 5,
+   "docstrings": 11,
+   "total": 63
   },
   "blizzard/runner/api/environments.py": {
    "comments": 0,
    "docstrings": 7,
-   "total": 32
+   "total": 36
   },
   "blizzard/runner/api/escalations.py": {
    "comments": 0,
    "docstrings": 6,
-   "total": 38
+   "total": 42
   },
   "blizzard/runner/api/facts.py": {
    "comments": 1,
    "docstrings": 6,
-   "total": 41
+   "total": 45
   },
   "blizzard/runner/api/fleet_summary.py": {
    "comments": 0,
    "docstrings": 6,
-   "total": 21
+   "total": 25
   },
   "blizzard/runner/api/git_commits.py": {
    "comments": 2,
@@ -1794,8 +1799,8 @@
   },
   "blizzard/runner/api/hub_proxy.py": {
    "comments": 1,
-   "docstrings": 12,
-   "total": 75
+   "docstrings": 14,
+   "total": 88
   },
   "blizzard/runner/api/lease_scope.py": {
    "comments": 0,
@@ -1835,7 +1840,7 @@
   "blizzard/runner/api/takeovers.py": {
    "comments": 0,
    "docstrings": 11,
-   "total": 63
+   "total": 67
   },
   "blizzard/runner/api/transcripts.py": {
    "comments": 0,
@@ -1860,7 +1865,7 @@
   "blizzard/runner/app.py": {
    "comments": 33,
    "docstrings": 20,
-   "total": 320
+   "total": 322
   },
   "blizzard/runner/auth/__init__.py": {
    "comments": 0,
@@ -2619,8 +2624,8 @@
   },
   "blizzard/wire/runner_status.py": {
    "comments": 2,
-   "docstrings": 27,
-   "total": 138
+   "docstrings": 31,
+   "total": 155
   },
   "blizzard/wire/sse.py": {
    "comments": 8,
@@ -2853,6 +2858,11 @@
    "comments": 8,
    "docstrings": 15,
    "total": 230
+  },
+  "service/test_dashboard_route_service.py": {
+   "comments": 7,
+   "docstrings": 10,
+   "total": 153
   },
   "service/test_event_log_service.py": {
    "comments": 20,
@@ -3218,6 +3228,11 @@
    "comments": 6,
    "docstrings": 5,
    "total": 42
+  },
+  "test_dashboard_route.py": {
+   "comments": 4,
+   "docstrings": 10,
+   "total": 209
   },
   "test_decisions_api.py": {
    "comments": 5,
@@ -4062,7 +4077,7 @@
   "test_runner_route_gating.py": {
    "comments": 12,
    "docstrings": 21,
-   "total": 149
+   "total": 150
   },
   "test_runner_selftest.py": {
    "comments": 24,

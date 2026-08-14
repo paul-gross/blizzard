@@ -270,13 +270,10 @@ export type ChunkUsageTotalView = {
 /**
  * DashboardView
  *
- * ``GET /api/dashboard`` — the panel's seven status reads composed into one response.
- *
- * Read-only over its wiring (``bzh:controller-read-only``): every section but
- * ``fleet_summary`` is derived from local store facts the same way its own individual
- * route is, so it degrades exactly as those do. ``fleet_summary`` alone is a hub
- * pass-through, so it alone is nullable — ``None`` when the hub call fails or this
- * runner is unwired, while the six local sections still populate.
+ * ``GET /api/dashboard`` — the panel's seven status reads composed into one response
+ * (``bzh:controller-read-only``). ``fleet_summary`` alone is a hub pass-through and
+ * the only nullable section — ``None`` on a hub failure or an unwired runner, while
+ * the six local sections still populate.
  */
 export type DashboardView = {
     asks: AskListResponse;
