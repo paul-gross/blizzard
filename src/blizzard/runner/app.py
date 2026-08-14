@@ -6,8 +6,10 @@ migrated database; the startup revision guard and the offline ``migrate`` verb o
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import secrets
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
@@ -18,6 +20,7 @@ from fastapi.responses import RedirectResponse
 
 from blizzard import __version__
 from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -32,6 +35,7 @@ from blizzard.runner.api.control import router as control_router
 from blizzard.runner.api.dashboard import router as dashboard_router
 from blizzard.runner.api.environments import router as environments_router
 from blizzard.runner.api.escalations import router as escalations_router
+from blizzard.runner.api.events import router as events_router
 from blizzard.runner.api.facts import router as facts_router
 from blizzard.runner.api.fleet_summary import router as fleet_summary_router
 from blizzard.runner.api.git_commits import router as git_commits_router
@@ -132,7 +136,17 @@ _HUMAN = (
     takeovers_router,
     dashboard_router,
     requeues_router,
+    events_router,
 )
+
+
+@contextlib.asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message (D3,
+    blizzard#317) — an SSE response held open never drains on its own, so the stream's
+    live wait races this signal instead of uvicorn's own graceful drain."""
+    yield
+    app.state.shutdown.set()
 
 
 def create_app(
@@ -152,21 +166,32 @@ def create_app(
     git_commit_declarations: GitCommitDeclarationService | None = None,
     hub_http_client: httpx.Client | None = None,
     jti_cache: IJtiCache | None = None,
+    events: EventBroker | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
     Every store-backed seam is optional, so a store-free build is possible; those routes
     then answer 503 and ``/api/ready`` reports ``ready=false`` rather than pretending.
-    ``selftests`` needs no store and is always wired (issue #54)."""
+    ``selftests`` needs no store and is always wired (issue #54). ``events`` (D2,
+    blizzard#317) defaults to absent: unlike the hub, the runner does not conjure one on a
+    store-free app — a composer with no stream to feed (``blizzard runner tick``, the
+    OpenAPI exporter) leaves the stream route publishing nothing rather than buffering
+    events nobody will ever read."""
     log = get_logger("blizzard.runner")
 
-    app = FastAPI(title="blizzard-runner", version=__version__)
+    app = FastAPI(title="blizzard-runner", version=__version__, lifespan=_lifespan)
     app.state.config = config
     app.state.readiness = readiness
     # The seams below are None on the store-free app.
     app.state.workspace_provider = workspace_provider
     app.state.harness = harness
     app.state.runner_store = runner_store
+    # The SSE broker (D2, blizzard#317) — `None` on every composer with no stream to
+    # feed; the stream route and :class:`~blizzard.foundation.events.stream.Stream`
+    # both degrade cleanly for a broker-less app.
+    app.state.events = events
+    # Set on shutdown by `_lifespan` (D3); the stream route's live wait races it.
+    app.state.shutdown = asyncio.Event()
     # Unconditional: a stateless wrapper over the wall clock (``bzh:injected-clock``),
     # needed whether or not a store is wired.
     app.state.clock = SystemClock()
@@ -228,12 +253,13 @@ def create_app(
     return app
 
 
-def build_hosted_app(config: RunnerConfig) -> FastAPI:
+def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None) -> FastAPI:
     """The ``host`` composition root: open the store and wire the readiness seam.
 
     Engine creation is connection-free, so this stays cheap; the connection is opened
-    lazily on the first ``/api/ready`` read.
-    """
+    lazily on the first ``/api/ready`` read. ``events`` (D2, blizzard#317) is the
+    process-wide broker the ``host`` verb constructs and shares with the reconciliation
+    loop's own ``PeriodicDriver`` — absent for every other caller of this function."""
     engine = create_engine_from_url(config.db_url)
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
@@ -314,6 +340,7 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         git_commit_declarations=git_commit_declarations,
         jti_cache=jti_cache,
         hub_http_client=hub_http_client,
+        events=events,
     )
 
 

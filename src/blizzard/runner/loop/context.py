@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.events.broker import EventBroker
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
@@ -105,3 +106,8 @@ class LoopContext:
     #: The harness transcript source (blizzard#245) — a declared field so the loop's own
     #: dependency is visible here; ``None`` when not wired.
     transcripts: IHarnessTranscriptSource | None = None
+    #: The SSE broker (D2, blizzard#317) — shared with the served app when both are
+    #: built by the same composer (the ``host`` verb, the e2e harness); ``None`` on
+    #: ``blizzard runner tick`` and every other loop-only caller, where publishing is a
+    #: no-op (Phase 3 wires the publish call sites; none is wired yet).
+    events: EventBroker | None = None

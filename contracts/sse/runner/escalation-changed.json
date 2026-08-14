@@ -1,0 +1,12 @@
+{
+  "minimal": {
+    "chunk_id": "ch_1",
+    "cause": "opened"
+  },
+  "full": {
+    "chunk_id": "ch_1",
+    "cause": "closed",
+    "lease_id": "ls_1",
+    "key": "escalations:ch_1"
+  }
+}

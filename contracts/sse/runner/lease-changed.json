@@ -1,0 +1,14 @@
+{
+  "minimal": {
+    "lease_id": "ls_1",
+    "chunk_id": "ch_1",
+    "cause": "created"
+  },
+  "full": {
+    "lease_id": "ls_1",
+    "chunk_id": "ch_1",
+    "cause": "transitioned",
+    "node_name": "build",
+    "key": "leases:ls_1"
+  }
+}

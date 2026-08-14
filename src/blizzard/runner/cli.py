@@ -21,6 +21,8 @@ import httpx
 import uvicorn
 
 from blizzard.cli.host_directory import HostDirectory
+from blizzard.foundation.events.broker import EventBroker
+from blizzard.foundation.events.server import EarlyShutdownServer
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.artifacts import ArtifactKind
@@ -55,6 +57,11 @@ _SELFTEST_POLL_INTERVAL = 0.2
 # A CLI-side backstop above the server's own authoritative run budget, so the CLI never spins forever
 # against a runner that cannot reach that code.
 _SELFTEST_POLL_TIMEOUT = 600.0
+
+# Bounds uvicorn's own connection-drain wait — defense-in-depth, not the fix for an SSE
+# response held open (see `EarlyShutdownServer`, the shared foundation wrapper, D1/D3,
+# blizzard#317, imported above).
+_GRACEFUL_SHUTDOWN_SECONDS = 5
 
 
 def _set_local_paused(*, paused: bool, by: str, directory: str, runner_url: str | None) -> None:
@@ -140,12 +147,16 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         ensure_current_revision(config)
     except RevisionMismatchError as exc:
         raise click.ClickException(str(exc)) from exc
-    app = build_hosted_app(config)
+    # One broker for the process (D2, blizzard#317): the ``host`` verb is the one composer
+    # that builds both the served app and the ticked loop, so this is the single instance
+    # shared between the two independent object graphs — every writer and the stream route.
+    broker = EventBroker()
+    app = build_hosted_app(config, events=broker)
     interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
     # `PeriodicDriver` resolves its prompt files on this thread, not in the loop thread: a
     # configured-but-missing prompt raises here, before any socket binds.
     try:
-        driver = PeriodicDriver(config, interval_seconds=interval)
+        driver = PeriodicDriver(config, interval_seconds=interval, broker=broker)
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -159,17 +170,29 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         f"serving blizzard-runner on {config.host}:{config.port} and {config.socket_path} (loop tick {interval}s)"
     )
 
-    # SIGTERM must drain the server (set `should_exit`) rather than hard-exit, or `run()` never returns
-    # and the `finally` resume-marking below is never reached (tests/crash/test_kill9_sweep.py).
-    server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port))
+    # The shared early-shutdown wrapper (D1/D3, blizzard#317): sets `app.state.shutdown`
+    # synchronously in `handle_exit`, ahead of uvicorn's own graceful drain, which an SSE
+    # response held open would otherwise never let expire — `server.run()` must still
+    # return promptly so the `finally` resume-marking below is reached
+    # (tests/crash/test_kill9_sweep.py).
+    server = EarlyShutdownServer(
+        uvicorn.Config(app, host=config.host, port=config.port, timeout_graceful_shutdown=_GRACEFUL_SHUTDOWN_SECONDS),
+        shutdown_signal=app.state.shutdown,
+    )
 
-    def _drain(_signum: int, _frame: types.FrameType | None) -> None:
-        server.should_exit = True
+    # A harmless placeholder SIGTERM/SIGINT handler, installed *before* `server.run()`.
+    # `Server.capture_signals()` saves whatever handler is registered at that moment,
+    # binds its own (`EarlyShutdownServer.handle_exit`) for the run, then — once the
+    # graceful shutdown it drove finishes — restores the saved handler and re-raises the
+    # same signal through it (uvicorn's own "propagate the signal that caused this" step).
+    # With no handler pre-registered, that restore-and-reraise lands on the OS default,
+    # which kills the process outright — bypassing this `finally` block entirely and
+    # stranding the resume-marking below. A no-op handler here just absorbs the replay.
+    def _absorb_reraised_signal(_signum: int, _frame: types.FrameType | None) -> None:
+        pass
 
-    signal.signal(signal.SIGTERM, _drain)
-    signal.signal(signal.SIGINT, _drain)
-    if hasattr(server, "install_signal_handlers"):
-        server.install_signal_handlers = lambda: None  # type: ignore[method-assign]
+    signal.signal(signal.SIGTERM, _absorb_reraised_signal)
+    signal.signal(signal.SIGINT, _absorb_reraised_signal)
 
     # Ungraceful-restart recovery (#13): a `kill -9` never ran the graceful shutdown marker below, so
     # sessions killed mid-work are marked here for the same startup RESUME the first tick runs.

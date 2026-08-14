@@ -1,0 +1,13 @@
+{
+  "kinds": [
+    "lease-changed",
+    "ask-changed",
+    "escalation-changed",
+    "takeover-changed",
+    "environment-changed",
+    "fact-changed"
+  ],
+  "reserved_comment": ": blizzard runner event stream\n\n",
+  "keepalive_comment": ": keepalive\n\n",
+  "frame_line_order": ["id", "event", "data"]
+}

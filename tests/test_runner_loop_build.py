@@ -11,7 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.app import build_hosted_app
+from blizzard.foundation.events.broker import EventBroker
+from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver
@@ -108,6 +109,90 @@ def test_loop_wiring_threads_runner_dir_from_the_resolved_root(tmp_path: Path) -
 
     assert ".." not in ctx.config.runner_dir
     assert ctx.config.runner_dir == str(real_root.resolve())
+
+
+@pytest.mark.unit
+def test_loop_wiring_of_defaults_to_no_broker(tmp_path: Path) -> None:
+    """D2, blizzard#317: a loop-only caller (``blizzard runner tick``) threads no
+    broker, so its ``LoopContext`` publishes nothing — the disposition for the
+    store-free/export app and every other path with no stream to feed."""
+    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path))
+
+    ctx = LoopWiring.of(config).context(FakeHub())
+
+    assert ctx.events is None
+
+
+@pytest.mark.unit
+def test_loop_wiring_of_threads_the_broker_into_the_loop_context(tmp_path: Path) -> None:
+    """D2, blizzard#317: the ``host`` verb's one broker reaches ``LoopContext`` — the
+    seam Phase 3's publish call sites read off."""
+    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path))
+    broker = EventBroker()
+
+    ctx = LoopWiring.of(config, broker=broker).context(FakeHub())
+
+    assert ctx.events is broker
+
+
+@pytest.mark.unit
+def test_periodic_driver_threads_the_broker_into_its_own_loop_wiring(tmp_path: Path) -> None:
+    """D2, blizzard#317: the same broker the ``host`` verb passes to ``build_hosted_app``
+    also reaches ``PeriodicDriver``'s own ``LoopWiring`` — the second of the two
+    composition paths a single instance must reach."""
+    config = RunnerConfig(
+        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
+    )
+    broker = EventBroker()
+
+    driver = PeriodicDriver(config, interval_seconds=30.0, broker=broker)
+
+    assert driver._wiring.events is broker
+
+
+@pytest.mark.unit
+def test_periodic_driver_defaults_to_no_broker(tmp_path: Path) -> None:
+    config = RunnerConfig(
+        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
+    )
+
+    driver = PeriodicDriver(config, interval_seconds=30.0)
+
+    assert driver._wiring.events is None
+
+
+@pytest.mark.unit
+def test_hosted_app_threads_the_broker_into_create_apps_seam_list(tmp_path: Path) -> None:
+    """D2, blizzard#317: the ``host`` verb's broker reaches ``app.state.events`` — the
+    seam the stream route (``runner/api/events.py``) reads off the served app."""
+    (tmp_path / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(tmp_path)}"\n')
+    broker = EventBroker()
+
+    app = build_hosted_app(RunnerConfig.load(tmp_path), events=broker)
+
+    assert app.state.events is broker
+
+
+@pytest.mark.unit
+def test_hosted_app_defaults_to_no_broker(tmp_path: Path) -> None:
+    """The disposition for every ``build_hosted_app`` caller but ``host`` itself — none
+    exists yet, but the default must stay absent so a future one degrades safely."""
+    (tmp_path / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(tmp_path)}"\n')
+
+    app = build_hosted_app(RunnerConfig.load(tmp_path))
+
+    assert app.state.events is None
+
+
+@pytest.mark.unit
+def test_create_app_for_export_stays_broker_less(tmp_path: Path) -> None:
+    """The OpenAPI-export/store-free app is one of the paths D2 names as having no
+    stream to feed — unlike the hub, ``create_app`` never conjures a broker on its own."""
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://")
+
+    app = create_app(config)
+
+    assert app.state.events is None
 
 
 @pytest.mark.unit

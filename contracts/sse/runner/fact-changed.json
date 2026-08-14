@@ -1,0 +1,15 @@
+{
+  "lease-scoped": {
+    "seq": 1,
+    "kind": "completion",
+    "chunk_id": "ch_1",
+    "lease_id": "ls_1",
+    "key": "outbound_buffer:1"
+  },
+  "runner-scoped": {
+    "seq": 2,
+    "kind": "heartbeat",
+    "chunk_id": null,
+    "lease_id": null
+  }
+}

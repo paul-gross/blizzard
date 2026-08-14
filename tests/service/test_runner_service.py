@@ -7,20 +7,39 @@ reading a real transcript back through the runner's own local HTTP API (#29, bli
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
+import json
 import os
 import shutil
+import signal
+import subprocess
+import sys
+import threading
 import time
 from pathlib import Path
 
 import httpx
 import pytest
+import uvicorn
+from fastapi import FastAPI
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop.build import LoopWiring
+from blizzard.runner.runtime import init_environment as init_runner_environment
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _free_port, _git_bare, _runner_api, _runner_config
+from tests.e2e.test_acceptance_loop import (
+    REPO,
+    REPO_NAME,
+    _await_http,
+    _free_port,
+    _git_bare,
+    _runner_api,
+    _runner_config,
+    _terminate,
+)
 from tests.service.support import (
     JUDGEMENT_SCRIPT,
     mint_fixture,
@@ -30,9 +49,11 @@ from tests.service.support import (
     require_mock_fleet,
     require_winter_source,
     service_gate,
+    sse_tap,
     transcript_segment_record,
     transcript_segment_turn,
 )
+from tests.support import daemon_log_sink, parse_sse_frames
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -495,3 +516,143 @@ def _tick_then(config: RunnerConfig, fenced: dict[str, str], check) -> bool:
     """One tick, then evaluate ``check`` — the buffered-completion poll predicate."""
     _drive(config, fenced, ticks=1, pause=0.3)
     return bool(check())
+
+
+# --- The runner's SSE stream (blizzard#317 Phase 2) -------------------------------
+#
+# No mock fleet needed: a bare, migrated runtime dir is enough to serve the local API.
+# Phase 3 wires the real publish call sites; until then these tests drive the broker
+# directly, the "minimal internal seam" the plan names — the app under test is the real
+# served app (``build_hosted_app``/``create_app``), never a stand-in.
+
+
+def _bare_runner_config(tmp_path: Path) -> RunnerConfig:
+    """A migrated, otherwise-empty runner runtime — no workspace, no hub, no harness —
+    enough to serve the local API and its stream route without ever ticking."""
+    config = init_runner_environment(tmp_path / "runner")
+    return dataclasses.replace(config, host="127.0.0.1", port=_free_port())
+
+
+def test_runner_stream_delivers_live_and_replays_from_last_event_id(tmp_path: Path) -> None:
+    """The running runner's stream, exercised from outside: a live subscriber receives a
+    published frame, and a reconnect with ``Last-Event-ID`` replays only what it missed
+    — not a re-delivery of what it already saw. The shared core's keepalive-at-an-
+    injected-interval is proven generically (tests/test_foundation_events.py); this is
+    the runner's own route wiring."""
+    broker = EventBroker()
+    config = _bare_runner_config(tmp_path)
+
+    with _runner_api(config, events=broker):
+        with sse_tap(config.port) as tap:
+            first_id = broker.publish_lease_changed("ls_1", "ch_1", cause="created")
+            second_id = broker.publish_lease_changed("ls_1", "ch_1", cause="transitioned")
+            live = tap.collect(window=3.0)
+        assert live.count("lease-changed") == 2, live
+
+        # A reconnect naming the first event's id as its cursor must replay only the
+        # second — dedup at the seam, not a second delivery of the first.
+        with (
+            httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0) as client,
+            client.stream("GET", "/api/events/stream", headers={"Last-Event-ID": str(first_id)}) as resp,
+        ):
+            assert resp.status_code == 200
+            assert resp.headers["content-type"].startswith("text/event-stream")
+            body = ""
+            for chunk in resp.iter_text():
+                body += chunk
+                # the reserved comment's own trailing blank line, then the one
+                # replayed frame's — two frames, so stop reading once both landed.
+                if body.count("\n\n") >= 2:
+                    break
+
+        frames = parse_sse_frames(body)
+        assert [f["event"] for f in frames] == ["lease-changed"], frames
+        assert int(frames[0]["id"]) == second_id
+        assert json.loads(frames[0]["data"])["cause"] == "transitioned"
+
+
+def test_events_stream_401s_without_a_session_over_tcp_under_oauth(tmp_path: Path) -> None:
+    """The route classification tier (``tests/test_runner_route_gating.py``) already
+    proves this generically, in-process, over every human-lane route including this one
+    — that table-driven suite is this claim's real home. This is the same claim
+    reproven against a genuinely running daemon: ``build_hosted_app`` opens its own
+    real network client for the hub-auth-mode probe, so the "hub" here is a real
+    listening stub rather than an in-process transport double."""
+    config = _bare_runner_config(tmp_path)
+
+    jwks_app = FastAPI()
+
+    @jwks_app.get("/api/auth/jwks.json")
+    def _jwks() -> dict[str, list[object]]:
+        return {"keys": []}
+
+    jwks_port = _free_port()
+    jwks_server = uvicorn.Server(uvicorn.Config(jwks_app, host="127.0.0.1", port=jwks_port, log_level="warning"))
+    jwks_thread = threading.Thread(target=jwks_server.run, daemon=True)
+    jwks_thread.start()
+    jwks_client = httpx.Client(base_url=f"http://127.0.0.1:{jwks_port}", timeout=10.0)
+    try:
+        deadline = time.monotonic() + 20.0
+        while time.monotonic() < deadline:
+            with contextlib.suppress(httpx.HTTPError):
+                if jwks_client.get("/api/auth/jwks.json").status_code == 200:
+                    break
+            time.sleep(0.1)
+        else:
+            raise AssertionError("the jwks stub never came up")
+
+        app_config = dataclasses.replace(config, hub_url=f"http://127.0.0.1:{jwks_port}")
+        with (
+            _runner_api(app_config),
+            httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0) as client,
+        ):
+            resp = client.get("/api/events/stream")
+        assert resp.status_code == 401, resp.text
+    finally:
+        jwks_client.close()
+        jwks_server.should_exit = True
+        jwks_thread.join(timeout=10.0)
+
+
+def test_runner_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_path: Path) -> None:
+    """SIGTERM sets ``app.state.shutdown`` synchronously (D1/D3, blizzard#317), ahead of
+    uvicorn's own graceful drain, which an SSE response never finishes on its own — the
+    process exits well inside the drain bound even with a client still connected,
+    rather than riding it out (the crash sweep's own whole-process SIGTERM case,
+    ``tests/crash/test_kill9_sweep.py::test_graceful_restart_resumes_in_flight_session``,
+    is the re-proof that this does not strand the resume-marking `finally`)."""
+    runner_dir = tmp_path / "runner"
+    runner_port = _free_port()
+    runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
+    subprocess.run([runner_bin, "init", str(runner_dir)], check=True, capture_output=True, text=True)
+    log = runner_dir / "daemon.log"
+    proc = subprocess.Popen(
+        [runner_bin, "host", "--dir", str(runner_dir), "--host", "127.0.0.1", "--port", str(runner_port)],
+        stdout=daemon_log_sink(log),
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    client = httpx.Client(base_url=f"http://127.0.0.1:{runner_port}", timeout=30.0)
+    exit_code: int | None = None
+    try:
+        _await_http(proc, client, "/api/health", log=log)
+        # The server dies mid-stream by design; closing our own end of a now-dead
+        # connection is expected to raise, not a failure of what this test asserts.
+        with contextlib.suppress(httpx.HTTPError), client.stream("GET", "/api/events/stream") as resp:
+            assert resp.status_code == 200
+            next(resp.iter_text())  # block for the reserved comment — the subscriber is live
+
+            proc.send_signal(signal.SIGTERM)
+            try:
+                exit_code = proc.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=10)
+                raise AssertionError(
+                    "runner did not exit within 2s of SIGTERM with a client parked on the stream "
+                    "(uvicorn's own graceful-shutdown bound is 5s)"
+                ) from None
+        assert exit_code is not None
+    finally:
+        client.close()
+        _terminate(proc)
