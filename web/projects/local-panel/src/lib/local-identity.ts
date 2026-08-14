@@ -15,7 +15,11 @@ import { injectRunnerLogoutMutation, injectRunnerSessionQuery, signedInUsername 
  * silently re-authenticates through the bounce (correct — ending fleet-wide access is
  * *hub* logout), an ended one lands on the hub's login surface. The reload also escapes
  * the moment-after state where every other rail would start `401`ing on its next poll
- * with the session now gone.
+ * with the session now gone — deliberately: `session-recovery.ts`'s seam suspends
+ * itself for the duration of this very logout (`runnerLogoutInFlight`), since the
+ * session is clearing on purpose and this reload is the navigation for it. For every
+ * *other* cause of session loss (issue #312, an expired session, a runner redeploy),
+ * that same moment-after window is the seam's own to cover instead.
  *
  * Two shapes, one owner of the session read and the logout call. The default
  * `control` shape is the header's own username-plus-button block. The `label`

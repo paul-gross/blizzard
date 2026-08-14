@@ -12,9 +12,11 @@ const RETURN_URL_KEY = 'fleet.auth.return-to';
 /** Routes the app to `/login`, first stashing the current route (unless already on
  * `/login`, which would otherwise clobber a real return location with `/login`
  * itself) for {@link consumeReturnUrl} to read back once the dance completes. The one
- * seam both the 401 interceptor (`auth.interceptor.ts`) and the SSE auth-failure
- * channel (`../sse/fleet-live.ts`) route through, so "an unauthenticated response
- * means log in again" is decided in exactly one place. */
+ * seam both the hub's 401 interceptor (`auth.interceptor.ts`) and the SSE auth-failure
+ * channel (`../sse/fleet-live.ts`) route through, so "an unauthenticated hub response
+ * means log in again" is decided in exactly one place *for the hub app* — the runner
+ * webapp makes the same decision independently, for its own surface, in `local-panel`'s
+ * `session-recovery.ts` (issue #312). */
 export function redirectToLogin(router: Router): void {
   const current = router.url;
   if (!current.startsWith('/login')) {
