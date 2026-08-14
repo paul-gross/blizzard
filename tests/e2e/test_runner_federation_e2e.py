@@ -3,12 +3,7 @@
 A real Chromium bounces through a real hub + stub IdP into runner A, then the captured
 token is replayed against runner B (rejected, audience-bound) and against runner A again
 (rejected, single-use ``jti``); a hub key rotation mid-run is picked up by a second
-bounce into runner B with no restart. Needs ``uv run playwright install chromium`` once.
-
-``test_runner_session_reacquisition_e2e`` (issue #312) covers the runner webapp's own
-session-recovery seam: a runner restart (the session secret is minted per start) invalidates
-an already-open tab's session, and the SPA must silently re-federate and resume — no page
-reload, no operator action."""
+bounce into runner B with no restart. Needs ``uv run playwright install chromium`` once."""
 
 from __future__ import annotations
 
@@ -281,16 +276,9 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
 
 
 def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
-    """The runner webapp's session-recovery seam (issue #312): a running SPA whose runner
-    session expires re-federates on its own, with no operator reload.
-
-    The runner's session secret is minted fresh at every daemon start (`app.py`), so a
-    restart invalidates every open tab's session — the redeploy this scenario reproduces.
-    Restarting (not a cookie edit, not a page reload) both invalidates the session and
-    leaves the still-open browser tab, and the hub's own session, untouched: this module
-    already documents Playwright mis-attributing the runner's `Secure` cookies on a plain
-    `http` loopback origin, so cookie surgery from the test side is not the lever here.
-    """
+    """The runner's session-recovery seam (issue #312): restarting the runner (its
+    session secret is minted per start) invalidates an open tab's session with no
+    reload and no touch to the hub's own session; the SPA must re-federate on its own."""
     from playwright.sync_api import expect, sync_playwright
 
     bin_dir = require_stub_idp()
@@ -317,8 +305,7 @@ def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
             new_proc: subprocess.Popen[str] | None = None
 
             try:
-                # 1. Authenticate into runner A's own panel, same dance as scenario 1
-                # above — the identity control renders once the session resolves.
+                # 1. Authenticate into the panel, same dance as scenario 1 above.
                 page.goto(f"{runner_url}/", wait_until="load")
                 expect(page).to_have_title(re.compile("blizzard runner"))
                 expect(page.locator('[data-testid="identity-username"]')).to_be_visible()
@@ -326,27 +313,15 @@ def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
                     c.get("value") for c in context.cookies(runner_url) if c.get("name") == "bz_runner_session"
                 )
 
-                # 2. Restart the runner in place, on the same port and directory — no
-                # re-`init`, no re-registration, exactly a redeploy. The hub session and
-                # this open tab are both left alone; only the runner's session secret
-                # (and so every session it minted) changes.
+                # 2. Restart in place (same dir/port, no re-`init`) — a redeploy.
                 _terminate(proc)
                 new_proc = _spawn_runner(runner_dir, port=runner_port)
 
-                # 3. No `page.goto`, no `page.reload` from here. Wait for the seam to
-                # drive the bounce itself — `wait_for_request` blocks on the request
-                # actually firing, unlike a DOM-visibility check: the identity control's
-                # text never changes (it is the same username before and after), and the
-                # whole bounce completes against the still-live hub session fast enough
-                # that any hidden window in between is too transient to reliably catch,
-                # so neither a "went away" nor a "came back" DOM assertion actually
-                # distinguishes recovery from the stale pre-restart render.
+                # 3. No goto/reload here: wait for the seam's own bounce request — a
+                # DOM check can't tell (same username before/after, recovery is fast).
                 page.wait_for_event(
                     "request", predicate=lambda r: "/api/auth/login?return_to=" in r.url, timeout=20_000
                 )
-
-                # 4. The bounce lands back on a served page with a fresh session — the
-                # panel renders again with no operator action taken.
                 page.wait_for_load_state("load")
                 expect(page.locator('[data-testid="identity-username"]')).to_be_visible()
                 after_cookie = next(

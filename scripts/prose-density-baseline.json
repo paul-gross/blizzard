@@ -2785,9 +2785,9 @@
    "total": 222
   },
   "e2e/test_runner_federation_e2e.py": {
-   "comments": 18,
-   "docstrings": 10,
-   "total": 265
+   "comments": 22,
+   "docstrings": 16,
+   "total": 334
   },
   "e2e/test_session_modes_e2e.py": {
    "comments": 29,
