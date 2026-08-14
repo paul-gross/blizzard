@@ -7,13 +7,17 @@ network. Run with ``BLIZZARD_SERVICE=1``."""
 
 from __future__ import annotations
 
+import contextlib
+import signal
+import subprocess
+import sys
 from pathlib import Path
 
 import httpx
 import pytest
 
 from blizzard.hub.config import PRODUCES_ENFORCE, ROUTE_TOKEN_ENFORCE
-from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub
+from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _await_http, _forge, _free_port, _hub, _terminate
 from tests.service.support import (
     mint_fixture,
     mock_runner,
@@ -23,6 +27,7 @@ from tests.service.support import (
     service_gate,
     sse_tap,
 )
+from tests.support import daemon_log_sink
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -165,6 +170,50 @@ def test_sse_stream_serves_the_eventsource_contract(tmp_path: Path) -> None:
             assert resp.headers["content-type"].startswith("text/event-stream")
             first = next(resp.iter_text())
         assert first.startswith(": blizzard hub event stream"), first[:80]
+
+
+def test_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_path: Path) -> None:
+    """SIGTERM sets ``app.state.shutdown`` synchronously (D1/D3, issue #47), ahead of
+    uvicorn's own graceful drain (bounded at 5s) — the process exits well inside that
+    bound even with an SSE client still connected, rather than riding out the drain."""
+    hub_dir = tmp_path / "hub"
+    hub_port = _free_port()
+    hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
+    subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
+    log = hub_dir / "daemon.log"
+    proc = subprocess.Popen(
+        [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(hub_port)],
+        stdout=daemon_log_sink(log),
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    client = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    exit_code: int | None = None
+    try:
+        _await_http(proc, client, "/api/health", log=log)
+        # The server dies mid-stream by design; closing our own end of a now-dead
+        # connection is expected to raise, not a failure of what this test asserts.
+        with contextlib.suppress(httpx.HTTPError), client.stream("GET", "/api/events/stream") as resp:
+            assert resp.status_code == 200
+            next(resp.iter_text())  # block for the reserved comment — the subscriber is live
+
+            proc.send_signal(signal.SIGTERM)
+            try:
+                exit_code = proc.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=10)
+                raise AssertionError(
+                    "hub did not exit within 2s of SIGTERM with a client parked on the stream "
+                    "(uvicorn's own graceful-shutdown bound is 5s)"
+                ) from None
+        # A process ended by a caught signal reports its negative signal number, not 0
+        # (Python's own `subprocess` convention) — what matters here is that it returned
+        # promptly at all, not the sign of the code.
+        assert exit_code is not None
+    finally:
+        client.close()
+        _terminate(proc)
 
 
 def _migration_graphs_yaml() -> tuple[str, str]:

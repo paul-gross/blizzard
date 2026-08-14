@@ -625,14 +625,14 @@ async def drain_stream(broker: EventBroker, *, last_event_id: int = 0) -> list[d
     Starlette's ``TestClient`` buffers a whole response body, so it cannot consume an
     infinite live stream incrementally. Instead this drives the route's async generator
     directly with a request that reports itself disconnected, emitting the replay tail."""
-    from blizzard.hub.api.events import Cursor, Stream
+    from blizzard.hub.api.events import _RESERVED_COMMENT, Cursor, Stream
 
     class _DisconnectedRequest:
         async def is_disconnected(self) -> bool:
             return True
 
     chunks: list[bytes] = []
-    stream = Stream(broker, _DisconnectedRequest(), Cursor(last_event_id))  # type: ignore[arg-type]
+    stream = Stream(broker, _DisconnectedRequest(), Cursor(last_event_id), _RESERVED_COMMENT)  # type: ignore[arg-type]
     async for chunk in stream.frames():
         chunks.append(chunk)
     return parse_sse_frames(b"".join(chunks).decode())

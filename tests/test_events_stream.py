@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from blizzard.hub.api.auth_session import IMPLICIT_OPERATOR
-from blizzard.hub.api.events import Cursor, Stream, events_stream
+from blizzard.hub.api.events import _RESERVED_COMMENT, Cursor, Stream, events_stream
 from blizzard.hub.app import create_app_for_export
 from blizzard.hub.events.broker import EventBroker
 
@@ -63,7 +63,7 @@ async def test_stream_exits_promptly_on_shutdown_signal_not_disconnect() -> None
             return False  # the client stays connected — only the shutdown signal ends this
 
     async def _drain() -> None:
-        stream = Stream(broker, _ConnectedRequest(), Cursor(0), shutdown)  # type: ignore[arg-type]
+        stream = Stream(broker, _ConnectedRequest(), Cursor(0), _RESERVED_COMMENT, shutdown)  # type: ignore[arg-type]
         async for _ in stream.frames():
             pass
 
