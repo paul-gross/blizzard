@@ -742,9 +742,8 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
         When ``event_kind``/``event_payload`` are given (issue #125), the event is
         enqueued to the outbound buffer **in the same transaction** as the closure, so
-        the two land together or not at all — and this returns that row's seq, so a
-        caller with an events publisher can announce ``fact-changed`` for it (blizzard#317
-        review round 4, F1). ``None`` when no event was given, since nothing was enqueued."""
+        the two land together or not at all — returning that row's seq, or ``None``
+        when no event was given."""
         ...
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
@@ -883,9 +882,8 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
         Appends rather than upserts: this is a locally-minted fact, not a mirror. Taking
         the buffer entry here is what makes the brake and its report crash-atomic (pinned
-        by ``tests/test_ingest_and_pause_verbs.py``). Returns the buffered report's
-        ``outbound_buffer`` seq — always inserted, so a caller with an events publisher
-        announces ``fact-changed`` with it (blizzard#317 review round 4, F1)."""
+        by ``tests/test_ingest_and_pause_verbs.py``). Returns the buffered report's own
+        ``outbound_buffer`` seq — always inserted."""
         ...
 
     def set_workspace_prompt(self, workspace_id: str, *, prompt: str, at: datetime) -> None:
@@ -965,9 +963,8 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         atomically (issue #58).
 
         Keyed on ``(lease_id, generation, sample.kind)``: a resume within the same lease
-        is a genuinely new row; an exact replay writes nothing and buffers nothing — and
-        returns ``None`` rather than a seq, since nothing was enqueued to announce
-        (blizzard#317 review round 4, F1)."""
+        is a genuinely new row; an exact replay writes nothing and buffers nothing,
+        returning ``None`` rather than a seq."""
         ...
 
     def record_context_sample(
@@ -984,8 +981,8 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Append one context-sample attempt, and buffer its outbound report when one is given,
         atomically. ``context_tokens is None`` records an attempt that measured nothing, which
         still advances the cadence anchor. An empty ``report_kind`` records the sample alone —
-        the ordinary case, since only a first crossing reports, and returns ``None`` since no
-        report was buffered to announce (blizzard#317 review round 4, F1)."""
+        the ordinary case, since only a first crossing reports — and returns ``None`` then,
+        since no report was buffered."""
         ...
 
     def record_external_usage_attempt(
@@ -995,8 +992,8 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         produced a sample, buffer its outbound report — atomically (issue #218).
 
         The attempt row is always appended, whether or not the harness had anything to
-        report; the outbound fact is enqueued only when ``payload`` is not ``None``, and
-        only then is a seq returned rather than ``None`` (blizzard#317 review round 4, F1)."""
+        report; the outbound fact, and the seq returned for it, exist only when
+        ``payload`` is not ``None``."""
         ...
 
     def record_attachment(

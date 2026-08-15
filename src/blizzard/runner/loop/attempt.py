@@ -265,8 +265,7 @@ class Attempt:
                 )
             if event_seq is not None:
                 # The optional operational event `record_closure` buffered alongside the
-                # closure — its own fact-log row, distinct from the lease-changed frame above
-                # (blizzard#317 review round 4, F1 — was buffered with no announcement).
+                # closure — its own fact-log row, distinct from the lease-changed frame above.
                 self.ctx.events.publish_fact_changed(
                     seq=event_seq,
                     kind=EVENT_RECORDED,
