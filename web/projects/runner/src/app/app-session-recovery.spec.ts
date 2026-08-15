@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerApi, runnerClient } from 'fleet';
+import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource, runnerApi, runnerClient } from 'fleet';
 import { stubError, stubRequestClient } from 'fleet/testing';
 import { SessionRecovery } from 'local-panel';
 import { vi } from 'vitest';
@@ -10,16 +10,32 @@ import { vi } from 'vitest';
 import { App } from './app';
 import { routes } from './app.routes';
 
+/** A do-nothing EventSource so `RunnerLiveUpdates` (blizzard#317 Phase 4) can open
+ * without a real stream — mirrors `app.spec.ts`'s own `FakeEventSource`. */
+class FakeEventSource {
+  onopen: (() => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: (() => void) | null = null;
+  addEventListener(): void {
+    /* no-op: no case here drives the stream */
+  }
+  close(): void {
+    /* no-op */
+  }
+}
+
 /** Registers a fresh `SessionRecovery`'s interceptor, spying its navigation so no
  * case actually leaves jsdom — see `local-panel`'s own `session-recovery.spec.ts`
  * for why each case owns (and ejects) its own registration. */
 async function setUp(route: (method: string, path: string) => unknown) {
+  const factory: EventSourceFactory = () => new FakeEventSource() as unknown as FleetEventSource;
   await TestBed.configureTestingModule({
     imports: [App],
     providers: [
       provideZonelessChangeDetection(),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       provideRouter(routes),
+      { provide: EVENT_SOURCE_FACTORY, useValue: factory },
     ],
   }).compileComponents();
   const recovery = TestBed.inject(SessionRecovery);

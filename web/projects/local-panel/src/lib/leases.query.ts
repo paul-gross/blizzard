@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 import { runnerApi } from 'fleet';
 
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './polling';
 import { runnerLeasesKey } from './query-keys';
 
 /**
@@ -8,8 +9,12 @@ import { runnerLeasesKey } from './query-keys';
  * active lease with its joined binding facts and read-time-derived state
  * (`running`/`stale`/`parked`/`spawning`/`exited`), through TanStack Query and the
  * generated runner client (bzh:generated-client). Modeled on `fleet`'s
- * `injectHubRunnersQuery`; `refetchInterval: 5000` matches its floor. There is no
- * SSE here — the runner has no event stream, so the poll is the only signal.
+ * `injectHubRunnersQuery`. Covered by `lease-changed` (`runner-live-updates.ts`'s
+ * `RUNNER_EVENT_INVALIDATION_REGISTRY`, blizzard#317 Phase 4); lease staleness is
+ * also *derived from elapsed heartbeat time*, which no event marks, so a lease
+ * that goes quiet without a further transition needs a real re-read to flip
+ * `stale` on the client's own clock (D7) — the interval below is that backstop,
+ * not the primary signal a fresh lease/transition/close is covered by.
  */
 export function injectRunnerLeasesQuery() {
   return injectQuery(() => ({
@@ -19,6 +24,7 @@ export function injectRunnerLeasesQuery() {
       if (error) throw error;
       return data?.items ?? [];
     },
-    refetchInterval: 5000,
+    // See RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS.
+    refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
 }

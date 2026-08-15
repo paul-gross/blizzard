@@ -41,40 +41,47 @@ export type TakeoverChangeCause = 'opened' | 'closed';
 export type EnvironmentChangeCause = 'bound' | 'released';
 
 /** A `lease-changed` frame's payload. `key`/`node_name` are present-when-meaningful,
- * omitted rather than `null` when they do not apply. */
+ * omitted rather than `null` when they do not apply. `cause` is typed `string`, not
+ * {@link LeaseChangeCause}, for the same reason `fleet-live.ts`'s `RunnerEvent.kind`
+ * is: {@link RunnerEventPayload} intersects every payload interface here, and each
+ * carries its own disjoint `cause` literal union — intersecting those collapses the
+ * field (and, with it, the whole type) to `never`. */
 export interface LeaseChanged {
   lease_id: string;
   chunk_id: string;
-  cause: LeaseChangeCause;
+  cause: string;
   node_name?: string;
 }
 /** An `ask-changed` frame's payload — a worker's question recorded, or its answer
- * landing (the park resume the answer drives). */
+ * landing (the park resume the answer drives). `cause` typed `string` — see
+ * {@link LeaseChanged}. */
 export interface AskChanged {
   lease_id: string;
   chunk_id: string;
   question_id: string;
-  cause: AskChangeCause;
+  cause: string;
 }
 /** An `escalation-changed` frame's payload — opened at an exhausted retry budget, or
  * closed by supersession. `lease_id` is present only when the closing/opening lease is
- * known. */
+ * known. `cause` typed `string` — see {@link LeaseChanged}. */
 export interface EscalationChanged {
   chunk_id: string;
-  cause: EscalationChangeCause;
+  cause: string;
   lease_id?: string;
 }
-/** A `takeover-changed` frame's payload. */
+/** A `takeover-changed` frame's payload. `cause` typed `string` — see
+ * {@link LeaseChanged}. */
 export interface TakeoverChanged {
   chunk_id: string;
   takeover_id: string;
-  cause: TakeoverChangeCause;
+  cause: string;
 }
-/** An `environment-changed` frame's payload. */
+/** An `environment-changed` frame's payload. `cause` typed `string` — see
+ * {@link LeaseChanged}. */
 export interface EnvironmentChanged {
   chunk_id: string;
   environment_id: string;
-  cause: EnvironmentChangeCause;
+  cause: string;
 }
 /** A `fact-changed` frame's payload — a hub-bound fact was enqueued onto the outbound
  * buffer. `chunk_id`/`lease_id` are always present, `null` rather than omitted, for a

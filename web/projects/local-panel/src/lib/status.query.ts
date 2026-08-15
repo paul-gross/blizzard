@@ -2,21 +2,27 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation, injectQuery } from '@tanstack/angular-query-experimental';
 import { runnerApi } from 'fleet';
 
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './polling';
 import { runnerDashboardKey } from './query-keys';
 
 /**
  * The panel's whole machine-local status read, composed into one poll
  * (issue #311) — `GET /api/dashboard`, through the generated runner client
- * (`bzh:generated-client`), on the same 5s poll floor as `leases.query.ts`
- * — the runner has no event stream, so the poll is the only signal. Nests
- * every section the panel's rails read: `runner` (identity, capacities, hub
- * connectivity, last tick), `environments`, `asks`, `escalations`,
- * `takeovers`, `facts`, and `fleet_summary` (the one section that can be
- * `null` — a hub outage or an unwired runner, never a client-visible error
- * for that case). Every consumer injects this same query directly rather
- * than threading it down as an input — TanStack's own query-key dedupe
- * folds N injections of {@link runnerDashboardKey} into one network request,
- * so this is still one poll for the whole panel, not seven.
+ * (`bzh:generated-client`). Six of its seven sections (`runner`,
+ * `environments`, `asks`, `escalations`, `takeovers`, `facts`) are covered by
+ * the runner's own SSE stream (blizzard#317 Phase 4) — every event kind
+ * `RunnerLiveUpdates` dispatches stales this read (`runner-live-updates.ts`'s
+ * registry) — so the interval below is a backstop against a dropped frame,
+ * not the primary freshness path; `fleet_summary`, the seventh, is a hub
+ * pass-through no runner event can prove, and rides the same backstop for a
+ * different reason (D7). Nests every section the panel's rails read: `runner`
+ * (identity, capacities, hub connectivity, last tick), `environments`, `asks`,
+ * `escalations`, `takeovers`, `facts`, and `fleet_summary` (the one section
+ * that can be `null` — a hub outage or an unwired runner, never a
+ * client-visible error for that case). Every consumer injects this same query
+ * directly rather than threading it down as an input — TanStack's own
+ * query-key dedupe folds N injections of {@link runnerDashboardKey} into one
+ * network request, so this is still one poll for the whole panel, not seven.
  */
 export function injectRunnerDashboardQuery() {
   return injectQuery(() => ({
@@ -26,7 +32,8 @@ export function injectRunnerDashboardQuery() {
       if (error) throw error;
       return data!;
     },
-    refetchInterval: 5000,
+    // See RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS.
+    refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
   }));
 }
 

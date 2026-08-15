@@ -79,6 +79,21 @@ describe('SessionRecovery (issue #312)', () => {
     expect(navigateSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('navigates on a direct recoverFromUnauthenticated() call — the shape RunnerLiveUpdates drives on a stream 401 (D9)', async () => {
+    history.pushState({}, '', '/?chunk=ch_live');
+    const { recovery, navigateSpy, restore: r } = setUp((_method, path) =>
+      path === '/api/auth/session' ? { auth_enabled: true, username: null } : unauthorized(),
+    );
+    restore = r;
+
+    // No Response/Request at all — the stream's transport never produces either,
+    // which is exactly why this logic had to be lifted out of `handle`'s body.
+    await recovery.recoverFromUnauthenticated();
+
+    expect(navigateSpy).toHaveBeenCalledTimes(1);
+    expect(navigateSpy).toHaveBeenCalledWith(`/api/auth/login?return_to=${encodeURIComponent('/?chunk=ch_live')}`);
+  });
+
   it('leaves a 401 untouched when the session read still resolves a username — an upstream rejection, not an expiry', async () => {
     const { navigateSpy, recovery, restore: r } = setUp((_method, path) =>
       path === '/api/auth/session' ? { auth_enabled: true, username: 'alice' } : unauthorized(),

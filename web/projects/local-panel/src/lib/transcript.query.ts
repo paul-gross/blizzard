@@ -13,12 +13,14 @@ import { runnerTranscriptKey } from './query-keys';
  *
  * `enabled: leaseId() !== null` — no request fires until a row is selected.
  * `refetchInterval: false`, deliberately unlike {@link injectRunnerLeasesQuery}:
- * the runner has no SSE — there is no event stream to subscribe to, so
- * polling is the only signal the lease list has — but real-time transcript
- * refresh is explicitly out of scope for this issue, and polling a
- * hundreds-of-KB read every 5s is a real cost the lease list (a few hundred
- * bytes) does not pay. The query re-fires when `leaseId` changes — selecting a
- * different row — not on a timer.
+ * the runner's SSE stream (blizzard#317 Phase 4) carries no `transcript-changed`
+ * kind — none of the six kinds it publishes says anything about a lease's
+ * conversation content — so there is still no live signal for *this* read
+ * specifically, event-driven or polled. Real-time transcript refresh stays
+ * explicitly out of scope for this issue, and polling a hundreds-of-KB read
+ * on a timer is a real cost the lease list (a few hundred bytes) does not pay.
+ * The query re-fires when `leaseId` changes — selecting a different row — not
+ * on a timer.
  */
 export function injectTranscriptQuery(leaseId: () => string | null) {
   return injectQuery(() => {
