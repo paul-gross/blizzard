@@ -2,7 +2,8 @@
 loop and domain layers depend on instead of the concrete :class:`~blizzard.runner.events.broker.EventBroker`
 (``bzh:dependency-inversion``). Every mutation seam that publishes holds this, never the
 concrete class, which stays a composition-root-only import (``cli.py``, ``app.py``,
-``loop/build.py``, ``api/wiring.py``)."""
+``loop/build.py``); ``api/wiring.py``'s own ``events()`` accessor is typed against this
+Protocol too, so every route-level publisher holds it just like the loop/domain layers do."""
 
 from __future__ import annotations
 

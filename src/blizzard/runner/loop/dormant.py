@@ -54,6 +54,16 @@ class DormantSession:
         self.ctx.store.record_park(
             lease_id=lease.lease_id, chunk_id=lease.chunk_id, question_id=ask.question_id, parked_at=now
         )
+        if self.ctx.events is not None:
+            # LeaseActivity.state (D4) flips to "parked" — see LeaseChangeCause's own doc
+            # (wire/sse_runner.py) for why this cause isn't record_closure's "parked".
+            self.ctx.events.publish_lease_changed(
+                lease.lease_id,
+                lease.chunk_id,
+                cause="dormant",
+                node_name=lease.node_name,
+                key=f"leases:{lease.lease_id}",
+            )
         _log.info("chunk parked on question", chunk_id=lease.chunk_id, question_id=ask.question_id)
 
     def restart_or_release(self) -> None:

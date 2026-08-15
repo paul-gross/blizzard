@@ -33,6 +33,7 @@ export type RunnerEventType = (typeof RUNNER_EVENT_TYPES)[number];
 export type LeaseChangeCause =
   | 'created'
   | 'spawned'
+  | 'dormant'
   | 'transitioned'
   | 'reaped'
   | 'failed'

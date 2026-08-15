@@ -22,11 +22,12 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.drain import OutboundDrain
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.steps import Advance, Fill, Pull
 from blizzard.runner.store.repository import NewLease
-from blizzard.wire.chunk import ChunkDetail, RouteView
+from blizzard.wire.chunk import ChunkDetail, PauseView, RouteView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
@@ -322,6 +323,87 @@ def test_attempt_abandon_retiring_an_open_park_does_not_publish_ask_answered(tmp
     # The abandon's own lease-changed(released) frame still fires — the client re-reads
     # through it instead.
     assert _frames(events, "lease-changed")[-1]["cause"] == "released"
+
+
+# --- lease-changed(dormant) — park without closure (review round 3, F1) ----------------- #
+
+
+def test_dormant_park_on_ask_publishes_lease_changed_dormant(tmp_path: Path) -> None:
+    """LeaseActivity.state flips to "parked" the instant `record_park` lands — the leases
+    rail needs a frame to catch that, distinct from the ask itself (already covered by
+    `record_ask`'s own 'asked' frame)."""
+    store = _store(tmp_path)
+    events = EventBroker()
+    _seed_lease(store, retries_max=2)
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="qn_1",
+        question="Which API?",
+        options=["rest", "graphql"],
+        session_id="sess-a",
+        asked_at=_NOW,
+    )
+    ask = store.unforwarded_ask("lease_1")
+    assert ask is not None
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict=None),
+        probe=FakeProbe(),
+        events=events,
+    )
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+
+    DormantSession(ctx, lease).park_on_ask(ask)
+
+    lease_frames = _frames(events, "lease-changed")
+    assert lease_frames[-1] == {
+        "lease_id": "lease_1",
+        "chunk_id": "ch_1",
+        "cause": "dormant",
+        "node_name": "build",
+        "key": "leases:lease_1",
+    }
+
+
+def test_pull_reconcile_leases_publishes_lease_changed_dormant_on_operator_pause(tmp_path: Path) -> None:
+    """The same LeaseActivity.state flip, reached via the operator-pause path
+    (`Attempt.park_paused`) instead of an ask."""
+    store = _store(tmp_path)
+    events = EventBroker()
+    _seed_lease(store, retries_max=2)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkDetail(
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        status=ChunkStatus.PAUSED,
+        current_node_id="nd_build",
+        latest_epoch=1,
+        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        pause=PauseView(by="operator", set_at="2026-07-16T12:00:00Z"),
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict=None),
+        probe=FakeProbe(),
+        events=events,
+    )
+
+    Pull(ctx).run()
+
+    lease_frames = _frames(events, "lease-changed")
+    assert lease_frames[-1] == {
+        "lease_id": "lease_1",
+        "chunk_id": "ch_1",
+        "cause": "dormant",
+        "node_name": "build",
+        "key": "leases:lease_1",
+    }
 
 
 # --- escalation-changed(closed) ---------------------------------------------------------- #

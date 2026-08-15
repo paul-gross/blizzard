@@ -200,6 +200,16 @@ class Attempt:
         _CP_PAUSE_PARK_AFTER_KILL.reached()  # worker dead; the park is not yet durable
         self.ctx.store.record_pause_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, parked_at=now)
         self.ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+        if self.ctx.events is not None:
+            # Same "dormant" cause `park_on_ask` publishes (dormant.py) — this write flips the
+            # same LeaseActivity.state to "parked", just via the operator-pause path.
+            self.ctx.events.publish_lease_changed(
+                lease.lease_id,
+                lease.chunk_id,
+                cause="dormant",
+                node_name=lease.node_name,
+                key=f"leases:{lease.lease_id}",
+            )
         _log.info(
             "parked chunk on an operator pause — claim retained",
             chunk_id=lease.chunk_id,

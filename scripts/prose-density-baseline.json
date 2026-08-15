@@ -1874,8 +1874,8 @@
   },
   "blizzard/runner/api/wiring.py": {
    "comments": 0,
-   "docstrings": 13,
-   "total": 120
+   "docstrings": 14,
+   "total": 121
   },
   "blizzard/runner/api/work_items.py": {
    "comments": 2,
@@ -2039,8 +2039,8 @@
   },
   "blizzard/runner/events/publisher.py": {
    "comments": 0,
-   "docstrings": 7,
-   "total": 52
+   "docstrings": 8,
+   "total": 53
   },
   "blizzard/runner/harness/__init__.py": {
    "comments": 0,
@@ -2123,9 +2123,9 @@
    "total": 5
   },
   "blizzard/runner/loop/attempt.py": {
-   "comments": 32,
+   "comments": 34,
    "docstrings": 41,
-   "total": 289
+   "total": 299
   },
   "blizzard/runner/loop/build.py": {
    "comments": 16,
@@ -2148,9 +2148,9 @@
    "total": 111
   },
   "blizzard/runner/loop/dormant.py": {
-   "comments": 29,
+   "comments": 31,
    "docstrings": 34,
-   "total": 233
+   "total": 243
   },
   "blizzard/runner/loop/drain.py": {
    "comments": 19,
@@ -2675,7 +2675,7 @@
   "blizzard/wire/sse_runner.py": {
    "comments": 10,
    "docstrings": 8,
-   "total": 92
+   "total": 94
   },
   "blizzard/wire/takeover.py": {
    "comments": 0,
@@ -2870,9 +2870,9 @@
    "total": 623
   },
   "runner_event_census.py": {
-   "comments": 17,
+   "comments": 18,
    "docstrings": 8,
-   "total": 170
+   "total": 188
   },
   "runner_fakes.py": {
    "comments": 53,
@@ -4005,9 +4005,9 @@
    "total": 294
   },
   "test_runner_event_publish.py": {
-   "comments": 28,
-   "docstrings": 13,
-   "total": 521
+   "comments": 29,
+   "docstrings": 18,
+   "total": 603
   },
   "test_runner_events_stream.py": {
    "comments": 5,

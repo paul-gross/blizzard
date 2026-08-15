@@ -1,7 +1,12 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource } from 'fleet';
+import {
+  EVENT_SOURCE_FACTORY,
+  type EventSourceFactory,
+  type FleetEventSource,
+  INVALIDATION_COALESCE_WINDOW_MS,
+} from 'fleet';
 import { vi } from 'vitest';
 
 import { runnerChunkDetailKey, runnerDashboardKey, runnerLeasesKey } from './query-keys';
@@ -87,6 +92,7 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
       JSON.stringify({ lease_id: 'lease_1', chunk_id: 'ch_1', cause: 'transitioned' }),
       '1',
     );
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(runnerLeasesKey);
@@ -105,6 +111,7 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
       JSON.stringify({ lease_id: 'lease_1', chunk_id: 'ch_2', question_id: 'q_1', cause: 'asked' }),
       '1',
     );
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(runnerDashboardKey);
@@ -119,6 +126,7 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
     const source = FakeEventSource.instances[0];
     source.open();
     source.emitNamed('escalation-changed', JSON.stringify({ chunk_id: 'ch_3', cause: 'opened' }), '1');
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(runnerDashboardKey);
@@ -136,6 +144,7 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
       JSON.stringify({ chunk_id: 'ch_4', takeover_id: 'tko_1', cause: 'opened' }),
       '1',
     );
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(runnerDashboardKey);
@@ -153,6 +162,7 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
       JSON.stringify({ chunk_id: 'ch_5', environment_id: 'env_1', cause: 'bound' }),
       '1',
     );
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(runnerDashboardKey);
@@ -170,6 +180,7 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
       JSON.stringify({ seq: 1, kind: 'event.recorded', chunk_id: null, lease_id: null }),
       '1',
     );
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(runnerDashboardKey);
@@ -187,10 +198,46 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
       JSON.stringify({ seq: 2, kind: 'chunk-facts-appended', chunk_id: 'ch_6', lease_id: 'lease_2' }),
       '1',
     );
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(runnerDashboardKey);
     expect(keys).toContainEqual(runnerChunkDetailKey('ch_6'));
+  });
+
+  it('collapses duplicate keys from multiple frames in one window into a single invalidation (review:F5)', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates).start());
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    // Three frames in the same window, each staling the dashboard key.
+    source.emitNamed('escalation-changed', JSON.stringify({ chunk_id: 'ch_a', cause: 'opened' }), '1');
+    source.emitNamed('takeover-changed', JSON.stringify({ chunk_id: 'ch_b', takeover_id: 't_1', cause: 'opened' }), '2');
+    source.emitNamed(
+      'fact-changed',
+      JSON.stringify({ seq: 3, kind: 'event.recorded', chunk_id: null, lease_id: null }),
+      '3',
+    );
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+
+    const dashboardHits = invalidate.mock.calls.filter((call) => call[0]?.queryKey === runnerDashboardKey);
+    expect(dashboardHits).toHaveLength(1);
+  });
+
+  it('flushes a lone event within the coalesce window bound on an otherwise quiet stream (review:F5)', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates).start());
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('escalation-changed', JSON.stringify({ chunk_id: 'ch_a', cause: 'opened' }), '1');
+
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS - 1);
+    expect(invalidate).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toContainEqual(runnerDashboardKey);
   });
 
   it('re-GETs the whole query client after a reconnect to close the gap', () => {

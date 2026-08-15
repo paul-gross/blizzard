@@ -9,9 +9,11 @@ from typing import ClassVar, Literal
 
 from blizzard.wire.sse import SseFramePayload
 
-#: What caused a ``lease-changed`` frame — ``created`` on mint, ``spawned`` once the pid is
-#: durable, the rest mirroring :class:`~blizzard.runner.store.repository.ClosedLeaseRecord`.
-LeaseChangeCause = Literal["created", "spawned", "transitioned", "reaped", "failed", "escalated", "parked", "released"]
+#: What caused a ``lease-changed`` frame — ``dormant`` is an open-lease park (the census's
+#: ``record_park``), the rest mirror :class:`~blizzard.runner.store.repository.ClosedLeaseRecord`.
+LeaseChangeCause = Literal[
+    "created", "spawned", "dormant", "transitioned", "reaped", "failed", "escalated", "parked", "released"
+]
 
 #: What caused an ``ask-changed`` frame — a worker's question recorded, or its answer
 #: landing (the park resume the answer drives).

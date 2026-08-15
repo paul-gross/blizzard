@@ -97,8 +97,8 @@ export class HeartbeatFreshness {
   readonly stale = input(false);
 
   /** Ticks once a second (issue #178) so the bar drains between polls, not just when
-   * `leases.query.ts`'s backstop (D7) hands this row a fresh `lastHeartbeatAt` — which
-   * can itself read up to one backstop interval staler than the truth, never fresher. */
+   * `leases.query.ts`'s backstop hands this row a fresh `lastHeartbeatAt` — see
+   * `RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS` (`polling.ts`) for that anchor's own bound. */
   private readonly now = injectNowSignal(1000);
 
   protected readonly freshAgeMs = computed(() => ageMs(this.lastHeartbeatAt(), this.now()));

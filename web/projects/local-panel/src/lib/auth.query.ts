@@ -20,10 +20,14 @@ export const runnerLogoutInFlight = logoutInFlightSignal.asReadonly();
  * in": under a `none`-mode hub it answers `auth_enabled: false` (authless surface —
  * hide the control), under oauth it carries the signed-in hub `username` (or `null`
  * when no session rode along). No `refetchInterval` (D7, blizzard#317 Phase 4): the
- * poll this used to carry stood in for a session-loss signal, and the stream's own
- * terminal `401` is exactly that signal now — `session-recovery.ts`'s seam drives a
- * full-page federation bounce on it, which re-reads every key, this one included, on
- * the way back. The one other writer, the logout mutation below, invalidates this key
+ * poll this used to carry stood in for a session-loss signal; the runner's own auth
+ * dependency (`require_human_api`) resolves once when the stream connects and is
+ * never re-checked per frame, so an in-place expiry surfaces through whichever
+ * backstop-polled read (leases/status/chunk-detail) next re-authenticates over HTTP
+ * and gets a `401` — the stream itself only 401s on a reconnect (daemon restart,
+ * transport drop). Either source lands on `session-recovery.ts`'s seam, which drives
+ * a full-page federation bounce that re-reads every key, this one included, on the
+ * way back. The one other writer, the logout mutation below, invalidates this key
  * explicitly on success, so a deliberate session clear is never left stale either.
  */
 export function injectRunnerSessionQuery() {

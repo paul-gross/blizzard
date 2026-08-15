@@ -1,6 +1,7 @@
 import { DestroyRef, EnvironmentInjector, Injectable, effect, inject, untracked } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 import {
+  INVALIDATION_COALESCE_WINDOW_MS,
   RUNNER_EVENT_STREAM_URL,
   RUNNER_EVENT_TYPES,
   type RunnerEventPayload,
@@ -83,6 +84,11 @@ export class RunnerLiveUpdates {
   private readonly destroyRef = inject(DestroyRef);
   private readonly sessionRecovery = inject(SessionRecovery);
   private handle: SseHandle<RunnerEventPayload> | null = null;
+  /** Keys queued by {@link dispatch} since the last flush, mirroring `fleet-live.ts`'s own
+   * coalescing (issue #310) — keyed by serialized form so a repeated key collapses to one
+   * entry regardless of how many frames named it. */
+  private readonly pendingInvalidations = new Map<string, readonly unknown[]>();
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Open the live stream and wire it to the query cache. Idempotent — a second call
@@ -136,11 +142,25 @@ export class RunnerLiveUpdates {
     });
   }
 
-  /** Look up this frame's type in {@link RUNNER_EVENT_INVALIDATION_REGISTRY} and
-   * invalidate every key it names — a lookup, not a per-event `case`; see that
-   * registry's own doc for what each event type stales. */
+  /** Look up this frame's type in {@link RUNNER_EVENT_INVALIDATION_REGISTRY} and queue every
+   * key it names for the next flush rather than invalidating immediately — a lookup, not a
+   * per-event `case`; see that registry's own doc for what each event type stales, and
+   * {@link INVALIDATION_COALESCE_WINDOW_MS} for why this queues instead of firing per frame. */
   private dispatch(type: string, data: RunnerEventPayload): void {
     const keys = RUNNER_EVENT_INVALIDATION_REGISTRY[type as RunnerEventType]?.(data) ?? [];
+    for (const queryKey of keys) {
+      this.pendingInvalidations.set(JSON.stringify(queryKey), queryKey);
+    }
+    if (keys.length > 0 && this.flushTimer === null) {
+      this.flushTimer = setTimeout(() => this.flushInvalidations(), INVALIDATION_COALESCE_WINDOW_MS);
+    }
+  }
+
+  /** Invalidate every key accumulated since the last flush, once each. */
+  private flushInvalidations(): void {
+    this.flushTimer = null;
+    const keys = [...this.pendingInvalidations.values()];
+    this.pendingInvalidations.clear();
     for (const queryKey of keys) {
       void this.queryClient.invalidateQueries({ queryKey });
     }

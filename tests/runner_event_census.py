@@ -36,14 +36,12 @@ class Silent:
 
 Disposition = Published | Silent
 
-#: The elapsed-time-derived samplers' and beats' shared reason (D7).
+#: The elapsed-time-derived samplers' and beats' shared reason (D7) — staleness bound is
+#: `polling.ts`'s own to state (`bzh:one-prose-home`), not restated here.
 _ELAPSED_TIME_DERIVED = (
     "elapsed-time-derived state (D7): eventing it would restore the request rate this "
     "change exists to remove, so the client re-derives it from elapsed time against an "
-    "anchor timestamp instead of from a cause a frame could carry — but that anchor itself "
-    "only advances when the panel's own RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS backstop "
-    "lands, so the rendering can read up to one backstop interval behind the true value "
-    "between polls, not continuously live."
+    "anchor timestamp the panel's own poll backstop refreshes, not continuously live."
 )
 
 #: The transcript lane's shared reason — it keeps its own poll (the falsified-claims table's one exception).
@@ -85,10 +83,13 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     "record_checks_ran": Silent(_INTERNAL_BOOKKEEPING + " (judgement's checks-ran marker)"),
     # --- asks ----------------------------------------------------------------
     "record_ask": Published(ASK_CHANGED, "POST /api/leases/{lease_id}/asks (runner/api/asks.py) — cause='asked'"),
-    "record_park": Silent(
-        "the ask is already visible from its own 'asked' frame (record_ask); open_asks()'s "
-        "derivation does not key on park/forward state, so this write moves nothing a read "
-        "surface renders differently."
+    "record_park": Published(
+        LEASE_CHANGED,
+        "DormantSession.park_on_ask (runner/loop/dormant.py) — cause='dormant'. The ask itself "
+        "is already visible from record_ask's own 'asked' frame, but this write separately flips "
+        "LeaseActivity.state (domain/leases.py) to 'parked' via parked_lease_ids(), which GET "
+        "/api/leases renders as the row's headline label — a real leases-rail transition, "
+        "distinct from open_asks()'s own unaffected derivation.",
     ),
     "record_park_resume": Published(
         ASK_CHANGED,
@@ -99,20 +100,29 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "prompts a re-read.",
     ),
     # --- operator pause (local + hub-mirrored) --------------------------------
-    "record_pause_park": Silent(
-        "the pause fact the panel renders is hub-sourced (D7 — `runner/api/chunk_detail.py`'s "
-        "proxy); this local pause-park mirror carries no separate client-facing kind."
+    "record_pause_park": Published(
+        LEASE_CHANGED,
+        "Attempt.park_paused (runner/loop/attempt.py) — cause='dormant', the same "
+        "LeaseActivity.state flip record_park causes above, reached via the operator-pause path "
+        "instead of an ask. The hub-sourced pause fact D7 already covers is a different render "
+        "(the chunk-detail pause banner) — this frame is for the leases-rail state, which that "
+        "one does not stale.",
     ),
-    "record_pause_park_resume": Silent("same as record_pause_park — the hub-sourced pause fact, not this mirror."),
+    "record_pause_park_resume": Silent(
+        "fires in two shapes: unpausing a lease that is also ask-parked clears only the pause "
+        "half — parked_lease_ids() stays true (still ask-parked), so no read-surface state "
+        "changes; unpausing any other lease calls DormantSession._wake first, whose own "
+        "record_spawn already publishes lease-changed(cause='spawned') for the state flip — this "
+        "write's own effect is already announced either way."
+    ),
     "set_hub_paused": Silent(
-        "mirrors the hub's pause brake locally; no kind in the vocabulary represents it, so the "
-        "dashboard's local mirror can read up to a RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS-old value "
-        "until the panel's own backstop poll lands."
+        "mirrors the hub's pause brake locally; no kind in the vocabulary represents it — "
+        "backstop-bounded staleness, `polling.ts`'s own claim to state (`bzh:one-prose-home`)."
     ),
     "record_local_pause": Silent(
         "the runner's own pause brake (issue #43/#61b); no kind in the vocabulary represents it — "
-        "distinct from the hub-sourced pause fact D7 already covers via the chunk-detail backstop — "
-        "so it carries the same backstop-bounded staleness as set_hub_paused above."
+        "distinct from the hub-sourced pause fact D7 already covers via the chunk-detail backstop, "
+        "but the same backstop-bounded staleness as set_hub_paused above."
     ),
     # --- escalations -----------------------------------------------------------
     "record_escalation_closure": Published(

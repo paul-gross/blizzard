@@ -16,5 +16,11 @@
  * per-surface polling: 1 request/minute across two reads is negligible idle volume
  * even left running for a full shift, and every transition either read renders that
  * *does* carry a cause is still SSE-driven, not floor-driven.
+ *
+ * The bound this leaves for what it doesn't cover: an elapsed-time-derived rendering
+ * fed by this floor can read up to one interval behind the truth between refreshes,
+ * never fresher — its anchor only moves when this backstop (or a covering event)
+ * lands. Every reader of this constant that carries that caveat should point here
+ * rather than restate it (`bzh:one-prose-home`).
  */
 export const RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS = 60_000;

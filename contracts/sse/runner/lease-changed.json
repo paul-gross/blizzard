@@ -17,5 +17,12 @@
     "cause": "spawned",
     "node_name": "build",
     "key": "leases:ls_1"
+  },
+  "dormant": {
+    "lease_id": "ls_1",
+    "chunk_id": "ch_1",
+    "cause": "dormant",
+    "node_name": "build",
+    "key": "leases:ls_1"
   }
 }
