@@ -686,6 +686,7 @@ def make_context(
             worker_files=_files,
             workspace_root=resolved_config.workspace_root,
             transcripts=harness.transcript_source(),
+            events=events,
         ),
         sessions=SessionResolver(store=store, harness=_harness, transcripts=harness.transcript_source()),
         env_release=EnvironmentRelease(

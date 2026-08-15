@@ -22,12 +22,21 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot, ExternalSubscriptionUsageWindow
+from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.drain import OutboundDrain
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.loop.steps import Advance, Fill, Pull
+from blizzard.runner.loop.steps import Advance, ContextSample, ExternalUsageSample, Fill, Pull, SpendCeiling
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, PauseView, RouteView
+from blizzard.wire.facts import (
+    EVENT_RECORDED,
+    EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+    RUNNER_LOCALLY_PAUSED,
+    USAGE_RECORDED,
+)
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
@@ -35,6 +44,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    FakeTranscriptSource,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -578,6 +588,182 @@ def test_outbound_drain_ack_republishes_fact_changed_on_the_same_seq(tmp_path: P
     enqueue_frame, ack_frame = fact_frames
     assert enqueue_frame["seq"] == ack_frame["seq"] == 1
     assert hub.pushed and hub.pushed[0].seq == 1, "the fake hub never actually received the fact"
+
+
+# --- fact-changed for the outbound_buffer writes that bypassed enqueue_outbound (review round 4, F1) --- #
+
+
+def test_ceiling_pause_publishes_fact_changed(tmp_path: Path) -> None:
+    """`record_local_pause` inserts straight into outbound_buffer, bypassing enqueue_outbound
+    (the one member the prior census mapped to fact-changed) — so the fact-log row it always
+    buffers went unannounced until the backstop next polled."""
+    store = _store(tmp_path)
+    events = EventBroker()
+    store.record_usage(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        sample=UsageSample(
+            kind="spawn",
+            model="m",
+            input_tokens=1,
+            output_tokens=1,
+            cache_read_tokens=0,
+            cache_create_tokens=0,
+            cost_usd=7.0,
+        ),
+        recorded_at=_NOW,
+    )
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict=None),
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, runner_ceiling_usd=5.0),
+        events=events,
+    )
+
+    SpendCeiling(ctx).run()
+
+    fact_frames = _frames(events, "fact-changed")
+    assert len(fact_frames) == 1
+    assert fact_frames[0]["kind"] == RUNNER_LOCALLY_PAUSED
+    assert fact_frames[0]["chunk_id"] is None
+    assert fact_frames[0]["lease_id"] is None
+
+
+def test_usage_recorder_publishes_fact_changed_and_an_exact_replay_publishes_nothing(tmp_path: Path) -> None:
+    """`record_usage` also inserts straight into outbound_buffer — D7 names only the usage
+    sampler's own elapsed-time readout as backstop-bounded, not this fact-log row. An exact
+    replay (same lease/generation/kind) enqueues nothing, so nothing is announced either."""
+    store = _store(tmp_path)
+    events = EventBroker()
+    _seed_lease(store, retries_max=2)
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict=None),
+        probe=FakeProbe(),
+        events=events,
+    )
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    sample = UsageSample(
+        kind="spawn",
+        model="m",
+        input_tokens=1,
+        output_tokens=1,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=1.0,
+    )
+
+    ctx.usage.record_sample(lease, generation=1, sample=sample)
+    ctx.usage.record_sample(lease, generation=1, sample=sample)  # exact replay — idempotent no-op
+
+    fact_frames = _frames(events, "fact-changed")
+    assert len(fact_frames) == 1
+    assert fact_frames[0]["kind"] == USAGE_RECORDED
+    assert fact_frames[0]["chunk_id"] == "ch_1"
+    assert fact_frames[0]["lease_id"] == "lease_1"
+
+
+def test_context_sample_crossing_publishes_fact_changed(tmp_path: Path) -> None:
+    """`record_context_sample` buffers a report only on a first crossing — this pins that the
+    occasional row it does buffer is announced, distinct from D7's elapsed-time-derived cadence."""
+    store = _store(tmp_path)
+    events = EventBroker()
+    _seed_lease(store, retries_max=2)
+    source = FakeTranscriptSource(context_tokens_by_session={"sess-a": 400_000})
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict=None, transcript_source=source),
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+        config=LoopConfig(
+            runner_id="r1",
+            workspace_id="ws1",
+            max_agents=1,
+            context_warn_tokens=300_000,
+            context_sample_interval_seconds=60,
+        ),
+        events=events,
+    )
+
+    ContextSample(ctx).run()
+
+    fact_frames = _frames(events, "fact-changed")
+    assert len(fact_frames) == 1
+    assert fact_frames[0]["kind"] == EVENT_RECORDED
+    assert fact_frames[0]["chunk_id"] == "ch_1"
+    assert fact_frames[0]["lease_id"] == "lease_1"
+
+
+def test_external_usage_sample_publishes_fact_changed(tmp_path: Path) -> None:
+    """`record_external_usage_attempt` buffers a report only when the harness produced a
+    sample — this pins that the occasional row it does buffer is announced."""
+    store = _store(tmp_path)
+    events = EventBroker()
+    snapshot = ExternalSubscriptionUsageSnapshot(
+        sampled_at=_NOW,
+        windows=(
+            ExternalSubscriptionUsageWindow(
+                window="5h", utilization_pct=42.0, resets_at=_NOW + timedelta(hours=5), window_seconds=18_000
+            ),
+        ),
+    )
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict=None, external_usage_snapshot=snapshot),
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+        events=events,
+    )
+
+    ExternalUsageSample(ctx).run()
+
+    fact_frames = _frames(events, "fact-changed")
+    assert len(fact_frames) == 1
+    assert fact_frames[0]["kind"] == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
+    assert fact_frames[0]["chunk_id"] is None
+    assert fact_frames[0]["lease_id"] is None
+
+
+def test_attempt_retry_closure_publishes_fact_changed_for_its_own_event(tmp_path: Path) -> None:
+    """`record_closure`'s optional `event` also bypasses enqueue_outbound — a retry's own
+    "attempt failed, retrying" fact-log row went unannounced alongside the lease-changed
+    frame the closure itself already publishes."""
+    store = _store(tmp_path)
+    events = EventBroker()
+    _seed_lease(store, retries_max=2)  # retried=0 < 2 -> retry, closes with an event
+    hub = FakeHub()
+    hub.envelopes = {"ch_1": make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])}
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict=None),
+        probe=FakeProbe(),
+        events=events,
+    )
+
+    Advance(ctx).run()
+
+    # The retry also re-mints a fresh lease, its own lease.minted fact-changed frame
+    # (`enqueue_outbound`, already covered) — filter to the closure's own event.
+    fact_frames = [f for f in _frames(events, "fact-changed") if f["kind"] == EVENT_RECORDED]
+    assert len(fact_frames) == 1
+    assert fact_frames[0]["chunk_id"] == "ch_1"
+    assert fact_frames[0]["lease_id"] == "lease_1"
 
 
 # --- a broker-less context publishes nothing, degrading cleanly (D2) -------------------- #

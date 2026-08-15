@@ -889,9 +889,10 @@ class SqlAlchemyRunnerStore:
         closed_at: datetime,
         event_kind: str | None = None,
         event_payload: str | None = None,
-    ) -> None:
+    ) -> int | None:
         # The closure and its operational event land in ONE transaction, so a `kill -9`
         # can neither surface an event for a closure that never happened nor drop one (#125).
+        event_seq: int | None = None
         with self._begin() as conn:
             conn.execute(
                 lease_closures.insert().values(
@@ -899,7 +900,7 @@ class SqlAlchemyRunnerStore:
                 )
             )
             if event_kind is not None and event_payload is not None:
-                conn.execute(
+                result = conn.execute(
                     outbound_buffer.insert().values(
                         kind=event_kind,
                         chunk_id=chunk_id,
@@ -908,6 +909,8 @@ class SqlAlchemyRunnerStore:
                         created_at=closed_at,
                     )
                 )
+                key = result.inserted_primary_key
+                event_seq = int(key[0]) if key is not None else 0
             # Segments are final by step close (issue #246) — finalized atomically here, on
             # the transcript lane's OWN buffer (D3), never `outbound_buffer` above.
             open_segments = conn.execute(
@@ -929,6 +932,7 @@ class SqlAlchemyRunnerStore:
             reason=reason,
             transcript_segments_finalized=len(open_segments),
         )
+        return event_seq
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
         with self._begin() as conn:
@@ -1215,17 +1219,19 @@ class SqlAlchemyRunnerStore:
 
     def record_local_pause(
         self, runner_id: str, *, paused: bool, at: datetime, by: str, report_kind: str, report_payload: str
-    ) -> None:
+    ) -> int:
         # Both inserts, one transaction: two would leave a `kill -9` window where the runner
         # has stopped claiming and the hub is never told (issue #43).
         with self._begin() as conn:
             conn.execute(local_pause_facts.insert().values(runner_id=runner_id, paused=paused, set_at=at, set_by=by))
-            conn.execute(
+            result = conn.execute(
                 outbound_buffer.insert().values(
                     kind=report_kind, chunk_id=None, lease_id=None, payload=report_payload, created_at=at
                 )
             )
         _log.info("local pause fact recorded", runner_id=runner_id, paused=paused, set_by=by, report=report_kind)
+        key = result.inserted_primary_key
+        return int(key[0]) if key is not None else 0
 
     def set_workspace_prompt(self, workspace_id: str, *, prompt: str, at: datetime) -> None:
         with self._begin() as conn:
@@ -1455,7 +1461,7 @@ class SqlAlchemyRunnerStore:
         generation: int,
         sample: UsageSample,
         recorded_at: datetime,
-    ) -> None:
+    ) -> int | None:
         # Both writes, one transaction: a usage fact the hub is never told about is never
         # reconciled later.
         with self._begin() as conn:
@@ -1471,7 +1477,7 @@ class SqlAlchemyRunnerStore:
             if existing is not None:
                 # A replay of the exact same invocation — the row is already durable;
                 # write nothing a second time.
-                return
+                return None
             conn.execute(
                 usage_facts.insert().values(
                     lease_id=lease_id,
@@ -1503,7 +1509,7 @@ class SqlAlchemyRunnerStore:
                     "cost_usd": sample.cost_usd,
                 }
             )
-            conn.execute(
+            result = conn.execute(
                 outbound_buffer.insert().values(
                     kind=USAGE_RECORDED,
                     chunk_id=chunk_id,
@@ -1520,6 +1526,8 @@ class SqlAlchemyRunnerStore:
             kind=sample.kind,
             cost_usd=sample.cost_usd,
         )
+        key = result.inserted_primary_key
+        return int(key[0]) if key is not None else 0
 
     def context_sample_state(self, lease_id: str) -> ContextSampleState | None:
         stmt = select(
@@ -1549,9 +1557,10 @@ class SqlAlchemyRunnerStore:
         sampled_at: datetime,
         report_kind: str = "",
         report_payload: str = "",
-    ) -> None:
+    ) -> int | None:
         # The sample row and any outbound report land in ONE transaction, as the external
         # usage sampler below does — a warning buffered without its sample would re-fire.
+        seq: int | None = None
         with self._begin() as conn:
             conn.execute(
                 context_samples.insert().values(
@@ -1562,7 +1571,7 @@ class SqlAlchemyRunnerStore:
                 )
             )
             if report_kind:
-                conn.execute(
+                result = conn.execute(
                     outbound_buffer.insert().values(
                         kind=report_kind,
                         chunk_id=chunk_id,
@@ -1571,6 +1580,8 @@ class SqlAlchemyRunnerStore:
                         created_at=sampled_at,
                     )
                 )
+                key = result.inserted_primary_key
+                seq = int(key[0]) if key is not None else 0
         if report_kind:
             _log.warning(
                 "session context crossed the warn line",
@@ -1578,21 +1589,26 @@ class SqlAlchemyRunnerStore:
                 session_id=session_id,
                 context_tokens=context_tokens,
             )
+        return seq
 
     def record_external_usage_attempt(
         self, *, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str
-    ) -> None:
+    ) -> int | None:
         # The attempt row and its outbound report land in ONE transaction. Runner-scoped
         # (`chunk_id=None, lease_id=None`): a fact about the account, not a chunk or lease.
+        seq: int | None = None
         with self._begin() as conn:
             conn.execute(external_usage_samples.insert().values(sampled_at=sampled_at, payload=payload))
             if payload is not None:
-                conn.execute(
+                result = conn.execute(
                     outbound_buffer.insert().values(
                         kind=report_kind, chunk_id=None, lease_id=None, payload=report_payload, created_at=sampled_at
                     )
                 )
+                key = result.inserted_primary_key
+                seq = int(key[0]) if key is not None else 0
         _log.info("external subscription usage attempt recorded", sampled=payload is not None)
+        return seq
 
     # --- plumbing -----------------------------------------------------------
 

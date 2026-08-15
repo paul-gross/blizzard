@@ -71,7 +71,13 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         LEASE_CHANGED,
         "Attempt.close (runner/loop/attempt.py) — cause=the closure reason itself, which IS "
         "the LeaseChangeCause vocabulary (transitioned/reaped/failed/escalated/parked/released); "
-        "reason='escalated' additionally publishes escalation-changed(opened) at the same site.",
+        "reason='escalated' additionally publishes escalation-changed(opened) at the same site. "
+        "When `close()` is given an operational `event` (a retry or an exhausted-retries "
+        "escalation), the write also buffers it to outbound_buffer, additionally announced as "
+        "fact-changed(kind='event.recorded') at the same site (blizzard#317 review round 4, F1 — "
+        "was buffered with no fact-changed announcement, the same defect class as "
+        "record_local_pause/record_usage/record_context_sample/record_external_usage_attempt "
+        "below).",
     ),
     "record_resume_intent": Silent(_INTERNAL_BOOKKEEPING + " (restart-resume marking)"),
     "record_resume_clear": Silent(_INTERNAL_BOOKKEEPING + " (restart-resume marking)"),
@@ -119,10 +125,14 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "mirrors the hub's pause brake locally; no kind in the vocabulary represents it — "
         "backstop-bounded staleness, `polling.ts`'s own claim to state (`bzh:one-prose-home`)."
     ),
-    "record_local_pause": Silent(
-        "the runner's own pause brake (issue #43/#61b); no kind in the vocabulary represents it — "
-        "distinct from the hub-sourced pause fact D7 already covers via the chunk-detail backstop, "
-        "but the same backstop-bounded staleness as set_hub_paused above."
+    "record_local_pause": Published(
+        FACT_CHANGED,
+        "SpendCeiling.run and patch_runner (runner/loop/steps.py, runner/api/control.py) — kind is "
+        "the write's own report_kind (runner.locally_paused/resumed). The runner's own pause brake "
+        "(issue #43/#61b) is distinct from the hub-sourced pause fact D7 already covers via the "
+        "chunk-detail backstop; this frame is for the fact-log row this write always buffers "
+        "(blizzard#317 review round 4, F1 — was wrongly Silent, since the write's own outbound_buffer "
+        "insert bypassed enqueue_outbound and so went unannounced).",
     ),
     # --- escalations -----------------------------------------------------------
     "record_escalation_closure": Published(
@@ -164,9 +174,31 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     # --- liveness/usage/context — the elapsed-time-derived samplers (D7) ------------
     "record_daemon_liveness": Silent(_ELAPSED_TIME_DERIVED + " (the daemon's own tick beat)"),
     "record_heartbeat": Silent(_ELAPSED_TIME_DERIVED + " (a worker's tool-call beat, named explicitly in D7)"),
-    "record_usage": Silent(_ELAPSED_TIME_DERIVED + " (the usage sampler, named explicitly in D7)"),
-    "record_context_sample": Silent(_ELAPSED_TIME_DERIVED + " (the context sampler, named explicitly in D7)"),
-    "record_external_usage_attempt": Silent(_ELAPSED_TIME_DERIVED + " (the external-subscription-usage sampler)"),
+    "record_usage": Published(
+        FACT_CHANGED,
+        "UsageRecorder.record_sample (runner/loop/usage.py) — kind='usage.recorded'. D7 names the "
+        "usage *sampler's own elapsed-time readout* as backstop-bounded, but this write also always "
+        "buffers a fact-log row (except on an exact-replay idempotent no-op, which enqueues nothing "
+        "to announce) — a different render this frame covers (blizzard#317 review round 4, F1 — was "
+        "wrongly Silent under a reason that addressed only the sampler, not the fact-log row the "
+        "same write also creates by inserting into outbound_buffer directly, bypassing "
+        "enqueue_outbound).",
+    ),
+    "record_context_sample": Published(
+        FACT_CHANGED,
+        "ContextSample._sample (runner/loop/steps.py) — kind='event.recorded', only on a first "
+        "crossing (report_kind is empty otherwise, and nothing is enqueued to announce then). D7's "
+        "elapsed-time-derived reason covers the sampler's own cadence, not this occasional fact-log "
+        "row (blizzard#317 review round 4, F1 — same class as record_usage above).",
+    ),
+    "record_external_usage_attempt": Published(
+        FACT_CHANGED,
+        "ExternalUsageSample.run (runner/loop/steps.py) — kind='external_subscription_usage.sampled', "
+        "only when the harness produced a sample (report_kind is empty otherwise, and nothing is "
+        "enqueued to announce then). D7's elapsed-time-derived reason covers the sampler's own "
+        "cadence, not this occasional fact-log row (blizzard#317 review round 4, F1 — same class as "
+        "record_usage above).",
+    ),
     # --- operator config -------------------------------------------------------------
     "set_workspace_prompt": Silent("operator-set runtime config; no kind in the vocabulary represents it."),
     "set_route_token": Silent(_INTERNAL_BOOKKEEPING + " (won-claim capability token)"),

@@ -138,6 +138,10 @@ export class RunnerLiveUpdates {
       reopenRef.destroy();
       authRef.destroy();
       handle.close();
+      if (this.flushTimer !== null) {
+        clearTimeout(this.flushTimer);
+        this.flushTimer = null;
+      }
       this.handle = null;
     });
   }

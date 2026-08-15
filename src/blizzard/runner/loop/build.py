@@ -139,6 +139,7 @@ class LoopWiring:
                 worker_files=_worker_files,
                 workspace_root=config.workspace_root,
                 transcripts=harness_transcript_source,
+                events=self.events,
             ),
             sessions=SessionResolver(store=store, harness=harness, transcripts=harness_transcript_source),
             env_release=EnvironmentRelease(

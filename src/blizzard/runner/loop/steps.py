@@ -127,7 +127,7 @@ class SpendCeiling(Step):
             window_hours=ctx.config.runner_ceiling_window_hours,
             cost_partial=totals.cost_partial,
         )
-        ctx.store.record_local_pause(
+        seq = ctx.store.record_local_pause(
             ctx.config.runner_id,
             paused=True,
             at=now,
@@ -137,6 +137,10 @@ class SpendCeiling(Step):
                 {"runner_id": ctx.config.runner_id, "by": "runner-ceiling", "at": iso_utc(now), "reason": reason}
             ),
         )
+        if ctx.events is not None:
+            ctx.events.publish_fact_changed(
+                seq=seq, kind=RUNNER_LOCALLY_PAUSED, chunk_id=None, lease_id=None, key=f"outbound_buffer:{seq}"
+            )
 
 
 class Reap(Step):
@@ -500,7 +504,7 @@ class ContextSample(Step):
             and tokens > warn_tokens
             and not (state is not None and (state.max_context_tokens or 0) > warn_tokens)
         )
-        ctx.store.record_context_sample(
+        seq = ctx.store.record_context_sample(
             lease_id=lease.lease_id,
             chunk_id=lease.chunk_id,
             session_id=lease.session_id,
@@ -511,6 +515,14 @@ class ContextSample(Step):
             report_kind=EVENT_RECORDED if crossing else "",
             report_payload=json.dumps(self._event(lease, tokens, warn_tokens, now)) if crossing else "",
         )
+        if seq is not None and ctx.events is not None:
+            ctx.events.publish_fact_changed(
+                seq=seq,
+                kind=EVENT_RECORDED,
+                chunk_id=lease.chunk_id,
+                lease_id=lease.lease_id,
+                key=f"outbound_buffer:{seq}",
+            )
 
     @staticmethod
     def _event(lease: LeaseRecord, tokens: int | None, warn_tokens: int, now: datetime) -> dict[str, object]:
@@ -562,12 +574,20 @@ class ExternalUsageSample(Step):
                 )
                 return
             payload = json.dumps(self._payload(snapshot))
-            ctx.store.record_external_usage_attempt(
+            seq = ctx.store.record_external_usage_attempt(
                 sampled_at=ctx.clock.now(),
                 payload=payload,
                 report_kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
                 report_payload=payload,
             )
+            if seq is not None and ctx.events is not None:
+                ctx.events.publish_fact_changed(
+                    seq=seq,
+                    kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+                    chunk_id=None,
+                    lease_id=None,
+                    key=f"outbound_buffer:{seq}",
+                )
         except Exception as exc:  # second line of defense — the adapter contract already promises this
             _log.warning("external subscription usage sample step failed", detail=str(exc))
 

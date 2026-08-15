@@ -237,7 +237,7 @@ class Attempt:
         closure path funnels through here — the one place to pump this lease's own open
         transcript segment(s) before ``record_closure`` finalizes them (issue #246)."""
         self._pump_lease_before_close()
-        self.ctx.store.record_closure(
+        event_seq = self.ctx.store.record_closure(
             lease_id=self.lease.lease_id,
             chunk_id=self.lease.chunk_id,
             node_id=self.lease.node_id,
@@ -262,6 +262,17 @@ class Attempt:
                 # superseded — begins reading open at exactly this instant.
                 self.ctx.events.publish_escalation_changed(
                     self.lease.chunk_id, cause="opened", lease_id=lease_id, key=f"escalations:{self.lease.chunk_id}"
+                )
+            if event_seq is not None:
+                # The optional operational event `record_closure` buffered alongside the
+                # closure — its own fact-log row, distinct from the lease-changed frame above
+                # (blizzard#317 review round 4, F1 — was buffered with no announcement).
+                self.ctx.events.publish_fact_changed(
+                    seq=event_seq,
+                    kind=EVENT_RECORDED,
+                    chunk_id=self.lease.chunk_id,
+                    lease_id=lease_id,
+                    key=f"outbound_buffer:{event_seq}",
                 )
 
     def _pump_lease_before_close(self) -> None:

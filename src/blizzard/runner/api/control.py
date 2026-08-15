@@ -48,16 +48,22 @@ def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerCo
     wiring = RunnerWiring.of(request)
     store, config = wiring.store(), wiring.config()
     now = wiring.clock().now()
+    report_kind = RUNNER_LOCALLY_PAUSED if request_body.paused else RUNNER_LOCALLY_RESUMED
     # The brake and its upward report are one write: mirroring runs hub→runner only, so a
     # brake never reported up would never be repaired (tests/test_ingest_and_pause_verbs.py).
-    store.record_local_pause(
+    seq = store.record_local_pause(
         config.runner_id,
         paused=request_body.paused,
         at=now,
         by=request_body.by,
-        report_kind=RUNNER_LOCALLY_PAUSED if request_body.paused else RUNNER_LOCALLY_RESUMED,
+        report_kind=report_kind,
         report_payload=json.dumps({"runner_id": config.runner_id, "by": request_body.by, "at": iso_utc(now)}),
     )
+    events = wiring.events()
+    if events is not None:
+        events.publish_fact_changed(
+            seq=seq, kind=report_kind, chunk_id=None, lease_id=None, key=f"outbound_buffer:{seq}"
+        )
     return _view(store, config.runner_id)
 
 

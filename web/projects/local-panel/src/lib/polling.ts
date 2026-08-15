@@ -21,6 +21,12 @@
  * fed by this floor can read up to one interval behind the truth between refreshes,
  * never fresher — its anchor only moves when this backstop (or a covering event)
  * lands. Every reader of this constant that carries that caveat should point here
- * rather than restate it (`bzh:one-prose-home`).
+ * rather than restate it (`bzh:one-prose-home`). The same bound covers a *read*-time,
+ * not elapsed-time, derivation too: `leases.query.ts`'s `LeaseActivity.state` computes
+ * its `"exited"` branch from a live process-alive probe, not from a stored fact, so no
+ * lease-changed cause announces a worker's pid dying — that transition surfaces only
+ * once this backstop (or an unrelated lease-changed frame for the same lease) triggers
+ * the next read, up to one interval later, until REAP's own closure catches up and
+ * publishes lease-changed(reaped) for real (blizzard#317 review round 4, F3).
  */
 export const RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS = 60_000;

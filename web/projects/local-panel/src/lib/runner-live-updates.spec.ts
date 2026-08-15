@@ -225,6 +225,23 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
     expect(dashboardHits).toHaveLength(1);
   });
 
+  it('clears the pending coalesce timer on destroy — no invalidation fires after teardown (review round 4, F2)', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates).start());
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    // A frame lands inside the coalesce window, then the service is torn down before
+    // that window's own flush would have fired.
+    source.emitNamed('escalation-changed', JSON.stringify({ chunk_id: 'ch_a', cause: 'opened' }), '1');
+    TestBed.resetTestingModule();
+    invalidate.mockClear();
+
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
   it('flushes a lone event within the coalesce window bound on an otherwise quiet stream (review:F5)', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(RunnerLiveUpdates).start());

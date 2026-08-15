@@ -5,12 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
+from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.store.repository import EnvBindingRecord, IWriteRunnerStore, LeaseRecord
+from blizzard.wire.facts import USAGE_RECORDED
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,9 @@ class UsageRecorder:
     worker_files: WorkerStdoutFiles
     workspace_root: str
     transcripts: IHarnessTranscriptSource | None = None
+    #: The SSE publish seam (D2, blizzard#317), typed against the Protocol
+    #: (``bzh:dependency-inversion``); ``None`` on a loop-only caller, a no-op there.
+    events: IRunnerEventPublisher | None = None
 
     def record_worker(self, lease: LeaseRecord, bindings: list[EnvBindingRecord]) -> None:
         """Record just this attempt's spawn/resume invocation usage — no judgement ran."""
@@ -46,7 +51,7 @@ class UsageRecorder:
 
     def record_sample(self, lease: LeaseRecord, *, generation: int, sample: UsageSample) -> None:
         """Make one already-parsed sample durable against this lease's generation."""
-        self.store.record_usage(
+        seq = self.store.record_usage(
             lease_id=lease.lease_id,
             chunk_id=lease.chunk_id,
             node_id=lease.node_id,
@@ -55,6 +60,16 @@ class UsageRecorder:
             sample=sample,
             recorded_at=self.clock.now(),
         )
+        # `None` on an exact-replay idempotent no-op (`record_usage`'s own docstring) — nothing
+        # was enqueued, so nothing to announce.
+        if seq is not None and self.events is not None:
+            self.events.publish_fact_changed(
+                seq=seq,
+                kind=USAGE_RECORDED,
+                chunk_id=lease.chunk_id,
+                lease_id=lease.lease_id,
+                key=f"outbound_buffer:{seq}",
+            )
 
     def _worker_sample(
         self, lease: LeaseRecord, bindings: list[EnvBindingRecord], *, generation: int, kind: UsageKind

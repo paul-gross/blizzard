@@ -737,12 +737,14 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         closed_at: datetime,
         event_kind: str | None = None,
         event_payload: str | None = None,
-    ) -> None:
+    ) -> int | None:
         """Close a lease — a clean transition or a failure/escalation.
 
         When ``event_kind``/``event_payload`` are given (issue #125), the event is
         enqueued to the outbound buffer **in the same transaction** as the closure, so
-        the two land together or not at all."""
+        the two land together or not at all — and this returns that row's seq, so a
+        caller with an events publisher can announce ``fact-changed`` for it (blizzard#317
+        review round 4, F1). ``None`` when no event was given, since nothing was enqueued."""
         ...
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
@@ -876,12 +878,14 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def record_local_pause(
         self, runner_id: str, *, paused: bool, at: datetime, by: str, report_kind: str, report_payload: str
-    ) -> None:
+    ) -> int:
         """Append a local pause/start fact **and** its hub-bound report, atomically (issue #43).
 
         Appends rather than upserts: this is a locally-minted fact, not a mirror. Taking
         the buffer entry here is what makes the brake and its report crash-atomic (pinned
-        by ``tests/test_ingest_and_pause_verbs.py``)."""
+        by ``tests/test_ingest_and_pause_verbs.py``). Returns the buffered report's
+        ``outbound_buffer`` seq — always inserted, so a caller with an events publisher
+        announces ``fact-changed`` with it (blizzard#317 review round 4, F1)."""
         ...
 
     def set_workspace_prompt(self, workspace_id: str, *, prompt: str, at: datetime) -> None:
@@ -956,12 +960,14 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         generation: int,
         sample: UsageSample,
         recorded_at: datetime,
-    ) -> None:
+    ) -> int | None:
         """Idempotently record one usage fact **and** buffer its outbound report,
         atomically (issue #58).
 
         Keyed on ``(lease_id, generation, sample.kind)``: a resume within the same lease
-        is a genuinely new row; an exact replay writes nothing and buffers nothing."""
+        is a genuinely new row; an exact replay writes nothing and buffers nothing — and
+        returns ``None`` rather than a seq, since nothing was enqueued to announce
+        (blizzard#317 review round 4, F1)."""
         ...
 
     def record_context_sample(
@@ -974,21 +980,23 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         sampled_at: datetime,
         report_kind: str = "",
         report_payload: str = "",
-    ) -> None:
+    ) -> int | None:
         """Append one context-sample attempt, and buffer its outbound report when one is given,
         atomically. ``context_tokens is None`` records an attempt that measured nothing, which
         still advances the cadence anchor. An empty ``report_kind`` records the sample alone —
-        the ordinary case, since only a first crossing reports."""
+        the ordinary case, since only a first crossing reports, and returns ``None`` since no
+        report was buffered to announce (blizzard#317 review round 4, F1)."""
         ...
 
     def record_external_usage_attempt(
         self, *, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str
-    ) -> None:
+    ) -> int | None:
         """Append one external-subscription-usage sampling attempt **and**, only when it
         produced a sample, buffer its outbound report — atomically (issue #218).
 
         The attempt row is always appended, whether or not the harness had anything to
-        report; the outbound fact is enqueued only when ``payload`` is not ``None``."""
+        report; the outbound fact is enqueued only when ``payload`` is not ``None``, and
+        only then is a seq returned rather than ``None`` (blizzard#317 review round 4, F1)."""
         ...
 
     def record_attachment(
