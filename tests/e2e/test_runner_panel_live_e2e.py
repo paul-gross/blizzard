@@ -137,8 +137,8 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
                     expect(page.get_by_test_id("lease-count")).to_have_text("1 live")
                     expect(page.get_by_test_id("agent-row")).to_have_count(1)
 
-                    # build -> review -> deliver -> done under the same live tick; each
-                    # transition is a further lease-changed frame on the same connection.
+                    # build -> review -> deliver -> done under the same tick; this wait's own
+                    # timeout equals the D7 backstop, so unlike "1 live" it alone doesn't prove SSE.
                     expect(page.get_by_test_id("lease-count")).to_have_text("0 live", timeout=60_000)
                     expect(page.get_by_test_id("agent-row")).to_have_count(0)
                 finally:

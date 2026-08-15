@@ -39,8 +39,11 @@ Disposition = Published | Silent
 #: The elapsed-time-derived samplers' and beats' shared reason (D7).
 _ELAPSED_TIME_DERIVED = (
     "elapsed-time-derived state (D7): eventing it would restore the request rate this "
-    "change exists to remove, and a client already re-derives it from elapsed time rather "
-    "than from a cause a frame could carry."
+    "change exists to remove, so the client re-derives it from elapsed time against an "
+    "anchor timestamp instead of from a cause a frame could carry — but that anchor itself "
+    "only advances when the panel's own RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS backstop "
+    "lands, so the rendering can read up to one backstop interval behind the true value "
+    "between polls, not continuously live."
 )
 
 #: The transcript lane's shared reason — it keeps its own poll (the falsified-claims table's one exception).
@@ -101,10 +104,15 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "proxy); this local pause-park mirror carries no separate client-facing kind."
     ),
     "record_pause_park_resume": Silent("same as record_pause_park — the hub-sourced pause fact, not this mirror."),
-    "set_hub_paused": Silent("mirrors the hub's pause brake locally; no kind in the vocabulary represents it."),
+    "set_hub_paused": Silent(
+        "mirrors the hub's pause brake locally; no kind in the vocabulary represents it, so the "
+        "dashboard's local mirror can read up to a RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS-old value "
+        "until the panel's own backstop poll lands."
+    ),
     "record_local_pause": Silent(
         "the runner's own pause brake (issue #43/#61b); no kind in the vocabulary represents it — "
-        "distinct from the hub-sourced pause fact D7 already covers via the chunk-detail backstop."
+        "distinct from the hub-sourced pause fact D7 already covers via the chunk-detail backstop — "
+        "so it carries the same backstop-bounded staleness as set_hub_paused above."
     ),
     # --- escalations -----------------------------------------------------------
     "record_escalation_closure": Published(

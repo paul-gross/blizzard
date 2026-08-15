@@ -96,8 +96,9 @@ export class HeartbeatFreshness {
   /** Whether the server already derived this lease `stale` — colors the bar red. */
   readonly stale = input(false);
 
-  /** Ticks once a second (issue #178) so the bar drains between polls, not just
-   * when the 5s leases poll hands this row a fresh object. */
+  /** Ticks once a second (issue #178) so the bar drains between polls, not just when
+   * `leases.query.ts`'s backstop (D7) hands this row a fresh `lastHeartbeatAt` — which
+   * can itself read up to one backstop interval staler than the truth, never fresher. */
   private readonly now = injectNowSignal(1000);
 
   protected readonly freshAgeMs = computed(() => ageMs(this.lastHeartbeatAt(), this.now()));

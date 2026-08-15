@@ -317,10 +317,10 @@ def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
                 _terminate(proc)
                 new_proc = _spawn_runner(runner_dir, port=runner_port)
 
-                # 3. No goto/reload here: wait for the seam's own bounce request — a
-                # DOM check can't tell (same username before/after, recovery is fast).
+                # 3. No goto/reload here: wait for the seam's own bounce request, triggered by
+                # the SSE reconnect (D9); timeout clears SseService's own backoff ladder — see e2e-scenarios.md.
                 page.wait_for_event(
-                    "request", predicate=lambda r: "/api/auth/login?return_to=" in r.url, timeout=20_000
+                    "request", predicate=lambda r: "/api/auth/login?return_to=" in r.url, timeout=40_000
                 )
                 page.wait_for_load_state("load")
                 expect(page.locator('[data-testid="identity-username"]')).to_be_visible()

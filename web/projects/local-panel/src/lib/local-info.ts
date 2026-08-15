@@ -238,7 +238,10 @@ export class LocalInfo {
   });
 
   /** Ticks once a second (issue #178) so `lastFlushLabel`/`lastTickLabel` advance
-   * between polls instead of sitting frozen at whatever age the last read carried. */
+   * between polls instead of sitting frozen at whatever age the last read carried —
+   * both are elapsed-time-derived with no covering event (D7), so `status.query.ts`'s
+   * backstop is what refreshes their anchors, and either can read up to one backstop
+   * interval staler than the daemon's true state, never fresher. */
   private readonly now = injectNowSignal(1000);
 
   /** `-34s` since the last successful PULL, or `never` before first contact. */

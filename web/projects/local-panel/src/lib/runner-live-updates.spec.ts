@@ -165,7 +165,11 @@ describe('RunnerLiveUpdates (blizzard#317 Phase 4)', () => {
 
     const source = FakeEventSource.instances[0];
     source.open();
-    source.emitNamed('fact-changed', JSON.stringify({ seq: 1, kind: 'heartbeat', chunk_id: null, lease_id: null }), '1');
+    source.emitNamed(
+      'fact-changed',
+      JSON.stringify({ seq: 1, kind: 'event.recorded', chunk_id: null, lease_id: null }),
+      '1',
+    );
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(runnerDashboardKey);

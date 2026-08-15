@@ -30,7 +30,15 @@ export type RunnerEventType = (typeof RUNNER_EVENT_TYPES)[number];
 
 /** What caused a `lease-changed` frame — `created` on mint, the rest mirroring the
  * runner store's own closure vocabulary (`ClosedLeaseRecord.reason`). */
-export type LeaseChangeCause = 'created' | 'transitioned' | 'reaped' | 'failed' | 'escalated' | 'parked' | 'released';
+export type LeaseChangeCause =
+  | 'created'
+  | 'spawned'
+  | 'transitioned'
+  | 'reaped'
+  | 'failed'
+  | 'escalated'
+  | 'parked'
+  | 'released';
 /** What caused an `ask-changed` frame. */
 export type AskChangeCause = 'asked' | 'answered';
 /** What caused an `escalation-changed` frame. */
@@ -85,7 +93,7 @@ export interface EnvironmentChanged {
 }
 /** A `fact-changed` frame's payload — a hub-bound fact was enqueued onto the outbound
  * buffer. `chunk_id`/`lease_id` are always present, `null` rather than omitted, for a
- * runner-wide fact (e.g. a heartbeat) that names neither. */
+ * runner-wide fact (e.g. a chunk-less `event.recorded`) that names neither. */
 export interface FactChanged {
   seq: number;
   kind: string;
