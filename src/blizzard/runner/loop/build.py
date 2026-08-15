@@ -57,8 +57,7 @@ class LoopWiring:
     workspace_prompt: str
     runner_prompt: str
     #: The SSE broker (D2, blizzard#317) shared with the served app when one composer
-    #: builds both graphs (the ``host`` verb, the e2e harness); ``None`` for a
-    #: loop-only caller (``blizzard runner tick``, the transcript-maintenance verbs).
+    #: builds both; ``None`` for a loop-only caller (``blizzard runner tick`` and siblings).
     events: EventBroker | None = None
 
     @classmethod

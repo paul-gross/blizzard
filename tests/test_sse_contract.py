@@ -1,11 +1,8 @@
 """The SSE frame shape contract — golden corpus equality (component tier, issue #235;
-broadened to a runner scope by blizzard#317 Phase 2).
-
-``contracts/sse/`` is the single description of every SSE frame kind's wire shape, one
-self-contained scope per daemon — the hub's at the directory's top level, the runner's
-under ``runner/``; this suite and its TypeScript counterpart read the same physical
-files — no per-side copy. Every golden also validates against its own scope's payload
-model and round-trips back to a dict equal to the golden."""
+broadened to a runner scope by blizzard#317 Phase 2). ``contracts/sse/`` is the single
+description of every frame kind's wire shape, one self-contained scope per daemon — the
+hub's at the directory's top level, the runner's under ``runner/`` — read by this suite
+and its TypeScript counterpart from the same physical files, no per-side copy."""
 
 from __future__ import annotations
 

@@ -1,11 +1,9 @@
 """The hub live-event stream — ``GET /api/events/stream`` (SSE), excluded from the OpenAPI schema.
 
-A subscriber registers with the :class:`~blizzard.hub.events.broker.EventBroker`, replays the buffered
-tail newer than its ``Last-Event-ID``, then streams live until it disconnects. Ids are monotonic, so an
-event caught in both the replay and the live queue is emitted once. A periodic keepalive comment keeps
-intermediaries from idling the connection out. The stream-response machinery itself — :class:`Cursor`,
-:class:`Stream` — is shared with the runner (D1, blizzard#317); only the reserved open-of-stream comment
-below names this daemon."""
+A subscriber registers with :class:`~blizzard.hub.events.broker.EventBroker`, replays the
+buffered tail newer than its ``Last-Event-ID``, then streams live until it disconnects — ids
+are monotonic, so an event caught in both is emitted once. :class:`Cursor`/:class:`Stream` are
+the runner-shared machinery (D1); only the reserved open-of-stream comment names this daemon."""
 
 from __future__ import annotations
 

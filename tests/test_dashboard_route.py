@@ -189,11 +189,9 @@ def test_fleet_summary_is_none_when_the_runner_is_unwired_to_a_hub_and_the_six_l
 def test_the_dashboards_own_hub_call_carries_the_bounded_timeout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The composed route's own outbound call is bounded strictly below a
-    human-tolerable read latency, independent of the panel's own poll floor (which
-    moved to a multi-minute SSE backstop, blizzard#317) — distinct from
-    ``/api/fleet-summary``'s own call, which keeps the module default (proven by
-    ``test_fleet_summary_proxy.py``)."""
+    """The composed route's own outbound call is bounded well below a human-tolerable
+    read latency — distinct from ``/api/fleet-summary``'s own call, which keeps the
+    module default (proven by ``test_fleet_summary_proxy.py``)."""
     client, store = _app_with_status(tmp_path)
     _seed_all_sections(store)
     seen_timeouts: list[float] = []

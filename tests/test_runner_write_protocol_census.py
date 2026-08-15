@@ -1,11 +1,8 @@
 """The write-protocol census exhaustiveness gate (D5, blizzard#317 Phase 3).
 
 Introspects :class:`~blizzard.runner.store.repository.IWriteRunnerStore` at runtime for the
-members it declares **itself** — a plain Protocol subclass's ``__dict__`` holds only what its
-own body defines, never what it inherits from :class:`~blizzard.runner.store.repository.IReadRunnerStore`
-— and asserts the census in :mod:`blizzard.runner.events.census` names exactly that set, no
-more and no fewer. A write member the census does not carry fails this test the moment it is
-added, which is the whole point: exhaustiveness is carried by this test, not by review."""
+members it declares **itself**, never what it inherits, and asserts
+:mod:`blizzard.runner.events.census` names exactly that set — exhaustiveness by test, not review."""
 
 from __future__ import annotations
 

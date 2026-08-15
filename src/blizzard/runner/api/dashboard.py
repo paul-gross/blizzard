@@ -29,9 +29,6 @@ router = APIRouter(prefix="/api", tags=["runner"])
 
 #: A slow hub must not stall the six local sections behind it, so this route's own
 #: outbound call fails fast rather than riding the ``HubProxy`` module default (15s).
-#: No longer pinned to the panel's own poll floor (``status.query.ts``), which moved
-#: to a multi-minute SSE backstop (blizzard#317) — this bound stays independent of it,
-#: a human-tolerable ceiling on the read itself regardless of how often it recurs.
 _DASHBOARD_HUB_TIMEOUT = 3.0
 
 

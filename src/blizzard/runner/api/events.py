@@ -1,15 +1,9 @@
 """The runner live-event stream — ``GET /api/events/stream`` (SSE), excluded from the OpenAPI
-schema (blizzard#317 Phase 2).
-
-A subscriber registers with the :class:`~blizzard.runner.events.broker.EventBroker`, replays
-the buffered tail newer than its ``Last-Event-ID``, then streams live until it disconnects.
-The stream-response machinery itself — :class:`Cursor`, :class:`Stream` — is shared with the
-hub (D1, blizzard#317); only the reserved open-of-stream comment below names this daemon.
-Mounted in the ``_HUMAN`` lane (``runner/app.py``), so ``require_human_api`` gates it at
-router inclusion — no route-level ``Depends`` of its own, unlike the hub's per-route
-permission. ``app.state.events`` is ``None`` on every composer that has no stream to feed
-(``blizzard runner tick``, the store-free/export app); :class:`Stream` degrades to an
-idle, cleanly-opened connection in that case (D2)."""
+schema (blizzard#317 Phase 2). A subscriber registers with
+:class:`~blizzard.runner.events.broker.EventBroker`, replays its buffered tail, then streams
+live over the hub-shared :class:`Cursor`/:class:`Stream` machinery (D1). Mounted in the
+``_HUMAN`` lane, gated at router inclusion. ``app.state.events`` is ``None`` on a
+stream-less composer, where :class:`Stream` degrades to an idle connection (D2)."""
 
 from __future__ import annotations
 

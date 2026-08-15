@@ -171,12 +171,8 @@ def create_app(
     """Build a fully wired runner app from resolved config.
 
     Every store-backed seam is optional, so a store-free build is possible; those routes
-    then answer 503 and ``/api/ready`` reports ``ready=false`` rather than pretending.
-    ``selftests`` needs no store and is always wired (issue #54). ``events`` (D2,
-    blizzard#317) defaults to absent: unlike the hub, the runner does not conjure one on a
-    store-free app — a composer with no stream to feed (``blizzard runner tick``, the
-    OpenAPI exporter) leaves the stream route publishing nothing rather than buffering
-    events nobody will ever read."""
+    then answer 503 and ``/api/ready`` reports ``ready=false``. ``selftests`` is always
+    wired (issue #54); ``events`` (D2) defaults absent, leaving the route silent."""
     log = get_logger("blizzard.runner")
 
     app = FastAPI(title="blizzard-runner", version=__version__, lifespan=_lifespan)
@@ -186,9 +182,8 @@ def create_app(
     app.state.workspace_provider = workspace_provider
     app.state.harness = harness
     app.state.runner_store = runner_store
-    # The SSE broker (D2, blizzard#317) — `None` on every composer with no stream to
-    # feed; the stream route and :class:`~blizzard.foundation.events.stream.Stream`
-    # both degrade cleanly for a broker-less app.
+    # The SSE broker (D2) — `None` on every composer with no stream to feed, where
+    # :class:`~blizzard.foundation.events.stream.Stream` degrades cleanly.
     app.state.events = events
     # Set on shutdown by `_lifespan` (D3); the stream route's live wait races it.
     app.state.shutdown = asyncio.Event()
@@ -257,9 +252,8 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     """The ``host`` composition root: open the store and wire the readiness seam.
 
     Engine creation is connection-free, so this stays cheap; the connection is opened
-    lazily on the first ``/api/ready`` read. ``events`` (D2, blizzard#317) is the
-    process-wide broker the ``host`` verb constructs and shares with the reconciliation
-    loop's own ``PeriodicDriver`` — absent for every other caller of this function."""
+    lazily on the first ``/api/ready`` read. ``events`` (D2) is the process-wide broker
+    ``host`` shares with the loop's ``PeriodicDriver``; absent for every other caller."""
     engine = create_engine_from_url(config.db_url)
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()

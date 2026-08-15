@@ -518,12 +518,8 @@ def _tick_then(config: RunnerConfig, fenced: dict[str, str], check) -> bool:
     return bool(check())
 
 
-# --- The runner's SSE stream (blizzard#317 Phase 2) -------------------------------
-#
-# No mock fleet needed: a bare, migrated runtime dir is enough to serve the local API.
-# Phase 3 wires the real publish call sites; until then these tests drive the broker
-# directly, the "minimal internal seam" the plan names — the app under test is the real
-# served app (``build_hosted_app``/``create_app``), never a stand-in.
+# --- The runner's SSE stream (blizzard#317 Phase 2): no mock fleet needed, a bare
+# migrated runtime dir serves the local API, and these tests drive the broker directly.
 
 
 def _bare_runner_config(tmp_path: Path) -> RunnerConfig:
@@ -534,11 +530,9 @@ def _bare_runner_config(tmp_path: Path) -> RunnerConfig:
 
 
 def test_runner_stream_delivers_live_and_replays_from_last_event_id(tmp_path: Path) -> None:
-    """The running runner's stream, exercised from outside: a live subscriber receives a
-    published frame, and a reconnect with ``Last-Event-ID`` replays only what it missed
-    — not a re-delivery of what it already saw. The shared core's keepalive-at-an-
-    injected-interval is proven generically (tests/test_foundation_events.py); this is
-    the runner's own route wiring."""
+    """A live subscriber receives a published frame, and a reconnect with
+    ``Last-Event-ID`` replays only what it missed — the runner's own route wiring,
+    beside the shared core's generic keepalive proof (test_foundation_events.py)."""
     broker = EventBroker()
     config = _bare_runner_config(tmp_path)
 
@@ -572,12 +566,9 @@ def test_runner_stream_delivers_live_and_replays_from_last_event_id(tmp_path: Pa
 
 
 def test_events_stream_401s_without_a_session_over_tcp_under_oauth(tmp_path: Path) -> None:
-    """The route classification tier (``tests/test_runner_route_gating.py``) already
-    proves this generically, in-process, over every human-lane route including this one
-    — that table-driven suite is this claim's real home. This is the same claim
-    reproven against a genuinely running daemon: ``build_hosted_app`` opens its own
-    real network client for the hub-auth-mode probe, so the "hub" here is a real
-    listening stub rather than an in-process transport double."""
+    """``test_runner_route_gating.py`` proves this generically, in-process, over every
+    human-lane route; this reproves it against a genuinely running daemon, whose
+    hub-auth-mode probe hits a real listening stub, not an in-process double."""
     config = _bare_runner_config(tmp_path)
 
     jwks_app = FastAPI()
@@ -615,12 +606,9 @@ def test_events_stream_401s_without_a_session_over_tcp_under_oauth(tmp_path: Pat
 
 
 def test_runner_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_path: Path) -> None:
-    """SIGTERM sets ``app.state.shutdown`` synchronously (D1/D3, blizzard#317), ahead of
-    uvicorn's own graceful drain, which an SSE response never finishes on its own — the
-    process exits well inside the drain bound even with a client still connected,
-    rather than riding it out (the crash sweep's own whole-process SIGTERM case,
-    ``tests/crash/test_kill9_sweep.py::test_graceful_restart_resumes_in_flight_session``,
-    is the re-proof that this does not strand the resume-marking `finally`)."""
+    """SIGTERM sets ``app.state.shutdown`` synchronously (D1/D3): the process exits well
+    inside uvicorn's graceful-drain bound with a client still connected, so the crash
+    sweep's whole-process SIGTERM case finds the resume-marking ``finally`` unstranded."""
     runner_dir = tmp_path / "runner"
     runner_port = _free_port()
     runner_bin = str(Path(sys.executable).parent / "blizzard-runner")

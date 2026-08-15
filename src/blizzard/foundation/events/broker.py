@@ -1,11 +1,9 @@
 """The kind-agnostic SSE event broker (D1) — the live re-broadcast seam both daemons bind.
-
 Every published event carries a **monotonic id** and reaches every open connection live,
-with a bounded tail (``history``) a reconnect replays from its ``Last-Event-ID``. Publishers
-run on worker threads and subscribers on the event loop, so a subscriber captures its loop at
-:meth:`subscribe` and :meth:`publish` crosses over with ``loop.call_soon_threadsafe``. A
-daemon's own broker wraps this one with its own domain-named ``publish_*`` helpers and event
-vocabulary; nothing here knows an event's kind beyond its bare type name."""
+with a bounded tail (``history``) a reconnect replays from its ``Last-Event-ID``.
+Publishers run on worker threads, subscribers on the event loop, so :meth:`publish`
+crosses over with ``loop.call_soon_threadsafe``. A daemon's own broker wraps this one
+with its own ``publish_*`` helpers; nothing here knows an event's kind."""
 
 from __future__ import annotations
 

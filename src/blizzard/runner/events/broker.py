@@ -1,10 +1,9 @@
 """The runner event broker — its typed ``publish_*`` wrappers and event-type vocabulary over
-the kind-agnostic core (D1, blizzard#317) shared with the hub.
-
-The history/replay/live-fanout machinery underneath — id minting, the bounded ring, the
-per-connection queues — lives in :mod:`blizzard.foundation.events.broker`; this module
-owns only what is runner-specific: the event-type names, their payload shapes, and the
-``publish_*`` helpers a mutation seam calls (Phase 3 — no call site is wired here yet)."""
+the kind-agnostic core (D1, blizzard#317) shared with the hub. The history/replay/live-fanout
+machinery — id minting, the bounded ring, per-connection queues — lives in
+:mod:`blizzard.foundation.events.broker`; this module owns only what is runner-specific: the
+event-type names, their payload shapes, and the ``publish_*`` helpers each mutation seam
+calls (wired in Phase 3, see :mod:`blizzard.runner.events.census`)."""
 
 from __future__ import annotations
 
@@ -44,12 +43,9 @@ EVENT_TYPES: tuple[str, ...] = (
 
 
 class EventBroker(_EventBroker):
-    """The runner's typed ``publish_*`` wrappers over the shared broker core.
-
-    The id-minting/ring/replay/fan-out machinery lives in
-    :class:`blizzard.foundation.events.broker.EventBroker`; this subclass adds only
-    the runner's own event shapes. Phase 3 wires the call sites; this class is
-    complete enough for that phase to use without further design."""
+    """The runner's typed ``publish_*`` wrappers over the shared broker core
+    (:class:`blizzard.foundation.events.broker.EventBroker`), adding only the
+    runner's own event shapes."""
 
     def publish_lease_changed(
         self,

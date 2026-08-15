@@ -531,11 +531,8 @@ def _work_item_graph_yaml() -> str:
 def _runner_api(config: RunnerConfig, *, events: EventBroker | None = None) -> Iterator[None]:
     """Serve the runner's local API in a thread — the daemon the worker's verbs POST/GET to.
 
-    Touches no store, so it runs alongside the synchronously driven reconciliation tick
-    without contention. ``events`` (D2, blizzard#317) threads a broker into this same
-    served app, for a scenario that also wants to prove the runner's own stream route
-    against it.
-    """
+    Touches no store, so it runs alongside the tick without contention. ``events`` (D2,
+    blizzard#317) threads a broker in, for a scenario proving the stream route too."""
     app = build_hosted_app(config, events=events)
     server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port, log_level="warning"))
     thread = threading.Thread(target=server.run, name="runner-local-api", daemon=True)

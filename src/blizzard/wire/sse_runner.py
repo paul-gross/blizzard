@@ -1,11 +1,7 @@
 """Per-kind SSE frame wire models for the runner's stream (blizzard#317 Phase 2), beside the
-hub's own vocabulary in :mod:`blizzard.wire.sse`. Mirrored by the golden corpus's runner scope
-at ``contracts/sse/runner/``.
-
-D6: frames are thin id-and-cause notifications — the panel re-reads through the runner's
-existing endpoints rather than the frame carrying a full view. Every model reuses
-:class:`~blizzard.wire.sse.SseFramePayload`'s present-when-meaningful serialization, so an
-unset optional is omitted rather than sent as a literal ``null``."""
+hub's own vocabulary in :mod:`blizzard.wire.sse`; mirrored by the golden corpus's runner scope
+at ``contracts/sse/runner/``. D6: frames are thin id-and-cause notifications, and every model
+reuses :class:`~blizzard.wire.sse.SseFramePayload`'s present-when-meaningful serialization."""
 
 from __future__ import annotations
 

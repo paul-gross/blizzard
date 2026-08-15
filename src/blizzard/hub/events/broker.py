@@ -1,10 +1,8 @@
 """The hub event broker — its typed ``publish_*`` wrappers and event-type vocabulary over
-the kind-agnostic core (D1, blizzard#317) shared with the runner.
-
-The history/replay/live-fanout machinery underneath — id minting, the bounded ring, the
-per-connection queues — lives in :mod:`blizzard.foundation.events.broker`; this module
-owns only what is hub-specific: the event-type names, their payload shapes, and the
-``publish_*`` helpers each mutation seam calls."""
+the kind-agnostic core (D1, blizzard#317) shared with the runner. The history/replay/
+live-fanout machinery — id minting, the bounded ring, per-connection queues — lives in
+:mod:`blizzard.foundation.events.broker`; this module owns only what is hub-specific: the
+event-type names, their payload shapes, and each mutation seam's ``publish_*`` helper."""
 
 from __future__ import annotations
 
@@ -47,11 +45,9 @@ EVENT_TYPES: tuple[str, ...] = (
 
 
 class EventBroker(_EventBroker):
-    """The hub's typed ``publish_*`` wrappers over the shared broker core.
-
-    The id-minting/ring/replay/fan-out machinery lives in
-    :class:`blizzard.foundation.events.broker.EventBroker`; this subclass adds only
-    the hub's own event shapes."""
+    """The hub's typed ``publish_*`` wrappers over the shared broker core
+    (:class:`blizzard.foundation.events.broker.EventBroker`), adding only the
+    hub's own event shapes."""
 
     def publish_chunk_changed(
         self,

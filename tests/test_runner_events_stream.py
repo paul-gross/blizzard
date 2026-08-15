@@ -1,10 +1,8 @@
 """The runner SSE endpoint — ``GET /api/events/stream`` serves a live ``text/event-stream``
-(blizzard#317 Phase 2). Mirrors the hub's own ``tests/test_events_stream.py``.
-
-The stream is an infinite live fan-out, so it cannot be read through Starlette's
-``TestClient`` (``ASGITransport`` buffers the whole body and would hang) — these tests
-call the route handler directly. The shared replay/keepalive/shutdown machinery itself is
-covered generically in ``tests/test_foundation_events.py``."""
+(blizzard#317 Phase 2), mirroring the hub's own ``tests/test_events_stream.py``. It is an
+infinite live fan-out, unreadable through Starlette's buffering ``TestClient``, so these
+tests call the route handler directly; the shared machinery itself is covered generically
+in ``tests/test_foundation_events.py``."""
 
 from __future__ import annotations
 

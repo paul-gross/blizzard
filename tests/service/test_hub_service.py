@@ -207,9 +207,7 @@ def test_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_path: P
                     "hub did not exit within 2s of SIGTERM with a client parked on the stream "
                     "(uvicorn's own graceful-shutdown bound is 5s)"
                 ) from None
-        # A process ended by a caught signal reports its negative signal number, not 0
-        # (Python's own `subprocess` convention) — what matters here is that it returned
-        # promptly at all, not the sign of the code.
+        # A caught-signal exit reports a negative signal number, not 0 — only promptness matters here.
         assert exit_code is not None
     finally:
         client.close()

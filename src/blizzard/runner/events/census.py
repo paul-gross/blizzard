@@ -1,17 +1,9 @@
 """The write-protocol census (D5, blizzard#317 Phase 3) — every member
-:class:`~blizzard.runner.store.repository.IWriteRunnerStore` declares **itself** (not the
-read surface it inherits from :class:`~blizzard.runner.store.repository.IReadRunnerStore`),
-mapped to either the event kind its mutation publishes or a stated reason it deliberately
-publishes nothing. Exhaustiveness is carried by a test, not by review
-(``tests/test_runner_write_protocol_census.py``): it fails the moment the write protocol
-grows a member this module does not name.
-
-A :class:`Published` entry names where the call site lives, so a reader can find it without
-grepping; a :class:`Silent` entry states why — most commonly because the write moves only
-state a client already re-derives from elapsed time (heartbeats, the usage/context/external-
-usage samplers — D7), or because no kind in the six-member vocabulary
-(:data:`~blizzard.runner.events.broker.EVENT_TYPES`) represents what changed (the transcript
-lane, which keeps its own poll; internal capability/bookkeeping facts no read surfaces)."""
+:class:`~blizzard.runner.store.repository.IWriteRunnerStore` declares **itself**, mapped to
+either the event kind its mutation publishes (:class:`Published`, naming the call site) or a
+stated reason it publishes nothing (:class:`Silent`). Exhaustiveness is carried by
+``tests/test_runner_write_protocol_census.py``, not by review: it fails the moment the write
+protocol grows a member this module does not name."""
 
 from __future__ import annotations
 
@@ -44,19 +36,14 @@ class Silent:
 
 Disposition = Published | Silent
 
-#: The reason every elapsed-time-derived sampler and beat gives (D7) — heartbeats and the
-#: usage/context/external-usage samplers, verbatim: eventing them would restore the request
-#: rate this change exists to remove, and they move only state a client already re-derives
-#: from elapsed time rather than from a cause a frame could carry.
+#: The elapsed-time-derived samplers' and beats' shared reason (D7).
 _ELAPSED_TIME_DERIVED = (
     "elapsed-time-derived state (D7): eventing it would restore the request rate this "
     "change exists to remove, and a client already re-derives it from elapsed time rather "
     "than from a cause a frame could carry."
 )
 
-#: The reason every transcript-lane write gives — the transcript viewer keeps its own poll
-#: (the falsified-claims table's one deliberate exception), and the six-member vocabulary
-#: carries no transcript-changed kind for it to publish.
+#: The transcript lane's shared reason — it keeps its own poll (the falsified-claims table's one exception).
 _TRANSCRIPT_LANE_POLLS = (
     "the transcript lane keeps its own poll (`transcript.query.ts`) rather than joining "
     "this stream; no kind in the vocabulary represents a transcript-lane write."
@@ -68,9 +55,8 @@ _INTERNAL_BOOKKEEPING = (
     "internal bookkeeping with no client-facing read surface; no kind in the vocabulary represents it."
 )
 
-#: The full census over ``IWriteRunnerStore``'s own-declared members (D5). Keys are exactly
-#: the method names ``tests/test_runner_write_protocol_census.py`` introspects off the
-#: Protocol at runtime.
+#: The full census over ``IWriteRunnerStore``'s own-declared members (D5) — keyed by the
+#: method names ``tests/test_runner_write_protocol_census.py`` introspects at runtime.
 WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     # --- lease lifecycle ---------------------------------------------------
     "record_lease": Published(LEASE_CHANGED, "Spawner._mint (runner/loop/spawn.py) — cause='created'"),

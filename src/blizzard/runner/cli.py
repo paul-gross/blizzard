@@ -58,9 +58,8 @@ _SELFTEST_POLL_INTERVAL = 0.2
 # against a runner that cannot reach that code.
 _SELFTEST_POLL_TIMEOUT = 600.0
 
-# Bounds uvicorn's own connection-drain wait — defense-in-depth, not the fix for an SSE
-# response held open (see `EarlyShutdownServer`, the shared foundation wrapper, D1/D3,
-# blizzard#317, imported above).
+# Bounds uvicorn's own connection-drain wait — defense-in-depth, not the actual fix
+# for an SSE response held open (`EarlyShutdownServer` above, D1/D3).
 _GRACEFUL_SHUTDOWN_SECONDS = 5
 
 
@@ -147,9 +146,8 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         ensure_current_revision(config)
     except RevisionMismatchError as exc:
         raise click.ClickException(str(exc)) from exc
-    # One broker for the process (D2, blizzard#317): the ``host`` verb is the one composer
-    # that builds both the served app and the ticked loop, so this is the single instance
-    # shared between the two independent object graphs — every writer and the stream route.
+    # One broker for the process (D2): `host` is the one composer building both the
+    # served app and the ticked loop, so every writer and the stream route share it.
     broker = EventBroker()
     app = build_hosted_app(config, events=broker)
     interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
@@ -170,24 +168,15 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         f"serving blizzard-runner on {config.host}:{config.port} and {config.socket_path} (loop tick {interval}s)"
     )
 
-    # The shared early-shutdown wrapper (D1/D3, blizzard#317): sets `app.state.shutdown`
-    # synchronously in `handle_exit`, ahead of uvicorn's own graceful drain, which an SSE
-    # response held open would otherwise never let expire — `server.run()` must still
-    # return promptly so the `finally` resume-marking below is reached
-    # (tests/crash/test_kill9_sweep.py).
+    # The shared early-shutdown wrapper (D1/D3): sets `app.state.shutdown` ahead of
+    # uvicorn's own drain, so `server.run()` returns and the `finally` below still runs.
     server = EarlyShutdownServer(
         uvicorn.Config(app, host=config.host, port=config.port, timeout_graceful_shutdown=_GRACEFUL_SHUTDOWN_SECONDS),
         shutdown_signal=app.state.shutdown,
     )
 
-    # A harmless placeholder SIGTERM/SIGINT handler, installed *before* `server.run()`.
-    # `Server.capture_signals()` saves whatever handler is registered at that moment,
-    # binds its own (`EarlyShutdownServer.handle_exit`) for the run, then — once the
-    # graceful shutdown it drove finishes — restores the saved handler and re-raises the
-    # same signal through it (uvicorn's own "propagate the signal that caused this" step).
-    # With no handler pre-registered, that restore-and-reraise lands on the OS default,
-    # which kills the process outright — bypassing this `finally` block entirely and
-    # stranding the resume-marking below. A no-op handler here just absorbs the replay.
+    # `capture_signals()` re-raises through whatever ran here once its own shutdown ends —
+    # absorb it, or the OS default kills the process and strands the `finally` below.
     def _absorb_reraised_signal(_signum: int, _frame: types.FrameType | None) -> None:
         pass
 

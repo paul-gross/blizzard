@@ -106,8 +106,6 @@ class LoopContext:
     #: The harness transcript source (blizzard#245) — a declared field so the loop's own
     #: dependency is visible here; ``None`` when not wired.
     transcripts: IHarnessTranscriptSource | None = None
-    #: The SSE broker (D2, blizzard#317) — shared with the served app when both are
-    #: built by the same composer (the ``host`` verb, the e2e harness); ``None`` on
-    #: ``blizzard runner tick`` and every other loop-only caller, where publishing is a
-    #: no-op (Phase 3 wires the publish call sites; none is wired yet).
+    #: The SSE broker (D2, blizzard#317) — shared with the served app when both are built
+    #: by the same composer; ``None`` on ``blizzard runner tick``, where publishing is a no-op.
     events: EventBroker | None = None
