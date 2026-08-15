@@ -943,7 +943,7 @@ the full contract. Each brake is cleared only where it was set — `runner start
 The panel's leases, environments, asks, escalations, takeovers, and facts render live: new
 events fan out over the runner's own SSE spine (`/api/events/stream`, issue #317), so an
 open panel updates without polling — the parallel of what the board's Events tab does off
-the hub's stream, above. The panel's own dashboard/leases reads keep a multi-minute poll as
+the hub's stream, above. The panel's own dashboard/leases reads keep a one-minute poll as
 a backstop against a dropped frame rather than as the primary signal, and the session read
 carries no poll of its own: a stream `401` routes into the same recovery seam a `401` from
 any other read does.

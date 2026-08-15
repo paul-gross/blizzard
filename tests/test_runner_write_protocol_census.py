@@ -2,7 +2,7 @@
 
 Introspects :class:`~blizzard.runner.store.repository.IWriteRunnerStore` at runtime for the
 members it declares **itself**, never what it inherits, and asserts
-:mod:`blizzard.runner.events.census` names exactly that set — exhaustiveness by test, not review."""
+``tests/runner_event_census.py`` names exactly that set — exhaustiveness by test, not review."""
 
 from __future__ import annotations
 
