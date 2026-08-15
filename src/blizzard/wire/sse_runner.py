@@ -9,9 +9,9 @@ from typing import ClassVar, Literal
 
 from blizzard.wire.sse import SseFramePayload
 
-#: What caused a ``lease-changed`` frame — ``created`` on mint, the rest mirroring
-#: :class:`~blizzard.runner.store.repository.ClosedLeaseRecord`'s own closure vocabulary.
-LeaseChangeCause = Literal["created", "transitioned", "reaped", "failed", "escalated", "parked", "released"]
+#: What caused a ``lease-changed`` frame — ``created`` on mint, ``spawned`` once the pid is
+#: durable, the rest mirroring :class:`~blizzard.runner.store.repository.ClosedLeaseRecord`.
+LeaseChangeCause = Literal["created", "spawned", "transitioned", "reaped", "failed", "escalated", "parked", "released"]
 
 #: What caused an ``ask-changed`` frame — a worker's question recorded, or its answer
 #: landing (the park resume the answer drives).
@@ -66,10 +66,10 @@ class EnvironmentChangedPayload(SseFramePayload):
 
 
 class FactChangedPayload(SseFramePayload):
-    """A hub-bound fact was enqueued (``bzh:facts-not-status``) — mirrors the hub's own
-    ``event-logged`` shape: ``chunk_id``/``lease_id`` ride as a present ``null`` rather
-    than omitted, since a runner-wide fact (e.g. a heartbeat) legitimately carries
-    neither."""
+    """A hub-bound fact was enqueued or acked (``bzh:facts-not-status``) — mirrors the hub's
+    own ``event-logged`` shape: ``chunk_id``/``lease_id`` ride as a present ``null`` rather
+    than omitted, since a runner-wide fact (e.g. a chunk-less ``event.recorded``) legitimately
+    carries neither. Never a heartbeat — those ride elsewhere, elapsed-time-derived (D7)."""
 
     seq: int
     kind: str

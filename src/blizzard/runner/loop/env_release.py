@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.runner.environments.provider import AcquiredEnvironment, IWorkspaceProvider
-from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.store.repository import IWriteRunnerStore
 
@@ -20,9 +20,9 @@ class EnvironmentRelease:
     clock: IClock
     provider: IWorkspaceProvider
     worker_files: WorkerStdoutFiles
-    #: The SSE broker (D2, blizzard#317); ``None`` on a loop-only caller, where publishing
-    #: is a no-op (Phase 3).
-    events: EventBroker | None = None
+    #: The SSE publish seam (D2, blizzard#317), typed against the Protocol
+    #: (``bzh:dependency-inversion``); ``None`` on a loop-only caller, a no-op there.
+    events: IRunnerEventPublisher | None = None
 
     def release_chunk(self, chunk_id: str) -> None:
         """Release every held environment at the chunk's tenure end, and sweep the

@@ -175,13 +175,13 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         shutdown_signal=app.state.shutdown,
     )
 
-    # `capture_signals()` re-raises through whatever ran here once its own shutdown ends —
-    # absorb it, or the OS default kills the process and strands the `finally` below.
-    def _absorb_reraised_signal(_signum: int, _frame: types.FrameType | None) -> None:
-        pass
+    # Installed before `server.run()`'s own `capture_signals()` window opens, so a signal in
+    # that gap still primes shutdown (D3) rather than being discarded; re-invoking it later is idempotent.
+    def _handle_signal(signum: int, frame: types.FrameType | None) -> None:
+        server.handle_exit(signum, frame)
 
-    signal.signal(signal.SIGTERM, _absorb_reraised_signal)
-    signal.signal(signal.SIGINT, _absorb_reraised_signal)
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
 
     # Ungraceful-restart recovery (#13): a `kill -9` never ran the graceful shutdown marker below, so
     # sessions killed mid-work are marked here for the same startup RESUME the first tick runs.

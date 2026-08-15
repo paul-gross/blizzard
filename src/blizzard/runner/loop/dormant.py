@@ -220,4 +220,14 @@ class DormantSession:
             session_id=lease.session_id or "",  # unchanged — same session under the same lease
             spawned_at=stamped,
         )
+        if self.ctx.events is not None:
+            # Same 'spawned' cause the fresh-spawn path publishes (spawn.py) — a resumed
+            # session's own flip back to a live pid is exactly as un-announced otherwise.
+            self.ctx.events.publish_lease_changed(
+                lease.lease_id,
+                lease.chunk_id,
+                cause="spawned",
+                node_name=lease.node_name,
+                key=f"leases:{lease.lease_id}",
+            )
         return pid, stamped

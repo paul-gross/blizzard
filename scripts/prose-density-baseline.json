@@ -1889,8 +1889,8 @@
   },
   "blizzard/runner/app.py": {
    "comments": 36,
-   "docstrings": 23,
-   "total": 344
+   "docstrings": 25,
+   "total": 346
   },
   "blizzard/runner/auth/__init__.py": {
    "comments": 0,
@@ -2037,10 +2037,10 @@
    "docstrings": 15,
    "total": 102
   },
-  "blizzard/runner/events/census.py": {
-   "comments": 17,
-   "docstrings": 8,
-   "total": 166
+  "blizzard/runner/events/publisher.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "total": 52
   },
   "blizzard/runner/harness/__init__.py": {
    "comments": 0,
@@ -2125,7 +2125,7 @@
   "blizzard/runner/loop/attempt.py": {
    "comments": 32,
    "docstrings": 41,
-   "total": 290
+   "total": 289
   },
   "blizzard/runner/loop/build.py": {
    "comments": 16,
@@ -2148,14 +2148,14 @@
    "total": 111
   },
   "blizzard/runner/loop/dormant.py": {
-   "comments": 27,
+   "comments": 29,
    "docstrings": 34,
-   "total": 223
+   "total": 233
   },
   "blizzard/runner/loop/drain.py": {
-   "comments": 17,
+   "comments": 19,
    "docstrings": 20,
-   "total": 164
+   "total": 174
   },
   "blizzard/runner/loop/env_release.py": {
    "comments": 2,
@@ -2228,9 +2228,9 @@
    "total": 103
   },
   "blizzard/runner/loop/spawn.py": {
-   "comments": 13,
+   "comments": 14,
    "docstrings": 25,
-   "total": 229
+   "total": 238
   },
   "blizzard/runner/loop/steps.py": {
    "comments": 54,
@@ -2835,9 +2835,9 @@
    "total": 334
   },
   "e2e/test_runner_panel_live_e2e.py": {
-   "comments": 8,
+   "comments": 11,
    "docstrings": 9,
-   "total": 146
+   "total": 149
   },
   "e2e/test_session_modes_e2e.py": {
    "comments": 29,
@@ -2868,6 +2868,11 @@
    "comments": 62,
    "docstrings": 25,
    "total": 623
+  },
+  "runner_event_census.py": {
+   "comments": 17,
+   "docstrings": 8,
+   "total": 170
   },
   "runner_fakes.py": {
    "comments": 53,
@@ -4000,9 +4005,9 @@
    "total": 294
   },
   "test_runner_event_publish.py": {
-   "comments": 24,
-   "docstrings": 11,
-   "total": 485
+   "comments": 28,
+   "docstrings": 13,
+   "total": 521
   },
   "test_runner_events_stream.py": {
    "comments": 5,
@@ -4225,9 +4230,9 @@
    "total": 358
   },
   "test_runner_write_protocol_census.py": {
-   "comments": 0,
+   "comments": 2,
    "docstrings": 13,
-   "total": 48
+   "total": 52
   },
   "test_runners_api.py": {
    "comments": 1,

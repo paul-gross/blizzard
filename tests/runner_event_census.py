@@ -1,9 +1,9 @@
 """The write-protocol census (D5, blizzard#317 Phase 3) — every member
 :class:`~blizzard.runner.store.repository.IWriteRunnerStore` declares **itself**, mapped to
-either the event kind its mutation publishes (:class:`Published`, naming the call site) or a
-stated reason it publishes nothing (:class:`Silent`). Exhaustiveness is carried by
-``tests/test_runner_write_protocol_census.py``, not by review: it fails the moment the write
-protocol grows a member this module does not name."""
+either the event kind its mutation publishes (:class:`Published`) or a stated reason it
+publishes nothing (:class:`Silent`). Exhaustiveness is carried by
+``tests/test_runner_write_protocol_census.py``, this module's only reader — which is also
+why it lives under ``tests/``, not ``src/``: no runtime importer."""
 
 from __future__ import annotations
 
@@ -60,10 +60,11 @@ _INTERNAL_BOOKKEEPING = (
 WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     # --- lease lifecycle ---------------------------------------------------
     "record_lease": Published(LEASE_CHANGED, "Spawner._mint (runner/loop/spawn.py) — cause='created'"),
-    "record_spawn": Silent(
-        "fills an already-announced lease's pid/session facts (a fresh spawn or an in-place "
-        "resume); LeaseChangeCause carries no literal for either, and the lease itself was "
-        "already announced at its 'created' mint."
+    "record_spawn": Published(
+        LEASE_CHANGED,
+        "Spawner.spawn (runner/loop/spawn.py) and DormantSession._wake (runner/loop/dormant.py) "
+        "— cause='spawned', once the pid is durable; the 'created' mint alone leaves the "
+        "spawning->running flip unannounced, since the lease is already visible but not yet live.",
     ),
     "record_closure": Published(
         LEASE_CHANGED,
@@ -135,9 +136,12 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "OutboundFacts._enqueue (runner/loop/outbound.py), and TakeoverService.open's own fence-"
         "bump enqueue (runner/domain/takeover.py) — every hub-bound fact enqueued.",
     ),
-    "ack_outbound": Silent(
-        "the fact was already announced at enqueue; FactChangedPayload carries no acked state, "
-        "and the fact log (`GET /api/facts`) already lists the row either way."
+    "ack_outbound": Published(
+        FACT_CHANGED,
+        "OutboundDrain._ack (runner/loop/drain.py) — the same seq re-announced. "
+        "FactChangedPayload carries no acked state itself (D6), but the fact log's own ✓/· "
+        "flush marker reads `acked_at` off the row this re-read fetches, so leaving this "
+        "silent stales that marker until the next backstop poll.",
     ),
     # --- liveness/usage/context — the elapsed-time-derived samplers (D7) ------------
     "record_daemon_liveness": Silent(_ELAPSED_TIME_DERIVED + " (the daemon's own tick beat)"),

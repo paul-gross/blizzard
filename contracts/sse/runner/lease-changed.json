@@ -10,5 +10,12 @@
     "cause": "transitioned",
     "node_name": "build",
     "key": "leases:ls_1"
+  },
+  "spawned": {
+    "lease_id": "ls_1",
+    "chunk_id": "ch_1",
+    "cause": "spawned",
+    "node_name": "build",
+    "key": "leases:ls_1"
   }
 }

@@ -2,7 +2,7 @@
 
 A real Chromium over the runner's own panel, against a **real** `blizzard-runner host`
 subprocess ticking its live loop (D2), proving a real mutation reaches the panel with
-no reload, inside the 5-minute poll backstop (D7) a pass could not otherwise satisfy.
+no reload, inside the 1-minute poll backstop (D7) a pass could not otherwise satisfy.
 Setup needs match `tests/e2e/test_acceptance_loop.py`'s module docstring."""
 
 from __future__ import annotations
@@ -89,7 +89,8 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
         ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
-        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+        # Left in `backlog` — promoting now would race the live loop's tick against
+        # Chromium launch/page-load; promotion moves below, after "0 live" is confirmed.
 
         # Persisted to disk, unlike the other scenarios' in-process config, so a real
         # `blizzard-runner host --dir` subprocess can load it.
@@ -123,14 +124,16 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
                 page = browser.new_page()
                 expect.set_options(timeout=15_000)
                 try:
-                    # --- Load the panel ONCE. It is never reloaded again. ----------------
+                    # Load the panel ONCE, never reloaded again. Established pre-state, not a
+                    # race: nothing is promoted yet, so "0 live" holds regardless of launch time.
                     page.goto(f"http://{config.host}:{config.port}/", wait_until="load")
                     expect(page.get_by_test_id("local-panel")).to_be_visible()
                     expect(page.get_by_test_id("lease-count")).to_have_text("0 live")
                     expect(page.get_by_test_id("agent-row")).to_have_count(0)
 
-                    # FILL mints a real lease-changed(created) frame, not a fixture
-                    # shortcut — the panel's 5-minute backstop (D7) cannot explain this.
+                    # NOW promote — FILL mints a real lease-changed(created) frame the
+                    # panel's 1-minute backstop (D7) cannot explain, not a fixture shortcut.
+                    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
                     expect(page.get_by_test_id("lease-count")).to_have_text("1 live")
                     expect(page.get_by_test_id("agent-row")).to_have_count(1)
 

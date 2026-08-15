@@ -121,6 +121,15 @@ class Spawner:
             session_id=handle.session_id,
             spawned_at=now,
         )
+        if self.ctx.events is not None:
+            # The 'created' mint alone leaves `spawning` -> `running` unannounced (D4).
+            self.ctx.events.publish_lease_changed(
+                lease.lease_id,
+                chunk_id,
+                cause="spawned",
+                node_name=envelope.node.node_name,
+                key=f"leases:{lease.lease_id}",
+            )
         # Keyed on the HANDLE's session id — the authoritative continuation id (issue #149).
         # Written after the spawn, so a durable fingerprint always implies the prose was sent.
         self.ctx.store.record_session_preamble(handle.session_id, fingerprint=rendered.fingerprint, at=now)

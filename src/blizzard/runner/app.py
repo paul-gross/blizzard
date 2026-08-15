@@ -143,8 +143,10 @@ _HUMAN = (
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message (D3,
-    blizzard#317) — an SSE response held open never drains on its own, so the stream's
-    live wait races this signal instead of uvicorn's own graceful drain."""
+    blizzard#317) — sent *after* uvicorn's own graceful-drain wait, so in the hosted daemon
+    ``EarlyShutdownServer.handle_exit`` (``cli.py``) is what actually frees a parked SSE
+    response promptly. This hook is the only signal a wrapper-less composer gets — a plain
+    ``TestClient``/``uvicorn.Server``, as the test suite uses."""
     yield
     app.state.shutdown.set()
 

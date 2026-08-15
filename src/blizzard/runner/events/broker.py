@@ -3,7 +3,7 @@ the kind-agnostic core (D1, blizzard#317) shared with the hub. The history/repla
 machinery — id minting, the bounded ring, per-connection queues — lives in
 :mod:`blizzard.foundation.events.broker`; this module owns only what is runner-specific: the
 event-type names, their payload shapes, and the ``publish_*`` helpers each mutation seam
-calls (wired in Phase 3, see :mod:`blizzard.runner.events.census`)."""
+calls (wired in Phase 3, see ``tests/runner_event_census.py``)."""
 
 from __future__ import annotations
 

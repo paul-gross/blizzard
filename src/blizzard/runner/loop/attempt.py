@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import cast
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
@@ -62,7 +61,7 @@ class Attempt:
     ctx: LoopContext
     lease: LeaseRecord
 
-    def fail(self, *, reason: str, via: str) -> None:
+    def fail(self, *, reason: LeaseChangeCause, via: str) -> None:
         """Close a failed attempt, then requeue at the node or escalate per the budget.
 
         An escalation is a one-way door this same tick's flush cannot retract, so the
@@ -222,7 +221,7 @@ class Attempt:
             return False  # hub unreachable — last-known directive holds; keep working
         return detail.route is None or detail.route.runner_id != self.ctx.config.runner_id
 
-    def close(self, reason: str, at: datetime, event: dict[str, object] | None = None) -> None:
+    def close(self, reason: LeaseChangeCause, at: datetime, event: dict[str, object] | None = None) -> None:
         """Close this lease. An ``event`` lands in the outbound buffer in the same transaction
         as the closure it describes (issue #125), so the two are never seen apart. Every
         closure path funnels through here — the one place to pump this lease's own open
@@ -239,12 +238,12 @@ class Attempt:
         )
         if self.ctx.events is not None:
             lease_id = self.lease.lease_id
-            # `reason` IS the LeaseChangeCause vocabulary (D4) — every caller passes one of
-            # this module's own closure-reason constants, which are exactly its six literals.
+            # `reason` IS the LeaseChangeCause vocabulary (D4) — enforced by `close`'s and
+            # `fail`'s own parameter type now, not by a comment's claim about callers.
             self.ctx.events.publish_lease_changed(
                 lease_id,
                 self.lease.chunk_id,
-                cause=cast(LeaseChangeCause, reason),
+                cause=reason,
                 node_name=self.lease.node_name,
                 key=f"leases:{lease_id}",
             )

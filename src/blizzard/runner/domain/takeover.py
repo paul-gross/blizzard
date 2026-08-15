@@ -15,7 +15,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import TAKEOVER_PREFIX, Id
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerPreamble
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.store.repository import IWriteRunnerStore, LeaseRecord
@@ -101,15 +101,15 @@ class TakeoverService:
         process: IProcessProbe,
         *,
         local_api_url: str,
-        events: EventBroker | None = None,
+        events: IRunnerEventPublisher | None = None,
     ) -> None:
         self._store = store
         self._clock = clock
         self._harness = harness
         self._process = process
         self._local_api_url = local_api_url
-        # The SSE broker (D2, blizzard#317); ``None`` on a broker-less app, where
-        # publishing is a no-op (Phase 3).
+        # The SSE publish seam (D2), typed against the Protocol (``bzh:dependency-inversion``);
+        # ``None`` on a broker-less app, a no-op there.
         self._events = events
 
     def open(self, chunk_id: str, *, force: bool) -> OpenedTakeover:

@@ -22,6 +22,8 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.loop.drain import OutboundDrain
+from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.steps import Advance, Fill, Pull
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, RouteView
@@ -96,6 +98,10 @@ def test_fill_claim_publishes_lease_created_environment_bound_and_fact_changed(t
     assert lease_frames[0]["cause"] == "created"
     assert lease_frames[0]["chunk_id"] == "ch_1"
     assert lease_frames[0]["key"] == f"leases:{lease_frames[0]['lease_id']}"
+    # The pid-recorded flip to `running` gets its own frame — the 'created' mint alone
+    # leaves a re-reader seeing `spawning` until the next backstop poll (blizzard#317 review).
+    assert lease_frames[1]["cause"] == "spawned"
+    assert lease_frames[1]["lease_id"] == lease_frames[0]["lease_id"]
 
     env_frames = _frames(events, "environment-changed")
     assert env_frames == [{"chunk_id": "ch_1", "environment_id": "e1", "cause": "bound", "key": "environments:e1"}]
@@ -156,8 +162,8 @@ def test_attempt_close_publishes_lease_changed_with_the_closure_reason_as_cause(
 
     lease_frames = _frames(events, "lease-changed")
     causes = [f["cause"] for f in lease_frames]
-    # The closed attempt's own frame, then the fresh retry's mint.
-    assert causes == ["failed", "created"]
+    # The closed attempt's own frame, then the fresh retry's mint and its own spawn.
+    assert causes == ["failed", "created", "spawned"]
     # No escalation on a plain retry.
     assert _frames(events, "escalation-changed") == []
 
@@ -269,6 +275,11 @@ def test_dormant_on_answer_publishes_ask_answered(tmp_path: Path) -> None:
     assert ask_frames == [
         {"lease_id": "lease_1", "chunk_id": "ch_1", "question_id": "qn_1", "cause": "answered", "key": "asks:qn_1"}
     ]
+    # The resumed session's own flip back to a live pid (`DormantSession._wake`) gets the
+    # same 'spawned' frame the fresh-spawn path publishes.
+    lease_frames = _frames(events, "lease-changed")
+    assert lease_frames[-1]["cause"] == "spawned"
+    assert lease_frames[-1]["lease_id"] == "lease_1"
 
 
 def test_attempt_abandon_retiring_an_open_park_does_not_publish_ask_answered(tmp_path: Path) -> None:
@@ -460,6 +471,31 @@ def test_pull_reconcile_takeovers_publishes_takeover_closed(tmp_path: Path) -> N
     assert takeover_frames == [
         {"chunk_id": "ch_1", "takeover_id": "tko_1", "cause": "closed", "key": "takeovers:tko_1"}
     ]
+
+
+def test_outbound_drain_ack_republishes_fact_changed_on_the_same_seq(tmp_path: Path) -> None:
+    """The enqueue frame alone leaves the fact log's ✓/· flush marker stuck unacked until
+    the next backstop poll (blizzard#317 review) — the drain's own ack must re-announce."""
+    store = _store(tmp_path)
+    events = EventBroker()
+    hub = FakeHub()
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict=None),
+        probe=FakeProbe(),
+        events=events,
+    )
+    OutboundFacts(ctx).event(chunk_id=None, lease_id=None, payload={"detail": "probe"}, at=_NOW)
+
+    OutboundDrain(ctx).run()
+
+    fact_frames = _frames(events, "fact-changed")
+    assert len(fact_frames) == 2, "expected one frame at enqueue and one at ack"
+    enqueue_frame, ack_frame = fact_frames
+    assert enqueue_frame["seq"] == ack_frame["seq"] == 1
+    assert hub.pushed and hub.pushed[0].seq == 1, "the fake hub never actually received the fact"
 
 
 # --- a broker-less context publishes nothing, degrading cleanly (D2) -------------------- #

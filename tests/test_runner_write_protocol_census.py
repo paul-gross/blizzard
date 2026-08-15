@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.runner.events.census import WRITE_PROTOCOL_CENSUS, Published, Silent
+from blizzard.runner.events.broker import EVENT_TYPES
 from blizzard.runner.store.repository import IReadRunnerStore, IWriteRunnerStore
+from tests.runner_event_census import WRITE_PROTOCOL_CENSUS, Published, Silent
 
 pytestmark = pytest.mark.unit
 
@@ -43,6 +44,9 @@ def test_every_census_entry_is_a_published_or_silent_disposition() -> None:
     for name, disposition in WRITE_PROTOCOL_CENSUS.items():
         assert isinstance(disposition, Published | Silent), f"{name}: {disposition!r} is neither Published nor Silent"
         if isinstance(disposition, Published):
-            assert disposition.kind and disposition.where
+            assert disposition.where
+            # A typo'd or stale kind (e.g. a deleted publish call's name left behind) is
+            # otherwise merely truthy, not actually a kind the broker can publish.
+            assert disposition.kind in EVENT_TYPES, f"{name}: {disposition.kind!r} is not a real event kind"
         else:
             assert disposition.reason

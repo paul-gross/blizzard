@@ -1,4 +1,4 @@
-import { DestroyRef, EnvironmentInjector, Injectable, type Signal, effect, inject, untracked } from '@angular/core';
+import { DestroyRef, EnvironmentInjector, Injectable, effect, inject, untracked } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 import {
   RUNNER_EVENT_STREAM_URL,
@@ -6,7 +6,6 @@ import {
   type RunnerEventPayload,
   type RunnerEventType,
   type SseHandle,
-  type SseStatus,
   SseService,
 } from 'fleet';
 
@@ -85,11 +84,6 @@ export class RunnerLiveUpdates {
   private readonly sessionRecovery = inject(SessionRecovery);
   private handle: SseHandle<RunnerEventPayload> | null = null;
 
-  /** Connection lifecycle, or `idle` before {@link start}. */
-  get status(): Signal<SseStatus> {
-    return this.handle?.status ?? IDLE_STATUS;
-  }
-
   /**
    * Open the live stream and wire it to the query cache. Idempotent — a second call
    * is a no-op. Auto-closes on the caller's {@link DestroyRef} (the app teardown).
@@ -152,9 +146,3 @@ export class RunnerLiveUpdates {
     }
   }
 }
-
-/** A frozen `idle` status used before the stream is opened. */
-const IDLE_STATUS: Signal<SseStatus> = (() => {
-  const s = () => 'idle' as const;
-  return s as Signal<SseStatus>;
-})();
