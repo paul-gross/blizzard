@@ -27,6 +27,23 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
       font-size: var(--fs-label);
       letter-spacing: 0.14em;
       text-transform: uppercase;
+      /* The strip is the one that gives, never the page. Three uppercase
+         letter-spaced labels (GENERAL/ARTIFACTS/TRANSCRIPTS) measure ~315px —
+         wider than a 320px phone's content box — and a plain non-wrapping flex
+         row pushed that overflow all the way up to the page, which is what
+         chunk-detail-page.shell-sweep.spec.ts caught at width 320. Scrolling
+         here absorbs it instead: min-width: 0 lets the strip be narrower than
+         its content, and overflow-y: hidden keeps the implicit auto that
+         overflow-x would otherwise force from clipping the 32px row. */
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      /* A scrollbar inside a 32px row would eat the tabs it is scrolling. */
+      scrollbar-width: none;
+    }
+    :host::-webkit-scrollbar {
+      width: 0;
+      height: 0;
     }
   `,
 })
@@ -55,6 +72,20 @@ export class KitTabStrip {}
       font-family: inherit;
       text-decoration: none;
       cursor: pointer;
+      /* A tab is its label; it neither squeezes nor breaks. Explicit because
+         the strip scrolls now (see KitTabStrip) — flex's default shrink would
+         otherwise compress the labels toward illegibility before the strip
+         ever reached the scroll it gained for exactly this case. */
+      flex: none;
+      white-space: nowrap;
+    }
+    /* Phone widths: the tracking that makes these labels legible on a monitor is
+       what pushes them past the viewport here, so the gutters give first — the
+       strip can still scroll if a fourth tab arrives, but three fit outright. */
+    @media (max-width: 420px) {
+      :host {
+        padding: 0 10px;
+      }
     }
     :host(.active) {
       color: var(--amber-hi);

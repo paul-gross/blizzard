@@ -3,6 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
 import {
+  AppShell,
   BoardHeader,
   FleetLiveUpdates,
   PendingLobby,
@@ -38,7 +39,10 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
  * persistent {@link MobileTabBar} renders below the routed content (mock screen C,
  * `../docs/designs/mobile/core-flows.html`) — the fork happens once, here, at the
  * app root, the same "pick it once" rule the route table already follows for the
- * `board` route itself (`app.routes.ts`).
+ * `board` route itself (`app.routes.ts`). The shared {@link AppShell} (`fleet`,
+ * issue #325) is what enforces this ordering by construction — header above nav
+ * above routed content — the same slot order the runner app root composes its
+ * own header/nav/content into, so the two apps cannot drift apart.
  *
  * - the {@link FleetLiveUpdates} spine subscribes to `GET /api/events/stream` and
  *   invalidates the reads on every hub fact, so the whole app streams live;
@@ -75,7 +79,7 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardHeader, AppNav, AppNavMenu, MobileTitlebar, MobileTabBar, RouterOutlet, PendingLobby],
+  imports: [AppShell, BoardHeader, AppNav, AppNavMenu, MobileTitlebar, MobileTabBar, RouterOutlet, PendingLobby],
   template: `
     @switch (authState()) {
       @case ('unauthenticated') {
@@ -93,11 +97,18 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
         <fleet-pending-lobby [me]="me()" (logout)="onLogout()" />
       }
       @case ('ready') {
-        <div class="layout">
+        <fleet-app-shell>
+          <!-- Each slotted node sits in its own @if/@else pair rather than
+               sharing an @else with a sibling: a control-flow branch with more
+               than one root node cannot resolve which named ng-content slot
+               each child belongs to (NG8011), so AppShell's ordering
+               guarantee only holds when every projected node is the sole
+               root of its own branch. -->
           @if (mobile()) {
-            <app-mobile-titlebar [live]="streamLive()" />
+            <app-mobile-titlebar shell-header [live]="streamLive()" />
           } @else {
             <fleet-board-header
+              shell-header
               [connection]="connection()"
               [chunks]="chunks()"
               [spendToday]="spendToday.data() ?? null"
@@ -105,13 +116,15 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
             >
               <app-nav-menu header-trailing (logout)="onLogout()" />
             </fleet-board-header>
-            <app-nav [showAdmin]="canManageUsers()" />
+          }
+          @if (!mobile()) {
+            <app-nav shell-nav [showAdmin]="canManageUsers()" />
           }
           <router-outlet />
           @if (mobile()) {
-            <app-mobile-tab-bar />
+            <app-mobile-tab-bar shell-tab-bar />
           }
-        </div>
+        </fleet-app-shell>
       }
       @default {
         <!-- 'loading' — the first /api/me round trip has not resolved yet. No
@@ -125,17 +138,6 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
     :host {
       display: block;
       height: 100%;
-    }
-    /* The titlebar and nav span the window, and the routed page fills everything
-       under them. The layout is height-capped to the viewport and the routed page
-       scrolls its own content, so the page itself never scrolls — an operator's
-       board does not move under them. */
-    .layout {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      min-height: 0;
-      overflow: hidden;
     }
     /* router-outlet is an empty anchor element the router inserts routed
        components after — it carries no visual size of its own. */

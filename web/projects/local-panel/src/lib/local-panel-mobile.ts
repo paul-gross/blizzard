@@ -1,28 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { CdkMenuTrigger } from '@angular/cdk/menu';
-import {
-  KitAsyncState,
-  type KitAsyncStateValue,
-  KitBackBar,
-  KitMenuItem,
-  KitMenuPanel,
-  KitPanel,
-  KitPanelHeader,
-  MobileTitlebar,
-  ViewportMenu,
-  type runnerApi,
-} from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitBackBar, KitPanel, KitPanelHeader, type runnerApi } from 'fleet';
 
 import { AgentRow } from './agent-row';
 import { ChunkCard } from './chunk-card';
 import { MachineDetail } from './chunk-detail';
 import type { MachineChunkStatus } from './chunk-status';
 import { LocalAsks } from './local-asks';
-import { LocalIdentity } from './local-identity';
 import { LocalInfo } from './local-info';
 import type { MachineChunkRow } from './local-panel';
-import { injectRunnerSessionQuery, signedInUsername } from './auth.query';
-import { injectRunnerDashboardQuery } from './status.query';
 
 /**
  * The runner local panel's mobile shell (mobile mockups, `../docs/designs/mobile/README.md`)
@@ -51,70 +36,21 @@ import { injectRunnerDashboardQuery } from './status.query';
  * by hub" badge today. Mounting it (and wiring a home for it in this single
  * scrolling column) is left to the next mobile chunk.
  *
- * Mounts the shared {@link MobileTitlebar} (issue #92) in place of its old
- * bespoke header — the same fleet component the hub's app-root mounts —
- * burying the appearance switcher behind the titlebar's own overflow menu
- * (mobile polish feedback item 5; the desktop layout's own header hosts one
- * too, so the override stays reachable in both modes). Since the CDK-menu
- * rebuild (issue #161) that menu's panel is declared here and passed to the
- * titlebar as a template — a `CdkMenu` finds its items by a content query,
- * which cannot cross an `<ng-content>` boundary. Its `live` input is
- * this runner's own hub-reachability read (`GET /api/dashboard`'s
- * `runner.hub.reachable`, the same fact `local-info.ts`'s "link" cell
- * renders) — never a new poll, the same severable {@link injectRunnerDashboardQuery}
- * read.
+ * Owns no titlebar (issue #325): the shared `MobileTitlebar` chrome — its
+ * live dot, its overflow menu, and the signed-in identity/logout row inside
+ * that menu — moved up to the app root's own `app-mobile-titlebar`
+ * (`../../runner/src/app/nav/mobile-titlebar.ts`'s `MobileTitlebar`), the
+ * same shelf the hub's app-root mounts its own mobile titlebar on. Mounted
+ * once, above the routed content, rather than nested inside this routed
+ * shell where it used to render only on `/board` and not at all on
+ * `/events`.
  */
 @Component({
   selector: 'local-panel-mobile',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    AgentRow,
-    ChunkCard,
-    KitAsyncState,
-    KitBackBar,
-    KitPanel,
-  KitPanelHeader,
-    LocalAsks,
-    LocalIdentity,
-    LocalInfo,
-    MachineDetail,
-    CdkMenuTrigger,
-    KitMenuItem,
-    KitMenuPanel,
-    MobileTitlebar,
-    ViewportMenu,
-  ],
+  imports: [AgentRow, ChunkCard, KitAsyncState, KitBackBar, KitPanel, KitPanelHeader, LocalAsks, LocalInfo, MachineDetail],
   template: `
     <div class="lpm" data-testid="local-panel-mobile">
-      <fleet-mobile-titlebar [live]="hubReachable()" testid="local-panel-mobile-titlebar" [menu]="shellMenu" />
-      <ng-template #shellMenu>
-        <fleet-kit-menu-panel testid="local-panel-mobile-titlebar-menu-panel">
-          <!-- The identity block renders label-only in here: a role=menu may own
-               only menu items, so its logout is the real menu item below, driven
-               through the template reference — LocalIdentity stays the one owner
-               of the logout call. The item's *gate* is this shell's own session
-               read, not the block's: the block is constructed inside the overlay,
-               so its signal is still unresolved when CdkMenu picks the initially
-               focused item, and a Log out that appears a tick later is one the
-               keyboard has already skipped past. -->
-          <local-identity #identity variant="label" />
-          @if (signedIn()) {
-            <fleet-kit-menu-item testid="local-panel-mobile-logout" (triggered)="identity.logout()">
-              Log out
-            </fleet-kit-menu-item>
-          }
-          <fleet-kit-menu-item
-            testid="local-panel-mobile-appearance"
-            submenu
-            [cdkMenuTriggerFor]="appearanceMenu"
-          >
-            Appearance
-          </fleet-kit-menu-item>
-        </fleet-kit-menu-panel>
-      </ng-template>
-      <ng-template #appearanceMenu>
-        <fleet-viewport-menu testid="local-panel-mobile-appearance-panel" />
-      </ng-template>
       @if (detailOpen()) {
         <div class="lpm-detail" data-testid="panel-chunk-detail">
           <button class="back-row" type="button" aria-label="Back to Machine" data-testid="mobile-detail-back" (click)="closeDetail.emit()">
@@ -188,11 +124,12 @@ import { injectRunnerDashboardQuery } from './status.query';
       font-size: var(--fs-base);
       font-variant-numeric: tabular-nums;
     }
-    /* The titlebar is chrome, not content: it sits outside the scroll region
-       so it stays fixed at the top while the sections scroll under it — the
-       same shape the hub's app-root gives its own mobile titlebar, and what
-       both MobileTitlebar and MobileTabBar already declare flex:none for.
-       Scrolling .lpm itself would carry the titlebar away with it. */
+    /* The titlebar used to be chrome rendered *inside* this shell, kept
+       outside the scroll region by its own flex:none. That responsibility now
+       belongs to AppShell (fleet) instead (issue #325): the titlebar mounts
+       at the app root, above this component entirely, and AppShell is what
+       keeps it fixed while the routed content — this shell included —
+       scrolls under it. */
     .lpm {
       display: flex;
       flex-direction: column;
@@ -299,23 +236,4 @@ export class LocalPanelMobile {
 
   /** Whether the detail screen is mounted in place of the sections list. */
   protected readonly detailOpen = computed(() => this.selectedChunkLeases().length > 0);
-
-  /** The titlebar's own severable read (`local-info.ts`'s own instance dedupes
-   * on the same query key, so this is not a second poll) — `runner.hub.reachable`
-   * off `GET /api/dashboard`, the same fact `local-info`'s "link" cell renders. */
-  private readonly dashboardQuery = injectRunnerDashboardQuery();
-
-  /** Whether the hub link is reachable — the titlebar's `live` dot. A
-   * malformed body (e.g. a misrouted proxy) must degrade to `false`, not
-   * throw mid-render — the same guard `local-info.ts`'s own `view` takes. */
-  protected readonly hubReachable = computed(() => this.dashboardQuery.data()?.runner?.hub?.reachable ?? false);
-
-  private readonly sessionQuery = injectRunnerSessionQuery();
-
-  /** Whether a hub username is signed in — the gate on the titlebar menu's
-   * `Log out` item. Read here, on a component that has been alive since the
-   * shell mounted, rather than off the {@link LocalIdentity} inside the overlay,
-   * so the item exists in the panel's very first change detection and
-   * `CdkMenu` focuses it as the first item. */
-  protected readonly signedIn = computed(() => signedInUsername(this.sessionQuery.data()) !== null);
 }

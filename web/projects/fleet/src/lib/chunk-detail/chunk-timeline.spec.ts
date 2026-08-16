@@ -272,6 +272,26 @@ describe('ChunkTimeline', () => {
     expect(firstStepUsage?.querySelector('[data-testid="history-step-cost-partial"]')).not.toBeNull();
   });
 
+  it('renders its own "Node history" heading by default (issue #205)', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('#chunk-timeline-heading')?.textContent).toBe('Node history');
+  });
+
+  it('omits its own heading when a consumer already supplies one, e.g. a wrapping fleet-kit-panel (issue #205)', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    fixture.componentRef.setInput('heading', false);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('#chunk-timeline-heading')).toBeNull();
+    expect(el.textContent).not.toContain('Node history');
+  });
+
   it("gives a history step's token count and cost their own fixed-width, nowrap tracks so neither wraps mid-text, and lets the pair itself drop to its own line rather than overflow a tight column (issue #204)", async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', COST_DETAIL);

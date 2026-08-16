@@ -12,14 +12,16 @@ import { ChunkDetailPage } from './chunk-detail-page';
 /**
  * The runner-local chunk detail page's half of `web:shell-sweep`
  * (`blizzard-context:/verification/blizzard.md` bzh:web-shell-sweep,
- * issue #318) — a real, headless-Chromium proof that its six stacked
- * sections (work item, issues, node history, asks · decisions, artifacts,
- * transcript) genuinely stack with no horizontal overflow at phone widths,
- * the way the hub's own chunk detail page is proven (`chunk-page-layout
- * .shell-sweep.spec.ts`). This page has no `@media` column split to collapse
- * — it is one flex column throughout — so unlike that sweep this one proves
- * the narrower claim: real content (a long artifact key, an unbroken work
- * item token) never pushes the page wider than the viewport.
+ * issue #318, tabbed follow-up) — a real, headless-Chromium proof that each
+ * of its three tabs — General (work item, issues, node history, asks ·
+ * decisions), Artifacts, Transcripts — genuinely stacks its own sections with
+ * no horizontal overflow at phone widths, the way the hub's own chunk detail
+ * page is proven (`chunk-page-layout.shell-sweep.spec.ts`). The General tab's
+ * `@media (min-width: 720px)` two-column grid (`chunk-general-tab.ts`)
+ * collapses below that breakpoint the same way the hub's own copy does; jsdom
+ * parses that query without ever evaluating it, so `web:unit-test` cannot see
+ * the collapse — real content (a long artifact key, an unbroken work item
+ * token) never pushes the page wider than the viewport.
  *
  * Excluded from the default `ng test runner` run (`angular.json`'s
  * `test.exclude`) because it needs `--browsers=ChromiumHeadless`, not jsdom —
@@ -94,8 +96,14 @@ function routes(method: string, path: string): unknown {
 
 const WIDTHS = [390, 320];
 
+const TABS = [
+  { testid: 'tab-general', label: 'General' },
+  { testid: 'tab-artifacts', label: 'Artifacts' },
+  { testid: 'tab-transcripts', label: 'Transcripts' },
+] as const;
+
 describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', () => {
-  it('stacks every section with no horizontal overflow at phone widths', async () => {
+  it('stacks every tab’s own sections with no horizontal overflow at phone widths', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
     const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
@@ -113,7 +121,7 @@ describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', (
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
     await settle(harness.fixture);
-    const root = harness.fixture.nativeElement as HTMLElement;
+    let root = harness.fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
 
     try {
@@ -121,19 +129,26 @@ describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', (
         await page.viewport(width, 900);
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
-        const label = `width=${width}`;
-        const pageEl = root.querySelector<HTMLElement>('[data-testid="chunk-detail-page"]')!;
-        expect(pageEl, `${label}: no chunk-detail-page in the DOM`).not.toBeNull();
-        expect(
-          pageEl.scrollWidth,
-          `${label}: the page overflows horizontally (${pageEl.scrollWidth} > ${window.innerWidth})`,
-        ).toBeLessThanOrEqual(window.innerWidth);
+        for (const { testid: tabTestid, label: tabLabel } of TABS) {
+          root.querySelector<HTMLButtonElement>(`[data-testid="${tabTestid}"]`)?.click();
+          await settle(harness.fixture);
+          root = harness.fixture.nativeElement as HTMLElement;
+          await new Promise((resolve) => requestAnimationFrame(resolve));
 
-        const sections = Array.from(root.querySelectorAll<HTMLElement>('[data-testid^="section-"]'));
-        expect(sections.length, `${label}: no sections rendered`).toBeGreaterThan(0);
-        const tops = sections.map((s) => s.getBoundingClientRect().top);
-        const distinctTops = new Set(tops);
-        expect(distinctTops.size, `${label}: sections did not stack — tops were ${tops.join(', ')}`).toBe(sections.length);
+          const label = `width=${width}, tab=${tabLabel}`;
+          const pageEl = root.querySelector<HTMLElement>('[data-testid="chunk-detail-page"]')!;
+          expect(pageEl, `${label}: no chunk-detail-page in the DOM`).not.toBeNull();
+          expect(
+            pageEl.scrollWidth,
+            `${label}: the page overflows horizontally (${pageEl.scrollWidth} > ${window.innerWidth})`,
+          ).toBeLessThanOrEqual(window.innerWidth);
+
+          const sections = Array.from(root.querySelectorAll<HTMLElement>('[data-testid^="section-"]'));
+          expect(sections.length, `${label}: no sections rendered`).toBeGreaterThan(0);
+          const tops = sections.map((s) => s.getBoundingClientRect().top);
+          const distinctTops = new Set(tops);
+          expect(distinctTops.size, `${label}: sections did not stack — tops were ${tops.join(', ')}`).toBe(sections.length);
+        }
       }
     } finally {
       root.remove();

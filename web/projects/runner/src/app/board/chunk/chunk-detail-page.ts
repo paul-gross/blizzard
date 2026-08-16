@@ -6,72 +6,65 @@ import { map } from 'rxjs';
 import {
   asyncState,
   ChunkArtifacts,
-  ChunkAwaitingHuman,
-  ChunkFacts,
-  ChunkIssuePane,
-  ChunkTimeline,
-  ChunkTokenBreakdown,
   deriveWorkItemsState,
   KitAsyncState,
   type KitAsyncStateValue,
   KitBackBar,
   type KitChipOption,
-  KitChips,
   KitPanel,
+  KitTabs,
+  type KitTabOption,
   type runnerApi,
   type WorkItemsState,
 } from 'fleet';
-import {
-  injectChunkDetailQuery,
-  injectChunkWorkItemsDetailQuery,
-  injectRunnerLeasesQuery,
-  TranscriptPanel,
-} from 'local-panel';
+import { injectChunkDetailQuery, injectChunkWorkItemsDetailQuery, injectRunnerLeasesQuery } from 'local-panel';
+
+import { type RunnerChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-selection';
+import { ChunkGeneralTab } from './chunk-general-tab';
+import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
 /**
- * The `/board/chunk/:chunkId` route (issue #318) — the runner-local chunk
- * detail page: work item, issues, node history, asks · decisions, and
- * artifacts, composed from the same presentational `fleet` sections the hub
- * board's own `ChunkGeneralTab` arranges (`bzh:frontend-kit`), plus the
- * transcripts and per-attempt selection that used to live inline in the
- * dock (`MachineDetail`, issue #185) — moved here per D2/D4, a deliberate
- * replacement rather than a regression.
+ * The `/board/chunk/:chunkId` route (issue #318, tabbed follow-up) — the
+ * runner-local chunk detail page: work item, issues, node history, asks ·
+ * decisions, artifacts, and the per-attempt transcript (`MachineDetail`,
+ * issue #185, moved here per D2/D4), now split across three tabs — General,
+ * Artifacts, Transcripts — selected through {@link injectChunkDetailSelection}
+ * (`?tab=`), the same shape the hub's own `chunk-page.ts` gives its own tab
+ * strip.
  *
  * A container mapping its three reads down to presentational children
  * (`bzh:frontend-container-presentational`): {@link injectChunkDetailQuery}
- * for the whole aggregate ({@link ChunkFacts} and siblings all declare
+ * for the whole aggregate ({@link ChunkGeneralTab} and siblings all declare
  * `detail: hubApi.ChunkDetail` — the runner's proxy declares that same shared
  * model, so the payload is that type field for field, escalation included,
  * and no runner-local wrapper type is owed), {@link injectChunkWorkItemsDetailQuery}
- * for the full-fidelity work-item read ({@link ChunkIssuePane}'s
+ * for the full-fidelity work-item read ({@link ChunkGeneralTab}'s
  * `WorkItemsState` triad — deliberately not the severable
  * `injectChunkTitleQuery` the board's list rows use, since this section
  * renders a real error state rather than silently dropping one), and
- * {@link injectRunnerLeasesQuery} for the transcript section's attempt
- * picker. The chunk id rides the URL's path (`:chunkId`); the attempt
- * selector rides `?attempt=` (D4), which this route owns outright — the only
- * site that reads it and the only one that writes it. Nothing propagates it
- * in from elsewhere: `/board`'s own selection is `?chunk=` alone
- * (`panel-selection.ts`), and the one link in here carries no query params
- * (`machine-detail-header.ts`).
+ * {@link injectRunnerLeasesQuery} for the Transcripts tab's attempt picker.
+ * The chunk id rides the URL's path (`:chunkId`); the attempt selector rides
+ * `?attempt=` (D4), which this route owns outright — the only site that reads
+ * it and the only one that writes it. `?tab=` and `?attempt=` are independent
+ * params on the same URL: {@link injectChunkDetailSelection}'s `select` merges
+ * rather than replaces, so switching tabs never drops the open attempt.
+ * General and Transcripts each move their own layout into a presentational
+ * sibling ({@link ChunkGeneralTab}, {@link ChunkTranscriptsTab}) — the same
+ * split the hub's tabs make; Artifacts stays inline since it is already one
+ * `fleet` component behind its own panel, nothing this container would gain
+ * from a further extraction. Together this is what keeps this container
+ * under `web:structural-gate`'s line cap.
  */
+const TAB_OPTIONS: readonly KitTabOption[] = [
+  { value: 'general', label: 'General', testid: 'tab-general' },
+  { value: 'artifacts', label: 'Artifacts', testid: 'tab-artifacts' },
+  { value: 'transcripts', label: 'Transcripts', testid: 'tab-transcripts' },
+];
+
 @Component({
   selector: 'app-chunk-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    ChunkArtifacts,
-    ChunkAwaitingHuman,
-    ChunkFacts,
-    ChunkIssuePane,
-    ChunkTimeline,
-    ChunkTokenBreakdown,
-    KitAsyncState,
-    KitBackBar,
-    KitChips,
-    KitPanel,
-    RouterLink,
-    TranscriptPanel,
-  ],
+  imports: [ChunkArtifacts, ChunkGeneralTab, ChunkTranscriptsTab, KitAsyncState, KitBackBar, KitPanel, KitTabs, RouterLink],
   template: `
     <div class="page" data-testid="chunk-detail-page">
       <a class="back-row" routerLink="/board" [queryParams]="backQueryParams()" data-testid="chunk-detail-back">
@@ -86,50 +79,28 @@ import {
           errorTestid="chunk-detail-page-error"
         >
           @if (detail(); as d) {
-            <fleet-kit-panel
-              class="section"
-              data-testid="section-work-item"
-              label="work item"
-              [count]="pointerCount() || null"
-            >
-              <fleet-chunk-detail-facts [detail]="d">
-                <fleet-chunk-detail-token-breakdown token-breakdown [detail]="d" />
-              </fleet-chunk-detail-facts>
-            </fleet-kit-panel>
-            <fleet-kit-panel class="section" data-testid="section-issues" label="issues">
-              <fleet-chunk-detail-issue-pane [workItems]="workItems()" placement="inline" />
-            </fleet-kit-panel>
-            <fleet-kit-panel class="section" data-testid="section-node-history" label="node history">
-              <fleet-chunk-detail-timeline [detail]="d" />
-            </fleet-kit-panel>
-            <fleet-kit-panel class="section" data-testid="section-asks" label="asks · decisions">
-              <fleet-chunk-detail-awaiting-human [detail]="d" />
-            </fleet-kit-panel>
-            <fleet-kit-panel class="section" data-testid="section-artifacts" label="artifacts">
-              <fleet-chunk-detail-artifacts [detail]="d" [expandable]="true" />
-            </fleet-kit-panel>
-            <fleet-kit-panel class="section transcript-section" data-testid="section-transcript" label="transcript">
-              <fleet-kit-async-state
-                [state]="attemptsState()"
-                loadingText="LOADING…"
-                loadingTestid="attempts-loading"
-                emptyText="NO RECENT ATTEMPTS ON THIS MACHINE"
-                emptyTestid="attempts-empty"
-              >
-                @if (attemptOptions().length > 1) {
-                  <div class="attempts" data-testid="attempt-tabs">
-                    <fleet-kit-chips
-                      [options]="attemptOptions()"
-                      [selectedValue]="activeAttemptLeaseId()"
-                      (choose)="selectAttempt($event)"
-                    />
-                  </div>
-                }
-                @if (activeAttemptLeaseId(); as leaseId) {
-                  <local-transcript-panel [leaseId]="leaseId" />
-                }
-              </fleet-kit-async-state>
-            </fleet-kit-panel>
+            <fleet-kit-tabs [options]="tabOptions" [activeValue]="tab()" (choose)="onChooseTab($event)" />
+            @switch (tab()) {
+              @case ('general') {
+                <app-chunk-general-tab [detail]="d" [workItems]="workItems()" />
+              }
+              @case ('artifacts') {
+                <fleet-kit-panel class="section" data-testid="section-artifacts" label="artifacts">
+                  <!-- Heading suppressed: the enclosing panel's label already
+                       says "artifacts". The default stays true for the board
+                       dock, which wraps this in a bare <section> instead. -->
+                  <fleet-chunk-detail-artifacts [detail]="d" [expandable]="true" [heading]="false" />
+                </fleet-kit-panel>
+              }
+              @case ('transcripts') {
+                <app-chunk-transcripts-tab
+                  [attemptsState]="attemptsState()"
+                  [attemptOptions]="attemptOptions()"
+                  [activeAttemptLeaseId]="activeAttemptLeaseId()"
+                  (selectAttempt)="selectAttempt($event)"
+                />
+              }
+            }
           }
         </fleet-kit-async-state>
       </div>
@@ -156,7 +127,7 @@ import {
       flex: none;
       text-decoration: none;
     }
-    /* The sections' own column, and the positioned ancestor {@link KitAsyncState}'s
+    /* The tabs' own column, and the positioned ancestor {@link KitAsyncState}'s
        absolutely-centered status line resolves against. It is the back row's
        *sibling*, not its parent: centering against .page instead resolves against a
        box the 44px back bar is the only content of while the read is in flight, and
@@ -169,17 +140,14 @@ import {
       flex-direction: column;
       gap: 8px;
     }
+    fleet-kit-tabs {
+      flex: none;
+    }
+    app-chunk-general-tab,
+    app-chunk-transcripts-tab,
     fleet-kit-panel.section {
-      flex: none;
-    }
-    fleet-kit-panel.transcript-section {
-      display: flex;
-      flex-direction: column;
-      height: 480px;
-    }
-    .attempts {
-      flex: none;
-      padding-bottom: 6px;
+      flex: 1;
+      min-height: 0;
     }
   `,
 })
@@ -206,6 +174,16 @@ export class ChunkDetailPage {
     { initialValue: this.route.snapshot.queryParamMap.get('attempt') },
   );
 
+  protected readonly tabOptions = TAB_OPTIONS;
+
+  private readonly selection = injectChunkDetailSelection();
+
+  protected readonly tab = this.selection.tab;
+
+  protected onChooseTab(tab: string): void {
+    this.selection.select(tab as RunnerChunkDetailTab);
+  }
+
   private readonly detailQuery = injectChunkDetailQuery(() => this.chunkId());
   private readonly workItemsQuery = injectChunkWorkItemsDetailQuery(() => this.chunkId());
   private readonly leasesQuery = injectRunnerLeasesQuery();
@@ -213,8 +191,6 @@ export class ChunkDetailPage {
   protected readonly detail = computed(() => this.detailQuery.data());
 
   protected readonly detailState = computed<KitAsyncStateValue>(() => asyncState(this.detailQuery, false));
-
-  protected readonly pointerCount = computed(() => this.detail()?.work_refs?.length ?? 0);
 
   /** The open chunk's related work items + fetch state for the Issue pane —
    * the same {@link deriveWorkItemsState} fold `fleet`'s own `ChunkDetail`
@@ -260,7 +236,7 @@ export class ChunkDetailPage {
   protected readonly backQueryParams = computed(() => ({ chunk: this.chunkId() }));
 
   /** Write an attempt pick to the URL's `?attempt=` param — a client-side
-   * navigation that stays on this route. */
+   * navigation that stays on this route and leaves `?tab=` untouched. */
   protected selectAttempt(leaseId: string): void {
     void this.router.navigate([], { relativeTo: this.route, queryParams: { attempt: leaseId }, queryParamsHandling: 'merge' });
   }

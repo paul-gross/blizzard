@@ -40,7 +40,9 @@ import { sortArtifacts } from './sort-artifacts';
   imports: [ChunkArtifactBody, RouterLink],
   template: `
     <div class="arts">
-      <div class="s-head"><span class="tag" id="chunk-artifacts-heading">Artifacts</span></div>
+      @if (heading()) {
+        <div class="s-head"><span class="tag" id="chunk-artifacts-heading">Artifacts</span></div>
+      }
       @if (artifacts().length === 0) {
         <p class="none" data-testid="artifacts-empty">No artifacts yet.</p>
       } @else {
@@ -85,8 +87,14 @@ import { sortArtifacts } from './sort-artifacts';
     </div>
   `,
   styles: `
+    /* Same flush-to-border problem as chunk-timeline.ts's node history, and the
+       same fix: this host pads itself so the dock (chunk-detail-panel.ts,
+       whose own \`.d-sec\` drops its padding for this section) and any
+       \`fleet-kit-panel\`-wrapped consumer (whose \`.p-body\` is deliberately
+       zero-padded) both get breathing room around the artifact list. */
     :host {
       display: block;
+      padding: 6px 8px;
     }
     .tag {
       font-size: var(--fs-label);
@@ -153,6 +161,15 @@ export class ChunkArtifacts {
    * a `routerLink` — for a host with no Artifacts tab of its own to link to.
    * `false` (the default) is every existing consumer's current behavior. */
   readonly expandable = input(false);
+
+  /** Whether to render this component's own "Artifacts" section heading. `true`
+   * (the default) is today's behavior, kept for the desktop board dock
+   * (`chunk-detail-panel.ts`'s `.d-sec`), which has no panel chrome of its own
+   * around this component and relies on the heading both visually and as its
+   * `aria-labelledby` target. A consumer that already wraps this component in
+   * a titled `<fleet-kit-panel label="artifacts">` (issue #205) sets this
+   * `false` so the label doesn't render twice. */
+  readonly heading = input(true);
 
   protected readonly chunkId = computed(() => this.detail().chunk_id);
 

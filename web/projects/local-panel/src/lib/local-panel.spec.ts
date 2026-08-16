@@ -129,20 +129,13 @@ describe('LocalPanel', () => {
     vi.restoreAllMocks();
   });
 
-  it('shows ok in the header once the runner local API responds (issue #131)', async () => {
-    stub = stubRequestClient(runnerClient, routes([]));
-    const fixture = await render();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('ok');
-  });
-
   it('polls GET /api/dashboard exactly once for the whole shell, and none of the seven folded-in endpoints (issue #311)', async () => {
-    // The desktop layout mounts five separate injectors of the dashboard query
-    // (LocalPanel itself, plus EnvList/LocalAsks/LocalInfo/LocalPauseControl
-    // via LocalPanelLayout) — proving one request here is what the issue's rate
-    // criterion asks for: TanStack's query-key dedupe, not a single shared read
-    // threaded down as an input.
+    // The desktop layout mounts four separate injectors of the dashboard query
+    // (LocalPanel itself, plus EnvList/LocalAsks/LocalInfo via LocalPanelLayout —
+    // the app root's own AppHeader is a distinct component tree, out of scope
+    // here) — proving one request here is what the issue's rate criterion asks
+    // for: TanStack's query-key dedupe, not a single shared read threaded down
+    // as an input.
     stub = stubRequestClient(runnerClient, routes([LEASE()]));
     await render();
 
@@ -150,66 +143,6 @@ describe('LocalPanel', () => {
     for (const path of ['/api/runner', '/api/environments', '/api/asks', '/api/escalations', '/api/takeovers', '/api/facts', '/api/fleet-summary']) {
       expect(stub.forRoute(path, 'GET')).toHaveLength(0);
     }
-  });
-
-  it('shows offline in the header when the runner local API is unreachable (issue #131)', async () => {
-    stub = stubRequestClient(runnerClient,
-      routes([], {}, (method, path) => (method === 'GET' && path === '/api/dashboard' ? stubError(503, { detail: 'down' }) : undefined)),
-    );
-    const fixture = await render();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('offline');
-  });
-
-  it('folds the runner status and environments reads into the header stat cells (issue #131)', async () => {
-    stub = stubRequestClient(runnerClient,
-      routes([], {
-        runner: {
-          runner_id: 'runner-local',
-          workspace_id: 'workspace-local',
-          pause: { local: false, hub: false, effective: false },
-          capacities: { max_agents: 2, used: 1, free: 1 },
-          hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
-          last_tick_at: null,
-        },
-        environments: {
-          items: [
-            { environment_id: 'alpha', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', held_since: '2026-07-16T11:18:00.000Z' },
-            { environment_id: 'beta', chunk_id: null, held_since: null },
-            { environment_id: 'gamma', chunk_id: null, held_since: null },
-            { environment_id: 'delta', chunk_id: null, held_since: null },
-          ],
-        },
-      }),
-    );
-    const fixture = await render();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="stat-envs"]')?.textContent?.trim()).toBe('1/4');
-    expect(el.querySelector('[data-testid="stat-agents"]')?.textContent?.trim()).toBe('1/2');
-  });
-
-  it('withholds the header stat cells before the first read resolves, rather than a misleading 0/0', async () => {
-    stub = stubRequestClient(runnerClient, routes([]));
-    await setUp();
-    const fixture = TestBed.createComponent(LocalPanel);
-    // Right after creation neither the status nor the environments read has resolved
-    // yet — the same gap the header's own `spendToday` cell withholds itself for
-    // rather than show a misleading `$0.00` (issue #131 review).
-    fixture.detectChanges();
-    let el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="stat-envs"]')).toBeNull();
-    expect(el.querySelector('[data-testid="stat-agents"]')).toBeNull();
-
-    await settle(fixture);
-    el = fixture.nativeElement as HTMLElement;
-
-    // Once both reads land the cells appear — this is a withhold-once-on-mount, not
-    // a permanent absence.
-    expect(el.querySelector('[data-testid="stat-envs"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="stat-agents"]')).not.toBeNull();
   });
 
   it('shows a loading line before the first read resolves, not the empty state', async () => {
@@ -725,37 +658,6 @@ describe('LocalPanel', () => {
       expect(el.querySelector('[data-testid="local-panel-mobile"]')).not.toBeNull();
       expect(el.querySelector('[data-testid="local-panel"]')).toBeNull();
       expect(el.querySelectorAll('[data-testid="agent-row"]')).toHaveLength(1);
-    });
-
-    it('the appearance switcher sits behind a quiet header menu, reachable in both modes', async () => {
-      stub = stubRequestClient(runnerClient, routes([]));
-      await setUp();
-      const viewport = TestBed.inject(ViewportService);
-      const fixture = TestBed.createComponent(LocalPanel);
-
-      // Each shell's menu is a CDK overlay (issue #161), so it renders on
-      // `document.body` rather than inside the fixture.
-      viewport.setOverride('desktop');
-      await settle(fixture);
-      let el = fixture.nativeElement as HTMLElement;
-      expect(document.body.querySelector('[data-testid="local-panel-appearance"]')).toBeNull();
-      el.querySelector<HTMLElement>('[data-testid="local-panel-menu"]')?.click();
-      await settle(fixture);
-      expect(
-        document.body.querySelector('[data-testid="local-panel-menu-panel"] [data-testid="local-panel-appearance"]'),
-      ).not.toBeNull();
-
-      viewport.setOverride('mobile');
-      await settle(fixture);
-      el = fixture.nativeElement as HTMLElement;
-      expect(document.body.querySelector('[data-testid="local-panel-mobile-appearance"]')).toBeNull();
-      el.querySelector<HTMLElement>('[data-testid="local-panel-mobile-titlebar-menu"]')?.click();
-      await settle(fixture);
-      expect(
-        document.body.querySelector(
-          '[data-testid="local-panel-mobile-titlebar-menu-panel"] [data-testid="local-panel-mobile-appearance"]',
-        ),
-      ).not.toBeNull();
     });
   });
 });

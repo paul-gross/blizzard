@@ -206,6 +206,26 @@ describe('ChunkArtifacts', () => {
     );
   });
 
+  it('renders its own "Artifacts" heading by default (issue #205)', async () => {
+    const fixture = TestBed.createComponent(ChunkArtifacts);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('#chunk-artifacts-heading')?.textContent).toBe('Artifacts');
+  });
+
+  it('omits its own heading when a consumer already supplies one, e.g. a wrapping fleet-kit-panel (issue #205)', async () => {
+    const fixture = TestBed.createComponent(ChunkArtifacts);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    fixture.componentRef.setInput('heading', false);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('#chunk-artifacts-heading')).toBeNull();
+    expect(el.textContent).not.toContain('Artifacts');
+  });
+
   it('shows an empty state when the chunk has no artifacts yet', async () => {
     const fixture = TestBed.createComponent(ChunkArtifacts);
     fixture.componentRef.setInput('detail', { ...REVIEW_FAIL_DETAIL, artifacts: [] });

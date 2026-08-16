@@ -96,6 +96,39 @@ describe('runner App', () => {
     expect(el.querySelector('local-panel')).toBeNull();
   });
 
+  describe('the app-root header/nav/content order (issue #325)', () => {
+    // The bug this shell exists to fix: the header used to render *inside*
+    // the routed layout, below the tab strip on /board and not at all on
+    // /events. `AppShell` makes the header app-root chrome instead, so it
+    // now precedes the nav strip in DOM order and persists across both
+    // routes, matching the hub.
+    it('renders the header above the tab strip on /board, not the other way around', async () => {
+      const router = TestBed.inject(Router);
+      const fixture = TestBed.createComponent(App);
+      await router.navigateByUrl('/board');
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      const header = el.querySelector('[data-testid="board-header"]');
+      const nav = el.querySelector('[data-testid="app-nav"]');
+      expect(header).toBeTruthy();
+      expect(nav).toBeTruthy();
+      expect(
+        Boolean(header!.compareDocumentPosition(nav!) & Node.DOCUMENT_POSITION_FOLLOWING),
+      ).toBe(true);
+    });
+
+    it('keeps the header mounted on /events, where it used to be entirely absent', async () => {
+      const router = TestBed.inject(Router);
+      const fixture = TestBed.createComponent(App);
+      await router.navigateByUrl('/events');
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="board-header"]')).toBeTruthy();
+    });
+  });
+
   it('marks the active route on the nav tabs and preserves the selection across a Board → Events → Board round trip', async () => {
     const router = TestBed.inject(Router);
     const fixture = TestBed.createComponent(App);

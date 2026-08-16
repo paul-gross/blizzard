@@ -115,8 +115,14 @@ describe('hub App', () => {
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="board-header"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="app-nav"]')).toBeTruthy();
+    const header = el.querySelector('[data-testid="board-header"]');
+    const nav = el.querySelector('[data-testid="app-nav"]');
+    expect(header).toBeTruthy();
+    expect(nav).toBeTruthy();
+    // The order AppShell enforces by construction (issue #325) — header above
+    // nav above routed content, the same fixed slot order the runner app root
+    // composes its own header/nav/content into.
+    expect(Boolean(header!.compareDocumentPosition(nav!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
 
     expect(router.url).toBe('/board');
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();

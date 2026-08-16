@@ -67,7 +67,9 @@ interface StepUsageTotal {
   selector: 'fleet-chunk-detail-timeline',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="s-head"><span class="tag" id="chunk-timeline-heading">Node history</span></div>
+    @if (heading()) {
+      <div class="s-head"><span class="tag" id="chunk-timeline-heading">Node history</span></div>
+    }
     @if (historyRows().length === 0 && !activeRow()) {
       <p class="none" data-testid="history-empty">No transitions yet — waiting on the first node-step.</p>
     } @else {
@@ -128,8 +130,13 @@ interface StepUsageTotal {
     }
   `,
   styles: `
+    /* The dock has no chrome of its own around this component, so this host
+       pads itself — \`fleet-kit-panel\`'s zero-padded \`.p-body\` (kit-panel.ts)
+       means a panel-wrapped consumer isn't double-padded; the dock's own
+       \`.d-sec\` (chunk-detail-panel.ts) drops its padding here to match. */
     :host {
       display: block;
+      padding: 6px 8px;
     }
     .tag {
       font-size: var(--fs-label);
@@ -144,16 +151,37 @@ interface StepUsageTotal {
       color: var(--label-dim);
       font-size: var(--fs-xs);
     }
-    /* One row per judged node: the attempt, the node in a fixed column, and the
-       verdict — fixed widths so the verdicts read down the timeline aligned. */
+    /* One row per judged node: the attempt, the node column, and the verdict.
+       \`<ol>\` owns the track sizes; every \`<li class="step">\` adopts them via
+       \`grid-template-columns: subgrid\` instead of sizing its own columns
+       from only its own content, which can't keep the verdicts aligned once
+       a column is content-sized (two rows with differently-long node names
+       would size that column differently). \`.step\` keeps its own real box
+       (border-bottom, padding, baseline alignment) rather than
+       \`display: contents\`, so \`[data-choice]\` below still works.
+
+       The node track used to be a hard 84px, ellipsizing any real name once
+       this also renders as half a full-width tab. A bare
+       \`minmax(84px, max-content)\` fixes that but, once the track is shared,
+       over-corrects: one long outlier name pulls the whole column to its own
+       max-content, which measured out (checked, not assumed) to squeezing
+       the verdict track to 0 width in a ~300px column. \`fit-content(160px)\`
+       caps that growth; \`.nd\`'s own \`min-width: 84px\` supplies the floor
+       \`fit-content()\`'s automatic minimum (0, since \`.nd\` hides overflow)
+       wouldn't otherwise give it. The verdict/routing track is
+       \`minmax(64px, 1fr)\`, not \`minmax(0, 1fr)\` — at the node track's
+       fullest growth, 0 leaves the verdict illegible rather than just tight. */
     .timeline {
+      display: grid;
+      grid-template-columns: 16px fit-content(160px) minmax(64px, 1fr) auto;
       list-style: none;
       margin: 0;
       padding: 0;
     }
     .step {
       display: grid;
-      grid-template-columns: 16px 84px 1fr auto;
+      grid-column: 1 / -1;
+      grid-template-columns: subgrid;
       gap: 6px;
       align-items: baseline;
       padding: 3px 0;
@@ -167,13 +195,13 @@ interface StepUsageTotal {
     }
     .step .nd {
       color: var(--text);
-      text-transform: uppercase;
+      text-transform: uppercase; /* matches every other engraved label here/in the kit */
       font-size: var(--fs-label);
       letter-spacing: 0.1em;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      min-width: 0;
+      min-width: 84px; /* the node column's floor — see the \`.timeline\` comment above */
     }
     .step .jg {
       display: flex;
@@ -237,7 +265,10 @@ interface StepUsageTotal {
        spanning item's own content floor win); flex-wrap: wrap is the fallback for
        whatever's left over — the token cell and the cost cell each keep their own
        nowrap (a figure's own text never breaks), but the pair as a whole can drop
-       the cost onto its own line rather than overflow the column. */
+       the cost onto its own line rather than overflow the column. \`1 / -1\`
+       still spans all four of \`.timeline\`'s subgridded tracks under \`.step\`;
+       checked (not assumed) that \`min-width: 0\` keeps this spanning item
+       from contributing back into their shared sizing. */
     .step-usage {
       grid-column: 1 / -1;
       min-width: 0;
@@ -272,6 +303,14 @@ interface StepUsageTotal {
 export class ChunkTimeline {
   /** The chunk aggregate to render (its recorded history, current node, and usage). */
   readonly detail = input.required<ChunkDetail>();
+
+  /** Whether to render this component's own "Node history" heading. `true`
+   * (the default) is kept for the dock (`chunk-detail-panel.ts`'s `.d-sec`),
+   * which has no panel chrome of its own and relies on the heading both
+   * visually and as its `aria-labelledby` target; a consumer already
+   * wrapped in a titled `<fleet-kit-panel label="node history">`
+   * (issue #205) sets this `false`. */
+  readonly heading = input(true);
 
   protected readonly formatCost = formatCost;
   protected readonly formatTokens = formatTokens;

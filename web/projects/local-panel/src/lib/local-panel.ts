@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { type KitAsyncStateValue, type runnerApi, type StatCell, ViewportService } from 'fleet';
+import { type KitAsyncStateValue, type runnerApi, ViewportService } from 'fleet';
 
 import { type MachineChunkStatus, deriveMachineChunkStatus } from './chunk-status';
 import { injectRunnerLeasesQuery } from './leases.query';
@@ -36,11 +36,14 @@ export interface MachineChunkRow {
  * single source of truth — the panel derives its selection from the query params
  * and every click writes them back, never the reverse.
  *
- * The shared header's live state is folded here too (issue #131): {@link headerStats}
- * off the dashboard's `runner.capacities` and `environments` pool (envs and
- * agents used/capacity), and {@link connection} off the same dashboard read's
- * pending/error state — `ok` once it resolves, `offline` on a failed read, never
- * the permanently-dead placeholder the header used to carry.
+ * Owns no header state (issue #325): the shared header's connection cell and
+ * live stat cells used to be folded here and threaded down as inputs to
+ * {@link LocalPanelLayout}. Both the desktop header and the mobile titlebar
+ * moved to the app root (`../../runner/src/app/nav/app-header.ts`,
+ * `../../runner/src/app/nav/mobile-titlebar.ts`), so they now inject
+ * {@link injectRunnerDashboardQuery} themselves rather than reading it off
+ * this container — TanStack dedupes the extra injection, so it costs no
+ * extra request.
  */
 @Component({
   selector: 'local-panel',
@@ -51,8 +54,6 @@ export interface MachineChunkRow {
       <div class="lp-content">
         @if (mode() === 'desktop') {
           <local-panel-layout
-            [connection]="connection()"
-            [headerStats]="headerStats()"
             [activeLeases]="activeLeases()"
             [leasesTriadState]="leasesTriadState()"
             [chunksTriadState]="visibleChunksTriadState()"
@@ -115,10 +116,9 @@ export class LocalPanel {
    * root now (issue #313, `../../runner/src/app/nav/mobile-tab-bar.ts`), not
    * here, so it survives navigating to `/events` where this component isn't
    * mounted at all. The viewport override itself lives behind each shell's
-   * own header menu (`KitMenu`, mobile polish feedback item 5) — the shared
-   * header's `[header-trailing]` slot and `LocalPanelMobile`'s shared
-   * `MobileTitlebar` menu slot — rather than an always-visible strip above
-   * both. */
+   * own header menu (`KitMenu`, mobile polish feedback item 5) — the app
+   * root's `AppHeader` and `MobileTitlebar` (issue #325), not this component
+   * — rather than an always-visible strip above both. */
   protected readonly viewport = inject(ViewportService);
 
   protected readonly mode = this.viewport.mode;
@@ -131,37 +131,6 @@ export class LocalPanel {
    * what were five separate query injections here (asks, escalations,
    * takeovers, status, environments). */
   protected readonly dashboardQuery = injectRunnerDashboardQuery();
-
-  /** The header's connection cell (issue #131) — `ok` once the dashboard
-   * read resolves, `offline` on a failed read, `connecting…` for the pending
-   * gap before the first read settles. Never the dead `'—'` placeholder the
-   * header used to carry: this is real health, derived from the same query
-   * every other hub-free rail on this panel already polls. */
-  protected readonly connection = computed<string>(() => {
-    if (this.dashboardQuery.isPending()) return 'connecting…';
-    if (this.dashboardQuery.isError()) return 'offline';
-    return 'ok';
-  });
-
-  /** The header's live stat cells (issue #131) — environments in use/capacity
-   * off the environments pool, active agent leases/capacity off the runner
-   * section's `capacities`. Withheld (`[]`) until the dashboard read has
-   * resolved at least once, the same stance the header's own `spendToday`
-   * cell takes rather than show a misleading `$0.00` — a confident `Envs
-   * 0/0` before the first read would be the same lie one cell over.
-   * `isPending()` is only `true` for that initial gap (never on a background
-   * 5s-poll refetch), so this withholds once, on mount, rather than flapping
-   * the cells on every poll. */
-  protected readonly headerStats = computed<readonly StatCell[]>(() => {
-    if (this.dashboardQuery.isPending()) return [];
-    const envs = this.dashboardQuery.data()?.environments?.items ?? [];
-    const envsUsed = envs.filter((env) => env.chunk_id != null).length;
-    const capacities = this.dashboardQuery.data()?.runner?.capacities;
-    return [
-      { key: 'envs', label: 'Envs', value: envsUsed, capacity: envs.length },
-      { key: 'agents', label: 'Agents', value: capacities?.used ?? 0, capacity: capacities?.max_agents ?? 0 },
-    ];
-  });
 
   /** The active + recently-closed leases, server-ordered; empty until the first read resolves. */
   private readonly leases = computed(() => this.leasesQuery.data() ?? []);

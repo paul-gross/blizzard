@@ -6,24 +6,24 @@ import { runnerClient } from 'fleet';
 import { stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
-import type { MachineChunkRow } from './local-panel';
-import { LocalPanelLayout } from './local-panel-layout';
+import { AppHeader } from './app-header';
 
 /**
- * The runner local-panel shell's half of `web:shell-sweep`
+ * The runner app root's desktop header's half of `web:shell-sweep`
  * (`blizzard-context:/verification/blizzard.md` bzh:web-shell-sweep) — a
- * real, headless-Chromium proof that this shell's own trailing cluster
- * (pause control + identity + profile menu, `local-panel-layout.ts`) never
- * lets the profile menu drift off-viewport, at every width from a wide
- * monitor down to a phone forced into desktop mode, and at every username
- * length from authless to a 64-character one.
+ * real, headless-Chromium proof that this header's own trailing cluster
+ * (pause control + identity + profile menu, `app-header.ts`) never lets the
+ * profile menu drift off-viewport, at every width from a wide monitor down to
+ * a phone forced into desktop mode, and at every username length from
+ * authless to a 64-character one.
  *
- * This is the shell where issue #163's actual defect lived: the identity
- * block is the header's one *content-dependent* width, so — unlike the hub
- * shell's own sweep — identity length is a real, load-bearing axis here, not
- * a no-op one.
+ * Moved here from `local-panel`'s own `local-panel-layout.shell-sweep.spec.ts`
+ * (issue #325) along with the header itself: this is the shell where issue
+ * #163's actual defect lived — the identity block is the header's one
+ * *content-dependent* width, so — unlike the hub shell's own sweep — identity
+ * length is a real, load-bearing axis here, not a no-op one.
  *
- * Excluded from the default `ng test local-panel` run (`angular.json`'s
+ * Excluded from the default `ng test runner` run (`angular.json`'s
  * `test.exclude`) because it needs `--browsers=ChromiumHeadless`, not jsdom —
  * run it via `npm run shell-sweep` (`web/scripts/shell-sweep.js`), which
  * drives both this file and the hub shell's counterpart
@@ -31,7 +31,7 @@ import { LocalPanelLayout } from './local-panel-layout';
  */
 async function render() {
   await TestBed.configureTestingModule({
-    imports: [LocalPanelLayout],
+    imports: [AppHeader],
     providers: [
       provideZonelessChangeDetection(),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
@@ -39,47 +39,7 @@ async function render() {
       provideRouter([]),
     ],
   }).compileComponents();
-  const fixture = TestBed.createComponent(LocalPanelLayout);
-  const machineChunk: MachineChunkRow = {
-    lease: {
-      lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
-      chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-      graph_id: 'gr_1',
-      node_id: 'nd_build',
-      node_name: 'build',
-      epoch: 2,
-      session_id: 'sess-77',
-      pid: 4821,
-      environment_id: 'beta',
-      workdir: '/ws/beta',
-      created_at: '2026-07-16T11:00:00.000Z',
-      last_heartbeat_at: '2026-07-16T11:59:26.000Z',
-      state: 'running',
-      closed_at: null,
-      closure_reason: null,
-    },
-    leases: [],
-    status: { label: 'RUNNING', tone: 'running' },
-  };
-  const defaults = {
-    connection: 'ok',
-    headerStats: [
-      { key: 'envs', label: 'Envs', value: 2, capacity: 4 },
-      { key: 'agents', label: 'Agents', value: 1, capacity: 2 },
-    ],
-    activeLeases: [machineChunk.lease],
-    leasesTriadState: 'ready',
-    chunksTriadState: 'ready',
-    chunksEmptyText: 'NO CHUNKS ON THIS MACHINE',
-    machineChunks: [machineChunk],
-    showAllChunks: false,
-    openAskCount: 0,
-    selectedChunkId: null,
-    selectedChunkLeases: [],
-    selectedStatus: null,
-    selectedEscalation: null,
-  };
-  for (const [key, value] of Object.entries(defaults)) fixture.componentRef.setInput(key, value);
+  const fixture = TestBed.createComponent(AppHeader);
   await fixture.whenStable();
   return fixture;
 }
@@ -98,7 +58,7 @@ function usernameOfLength(length: number): string {
   return 'a'.repeat(length);
 }
 
-describe('runner local-panel shell sweep (web:shell-sweep, issue #163/#171)', () => {
+describe('runner AppHeader shell sweep (web:shell-sweep, issue #163/#171/#325)', () => {
   for (const length of IDENTITY_LENGTHS) {
     it(`keeps the profile menu on-screen, hit-testable, and overflow-free at every width (username length ${length})`, async () => {
       const pageErrors: string[] = [];
@@ -140,13 +100,12 @@ describe('runner local-panel shell sweep (web:shell-sweep, issue #163/#171)', ()
           expect(hit, `${label}: nothing hit-tests at the menu's own center`).not.toBeNull();
           expect(menu!.contains(hit), `${label}: the menu's center hit-tests to something outside it`).toBe(true);
 
-          // Scoped to the header itself, not the whole document: this shell's
-          // three-column desktop body grid (`.cols`, fixed 340px/330px rails)
-          // is explicitly out of this sweep's scope (issue #171's own Out of
-          // Scope — "the sweep targets the shared shells and their projected
-          // chrome") — a forced-desktop phone is expected to overflow *there*,
-          // the same way forcing desktop mode on a phone always has; what must
-          // never overflow is the header chrome the escape hatch lives in.
+          // Scoped to the header itself, not a whole page: this header's
+          // consumer (the app root) also renders a nav strip and routed
+          // content beside it, out of this sweep's scope (issue #171's own
+          // Out of Scope — "the sweep targets the shared shells and their
+          // projected chrome") — what must never overflow is the header
+          // chrome the escape hatch lives in.
           const header = root.querySelector<HTMLElement>('[data-testid="board-header"]')!;
           expect(
             header.scrollWidth,

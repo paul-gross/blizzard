@@ -16,6 +16,7 @@
  */
 
 export * from './lib/kit';
+export * from './lib/app-shell';
 export * from './lib/auth';
 export * from './lib/admin';
 export * from './lib/design';

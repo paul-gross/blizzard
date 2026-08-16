@@ -88,10 +88,10 @@ export type { EditGraphEvent } from './chunk-facts';
           />
           <fleet-chunk-detail-issue-pane [workItems]="workItems()" />
         </section>
-        <section class="d-sec" aria-labelledby="chunk-timeline-heading">
+        <section class="d-sec d-sec--flush" aria-labelledby="chunk-timeline-heading">
           <fleet-chunk-detail-timeline [detail]="detail()" />
         </section>
-        <section class="d-sec" aria-labelledby="chunk-artifacts-heading">
+        <section class="d-sec d-sec--flush" aria-labelledby="chunk-artifacts-heading">
           <fleet-chunk-detail-artifacts [detail]="detail()" />
         </section>
       </div>
@@ -170,6 +170,13 @@ export type { EditGraphEvent } from './chunk-facts';
       overflow-y: auto;
       min-height: 0;
       min-width: 0;
+    }
+    /* The node-history and artifacts sections now pad their own host
+       (chunk-timeline.ts, chunk-artifacts.ts) — a plain \`.d-sec\` here would
+       double that padding. The work-item section keeps \`.d-sec\`'s padding: its
+       children (ChunkFacts and siblings) supply none of their own. */
+    .d-sec--flush {
+      padding: 0;
     }
     .s-head {
       margin-bottom: 6px;

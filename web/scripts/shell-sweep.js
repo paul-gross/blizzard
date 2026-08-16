@@ -31,10 +31,11 @@
  *     evaluate — plus the same page's takeover panel (blizzard#251) and its
  *     Transcripts tab (blizzard#248), the latter both standalone and through
  *     its real ChunkPage → container → tab chain.
- *   - projects/local-panel/src/lib/local-panel-layout.shell-sweep.spec.ts —
- *     the runner's local-panel shell (LocalPanelLayout), swept over width ×
- *     signed-in username length — the axis issue #163's actual defect lived
- *     on: same profile-menu-drift proof.
+ *   - projects/runner/src/app/nav/app-header.shell-sweep.spec.ts — the
+ *     runner app root's own desktop header (`AppHeader`, moved out of
+ *     `LocalPanelLayout` by issue #325), swept over width × signed-in
+ *     username length — the axis issue #163's actual defect lived on: same
+ *     profile-menu-drift proof.
  *   - projects/local-panel/src/lib/local-panel-mobile.shell-sweep.spec.ts —
  *     the runner's mobile chunk list (`LocalPanelMobile` → `ChunkCard`,
  *     issue #176): a five-work-item chunk card's per-line
@@ -71,7 +72,7 @@ const { spawnSync } = require('node:child_process');
 const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk/chunk-page-layout.shell-sweep.spec.ts' },
-  { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-panel-layout.shell-sweep.spec.ts' },
+  { project: 'runner', spec: 'projects/runner/src/app/nav/app-header.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-panel-mobile.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/runners/runner-view.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/transcript-panel.shell-sweep.spec.ts' },

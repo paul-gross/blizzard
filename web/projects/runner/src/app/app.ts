@@ -2,14 +2,27 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { RouterOutlet } from '@angular/router';
 import { RunnerLiveUpdates, SessionRecovery, SessionRecoveryView } from 'local-panel';
 
-import { ViewportService } from 'fleet';
+import { AppShell, ViewportService } from 'fleet';
+import { AppHeader } from './nav/app-header';
 import { AppNav } from './nav/app-nav';
 import { MobileTabBar } from './nav/mobile-tab-bar';
+import { MobileTitlebar } from './nav/mobile-titlebar';
 
 /**
  * The runner local-panel app — a thin entrypoint that renders the routed
  * panel shell. It composes the shared fleet library (design tokens, and the
  * fleet views as they arrive) plus the runner-only local-panel library.
+ *
+ * The app header — {@link AppHeader} (desktop) or {@link MobileTitlebar}
+ * (mobile) — is app-root chrome now (issue #325), persisting across `/board`,
+ * `/events`, and `/board/chunk/:chunkId` exactly the way the hub's own
+ * `BoardHeader`/`MobileTitlebar` pair does. It used to live *inside*
+ * `LocalPanelLayout`/`LocalPanelMobile`, below the `<router-outlet>` anchor —
+ * so it rendered under the `Board`/`Events` tab strip on `/board` and not at
+ * all on the other two routes. The shared {@link AppShell} (`fleet`) is what
+ * enforces the fix by construction: header above nav above routed content,
+ * the same fixed slot order the hub app root composes it in, so the two apps
+ * cannot independently drift into different orderings again.
  *
  * Routed tab shell (issue #313): a top {@link AppNav} strip (desktop) or a
  * persistent bottom {@link MobileTabBar} (mobile) frames the routed content
@@ -42,33 +55,37 @@ import { MobileTabBar } from './nav/mobile-tab-bar';
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AppNav, MobileTabBar, RouterOutlet, SessionRecoveryView],
+  imports: [AppHeader, AppNav, AppShell, MobileTabBar, MobileTitlebar, RouterOutlet, SessionRecoveryView],
   template: `
     @if (recovering()) {
       <local-session-recovery (retry)="onRetry()" />
     } @else {
-      <div class="shell">
+      <fleet-app-shell>
+        <!-- Each slotted node sits in its own @if/@else pair rather than
+             sharing an @else with a sibling: a control-flow branch with more
+             than one root node cannot resolve which named ng-content slot
+             each child belongs to (NG8011), so AppShell's ordering
+             guarantee only holds when every projected node is the sole root
+             of its own branch. -->
+        @if (mobile()) {
+          <app-mobile-titlebar shell-header />
+        } @else {
+          <app-header shell-header />
+        }
         @if (!mobile()) {
-          <app-nav />
+          <app-nav shell-nav />
         }
         <router-outlet />
         @if (mobile()) {
-          <app-mobile-tab-bar />
+          <app-mobile-tab-bar shell-tab-bar />
         }
-      </div>
+      </fleet-app-shell>
     }
   `,
   styles: `
     :host {
       display: block;
       height: 100%;
-    }
-    .shell {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      min-height: 0;
-      overflow: hidden;
     }
     /* router-outlet is an empty anchor element the router inserts routed
        components after — it carries no visual size of its own. */
