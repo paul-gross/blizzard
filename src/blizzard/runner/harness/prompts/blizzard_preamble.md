@@ -45,6 +45,33 @@ the only path.
 
 The machine-local facts table below names your runner, chunk, lease, and held environment(s) for this spawn.
 
+## Never end a turn with work you still need running
+
+Your session is a headless process, and **ending your turn ends the process**. Every background shell it started is
+killed mid-run at that moment — not orphaned and still going, actually dead, with its output truncated wherever it
+happened to be.
+
+Your coding harness may still offer to run a command in the background and promise to notify you when it completes. That
+promise is written for an interactive session that stays alive to receive the notification. **You are not one.** Nothing
+wakes you when a background command finishes; the only thing that resumes your session is the runner coming back to ask
+for your judgement, and by then whatever you left running is dead.
+
+So the rule is about **how your turn ends**, not about which flag you pass:
+
+- **Backgrounding is fine when you poll it to completion in the same turn.** Kicking off several long commands at once
+  and polling each to completion is a legitimate, useful pattern — it works here exactly as it does interactively.
+- **Backgrounding is fatal when you end your turn while it is pending.** If you are not going to poll it, run it in the
+  foreground with a generous timeout instead — test suites, builds, migrations.
+
+Two consequences worth stating plainly:
+
+- **At a judgement prompt, "I'll wait for it" is not available.** If you are being asked for a verdict and your evidence
+  is not in hand, get it *now* — foreground, or background and poll — and then answer. Ending the turn to wait produces
+  a verdict-less attempt, and a verdict-less attempt is a failing one.
+- **An orphan notification is not a reason to relaunch the same way.** If you are told that a previous session's
+  background task has no completion record, that task is already dead. Re-run it and *stay with it until it finishes* —
+  relaunching it in the background and ending your turn reproduces exactly the failure you were just told about.
+
 ## What this preamble covers
 
 Everything above ships with blizzard and holds in every deployment: your identity as a fleet worker, your worker-facing

@@ -1932,6 +1932,10 @@ export type WorkspacePromptResponse = {
      * Prompt
      */
     prompt: string;
+    /**
+     * Source
+     */
+    source?: 'override' | 'config';
 };
 
 export type ListAsksApiAsksGetData = {
@@ -2849,6 +2853,22 @@ export type ListOpenTakeoversApiTakeoversGetResponses = {
 };
 
 export type ListOpenTakeoversApiTakeoversGetResponse = ListOpenTakeoversApiTakeoversGetResponses[keyof ListOpenTakeoversApiTakeoversGetResponses];
+
+export type ClearWorkspacePromptApiWorkspacePromptDeleteData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/workspace-prompt';
+};
+
+export type ClearWorkspacePromptApiWorkspacePromptDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkspacePromptResponse;
+};
+
+export type ClearWorkspacePromptApiWorkspacePromptDeleteResponse = ClearWorkspacePromptApiWorkspacePromptDeleteResponses[keyof ClearWorkspacePromptApiWorkspacePromptDeleteResponses];
 
 export type ReadWorkspacePromptApiWorkspacePromptGetData = {
     body?: never;

@@ -462,12 +462,34 @@ against 17 for a bare resume, nothing like the full-history rewrite a cross-mode
 ### The worker spawn preamble
 
 A worker's **first** spawn on a session carries three ordered layers ahead of the node's own envelope prompt: (1) a
-baked-in blizzard preamble — framing the worker as operating inside the fleet and naming its worker-facing
-`blizzard runner` verbs (`ask`, `work-items`) — (2) the operator's own `workspace_prompt` prose, layered on top when
-set, and (3) a machine-local facts table (runner/chunk/lease identity, held environment(s)). Layer 1 closes by stating
-that division of labor for the worker's own benefit; read the shipped text
+baked-in blizzard preamble — framing the worker as operating inside the fleet, naming its worker-facing
+`blizzard runner` verbs (`ask`, `work-items`), and stating the turn-ending discipline a headless session is held to
+(nothing survives the turn that started it) — (2) the operator's own `workspace_prompt` prose, layered on top when set,
+and (3) a machine-local facts table (runner/chunk/lease identity, held environment(s)). Layer 1 closes by stating that
+division of labor for the worker's own benefit; read the shipped text
 (`src/blizzard/runner/harness/prompts/blizzard_preamble.md`) before authoring layer 2, so your prose adds
 deployment-specific policy rather than re-establishing framing the worker already has.
+
+#### Adopting a packaged sample instead of authoring layer 2
+
+Blizzard ships a corpus of workspace prompts — one per deployment shape — so a workspace whose shape is already
+represented names one rather than writing layer 2 from scratch. `blizzard runner prompt list` names what this wheel
+carries, and `blizzard runner prompt show <name>` prints one. A sample is never applied by default; it takes a knob:
+
+```toml
+workspace_prompt_package = "winter"
+```
+
+That knob resolves the named sample out of the installed wheel at `host` startup, so nothing lands in the runtime root
+and a redeploy carrying a changed sample applies it on the next restart. It is **exclusive** with `workspace_prompt` and
+`workspace_prompt_file` — those two keep their own file-wins-over-inline precedence, and setting the package knob
+alongside either fails startup rather than ranking them. A name the corpus does not carry fails startup too, listing
+what it does carry.
+
+To fork a sample instead of tracking it, `blizzard runner prompt install <name>` copies it into the runtime root and
+sets `workspace_prompt_file` at the copy — never the package knob, so `blizzard runner prompt diff <name>` always has a
+local file to compare and can report drift from the sample it came from. `blizzard runner prompt status` reports which
+source the effective prompt resolves from, and exits non-zero when a source is configured but resolves to nothing.
 
 #### What the packaged graphs delegate to layer 2
 
@@ -505,6 +527,11 @@ That announcement is the operator-visible reason `PUT /api/workspace-prompt` is 
 to the chunk's next resumed node-step, and the worker is told it is reading something new rather than being handed
 replacement prose in the same position the superseded block occupied. `runner_prompt` behaves the same way once it
 moves, but it is a startup knob — reaching a running fleet still takes the restart the section below describes.
+
+An override is a standing one: it wins over every config knob until it is removed, and replacing it with empty text sets
+a standing *empty* prompt rather than restoring the configured one. `DELETE /api/workspace-prompt` is the way back — it
+drops the override so the config resolves again, which is what makes the override usable as a live scratchpad for prose
+you intend to land in the corpus.
 
 **Layer 3 is unconditional on every path.** The facts table is re-rendered per attempt around a freshly minted
 `lease_id`, and a worker whose table named a dead lease could not address the fleet at all. A fresh spawn, and any node
@@ -830,10 +857,12 @@ brake — same "start no processes on this machine" semantics, live workers left
 `blizzard hub status` names the reason on a ceiling-engaged runner so you can tell it apart from a hand-issued pause.
 
 With no daemon running, the verbs report that rather than reading the store behind its back — a **client** verb reaches
-the store only through the daemon that owns it. The exceptions are the offline maintenance verbs, which open the store
-themselves and are therefore run with the daemon *stopped*: `migrate`, `tick`, and the two transcript verbs
+the store only through the daemon that owns it. Two kinds of verb open the store directly instead. The **writing**
+offline maintenance verbs are therefore run with the daemon *stopped*: `migrate`, `tick`, and the two transcript verbs
 [`transcript backfill` and `transcript reship`](#shipping-transcript-content-to-the-hub--the-outbound-lane-off-by-default),
-whose own refusal enforces it. What you see from a client verb depends on how the daemon left:
+whose own refusal enforces it. The **read-only** `prompt status`, `prompt diff`, and `prompt install` open it for one
+query — whether a workspace-prompt override stands — and need no such refusal, because the single-writer constraint the
+refusal protects binds writers only. What you see from a client verb depends on how the daemon left:
 
 | How it stopped             | On disk                               | What a local verb reports                                                 |
 | -------------------------- | ------------------------------------- | ------------------------------------------------------------------------- |

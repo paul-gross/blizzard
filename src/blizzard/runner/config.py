@@ -15,6 +15,7 @@ from typing import Any
 
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
+from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
 
 CONFIG_FILENAME = "blizzard-runner.toml"
@@ -40,6 +41,7 @@ ENV_HARNESS_PERMISSION_MODE = "BZ_HARNESS_PERMISSION_MODE"
 ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
 ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates
 ENV_WORKSPACE_PROMPT = "BZ_WORKSPACE_PROMPT"  # the runner-owned workspace prompt, inline (issue #17)
+ENV_WORKSPACE_PROMPT_PACKAGE = "BZ_WORKSPACE_PROMPT_PACKAGE"  # a packaged workspace-prompt sample, by name (#344)
 ENV_RUNNER_PROMPT = "BZ_RUNNER_PROMPT"  # the blizzard-preamble override, inline (issue #103)
 # Where the harness writes session transcripts (issue #29); empty resolves to a default at
 # the composition root, never here.
@@ -312,6 +314,8 @@ class RunnerConfig:
     #: one effective value (:meth:`resolved_workspace_prompt`); the file wins when set.
     workspace_prompt: str = ""
     workspace_prompt_file: str = ""
+    #: A packaged workspace-prompt sample, by name (issue #344); exclusive with the two above.
+    workspace_prompt_package: str = ""
     #: The override of the baked-in blizzard preamble (issue #103), prepended ahead of
     #: :attr:`workspace_prompt`; empty resolves to the baked default.
     runner_prompt: str = ""
@@ -421,11 +425,21 @@ class RunnerConfig:
         return f"sqlite:///{(root / DATA_DIRNAME / 'runner.db').resolve()}"
 
     def resolved_workspace_prompt(self) -> str:
-        """The effective static workspace prompt (issue #17), resolved from its two knobs.
+        """The effective static workspace prompt (issue #17), resolved from its three knobs.
 
-        ``workspace_prompt_file`` wins when set, resolving a relative path under
-        :attr:`root`. A configured-but-missing file raises, which is not the same as an
-        *absent* prompt: both knobs empty is valid and returns ``""``."""
+        ``workspace_prompt_package`` names a packaged sample and is exclusive with the other two,
+        which keep their file-wins-over-inline precedence; a configured-but-missing sample or file
+        raises, while all three empty is valid and returns ``""``."""
+        if self.workspace_prompt_package:
+            self._sole_workspace_prompt_knob()
+            try:
+                return PACKAGED.text(self.workspace_prompt_package)
+            except UnknownWorkspacePromptSample as exc:
+                packaged = ", ".join(PACKAGED.names) or "none"
+                raise ConfigError(
+                    f"workspace_prompt_package names no packaged sample: "
+                    f"{self.workspace_prompt_package} (packaged: {packaged})"
+                ) from exc
         if self.workspace_prompt_file:
             path = Path(self.workspace_prompt_file)
             if not path.is_absolute():
@@ -434,6 +448,19 @@ class RunnerConfig:
                 raise ConfigError(f"workspace_prompt_file does not exist: {path}")
             return path.read_text()
         return self.workspace_prompt
+
+    def _sole_workspace_prompt_knob(self) -> None:
+        """Reject a named sample set alongside either text knob — the pair has no precedence rule."""
+        conflicts = [
+            name
+            for name, value in (
+                ("workspace_prompt_file", self.workspace_prompt_file),
+                ("workspace_prompt", self.workspace_prompt),
+            )
+            if value
+        ]
+        if conflicts:
+            raise ConfigError(f"workspace_prompt_package is exclusive with {', '.join(conflicts)} — set one of them")
 
     def resolved_runner_prompt(self) -> str:
         """The effective override for the blizzard preamble (issue #103), from its two knobs.
@@ -490,6 +517,8 @@ class RunnerConfig:
             # Empty on a fresh scaffold; seeded from the environment so `init` can inject
             # a default without hand-editing (issue #17).
             workspace_prompt=os.environ.get(ENV_WORKSPACE_PROMPT, ""),
+            # Seeded the same way, so `init` can adopt a packaged sample by name (issue #344).
+            workspace_prompt_package=os.environ.get(ENV_WORKSPACE_PROMPT_PACKAGE, ""),
             # Empty on a fresh scaffold means the baked-in preamble is used (issue #103).
             runner_prompt=os.environ.get(ENV_RUNNER_PROMPT, ""),
             transcripts_root=os.environ.get(ENV_TRANSCRIPTS_ROOT, ""),
@@ -511,6 +540,7 @@ class RunnerConfig:
         # (\n, \t, \", \\, \uXXXX), so a multi-line inline prompt round-trips intact.
         workspace_prompt = json.dumps(self.workspace_prompt)
         workspace_prompt_file = json.dumps(self.workspace_prompt_file)
+        workspace_prompt_package = json.dumps(self.workspace_prompt_package)
         runner_prompt = json.dumps(self.runner_prompt)
         runner_prompt_file = json.dumps(self.runner_prompt_file)
         return (
@@ -547,10 +577,13 @@ class RunnerConfig:
             f"gates = [{gates}]\n"
             "\n# The runner-owned workspace prompt prepended to a worker spawn (issue #17).\n"
             "# `workspace_prompt` is inline text; `workspace_prompt_file` (a path) wins when set.\n"
+            "# `workspace_prompt_package` names a sample shipped in the wheel and may not be\n"
+            "# combined with either (`blizzard runner prompt list` names them; issue #344).\n"
             "# Empty = table-only injection. Replace at runtime via PUT /api/workspace-prompt.\n"
             "# A resumed spawn re-sends this only when it changed, announced as updated.\n"
             f"workspace_prompt = {workspace_prompt}\n"
             f"workspace_prompt_file = {workspace_prompt_file}\n"
+            f"workspace_prompt_package = {workspace_prompt_package}\n"
             "\n# The operator's override of the baked-in blizzard preamble (issue #103) — layer 1\n"
             "# of the spawn preamble, ahead of `workspace_prompt` above. `runner_prompt` is inline\n"
             "# text; `runner_prompt_file` (a path) wins when set. Empty = the baked default\n"
@@ -677,6 +710,7 @@ class RunnerConfig:
             gates=tuple(str(g) for g in raw.get("gates", ())),
             workspace_prompt=str(raw.get("workspace_prompt", "")),
             workspace_prompt_file=str(raw.get("workspace_prompt_file", "")),
+            workspace_prompt_package=str(raw.get("workspace_prompt_package", "")),
             runner_prompt=str(raw.get("runner_prompt", "")),
             runner_prompt_file=str(raw.get("runner_prompt_file", "")),
             transcripts_root=str(raw.get("transcripts_root", "")),

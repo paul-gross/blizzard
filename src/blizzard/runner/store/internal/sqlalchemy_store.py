@@ -1277,6 +1277,14 @@ class SqlAlchemyRunnerStore:
                 )
         _log.info("workspace prompt override set", workspace_id=workspace_id, length=len(prompt))
 
+    def clear_workspace_prompt(self, workspace_id: str) -> bool:
+        with self._begin() as conn:
+            deleted = conn.execute(
+                workspace_prompt.delete().where(workspace_prompt.c.workspace_id == workspace_id)
+            ).rowcount
+        _log.info("workspace prompt override cleared", workspace_id=workspace_id, existed=bool(deleted))
+        return bool(deleted)
+
     def set_route_token(self, chunk_id: str, *, token: str, at: datetime) -> None:
         with self._begin() as conn:
             existing = conn.execute(

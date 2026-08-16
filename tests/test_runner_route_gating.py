@@ -32,6 +32,7 @@ _HUMAN: set[tuple[str, str]] = {
     ("GET", "/api/fleet-summary"),
     ("GET", "/api/workspace-prompt"),
     ("PUT", "/api/workspace-prompt"),
+    ("DELETE", "/api/workspace-prompt"),
     ("GET", "/api/runner"),
     ("PATCH", "/api/runner"),
     ("GET", "/api/environments"),

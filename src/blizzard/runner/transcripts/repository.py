@@ -12,12 +12,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
 
-#: The shared turn wire vocabulary — closes ``TurnSegmentView.kind`` too (blizzard#248 D1),
-#: widened for thinking/unlinked-sidechain (D2); ``ask``/``verdict`` stay deferred, not derivable here.
+#: The shared turn wire vocabulary (blizzard#248 D1/D2); ``ask``/``verdict`` stay deferred.
 TurnKind = Literal["env", "asst", "tool", "thinking", "sidechain"]
 
-#: Why a transcript is unavailable — all three are ordinary, expected states of a
-#: healthy agent, never a fault on their own; only ``unreadable`` logs at ERROR.
+#: Why a transcript is unavailable — all three are ordinary states; only ``unreadable`` logs at ERROR.
 TranscriptUnavailable = Literal["spawning", "not_found", "unreadable"]
 
 #: Which side answered a resolved transcript (D1) — the wire's ``provenance`` field.
@@ -38,9 +36,7 @@ class ToolCall:
     tool_use_id: str | None
     output: str | None
     output_truncated: bool
-    #: This turn carries only a late-arriving ``output`` for the call naming the same
-    #: ``tool_use_id``, not a call of its own — the reader folds it and drops this turn.
-    #: Never set on the local read, which is cold and links its own results.
+    #: A late-arriving ``output`` for the same ``tool_use_id``; the reader folds and drops this turn.
     output_patch: bool = False
 
 
@@ -55,8 +51,7 @@ class Sidechain:
     agent_type: str | None
     link: str
     turns: list[Turn]
-    #: The ``tool_use_id`` of the call that spawned this conversation, when it shipped in an
-    #: earlier record than the conversation did — the handle a reader nests it back under.
+    #: The spawning call's ``tool_use_id`` when it shipped earlier — the handle a reader nests under.
     parent_tool_use_id: str | None = None
 
 

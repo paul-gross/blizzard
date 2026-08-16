@@ -17,8 +17,9 @@ from blizzard.hub.config import ENV_HOST as HUB_ENV_HOST
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
 from blizzard.hub.config import PRODUCES_ENFORCE, HubConfig, WorkSourceConfig
 from blizzard.hub.config import ConfigError as HubConfigError
-from blizzard.runner.config import DEFAULT_RUNNER_CEILING_WINDOW_HOURS, RunnerConfig
+from blizzard.runner.config import DEFAULT_RUNNER_CEILING_WINDOW_HOURS, ConfigError, RunnerConfig
 from blizzard.runner.config import ENV_PORT as RUNNER_ENV_PORT
+from blizzard.runner.harness.workspace_prompts import PACKAGED
 
 
 @pytest.mark.unit
@@ -111,6 +112,57 @@ def test_workspace_prompt_file_wins_and_resolves_relative_to_root(tmp_path: Path
         workspace_prompt_file="prompt.md",
     )
     assert config.resolved_workspace_prompt() == "# Fleet worker\nFrom a file."
+
+
+@pytest.mark.unit
+def test_workspace_prompt_package_resolves_a_packaged_sample(tmp_path: Path) -> None:
+    """A named sample is resolved out of the wheel — no file in the runtime root at all."""
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url=RunnerConfig.default_db_url(tmp_path),
+        workspace_prompt_package="winter",
+    )
+    assert config.resolved_workspace_prompt() == PACKAGED.text("winter")
+
+
+@pytest.mark.unit
+def test_workspace_prompt_package_rejects_an_unknown_sample(tmp_path: Path) -> None:
+    """Fail fast at startup, naming the corpus, rather than spawning workers with no policy."""
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://", workspace_prompt_package="no-such-sample")
+    with pytest.raises(ConfigError) as caught:
+        config.resolved_workspace_prompt()
+    assert "no-such-sample" in str(caught.value)
+    assert "winter" in str(caught.value)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("knob", ["workspace_prompt", "workspace_prompt_file"])
+def test_workspace_prompt_package_is_exclusive_with_the_text_knobs(tmp_path: Path, knob: str) -> None:
+    """The pair has no precedence rule, so the ambiguity is refused instead of silently ranked."""
+    base = RunnerConfig(root=tmp_path, db_url="sqlite://", workspace_prompt_package="winter")
+    config = (
+        dataclasses.replace(base, workspace_prompt="something")
+        if knob == "workspace_prompt"
+        else dataclasses.replace(base, workspace_prompt_file="something")
+    )
+    with pytest.raises(ConfigError) as caught:
+        config.resolved_workspace_prompt()
+    assert knob in str(caught.value)
+
+
+@pytest.mark.unit
+def test_workspace_prompt_package_round_trips_through_toml(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    written = RunnerConfig(root=root, db_url="sqlite://", workspace_prompt_package="winter")
+    (root / "blizzard-runner.toml").write_text(written.to_toml())
+    assert RunnerConfig.load(root).workspace_prompt_package == "winter"
+
+
+@pytest.mark.unit
+def test_workspace_prompt_package_env_seeds_scaffold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BZ_WORKSPACE_PROMPT_PACKAGE", "winter")
+    assert RunnerConfig.scaffold(tmp_path).workspace_prompt_package == "winter"
 
 
 @pytest.mark.unit

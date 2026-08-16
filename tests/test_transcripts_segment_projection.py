@@ -1,9 +1,8 @@
 """``transcripts/internal/segment_projection.py`` — a hub segment's wire turns onto the
 runner's transcript read model (blizzard#249).
 
-Constructs :class:`TurnSegmentView` fixtures directly, so this file's job is the mapping
-itself — what survives it, and what it degrades rather than raising on — not the transport
-(pinned in ``test_runner_archived_transcript_repository.py``)."""
+Constructs :class:`TurnSegmentView` fixtures directly, so the job here is the mapping — what
+survives it and what it degrades on — not the transport."""
 
 from __future__ import annotations
 
@@ -175,10 +174,9 @@ def test_an_uncapped_tool_turn_stays_untruncated() -> None:
 
 @pytest.mark.unit
 def test_a_late_output_patch_keeps_its_flag_through_the_projection() -> None:
-    """The archived read is the route a closed lease's transcript takes, and it is the only
-    route that ever carries a late link — a cold local read links its own results. Dropping
-    the flag here leaves the panel unable to fold the patch, rendering the very defect
-    blizzard#338 fixed: a tool card with no output beside a nameless one that holds it."""
+    """The archived read is the only route carrying a late link — a cold local read links its
+    own results. Dropping the flag leaves the panel unable to fold the patch, the defect
+    blizzard#338 fixed."""
     patch = _tool(name="", output="3 blockers", output_patch=True)
 
     result = to_turn(_turn(0, "tool", tool=patch), 0)
@@ -213,9 +211,8 @@ _FOLDED_TOOL_FIELDS = {"input_truncated": "folds into Turn.truncated"}
 @pytest.mark.unit
 @pytest.mark.parametrize(("view", "domain"), [(ToolCallSegmentView, ToolCall), (SidechainSegmentView, Sidechain)])
 def test_every_wire_field_has_a_domain_counterpart(view: type, domain: type) -> None:
-    """A field-set guard, not a behavior test: the projection is hand-written per field, so
-    a field added to the segment wire is silently dropped here until someone maps it. That
-    is how ``output_patch`` and ``parent_tool_use_id`` reached a published runner schema the
-    runner could never populate. Fails on the next one instead."""
+    """A field-set guard: the projection is hand-written per field, so a new wire field is
+    silently dropped until mapped — how ``output_patch`` and ``parent_tool_use_id`` reached a
+    schema the runner could never populate."""
     unmapped = set(view.model_fields) - {f.name for f in fields(domain)} - set(_FOLDED_TOOL_FIELDS)
     assert unmapped == set(), f"{view.__name__} fields reach no {domain.__name__} field: {sorted(unmapped)}"

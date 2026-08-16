@@ -898,6 +898,13 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Set the runtime workspace-prompt override (upsert) — read at spawn (issue #17)."""
         ...
 
+    def clear_workspace_prompt(self, workspace_id: str) -> bool:
+        """Drop the runtime workspace-prompt override, returning whether one was there (#344).
+
+        Removing the row is what distinguishes clearing from overriding with empty text: the
+        absent row is the only state that resolves back to the configured prompt."""
+        ...
+
     def set_route_token(self, chunk_id: str, *, token: str, at: datetime) -> None:
         """Stash a won claim's plaintext route token (upsert) — issue #84a.
 

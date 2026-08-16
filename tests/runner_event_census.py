@@ -201,6 +201,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     # --- operator config -------------------------------------------------------------
     "set_workspace_prompt": Silent("operator-set runtime config; no kind in the vocabulary represents it."),
+    "clear_workspace_prompt": Silent("the same operator-set runtime config, removed; no kind represents it either."),
     "set_route_token": Silent(_INTERNAL_BOOKKEEPING + " (won-claim capability token)"),
     # --- worker-submitted artifacts ---------------------------------------------------
     "record_attachment": Silent(

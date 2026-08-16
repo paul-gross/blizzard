@@ -334,6 +334,16 @@ def test_workspace_prompt_empty_override_is_distinct_from_absent(tmp_path) -> No
     assert store.workspace_prompt_override("ws1") == ""
 
 
+@pytest.mark.unit
+def test_workspace_prompt_clear_removes_the_row_and_reports_what_it_found(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    # Absence is the only state that resolves back to the configured prompt (issue #344).
+    store = _store(tmp_path)
+    store.set_workspace_prompt("ws1", prompt="", at=_NOW)
+    assert store.clear_workspace_prompt("ws1") is True
+    assert store.workspace_prompt_override("ws1") is None
+    assert store.clear_workspace_prompt("ws1") is False
+
+
 def _sample(kind: UsageKind = "spawn", cost: float | None = 1.5, model: str = "claude-x") -> UsageSample:
     return UsageSample(
         kind=kind,
