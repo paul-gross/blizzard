@@ -26,16 +26,9 @@ from blizzard.runner.harness.transcript import (
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.store.repository import TranscriptSegmentLedgerRow
+from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
 
 _log = get_logger("blizzard.runner.loop")
-
-#: The runner's own per-record cap (D4) — held below the hub's `RECORD_MAX_BYTES`, which
-#: REJECTS what this one merely shrinks; `test_record_caps.py` asserts that ordering.
-TRANSCRIPT_RECORD_MAX_BYTES = 8 * 1024 * 1024
-
-#: The per-chunk budget (D4) — the sum of `shipped_bytes` across the chunk's segments, which
-#: counts whole serialized records and so overcounts what the hub bills (its turns payload alone).
-CHUNK_TRANSCRIPT_MAX_BYTES = 64 * 1024 * 1024
 
 #: Backpressure cap on total unacked bytes across the WHOLE outbound buffer, distinct
 #: from `CHUNK_TRANSCRIPT_MAX_BYTES`'s per-chunk shipped total — self-clears as the drain catches up.
@@ -88,6 +81,19 @@ class TranscriptPump:
     of transcript records."""
 
     ctx: LoopContext
+
+    @property
+    def _record_max_bytes(self) -> int:
+        """The configured per-record cap, or the module default (blizzard#338)."""
+        configured = self.ctx.config.transcript_record_max_bytes
+        return TRANSCRIPT_RECORD_MAX_BYTES if configured is None else configured
+
+    @property
+    def _chunk_max_bytes(self) -> int:
+        """The configured per-chunk budget, or the module default (blizzard#338). Widened for a
+        backfill window: a re-ship spends this budget a second time over the same chunk."""
+        configured = self.ctx.config.transcript_chunk_max_bytes
+        return CHUNK_TRANSCRIPT_MAX_BYTES if configured is None else configured
 
     def run(self, *, deadline: datetime | None = None) -> None:
         """Pump every open segment. ``deadline`` bounds only how many ADDITIONAL segments a
@@ -170,8 +176,9 @@ class TranscriptPump:
         own comment. Otherwise ``_CAUGHT_UP``/``_INCOMPLETE`` from ``batch.complete``."""
         if segment.shipping_stopped_reason is not None:
             return _CAUGHT_UP  # permanently stopped past the per-chunk budget (D4)
+        chunk_max_bytes = self._chunk_max_bytes
         budget_before = self.ctx.store.chunk_transcript_shipped_bytes(segment.chunk_id)
-        if budget_before >= CHUNK_TRANSCRIPT_MAX_BYTES:
+        if budget_before >= chunk_max_bytes:
             self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
             return _CAUGHT_UP
         if self.ctx.store.outstanding_transcript_buffer_bytes() >= MAX_BUFFERED_BYTES:
@@ -226,14 +233,16 @@ class TranscriptPump:
             return _STUCK
 
         turn_range_start = segment.shipped_turns
-        records, any_shrunk, any_unshippable = _build_records(segment, batch, turn_range_start)
+        records, any_shrunk, any_unshippable = _build_records(
+            segment, batch, turn_range_start, record_max_bytes=self._record_max_bytes
+        )
         # The source's own tail-cap signal (D4) rides the LAST record this batch produced.
         if batch.truncated or batch.sidechain_truncated:
             records[-1]["record_truncated"] = True
         payloads = [json.dumps(record) for record in records]
         total_bytes = sum(len(p.encode("utf-8")) for p in payloads)
 
-        if budget_before + total_bytes > CHUNK_TRANSCRIPT_MAX_BYTES:
+        if budget_before + total_bytes > chunk_max_bytes:
             # All-or-nothing: every record here advances the SAME cursor write, so
             # shipping only some would silently lose the rest's turns forever.
             self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
@@ -392,9 +401,13 @@ _GroupOutcome = Literal["ok", "shrunk", "unshippable"]
 
 
 def _build_records(
-    segment: TranscriptSegmentLedgerRow, batch: TranscriptBatch, turn_range_start: int
+    segment: TranscriptSegmentLedgerRow,
+    batch: TranscriptBatch,
+    turn_range_start: int,
+    *,
+    record_max_bytes: int = TRANSCRIPT_RECORD_MAX_BYTES,
 ) -> tuple[list[dict[str, Any]], bool, bool]:
-    """Greedily pack ``batch.turns`` into ``TRANSCRIPT_RECORD_MAX_BYTES``-or-smaller records
+    """Greedily pack ``batch.turns`` into ``record_max_bytes``-or-smaller records
     closing a group once the next turn's estimated cost would push it over cap; each
     closed group's REAL size is then verified (and shrunk/emptied if needed). A turn whose
     own cost alone exceeds the cap forms a group of one, scoping any fallback to it alone.
@@ -413,12 +426,12 @@ def _build_records(
         record["turns"] = wire_turns[start:end]
         payload = json.dumps(record)
         outcome: _GroupOutcome = "ok"
-        if len(payload.encode("utf-8")) > TRANSCRIPT_RECORD_MAX_BYTES:
-            record = _shrink_to_cap(record)
+        if len(payload.encode("utf-8")) > record_max_bytes:
+            record = _shrink_to_cap(record, record_max_bytes)
             record["record_truncated"] = True
             payload = json.dumps(record)
             outcome = "shrunk"
-            if len(payload.encode("utf-8")) > TRANSCRIPT_RECORD_MAX_BYTES:
+            if len(payload.encode("utf-8")) > record_max_bytes:
                 # Every shrinkable field here is already empty — ship an empty slice over
                 # just THIS group's claimed range, gapless, not the whole batch's.
                 record["turns"] = []
@@ -431,7 +444,7 @@ def _build_records(
     running = overhead
     for i, cost in enumerate(turn_costs):
         separator = _ARRAY_SEPARATOR_BYTES if group_start < i else 0
-        if group_start < i and running + separator + cost > TRANSCRIPT_RECORD_MAX_BYTES:
+        if group_start < i and running + separator + cost > record_max_bytes:
             close_group(group_start, i)
             group_start = i
             running = overhead
@@ -448,7 +461,6 @@ _SHRINK_MAX_PASSES = 20
 
 #: Margin applied to the target size a pass cuts down to, not the cut fraction.
 _SHRINK_OVERCUT = 1.15
-_SHRINK_TARGET_BYTES = int(TRANSCRIPT_RECORD_MAX_BYTES / _SHRINK_OVERCUT)
 
 
 def _flat_turns(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -520,7 +532,7 @@ def _byte_cost(text: str) -> int:
     return len(json.dumps(text))
 
 
-def _shrink_to_cap(record: dict[str, Any]) -> dict[str, Any]:
+def _shrink_to_cap(record: dict[str, Any], record_max_bytes: int = TRANSCRIPT_RECORD_MAX_BYTES) -> dict[str, Any]:
     """Shrink turn text and tool-output fields in place — including nested sidechain turns —
     until the serialized record fits the per-record cap (D4). Never drops a turn: every
     shrinkable field is cut proportionally to its share of the overshoot, not just the single
@@ -528,7 +540,7 @@ def _shrink_to_cap(record: dict[str, Any]) -> dict[str, Any]:
     still-over-cap result is the caller's own :data:`_RECORD_UNSHIPPABLE`)."""
     for _ in range(_SHRINK_MAX_PASSES):
         size = len(json.dumps(record).encode("utf-8"))
-        if size <= TRANSCRIPT_RECORD_MAX_BYTES:
+        if size <= record_max_bytes:
             break
         candidates = _shrink_candidates(record)
         shrinkable = sum(_byte_cost(holder[field]) for holder, field, _, _ in candidates)
@@ -536,7 +548,7 @@ def _shrink_to_cap(record: dict[str, Any]) -> dict[str, Any]:
             break  # nothing left to shrink; the cap stays exceeded by structure alone
         # A window many times over cap still keeps the fraction the budget allows, rather
         # than emptying every field in the first pass.
-        overshoot = size - _SHRINK_TARGET_BYTES
+        overshoot = size - int(record_max_bytes / _SHRINK_OVERCUT)
         keep_fraction = max(0.0, (shrinkable - overshoot) / shrinkable)
         for holder, field, marker_holder, marker_field in candidates:
             text = holder[field]

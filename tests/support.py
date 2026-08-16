@@ -45,6 +45,7 @@ from blizzard.hub.config import (
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.graph import Edge, Graph, Node
+from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
@@ -490,6 +491,7 @@ def build_hub(
     superuser: str | None = None,
     oauth_providers: dict[str, IOAuthProvider] | None = None,
     trusted_proxies: Sequence[str] = (),
+    transcript_caps: TranscriptCaps | None = None,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -531,6 +533,7 @@ def build_hub(
         # `hub/app.py`'s own `build_hosted_app` gating exactly.
         signing_keys_dir=(tmp_path / "auth" / "signing-keys") if auth_mode == AUTH_MODE_OAUTH else None,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
+        transcript_caps=transcript_caps,
     )
     app = create_app(config, services=services)
     client = TestClient(app)

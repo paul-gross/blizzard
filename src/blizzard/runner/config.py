@@ -15,6 +15,7 @@ from typing import Any
 
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
+from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
 
 CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"
@@ -77,6 +78,12 @@ DEFAULT_AUTH_HUB_ROLE = "mirror"
 
 class ConfigError(RuntimeError):
     """A runtime directory is missing its config — it was never initialized."""
+
+
+def _cap_line(key: str, value: int | None, default: int) -> str:
+    """One ``[transcripts]`` ceiling: live once overridden, commented at its default so the
+    scaffolded file always shows an operator what the ceiling IS (blizzard#338)."""
+    return f"{key} = {value}\n" if value is not None else f"# {key} = {default}\n"
 
 
 @dataclass(frozen=True)
@@ -228,6 +235,30 @@ class Transcripts:
         The dogfood fleet just has not turned shipping on yet."""
         return self.table.boolean("ship", False)
 
+    @property
+    def record_max_bytes(self) -> int | None:
+        """Override for the pump's own per-record cap; ``None`` keeps its default
+        (blizzard#338). Must stay at or BELOW the hub's `record_max_bytes`, which rejects
+        a record's turns whole where this one merely shrinks them."""
+        return self._cap("record_max_bytes")
+
+    @property
+    def chunk_max_bytes(self) -> int | None:
+        """Override for the pump's own per-chunk budget; ``None`` keeps its default
+        (blizzard#338)."""
+        return self._cap("chunk_max_bytes")
+
+    def _cap(self, key: str) -> int | None:
+        value = self.table.body.get(key)
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ConfigError(f"transcripts.{key} must be an integer number of bytes, got {value!r}")
+        if value <= 0:
+            # Zero reads as "unset" while rejecting every record; a cap has no "off" value.
+            raise ConfigError(f"transcripts.{key} must be positive, got {value!r}")
+        return value
+
 
 @dataclass(frozen=True)
 class Auth:
@@ -288,6 +319,10 @@ class RunnerConfig:
     #: Where the harness writes session transcripts (issue #29); read from the toml, never
     #: re-read from the environment live, so a changed env var needs a re-``init``.
     transcripts_root: str = ""
+    #: Per-record cap and per-chunk budget overrides (``[transcripts]``, blizzard#338);
+    #: ``None`` keeps `transcript_pump`'s own defaults, which own the values.
+    transcript_record_max_bytes: int | None = None
+    transcript_chunk_max_bytes: int | None = None
     #: The transcript outbound lane's own switch (``[transcripts] ship``, issue #246);
     #: off by default (D5) — the pump enqueues no delta while this is ``False``.
     transcripts_ship: bool = False
@@ -530,7 +565,15 @@ class RunnerConfig:
             "# turning this on is a rollout decision, not a bandwidth-for-nothing one.\n"
             "[transcripts]\n"
             f"ship = {'true' if self.transcripts_ship else 'false'}\n"
-            "\n# Spend controls (epic #57); absent = no cap. `chunk_cap_usd` parks a chunk\n"
+            "# This lane's own byte ceilings (blizzard#338), shown at their defaults;\n"
+            "# uncomment to override. Widen `chunk_max_bytes` for a backfill window — a\n"
+            "# `blizzard runner transcript reship` spends that budget a SECOND time over the\n"
+            "# same chunk — then restore it. Keep `record_max_bytes` at or BELOW the hub's own\n"
+            "# `record_max_bytes`: over the hub's, a record loses its turns whole; over this\n"
+            "# one, the pump merely shrinks them.\n"
+            + _cap_line("record_max_bytes", self.transcript_record_max_bytes, TRANSCRIPT_RECORD_MAX_BYTES)
+            + _cap_line("chunk_max_bytes", self.transcript_chunk_max_bytes, CHUNK_TRANSCRIPT_MAX_BYTES)
+            + "\n# Spend controls (epic #57); absent = no cap. `chunk_cap_usd` parks a chunk\n"
             "# needs_human at its next step boundary once its derived spend reaches this cap.\n"
             "# `runner_ceiling_usd` engages this runner's own local pause brake (the same one\n"
             "# `blizzard runner pause` sets) once its rolling `window_hours`-long spend reaches\n"
@@ -638,6 +681,8 @@ class RunnerConfig:
             runner_prompt_file=str(raw.get("runner_prompt_file", "")),
             transcripts_root=str(raw.get("transcripts_root", "")),
             transcripts_ship=transcripts.ship,
+            transcript_record_max_bytes=transcripts.record_max_bytes,
+            transcript_chunk_max_bytes=transcripts.chunk_max_bytes,
             chunk_cap_usd=spend.chunk_cap_usd,
             runner_ceiling_usd=spend.ceiling_usd,
             runner_ceiling_window_hours=spend.window_hours,

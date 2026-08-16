@@ -17,6 +17,7 @@ from typing import overload
 from sqlalchemy.engine import make_url
 
 from blizzard.foundation.forwarded import TrustedProxies
+from blizzard.hub.domain.transcripts import TranscriptCaps
 
 CONFIG_FILENAME = "blizzard-hub.toml"
 DATA_DIRNAME = "data"
@@ -330,6 +331,40 @@ class AuthConfig:
 
 
 @dataclass(frozen=True)
+class TranscriptCapsConfig:
+    """Resolved ``[transcripts]`` config (blizzard#338) — the ingest lane's three byte
+    ceilings as OVERRIDES. ``None`` means "whatever the domain's default is", so this layer
+    never restates a number the domain already owns (``bzh:one-prose-home``)."""
+
+    record_max_bytes: int | None = None
+    chunk_budget_max_bytes: int | None = None
+    runner_daily_rate_max_bytes: int | None = None
+
+    @classmethod
+    def of(cls, raw_transcripts: object) -> TranscriptCapsConfig:
+        if not isinstance(raw_transcripts, dict):
+            return cls()
+        return cls(
+            record_max_bytes=cls._bytes(raw_transcripts, "record_max_bytes"),
+            chunk_budget_max_bytes=cls._bytes(raw_transcripts, "chunk_budget_max_bytes"),
+            runner_daily_rate_max_bytes=cls._bytes(raw_transcripts, "runner_daily_rate_max_bytes"),
+        )
+
+    @staticmethod
+    def _bytes(raw: Mapping[str, object], key: str) -> int | None:
+        value = raw.get(key)
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ConfigError(f"transcripts.{key} must be an integer number of bytes, got {value!r}")
+        if value <= 0:
+            # Zero would reject every record while reading as "unset" to an operator
+            # skimming the file; there is no "disable the lane" meaning for a cap.
+            raise ConfigError(f"transcripts.{key} must be positive, got {value!r}")
+        return value
+
+
+@dataclass(frozen=True)
 class HubConfig:
     """Resolved hub runtime configuration."""
 
@@ -346,6 +381,8 @@ class HubConfig:
     #: Forge-status sweep cadence in seconds (issue #179); consulted only when a source annotates.
     annotation_interval_seconds: int = 120
     auth: AuthConfig = field(default_factory=AuthConfig)
+    #: Transcript ingest cap overrides (blizzard#338); every field None = the domain defaults.
+    transcripts: TranscriptCapsConfig = field(default_factory=TranscriptCapsConfig)
     #: Reverse-proxy trust set (issue #130) — addresses or CIDRs whose forwarded headers are honored.
     trusted_proxies: tuple[str, ...] = ()
 
@@ -372,6 +409,35 @@ class HubConfig:
             port=env.port(DEFAULT_PORT),
         )
 
+    def _transcript_cap_lines(self) -> list[str]:
+        """The ``[transcripts]`` block. Every cap is rendered — commented out at its default,
+        live once overridden — so the file always shows an operator what the ceilings ARE
+        without them having to find the constants. Values come from the domain's own
+        defaults, never restated here."""
+        defaults = TranscriptCaps()
+        caps = (
+            ("record_max_bytes", self.transcripts.record_max_bytes, defaults.record_max_bytes),
+            ("chunk_budget_max_bytes", self.transcripts.chunk_budget_max_bytes, defaults.chunk_budget_max_bytes),
+            (
+                "runner_daily_rate_max_bytes",
+                self.transcripts.runner_daily_rate_max_bytes,
+                defaults.runner_daily_rate_max_bytes,
+            ),
+        )
+        lines = [
+            "\n# Transcript ingest ceilings (blizzard#338), in bytes. Each is shown at its\n"
+            "# default; uncomment to override. Widen these for a backfill window — a\n"
+            "# `blizzard runner transcript reship` spends the per-chunk budget a SECOND time —\n"
+            "# then restore them. `record_max_bytes` must stay at or ABOVE the runner's own\n"
+            "# per-record cap: a record over this one loses its turns whole, where the runner's\n"
+            "# cap merely shrinks it.\n",
+            "[transcripts]\n",
+        ]
+        lines += [
+            f"{key} = {value}\n" if value is not None else f"# {key} = {default}\n" for key, value, default in caps
+        ]
+        return lines
+
     def to_toml(self) -> str:
         lines = ["# blizzard-hub runtime configuration (blizzard hub init)\n"]
         if self.db_url != self.default_db_url(self.root):
@@ -397,6 +463,7 @@ class HubConfig:
             "# X-Forwarded-Proto/-For headers are honored (cookie Secure flag, login-throttle\n"
             "# key, auth-fact actor IP). Empty = ignore those headers from every peer.\n",
             f"trusted_proxies = [{', '.join(f'"{p}"' for p in self.trusted_proxies)}]\n",
+            *self._transcript_cap_lines(),
         ]
         if not self.work_sources:
             lines.append(_WORK_SOURCE_EXAMPLE_COMMENT)
@@ -491,5 +558,6 @@ class HubConfig:
             follow_latest=follow_latest,
             annotation_interval_seconds=int(raw.get("annotation_interval_seconds", 120)),
             auth=AuthConfig.of(raw.get("auth", {})),
+            transcripts=TranscriptCapsConfig.of(raw.get("transcripts", {})),
             trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
         )

@@ -27,6 +27,7 @@ _CONFIGS = (
     ("hub", "WorkSourceConfig"),
     ("hub", "OAuthProviderConfig"),
     ("hub", "AuthConfig"),
+    ("hub", "TranscriptCapsConfig"),
 )
 
 

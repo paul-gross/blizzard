@@ -44,6 +44,7 @@ from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
 from blizzard.hub.domain.forge_status import AnnotationReconciler
+from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
@@ -174,6 +175,19 @@ def create_app(
     return app
 
 
+def _transcript_caps(config: HubConfig) -> TranscriptCaps:
+    """The configured ingest ceilings, each falling back to the domain's own default —
+    resolved here rather than in `HubConfig`, which carries overrides and never restates
+    a value the domain owns (blizzard#338)."""
+    defaults = TranscriptCaps()
+    configured = config.transcripts
+    return TranscriptCaps(
+        record_max_bytes=configured.record_max_bytes or defaults.record_max_bytes,
+        chunk_budget_max_bytes=configured.chunk_budget_max_bytes or defaults.chunk_budget_max_bytes,
+        runner_daily_rate_max_bytes=configured.runner_daily_rate_max_bytes or defaults.runner_daily_rate_max_bytes,
+    )
+
+
 def build_hosted_app(config: HubConfig) -> FastAPI:
     """The ``host`` composition root: open the store and wire every fleet seam."""
     engine = create_engine_from_url(config.db_url)
@@ -205,6 +219,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         oauth_providers=oauth_providers,
         signing_keys_dir=signing_keys_dir,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
+        transcript_caps=_transcript_caps(config),
     )
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).

@@ -63,7 +63,7 @@ from blizzard.hub.domain.questions import QuestionService
 from blizzard.hub.domain.queue import GroupService, QueueService
 from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry
 from blizzard.hub.domain.stop import StopService
-from blizzard.hub.domain.transcripts import IReadTranscriptSegments, TranscriptIngestService
+from blizzard.hub.domain.transcripts import IReadTranscriptSegments, TranscriptCaps, TranscriptIngestService
 from blizzard.hub.domain.work import IReadChunkRepository
 from blizzard.hub.domain.work_closure import DeliveryClosureReconciler
 from blizzard.hub.events.broker import EventBroker
@@ -175,6 +175,7 @@ def build_services(
     oauth_registry: IOAuthProviderRegistry | None = None,
     signing_keys_dir: Path | None = None,
     trusted_proxies: TrustedProxies | None = None,
+    transcript_caps: TranscriptCaps | None = None,
 ) -> HubServices:
     """Construct and wire every fleet service over a migrated store engine.
 
@@ -256,7 +257,7 @@ def build_services(
         stop=StopService(chunks=chunk_store, clock=clock),
         edit=EditService(chunks=chunk_store, graphs=graph_store, claim_lock=claim_lock),
         facts=FactIngestService(chunks=chunk_store, fleet=fleet, clock=clock),
-        transcript_ingest=TranscriptIngestService(store=transcript_store, clock=clock),
+        transcript_ingest=TranscriptIngestService(store=transcript_store, clock=clock, caps=transcript_caps),
         graph_mint=GraphMintService(graphs=graph_store, clock=clock),
         graph_lifecycle=GraphLifecycleService(graphs=graph_store, clock=clock),
         runner_facts=RunnerFactsService(chunks=chunk_store, clock=clock),

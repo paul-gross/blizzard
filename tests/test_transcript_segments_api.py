@@ -9,7 +9,7 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from blizzard.hub.domain import transcripts as transcripts_domain
+from blizzard.hub.domain.transcripts import TranscriptCaps
 from tests.support import build_hub, seed_session, seed_user
 from tests.test_fleet_auth import _enroll, _register
 
@@ -38,6 +38,7 @@ def _record(
     final: bool = False,
     segment_id: str = "sg_1",
     spawn_generation: int = 1,
+    text: str = "hi",
 ) -> dict:
     return {
         "seq": seq,
@@ -51,7 +52,7 @@ def _record(
         "final": final,
         "normalizer_version": "v1",
         "harness_version": "claude-code-1.0",
-        "turns": [_turn(i) for i in range(turn_range_start, turn_range_end + 1)],
+        "turns": [_turn(i, text) for i in range(turn_range_start, turn_range_end + 1)],
     }
 
 
@@ -218,10 +219,10 @@ def test_get_segment_404s_when_the_segment_belongs_to_a_different_chunk(tmp_path
 # --- truncation (D5/D6), the operator's only signal turns are missing --------------
 
 
-def test_a_cap_rejected_tail_is_visible_as_truncation_on_both_read_routes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    hub = build_hub(tmp_path, auth_mode="oauth")
+def test_a_cap_rejected_tail_is_visible_as_truncation_on_both_read_routes(tmp_path: Path) -> None:
+    # Configured, not monkeypatched (blizzard#338): `TranscriptCaps` binds its defaults at
+    # class creation, so rebinding the module constant no longer reaches the wired service.
+    hub = build_hub(tmp_path, auth_mode="oauth", transcript_caps=TranscriptCaps(record_max_bytes=200))
     contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
     token = seed_session(hub, contributor)
     chunk_id = _ingest_chunk(hub, headers=_cookie(token))
@@ -231,12 +232,11 @@ def test_a_cap_rejected_tail_is_visible_as_truncation_on_both_read_routes(
     )
     assert head.json()["applied"] == [1]
 
-    monkeypatch.setattr(transcripts_domain, "RECORD_MAX_BYTES", 10)
     tail = hub.client.post(
         "/api/fleet/transcripts",
         json={
             "runner_id": "r1",
-            "records": [_record(chunk_id, seq=2, turn_range_start=1, turn_range_end=1, final=True)],
+            "records": [_record(chunk_id, seq=2, turn_range_start=1, turn_range_end=1, final=True, text="x" * 500)],
         },
     )
     assert tail.json()["capped"] == [2]

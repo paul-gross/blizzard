@@ -82,6 +82,10 @@ class LoopConfig:
     #: The transcript outbound lane's own switch (``[transcripts] ship``, issue #246); off
     #: by default (D5) — the pump enqueues no delta while this is ``False``.
     transcripts_ship: bool = False
+    #: The lane's byte-ceiling overrides (``[transcripts]``, blizzard#338); ``None`` keeps
+    #: `blizzard.runner.transcripts.caps`'s own defaults, which own the values.
+    transcript_record_max_bytes: int | None = None
+    transcript_chunk_max_bytes: int | None = None
 
 
 @dataclass(frozen=True)

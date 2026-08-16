@@ -191,10 +191,10 @@
      "role": "owner"
     },
     {
-     "file": "src/blizzard/runner/loop/transcript_pump.py",
+     "file": "src/blizzard/runner/transcripts/caps.py",
      "symbol": "<module>",
      "role": "allowed",
-     "reason": "The runner cannot import the hub's constant across the daemon boundary, so its own cap must restate which side of the ordering it is on; test_record_caps.py asserts the gap."
+     "reason": "The runner cannot import the hub's constant across the daemon boundary, so its own cap must restate which side of the ordering it is on; test_record_caps.py asserts the gap. Moved here from loop/transcript_pump.py in blizzard#338, so runner.config can read the defaults it renders without importing the pump that imports it."
     }
    ]
   },

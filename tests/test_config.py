@@ -1199,3 +1199,160 @@ def test_a_freshly_scaffolded_dir_copied_elsewhere_re_derives_its_own_db_url(tmp
     copy_config = HubConfig.load(copy_root)
     assert copy_config.db_url == HubConfig.default_db_url(copy_root)
     assert Path(copy_config.db_url.removeprefix("sqlite:///")).exists()
+
+
+# --- the lane's byte ceilings (blizzard#338) -----------------------------------------
+
+
+@pytest.mark.unit
+def test_transcript_caps_default_to_none_so_the_pump_keeps_its_own_defaults(tmp_path: Path) -> None:
+    """`None`, not a copy of the number: the config layer must never restate a value
+    `blizzard.runner.transcripts.caps` owns, or the two drift apart silently."""
+    scaffolded = RunnerConfig.scaffold(tmp_path)
+
+    assert scaffolded.transcript_record_max_bytes is None
+    assert scaffolded.transcript_chunk_max_bytes is None
+
+
+@pytest.mark.unit
+def test_transcript_caps_parse_from_a_hand_written_transcripts_table(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n'
+        "[transcripts]\nrecord_max_bytes = 4194304\nchunk_max_bytes = 214748364800\n"
+    )
+    loaded = RunnerConfig.load(root)
+
+    assert loaded.transcript_record_max_bytes == 4194304
+    assert loaded.transcript_chunk_max_bytes == 214748364800
+
+
+@pytest.mark.unit
+def test_transcript_caps_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    edited = RunnerConfig(
+        root=root,
+        db_url=RunnerConfig.default_db_url(root),
+        transcript_record_max_bytes=4194304,
+        transcript_chunk_max_bytes=214748364800,
+    )
+    (root / "blizzard-runner.toml").write_text(edited.to_toml())
+    reloaded = RunnerConfig.load(root)
+
+    assert reloaded.transcript_record_max_bytes == 4194304
+    assert reloaded.transcript_chunk_max_bytes == 214748364800
+
+
+@pytest.mark.unit
+def test_an_unset_transcript_cap_is_scaffolded_commented_at_its_default(tmp_path: Path) -> None:
+    """The template shows the ceiling an operator is about to override — a bare `[transcripts]`
+    with nothing under it leaves them guessing what the widened value is relative to."""
+    from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
+
+    rendered = RunnerConfig.scaffold(tmp_path).to_toml()
+
+    assert f"# record_max_bytes = {TRANSCRIPT_RECORD_MAX_BYTES}\n" in rendered
+    assert f"# chunk_max_bytes = {CHUNK_TRANSCRIPT_MAX_BYTES}\n" in rendered
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("key", ["record_max_bytes", "chunk_max_bytes"])
+@pytest.mark.parametrize("value", ["0", '"8388608"', "true"])
+def test_a_transcript_cap_refuses_a_non_positive_or_non_integer_value(tmp_path: Path, key: str, value: str) -> None:
+    """A cap has no "off" value: zero would reject every record while reading as unset, and a
+    quoted number would coerce to something arbitrary rather than the bytes it looks like."""
+    from blizzard.runner.config import ConfigError
+
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[transcripts]\n{key} = {value}\n'
+    )
+
+    with pytest.raises(ConfigError, match=key):
+        RunnerConfig.load(root)
+
+
+# --- the hub's own ingest ceilings (blizzard#338) ------------------------------------
+
+
+@pytest.mark.unit
+def test_hub_transcript_caps_default_to_none_so_the_domain_keeps_its_own(tmp_path: Path) -> None:
+    from blizzard.hub.config import HubConfig
+
+    caps = HubConfig(root=tmp_path, db_url=HubConfig.default_db_url(tmp_path)).transcripts
+
+    assert caps.record_max_bytes is None
+    assert caps.chunk_budget_max_bytes is None
+    assert caps.runner_daily_rate_max_bytes is None
+
+
+@pytest.mark.unit
+def test_hub_transcript_caps_parse_and_round_trip_through_to_toml(tmp_path: Path) -> None:
+    from blizzard.hub.config import HubConfig, TranscriptCapsConfig
+
+    root = tmp_path / "hub"
+    root.mkdir()
+    edited = HubConfig(
+        root=root,
+        db_url=HubConfig.default_db_url(root),
+        transcripts=TranscriptCapsConfig(runner_daily_rate_max_bytes=214748364800),
+    )
+    (root / "blizzard-hub.toml").write_text(edited.to_toml())
+
+    reloaded = HubConfig.load(root)
+
+    assert reloaded.transcripts.runner_daily_rate_max_bytes == 214748364800
+    # The two left unset stay unset through the round trip rather than being frozen at
+    # whatever the default happened to be when the file was written.
+    assert reloaded.transcripts.record_max_bytes is None
+    assert reloaded.transcripts.chunk_budget_max_bytes is None
+
+
+@pytest.mark.unit
+def test_the_hub_template_shows_each_ingest_ceiling_at_its_domain_default(tmp_path: Path) -> None:
+    from blizzard.hub.config import HubConfig
+    from blizzard.hub.domain.transcripts import TranscriptCaps
+
+    rendered = HubConfig(root=tmp_path, db_url=HubConfig.default_db_url(tmp_path)).to_toml()
+    defaults = TranscriptCaps()
+
+    assert f"# record_max_bytes = {defaults.record_max_bytes}\n" in rendered
+    assert f"# chunk_budget_max_bytes = {defaults.chunk_budget_max_bytes}\n" in rendered
+    assert f"# runner_daily_rate_max_bytes = {defaults.runner_daily_rate_max_bytes}\n" in rendered
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("key", ["record_max_bytes", "chunk_budget_max_bytes", "runner_daily_rate_max_bytes"])
+@pytest.mark.parametrize("value", ["0", '"10485760"', "false"])
+def test_a_hub_ingest_cap_refuses_a_non_positive_or_non_integer_value(tmp_path: Path, key: str, value: str) -> None:
+    from blizzard.hub.config import ConfigError, HubConfig
+
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(f"[transcripts]\n{key} = {value}\n")
+
+    with pytest.raises(ConfigError, match=key):
+        HubConfig.load(root)
+
+
+@pytest.mark.unit
+def test_the_configured_hub_caps_reach_the_wired_ingest_service(tmp_path: Path) -> None:
+    """The resolution seam itself (blizzard#338): a configured ceiling must reach the
+    service, and an unconfigured one must fall back to the domain default rather than None."""
+    from blizzard.hub.app import _transcript_caps
+    from blizzard.hub.config import HubConfig, TranscriptCapsConfig
+    from blizzard.hub.domain.transcripts import TranscriptCaps
+
+    resolved = _transcript_caps(
+        HubConfig(
+            root=tmp_path,
+            db_url=HubConfig.default_db_url(tmp_path),
+            transcripts=TranscriptCapsConfig(runner_daily_rate_max_bytes=214748364800),
+        )
+    )
+
+    assert resolved.runner_daily_rate_max_bytes == 214748364800
+    assert resolved.record_max_bytes == TranscriptCaps().record_max_bytes

@@ -1486,7 +1486,13 @@ ship = false
   2 GB/runner/day — rejecting an over-cap record but still acknowledging it, so a misbehaving
   runner wastes its own budget without wedging its lane. The hub's per-record cap sits
   deliberately *above* the runner's: over the runner's, content is shrunk and every turn
-  survives; over the hub's, the whole record's turns are rejected and stored as `[]`. Every runner-side outcome above is
+  survives; over the hub's, the whole record's turns are rejected and stored as `[]`.
+  All five values above are the **defaults**: each is overridable under `[transcripts]` in
+  the owning daemon's config — `record_max_bytes` and `chunk_max_bytes` on the runner,
+  `record_max_bytes`, `chunk_budget_max_bytes` and `runner_daily_rate_max_bytes` on the hub.
+  Widen them for a backfill window — `blizzard runner transcript reship` spends the
+  per-chunk budget a second time over the same chunk — then restore them, keeping the
+  runner's per-record cap at or below the hub's so the ordering above still holds. Every runner-side outcome above is
   recorded on the segment and surfaced as a `warning` operational event (see
   [the event log](#operational-visibility--the-event-log) below), the same way a captured
   command failure is.

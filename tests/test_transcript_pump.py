@@ -237,7 +237,13 @@ def _unlinked_sidechain(agent_id: str) -> SidechainConversation:
     )
 
 
-def _ctx(*, ship: bool, batches: dict[str, TranscriptBatch] | None = None):  # type: ignore[no-untyped-def]
+def _ctx(  # type: ignore[no-untyped-def]
+    *,
+    ship: bool,
+    batches: dict[str, TranscriptBatch] | None = None,
+    record_max_bytes: int | None = None,
+    chunk_max_bytes: int | None = None,
+):
     store = make_store("sqlite://")
     source = FakeTranscriptSource(batches_by_session=batches or {})
     harness = FakeHarness(
@@ -251,7 +257,13 @@ def _ctx(*, ship: bool, batches: dict[str, TranscriptBatch] | None = None):  # t
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=ship),
+        config=LoopConfig(
+            runner_id="r1",
+            workspace_id="ws1",
+            transcripts_ship=ship,
+            transcript_record_max_bytes=record_max_bytes,
+            transcript_chunk_max_bytes=chunk_max_bytes,
+        ),
     )
     return ctx, source
 
@@ -1878,3 +1890,91 @@ def test_pump_lease_marks_incomplete_when_the_cursor_is_stuck_at_closure() -> No
     fact_events = ctx.store.pending_outbound()
     kinds = [json.loads(e.payload)["kind"] for e in fact_events]
     assert "transcript-truncated" in kinds
+
+
+# --- configured byte ceilings (blizzard#338) ----------------------------------------
+
+
+def test_a_configured_chunk_budget_stops_shipping_where_the_default_would_not() -> None:
+    """The whole point of the knob: the same already-shipped total that is nowhere near the
+    64 MB default stops the lane once an operator narrows the budget to it."""
+    ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")}, chunk_max_bytes=500)
+    segment_id = _spawn_one_segment(ctx)
+    ctx.store.record_transcript_deltas(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor=None,
+        shipped_bytes=600,
+        shipped_turns=0,
+        normalizer_version="fake/1",
+        harness_version=None,
+        payloads=["{}"],
+        created_at=_NOW,
+    )
+
+    TranscriptPump(ctx).run()
+
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.shipping_stopped_reason == "chunk_budget_exceeded"
+    assert source.turns_since_calls == []  # the budget check still precedes the read
+
+
+def test_a_widened_chunk_budget_ships_past_the_default_ceiling() -> None:
+    """The backfill direction, which is what the knob exists for: a chunk already past the
+    64 MB default keeps shipping under a widened budget rather than latching stopped."""
+    ctx, _source = _ctx(
+        ship=True,
+        batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")},
+        chunk_max_bytes=CHUNK_TRANSCRIPT_MAX_BYTES * 4,
+    )
+    segment_id = _spawn_one_segment(ctx)
+    ctx.store.record_transcript_deltas(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor=None,
+        shipped_bytes=CHUNK_TRANSCRIPT_MAX_BYTES + 1,
+        shipped_turns=0,
+        normalizer_version="fake/1",
+        harness_version=None,
+        payloads=["{}"],
+        created_at=_NOW,
+    )
+
+    TranscriptPump(ctx).run()
+
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.shipping_stopped_reason is None
+    assert segment.shipped_turns == 1
+
+
+def test_a_configured_record_cap_shrinks_a_batch_the_default_would_ship_whole() -> None:
+    """The per-record cap reaches `_build_records`, not just the chunk budget: a narrow cap
+    marks the record truncated where the 8 MB default would have shipped the text intact."""
+    ctx, _source = _ctx(
+        ship=True,
+        batches={"sess-a": _batch([_turn(0, "x" * 4000)], next_token="pos-1")},
+        record_max_bytes=1500,
+    )
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    [delta] = [d for d in ctx.store.pending_transcript_outbound(limit=10) if not d.final]
+    payload = json.loads(delta.payload)
+    assert payload["record_truncated"] is True
+    assert len(payload["turns"][0]["text"]) < 4000
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "record_cap_exceeded"
+
+
+def test_unconfigured_caps_leave_the_module_defaults_in_force() -> None:
+    """The defaults are not restated by the config layer, so an unconfigured runner must
+    still read exactly them — the property, not a copy of the number."""
+    ctx, _source = _ctx(ship=True)
+    pump = TranscriptPump(ctx)
+
+    assert pump._record_max_bytes == TRANSCRIPT_RECORD_MAX_BYTES
+    assert pump._chunk_max_bytes == CHUNK_TRANSCRIPT_MAX_BYTES

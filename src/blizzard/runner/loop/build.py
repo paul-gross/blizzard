@@ -117,6 +117,8 @@ class LoopWiring:
             context_sample_interval_seconds=config.context_sample_interval_seconds,
             runner_dir=str(config.root),
             transcripts_ship=config.transcripts_ship,
+            transcript_record_max_bytes=config.transcript_record_max_bytes,
+            transcript_chunk_max_bytes=config.transcript_chunk_max_bytes,
         )
         _worker_files = WorkerStdoutFiles(str(worker_stdout_dir), store)
         _clock = SystemClock()

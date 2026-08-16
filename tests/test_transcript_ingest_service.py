@@ -19,6 +19,7 @@ from blizzard.hub.domain.transcripts import (
     SegmentIndexRow,
     SegmentRecord,
     SegmentRecordContent,
+    TranscriptCaps,
     TranscriptIngestService,
 )
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
@@ -263,14 +264,11 @@ def test_the_three_caps_are_the_magnitudes_that_govern_today() -> None:
     assert shipped == (10 * mb, 64 * mb, 2 * gb)
 
 
-def test_the_chunk_budget_cap_rejects_independently_of_the_other_two(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(transcripts_domain, "CHUNK_BUDGET_MAX_BYTES", 50)
+def test_the_chunk_budget_cap_rejects_independently_of_the_other_two(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
     store = TranscriptSegmentStore(hub.engine)
-    service = TranscriptIngestService(store=store, clock=hub.clock)
+    service = TranscriptIngestService(store=store, clock=hub.clock, caps=TranscriptCaps(chunk_budget_max_bytes=50))
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json="a" * 40)])
 
     result = service.ingest("r1", [_record(2, turn_range_start=1, turn_range_end=1, turns_json="b" * 40)])
@@ -280,14 +278,11 @@ def test_the_chunk_budget_cap_rejects_independently_of_the_other_two(
     assert entry.truncated is True
 
 
-def test_the_runner_daily_rate_cap_rejects_independently_of_the_other_two(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(transcripts_domain, "RUNNER_DAILY_RATE_MAX_BYTES", 50)
+def test_the_runner_daily_rate_cap_rejects_independently_of_the_other_two(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
     store = TranscriptSegmentStore(hub.engine)
-    service = TranscriptIngestService(store=store, clock=hub.clock)
+    service = TranscriptIngestService(store=store, clock=hub.clock, caps=TranscriptCaps(runner_daily_rate_max_bytes=50))
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json="a" * 40)])
 
     result = service.ingest(

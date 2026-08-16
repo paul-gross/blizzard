@@ -36,6 +36,18 @@ REJECTED_RUNNER_DAILY_RATE_EXCEEDED = "runner_daily_rate_exceeded"
 
 
 @dataclass(frozen=True)
+class TranscriptCaps:
+    """The three ceilings :meth:`TranscriptIngestService._reject_reason` adjudicates, resolved
+    from configuration rather than read as constants — an operator widens them for a backfill
+    window (a re-ship spends the per-chunk budget a second time) and restores them after. The
+    defaults ARE the module constants above, so an unconfigured hub is unchanged."""
+
+    record_max_bytes: int = RECORD_MAX_BYTES
+    chunk_budget_max_bytes: int = CHUNK_BUDGET_MAX_BYTES
+    runner_daily_rate_max_bytes: int = RUNNER_DAILY_RATE_MAX_BYTES
+
+
+@dataclass(frozen=True)
 class SegmentRecord:
     """One shipped turn-range slice, store-shaped: ``turns_json`` is the record's turns,
     already serialized by the caller (``bzh:domain-core``). ``record_truncated`` is the
@@ -151,9 +163,10 @@ class TranscriptIngestService:
     lane's own high-water mark (D7). Caps are derived by summing stored rows (D2), never
     a maintained counter."""
 
-    def __init__(self, *, store: IWriteTranscriptSegments, clock: IClock) -> None:
+    def __init__(self, *, store: IWriteTranscriptSegments, clock: IClock, caps: TranscriptCaps | None = None) -> None:
         self._store = store
         self._clock = clock
+        self._caps = caps if caps is not None else TranscriptCaps()
 
     def ingest(self, runner_id: str, records: list[tuple[int, SegmentRecord]]) -> TranscriptIngestResult:
         """``records`` pairs each record with its lane ``seq`` (the wire batch's own
@@ -232,13 +245,39 @@ class TranscriptIngestService:
         return True
 
     def _reject_reason(self, record: SegmentRecord, *, byte_count: int, at: datetime) -> str | None:
-        if byte_count > RECORD_MAX_BYTES:
-            return REJECTED_RECORD_TOO_LARGE
+        if byte_count > self._caps.record_max_bytes:
+            return self._rejected(record, REJECTED_RECORD_TOO_LARGE, byte_count, self._caps.record_max_bytes)
         # D4: only already-*stored* bytes count toward the chunk budget — a rejection
         # counts toward the daily rate only (Phase 2 AC).
-        if self._store.chunk_stored_bytes(record.chunk_id) + byte_count > CHUNK_BUDGET_MAX_BYTES:
-            return REJECTED_CHUNK_BUDGET_EXCEEDED
+        stored = self._store.chunk_stored_bytes(record.chunk_id)
+        if stored + byte_count > self._caps.chunk_budget_max_bytes:
+            return self._rejected(
+                record, REJECTED_CHUNK_BUDGET_EXCEEDED, stored + byte_count, self._caps.chunk_budget_max_bytes
+            )
         since = at - timedelta(hours=24)
-        if self._store.runner_window_bytes(record.runner_id, since=since) + byte_count > RUNNER_DAILY_RATE_MAX_BYTES:
-            return REJECTED_RUNNER_DAILY_RATE_EXCEEDED
+        window = self._store.runner_window_bytes(record.runner_id, since=since)
+        if window + byte_count > self._caps.runner_daily_rate_max_bytes:
+            return self._rejected(
+                record,
+                REJECTED_RUNNER_DAILY_RATE_EXCEEDED,
+                window + byte_count,
+                self._caps.runner_daily_rate_max_bytes,
+            )
         return None
+
+    @staticmethod
+    def _rejected(record: SegmentRecord, reason: str, observed: int, limit: int) -> str:
+        """Log the CONFIGURED limit alongside the reason: a rejection reads as a bug when the
+        operator cannot tell which ceiling bound it, and the ceilings are no longer constants
+        an operator could look up. Returns ``reason`` so the caller stays a single expression."""
+        _log.warning(
+            "transcript record rejected",
+            segment_id=record.segment_id,
+            chunk_id=record.chunk_id,
+            runner_id=record.runner_id,
+            turn_range_start=record.turn_range_start,
+            reason=reason,
+            observed_bytes=observed,
+            limit_bytes=limit,
+        )
+        return reason
