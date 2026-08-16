@@ -343,12 +343,12 @@ class SseTap:
 
 
 @contextlib.contextmanager
-def sse_tap(hub_port: int, *, settle: float = 2.0) -> Iterator[SseTap]:
-    """A **live** SSE subscriber on the hub's ``/api/events/stream``, connected before the
-    act, proving an event was actually **delivered** rather than merely recorded. Drains
-    and discards the broker's connect-time replay, so :meth:`SseTap.collect` reports only
-    live fan-out."""
-    tap = SseTap(f"http://127.0.0.1:{hub_port}")
+def sse_tap(port: int, *, settle: float = 2.0) -> Iterator[SseTap]:
+    """A **live** SSE subscriber on the daemon under test's ``/api/events/stream``,
+    connected before the act, proving an event was actually **delivered** rather than
+    merely recorded. Drains and discards the broker's connect-time replay, so
+    :meth:`SseTap.collect` reports only live fan-out."""
+    tap = SseTap(f"http://127.0.0.1:{port}")
     tap.start()
     try:
         tap.drain(settle=settle)

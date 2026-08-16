@@ -47,7 +47,7 @@ class SseFramePayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     #: Field names that stay in the payload as a present ``null`` when unset, rather than
-    #: being omitted. Empty for every kind but ``event-logged``.
+    #: being omitted. Empty by default; a subclass overrides per its own fields.
     _null_when_absent: ClassVar[frozenset[str]] = frozenset()
 
     def to_payload(self) -> dict[str, object]:

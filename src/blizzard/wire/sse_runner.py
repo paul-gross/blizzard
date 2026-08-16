@@ -1,7 +1,9 @@
 """Per-kind SSE frame wire models for the runner's stream (blizzard#317 Phase 2), beside the
 hub's own vocabulary in :mod:`blizzard.wire.sse`; mirrored by the golden corpus's runner scope
 at ``contracts/sse/runner/``. D6: frames are thin id-and-cause notifications, and every model
-reuses :class:`~blizzard.wire.sse.SseFramePayload`'s present-when-meaningful serialization."""
+reuses :class:`~blizzard.wire.sse.SseFramePayload`'s present-when-meaningful serialization.
+``key``/``node_name`` mirror the hub's own frame shape for a future runner event log; no
+runner-side consumer reads either today — `local-panel` invalidates by ``chunk_id`` alone."""
 
 from __future__ import annotations
 

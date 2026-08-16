@@ -61,7 +61,9 @@ class Stream:
 
         shutdown = self.shutdown if self.shutdown is not None else asyncio.Event()
         sub = broker.subscribe()
-        last_sent = self.cursor.last_event_id
+        # A cursor above this broker's high-water mark is a prior process instance's id, not this one's
+        # — clamp it, or every live event is silently dropped until a fresh broker's ids catch up.
+        last_sent = min(self.cursor.last_event_id, broker.latest_id())
         try:
             yield self.reserved_comment.encode()
             for event in broker.replay_since(self.cursor.last_event_id):

@@ -1,12 +1,12 @@
-import { DestroyRef, EnvironmentInjector, Injectable, effect, inject, untracked } from '@angular/core';
+import { DestroyRef, EnvironmentInjector, Injectable, inject } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 import {
   INVALIDATION_COALESCE_WINDOW_MS,
+  LiveInvalidationSpine,
   RUNNER_EVENT_STREAM_URL,
   RUNNER_EVENT_TYPES,
   type RunnerEventPayload,
   type RunnerEventType,
-  type SseHandle,
   SseService,
 } from 'fleet';
 
@@ -59,20 +59,15 @@ const RUNNER_EVENT_INVALIDATION_REGISTRY: Record<
 
 /**
  * The panel's live-update spine (blizzard#317 Phase 4) — the runner-scoped
- * counterpart of `fleet`'s {@link "./fleet-live".FleetLiveUpdates} (D10): one SSE
- * subscription to the runner's own `GET /api/events/stream`, through
- * {@link SseService} imported unchanged from `fleet`, that invalidates
- * `local-panel`'s TanStack queries through {@link RUNNER_EVENT_INVALIDATION_REGISTRY}
- * — a lookup, never a hand-written `case`.
- *
- * Gap recovery mirrors the hub's `FleetLiveUpdates`: a reconnect (`handle.reopens()`)
- * invalidates the whole query client, so any event missed while the socket was down
- * is closed by a fresh read on top of the transport's own `last_event_id` replay.
+ * counterpart of `fleet`'s {@link "./fleet-live".FleetLiveUpdates} (D10). The
+ * coalescing dispatch and reconnect-then-re-GET gap recovery are
+ * {@link LiveInvalidationSpine}'s (`review:F5`), configured here with
+ * {@link RUNNER_EVENT_INVALIDATION_REGISTRY} — a lookup, never a hand-written `case`.
  *
  * D9: a stream `401` is terminal — `SseService` schedules no reconnect past one — and
- * is the one place this service reaches outside its own query-invalidation concern: it
- * calls {@link "./session-recovery".SessionRecovery.recoverFromUnauthenticated}, the
- * same classify-and-bounce seam the response interceptor drives, so a session that
+ * is the one thing this service still handles itself, via the spine's `onAuthFailed`
+ * hook: it calls {@link "./session-recovery".SessionRecovery.recoverFromUnauthenticated},
+ * the same classify-and-bounce seam the response interceptor drives, so a session that
  * expires mid-stream routes through the one recovery path both callers share rather
  * than leaving a closed connection nothing acts on.
  */
@@ -83,90 +78,23 @@ export class RunnerLiveUpdates {
   private readonly injector = inject(EnvironmentInjector);
   private readonly destroyRef = inject(DestroyRef);
   private readonly sessionRecovery = inject(SessionRecovery);
-  private handle: SseHandle<RunnerEventPayload> | null = null;
-  /** Keys queued by {@link dispatch} since the last flush, mirroring `fleet-live.ts`'s own
-   * coalescing (issue #310) — keyed by serialized form so a repeated key collapses to one
-   * entry regardless of how many frames named it. */
-  private readonly pendingInvalidations = new Map<string, readonly unknown[]>();
-  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly spine = new LiveInvalidationSpine<RunnerEventPayload, RunnerEventType>({
+    sse: this.sse,
+    queryClient: this.queryClient,
+    injector: this.injector,
+    destroyRef: this.destroyRef,
+    streamUrl: RUNNER_EVENT_STREAM_URL,
+    eventTypes: RUNNER_EVENT_TYPES,
+    registry: RUNNER_EVENT_INVALIDATION_REGISTRY,
+    coalesceWindowMs: INVALIDATION_COALESCE_WINDOW_MS,
+    onAuthFailed: () => void this.sessionRecovery.recoverFromUnauthenticated(),
+  });
 
   /**
    * Open the live stream and wire it to the query cache. Idempotent — a second call
    * is a no-op. Auto-closes on the caller's {@link DestroyRef} (the app teardown).
    */
   start(): void {
-    if (this.handle) return;
-    const handle = this.sse.connect<RunnerEventPayload>(RUNNER_EVENT_STREAM_URL, {
-      events: [...RUNNER_EVENT_TYPES],
-    });
-    this.handle = handle;
-
-    const sub = handle.events.subscribe(({ type, data }) => this.dispatch(type, data));
-
-    // Reconnect-then-re-GET: a fresh reconnect re-reads the whole tree to close any
-    // gap, mirroring fleet-live.ts's own watcher. `untracked` around the `effect()`
-    // call itself — `start()` may be invoked from within another reactive context —
-    // for the same NG0602 reason `fleet-live.ts` documents at its own call site.
-    let lastReopens = handle.reopens();
-    const reopenRef = untracked(() =>
-      effect(
-        () => {
-          const reopens = handle.reopens();
-          if (reopens > lastReopens) {
-            lastReopens = reopens;
-            void this.queryClient.invalidateQueries();
-          }
-        },
-        { injector: this.injector },
-      ),
-    );
-
-    // D9: a stream 401 is terminal — SseService schedules no reconnect past one —
-    // so this is the only place that ever observes it; route it into the shared
-    // recovery seam rather than leave the closed connection with nothing acting on it.
-    const authRef = untracked(() =>
-      effect(
-        () => {
-          if (handle.authFailed()) void this.sessionRecovery.recoverFromUnauthenticated();
-        },
-        { injector: this.injector },
-      ),
-    );
-
-    this.destroyRef.onDestroy(() => {
-      sub.unsubscribe();
-      reopenRef.destroy();
-      authRef.destroy();
-      handle.close();
-      if (this.flushTimer !== null) {
-        clearTimeout(this.flushTimer);
-        this.flushTimer = null;
-      }
-      this.handle = null;
-    });
-  }
-
-  /** Look up this frame's type in {@link RUNNER_EVENT_INVALIDATION_REGISTRY} and queue every
-   * key it names for the next flush rather than invalidating immediately — a lookup, not a
-   * per-event `case`; see that registry's own doc for what each event type stales, and
-   * {@link INVALIDATION_COALESCE_WINDOW_MS} for why this queues instead of firing per frame. */
-  private dispatch(type: string, data: RunnerEventPayload): void {
-    const keys = RUNNER_EVENT_INVALIDATION_REGISTRY[type as RunnerEventType]?.(data) ?? [];
-    for (const queryKey of keys) {
-      this.pendingInvalidations.set(JSON.stringify(queryKey), queryKey);
-    }
-    if (keys.length > 0 && this.flushTimer === null) {
-      this.flushTimer = setTimeout(() => this.flushInvalidations(), INVALIDATION_COALESCE_WINDOW_MS);
-    }
-  }
-
-  /** Invalidate every key accumulated since the last flush, once each. */
-  private flushInvalidations(): void {
-    this.flushTimer = null;
-    const keys = [...this.pendingInvalidations.values()];
-    this.pendingInvalidations.clear();
-    for (const queryKey of keys) {
-      void this.queryClient.invalidateQueries({ queryKey });
-    }
+    this.spine.start();
   }
 }

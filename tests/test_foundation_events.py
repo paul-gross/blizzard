@@ -126,6 +126,23 @@ async def test_stream_opens_with_the_reserved_comment_then_replays_the_tail() ->
     assert b"widget-changed" in frames[1]
 
 
+async def test_stream_delivers_live_events_past_a_cursor_that_outruns_a_fresh_broker() -> None:
+    """A cursor above a fresh broker's own high-water mark belongs to some other
+    broker instance — trusting it as this one's last-sent watermark would discard
+    every live event until this broker's own ids caught back up to it."""
+    broker = EventBroker()  # a fresh broker — as after a daemon restart
+    stream = Stream(broker, _ConnectedRequest(), Cursor(500), _RESERVED_COMMENT, keepalive_seconds=30.0)  # type: ignore[arg-type]
+    frames = stream.frames()
+    try:
+        first = await asyncio.wait_for(frames.__anext__(), timeout=1.0)
+        assert first == _RESERVED_COMMENT.encode()
+        broker.publish("widget-changed", {"id": "w1"})
+        live = await asyncio.wait_for(frames.__anext__(), timeout=1.0)
+        assert b"widget-changed" in live
+    finally:
+        await frames.aclose()  # type: ignore[attr-defined]
+
+
 async def test_stream_emits_a_keepalive_on_an_idle_connection_at_the_injected_interval() -> None:
     """The keepalive interval is an injected value (D1) — bounding it well below the
     production default (15s) lets this observe an emission without waiting it out."""
