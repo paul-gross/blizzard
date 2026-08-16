@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient } from 'fleet';
-import { settle, stubRequestClient } from 'fleet/testing';
+import { settle, stubError, stubRequestClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { ChunkDetailPage } from './chunk-detail-page';
@@ -143,5 +143,67 @@ describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', (
     }
 
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+  });
+
+  /**
+   * The issue pane's error status (`ChunkIssuePane`'s `fleet-kit-async-state`,
+   * default `placement="center"`) centers a full sentence rather than a short
+   * label — unlike the loading/empty copy elsewhere on this page, long enough
+   * that a real environment with no forge configured (this env's own runner
+   * API returns 503 for `/work-items`) renders it at real phone widths. A
+   * page-level `scrollWidth` check alone (the test above) cannot catch this:
+   * the status line is `position: absolute` and was clipped by an ancestor
+   * without ever pushing the page wider, so a bare word-clipped fragment
+   * rendered with no page-wide horizontal scroll to show for it.
+   */
+  it('keeps the issue pane error status text within its section at phone widths', async () => {
+    const stub = stubRequestClient(runnerClient, (method: string, path: string): unknown => {
+      if (method !== 'GET') return {};
+      if (path === `/api/chunks/${CHUNK_ID}`) return DETAIL;
+      if (path === `/api/chunks/${CHUNK_ID}/work-items`) return stubError(503, { detail: 'no work source is configured' });
+      if (path === '/api/leases') return { items: [LEASE] };
+      if (path === `/api/leases/${LEASE_ID}/transcript`) {
+        return { lease_id: LEASE_ID, session_id: 'sess', available: true, reason: null, truncated: false, turns: [] };
+      }
+      return {};
+    });
+    await TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter([{ path: 'board/chunk/:chunkId', component: ChunkDetailPage }]),
+      ],
+    }).compileComponents();
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
+    await settle(harness.fixture);
+    const root = harness.fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+
+    try {
+      for (const width of WIDTHS) {
+        await page.viewport(width, 900);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const label = `width=${width}`;
+        const status = root.querySelector<HTMLElement>('[data-testid="issue-error"]');
+        expect(status, `${label}: issue-error status not in the DOM`).not.toBeNull();
+        expect(status!.textContent?.trim()).toBe('Could not reach the forge — issue content is unavailable.');
+        const section = status!.closest<HTMLElement>('[data-testid^="section-"]')!;
+        const statusRect = status!.getBoundingClientRect();
+        const sectionRect = section.getBoundingClientRect();
+        expect(
+          statusRect.left,
+          `${label}: the error status starts left of its section (${statusRect.left} < ${sectionRect.left})`,
+        ).toBeGreaterThanOrEqual(sectionRect.left - 1);
+        expect(
+          statusRect.right,
+          `${label}: the error status extends past its section (${statusRect.right} > ${sectionRect.right})`,
+        ).toBeLessThanOrEqual(sectionRect.right + 1);
+      }
+    } finally {
+      root.remove();
+      stub.restore();
+    }
   });
 });

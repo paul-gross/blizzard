@@ -70,7 +70,8 @@ export type KitAsyncStateValue = 'loading' | 'error' | 'empty' | 'ready';
       left: 50%;
       top: 50%;
       transform: translate(-50%, -50%);
-      white-space: nowrap;
+      max-width: 100%;
+      text-align: center;
       color: var(--label-dim);
       font-size: var(--fs-sm);
       letter-spacing: 0.12em;
@@ -80,12 +81,13 @@ export type KitAsyncStateValue = 'loading' | 'error' | 'empty' | 'ready';
       left: auto;
       top: auto;
       transform: none;
+      max-width: none;
+      text-align: left;
       display: block;
       padding: 10px 8px;
       margin: 0;
       font-size: var(--fs-sm);
       letter-spacing: 0.08em;
-      white-space: normal;
     }
     .status.error {
       color: var(--red);

@@ -29,6 +29,7 @@ export interface WorkItemsState {
     <div class="wrap" data-testid="issue-pane">
       <fleet-kit-async-state
         [state]="triadState()"
+        placement="inline"
         loadingText="Loading issue…"
         loadingTestid="issue-loading"
         errorText="Could not reach the forge — issue content is unavailable."
@@ -82,11 +83,10 @@ export interface WorkItemsState {
     :host {
       display: block;
     }
-    /* The async-state triad's status line centers within the nearest positioned
-       ancestor (kit-async-state.ts) — this is it, with enough height for the
-       centered text not to look stranded before any issue content lands. */
+    /* placement="inline" (kit-async-state.ts) flows the status line in normal
+       layout rather than centering it, so a full-sentence error/empty message
+       wraps and grows this wrap's height instead of overflowing a fixed void. */
     .wrap {
-      position: relative;
       min-height: 40px;
     }
     .tag {
