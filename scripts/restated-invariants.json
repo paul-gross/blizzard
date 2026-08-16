@@ -179,10 +179,12 @@
    },
    "markers": [
     "rogue runner backstop not the working limit",
-    "rejects what this one merely shrinks"
+    "rejects what this one merely shrinks",
+    "loses its turns whole"
    ],
    "marker_acknowledgments": {
-    "rejects what this one merely shrinks": "R1: 6 words, the runner-side constant's own phrasing of the ordering; distinct enough that no unrelated cap prose in-tree matches it."
+    "rejects what this one merely shrinks": "R1: 6 words, the runner-side constant's own phrasing of the ordering; distinct enough that no unrelated cap prose in-tree matches it.",
+    "loses its turns whole": "R2: 4 words, the phrasing both scaffolded config templates use for the hub-side consequence. blizzard#338 made both caps operator-settable, so the ordering now has to travel with the keys an operator is invited to edit: HubConfig._transcript_cap_lines and RunnerConfig.to_toml each restate it in the file they scaffold. Both are sanctioned under bzh:one-prose-home's published-surface clause — an operator reads blizzard-hub.toml / blizzard-runner.toml with no source tree to point at — and both are unobservable for the same structural reason named on federation-origin-declared-not-derived: the text lives inside string literals, which prose_spans.py does not extract, so a site entry reads as stale. Named here rather than dropped."
    },
    "sites": [
     {

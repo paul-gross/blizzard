@@ -38,6 +38,10 @@ class ToolCall:
     tool_use_id: str | None
     output: str | None
     output_truncated: bool
+    #: This turn carries only a late-arriving ``output`` for the call naming the same
+    #: ``tool_use_id``, not a call of its own — the reader folds it and drops this turn.
+    #: Never set on the local read, which is cold and links its own results.
+    output_patch: bool = False
 
 
 @dataclass(frozen=True)
@@ -51,6 +55,9 @@ class Sidechain:
     agent_type: str | None
     link: str
     turns: list[Turn]
+    #: The ``tool_use_id`` of the call that spawned this conversation, when it shipped in an
+    #: earlier record than the conversation did — the handle a reader nests it back under.
+    parent_tool_use_id: str | None = None
 
 
 @dataclass(frozen=True)

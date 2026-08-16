@@ -54,6 +54,18 @@ function applySidechain(anchor: TranscriptTurn | undefined, late: TranscriptSide
   }
   // Same agent across several windows: the fragments are one conversation, concatenated in
   // arrival order — which is turn order, since each rides the record that read it.
-  anchor.sidechain = held ? { ...held, turns: [...held.turns, ...late.turns] } : { ...late };
+  anchor.sidechain = held ? { ...held, turns: renumber([...held.turns, ...late.turns]) } : { ...late };
   return true;
+}
+
+/**
+ * One ascending index sequence over a concatenated conversation.
+ *
+ * Every fragment is numbered from zero by the runner — `_sidechain_wire` enumerates only the
+ * turns that window read — so joining two of them repeats indices. The board is the only party
+ * that sees the whole conversation, so it is the one that can number it: duplicates break
+ * `@for … track turn.index` and make `resolveSidechainByPath` resolve to the first match.
+ */
+function renumber(turns: readonly TranscriptTurn[]): TranscriptTurn[] {
+  return turns.map((turn, i) => (turn.index === i ? turn : { ...turn, index: i }));
 }

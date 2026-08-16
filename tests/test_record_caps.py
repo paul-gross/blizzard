@@ -1,17 +1,25 @@
 """The cross-daemon invariant binding the transcript lane's two per-record caps
 (blizzard#247 D4/D5). Neither side can see the other's constant, so nothing but this
 file keeps them ordered — and the ordering is what decides whether an oversized record
-loses some of its content or all of it."""
+loses some of its content or all of it.
+
+Scoped to the **defaults**. blizzard#338 made both caps operator-settable, and a
+configured pair is unvalidated by construction: the two values live in two files read by
+two daemons, so no in-process assertion can see both. The only mitigation is the warning
+each scaffolded config template carries, which is why the last test here pins it."""
 
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
+from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.transcripts import RECORD_MAX_BYTES
-from blizzard.runner.loop.transcript_pump import TRANSCRIPT_RECORD_MAX_BYTES
+from blizzard.runner.config import RunnerConfig
+from blizzard.runner.transcripts.caps import TRANSCRIPT_RECORD_MAX_BYTES
 
 pytestmark = pytest.mark.unit
 
@@ -49,3 +57,23 @@ def test_the_operator_doc_states_the_cap_magnitude_the_code_enforces(pattern: st
     assert [int(mb) for mb in found] == [expected_mb] * len(found), (
         f"docs/deployment.md states {found} MB for the {what} per-record cap; the code enforces {expected_mb} MB"
     )
+
+
+@pytest.mark.parametrize(
+    ("rendered", "who"),
+    [
+        (lambda p: HubConfig(root=p, db_url=HubConfig.default_db_url(p)).to_toml(), "hub"),
+        (lambda p: RunnerConfig(root=p, db_url=RunnerConfig.default_db_url(p)).to_toml(), "runner"),
+    ],
+)
+def test_each_scaffolded_config_warns_an_operator_about_the_cap_ordering(
+    rendered: Callable[[Path], str], who: str, tmp_path: Path
+) -> None:
+    """The configured pair is the hole the two tests above cannot cover, and this warning is
+    the whole of what stands in for them: an operator widening one cap without the other
+    inverts the ordering and turns every partial loss into a total one. Dropping the warning
+    while keeping the keys would leave the invariant with no enforcement channel at all."""
+    text = rendered(tmp_path)
+
+    assert "loses its turns whole" in text, f"the scaffolded {who} config no longer states the cap ordering"
+    assert "record_max_bytes" in text

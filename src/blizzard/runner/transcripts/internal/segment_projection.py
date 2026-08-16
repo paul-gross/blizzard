@@ -31,6 +31,7 @@ def _tool(tool: ToolCallSegmentView) -> ToolCall:
         tool_use_id=tool.tool_use_id,
         output=tool.output,
         output_truncated=tool.output_truncated,
+        output_patch=tool.output_patch,
     )
 
 
@@ -40,6 +41,7 @@ def _sidechain(sidechain: SidechainSegmentView) -> Sidechain:
         agent_type=sidechain.agent_type,
         link=sidechain.link,
         turns=[to_turn(turn, i) for i, turn in enumerate(sidechain.turns)],
+        parent_tool_use_id=sidechain.parent_tool_use_id,
     )
 
 

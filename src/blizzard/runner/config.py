@@ -238,8 +238,8 @@ class Transcripts:
     @property
     def record_max_bytes(self) -> int | None:
         """Override for the pump's own per-record cap; ``None`` keeps its default
-        (blizzard#338). Must stay at or BELOW the hub's `record_max_bytes`, which rejects
-        a record's turns whole where this one merely shrinks them."""
+        (blizzard#338). Must stay at or below the hub's `record_max_bytes` — the ordering
+        and its consequence are at :mod:`blizzard.runner.transcripts.caps`."""
         return self._cap("record_max_bytes")
 
     @property

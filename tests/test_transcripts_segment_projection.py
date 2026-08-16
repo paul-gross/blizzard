@@ -7,12 +7,13 @@ itself — what survives it, and what it degrades rather than raising on — not
 
 from __future__ import annotations
 
+from dataclasses import fields
 from datetime import UTC, datetime
 
 import pytest
 
 from blizzard.runner.transcripts.internal.segment_projection import to_turn
-from blizzard.runner.transcripts.repository import TurnKind
+from blizzard.runner.transcripts.repository import Sidechain, ToolCall, TurnKind
 from blizzard.wire.transcript_segment import SidechainSegmentView, ToolCallSegmentView, TurnSegmentView
 
 
@@ -48,6 +49,7 @@ def _tool(
     output: str | None = "done",
     output_truncated: bool = False,
     input_truncated: bool = False,
+    output_patch: bool = False,
 ) -> ToolCallSegmentView:
     return ToolCallSegmentView(
         name=name,
@@ -58,6 +60,7 @@ def _tool(
         output=output,
         output_truncated=output_truncated,
         input_truncated=input_truncated,
+        output_patch=output_patch,
     )
 
 
@@ -168,3 +171,51 @@ def test_a_capped_tool_input_folds_into_the_turns_own_truncation_flag() -> None:
 def test_an_uncapped_tool_turn_stays_untruncated() -> None:
     result = to_turn(_turn(0, "tool", tool=_tool(input_truncated=False), truncated=False), 0)
     assert result.truncated is False
+
+
+@pytest.mark.unit
+def test_a_late_output_patch_keeps_its_flag_through_the_projection() -> None:
+    """The archived read is the route a closed lease's transcript takes, and it is the only
+    route that ever carries a late link — a cold local read links its own results. Dropping
+    the flag here leaves the panel unable to fold the patch, rendering the very defect
+    blizzard#338 fixed: a tool card with no output beside a nameless one that holds it."""
+    patch = _tool(name="", output="3 blockers", output_patch=True)
+
+    result = to_turn(_turn(0, "tool", tool=patch), 0)
+
+    assert result.tool is not None
+    assert (result.tool.output_patch, result.tool.output) == (True, "3 blockers")
+
+
+@pytest.mark.unit
+def test_a_late_sidechains_parent_handle_survives_the_projection() -> None:
+    """Same route, the sidechain half — without ``parent_tool_use_id`` the conversation
+    cannot be nested back under the call that spawned it."""
+    late = SidechainSegmentView(
+        agent_id="agent-1",
+        agent_type="reviewer",
+        link="agent-id-late",
+        turns=[_turn(0, "asst", text="hi")],
+        parent_tool_use_id="toolu_T",
+    )
+
+    result = to_turn(_turn(0, "sidechain", sidechain=late), 0)
+
+    assert result.sidechain is not None
+    assert result.sidechain.parent_tool_use_id == "toolu_T"
+
+
+#: Wire fields with no one-to-one domain counterpart, and where each lands instead. The
+#: guard below reads this as the complete set, so adding a field without a home fails.
+_FOLDED_TOOL_FIELDS = {"input_truncated": "folds into Turn.truncated"}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("view", "domain"), [(ToolCallSegmentView, ToolCall), (SidechainSegmentView, Sidechain)])
+def test_every_wire_field_has_a_domain_counterpart(view: type, domain: type) -> None:
+    """A field-set guard, not a behavior test: the projection is hand-written per field, so
+    a field added to the segment wire is silently dropped here until someone maps it. That
+    is how ``output_patch`` and ``parent_tool_use_id`` reached a published runner schema the
+    runner could never populate. Fails on the next one instead."""
+    unmapped = set(view.model_fields) - {f.name for f in fields(domain)} - set(_FOLDED_TOOL_FIELDS)
+    assert unmapped == set(), f"{view.__name__} fields reach no {domain.__name__} field: {sorted(unmapped)}"

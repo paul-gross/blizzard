@@ -828,9 +828,10 @@ client_max_body_size               16m;
 ```
 
 `client_max_body_size` is there for the transcript lane, not for headers: one shipped record
-may reach the hub's 10 MB per-record cap, and nginx's own default is **1 MB**, so a proxy
-left at that default rejects a large record with a 413 before the hub ever adjudicates it.
-Raise it whenever the hub's record cap rises. Caddy has no equivalent default limit.
+may reach the hub's per-record cap — 10 MB by default, and settable — while nginx's own
+default is **1 MB**, so a proxy left at that default rejects a large record with a 413
+before the hub ever adjudicates it. Raise it whenever the hub's `record_max_bytes` rises.
+Caddy has no equivalent default limit.
 
 Caddy's `reverse_proxy` and Tailscale's `tailscale serve` set all three headers automatically. Only
 `X-Forwarded-*` is honored — `Forwarded` (RFC 7239) and proxy-protocol framing are not
@@ -1487,15 +1488,25 @@ ship = false
   runner wastes its own budget without wedging its lane. The hub's per-record cap sits
   deliberately *above* the runner's: over the runner's, content is shrunk and every turn
   survives; over the hub's, the whole record's turns are rejected and stored as `[]`.
-  All five values above are the **defaults**: each is overridable under `[transcripts]` in
-  the owning daemon's config — `record_max_bytes` and `chunk_max_bytes` on the runner,
-  `record_max_bytes`, `chunk_budget_max_bytes` and `runner_daily_rate_max_bytes` on the hub.
-  Widen them for a backfill window — `blizzard runner transcript reship` spends the
-  per-chunk budget a second time over the same chunk — then restore them, keeping the
-  runner's per-record cap at or below the hub's so the ordering above still holds. Every runner-side outcome above is
-  recorded on the segment and surfaced as a `warning` operational event (see
-  [the event log](#operational-visibility--the-event-log) below), the same way a captured
-  command failure is.
+  Every runner-side outcome above is recorded on the segment and surfaced as a `warning`
+  operational event (see [the event log](#operational-visibility--the-event-log) below),
+  the same way a captured command failure is.
+- **Every ceiling above is a default, not a fixed limit.** Each is overridable under
+  `[transcripts]` in the owning daemon's config — `record_max_bytes` and `chunk_max_bytes`
+  on the runner, `record_max_bytes`, `chunk_budget_max_bytes` and
+  `runner_daily_rate_max_bytes` on the hub. Widen them for a backfill window —
+  `blizzard runner transcript reship` spends the per-chunk budget a second time over the
+  same chunk — then restore them, keeping the runner's per-record cap at or below the hub's
+  so the ordering above still holds. **A daemon resolves its ceilings once, at startup**:
+  edit the file, then restart that daemon, or the old values stay in force with nothing in
+  the output saying so. A bad value fails loud rather than falling back to the default — a
+  non-integer or non-positive cap is a config error, and on the hub that fails the
+  `migrate` step the unit runs before `host`, so the daemon does not come up. Two limits
+  widening does *not* lift: a proxy in front of the hub rejects an oversized body before
+  ingest ever adjudicates it (raise
+  [`client_max_body_size`](#reverse-proxy-and-tls-termination) with the hub's record cap),
+  and a chunk whose shipping already stopped stays stopped — the per-chunk budget latches
+  on the segment, so widening frees the next segment, never the stopped one.
 - **Late links, for content whose call shipped earlier.** The runner reads a session in
   windows, so a tool's result and a subagent's conversation routinely arrive in a later
   record than the call that produced them. Both ship carrying the `tool_use_id` of that
@@ -1503,6 +1514,8 @@ ship = false
   `sidechain` turn naming `parent_tool_use_id` — and the board folds each back onto its
   call when rendering. Reading the API directly, expect to see them unmerged; a late turn
   whose call is outside the segment you fetched stays standalone rather than being dropped.
+  A conversation whose spawning call the runner never observed at all remains genuinely
+  unlinkable: it is dropped, and says so as a `warning` event naming the segment.
 - **Reads are operator-only.** A transcript holds everything a worker saw; reading one back
   (`GET /api/chunks/{id}/transcripts` and its per-segment content route) requires the
   `transcript:read` permission, `contributor` role and above — a runner's own fleet-plane
@@ -1531,8 +1544,8 @@ ship = false
   `--dry-run` classifies without opening, draining or shipping anything; its counts are what
   a real run would *attempt*, not a promise (a real run flushes between sessions, so
   backpressure moves the line). `--limit N` bounds one run — worth using on a long history,
-  since the hub enforces a 2 GB/runner/day rate and content past it is rejected rather than
-  queued. The verb refuses outright while `ship = false`.
+  since the hub enforces a per-runner daily rate (2 GB by default, widenable via
+  `runner_daily_rate_max_bytes`) and content past it is rejected rather than queued. The verb refuses outright while `ship = false`.
 
   The counts mean: *imported* — read and enqueued to the outbound lane, which is not the
   same as accepted by the hub; *capped* — the subset of those the hub refused or the runner
@@ -1564,7 +1577,7 @@ ship = false
   a segment whose lease is still active, because a live lease's segment belongs to the
   running pump. Three warnings can follow the report line, and each means something
   different: *shipping is stopped for this chunk* — nothing was sent at all, and note that a
-  re-ship spends the 64 MB per-chunk budget a **second** time; *the source was not read to
+  re-ship spends the per-chunk budget (64 MB by default) a **second** time; *the source was not read to
   its end* — the new segment stays open, rerun to resume it; *the new segment is itself
   marked truncated* — check the reason in the event log, since only some reasons are about
   the cap.

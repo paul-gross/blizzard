@@ -93,6 +93,18 @@ describe('mergeLateLinks', () => {
     expect(merged[0].sidechain?.turns.map((t) => t.text)).toEqual(['first', 'second']);
   });
 
+  it('renumbers a coalesced conversation into one ascending sequence', () => {
+    // Every fragment arrives numbered from zero, so the naive concatenation is 0,1,0,1 —
+    // duplicate keys under `track turn.index`, and an ambiguous sidechain path.
+    const merged = mergeLateLinks([
+      call(0, 'toolu_T'),
+      lateSidechain(1, { turns: [turn(0, { text: 'a' }), turn(1, { text: 'b' })] }),
+      lateSidechain(2, { turns: [turn(0, { text: 'c' }), turn(1, { text: 'd' })] }),
+    ]);
+
+    expect(merged[0].sidechain?.turns.map((t) => t.index)).toEqual([0, 1, 2, 3]);
+  });
+
   it('leaves a late turn top-level when its call is in a segment this read does not cover', () => {
     const merged = mergeLateLinks([outputPatch(0, 'toolu_ELSEWHERE', 'out'), lateSidechain(1)]);
 
