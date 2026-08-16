@@ -42,16 +42,18 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _pooled(node_name: str, node_id: str, *, mode: SessionMode, model: list[str] | None = None, effort=None):  # type: ignore[no-untyped-def]
-    """An envelope for a node referencing the `code` pool, in either mode."""
+def _pooled(
+    node_name: str, node_id: str, *, mode: SessionMode, model: list[str] | None = None, effort=None, pool: str = "code"
+):  # type: ignore[no-untyped-def]
+    """An envelope for a node referencing a named pool (`code` by default), in either mode."""
     return make_envelope(
         "ch_1",
         node_name,
         node_id=node_id,
         choices=_CHOICES,
         session=mode,
-        session_source="code",
-        session_name="code",
+        session_source=pool,
+        session_name=pool,
         session_model=model if model is not None else ["blizzard:basic"],
         session_effort=effort,
     )
@@ -188,6 +190,50 @@ def _pool_leases(store, chunk_id: str, session_name: str):  # type: ignore[no-un
             .where(s.lease_context.c.session_name == session_name)
         ).all()
     return list(rows)
+
+
+@pytest.mark.component
+def test_two_pools_in_one_chunk_keep_separate_heads(tmp_path):  # type: ignore[no-untyped-def]
+    """The shape adv-dwf declares: build(`resume:code`) → verify(`resume:verification`) →
+    build. Verify mints its own head, and the loop-back into build resumes build's own
+    prior session rather than the verify turns that ran in between."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+    build_env = _pooled("build", "nd_build", mode=SessionMode.RESUME)
+    verify_env = _pooled("verify", "nd_verify", mode=SessionMode.RESUME, pool="verification")
+
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", build_env)
+    h1 = FakeHarness(handle=WorkerHandle(session_id="sess-code-1", pid=100, process_start_time="t1"), verdict="pass")
+    Fill(_ctx(store, hub, provider, h1)).run()
+
+    assert h1.resume_froms == [None]  # an empty pool — build mints `code`'s head
+
+    # build -> verify: a different pool, also empty, so verify mints too.
+    hub.envelopes["ch_1"] = build_env
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=verify_env)]
+    h2 = FakeHarness(handle=WorkerHandle(session_id="sess-verify-1", pid=200, process_start_time="t2"), verdict="fail")
+    ctx2 = _ctx(store, hub, provider, h2, minutes=1)
+    Advance(ctx2).run()
+    Pull(ctx2).run()
+
+    assert h2.resume_froms == [None]
+    verify_lease = store.active_lease_for_chunk("ch_1")
+    assert verify_lease is not None
+    assert (verify_lease.session_id, verify_lease.session_name) == ("sess-verify-1", "verification")
+
+    # verify fails -> build, which must resume `code`'s head, not the newer verify one.
+    hub.envelopes["ch_1"] = verify_env
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_env)]
+    h3 = FakeHarness(handle=WorkerHandle(session_id="unused", pid=300, process_start_time="t3"), verdict="pass")
+    ctx3 = _ctx(store, hub, provider, h3, minutes=2)
+    Advance(ctx3).run()
+    Pull(ctx3).run()
+
+    assert h3.resume_froms == ["sess-code-1"]
+    assert [lease.session_id for lease in _pool_leases(store, "ch_1", "code")] == ["sess-code-1", "sess-code-1"]
+    assert [lease.session_id for lease in _pool_leases(store, "ch_1", "verification")] == ["sess-verify-1"]
 
 
 # Re-spawns join the pool (the retry regression the plan names).

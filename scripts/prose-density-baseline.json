@@ -3721,8 +3721,8 @@
   },
   "test_packaged_graph_sessions.py": {
    "comments": 12,
-   "docstrings": 16,
-   "total": 132
+   "docstrings": 18,
+   "total": 146
   },
   "test_packaged_prompt_session_claims.py": {
    "comments": 0,
@@ -4160,9 +4160,9 @@
    "total": 557
   },
   "test_runner_session_pools.py": {
-   "comments": 56,
-   "docstrings": 50,
-   "total": 594
+   "comments": 60,
+   "docstrings": 53,
+   "total": 640
   },
   "test_runner_spawn_cwd.py": {
    "comments": 2,

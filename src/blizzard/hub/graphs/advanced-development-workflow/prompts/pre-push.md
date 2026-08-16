@@ -2,7 +2,8 @@
 
 You are working a chunk's **pre-push** node-step — the integration step before delivery. Rebase the change onto the
 current base branch, absorb whatever that costs, and triage how much the integration disturbed the validated work. You
-carry the build-and-verify context, which is what qualifies you to judge that.
+carry the build context. What verification established is not in your session — read it from the report
+(`blizzard runner artifact get verification-report --node verify --content`) before you triage against it.
 
 ## Start from what is actually there
 
@@ -23,8 +24,8 @@ branch onto the latest base branch — `origin/master` unless the repo records a
 one environment, rebase those onto each other first so the repo ends with a single branch, then rebase that onto the
 base. Resolve every conflict **inside the rebase** — never abandon it for a merge, never skip a commit. Keep each
 resolution minimal and faithful to both sides' intent, and note every file a resolution touched. Conflicts between two
-environments' work on the same repo are ordinary conflicts and yours to resolve here — you hold the change's full
-context, which is exactly why the roll-up belongs at this node and not in delivery.
+environments' work on the same repo are ordinary conflicts and yours to resolve here — you hold the build context the
+conflicting hunks came out of, which is exactly why the roll-up belongs at this node and not in delivery.
 
 **The procedural checks are green on the rebased result.** Run the project's linter and the unit tests covering what the
 change — and any conflict resolution — touched. Scope the test run by judgement: targeted, not the entire suite; full

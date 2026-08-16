@@ -1,8 +1,8 @@
-"""The packaged graphs' session pools, and the continuity they must not change (#144).
+"""The packaged graphs' declared session pools and each node's declared lineage.
 
-Over the **real packaged YAML**: the tuning re-expresses lineages these graphs already
-had, so every node must still resume what it resumed before. ``--resume <sid>`` reuses
-the session id **in place**, so naming the pool changes nothing about the continuation.
+Over the **real packaged YAML**, since a graph referencing a pool it does not declare is
+rejected at mint. Which pool a node names is a deliberate decision per node, pinned here
+so a lineage cannot be moved without the move being stated.
 """
 
 from __future__ import annotations
@@ -53,19 +53,32 @@ def test_no_packaged_pool_name_collides_with_a_node_name(name: str) -> None:
     assert not (set(doc.sessions) & {n.name for n in doc.nodes})
 
 
-def test_adv_dwf_declares_the_three_tiers_and_bounds_only_the_mechanical_one() -> None:
+def test_adv_dwf_declares_the_four_tiers_and_bounds_only_the_accumulating_ones() -> None:
     doc = _doc("advanced-development-workflow")
 
-    assert set(doc.sessions) == {"planning", "code", "gate"}
+    assert set(doc.sessions) == {"planning", "code", "verification", "gate"}
     assert doc.sessions["planning"].model == ["blizzard:advanced"]
     assert doc.sessions["planning"].effort == "high"
     assert doc.sessions["code"].model == ["blizzard:basic"]
+    assert doc.sessions["verification"].model == ["blizzard:basic"]
     assert doc.sessions["gate"].model == ["blizzard:basic"]
-    # Only `code` is bounded — the one lineage that accumulates across a review-fail
-    # loop; `gate` is always `fresh:gate`, so a bound would never apply.
+    # `gate` is always `fresh:gate`, so a bound would never apply to it.
     assert doc.sessions["code"].rotate is not None
+    assert doc.sessions["verification"].rotate is not None
     assert doc.sessions["gate"].rotate is None
     assert doc.sessions["planning"].rotate is None
+
+
+def test_adv_dwf_keeps_verify_off_the_pool_build_resumes() -> None:
+    """The point of the split: `build` is the later node in the build/verify cycle, so a
+    shared id makes every build resume re-read verify's transcript."""
+    doc = _doc("advanced-development-workflow")
+
+    build, verify = doc.node("build"), doc.node("verify")
+    assert build is not None and verify is not None
+    assert build.session_source != verify.session_source
+    assert {n.name for n in doc.nodes if n.session_source == "code"} == {"build", "pre-push", "resolve"}
+    assert {n.name for n in doc.nodes if n.session_source == "verification"} == {"verify"}
 
 
 @pytest.mark.parametrize(
@@ -79,7 +92,8 @@ def test_adv_dwf_declares_the_three_tiers_and_bounds_only_the_mechanical_one() -
                 "plan": (SessionMode.RESUME, "planning"),
                 "plan-review": (SessionMode.FRESH, "gate"),
                 "build": (SessionMode.RESUME, "code"),
-                "verify": (SessionMode.RESUME, "code"),
+                # Its own lineage — never the one `build` resumes next.
+                "verify": (SessionMode.RESUME, "verification"),
                 "review": (SessionMode.FRESH, "gate"),
                 "pre-push": (SessionMode.RESUME, "code"),
                 "resolve": (SessionMode.RESUME, "code"),

@@ -19,30 +19,34 @@
 name: adv-dwf
 entry: plan
 
-# Named session pools (issue #144). Three lineages, each with its own capability tier:
+# Named session pools. Four lineages, each with its own capability tier:
 #
-#   planning  the plan node's own long-running context, on the advanced tier — authoring
-#             a plan against the project's declared verification methods and architecture
-#             guidance is the judgement-heaviest work this graph does.
-#   code      the mechanical build lineage — build -> verify -> pre-push -> resolve — on
-#             the basic tier and BOUNDED, since it is the one lineage that can accumulate
-#             indefinitely across a review-fail loop.
-#   gate      the two cold-eyes gates, on the basic tier. No `rotate:` block: a gate is
-#             only ever reached through `fresh:gate`, so its head is minted every entry
-#             and rotation never applies.
+#   planning      the plan node's own long-running context, on the advanced tier —
+#                 authoring a plan against the project's declared verification methods
+#                 and architecture guidance is the judgement-heaviest work this graph
+#                 does.
+#   code          the build lineage — build -> pre-push -> resolve — on the basic tier
+#                 and BOUNDED, since it accumulates across every review-fail loop.
+#   verification  the verify finale's own lineage, on the basic tier and bounded the same
+#                 way. Held apart from `code` because `build` is always the later node in
+#                 the build/verify/review cycle: on one shared id every build resume
+#                 re-reads the preceding verify's whole transcript, and one measured
+#                 `build` cost $7.74 entering at 128k context against $22.24 entering at
+#                 276k. What verify establishes still reaches the nodes that need it —
+#                 through the verification-report asset and the `fail` edge's prompt
+#                 addendum — rather than through a shared conversation.
+#   gate          the two cold-eyes gates, on the basic tier. No `rotate:` block: a gate
+#                 is only ever reached through `fresh:gate`, so its head is minted every
+#                 entry and rotation never applies.
 #
-# This is a re-EXPRESSION of the lineages these nodes already had, not a re-shaping of
-# them. Naming `code` changes nothing about which session each member continues:
-# `--resume <sid>` reuses the session id in place (forking is opt-in and never used), so
-# build/verify/pre-push/resolve already share ONE session id today — `resume:build`,
-# bare `resume`, `resume:verify` and `resume:pre-push` all resolve to the same value.
-# What the pool adds is the bound and the tier pin.
+# A pool bounds and tier-pins a lineage; it does not fork one. `--resume <sid>` reuses the
+# session id in place (forking is opt-in and never used), so every member of a pool
+# continues the one head the pool holds — which is why `build` re-entered after a
+# review-fail still resumes its own prior build turns.
 #
-# Deliberately NOT the issue's illustrative YAML, which shows `plan`/`build` on
-# `fresh:<name>`. `fresh:` mints on EVERY entry, so transcribing it would re-enter `plan`
-# with no memory of authoring the plan and `build` cold after a review-fail — silently
-# reverting the deliberate `resume:<node>` decisions the comments below still carry. The
-# `rotate:` thresholds supply the bounding `fresh:` was standing in for.
+# Deliberately NOT `fresh:<name>` on `plan`/`build`. `fresh:` mints on EVERY entry, so it
+# would re-enter `plan` with no memory of authoring the plan and `build` cold after a
+# review-fail. The `rotate:` thresholds supply the bounding instead.
 sessions:
   planning:
     model: ["blizzard:advanced"]
@@ -56,8 +60,8 @@ sessions:
       # plus a judge, plus any nudge), so this is roughly five node-steps, not twelve.
       # Observed p99 is 10 and the most any session ever reached is 21, so this bounds the
       # tail without touching the body — but it IS the bound that rotates a real lineage
-      # first, since `code` spans build -> verify -> pre-push -> resolve and exists to
-      # accumulate across the review-fail loop: expect it around one bounce.
+      # first, since `code` spans build -> pre-push -> resolve and accumulates across
+      # every review-fail loop.
       max_invocations: 12
       # The context the next resume starts from, in tokens — measured off the pool head's
       # last main-chain turn, so it is the conversation's SIZE, not spend accumulated
@@ -68,6 +72,15 @@ sessions:
       # measures, since a resume re-reads neither a subagent's context nor its bytes. A
       # backstop under the context bound rather than a peer of it: bytes track context only
       # loosely, and the largest main file ever observed is 5.2MB, so this is ~2x the tail.
+      max_transcript_bytes: 10000000
+  verification:
+    model: ["blizzard:basic"]
+    # `code`'s three numbers, inherited as backstops rather than derived for this
+    # lineage: they were fit to combined build+verify sessions, and a one-member pool
+    # will rarely reach them. Re-fit them off a verify-only slice when one exists.
+    rotate:
+      max_invocations: 12
+      max_context_tokens: 300000
       max_transcript_bytes: 10000000
   gate:
     # The plan gate's fold stays basic-tier deliberately: it transcribes the gate's own
@@ -162,9 +175,9 @@ nodes:
   verify:
     executor: runner
     prompt: ./prompts/verify.md
-    session: resume:code  # was bare `resume`, which already resolved to this same
-      # lineage — named so the whole mechanical track shares one bounded, tier-pinned
-      # pool rather than two spellings of the same thing
+    session: resume:verification  # its own lineage: a verify pass must not deposit
+      # its transcript into the session `build` resumes next, and `build` is always
+      # the later node in the build/verify/review cycle
     produces:
       - verification-report
       - retrospective
@@ -207,8 +220,8 @@ nodes:
     executor: runner
     prompt: ./prompts/pre-push.md
     session: resume:code  # integration is mechanical (rebase, lint, targeted
-      # tests), not a judgement call — the `code` lineage already carries build's
-      # context plus whatever gaps verify itself closed
+      # tests), not a judgement call — the `code` lineage already carries the build
+      # context the rebase is resolving against
     produces:
       - pre-push-summary
       - retrospective
