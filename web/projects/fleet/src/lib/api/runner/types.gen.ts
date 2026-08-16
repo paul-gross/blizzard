@@ -12,6 +12,65 @@ export type ClientOptions = {
 export type ArtifactKind = 'git_commit' | 'asset';
 
 /**
+ * ArtifactView
+ *
+ * One entry of a chunk's inline artifact store. ``key`` is ``{node}.{artifact-name}.{epoch}`` —
+ * append-only, so latest-by-epoch resolution is the reader's. ``content`` carries an **asset**'s text
+ * verbatim; ``repo``/``branch_name``/``commit_hash`` carry a ``git_commit``'s pinned reference, never
+ * the code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp.
+ */
+export type ArtifactView = {
+    /**
+     * Branch Name
+     */
+    branch_name?: string | null;
+    /**
+     * Branch Url
+     */
+    branch_url?: string | null;
+    /**
+     * Commit Hash
+     */
+    commit_hash?: string | null;
+    /**
+     * Content
+     */
+    content?: string | null;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Node Name
+     */
+    node_name: string;
+    /**
+     * Recorded At
+     */
+    recorded_at?: string | null;
+    /**
+     * Repo
+     */
+    repo?: string | null;
+};
+
+/**
  * AskListResponse
  *
  * Every ask still awaiting an answer.
@@ -136,6 +195,27 @@ export type AttachmentResponse = {
 };
 
 /**
+ * BounceView
+ *
+ * One recorded delivery kick-back (#64) — contention, not failure, and never itself a status.
+ * ``envelope`` is the raw JSON kick-back payload verbatim.
+ */
+export type BounceView = {
+    /**
+     * Cause
+     */
+    cause: string;
+    /**
+     * Envelope
+     */
+    envelope: string;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+};
+
+/**
  * CapacitiesView
  *
  * Agent slots — the same math FILL claims against.
@@ -156,18 +236,97 @@ export type CapacitiesView = {
 };
 
 /**
- * ChunkHeaderView
+ * ChunkDetailView
  *
- * A chunk-detail header aggregate (issue #185) — identity, work-item links, live state, and the
- * pause fact, without the transition/artifact history the hub's own chunk aggregate carries.
+ * The chunk aggregate minus ``escalation`` — the shared definition ``ChunkDetail`` extends and the
+ * runner's own detail proxy serves whole (issue #314). Carries its **transition history** — every node
+ * it visited, including a review that failed and looped back — and its inline **artifact store**.
+ *
+ * ``escalation`` lives only on ``ChunkDetail``: the runner app already serves its own
+ * ``EscalationView`` (``wire.runner_status``) on ``GET /api/escalations``, and one FastAPI app cannot
+ * carry two identically-named schemas without each being mangled — a collision this split avoids
+ * rather than resolves. The field is not among what the runner's chunk detail page renders.
  */
-export type ChunkHeaderView = {
+export type ChunkDetailView = {
+    /**
+     * Artifacts
+     */
+    artifacts?: Array<ArtifactView>;
+    /**
+     * Awaiting External Merge
+     */
+    awaiting_external_merge?: boolean;
+    /**
+     * Bounces
+     */
+    bounces?: Array<BounceView>;
     /**
      * Chunk Id
      */
     chunk_id: string;
+    cost?: ChunkUsageTotalView;
+    /**
+     * Current Node Id
+     */
+    current_node_id: string | null;
+    /**
+     * Current Node Name
+     */
+    current_node_name?: string | null;
+    decision?: DecisionView | null;
+    /**
+     * Default Effort
+     */
+    default_effort?: string | null;
+    /**
+     * Default Model
+     */
+    default_model?: Array<string>;
+    /**
+     * Graph Created At
+     */
+    graph_created_at?: string | null;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Graph Name
+     */
+    graph_name?: string | null;
+    /**
+     * History
+     */
+    history?: Array<TransitionView>;
+    intended_migration?: IntendedMigrationView | null;
+    /**
+     * Landed
+     */
+    landed?: boolean;
+    /**
+     * Latest Epoch
+     */
+    latest_epoch: number | null;
+    /**
+     * Migrations
+     */
+    migrations?: Array<MigrationView>;
+    /**
+     * Open Prs
+     */
+    open_prs?: Array<PrView>;
     pause?: PauseView | null;
+    pending?: PendingView | null;
+    /**
+     * Questions
+     */
+    questions?: Array<QuestionView>;
+    route?: RouteView | null;
     status: ChunkStatus;
+    /**
+     * Usage
+     */
+    usage?: Array<ChunkUsageView>;
     /**
      * Work Refs
      */
@@ -268,6 +427,52 @@ export type ChunkUsageTotalView = {
 };
 
 /**
+ * ChunkUsageView
+ *
+ * One node-step's usage/cost telemetry (issue #59) — one harness invocation's tokens-by-class and
+ * cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no result envelope
+ * existed for this invocation — never fabricated.
+ */
+export type ChunkUsageView = {
+    /**
+     * Cache Create Tokens
+     */
+    cache_create_tokens: number;
+    /**
+     * Cache Read Tokens
+     */
+    cache_read_tokens: number;
+    /**
+     * Cost Usd
+     */
+    cost_usd: number | null;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Input Tokens
+     */
+    input_tokens: number;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Model
+     */
+    model: string;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Output Tokens
+     */
+    output_tokens: number;
+};
+
+/**
  * DashboardView
  *
  * ``GET /api/dashboard`` — the panel's seven status reads composed into one response
@@ -283,6 +488,77 @@ export type DashboardView = {
     fleet_summary: FleetSummaryView | null;
     runner: RunnerStatusView;
     takeovers: OpenTakeoverListResponse;
+};
+
+/**
+ * DecisionChoiceModel
+ *
+ * One selectable gate outcome.
+ */
+export type DecisionChoiceModel = {
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * DecisionView
+ *
+ * A gate decision in full.
+ *
+ * ``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the
+ * resolving transition has been recorded.
+ */
+export type DecisionView = {
+    /**
+     * Choices
+     */
+    choices?: Array<DecisionChoiceModel>;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Decision Id
+     */
+    decision_id: string;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Node Name
+     */
+    node_name: string;
+    /**
+     * Resolved At
+     */
+    resolved_at?: string | null;
+    /**
+     * Resolved By
+     */
+    resolved_by?: string | null;
+    /**
+     * Resolved Choice
+     */
+    resolved_choice?: string | null;
+    /**
+     * Submitted At
+     */
+    submitted_at: string;
+    /**
+     * Transitioned
+     */
+    transitioned?: boolean;
 };
 
 /**
@@ -648,6 +924,30 @@ export type HubConnectivityView = {
 };
 
 /**
+ * IntendedMigrationView
+ *
+ * A chunk's standing migration intent (issue #124) — editable at any non-terminal status and
+ * consulted, never applied eagerly, at the chunk's next transition. ``graph_name`` is resolved
+ * server-side from the stored ``graph_id``, null when unresolvable. ``node_name`` is the ``forced``
+ * mode's landing target, null for ``auto``, whose landing is derived at consult time.
+ */
+export type IntendedMigrationView = {
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Graph Name
+     */
+    graph_name?: string | null;
+    mode: MigrationMode;
+    /**
+     * Node Name
+     */
+    node_name?: string | null;
+};
+
+/**
  * LeaseListResponse
  *
  * Active leases, then recently-closed ones (issue #28/#29).
@@ -729,6 +1029,75 @@ export type LeaseView = {
 };
 
 /**
+ * MigrationMode
+ *
+ * How a chunk's intended migration fires at its next transition (issue #124).
+ *
+ * ``AUTO`` fires only when the transition's own destination node name also exists on
+ * the target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``.
+ */
+export type MigrationMode = 'auto' | 'forced';
+
+/**
+ * MigrationView
+ *
+ * One cross-graph migration step (issue #90): the chunk's attempt ended in ``from_graph`` and it
+ * re-queued at ``landed_node`` in ``to_graph`` — its own step, never a transition
+ * (``bzh:migration-not-transition``). ``model`` is the re-pinned model, null when the chunk kept its
+ * own. ``source`` says what moved it: ``authored-edge``, ``intent``, or ``follow-latest`` (#164).
+ */
+export type MigrationView = {
+    /**
+     * Choice Name
+     */
+    choice_name?: string | null;
+    /**
+     * From Graph Id
+     */
+    from_graph_id: string;
+    /**
+     * From Graph Name
+     */
+    from_graph_name?: string | null;
+    /**
+     * From Node Id
+     */
+    from_node_id: string | null;
+    /**
+     * From Node Name
+     */
+    from_node_name?: string | null;
+    /**
+     * Landed Node Id
+     */
+    landed_node_id?: string | null;
+    /**
+     * Landed Node Name
+     */
+    landed_node_name?: string | null;
+    /**
+     * Model
+     */
+    model?: string | null;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * Source
+     */
+    source?: string | null;
+    /**
+     * To Graph Id
+     */
+    to_graph_id: string;
+    /**
+     * To Graph Name
+     */
+    to_graph_name?: string | null;
+};
+
+/**
  * OpenTakeoverListResponse
  *
  * Every takeover still open across this runner's held chunks.
@@ -801,6 +1170,114 @@ export type PauseView = {
 };
 
 /**
+ * PendingView
+ *
+ * A hub node's in-progress poll (#66) — whether a chunk parked at a hub node is about to run its
+ * first attempt or is already mid-poll, and when the next is due. Never itself a status.
+ */
+export type PendingView = {
+    /**
+     * Next Poll At
+     */
+    next_poll_at: string;
+    /**
+     * Node Name
+     */
+    node_name: string;
+};
+
+/**
+ * PrView
+ *
+ * An open PR a chunk is parked on in open-pr delivery mode.
+ */
+export type PrView = {
+    /**
+     * Number
+     */
+    number: number;
+    /**
+     * Repo
+     */
+    repo: string;
+    /**
+     * Url
+     */
+    url: string;
+};
+
+/**
+ * QuestionView
+ *
+ * A question row with its derived answer *and delivery* state.
+ *
+ * ``answered`` and the answer fields derive from the presence of the answer row;
+ * ``delivered``/``delivered_at`` derive from the ``answer.delivered`` fact (issue #165).
+ */
+export type QuestionView = {
+    /**
+     * Answer
+     */
+    answer?: string | null;
+    /**
+     * Answered
+     */
+    answered?: boolean;
+    /**
+     * Answered At
+     */
+    answered_at?: string | null;
+    /**
+     * Answered By
+     */
+    answered_by?: string | null;
+    /**
+     * Asked At
+     */
+    asked_at: string;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Delivered
+     */
+    delivered?: boolean;
+    /**
+     * Delivered At
+     */
+    delivered_at?: string | null;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Node Id
+     */
+    node_id?: string | null;
+    /**
+     * Options
+     */
+    options?: Array<string>;
+    /**
+     * Question
+     */
+    question: string;
+    /**
+     * Question Id
+     */
+    question_id: string;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Session Id
+     */
+    session_id?: string | null;
+};
+
+/**
  * ReadinessResponse
  *
  * The wire shape of a readiness reading (openapi-ts consumes this).
@@ -842,6 +1319,26 @@ export type RequeueResponse = {
      * Requeued
      */
     requeued: boolean;
+};
+
+/**
+ * RouteView
+ *
+ * A chunk's route — where it is being worked.
+ */
+export type RouteView = {
+    /**
+     * Environment Ids
+     */
+    environment_ids?: Array<string>;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
 };
 
 /**
@@ -1184,6 +1681,53 @@ export type TranscriptResponse = {
 };
 
 /**
+ * TransitionView
+ *
+ * One accepted transition in a chunk's history: the edge a node-step took — origin node, the
+ * judgement choice that routed it, destination — oldest first on the detail.
+ * ``from_node_name``/``to_node_name`` are the nodes' human graph names, null when unresolvable.
+ * ``graph_id``/``graph_name`` name the graph this step happened in (issue #90), both null on old rows.
+ */
+export type TransitionView = {
+    /**
+     * Choice Name
+     */
+    choice_name: string | null;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * From Node Id
+     */
+    from_node_id: string | null;
+    /**
+     * From Node Name
+     */
+    from_node_name?: string | null;
+    /**
+     * Graph Id
+     */
+    graph_id?: string | null;
+    /**
+     * Graph Name
+     */
+    graph_name?: string | null;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * To Node Id
+     */
+    to_node_id: string;
+    /**
+     * To Node Name
+     */
+    to_node_name?: string | null;
+};
+
+/**
  * TurnSegmentView
  *
  * One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted (D9),
@@ -1491,7 +2035,7 @@ export type GetChunkApiChunksChunkIdGetResponses = {
     /**
      * Successful Response
      */
-    200: ChunkHeaderView;
+    200: ChunkDetailView;
 };
 
 export type GetChunkApiChunksChunkIdGetResponse = GetChunkApiChunksChunkIdGetResponses[keyof GetChunkApiChunksChunkIdGetResponses];

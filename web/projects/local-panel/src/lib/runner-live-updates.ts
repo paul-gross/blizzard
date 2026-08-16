@@ -15,7 +15,7 @@ import { SessionRecovery } from './session-recovery';
 
 /**
  * A runner event that names a chunk stales that chunk's own detail key — the pass-
- * through pause fact (`runnerApi.ChunkHeaderView`) is hub-sourced, so no
+ * through pause fact (`runnerApi.ChunkDetailView`) is hub-sourced, so no
  * runner event proves it directly, but a frame naming the chunk is the closest local
  * signal that something about it moved, and the key's own backstop (D7) closes the
  * rest. Every {@link RunnerEventPayload} shape that carries a `chunk_id` shares this.

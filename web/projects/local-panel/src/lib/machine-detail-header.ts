@@ -9,7 +9,7 @@ import { KitButton, type runnerApi, type Tone } from 'fleet';
  * it is a hub-side concern.
  *
  * Presentational (`bzh:frontend-container-presentational`): {@link MachineDetail}
- * owns the severable `ChunkHeaderView` read and the pause mutation, and forwards
+ * owns the severable `ChunkDetailView` read and the pause mutation, and forwards
  * their data down as plain inputs; this component only renders and, mirroring the
  * hub header's own `onPause`/`onResume`, guards the mutating verbs behind a
  * `confirm()` before emitting {@link pauseChunk}/{@link resumeChunk} upward.
@@ -173,11 +173,11 @@ export class MachineDetailHeader {
 
   /** The chunk's open operator pause, if any — non-null renders Resume, null
    * renders Pause (subject to {@link pausable}). Container-fed off the fresh
-   * `ChunkHeaderView.pause`, never the machine-derived status. */
+   * `ChunkDetailView.pause`, never the machine-derived status. */
   readonly pause = input<runnerApi.PauseView | null>(null);
 
   /** Whether an **unpaused** chunk may be paused — container-folded off the
-   * fresh `ChunkHeaderView.status` (mirrors the hub `PauseService`'s refusal). */
+   * fresh `ChunkDetailView.status` (mirrors the hub `PauseService`'s refusal). */
   readonly pausable = input<boolean>(false);
 
   /** Emitted when the operator dismisses the dock via its close button. */

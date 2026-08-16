@@ -10,6 +10,111 @@
         "title": "ArtifactKind",
         "type": "string"
       },
+      "ArtifactView": {
+        "description": "One entry of a chunk's inline artifact store. ``key`` is ``{node}.{artifact-name}.{epoch}`` \u2014\nappend-only, so latest-by-epoch resolution is the reader's. ``content`` carries an **asset**'s text\nverbatim; ``repo``/``branch_name``/``commit_hash`` carry a ``git_commit``'s pinned reference, never\nthe code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp.",
+        "properties": {
+          "branch_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Name"
+          },
+          "branch_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Url"
+          },
+          "commit_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit Hash"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "node_name": {
+            "title": "Node Name",
+            "type": "string"
+          },
+          "recorded_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded At"
+          },
+          "repo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo"
+          }
+        },
+        "required": [
+          "key",
+          "kind",
+          "name",
+          "node_id",
+          "node_name",
+          "epoch"
+        ],
+        "title": "ArtifactView",
+        "type": "object"
+      },
       "AskListResponse": {
         "description": "Every ask still awaiting an answer.",
         "properties": {
@@ -173,6 +278,30 @@
         "title": "AttachmentResponse",
         "type": "object"
       },
+      "BounceView": {
+        "description": "One recorded delivery kick-back (#64) \u2014 contention, not failure, and never itself a status.\n``envelope`` is the raw JSON kick-back payload verbatim.",
+        "properties": {
+          "cause": {
+            "title": "Cause",
+            "type": "string"
+          },
+          "envelope": {
+            "title": "Envelope",
+            "type": "string"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cause",
+          "envelope",
+          "recorded_at"
+        ],
+        "title": "BounceView",
+        "type": "object"
+      },
       "CapacitiesView": {
         "description": "Agent slots \u2014 the same math FILL claims against.",
         "properties": {
@@ -197,12 +326,163 @@
         "title": "CapacitiesView",
         "type": "object"
       },
-      "ChunkHeaderView": {
-        "description": "A chunk-detail header aggregate (issue #185) \u2014 identity, work-item links, live state, and the\npause fact, without the transition/artifact history the hub's own chunk aggregate carries.",
+      "ChunkDetailView": {
+        "description": "The chunk aggregate minus ``escalation`` \u2014 the shared definition ``ChunkDetail`` extends and the\nrunner's own detail proxy serves whole (issue #314). Carries its **transition history** \u2014 every node\nit visited, including a review that failed and looped back \u2014 and its inline **artifact store**.\n\n``escalation`` lives only on ``ChunkDetail``: the runner app already serves its own\n``EscalationView`` (``wire.runner_status``) on ``GET /api/escalations``, and one FastAPI app cannot\ncarry two identically-named schemas without each being mangled \u2014 a collision this split avoids\nrather than resolves. The field is not among what the runner's chunk detail page renders.",
         "properties": {
+          "artifacts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ArtifactView"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "awaiting_external_merge": {
+            "default": false,
+            "title": "Awaiting External Merge",
+            "type": "boolean"
+          },
+          "bounces": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BounceView"
+            },
+            "title": "Bounces",
+            "type": "array"
+          },
           "chunk_id": {
             "title": "Chunk Id",
             "type": "string"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/ChunkUsageTotalView"
+          },
+          "current_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Node Id"
+          },
+          "current_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Node Name"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Effort"
+          },
+          "default_model": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Model",
+            "type": "array"
+          },
+          "graph_created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Created At"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
+          "history": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TransitionView"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "intended_migration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntendedMigrationView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "landed": {
+            "default": false,
+            "title": "Landed",
+            "type": "boolean"
+          },
+          "latest_epoch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Epoch"
+          },
+          "migrations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MigrationView"
+            },
+            "title": "Migrations",
+            "type": "array"
+          },
+          "open_prs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PrView"
+            },
+            "title": "Open Prs",
+            "type": "array"
           },
           "pause": {
             "anyOf": [
@@ -214,8 +494,44 @@
               }
             ]
           },
+          "pending": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "questions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/QuestionView"
+            },
+            "title": "Questions",
+            "type": "array"
+          },
+          "route": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RouteView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "status": {
             "$ref": "#/components/schemas/ChunkStatus"
+          },
+          "usage": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChunkUsageView"
+            },
+            "title": "Usage",
+            "type": "array"
           },
           "work_refs": {
             "default": [],
@@ -228,9 +544,12 @@
         },
         "required": [
           "chunk_id",
-          "status"
+          "graph_id",
+          "status",
+          "current_node_id",
+          "latest_epoch"
         ],
-        "title": "ChunkHeaderView",
+        "title": "ChunkDetailView",
         "type": "object"
       },
       "ChunkStatus": {
@@ -391,6 +710,67 @@
         "title": "ChunkUsageTotalView",
         "type": "object"
       },
+      "ChunkUsageView": {
+        "description": "One node-step's usage/cost telemetry (issue #59) \u2014 one harness invocation's tokens-by-class and\ncost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no result envelope\nexisted for this invocation \u2014 never fabricated.",
+        "properties": {
+          "cache_create_tokens": {
+            "title": "Cache Create Tokens",
+            "type": "integer"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "node_id",
+          "epoch",
+          "kind",
+          "model",
+          "input_tokens",
+          "output_tokens",
+          "cache_read_tokens",
+          "cache_create_tokens",
+          "cost_usd"
+        ],
+        "title": "ChunkUsageView",
+        "type": "object"
+      },
       "DashboardView": {
         "description": "``GET /api/dashboard`` \u2014 the panel's seven status reads composed into one response\n(``bzh:controller-read-only``). ``fleet_summary`` alone is a hub pass-through and\nthe only nullable section \u2014 ``None`` on a hub failure or an unwired runner, while\nthe six local sections still populate.",
         "properties": {
@@ -433,6 +813,110 @@
           "fleet_summary"
         ],
         "title": "DashboardView",
+        "type": "object"
+      },
+      "DecisionChoiceModel": {
+        "description": "One selectable gate outcome.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "title": "DecisionChoiceModel",
+        "type": "object"
+      },
+      "DecisionView": {
+        "description": "A gate decision in full.\n\n``resolved_choice`` is set once a person has decided; ``transitioned`` is true once the\nresolving transition has been recorded.",
+        "properties": {
+          "choices": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DecisionChoiceModel"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "node_name": {
+            "title": "Node Name",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By"
+          },
+          "resolved_choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Choice"
+          },
+          "submitted_at": {
+            "title": "Submitted At",
+            "type": "string"
+          },
+          "transitioned": {
+            "default": false,
+            "title": "Transitioned",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "decision_id",
+          "chunk_id",
+          "node_id",
+          "node_name",
+          "epoch",
+          "submitted_at"
+        ],
+        "title": "DecisionView",
         "type": "object"
       },
       "EnvelopeArtifact": {
@@ -996,6 +1480,46 @@
         "title": "HubConnectivityView",
         "type": "object"
       },
+      "IntendedMigrationView": {
+        "description": "A chunk's standing migration intent (issue #124) \u2014 editable at any non-terminal status and\nconsulted, never applied eagerly, at the chunk's next transition. ``graph_name`` is resolved\nserver-side from the stored ``graph_id``, null when unresolvable. ``node_name`` is the ``forced``\nmode's landing target, null for ``auto``, whose landing is derived at consult time.",
+        "properties": {
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/MigrationMode"
+          },
+          "node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Name"
+          }
+        },
+        "required": [
+          "mode",
+          "graph_id"
+        ],
+        "title": "IntendedMigrationView",
+        "type": "object"
+      },
       "LeaseListResponse": {
         "description": "Active leases, then recently-closed ones (issue #28/#29).",
         "properties": {
@@ -1152,6 +1676,139 @@
         "title": "LeaseView",
         "type": "object"
       },
+      "MigrationMode": {
+        "description": "How a chunk's intended migration fires at its next transition (issue #124).\n\n``AUTO`` fires only when the transition's own destination node name also exists on\nthe target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``.",
+        "enum": [
+          "auto",
+          "forced"
+        ],
+        "title": "MigrationMode",
+        "type": "string"
+      },
+      "MigrationView": {
+        "description": "One cross-graph migration step (issue #90): the chunk's attempt ended in ``from_graph`` and it\nre-queued at ``landed_node`` in ``to_graph`` \u2014 its own step, never a transition\n(``bzh:migration-not-transition``). ``model`` is the re-pinned model, null when the chunk kept its\nown. ``source`` says what moved it: ``authored-edge``, ``intent``, or ``follow-latest`` (#164).",
+        "properties": {
+          "choice_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choice Name"
+          },
+          "from_graph_id": {
+            "title": "From Graph Id",
+            "type": "string"
+          },
+          "from_graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Graph Name"
+          },
+          "from_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Node Id"
+          },
+          "from_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Node Name"
+          },
+          "landed_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landed Node Id"
+          },
+          "landed_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landed Node Name"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "to_graph_id": {
+            "title": "To Graph Id",
+            "type": "string"
+          },
+          "to_graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Graph Name"
+          }
+        },
+        "required": [
+          "from_node_id",
+          "from_graph_id",
+          "to_graph_id",
+          "recorded_at"
+        ],
+        "title": "MigrationView",
+        "type": "object"
+      },
       "OpenTakeoverListResponse": {
         "description": "Every takeover still open across this runner's held chunks.",
         "properties": {
@@ -1234,6 +1891,172 @@
         "title": "PauseView",
         "type": "object"
       },
+      "PendingView": {
+        "description": "A hub node's in-progress poll (#66) \u2014 whether a chunk parked at a hub node is about to run its\nfirst attempt or is already mid-poll, and when the next is due. Never itself a status.",
+        "properties": {
+          "next_poll_at": {
+            "title": "Next Poll At",
+            "type": "string"
+          },
+          "node_name": {
+            "title": "Node Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_name",
+          "next_poll_at"
+        ],
+        "title": "PendingView",
+        "type": "object"
+      },
+      "PrView": {
+        "description": "An open PR a chunk is parked on in open-pr delivery mode.",
+        "properties": {
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo",
+          "number",
+          "url"
+        ],
+        "title": "PrView",
+        "type": "object"
+      },
+      "QuestionView": {
+        "description": "A question row with its derived answer *and delivery* state.\n\n``answered`` and the answer fields derive from the presence of the answer row;\n``delivered``/``delivered_at`` derive from the ``answer.delivered`` fact (issue #165).",
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "answered": {
+            "default": false,
+            "title": "Answered",
+            "type": "boolean"
+          },
+          "answered_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answered At"
+          },
+          "answered_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answered By"
+          },
+          "asked_at": {
+            "title": "Asked At",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "delivered": {
+            "default": false,
+            "title": "Delivered",
+            "type": "boolean"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
+          "options": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "question_id": {
+            "title": "Question Id",
+            "type": "string"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "required": [
+          "question_id",
+          "chunk_id",
+          "runner_id",
+          "epoch",
+          "question",
+          "asked_at"
+        ],
+        "title": "QuestionView",
+        "type": "object"
+      },
       "ReadinessResponse": {
         "description": "The wire shape of a readiness reading (openapi-ts consumes this).",
         "properties": {
@@ -1299,6 +2122,33 @@
           "requeued"
         ],
         "title": "RequeueResponse",
+        "type": "object"
+      },
+      "RouteView": {
+        "description": "A chunk's route \u2014 where it is being worked.",
+        "properties": {
+          "environment_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Environment Ids",
+            "type": "array"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "workspace_id"
+        ],
+        "title": "RouteView",
         "type": "object"
       },
       "RunnerAuthSessionView": {
@@ -1792,6 +2642,98 @@
         "title": "TranscriptResponse",
         "type": "object"
       },
+      "TransitionView": {
+        "description": "One accepted transition in a chunk's history: the edge a node-step took \u2014 origin node, the\njudgement choice that routed it, destination \u2014 oldest first on the detail.\n``from_node_name``/``to_node_name`` are the nodes' human graph names, null when unresolvable.\n``graph_id``/``graph_name`` name the graph this step happened in (issue #90), both null on old rows.",
+        "properties": {
+          "choice_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choice Name"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "from_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Node Id"
+          },
+          "from_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Node Name"
+          },
+          "graph_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Id"
+          },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "to_node_id": {
+            "title": "To Node Id",
+            "type": "string"
+          },
+          "to_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Node Name"
+          }
+        },
+        "required": [
+          "from_node_id",
+          "to_node_id",
+          "choice_name",
+          "epoch",
+          "recorded_at"
+        ],
+        "title": "TransitionView",
+        "type": "object"
+      },
       "TurnSegmentView": {
         "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted (D9),\nstable across a segment's batches \u2014 EXCEPT under ``sidechain.turns``, where it restarts at 0 within\nthat one sidechain, and on a lease transcript read, where it numbers only the turns that read\nreturned and slides with the recency window (blizzard#248 D1). ``kind`` is closed.",
         "properties": {
@@ -2229,7 +3171,7 @@
     },
     "/api/chunks/{chunk_id}": {
       "get": {
-        "description": "Forward a chunk's detail read to the hub \u2014 the header aggregate only, with the\nupstream transition/artifact history dropped rather than served.",
+        "description": "Forward a chunk's detail read to the hub \u2014 the full aggregate minus ``escalation``\n(issue #314), including transition history and artifacts.",
         "operationId": "get_chunk_api_chunks__chunk_id__get",
         "parameters": [
           {
@@ -2247,7 +3189,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ChunkHeaderView"
+                  "$ref": "#/components/schemas/ChunkDetailView"
                 }
               }
             },

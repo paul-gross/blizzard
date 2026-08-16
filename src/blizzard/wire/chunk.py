@@ -317,9 +317,15 @@ class PauseView(BaseModel):
     set_at: str
 
 
-class ChunkDetail(BaseModel):
-    """The chunk aggregate in full, carrying its **transition history** — every node it visited,
-    including a review that failed and looped back — and its inline **artifact store**."""
+class ChunkDetailView(BaseModel):
+    """The chunk aggregate minus ``escalation`` — the shared definition ``ChunkDetail`` extends and the
+    runner's own detail proxy serves whole (issue #314). Carries its **transition history** — every node
+    it visited, including a review that failed and looped back — and its inline **artifact store**.
+
+    ``escalation`` lives only on ``ChunkDetail``: the runner app already serves its own
+    ``EscalationView`` (``wire.runner_status``) on ``GET /api/escalations``, and one FastAPI app cannot
+    carry two identically-named schemas without each being mangled — a collision this split avoids
+    rather than resolves. The field is not among what the runner's chunk detail page renders."""
 
     chunk_id: str
     graph_id: str
@@ -339,7 +345,6 @@ class ChunkDetail(BaseModel):
     # is set. See IntendedMigrationView.
     intended_migration: IntendedMigrationView | None = None
     route: RouteView | None = None
-    escalation: EscalationView | None = None
     # The operator's per-chunk pause brake (issue #46) — non-None iff currently paused, and carried
     # independently of ``status`` so a gated-and-paused chunk stays legible (see PauseView).
     pause: PauseView | None = None
@@ -373,16 +378,12 @@ class ChunkDetail(BaseModel):
     bounces: list[BounceView] = []
 
 
-# Pydantic's default ``extra="ignore"`` lets this validate straight off a ``ChunkDetail``
-# payload, which keeps ``EscalationView`` out of the runner's own OpenAPI schema.
-class ChunkHeaderView(BaseModel):
-    """A chunk-detail header aggregate (issue #185) — identity, work-item links, live state, and the
-    pause fact, without the transition/artifact history the hub's own chunk aggregate carries."""
+class ChunkDetail(ChunkDetailView):
+    """The chunk aggregate in full, carrying its **transition history** — every node it visited,
+    including a review that failed and looped back — its inline **artifact store**, and the open
+    escalation on a ``needs_human`` chunk, if any."""
 
-    chunk_id: str
-    status: ChunkStatus
-    work_refs: list[WorkRefView] = []
-    pause: PauseView | None = None
+    escalation: EscalationView | None = None
 
 
 class WorkItemEntry(BaseModel):

@@ -38,7 +38,7 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
  * are this dock's own severable enrichment — the same self-fetching shape
  * `injectChunkTitleQuery` already established for the chunks list — read through
  * {@link injectChunkDetailQuery}, the runner's pass-through proxy onto the hub's
- * `ChunkDetail` aggregate, projected to `ChunkHeaderView`. `pause` is the *only*
+ * `ChunkDetail` aggregate, served whole as `ChunkDetailView`. `pause` is the *only*
  * way this panel learns a chunk is paused (it sits independently of the derived
  * {@link status}, which folds in machine-only facts the hub aggregate does not
  * carry), so Pause/Resume's own gating reads the fresh `pause`/`status` off that
@@ -271,7 +271,7 @@ export class MachineDetail {
   protected readonly chunkId = computed<string | null>(() => this.newestLease()?.chunk_id ?? null);
 
   /**
-   * The dock's own severable enrichment (issue #185) — the `ChunkHeaderView` read,
+   * The dock's own severable enrichment (issue #185) — the `ChunkDetailView` read,
    * not container-folded: work-item links and the pause fact reach the header through
    * this, the same self-fetching shape `injectChunkTitleQuery` established for the
    * chunks list (`chunk-title.query.ts`, `chunk-row.ts`).
@@ -284,7 +284,7 @@ export class MachineDetail {
   );
 
   /** The chunk's open operator pause, if any — read off the fresh
-   * `ChunkHeaderView.pause`, never the machine-derived {@link status}, which folds
+   * `ChunkDetailView.pause`, never the machine-derived {@link status}, which folds
    * in facts the hub aggregate does not carry (mirrors the hub header's own `pause`). */
   protected readonly pause = computed<runnerApi.PauseView | null>(() => this.detailQuery.data()?.pause ?? null);
 

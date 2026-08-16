@@ -63,8 +63,8 @@ export const readSessionApiAuthSessionGet = <ThrowOnError extends boolean = fals
 /**
  * Get Chunk
  *
- * Forward a chunk's detail read to the hub — the header aggregate only, with the
- * upstream transition/artifact history dropped rather than served.
+ * Forward a chunk's detail read to the hub — the full aggregate minus ``escalation``
+ * (issue #314), including transition history and artifacts.
  */
 export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkApiChunksChunkIdGetData, ThrowOnError>): RequestResult<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}', ...options });
 

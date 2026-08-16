@@ -7,10 +7,13 @@ import { vi } from 'vitest';
 
 import { MachineDetail } from './chunk-detail';
 
-/** A `ChunkHeaderView` fixture — the runner's own `GET /api/chunks/{id}` pass-through
+/** A `ChunkDetailView` fixture — the runner's own `GET /api/chunks/{id}` pass-through
  * proxy response the header renders off. */
-const HEADER = (overrides: Partial<runnerApi.ChunkHeaderView> = {}): runnerApi.ChunkHeaderView => ({
+const HEADER = (overrides: Partial<runnerApi.ChunkDetailView> = {}): runnerApi.ChunkDetailView => ({
   chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+  graph_id: 'gr_1',
+  current_node_id: 'nd_build',
+  latest_epoch: 2,
   status: 'running',
   work_refs: [{ source: 'blizzard', ref: '185', label: 'blizzard#185', web_url: 'https://forge.example/issues/185' }],
   pause: null,
@@ -62,7 +65,7 @@ const RESUME_ROUTE = /^\/api\/chunks\/([^/]+)\/resume$/;
  * route every test needs — `header` answers `GET /api/chunks/{id}`, `pauseResult`
  * answers both `POST .../pause` and `POST .../resume` (a `ChunkSummary`, or a
  * {@link stubError} to exercise the 409 refusal). */
-function routes(header: runnerApi.ChunkHeaderView = HEADER(), pauseResult: unknown = {}) {
+function routes(header: runnerApi.ChunkDetailView = HEADER(), pauseResult: unknown = {}) {
   return (method: string, path: string): unknown => {
     if (method === 'GET') {
       const transcript = TRANSCRIPT_ROUTE.exec(path);
@@ -79,7 +82,7 @@ function routes(header: runnerApi.ChunkHeaderView = HEADER(), pauseResult: unkno
 async function render(
   leases: readonly runnerApi.LeaseView[],
   activeAttemptLeaseId: string | null = null,
-  header: runnerApi.ChunkHeaderView = HEADER(),
+  header: runnerApi.ChunkDetailView = HEADER(),
 ): Promise<{
   el: HTMLElement;
   fixture: ComponentFixture<MachineDetail>;
