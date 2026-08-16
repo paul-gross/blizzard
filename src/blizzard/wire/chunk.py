@@ -318,14 +318,10 @@ class PauseView(BaseModel):
 
 
 class ChunkDetailView(BaseModel):
-    """The chunk aggregate minus ``escalation`` — the shared definition ``ChunkDetail`` extends and the
-    runner's own detail proxy serves whole (issue #314). Carries its **transition history** — every node
-    it visited, including a review that failed and looped back — and its inline **artifact store**.
-
-    ``escalation`` lives only on ``ChunkDetail``: the runner app already serves its own
-    ``EscalationView`` (``wire.runner_status``) on ``GET /api/escalations``, and one FastAPI app cannot
-    carry two identically-named schemas without each being mangled — a collision this split avoids
-    rather than resolves. The field is not among what the runner's chunk detail page renders."""
+    """The chunk aggregate minus ``escalation`` (issue #314) — the shared definition ``ChunkDetail`` extends
+    and the runner's detail proxy serves whole, carrying its **transition history** and inline **artifact
+    store**. ``escalation`` stays ``ChunkDetail``-only: the runner already serves its own, differently-shaped
+    one on ``GET /api/escalations``, and one app cannot carry two same-named schemas without mangling both."""
 
     chunk_id: str
     graph_id: str
@@ -379,9 +375,8 @@ class ChunkDetailView(BaseModel):
 
 
 class ChunkDetail(ChunkDetailView):
-    """The chunk aggregate in full, carrying its **transition history** — every node it visited,
-    including a review that failed and looped back — its inline **artifact store**, and the open
-    escalation on a ``needs_human`` chunk, if any."""
+    """``ChunkDetailView`` plus the open escalation on a ``needs_human`` chunk, if any — the hub's own
+    response model."""
 
     escalation: EscalationView | None = None
 

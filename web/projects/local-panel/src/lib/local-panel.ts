@@ -10,9 +10,9 @@ import { injectRunnerDashboardQuery } from './status.query';
 
 /** One row in the machine-chunks list: a chunk's newest lease plus its derived
  * machine-side status, pre-folded so the layout needs no second read. `leases`
- * carries *every* attempt of the chunk (oldest → newest) for the detail dock's
- * per-attempt tabs; `lease` is `leases`' newest entry — the row and the summary
- * both render off it. */
+ * carries *every* attempt of the chunk (oldest → newest) — the detail dock
+ * resolves its own summary off the newest entry without a second read of its
+ * own; `lease` is that same newest entry, already resolved for the row. */
 export interface MachineChunkRow {
   readonly lease: runnerApi.LeaseView;
   readonly leases: readonly runnerApi.LeaseView[];
@@ -25,10 +25,10 @@ export interface MachineChunkRow {
  * {@link injectRunnerDashboardQuery} (issue #311's composed `GET
  * /api/dashboard` read, folding what were five separate query injections
  * here), the one derived-status fold ({@link deriveMachineChunkStatus}), and
- * the selection — which chunk is open and which attempt tab is active, both
- * bound to the URL's query params so a link is shareable and a reload keeps
- * its place (issue #99). Every panel below it (via {@link LocalPanelLayout})
- * is presentational or owns just its own read.
+ * the selection — which chunk is open, bound to the URL's `?chunk=` query
+ * param so a link is shareable and a reload keeps its place (issue #99).
+ * Every panel below it (via {@link LocalPanelLayout}) is presentational or
+ * owns just its own read.
  *
  * The fold and the selection stay here rather than in the layout, per the
  * epic's design decision: the layout takes `machineChunks`/`selected*` as
@@ -215,9 +215,8 @@ export class LocalPanel {
    * orders actives first, then the recent-closed block, so the first lease
    * seen per `chunk_id` is the freshest attempt) plus every attempt of the
    * chunk and the derived status — folded once here, handed to the row and the
-   * detail dock alike. Each row's `leases` is ordered oldest → newest for the
-   * detail dock's attempt tabs; `lease` (the summary/status subject) is that
-   * list's newest entry.
+   * detail dock alike. Each row's `leases` is ordered oldest → newest, so
+   * `lease` (the summary/status subject) is that list's own newest entry.
    */
   protected readonly machineChunks = computed<MachineChunkRow[]>(() => {
     const dashboard = this.dashboardQuery.data();
@@ -239,7 +238,7 @@ export class LocalPanel {
       const newest = group[0];
       rows.push({
         lease: newest,
-        leases: [...group].reverse(), // oldest → newest for the attempt tabs
+        leases: [...group].reverse(), // oldest → newest
         status: deriveMachineChunkStatus(newest, facts),
       });
     }

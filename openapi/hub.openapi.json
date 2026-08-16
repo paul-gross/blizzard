@@ -822,7 +822,7 @@
         "type": "object"
       },
       "ChunkDetail": {
-        "description": "The chunk aggregate in full, carrying its **transition history** \u2014 every node it visited,\nincluding a review that failed and looped back \u2014 its inline **artifact store**, and the open\nescalation on a ``needs_human`` chunk, if any.",
+        "description": "``ChunkDetailView`` plus the open escalation on a ``needs_human`` chunk, if any \u2014 the hub's own\nresponse model.",
         "properties": {
           "artifacts": {
             "default": [],

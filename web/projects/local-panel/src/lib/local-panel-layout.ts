@@ -30,15 +30,16 @@ import type { MachineChunkRow } from './local-panel';
  * The runner's machine-local panel's layout half (issue #80) — shaped like
  * the discovery mock's machine panel: a three-column grid over the runner's
  * local API, hub-free save for the rails that proxy through it — the
- * fleet-summary strip (`local-info`) and, for a closed lease, the transcript
- * dock below (issue #249).
+ * fleet-summary strip (`local-info`).
  *
  * - **Left (340px)** — liveness: the *active* leases (closed rows are history,
  *   not liveness — they live on the chunks list), each with a heartbeat
  *   freshness bar, over the held-environments rail, split 60/40.
  * - **Center (1fr)** — work: the chunks on this machine (one row per chunk,
  *   work-item-enriched, derived status in the hub board's colors) over the machine
- *   detail dock for the selected chunk, transcript inline.
+ *   detail dock for the selected chunk's execution facts — the transcript and
+ *   per-attempt selection moved to the runner-local chunk detail route
+ *   (issue #318).
  * - **Right (330px)** — the machine's account of itself: the hub link
  *   (endpoint, reachability, last flush, buffer) and the open local asks. The
  *   local fact log moved to its own `/events` route (issue #313) — full

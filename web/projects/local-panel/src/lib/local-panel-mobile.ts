@@ -48,8 +48,7 @@ import { injectRunnerDashboardQuery } from './status.query';
  * a deliberate scope decision, not an oversight: #133 shipped desktop-only,
  * so a mobile operator sees neither the local pause toggle nor the "paused
  * by hub" badge today. Mounting it (and wiring a home for it in this single
- * scrolling column) is left to the next mobile chunk, alongside the
- * transcript panel and detail docks above.
+ * scrolling column) is left to the next mobile chunk.
  *
  * Mounts the shared {@link MobileTitlebar} (issue #92) in place of its old
  * bespoke header — the same fleet component the hub's app-root mounts —
@@ -208,10 +207,8 @@ import { injectRunnerDashboardQuery } from './status.query';
       gap: 8px;
       padding: 8px;
     }
-    /* The drill-down screen fills the same box the sections list would have,
-       so MachineDetail's own transcript pane keeps the scrolling region it
-       sizes against on desktop — the facts and attempt tabs stay put while
-       the transcript scrolls under them. */
+    /* The drill-down screen fills the same box the sections list would have —
+       the same sizing MachineDetail gets on desktop. */
     .lpm-detail {
       display: flex;
       flex-direction: column;

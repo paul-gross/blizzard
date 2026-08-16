@@ -563,9 +563,8 @@ export type CheckResult = {
 /**
  * ChunkDetail
  *
- * The chunk aggregate in full, carrying its **transition history** — every node it visited,
- * including a review that failed and looped back — its inline **artifact store**, and the open
- * escalation on a ``needs_human`` chunk, if any.
+ * ``ChunkDetailView`` plus the open escalation on a ``needs_human`` chunk, if any — the hub's own
+ * response model.
  */
 export type ChunkDetail = {
     /**

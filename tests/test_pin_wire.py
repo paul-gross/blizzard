@@ -71,10 +71,8 @@ def test_chunk_detail_carries_no_transcript_field() -> None:
 
 
 def test_the_lease_history_route_still_answers_a_flat_history_row_view() -> None:
-    """The lease-scoped history route answers with a flat, fresh ``HistoryRowView`` (issue
-    #237) — unwidened by the chunk-detail proxy's own ``history`` field (issue #314), which
-    legitimately carries the board's nested transition/migration/bounce views instead
-    (`wire.chunk.ChunkDetailView`, the hub's own aggregate shape, per D1)."""
+    """The lease-scoped history route still answers a flat, fresh ``HistoryRowView`` (issue #237) — unwidened by
+    the chunk-detail proxy's own ``history`` field, which legitimately carries the board's own views (issue #314)."""
     spec = create_app_for_export().openapi()
     schemas = spec["components"]["schemas"]
     route = spec["paths"]["/api/leases/{lease_id}/history"]["get"]

@@ -238,14 +238,10 @@ export type CapacitiesView = {
 /**
  * ChunkDetailView
  *
- * The chunk aggregate minus ``escalation`` — the shared definition ``ChunkDetail`` extends and the
- * runner's own detail proxy serves whole (issue #314). Carries its **transition history** — every node
- * it visited, including a review that failed and looped back — and its inline **artifact store**.
- *
- * ``escalation`` lives only on ``ChunkDetail``: the runner app already serves its own
- * ``EscalationView`` (``wire.runner_status``) on ``GET /api/escalations``, and one FastAPI app cannot
- * carry two identically-named schemas without each being mangled — a collision this split avoids
- * rather than resolves. The field is not among what the runner's chunk detail page renders.
+ * The chunk aggregate minus ``escalation`` (issue #314) — the shared definition ``ChunkDetail`` extends
+ * and the runner's detail proxy serves whole, carrying its **transition history** and inline **artifact
+ * store**. ``escalation`` stays ``ChunkDetail``-only: the runner already serves its own, differently-shaped
+ * one on ``GET /api/escalations``, and one app cannot carry two same-named schemas without mangling both.
  */
 export type ChunkDetailView = {
     /**
