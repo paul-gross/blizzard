@@ -10,8 +10,9 @@ export { ChunkAwaitingHuman } from './chunk-awaiting-human';
 export { ChunkFacts } from './chunk-facts';
 export type { EditGraphEvent } from './chunk-facts';
 export { ChunkIssuePane } from './chunk-issue-pane';
-export { deriveWorkItemsState } from './chunk-issue-pane';
-export type { WorkItemsState, WorkItemsQuery } from './chunk-issue-pane';
+// deriveWorkItemsState / WorkItemsState / WorkItemsQuery live in `../query-state`
+// alongside asyncState/asyncStateOf (`bzh:one-owner`) — exported via that
+// module's own barrel entry, not re-exported here.
 export { ChunkTimeline } from './chunk-timeline';
 export { ChunkTokenBreakdown } from './chunk-token-breakdown';
 export type { TransitionView, ArtifactView, DecisionView, EscalationView, ChunkUsageTotalView, ChunkUsageView } from '../api/hub';

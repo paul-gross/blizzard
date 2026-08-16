@@ -3,6 +3,20 @@ import { runnerApi } from 'fleet';
 
 import { runnerChunkWorkItemsDetailKey, runnerChunkWorkItemsKey } from './query-keys';
 
+/** The `GET /api/chunks/{chunk_id}/work-items` fetch both queries below share
+ * — {@link injectChunkTitleQuery} and {@link injectChunkWorkItemsDetailQuery}
+ * hit the identical endpoint and differ only in cache key and observer
+ * options (the real severability distinction between them), never in how the
+ * response is fetched. */
+async function fetchWorkItems(chunkId: string): Promise<runnerApi.WorkItemsView> {
+  const { data, error } = await runnerApi.getWorkItemsApiChunksChunkIdWorkItemsGet({
+    path: { chunk_id: chunkId },
+    throwOnError: false,
+  });
+  if (error) throw error;
+  return data!;
+}
+
 /**
  * Runner `GET /api/chunks/{chunk_id}/work-items` read — the layered pass-through
  * (panel → its own runner → hub → vendor, with the hub's credentials) that
@@ -34,14 +48,7 @@ export function injectChunkTitleQuery(chunkId: () => string) {
     return {
       queryKey: runnerChunkWorkItemsKey(id),
       enabled: !!id,
-      queryFn: async (): Promise<runnerApi.WorkItemsView> => {
-        const { data, error } = await runnerApi.getWorkItemsApiChunksChunkIdWorkItemsGet({
-          path: { chunk_id: id },
-          throwOnError: false,
-        });
-        if (error) throw error;
-        return data!;
-      },
+      queryFn: () => fetchWorkItems(id),
       refetchInterval: false as const,
       staleTime: 5 * 60_000,
       gcTime: 30 * 60_000,
@@ -72,14 +79,7 @@ export function injectChunkWorkItemsDetailQuery(chunkId: () => string | null) {
     return {
       queryKey: runnerChunkWorkItemsDetailKey(id ?? ''),
       enabled: id !== null,
-      queryFn: async (): Promise<runnerApi.WorkItemsView> => {
-        const { data, error } = await runnerApi.getWorkItemsApiChunksChunkIdWorkItemsGet({
-          path: { chunk_id: id! },
-          throwOnError: false,
-        });
-        if (error) throw error;
-        return data!;
-      },
+      queryFn: () => fetchWorkItems(id!),
       staleTime: 30_000,
       refetchOnWindowFocus: false,
     };

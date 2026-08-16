@@ -33,7 +33,7 @@ export class MobileTabBar {
   protected readonly askCount = computed(() => (this.dashboardQuery.data()?.asks?.items ?? []).length);
 
   protected readonly items = computed<readonly MobileTabItem[]>(() => [
-    { testid: 'tab-board', label: 'Board', route: '/board' },
+    { testid: 'tab-board', label: 'Board', route: '/board', queryParamsHandling: 'preserve' },
     {
       testid: 'tab-asks-runner',
       label: 'Asks',
@@ -42,6 +42,6 @@ export class MobileTabBar {
       badgeTestid: 'tab-asks-runner-badge',
     },
     { testid: 'tab-transcripts-runner', label: 'Transcripts', inert: true },
-    { testid: 'tab-events', label: 'Events', route: '/events' },
+    { testid: 'tab-events', label: 'Events', route: '/events', queryParamsHandling: 'preserve' },
   ]);
 }

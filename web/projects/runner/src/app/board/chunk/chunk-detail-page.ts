@@ -98,14 +98,14 @@ import {
             <fleet-chunk-detail-awaiting-human [detail]="d" />
           </fleet-kit-panel>
           <fleet-kit-panel class="section" data-testid="section-artifacts" label="artifacts">
-            <fleet-chunk-detail-artifacts [detail]="d" />
+            <fleet-chunk-detail-artifacts [detail]="d" [expandable]="true" />
           </fleet-kit-panel>
           <fleet-kit-panel class="section transcript-section" data-testid="section-transcript" label="transcript">
             <fleet-kit-async-state
               [state]="attemptsState()"
               loadingText="LOADING…"
               loadingTestid="attempts-loading"
-              emptyText="NO ATTEMPTS RECORDED FOR THIS CHUNK"
+              emptyText="NO RECENT ATTEMPTS ON THIS MACHINE"
               emptyTestid="attempts-empty"
             >
               @if (attemptOptions().length > 1) {
@@ -134,6 +134,7 @@ import {
       overflow-y: auto;
     }
     .page {
+      position: relative;
       display: flex;
       flex-direction: column;
       gap: 8px;

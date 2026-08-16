@@ -180,7 +180,7 @@ describe('ChunkDetailPage', () => {
     stub = stubRequestClient(runnerClient, routes([]));
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
-    expect(el.querySelector('[data-testid="attempts-empty"]')?.textContent).toContain('NO ATTEMPTS');
+    expect(el.querySelector('[data-testid="attempts-empty"]')?.textContent).toContain('NO RECENT ATTEMPTS');
     expect(el.querySelector('local-transcript-panel')).toBeNull();
   });
 

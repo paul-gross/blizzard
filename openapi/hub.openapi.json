@@ -822,7 +822,7 @@
         "type": "object"
       },
       "ChunkDetail": {
-        "description": "The hub's own response model for a chunk's detail read \u2014 this module's ``ChunkDetailView`` (the\nsubset the runner serves, source-only cross-reference: ``ChunkDetailView`` is not a schema in this\nclass's own generated spec) plus the open escalation on a ``needs_human`` chunk, if any.",
+        "description": "The hub's own response model for a chunk's detail read \u2014 every ``ChunkDetailView`` field plus the\nopen escalation on a ``needs_human`` chunk, if any.",
         "properties": {
           "artifacts": {
             "default": [],

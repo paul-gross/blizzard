@@ -13,15 +13,13 @@ import {
 import { injectChunkPauseMutation } from '../chunks/pause.mutations';
 import { errorMessage } from '../error-message';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
-import { asyncState } from '../query-state';
+import { asyncState, deriveWorkItemsState, type WorkItemsState } from '../query-state';
 import {
   type AnswerQuestionEvent,
   ChunkDetailPanel,
   type EditGraphEvent,
-  type WorkItemsState,
   type ResolveDecisionEvent,
 } from './chunk-detail-panel';
-import { deriveWorkItemsState } from './chunk-issue-pane';
 
 /**
  * The chunk detail **container** — owns the reactive detail query and the

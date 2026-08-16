@@ -144,6 +144,32 @@ describe('ChunkArtifacts', () => {
     expect(orphan.querySelector('[data-testid="artifact-branch"]')?.textContent?.trim()).toBe('feature/orphan');
   });
 
+  it('in expandable mode, renders rows as buttons that toggle full content in place rather than linking away', async () => {
+    const fixture = TestBed.createComponent(ChunkArtifacts);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    fixture.componentRef.setInput('expandable', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelectorAll('a.artifact-link')).toHaveLength(0);
+    const buttons = [...el.querySelectorAll<HTMLButtonElement>('button.artifact-link')];
+    expect(buttons).toHaveLength(2);
+
+    const assetRow = el.querySelector('[data-kind="asset"]') as HTMLElement;
+    expect(assetRow.querySelector('[data-testid="artifact-content"]')).toBeNull();
+
+    assetRow.querySelector<HTMLButtonElement>('button.artifact-link')?.click();
+    await fixture.whenStable();
+    expect(assetRow.querySelector('[data-testid="artifact-content"]')?.textContent).toContain(
+      'BLOCKING: the widget endpoint returns 500 on empty input',
+    );
+
+    // Toggling again collapses it back to summary.
+    assetRow.querySelector<HTMLButtonElement>('button.artifact-link')?.click();
+    await fixture.whenStable();
+    expect(assetRow.querySelector('[data-testid="artifact-content"]')).toBeNull();
+  });
+
   it('shows an empty state when the chunk has no artifacts yet', async () => {
     const fixture = TestBed.createComponent(ChunkArtifacts);
     fixture.componentRef.setInput('detail', { ...REVIEW_FAIL_DETAIL, artifacts: [] });

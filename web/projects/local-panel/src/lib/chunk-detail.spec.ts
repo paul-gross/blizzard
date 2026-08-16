@@ -267,18 +267,20 @@ describe('MachineDetail header', () => {
  * now, the same chrome every sibling region in `local-panel-layout.ts` wears,
  * rather than mounting bare. `MachineDetailHeader` projects into the panel's
  * own `[header]` slot, so exactly one header bar (`KitPanel`'s own `.p-hdr`)
- * ever renders — never a second, stacked one.
+ * ever renders — never a second, stacked one, and never an empty one: `[hasHeaderContent]`
+ * tracks whether a chunk is actually selected, so the no-selection rest state
+ * renders no header bar at all rather than a bar with nothing in it.
  */
 describe('MachineDetail panel chrome', () => {
   let stub: RequestClientStub;
 
   afterEach(() => stub.restore());
 
-  it('renders inside a fleet-kit-panel with exactly one header bar when nothing is selected', async () => {
+  it('renders inside a fleet-kit-panel with no header bar when nothing is selected', async () => {
     const empty = await render([]);
     stub = empty.stub;
     expect(empty.el.querySelector('[data-testid="machine-detail"]')?.tagName.toLowerCase()).toBe('fleet-kit-panel');
-    expect(empty.el.querySelectorAll('.p-hdr')).toHaveLength(1);
+    expect(empty.el.querySelectorAll('.p-hdr')).toHaveLength(0);
   });
 
   it('renders inside a fleet-kit-panel with exactly one header bar, the header content inside it', async () => {

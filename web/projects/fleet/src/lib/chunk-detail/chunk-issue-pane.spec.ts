@@ -1,7 +1,8 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { ChunkIssuePane, type WorkItemsState } from './chunk-issue-pane';
+import { ChunkIssuePane } from './chunk-issue-pane';
+import type { WorkItemsState } from '../query-state';
 
 describe('ChunkIssuePane', () => {
   beforeEach(async () => {

@@ -327,7 +327,7 @@
         "type": "object"
       },
       "ChunkDetailView": {
-        "description": "The chunk aggregate minus ``escalation`` (issue #314) \u2014 the response model the runner's own detail\nproxy serves whole, carrying its **transition history** and inline **artifact store**. A subset of the\nhub's own response model for the same read (this module's ``ChunkDetail``, which extends this class\nwith the one field below) \u2014 the two live in the same Python module but publish to separate OpenAPI\nspecs, so this docstring names ``ChunkDetail`` for a reader of the source, not a schema resolvable from\nthis class's own generated spec. ``escalation`` stays hub-only: the runner already serves its own,\ndifferently-shaped one on ``GET /api/escalations``, and one app cannot carry two same-named schemas\nwithout mangling both.",
+        "description": "The chunk aggregate minus ``escalation`` (issue #314) \u2014 the response model the runner's own detail\nproxy serves whole, carrying its **transition history** and inline **artifact store**. ``escalation``\nstays hub-only: the runner already serves its own, differently-shaped one on ``GET /api/escalations``,\nand one app cannot carry two same-named schemas without mangling both.",
         "properties": {
           "artifacts": {
             "default": [],

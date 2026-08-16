@@ -24,7 +24,12 @@ import { KitButton, type runnerApi, type Tone } from 'fleet';
   template: `
     <header class="d-hdr">
       <div class="d-title">
-        <a class="cid" data-testid="detail-chunk-ref" [routerLink]="[...linkBase(), chunkId()]">{{ chunkId() }}</a>
+        <a
+          class="cid"
+          data-testid="detail-chunk-ref"
+          [routerLink]="[...linkBase(), chunkId()]"
+          [queryParams]="{ chunk: chunkId() }"
+        >{{ chunkId() }}</a>
         <span class="d-sub">
           @for (ref of workRefs(); track ref.source + ':' + ref.ref) {
             @if (ref.web_url) {
@@ -68,11 +73,12 @@ import { KitButton, type runnerApi, type Tone } from 'fleet';
     /* Two clusters, space-between — the hub board's own header shape: identity
        on the left, actions on the right. Wraps rather than overflows once the
        dock is only as wide as a phone. Paints no chrome of its own (issue
-       #307) — projected into KitPanel's own [header] slot (chunk-detail.ts),
-       which already supplies the bar's background and border; a second copy
+       #307) — projected into KitPanel's own [header] slot in owns-the-bar
+       mode (chunk-detail.ts's [hasHeaderContent], kit-panel.ts's own declared
+       contract for that mode), which already sizes this root to the bar's
+       full width and supplies the bar's background and border; a second copy
        here would stack two header bars. */
     .d-hdr {
-      flex: 1;
       min-width: 0;
       display: flex;
       align-items: center;

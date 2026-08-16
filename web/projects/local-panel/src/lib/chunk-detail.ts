@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { ageMs, compactRef, formatAge, KitPanel, type runnerApi } from 'fleet';
+import { ageMs, compactRef, formatAge, KitAsyncState, KitPanel, type runnerApi } from 'fleet';
 
 import { injectChunkDetailQuery } from './chunk-detail.query';
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
@@ -52,9 +52,9 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
 @Component({
   selector: 'local-machine-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HeartbeatFreshness, KitPanel, MachineDetailHeader],
+  imports: [HeartbeatFreshness, KitAsyncState, KitPanel, MachineDetailHeader],
   template: `
-    <fleet-kit-panel class="dock" data-testid="machine-detail">
+    <fleet-kit-panel class="dock" data-testid="machine-detail" [hasHeaderContent]="!!newestLease()">
       @if (newestLease(); as l) {
         <local-machine-detail-header
           header
@@ -107,7 +107,7 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
             }
           </div>
         } @else {
-          <p class="status" data-testid="detail-empty">SELECT A CHUNK</p>
+          <fleet-kit-async-state state="empty" emptyText="SELECT A CHUNK" emptyTestid="detail-empty" />
         }
       </div>
     </fleet-kit-panel>
@@ -195,16 +195,6 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
       color: var(--text);
       font-size: var(--fs-sm);
       user-select: all;
-    }
-    .status {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      white-space: nowrap;
-      color: var(--label-dim);
-      font-size: var(--fs-sm);
-      letter-spacing: 0.12em;
     }
   `,
 })

@@ -1,39 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import type { WorkItemEntry } from '../api/hub';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
-
-/** The chunk's related work items and the state of the pass-through fetch, for the work-item column.
- *
- * `loading` while the forge read is in flight, `error` when the whole read failed (an
- * unreachable hub or no work-source configured — the pane shows a visible notice, AC5), and
- * `success` with `items` (possibly empty for a chunk with no pointers — the empty state, AC4;
- * a per-item `error` carries a single pointer's forge failure the pane notices in place). */
-export interface WorkItemsState {
-  readonly status: 'loading' | 'error' | 'success';
-  readonly items: readonly WorkItemEntry[];
-}
-
-/** The shape {@link deriveWorkItemsState} needs from a work-items query — both
- * the runner's and the hub's generated query clients satisfy it structurally. */
-export interface WorkItemsQuery {
-  isPending(): boolean;
-  isError(): boolean;
-  data(): { items?: readonly WorkItemEntry[] } | undefined;
-}
-
-/**
- * Derives a {@link WorkItemsState} from a work-items query — the isError/
- * isPending/success fold every container mounting this pane needs (the
- * desktop dock's `chunk-detail.ts`, the hub's `chunk-page.ts`, the runner's
- * `chunk-detail-page.ts`), written once rather than duplicated per caller.
- * Loading takes precedence over error, matching every existing call site.
- */
-export function deriveWorkItemsState(query: WorkItemsQuery): WorkItemsState {
-  if (query.isPending()) return { status: 'loading', items: [] };
-  if (query.isError()) return { status: 'error', items: [] };
-  return { status: 'success', items: query.data()?.items ?? [] };
-}
+import { type WorkItemsState } from '../query-state';
 
 /**
  * The work item's issue pass-through (issue #24, issue #79) — the chunk's

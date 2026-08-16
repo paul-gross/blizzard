@@ -9,15 +9,16 @@ import {
 } from './chunk-awaiting-human';
 import { ChunkDetailHeader } from './chunk-detail-header';
 import { ChunkFacts, type EditGraphEvent } from './chunk-facts';
-import { ChunkIssuePane, type WorkItemsState } from './chunk-issue-pane';
+import { ChunkIssuePane } from './chunk-issue-pane';
 import { ChunkTimeline } from './chunk-timeline';
 import { ChunkTokenBreakdown } from './chunk-token-breakdown';
+import type { WorkItemsState } from '../query-state';
 
 export type { AnswerQuestionEvent, ResolveDecisionEvent } from './chunk-awaiting-human';
 // The container (`chunk-detail.ts`) imports these three from here too — re-exported
 // so it needs no edit for the split (issue #79's container-unchanged invariant).
 export type { EditGraphEvent } from './chunk-facts';
-export type { WorkItemsState } from './chunk-issue-pane';
+export type { WorkItemsState } from '../query-state';
 
 /**
  * The chunk detail dock (MVP criterion 9/11) — everything known about the
