@@ -3,7 +3,7 @@
 One call site per event kind at minimum, more where a kind has several distinct trigger
 seams worth covering. Each assertion is on the broker's own recorded frame, never on the
 write it followed — the write's own component tests already pin the store side; these pin
-that a frame was published, with the right cause, strictly after that write returned."""
+that a frame was published, with the right cause."""
 
 from __future__ import annotations
 
@@ -782,8 +782,8 @@ def test_external_usage_sample_publishes_fact_changed(tmp_path: Path) -> None:
 
 def test_attempt_retry_closure_publishes_fact_changed_for_its_own_event(tmp_path: Path) -> None:
     """`record_closure`'s optional `event` also bypasses enqueue_outbound — a retry's own
-    "attempt failed, retrying" fact-log row went unannounced alongside the lease-changed
-    frame the closure itself already publishes."""
+    "attempt failed, retrying" fact-log row went unannounced. Seeds an unrelated fact so
+    the expected seq isn't the trivially-correct 1, and checks it against the written row."""
     store = _store(tmp_path)
     events = EventBroker()
     _seed_lease(store, retries_max=2)  # retried=0 < 2 -> retry, closes with an event
@@ -797,15 +797,22 @@ def test_attempt_retry_closure_publishes_fact_changed_for_its_own_event(tmp_path
         probe=FakeProbe(),
         events=events,
     )
+    OutboundFacts(ctx).event(chunk_id=None, lease_id=None, payload={"detail": "seed"}, at=_NOW)
 
     Advance(ctx).run()
 
-    # The retry also re-mints a fresh lease, its own lease.minted fact-changed frame
-    # (`enqueue_outbound`, already covered) — filter to the closure's own event.
-    fact_frames = [f for f in _frames(events, "fact-changed") if f["kind"] == EVENT_RECORDED]
+    # Filter out the retry's own lease.minted frame and the seed above, to the
+    # closure's own event by the chunk/lease it's actually scoped to.
+    fact_frames = [
+        f
+        for f in _frames(events, "fact-changed")
+        if f["kind"] == EVENT_RECORDED and f["chunk_id"] == "ch_1" and f["lease_id"] == "lease_1"
+    ]
     assert len(fact_frames) == 1
-    assert fact_frames[0]["chunk_id"] == "ch_1"
-    assert fact_frames[0]["lease_id"] == "lease_1"
+    written = [f for f in store.pending_outbound() if f.kind == EVENT_RECORDED and f.chunk_id == "ch_1"]
+    assert len(written) == 1
+    assert fact_frames[0]["seq"] == written[0].seq > 1
+    assert fact_frames[0]["key"] == f"outbound_buffer:{written[0].seq}"
 
 
 # --- a broker-less context publishes nothing, degrading cleanly (D2) -------------------- #

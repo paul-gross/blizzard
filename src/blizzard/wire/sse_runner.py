@@ -11,8 +11,8 @@ from typing import ClassVar, Literal
 
 from blizzard.wire.sse import SseFramePayload
 
-#: What caused a ``lease-changed`` frame — ``dormant`` is an open-lease park (the census's
-#: ``record_park``), the rest mirror :class:`~blizzard.runner.store.repository.ClosedLeaseRecord`.
+#: What caused a ``lease-changed`` frame: ``created``/``spawned`` are not closures, ``dormant`` is
+#: an open-lease park; the other six mirror ``ClosedLeaseRecord.reason``'s closure vocabulary.
 LeaseChangeCause = Literal[
     "created", "spawned", "dormant", "transitioned", "reaped", "failed", "escalated", "parked", "released"
 ]

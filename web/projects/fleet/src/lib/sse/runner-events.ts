@@ -28,8 +28,7 @@ export const RUNNER_EVENT_TYPES = [
 /** One of the named event types the runner broadcasts ({@link RUNNER_EVENT_TYPES}). */
 export type RunnerEventType = (typeof RUNNER_EVENT_TYPES)[number];
 
-/** What caused a `lease-changed` frame — `created` on mint, the rest mirroring the
- * runner store's own closure vocabulary (`ClosedLeaseRecord.reason`). */
+/** What caused a `lease-changed` frame — the split is `sse_runner.py`'s own to state. */
 export type LeaseChangeCause =
   | 'created'
   | 'spawned'

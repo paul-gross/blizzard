@@ -19,7 +19,12 @@ export const STALE_AFTER_MS = 60 * 60_000;
  * lease at ~99% and give the operator nothing. The drain is logarithmic —
  * `1 - log(1+age)/log(1+threshold)` — so the seconds-to-minutes band where a
  * lease actually lives is where the bar visibly moves (≈50% at one minute,
- * ≈20% at ten), and the long tail to reap drains out the rest.
+ * ≈20% at ten), and the long tail to reap drains out the rest. `record_heartbeat`
+ * is deliberately Silent (D7, no SSE event announces it), so on a healthy,
+ * actively-beating lease this bar's anchor only advances on
+ * `RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS` (`polling.ts`, 60s) or an unrelated
+ * lease-changed frame — real cadence is far tighter, but the ≈50%-at-one-minute
+ * checkpoint above can render for stretches of a node-step regardless.
  *
  * Renders nothing bar-shaped for a lease with no heartbeat fact yet
  * (`spawning` — `last_heartbeat_at` null) or one whose timestamp reads ahead of

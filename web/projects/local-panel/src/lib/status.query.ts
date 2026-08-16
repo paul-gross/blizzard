@@ -9,13 +9,17 @@ import { runnerDashboardKey } from './query-keys';
  * The panel's whole machine-local status read, composed into one poll
  * (issue #311) — `GET /api/dashboard`, through the generated runner client
  * (`bzh:generated-client`). Six of its seven sections (`runner`,
- * `environments`, `asks`, `escalations`, `takeovers`, `facts`) are covered by
- * the runner's own SSE stream (blizzard#317 Phase 4) — every event kind
- * `RunnerLiveUpdates` dispatches stales this read (`runner-live-updates.ts`'s
- * registry) — so the interval below is a backstop against a dropped frame,
- * not the primary freshness path; `fleet_summary`, the seventh, is a hub
- * pass-through no runner event can prove, and rides the same backstop for a
- * different reason (D7). Nests every section the panel's rails read: `runner`
+ * `environments`, `asks`, `escalations`, `takeovers`, `facts`) are largely
+ * covered by the runner's own SSE stream (blizzard#317 Phase 4) — every
+ * event kind `RunnerLiveUpdates` dispatches stales this read
+ * (`runner-live-updates.ts`'s registry), so the interval below is mostly a
+ * backstop against a dropped frame, not the primary freshness path. Two facts
+ * inside `runner` are the exception: the daemon's own tick beat and its
+ * hub-pause mirror carry no event kind at all (D7, `polling.ts`), so for
+ * those two this interval is the only refresh path, not a backstop.
+ * `fleet_summary`, the seventh section, is a hub pass-through no runner event
+ * can prove, and rides the same backstop for a different reason (D7). Nests
+ * every section the panel's rails read: `runner`
  * (identity, capacities, hub connectivity, last tick), `environments`, `asks`,
  * `escalations`, `takeovers`, `facts`, and `fleet_summary` (the one section
  * that can be `null` — a hub outage or an unwired runner, never a

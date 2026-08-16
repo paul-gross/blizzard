@@ -2504,8 +2504,8 @@
   },
   "blizzard/runner/store/repository.py": {
    "comments": 7,
-   "docstrings": 414,
-   "total": 1074
+   "docstrings": 410,
+   "total": 1070
   },
   "blizzard/runner/store/schema.py": {
    "comments": 142,

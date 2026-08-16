@@ -742,8 +742,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
         When ``event_kind``/``event_payload`` are given (issue #125), the event is
         enqueued to the outbound buffer **in the same transaction** as the closure, so
-        the two land together or not at all — returning that row's seq, or ``None``
-        when no event was given."""
+        the two land together or not at all."""
         ...
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
@@ -882,8 +881,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
         Appends rather than upserts: this is a locally-minted fact, not a mirror. Taking
         the buffer entry here is what makes the brake and its report crash-atomic (pinned
-        by ``tests/test_ingest_and_pause_verbs.py``). Returns the buffered report's own
-        ``outbound_buffer`` seq — always inserted."""
+        by ``tests/test_ingest_and_pause_verbs.py``)."""
         ...
 
     def set_workspace_prompt(self, workspace_id: str, *, prompt: str, at: datetime) -> None:
@@ -963,8 +961,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         atomically (issue #58).
 
         Keyed on ``(lease_id, generation, sample.kind)``: a resume within the same lease
-        is a genuinely new row; an exact replay writes nothing and buffers nothing,
-        returning ``None`` rather than a seq."""
+        is a genuinely new row; an exact replay writes nothing and buffers nothing."""
         ...
 
     def record_context_sample(
@@ -992,8 +989,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         produced a sample, buffer its outbound report — atomically (issue #218).
 
         The attempt row is always appended, whether or not the harness had anything to
-        report; the outbound fact, and the seq returned for it, exist only when
-        ``payload`` is not ``None``."""
+        report; the outbound fact exists only when ``payload`` is not ``None``."""
         ...
 
     def record_attachment(
