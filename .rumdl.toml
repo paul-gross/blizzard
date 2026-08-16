@@ -1,0 +1,14 @@
+[global]
+# MD076 off: rule lists carry multi-block items (paragraphs, fences, nested lists), so the blank lines between them are what CommonMark requires, not stray spacing
+# MD018 off: the 120-column wrap can land an issue reference (`#N`) at line start; CommonMark does not parse it as a heading, but MD018's autofix would turn it into one
+# MD041 off: this repo's markdown is not all documents — the runner's resume prompts are single-paragraph fragments injected into a live session, where a top-level heading would be wrong. Disabled repo-wide rather than via a nested `.rumdl.toml` in that directory: winter lint roots each file at its nearest ancestor holding either tool config, so a nested one would take those files out of dprint's reach and drop the settings below.
+disable = ["MD076", "MD018", "MD041"]
+
+[MD004]
+style = "dash"
+
+[MD013]
+# 120 matches dprint's lineWidth; tables and code fences keep their own formatting, so only prose is held to the ceiling
+line-length = 120
+tables = false
+code-blocks = false

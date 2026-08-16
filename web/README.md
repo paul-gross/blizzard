@@ -1,91 +1,79 @@
 # blizzard frontend (`web/`)
 
-The Angular workspace for blizzard's two web apps. One workspace, two thin
-application entrypoints, two shared libraries:
+The Angular workspace for blizzard's two web apps. One workspace, two thin application entrypoints, two shared
+libraries:
 
-| Project | Kind | What it is |
-|---------|------|-----------|
-| `hub` | app | The mission-control board app. Renders the shared board shell; served by `blizzard hub host`. |
-| `runner` | app | The machine-local panel app. Served by `blizzard runner host`. |
-| `fleet` | library | Shared fleet layer: the design tokens, the mission-control board shell, the hand-rolled SSE transport, the health read, and the generated API clients. Composed by both apps. |
-| `local-panel` | library | The runner-only local-panel shell, added on top of `fleet` by the runner app. |
+| Project       | Kind    | What it is                                                                                                                                                                    |
+| ------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hub`         | app     | The mission-control board app. Renders the shared board shell; served by `blizzard hub host`.                                                                                 |
+| `runner`      | app     | The machine-local panel app. Served by `blizzard runner host`.                                                                                                                |
+| `fleet`       | library | Shared fleet layer: the design tokens, the mission-control board shell, the hand-rolled SSE transport, the health read, and the generated API clients. Composed by both apps. |
+| `local-panel` | library | The runner-only local-panel shell, added on top of `fleet` by the runner app.                                                                                                 |
 
-Both apps build as **client-rendered SPAs** (no SSR, no Node at runtime) whose
-output is embedded in the one wheel under `src/blizzard/static/{hub,runner}` and
-served by the daemons alongside `/api`. Change detection is
-**zoneless** from day one; component state is signals; server reads go through
-**TanStack Query**; there is **no Angular Material, no Tailwind, no chart
-library, and no prettier** (eslint owns formatting).
+Both apps build as **client-rendered SPAs** (no SSR, no Node at runtime) whose output is embedded in the one wheel under
+`src/blizzard/static/{hub,runner}` and served by the daemons alongside `/api`. Change detection is **zoneless** from day
+one; component state is signals; server reads go through **TanStack Query**; there is **no Angular Material, no
+Tailwind, no chart library, and no prettier** (eslint owns formatting).
 
 ## Scripts
 
 `package.json` scripts are exactly what CI invokes:
 
-| Script | Command | Does |
-|--------|---------|------|
-| install | `npm ci` | Install pinned dependencies. |
-| `npm run lint` | `ng lint` | eslint over every project (no prettier). |
-| `npm run test` | `ng test …` | The vitest unit/component tier, all four projects. |
-| `npm run build` | `ng build hub && ng build runner` | Build both apps into `../src/blizzard/static/{hub,runner}` for the wheel embed. |
-| `npm run generate:client` | `openapi-ts -f …` | Regenerate the two API clients from `../openapi/*.openapi.json`. |
+| Script                    | Command                           | Does                                                                            |
+| ------------------------- | --------------------------------- | ------------------------------------------------------------------------------- |
+| install                   | `npm ci`                          | Install pinned dependencies.                                                    |
+| `npm run lint`            | `ng lint`                         | eslint over every project (no prettier).                                        |
+| `npm run test`            | `ng test …`                       | The vitest unit/component tier, all four projects.                              |
+| `npm run build`           | `ng build hub && ng build runner` | Build both apps into `../src/blizzard/static/{hub,runner}` for the wheel embed. |
+| `npm run generate:client` | `openapi-ts -f …`                 | Regenerate the two API clients from `../openapi/*.openapi.json`.                |
 
-`mise.toml` mirrors these as `web-install`, `web-lint`, `web-test`, `web-build`,
-`web-generate-client`.
+`mise.toml` mirrors these as `web-install`, `web-lint`, `web-test`, `web-build`, `web-generate-client`.
 
 ## The dev server (`ng serve`)
 
-| Script | Serves | Needs |
-|--------|--------|-------|
-| `npm start` | the hub board, live-reloading | `BZ_HUB_PORT` — the hub daemon's port |
-| `npm run start:runner` | the runner local panel | `BZ_RUNNER_PORT` — the runner daemon's port |
+| Script                 | Serves                        | Needs                                       |
+| ---------------------- | ----------------------------- | ------------------------------------------- |
+| `npm start`            | the hub board, live-reloading | `BZ_HUB_PORT` — the hub daemon's port       |
+| `npm run start:runner` | the runner local panel        | `BZ_RUNNER_PORT` — the runner daemon's port |
 
-The apps request `/api/*` **same-origin** (the generated clients carry an empty
-baseUrl). Under `blizzard hub host` that works because the daemon serves the built
-bundle beside its own API. The dev server has no API on its origin, so it **proxies**
-`/api` to the daemon — `proxy.conf.hub.js` / `proxy.conf.runner.js`, wired to each
-app's `serve` target in `angular.json`. Each app gets its own file because both
-request the same `/api` prefix but must reach different daemons.
+The apps request `/api/*` **same-origin** (the generated clients carry an empty baseUrl). Under `blizzard hub host` that
+works because the daemon serves the built bundle beside its own API. The dev server has no API on its origin, so it
+**proxies** `/api` to the daemon — `proxy.conf.hub.js` / `proxy.conf.runner.js`, wired to each app's `serve` target in
+`angular.json`. Each app gets its own file because both request the same `/api` prefix but must reach different daemons.
 
-The port is read from the environment rather than pinned, since every feature env
-binds its own (workspace `.winter/config.toml`, `[env.feature.vars]`) — a literal
-would be right in one env and silently wrong in the rest. **Both scripts fail fast if
-their port var is unset**, rather than starting a server whose every read 404s:
+The port is read from the environment rather than pinned, since every feature env binds its own (workspace
+`.winter/config.toml`, `[env.feature.vars]`) — a literal would be right in one env and silently wrong in the rest.
+**Both scripts fail fast if their port var is unset**, rather than starting a server whose every read 404s:
 
-```
+```text
 BZ_HUB_PORT is not set. Run the dev server under `winter service up <env>`, which
 injects the env band, or set it explicitly for an ad-hoc client (e.g.
 `BZ_HUB_PORT=4582 npm start`).
 ```
 
-So: run it under `winter service up <env>` (which injects the band), or export the
-port yourself. The daemons must be up — the dev server proxies to them, it does not
-start them.
+So: run it under `winter service up <env>` (which injects the band), or export the port yourself. The daemons must be up
+— the dev server proxies to them, it does not start them.
 
 ## The generated API client (`bzh:generated-client`)
 
-The apps never hand-write fetch code. `projects/fleet/src/lib/api/{hub,runner}`
-is a TypeScript client **generated by openapi-ts** from the FastAPI-exported
-OpenAPI specs (`../openapi/hub.openapi.json`, `../openapi/runner.openapi.json`)
-and **committed**. Regenerate with `npm run generate:client`; the CI drift check
-re-exports the specs, regenerates, and fails on any git diff. Do not edit the
-generated files, and do not lint them (they are eslint-ignored).
+The apps never hand-write fetch code. `projects/fleet/src/lib/api/{hub,runner}` is a TypeScript client **generated by
+openapi-ts** from the FastAPI-exported OpenAPI specs (`../openapi/hub.openapi.json`, `../openapi/runner.openapi.json`)
+and **committed**. Regenerate with `npm run generate:client`; the CI drift check re-exports the specs, regenerates, and
+fails on any git diff. Do not edit the generated files, and do not lint them (they are eslint-ignored).
 
 ## The design layer (the mission-control aesthetic)
 
-`projects/fleet/src/lib/design/` holds two **global** stylesheets — both listed
-ahead of each app's own in its build `styles`, because component styles are
-view-encapsulated and these must reach every component:
+`projects/fleet/src/lib/design/` holds two **global** stylesheets — both listed ahead of each app's own in its build
+`styles`, because component styles are view-encapsulated and these must reach every component:
 
-| Sheet | Owns |
-|-------|------|
-| `tokens.css` | The color and type layer — the `:root` custom-property block. |
+| Sheet            | Owns                                                                                               |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| `tokens.css`     | The color and type layer — the `:root` custom-property block.                                      |
 | `scrollbars.css` | The board's slim scrollbars, so every scroll container inherits them instead of re-declaring them. |
 
-`tokens.css` is the **single owner** of both layers. Its `--fs-*` type scale is
-raised ~30% over the values it derives from, which were sized for a screenshot and
-read as unusably small on a real display. Views resolve color through `var(--…)`
-and size text through `--fs-*` — never a
-hard-coded hex, and never a bare px. That includes tinting: a translucent wash is
-`color-mix(in srgb, var(--red) 12%, transparent)`, not a re-typed `rgba(240, 92, 108,
-0.12)` — re-typing a token's channels means retuning the token silently leaves the
-tint behind on the old hue.
+`tokens.css` is the **single owner** of both layers. Its `--fs-*` type scale is raised ~30% over the values it derives
+from, which were sized for a screenshot and read as unusably small on a real display. Views resolve color through
+`var(--…)` and size text through `--fs-*` — never a hard-coded hex, and never a bare px. That includes tinting: a
+translucent wash is `color-mix(in srgb, var(--red) 12%, transparent)`, not a re-typed `rgba(240, 92, 108,
+0.12)` —
+re-typing a token's channels means retuning the token silently leaves the tint behind on the old hue.

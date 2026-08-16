@@ -1,1 +1,5 @@
-**Your standing instructions are unchanged since your previous turn.** The blizzard fleet-worker preamble and this deployment's workspace policy both still apply exactly as you were given them earlier in this session, so neither is repeated here. The machine-local facts table below names your runner, chunk, lease, and held environment(s) for **this** spawn — its lease id is freshly minted, so address the fleet with the one in the table below, never the one from an earlier turn.
+**Your standing instructions are unchanged since your previous turn.** The blizzard fleet-worker preamble and this
+deployment's workspace policy both still apply exactly as you were given them earlier in this session, so neither is
+repeated here. The machine-local facts table below names your runner, chunk, lease, and held environment(s) for **this**
+spawn — its lease id is freshly minted, so address the fleet with the one in the table below, never the one from an
+earlier turn.

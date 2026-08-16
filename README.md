@@ -1,36 +1,51 @@
 # Blizzard
 
-The main application — the **hub**, the **runner**, the **CLI**, and the web board for orchestrating autonomous fleets of coding agents.
+The main application — the **hub**, the **runner**, the **CLI**, and the web board for orchestrating autonomous fleets
+of coding agents.
 
-One repo, one wheel: the single distributable ships both daemons, the CLI, and the compiled frontend as embedded assets — no Node at install or runtime.
+One repo, one wheel: the single distributable ships both daemons, the CLI, and the compiled frontend as embedded assets
+— no Node at install or runtime.
 
-Spend is metered and boundable: every attempt's token usage and cost are recorded as facts, surfaced per chunk and fleet-wide on the board and `blizzard hub status`, and optionally capped — a per-chunk spend cap and a runner spend kill-switch (see [`docs/deployment.md`](docs/deployment.md) → "Bounding fleet spend").
+Spend is metered and boundable: every attempt's token usage and cost are recorded as facts, surfaced per chunk and
+fleet-wide on the board and `blizzard hub status`, and optionally capped — a per-chunk spend cap and a runner spend
+kill-switch (see [`docs/deployment.md`](docs/deployment.md) → "Bounding fleet spend").
 
 ## What Blizzard is, and what it deliberately isn't
 
-Blizzard runs **the loop around the work**: it ingests items, sequences and claims them, leases each worker a poly-repo capable workspace, judges what comes back, drives the result to delivery, and recovers correctly when any of that is interrupted. That loop — and the facts it records — is the whole product.
+Blizzard runs **the loop around the work**: it ingests items, sequences and claims them, leases each worker a poly-repo
+capable workspace, judges what comes back, drives the result to delivery, and recovers correctly when any of that is
+interrupted. That loop — and the facts it records — is the whole product.
 
-It is **not** a build system, a test runner, or a code-review engine, and it holds no model of any application it drives.
+It is **not** a build system, a test runner, or a code-review engine, and it holds no model of any application it
+drives.
 
-That absence is a design position, not a gap. Blizzard assumes a **competent agent dropped into a poly-repo capable workspace** can discover and follow the conventions of the repos it finds there — how they build, how they test, what "verified" means, which surfaces a change owes. A worker is leased a whole feature environment rather than a checkout, and one unit of work may span several repos at once, so the repos are the only place those answers stay correct as toolchains diverge and change.
+That absence is a design position, not a gap. Blizzard assumes a **competent agent dropped into a poly-repo capable
+workspace** can discover and follow the conventions of the repos it finds there — how they build, how they test, what
+"verified" means, which surfaces a change owes. A worker is leased a whole feature environment rather than a checkout,
+and one unit of work may span several repos at once, so the repos are the only place those answers stay correct as
+toolchains diverge and change.
 
 Two things follow, and they explain features you might otherwise expect to find:
 
-- **Workflow graphs are application-agnostic.** A graph declares the shape of the work — node roles, what each node produces, how a verdict is rendered — never a toolchain. The same graph drives twenty unrelated applications unchanged. The enforceable form of this is `bzh:app-agnostic-graphs` in the harness ([`architecture/system-shape.md`](https://github.com/paul-gross/blizzard-context/blob/master/architecture/system-shape.md)).
-- **There is no per-application configuration.** No repo-convention registry, no per-app graph variants, no place to tell Blizzard how your project is tested. If that seems missing, it is because the answer belongs in your repo, where your agents will read it.
+- **Workflow graphs are application-agnostic.** A graph declares the shape of the work — node roles, what each node
+  produces, how a verdict is rendered — never a toolchain. The same graph drives twenty unrelated applications
+  unchanged. The enforceable form of this is `bzh:app-agnostic-graphs` in the harness
+  ([`architecture/system-shape.md`](https://github.com/paul-gross/blizzard-context/blob/master/architecture/system-shape.md)).
+- **There is no per-application configuration.** No repo-convention registry, no per-app graph variants, no place to
+  tell Blizzard how your project is tested. If that seems missing, it is because the answer belongs in your repo, where
+  your agents will read it.
 
-What Blizzard does own is everything an agent cannot be trusted to do by being competent: exactly-once delivery, crash recovery at any step boundary, fencing a zombie worker out of the merge queue, metering spend, and keeping a truthful account of what happened.
+What Blizzard does own is everything an agent cannot be trusted to do by being competent: exactly-once delivery, crash
+recovery at any step boundary, fencing a zombie worker out of the merge queue, metering spend, and keeping a truthful
+account of what happened.
 
 ## Install
 
-Two ways to run blizzard: a public **container image** (`docker compose up` — see
-[docs/install.md](docs/install.md), start there), or the raw wheel below into any
-Python ≥ 3.12 environment (no Node needed at install or runtime). Milestone
-builds are published as [GitHub Releases](https://github.com/paul-gross/blizzard/releases)
-with both the wheel and the image attached/pushed — no package index for the
-wheel. Prerelease candidates are tagged `v0.1.0-rc.N`. See
-[`docs/versioning.md`](docs/versioning.md) for what a version number promises
-and the supported hub↔runner skew.
+Two ways to run blizzard: a public **container image** (`docker compose up` — see [docs/install.md](docs/install.md),
+start there), or the raw wheel below into any Python ≥ 3.12 environment (no Node needed at install or runtime).
+Milestone builds are published as [GitHub Releases](https://github.com/paul-gross/blizzard/releases) with both the wheel
+and the image attached/pushed — no package index for the wheel. Prerelease candidates are tagged `v0.1.0-rc.N`. See
+[`docs/versioning.md`](docs/versioning.md) for what a version number promises and the supported hub↔runner skew.
 
 ```bash
 gh release download v0.1.0-rc.1 --repo paul-gross/blizzard --pattern '*.whl'
@@ -51,21 +66,23 @@ blizzard hub host .          # serve the API + embedded mission-control board
 Then open <http://127.0.0.1:8421/> — the default port from the `blizzard-hub.toml` that `blizzard hub init` scaffolds.
 
 - **sqlite is the default store** — postgres is configuration (the `db_url` knob), not a requirement.
-- **The mission-control frontend is embedded in the wheel** — no Node install or runtime. It ships the mission-control board plus a graph explorer, whose detail view also carries operator Retire / Re-enable controls over a graph's lifecycle (issue #101).
+- **The mission-control frontend is embedded in the wheel** — no Node install or runtime. It ships the mission-control
+  board plus a graph explorer, whose detail view also carries operator Retire / Re-enable controls over a graph's
+  lifecycle (issue #101).
 - The same `init` / `migrate` / `host` verbs exist under `blizzard runner`.
 
 ## Layout (screaming architecture — `bzh:screaming-architecture`)
 
 The top-level packages announce what blizzard *is*: two daemons and the client that speaks to them.
 
-| Package | What it is |
-|---------|-----------|
-| `src/blizzard/hub/` | the `blizzard-hub` daemon — the work orchestrator. `api/` HTTP edge, `domain/` core, `store/` with its **own** Alembic tree. |
-| `src/blizzard/runner/` | the `blizzard-runner` daemon — the supervisor. Same `api/` + `domain/` + `store/` shape, an **independent** Alembic tree. |
-| `src/blizzard/cli/` | the `blizzard` binary's root command group — verbs namespaced by target (`blizzard hub …`, `blizzard runner …`). |
+| Package                    | What it is                                                                                                                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/blizzard/hub/`        | the `blizzard-hub` daemon — the work orchestrator. `api/` HTTP edge, `domain/` core, `store/` with its **own** Alembic tree.                                                                |
+| `src/blizzard/runner/`     | the `blizzard-runner` daemon — the supervisor. Same `api/` + `domain/` + `store/` shape, an **independent** Alembic tree.                                                                   |
+| `src/blizzard/cli/`        | the `blizzard` binary's root command group — verbs namespaced by target (`blizzard hub …`, `blizzard runner …`).                                                                            |
 | `src/blizzard/foundation/` | the shared kernel both daemons compose: the injected clock (`bzh:injected-clock`), structlog wiring, the portable store engine, and the Alembic migration runner + revision-mismatch guard. |
-| `src/blizzard/static/` | the wheel-embedded frontend assets seam — CI fills `hub/` and `runner/` with the compiled Angular apps ([static/README.md](./src/blizzard/static/README.md)). |
-| `src/blizzard/tools/` | dev/CI tooling — the OpenAPI exporter (`blizzard-export-openapi`). |
+| `src/blizzard/static/`     | the wheel-embedded frontend assets seam — CI fills `hub/` and `runner/` with the compiled Angular apps ([static/README.md](./src/blizzard/static/README.md)).                               |
+| `src/blizzard/tools/`      | dev/CI tooling — the OpenAPI exporter (`blizzard-export-openapi`).                                                                                                                          |
 
 ## Commands
 
@@ -87,31 +104,41 @@ blizzard hub logout            # log out of the hub and revoke the locally store
 blizzard-export-openapi --out-dir openapi   # dump hub + runner OpenAPI specs
 ```
 
-The same `init` / `migrate` / `host` verbs exist under `blizzard runner`. A daemon **refuses to start on a store-revision mismatch**, naming the exact `migrate` command (`bzh:manual-migrations`).
+The same `init` / `migrate` / `host` verbs exist under `blizzard runner`. A daemon **refuses to start on a
+store-revision mismatch**, naming the exact `migrate` command (`bzh:manual-migrations`).
 
 ## The standing e2e smoke suite (`mise run e2e`)
 
-`mise run e2e` (`BLIZZARD_E2E=1 uv run pytest tests/e2e/`) is the standing end-to-end smoke suite — the acceptance criterion for the whole system. [`verification/blizzard/e2e-scenarios.md`](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard/e2e-scenarios.md) is the single authoritative, scenario-by-scenario list — read there for what each of the standing scenarios proves rather than here.
+`mise run e2e` (`BLIZZARD_E2E=1 uv run pytest tests/e2e/`) is the standing end-to-end smoke suite — the acceptance
+criterion for the whole system.
+[`verification/blizzard/e2e-scenarios.md`](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard/e2e-scenarios.md)
+is the single authoritative, scenario-by-scenario list — read there for what each of the standing scenarios proves
+rather than here.
 
-Every delivery scenario holds at **both ends** — git truth on the bare origin and the hub's derived facts. The suite is **self-managed and token-free**: it mints its own disposable `blizzard-mock` fixture workspace, starts the real forge + hub + runner, and drives the reconciliation loop one synchronous tick at a time — every seam real (git over `file://`, the forge over HTTP, the `mock-claude-code` façade over its CLI). It needs the sibling **`blizzard-mock`** worktree provisioned (`winter provision <env>`) and a local winter source; the browser scenarios also need a Chromium (`uv run playwright install chromium`). Any scenario **skips cleanly** when its prerequisites are absent (e.g. a single-repo CI checkout, or no browser installed), so the default `uv run pytest` gate stays hermetic. To drive the same loop against the live tmux services instead, `winter service up <env> --wait` brings up forge + hub + runner (see the workspace's service manifest).
+Every delivery scenario holds at **both ends** — git truth on the bare origin and the hub's derived facts. The suite is
+**self-managed and token-free**: it mints its own disposable `blizzard-mock` fixture workspace, starts the real forge +
+hub + runner, and drives the reconciliation loop one synchronous tick at a time — every seam real (git over `file://`,
+the forge over HTTP, the `mock-claude-code` façade over its CLI). It needs the sibling **`blizzard-mock`** worktree
+provisioned (`winter provision <env>`) and a local winter source; the browser scenarios also need a Chromium
+(`uv run playwright install chromium`). Any scenario **skips cleanly** when its prerequisites are absent (e.g. a
+single-repo CI checkout, or no browser installed), so the default `uv run pytest` gate stays hermetic. To drive the same
+loop against the live tmux services instead, `winter service up <env> --wait` brings up forge + hub + runner (see the
+workspace's service manifest).
 
 ## The service tier (`mise run service-test`)
 
-`mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest tests/service/`) is the
-**service tier**: one **running daemon's HTTP API exercised from outside the process**
-with its counterpart bound to the mock fleet — distinct from the e2e tier, which drives
-the whole loop with every seam real. It lives in its own `tests/service/` package and,
-like e2e, is **skipped unless `BLIZZARD_SERVICE=1`** and the sibling `blizzard-mock`
-worktree is provisioned, so the default `uv run pytest` gate stays hermetic.
+`mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest tests/service/`) is the **service tier**: one **running
+daemon's HTTP API exercised from outside the process** with its counterpart bound to the mock fleet — distinct from the
+e2e tier, which drives the whole loop with every seam real. It lives in its own `tests/service/` package and, like e2e,
+is **skipped unless `BLIZZARD_SERVICE=1`** and the sibling `blizzard-mock` worktree is provisioned, so the default
+`uv run pytest` gate stays hermetic.
 
-What this tier proves — the levers each side is driven with, and what each one
-establishes — is stated in
+What this tier proves — the levers each side is driven with, and what each one establishes — is stated in
 [`verification/blizzard/commands.md`](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard/commands.md#blizzardservice-test),
 which is its authoritative account. Read there rather than here.
 
-The counterpart mocks and their lever surfaces live in the `blizzard-mock` repo
-(`blizzard_mock.mock_hub` / `blizzard_mock.mock_runner`). sqlite only, no tokens, no
-network.
+The counterpart mocks and their lever surfaces live in the `blizzard-mock` repo (`blizzard_mock.mock_hub` /
+`blizzard_mock.mock_runner`). sqlite only, no tokens, no network.
 
 ## CI, build, and release
 
@@ -120,15 +147,13 @@ mise run gate    # the local equivalent of the PR-to-master merge gate
 mise run build   # the one build entrypoint: Angular apps -> embed -> wheel -> verify install (node-free)
 ```
 
-The GitHub Actions workflows (PR gate, push-to-master dev build, tag-`v*`
-release) and the exact local commands equal to the gate are documented in
-[docs/ci.md](./docs/ci.md).
+The GitHub Actions workflows (PR gate, push-to-master dev build, tag-`v*` release) and the exact local commands equal to
+the gate are documented in [docs/ci.md](./docs/ci.md).
 
 ## Deployment
 
-Two shapes: a public **container image** (`docker compose up` — the hub, postgres,
-and a TLS-terminating proxy), or a **colocated wheel + systemd** install (a single
-machine running both daemons — the hub and the supervisor/runner — side by side,
-including the boot/crash recovery contract for how a reboot or a `kill -9` comes
-back and resumes each chunk at its last-recorded node). Operator docs for both,
-plus upgrade/rollback/backup, are routed from [docs/index.md](./docs/index.md).
+Two shapes: a public **container image** (`docker compose up` — the hub, postgres, and a TLS-terminating proxy), or a
+**colocated wheel + systemd** install (a single machine running both daemons — the hub and the supervisor/runner — side
+by side, including the boot/crash recovery contract for how a reboot or a `kill -9` comes back and resumes each chunk at
+its last-recorded node). Operator docs for both, plus upgrade/rollback/backup, are routed from
+[docs/index.md](./docs/index.md).

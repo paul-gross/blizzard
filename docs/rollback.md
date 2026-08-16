@@ -1,25 +1,21 @@
 # Rollback
 
 **Every shipped schema revision has a working downgrade** — the promise
-`tests/test_store_migrations.py::test_migrate_up_and_down` proves mechanically
-for every revision in the tree, and `docs/versioning.md` states as one of the
-things a breaking release is not allowed to violate. This walks that promise
-against a live compose deployment ([`docs/install.md`](./install.md)): the
-previous image tag, plus a `migrate --down` to the matching revision.
+`tests/test_store_migrations.py::test_migrate_up_and_down` proves mechanically for every revision in the tree, and
+`docs/versioning.md` states as one of the things a breaking release is not allowed to violate. This walks that promise
+against a live compose deployment ([`docs/install.md`](./install.md)): the previous image tag, plus a `migrate --down`
+to the matching revision.
 
-Registered as the manual method `blizzard:manual-rollback-drill` in the
-`blizzard-context` repo's
-[verification matrix](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard.md) — run
-this end to end at least once against the compose stack, not just read.
+Registered as the manual method `blizzard:manual-rollback-drill` in the `blizzard-context` repo's
+[verification matrix](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard.md) — run this
+end to end at least once against the compose stack, not just read.
 
 ## Why the downgrade runs on the *new* image, not the old one
 
-A revision's `downgrade()` function — the code that knows how to reverse it —
-ships in whichever image build introduced that revision. The **new** image (the
-one you're rolling back *from*) carries every downgrade step back to the old
-image's head; the **old** image's migration tree has never heard of the
-revisions you're reversing. So: stop the hub, run the downgrade using the
-still-current (new) image, *then* swap the image tag.
+A revision's `downgrade()` function — the code that knows how to reverse it — ships in whichever image build introduced
+that revision. The **new** image (the one you're rolling back *from*) carries every downgrade step back to the old
+image's head; the **old** image's migration tree has never heard of the revisions you're reversing. So: stop the hub,
+run the downgrade using the still-current (new) image, *then* swap the image tag.
 
 ## Procedure
 
@@ -59,19 +55,16 @@ curl -s https://<your-domain>/api/ready                  # -> "ready":true
 
 ## What a rollback does not undo
 
-- **Data written under the newer schema that the older code never reads.** A
-  downgrade reverses schema shape; it does not resurrect meaning the old code
-  never had a column for. This is exactly what `docs/versioning.md` calls
-  breaking, and why an unreversible migration is a breaking release by
-  definition — it should never reach this doc's "every revision has a working
-  downgrade" guarantee in the first place.
-- **Anything outside the store** — signing keys, hub workdirs
-  ([`docs/backup.md`](./backup.md)) are untouched by a schema downgrade; a
-  rollback is a store-schema operation, not a full-state restore. If a bad
-  release also corrupted state outside the store, restore from backup instead.
+- **Data written under the newer schema that the older code never reads.** A downgrade reverses schema shape; it does
+  not resurrect meaning the old code never had a column for. This is exactly what `docs/versioning.md` calls breaking,
+  and why an unreversible migration is a breaking release by definition — it should never reach this doc's "every
+  revision has a working downgrade" guarantee in the first place.
+- **Anything outside the store** — signing keys, hub workdirs ([`docs/backup.md`](./backup.md)) are untouched by a
+  schema downgrade; a rollback is a store-schema operation, not a full-state restore. If a bad release also corrupted
+  state outside the store, restore from backup instead.
 
 ## See also
 
 - [`docs/upgrade.md`](./upgrade.md) — the forward direction.
-- [`docs/versioning.md`](./versioning.md) — what "breaking" means, including the
-  unreversible-migration case this doc's guarantee depends on never happening.
+- [`docs/versioning.md`](./versioning.md) — what "breaking" means, including the unreversible-migration case this doc's
+  guarantee depends on never happening.
