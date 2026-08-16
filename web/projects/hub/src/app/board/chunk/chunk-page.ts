@@ -3,18 +3,18 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   type AnswerQuestionEvent,
+  ChunkPageHeader,
+  ChunkPageShell,
   deriveWorkItemsState,
   type EditGraphEvent,
   KitAsyncState,
   type KitAsyncStateValue,
   KitBackBar,
-  KitBadge,
   KitTabs,
   type KitTabOption,
   type WorkItemsState,
   type ResolveDecisionEvent,
   STATUS_TONE,
-  compactRef,
   errorMessage,
   hasPermission,
   injectAnswerQuestionMutation,
@@ -75,72 +75,89 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
 @Component({
   selector: 'app-chunk-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifactsTab, ChunkGeneralTab, ChunkTranscriptsContainer, KitAsyncState, KitBackBar, KitBadge, KitTabs, RouterLink],
+  imports: [
+    ChunkArtifactsTab,
+    ChunkGeneralTab,
+    ChunkPageHeader,
+    ChunkPageShell,
+    ChunkTranscriptsContainer,
+    KitAsyncState,
+    KitBackBar,
+    KitTabs,
+    RouterLink,
+  ],
   template: `
-    <div class="cp">
-      <a class="back-row" routerLink="/board" [queryParams]="{ chunk: chunkId() }" data-testid="mobile-chunk-back">
+    <fleet-chunk-page-shell>
+      <a chunk-page-back class="back-row" routerLink="/board" [queryParams]="{ chunk: chunkId() }" data-testid="mobile-chunk-back">
         <fleet-kit-back-bar label="Board" />
       </a>
       @if (actionError(); as err) {
-        <p class="notice" data-testid="mobile-chunk-action-error" role="alert">{{ err }}</p>
+        <p chunk-page-notice class="notice" data-testid="mobile-chunk-action-error" role="alert">{{ err }}</p>
       }
       @if (actionOutcome(); as outcome) {
-        <p class="outcome" data-testid="mobile-chunk-action-outcome" role="status">{{ outcome }}</p>
+        <p chunk-page-notice class="outcome" data-testid="mobile-chunk-action-outcome" role="status">{{ outcome }}</p>
+      }
+      <!-- Each of the shell's named slots below gets its own single-root @if
+           rather than sharing one — an @if whose root has more than one
+           projectable node can leave slot-selector matching unresolved
+           (NG8011); a solo root per block is unambiguous. -->
+      @if (detail(); as d) {
+        <fleet-chunk-page-header
+          chunk-page-header
+          data-testid="board-chunk-detail"
+          [chunkId]="chunkId() ?? ''"
+          [status]="d.status"
+          [tone]="tone()"
+        />
+      }
+      @if (detail()) {
+        <fleet-kit-tabs chunk-page-tabs [options]="tabOptions()" [activeValue]="tab()" (choose)="onChooseTab($event)" />
       }
       @if (detail(); as d) {
-        <div class="cp-body" data-testid="board-chunk-detail">
-          <header class="cp-hdr">
-            <span class="cid" data-testid="mobile-chunk-ref">{{ shortId() }}</span>
-            <fleet-kit-badge [tone]="tone()" variant="soft" data-testid="mobile-chunk-status">{{ d.status }}</fleet-kit-badge>
-          </header>
-          <fleet-kit-tabs [options]="tabOptions()" [activeValue]="tab()" (choose)="onChooseTab($event)" />
-          @switch (tab()) {
-            @case ('general') {
-              <app-chunk-general-tab
-                [detail]="d"
-                [workItems]="workItems()"
-                [canControl]="canControl()"
-                [canAnswer]="canAnswer()"
-                [canResolve]="canResolve()"
-                (answerQuestion)="onAnswer($event)"
-                (resolveDecision)="onResolve($event)"
-                (editGraph)="onEditGraph($event)"
-              />
-            }
-            @case ('artifacts') {
-              <app-chunk-artifacts-tab
-                [artifacts]="d.artifacts ?? []"
-                [selectedKey]="selection.artifactKey()"
-                (pickArtifact)="onSelectArtifact($event)"
-              />
-            }
-            @case ('transcripts') {
-              <app-chunk-transcripts-container
-                [chunkId]="chunkId()"
-                [history]="d.history ?? []"
-                [currentNodeId]="d.current_node_id"
-                [currentNodeName]="d.current_node_name ?? null"
-                [latestEpoch]="d.latest_epoch"
-                [segmentId]="selection.transcriptSegment()"
-                [sidechainPath]="selection.transcriptSidechain()"
-                (pickSegment)="onSelectTranscriptSegment($event)"
-                (pickSidechain)="onSelectTranscriptSidechain($event)"
-              />
-            }
+        @switch (tab()) {
+          @case ('general') {
+            <app-chunk-general-tab
+              [detail]="d"
+              [workItems]="workItems()"
+              [canControl]="canControl()"
+              [canAnswer]="canAnswer()"
+              [canResolve]="canResolve()"
+              (answerQuestion)="onAnswer($event)"
+              (resolveDecision)="onResolve($event)"
+              (editGraph)="onEditGraph($event)"
+            />
           }
-        </div>
+          @case ('artifacts') {
+            <app-chunk-artifacts-tab
+              [artifacts]="d.artifacts ?? []"
+              [selectedKey]="selection.artifactKey()"
+              (pickArtifact)="onSelectArtifact($event)"
+            />
+          }
+          @case ('transcripts') {
+            <app-chunk-transcripts-container
+              [chunkId]="chunkId()"
+              [history]="d.history ?? []"
+              [currentNodeId]="d.current_node_id"
+              [currentNodeName]="d.current_node_name ?? null"
+              [latestEpoch]="d.latest_epoch"
+              [segmentId]="selection.transcriptSegment()"
+              [sidechainPath]="selection.transcriptSidechain()"
+              (pickSegment)="onSelectTranscriptSegment($event)"
+              (pickSidechain)="onSelectTranscriptSidechain($event)"
+            />
+          }
+        }
       } @else {
-        <div class="rest">
-          <fleet-kit-async-state
-            [state]="state()"
-            loadingText="LOADING…"
-            loadingTestid="mobile-chunk-loading"
-            errorText="CHUNK UNAVAILABLE"
-            errorTestid="mobile-chunk-error"
-          />
-        </div>
+        <fleet-kit-async-state
+          [state]="state()"
+          loadingText="LOADING…"
+          loadingTestid="mobile-chunk-loading"
+          errorText="CHUNK UNAVAILABLE"
+          errorTestid="mobile-chunk-error"
+        />
       }
-    </div>
+    </fleet-chunk-page-shell>
   `,
   styles: `
     :host {
@@ -152,16 +169,11 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
       font-variant-numeric: tabular-nums;
       color: var(--text);
     }
-    /* Height-capped with the sections owning the scroll, so the back link stays
-       reachable at the top of a long chunk — the same shape the runner's own
-       mobile shell gives its titlebar. */
-    .cp {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      min-height: 0;
-      overflow: hidden;
-    }
+    /* The back link's own reset: \`fleet-chunk-page-shell\` cannot style content
+       projected into its slots (\`chunk-page-shell.ts\`'s own doc comment), so
+       this stays page-owned — flex:none so the row keeps its content height
+       as a direct flex item of the shell's own column, text-decoration:none
+       to clear the anchor's UA-default underline. */
     .back-row {
       flex: none;
       text-decoration: none;
@@ -192,28 +204,6 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
       color: var(--text);
       font-size: var(--fs-xs);
     }
-    .cp-body {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-height: 0;
-    }
-    .cp-hdr {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 8px;
-      flex: none;
-      margin: 8px;
-      padding: 0 8px;
-    }
-    .cid {
-      color: var(--amber);
-      font-size: var(--fs-md);
-    }
-    fleet-kit-tabs {
-      flex: none;
-    }
     app-chunk-general-tab {
       flex: 1;
       min-height: 0;
@@ -224,15 +214,9 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
     }
     /* No rule targets \`app-chunk-transcripts-container\` itself (review:F1) — it is
        \`display: contents\`, so it generates no box of its own to size; its child
-       \`app-chunk-transcripts-tab\` is a direct flex item of \`.cp-body\` instead, and
-       carries \`flex: 1; min-height: 0\` on its own \`:host\` (\`chunk-transcripts-tab.ts\`). */
-    /* Positioned and height-bearing so KitAsyncState's absolutely centered
-       status line has a box to center in. */
-    .rest {
-      position: relative;
-      flex: 1;
-      min-height: 0;
-    }
+       \`app-chunk-transcripts-tab\` is a direct flex item of the shell's own
+       \`.cps-body\` instead, and carries \`flex: 1; min-height: 0\` on its own
+       \`:host\` (\`chunk-transcripts-tab.ts\`). */
   `,
 })
 export class ChunkPage {
@@ -331,7 +315,6 @@ export class ChunkPage {
    * Mirrors the desktop container's own fold (`fleet`'s `chunk-detail.ts`). */
   protected readonly workItems = computed<WorkItemsState>(() => deriveWorkItemsState(this.workItemsQuery));
 
-  protected readonly shortId = computed(() => compactRef(this.chunkId() ?? ''));
   protected readonly tone = computed(() => STATUS_TONE[this.detail()?.status ?? 'ready']);
 
   /** Clear both report channels — every action on this page starts here. Kept as one

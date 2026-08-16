@@ -32,10 +32,14 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
          wider than a 320px phone's content box — and a plain non-wrapping flex
          row pushed that overflow all the way up to the page, which is what
          chunk-detail-page.shell-sweep.spec.ts caught at width 320. Scrolling
-         here absorbs it instead: min-width: 0 lets the strip be narrower than
-         its content, and overflow-y: hidden keeps the implicit auto that
-         overflow-x would otherwise force from clipping the 32px row. */
-      min-width: 0;
+         here absorbs it instead: both current mounts (AppShell's .shell,
+         chunk-detail-page's .body) are column flex containers, so the
+         strip's width is the *cross* axis, where a flex item's default
+         min-width: auto is not clamped to its min-content size the way the
+         main axis is — overflow-x: auto alone is what lets the strip stay
+         narrower than its content. overflow-y: hidden keeps the implicit
+         auto that overflow-x would otherwise force from clipping the 32px
+         row. */
       overflow-x: auto;
       overflow-y: hidden;
       /* A scrollbar inside a 32px row would eat the tabs it is scrolling. */
@@ -90,6 +94,13 @@ export class KitTabStrip {}
     :host(.active) {
       color: var(--amber-hi);
       background: var(--header-hi);
+    }
+    /* Inset, like local-panel-mobile.ts's .back-row: the strip's own
+       overflow-y: hidden (see KitTabStrip) clips an outline drawn outside
+       the border box, so the ring has to live inside it instead. */
+    :host(:focus-visible) {
+      outline: 1px solid var(--cyan);
+      outline-offset: -1px;
     }
   `,
 })

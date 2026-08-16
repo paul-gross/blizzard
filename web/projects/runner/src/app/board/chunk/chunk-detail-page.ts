@@ -6,6 +6,8 @@ import { map } from 'rxjs';
 import {
   asyncState,
   ChunkArtifacts,
+  ChunkPageHeader,
+  ChunkPageShell,
   deriveWorkItemsState,
   KitAsyncState,
   type KitAsyncStateValue,
@@ -15,6 +17,7 @@ import {
   KitTabs,
   type KitTabOption,
   type runnerApi,
+  STATUS_TONE,
   type WorkItemsState,
 } from 'fleet';
 import { injectChunkDetailQuery, injectChunkWorkItemsDetailQuery, injectRunnerLeasesQuery } from 'local-panel';
@@ -64,84 +67,78 @@ const TAB_OPTIONS: readonly KitTabOption[] = [
 @Component({
   selector: 'app-chunk-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifacts, ChunkGeneralTab, ChunkTranscriptsTab, KitAsyncState, KitBackBar, KitPanel, KitTabs, RouterLink],
+  imports: [
+    ChunkArtifacts,
+    ChunkGeneralTab,
+    ChunkPageHeader,
+    ChunkPageShell,
+    ChunkTranscriptsTab,
+    KitAsyncState,
+    KitBackBar,
+    KitPanel,
+    KitTabs,
+    RouterLink,
+  ],
   template: `
-    <div class="page" data-testid="chunk-detail-page">
-      <a class="back-row" routerLink="/board" [queryParams]="backQueryParams()" data-testid="chunk-detail-back">
+    <fleet-chunk-page-shell data-testid="chunk-detail-page">
+      <a chunk-page-back class="back-row" routerLink="/board" [queryParams]="backQueryParams()" data-testid="chunk-detail-back">
         <fleet-kit-back-bar label="Board" />
       </a>
-      <div class="body">
+      <!-- Each of the shell's named slots below gets its own single-root @if
+           rather than sharing one — an @if whose root has more than one
+           projectable node can leave slot-selector matching unresolved
+           (NG8011); a solo root per block is unambiguous. -->
+      @if (detail(); as d) {
+        <fleet-chunk-page-header chunk-page-header [chunkId]="chunkId() ?? ''" [status]="d.status" [tone]="tone()" />
+      }
+      @if (detail()) {
+        <fleet-kit-tabs chunk-page-tabs [options]="tabOptions" [activeValue]="tab()" (choose)="onChooseTab($event)" />
+      }
+      @if (detail(); as d) {
+        @switch (tab()) {
+          @case ('general') {
+            <app-chunk-general-tab [detail]="d" [workItems]="workItems()" />
+          }
+          @case ('artifacts') {
+            <fleet-kit-panel class="section" data-testid="section-artifacts" label="artifacts">
+              <!-- Heading suppressed: the enclosing panel's label already
+                   says "artifacts". The default stays true for the board
+                   dock, which wraps this in a bare <section> instead. -->
+              <fleet-chunk-detail-artifacts [detail]="d" [expandable]="true" [heading]="false" />
+            </fleet-kit-panel>
+          }
+          @case ('transcripts') {
+            <app-chunk-transcripts-tab
+              [attemptsState]="attemptsState()"
+              [attemptOptions]="attemptOptions()"
+              [activeAttemptLeaseId]="activeAttemptLeaseId()"
+              (selectAttempt)="selectAttempt($event)"
+            />
+          }
+        }
+      } @else {
         <fleet-kit-async-state
           [state]="detailState()"
           loadingText="LOADING…"
           loadingTestid="chunk-detail-page-loading"
           errorText="FAILED TO LOAD CHUNK"
           errorTestid="chunk-detail-page-error"
-        >
-          @if (detail(); as d) {
-            <fleet-kit-tabs [options]="tabOptions" [activeValue]="tab()" (choose)="onChooseTab($event)" />
-            @switch (tab()) {
-              @case ('general') {
-                <app-chunk-general-tab [detail]="d" [workItems]="workItems()" />
-              }
-              @case ('artifacts') {
-                <fleet-kit-panel class="section" data-testid="section-artifacts" label="artifacts">
-                  <!-- Heading suppressed: the enclosing panel's label already
-                       says "artifacts". The default stays true for the board
-                       dock, which wraps this in a bare <section> instead. -->
-                  <fleet-chunk-detail-artifacts [detail]="d" [expandable]="true" [heading]="false" />
-                </fleet-kit-panel>
-              }
-              @case ('transcripts') {
-                <app-chunk-transcripts-tab
-                  [attemptsState]="attemptsState()"
-                  [attemptOptions]="attemptOptions()"
-                  [activeAttemptLeaseId]="activeAttemptLeaseId()"
-                  (selectAttempt)="selectAttempt($event)"
-                />
-              }
-            }
-          }
-        </fleet-kit-async-state>
-      </div>
-    </div>
+        />
+      }
+    </fleet-chunk-page-shell>
   `,
   styles: `
     :host {
       display: block;
       flex: 1;
       min-height: 0;
-      overflow-y: auto;
     }
-    /* Fills the host even with nothing loaded yet, so .body below has a real
-       void to center a status line in — see .body. */
-    .page {
-      box-sizing: border-box;
-      min-height: 100%;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding: 8px;
-    }
+    /* The back link's own reset: \`fleet-chunk-page-shell\` cannot style content
+       projected into its slots (\`chunk-page-shell.ts\`'s own doc comment), so
+       this stays page-owned. */
     .back-row {
       flex: none;
       text-decoration: none;
-    }
-    /* The tabs' own column, and the positioned ancestor {@link KitAsyncState}'s
-       absolutely-centered status line resolves against. It is the back row's
-       *sibling*, not its parent: centering against .page instead resolves against a
-       box the 44px back bar is the only content of while the read is in flight, and
-       the status line lands on top of it. */
-    .body {
-      position: relative;
-      flex: 1;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    fleet-kit-tabs {
-      flex: none;
     }
     app-chunk-general-tab,
     app-chunk-transcripts-tab,
@@ -191,6 +188,12 @@ export class ChunkDetailPage {
   protected readonly detail = computed(() => this.detailQuery.data());
 
   protected readonly detailState = computed<KitAsyncStateValue>(() => asyncState(this.detailQuery, false));
+
+  /** The derived {@link Tone} the identity header's badge colors by — the same
+   * `STATUS_TONE` ladder the hub's own `chunk-page.ts` reads
+   * (`bzh:frontend-formatters`), since this route's `detail` is the same
+   * shared `hubApi.ChunkDetail` shape field for field. */
+  protected readonly tone = computed(() => STATUS_TONE[this.detail()?.status ?? 'ready']);
 
   /** The open chunk's related work items + fetch state for the Issue pane —
    * the same {@link deriveWorkItemsState} fold `fleet`'s own `ChunkDetail`

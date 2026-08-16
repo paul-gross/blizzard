@@ -140,6 +140,17 @@ describe('ChunkDetailPage', () => {
     expect(el.querySelector('fleet-chunk-detail-artifacts')).toBeNull();
   });
 
+  it('gains the identity header the hub’s own chunk page carries, naming the chunk by its full id', async () => {
+    // This page never had one before this refactor — the shared
+    // `fleet-chunk-page-header` (`ChunkPageShell`'s composition) — so this pins
+    // both that it now exists and that it reads the full id, not a compact ref.
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    const ref = el.querySelector('[data-testid="mobile-chunk-ref"]');
+    expect(ref?.textContent?.trim()).toBe(CHUNK_ID);
+    expect(el.querySelector('[data-testid="mobile-chunk-status"]')?.textContent?.trim()).toBe('running');
+  });
+
   it('renders artifacts on the Artifacts tab, not on the default General tab', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
 

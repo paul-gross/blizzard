@@ -62,9 +62,11 @@
  *     shell's own top tab strip (issue #313, `AppNav`): the Board/Events
  *     labels never force the strip to overflow its own width.
  *   - projects/runner/src/app/board/chunk/chunk-detail-page.shell-sweep.spec.ts —
- *     the runner-local chunk detail page (issue #318): its six stacked
- *     sections genuinely stack (distinct tops) with no horizontal overflow,
- *     including a long unbroken artifact key.
+ *     the runner-local chunk detail page (issue #318): each of its three
+ *     tabs — General, Artifacts, Transcripts — genuinely stacks its own
+ *     sections with no horizontal overflow at phone widths, including the
+ *     General tab's `@media (min-width: 720px)` two-column grid collapse and
+ *     a long unbroken artifact key on the Artifacts tab.
  */
 
 const { spawnSync } = require('node:child_process');

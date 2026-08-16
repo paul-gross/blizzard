@@ -136,6 +136,19 @@ describe('Mobile chunk drill-down', () => {
     expect(sections).toEqual(['section-work-item', 'section-issues', 'section-node-history', 'section-asks']);
   });
 
+  it('names the chunk by its full id in the identity header, not the compact ref', async () => {
+    // The identity header (fleet's shared `ChunkPageHeader`, issue: the runner's own
+    // page never had one, and this page's own ref used to be `compactRef`'d down to
+    // `C-3YJ9`) — the user wants the full id on a page whose whole job is naming this
+    // one chunk.
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    const ref = el.querySelector('[data-testid="mobile-chunk-ref"]');
+    expect(ref?.textContent?.trim()).toBe(CHUNK_ID);
+    expect(ref?.textContent).not.toContain('C-3YJ9');
+    expect(el.querySelector('[data-testid="mobile-chunk-status"]')?.textContent?.trim()).toBe('running');
+  });
+
   it('renders the fleet detail regions verbatim rather than forking them', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
