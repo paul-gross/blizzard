@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { KitButton, type runnerApi, type Tone } from 'fleet';
 
 /**
@@ -6,10 +7,16 @@ import { KitButton, type runnerApi, type Tone } from 'fleet';
  * chunk-detail header shape (`fleet/chunk-detail/chunk-detail-header.ts`, the
  * model): the full chunk id, its work items as links, the derived state, a
  * working Pause/Resume, and a close button. Detach is deliberately omitted —
- * it is a hub-side concern.
+ * it is a hub-side concern. The chunk id itself links to the runner-local
+ * chunk detail route (issue #318) — the operator's way into the shared
+ * `fleet` sections and the transcript, both of which moved out of this dock.
+ * The link carries the chunk in the route's own path and no query params at
+ * all: `?chunk=` is the board's selection (`panel-selection.ts`) and means
+ * nothing on the detail route, and `?attempt=` is that route's own, written
+ * there once an attempt is picked.
  *
  * Presentational (`bzh:frontend-container-presentational`): {@link MachineDetail}
- * owns the severable `ChunkHeaderView` read and the pause mutation, and forwards
+ * owns the severable `ChunkDetail` read and the pause mutation, and forwards
  * their data down as plain inputs; this component only renders and, mirroring the
  * hub header's own `onPause`/`onResume`, guards the mutating verbs behind a
  * `confirm()` before emitting {@link pauseChunk}/{@link resumeChunk} upward.
@@ -17,11 +24,11 @@ import { KitButton, type runnerApi, type Tone } from 'fleet';
 @Component({
   selector: 'local-machine-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton],
+  imports: [KitButton, RouterLink],
   template: `
     <header class="d-hdr">
       <div class="d-title">
-        <span class="cid" data-testid="detail-chunk-ref">{{ chunkId() }}</span>
+        <a class="cid" data-testid="detail-chunk-ref" [routerLink]="[...linkBase(), chunkId()]">{{ chunkId() }}</a>
         <span class="d-sub">
           @for (ref of workRefs(); track ref.source + ':' + ref.ref) {
             @if (ref.web_url) {
@@ -64,17 +71,19 @@ import { KitButton, type runnerApi, type Tone } from 'fleet';
     }
     /* Two clusters, space-between — the hub board's own header shape: identity
        on the left, actions on the right. Wraps rather than overflows once the
-       dock is only as wide as a phone. */
+       dock is only as wide as a phone. Paints no chrome of its own (issue
+       #307) — projected into KitPanel's own fleetKitPanelHeader slot in owns-the-bar
+       mode (kit-panel.ts's own declared contract for that mode, which the kit
+       observes through its KitPanelHeader query), which already sizes this root to the bar's
+       full width and supplies the bar's background and border; a second copy
+       here would stack two header bars. */
     .d-hdr {
-      flex: none;
+      min-width: 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
       gap: 10px;
-      padding: 6px 8px;
-      border-bottom: 1px solid var(--bezel);
-      background: linear-gradient(180deg, var(--header-hi), var(--header-lo));
       font-family: var(--mono);
     }
     .d-title {
@@ -84,11 +93,18 @@ import { KitButton, type runnerApi, type Tone } from 'fleet';
       min-width: 0;
     }
     .cid {
+      display: block;
       color: var(--amber-hi);
       font-size: var(--fs-md);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      text-decoration: none;
+    }
+    .cid:hover,
+    .cid:focus-visible {
+      text-decoration: underline;
+      outline: none;
     }
     .d-sub {
       display: flex;
@@ -158,6 +174,11 @@ export class MachineDetailHeader {
   /** The selected chunk's full id — never the compact shortname (issue #185). */
   readonly chunkId = input.required<string>();
 
+  /** The chunk detail route's own path segments, before the chunk id — mirrors
+   * `fleet`'s `ChunkArtifacts`/`ChunkDetailHeader` `linkBase` (`bzh:frontend-kit-floor`)
+   * so this component doesn't independently hardcode the route it links to. */
+  readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
+
   /** The chunk's work refs — each linked out to its source's web address when the
    * configured binding rendered one (a null `web_url` degrades to plain text, no
    * broken link). The header's own severable enrichment, container-fed. */
@@ -173,11 +194,11 @@ export class MachineDetailHeader {
 
   /** The chunk's open operator pause, if any — non-null renders Resume, null
    * renders Pause (subject to {@link pausable}). Container-fed off the fresh
-   * `ChunkHeaderView.pause`, never the machine-derived status. */
+   * `ChunkDetail.pause`, never the machine-derived status. */
   readonly pause = input<runnerApi.PauseView | null>(null);
 
   /** Whether an **unpaused** chunk may be paused — container-folded off the
-   * fresh `ChunkHeaderView.status` (mirrors the hub `PauseService`'s refusal). */
+   * fresh `ChunkDetail.status` (mirrors the hub `PauseService`'s refusal). */
   readonly pausable = input<boolean>(false);
 
   /** Emitted when the operator dismisses the dock via its close button. */

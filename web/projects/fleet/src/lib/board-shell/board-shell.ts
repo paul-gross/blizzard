@@ -6,7 +6,7 @@ import { BoardColumn, type BoardReposition } from './board-column';
 import { compactRef } from '../compact-ref';
 import { LANES, STATUS_LANE } from '../chunk-lanes';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
-import { KitPanel } from '../kit/kit-panel';
+import { KitPanel, KitPanelHeader } from '../kit/kit-panel';
 import { KitSkeleton } from '../kit/kit-skeleton';
 
 export type { BoardCard, BoardReposition };
@@ -32,11 +32,11 @@ export type { BoardCard, BoardReposition };
 @Component({
   selector: 'fleet-board-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardColumn, KitPanel, KitAsyncState, KitSkeleton],
+  imports: [BoardColumn, KitPanel, KitPanelHeader, KitAsyncState, KitSkeleton],
   template: `
     <div class="mc" data-testid="board-shell">
       <fleet-kit-panel class="board-panel" aria-label="Chunk board" label="Chunk board" [bodyScroll]="false">
-        <span header class="col-lbl">all workflows</span>
+        <span fleetKitPanelHeader class="col-lbl">all workflows</span>
         <div class="board" data-testid="board">
           @for (col of columns; track col.key) {
             <fleet-board-column

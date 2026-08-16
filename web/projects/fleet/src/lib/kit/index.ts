@@ -3,7 +3,7 @@
  * surface, re-exported one line per feature from the root `public-api.ts`.
  */
 
-export { KitPanel } from './kit-panel';
+export { KitPanel, KitPanelHeader } from './kit-panel';
 export { KitAsyncState, type KitAsyncStateValue } from './kit-async-state';
 export { KitAvatar } from './kit-avatar';
 export { KitBackBar } from './kit-back-bar';

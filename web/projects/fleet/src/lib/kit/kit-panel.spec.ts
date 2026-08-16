@@ -1,11 +1,11 @@
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { KitPanel } from './kit-panel';
+import { KitPanel, KitPanelHeader } from './kit-panel';
 
 @Component({
   selector: 'fleet-test-host',
-  imports: [KitPanel],
+  imports: [KitPanel, KitPanelHeader],
   template: `
     <fleet-kit-panel
       [label]="label()"
@@ -15,14 +15,14 @@ import { KitPanel } from './kit-panel';
       [bodyScroll]="bodyScroll()"
     >
       @if (withHeaderExtra()) {
-        <span header data-testid="extra-header">extra</span>
+        <span fleetKitPanelHeader data-testid="extra-header">extra</span>
       }
       <p data-testid="body-content">body</p>
     </fleet-kit-panel>
   `,
 })
 class TestHost {
-  readonly label = signal('Runners · fleet registry');
+  readonly label = signal<string | null>('Runners · fleet registry');
   readonly count = signal<number | string | null>(null);
   readonly withHeaderExtra = signal(false);
   readonly accent = signal<string | null>(null);
@@ -73,6 +73,47 @@ describe('KitPanel', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="extra-header"]')?.textContent).toBe('extra');
+    // Supplement mode: the label owns the bar, so the slot stays a bare
+    // `display: contents` passthrough sizing to its own content.
+    expect(el.querySelector('.hdr-slot')?.classList.contains('hdr-slot--owned')).toBe(false);
+  });
+
+  it('renders no header bar at all when nothing is set and nothing is projected', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.label.set(null);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelectorAll('.p-hdr')).toHaveLength(0);
+    expect(el.querySelector('[data-testid="body-content"]')?.textContent).toBe('body');
+  });
+
+  it('gives the slot the whole bar when it is the only header content (owns-the-bar)', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.label.set(null);
+    fixture.componentInstance.withHeaderExtra.set(true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelectorAll('.p-hdr')).toHaveLength(1);
+    expect(el.querySelectorAll('.lbl')).toHaveLength(0);
+    expect(el.querySelector('.hdr-slot')?.classList.contains('hdr-slot--owned')).toBe(true);
+  });
+
+  it('follows the slot into and back out of occupancy, with no second declaration to keep in sync', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.label.set(null);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('.p-hdr')).toHaveLength(0);
+
+    fixture.componentInstance.withHeaderExtra.set(true);
+    await fixture.whenStable();
+    expect(el.querySelectorAll('.p-hdr')).toHaveLength(1);
+
+    fixture.componentInstance.withHeaderExtra.set(false);
+    await fixture.whenStable();
+    expect(el.querySelectorAll('.p-hdr')).toHaveLength(0);
   });
 
   it('leaves the label and count uncolored when accent is unset', async () => {

@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient, type runnerApi } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
@@ -39,6 +40,8 @@ async function render(overrides: Record<string, unknown> = {}) {
       // `live` dot) plus renders `ChunkCard` and `LocalAsks`/`LocalInfo`, all of
       // whose own reads need a TanStack Query context to construct at all.
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      // The detail screen's header links the chunk name to its route now (issue #318).
+      provideRouter([]),
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(LocalPanelMobile);
@@ -162,40 +165,14 @@ describe('LocalPanelMobile', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="panel-chunk-detail"]')).not.toBeNull();
-    // The desktop dock reused verbatim — its execution facts and its transcript.
+    // The desktop dock reused verbatim — its execution facts.
     const facts = el.querySelector('[data-testid="detail-facts"]')?.textContent ?? '';
     expect(facts).toContain('sess-77');
     expect(facts).toContain('4821');
     expect(facts).toContain('beta');
     expect(facts).toContain('/ws/beta');
-    expect(el.querySelector('[data-testid="detail-transcript"]')).not.toBeNull();
     // …in place of the sections list, not beside it.
     expect(el.querySelector('[data-testid="mobile-chunks-pane"]')).toBeNull();
-  });
-
-  it('renders one attempt tab per lease of the selected chunk', async () => {
-    const fixture = await render({
-      selectedChunkLeases: [LEASE({ lease_id: 'lease_a1', epoch: 1, state: 'closed', closure_reason: 'transitioned' }), LEASE()],
-      selectedAttemptLeaseId: LEASE().lease_id,
-    });
-    const el = fixture.nativeElement as HTMLElement;
-
-    const tabs = Array.from(el.querySelectorAll('[data-testid="attempt-tab"]')).map((node) => node.textContent?.trim());
-    expect(tabs).toEqual(['a1 transitioned', 'a2 running']);
-  });
-
-  it('emits selectAttempt when an attempt tab is picked', async () => {
-    const fixture = await render({
-      selectedChunkLeases: [LEASE({ lease_id: 'lease_a1', epoch: 1, state: 'closed', closure_reason: 'transitioned' }), LEASE()],
-      selectedAttemptLeaseId: LEASE().lease_id,
-    });
-    const el = fixture.nativeElement as HTMLElement;
-    const picked: string[] = [];
-    fixture.componentInstance.selectAttempt.subscribe((id) => picked.push(id));
-
-    el.querySelector<HTMLElement>('[data-testid="attempt-tab"]')?.click();
-
-    expect(picked).toEqual(['lease_a1']);
   });
 
   it('emits closeDetail from the back affordance — the container clears the selection', async () => {

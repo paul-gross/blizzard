@@ -1,9 +1,9 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource, runnerApi, runnerClient } from 'fleet';
-import { stubError, stubRequestClient } from 'fleet/testing';
+import { settle, stubError, stubRequestClient } from 'fleet/testing';
 import { SessionRecovery } from 'local-panel';
 import { vi } from 'vitest';
 
@@ -70,7 +70,9 @@ describe('runner App session-recovery fork (issue #312)', () => {
     restore = r;
 
     const fixture = TestBed.createComponent(App);
-    await fixture.whenStable();
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/');
+    await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('local-panel')).toBeTruthy();

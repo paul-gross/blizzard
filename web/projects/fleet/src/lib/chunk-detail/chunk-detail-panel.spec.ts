@@ -5,7 +5,7 @@ import { vi } from 'vitest';
 
 import type { ChunkDetail } from '../api/hub';
 import { ChunkDetailPanel } from './chunk-detail-panel';
-import type { WorkItemsState } from './chunk-issue-pane';
+import type { WorkItemsState } from './work-items-state';
 
 const ISSUE_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01issue00000000000000000000',

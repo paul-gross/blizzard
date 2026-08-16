@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 
 import { MobileTabBar, type MobileTabItem } from './mobile-tab-bar';
 
@@ -71,5 +71,38 @@ describe('MobileTabBar', () => {
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('[data-testid="runner-mobile-tab-bar"]'),
     ).not.toBeNull();
+  });
+
+  it('preserves query params across navigation only for a tab that opts in, per item', async () => {
+    await TestBed.configureTestingModule({
+      imports: [MobileTabBar],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([
+          { path: 'a', children: [] },
+          { path: 'b', children: [] },
+        ]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(MobileTabBar);
+    fixture.componentRef.setInput('items', [
+      { testid: 'tab-a', label: 'A', route: '/a', queryParamsHandling: 'preserve' },
+      { testid: 'tab-b', label: 'B', route: '/b' },
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/a?chunk=ch_1');
+    await fixture.whenStable();
+    el.querySelector<HTMLElement>('[data-testid="tab-b"]')?.click();
+    await fixture.whenStable();
+    expect(router.url).toBe('/b');
+
+    await router.navigateByUrl('/b?chunk=ch_1');
+    await fixture.whenStable();
+    el.querySelector<HTMLElement>('[data-testid="tab-a"]')?.click();
+    await fixture.whenStable();
+    expect(router.url).toBe('/a?chunk=ch_1');
   });
 });

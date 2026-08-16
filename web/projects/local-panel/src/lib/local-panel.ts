@@ -1,12 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import {
-  type KitAsyncStateValue,
-  MobileTabBar,
-  type MobileTabItem,
-  type runnerApi,
-  type StatCell,
-  ViewportService,
-} from 'fleet';
+import { type KitAsyncStateValue, type runnerApi, type StatCell, ViewportService } from 'fleet';
 
 import { type MachineChunkStatus, deriveMachineChunkStatus } from './chunk-status';
 import { injectRunnerLeasesQuery } from './leases.query';
@@ -17,9 +10,9 @@ import { injectRunnerDashboardQuery } from './status.query';
 
 /** One row in the machine-chunks list: a chunk's newest lease plus its derived
  * machine-side status, pre-folded so the layout needs no second read. `leases`
- * carries *every* attempt of the chunk (oldest → newest) for the detail dock's
- * per-attempt tabs; `lease` is `leases`' newest entry — the row and the summary
- * both render off it. */
+ * carries *every* attempt of the chunk (oldest → newest) — the detail dock
+ * resolves its own summary off the newest entry without a second read of its
+ * own; `lease` is that same newest entry, already resolved for the row. */
 export interface MachineChunkRow {
   readonly lease: runnerApi.LeaseView;
   readonly leases: readonly runnerApi.LeaseView[];
@@ -32,10 +25,10 @@ export interface MachineChunkRow {
  * {@link injectRunnerDashboardQuery} (issue #311's composed `GET
  * /api/dashboard` read, folding what were five separate query injections
  * here), the one derived-status fold ({@link deriveMachineChunkStatus}), and
- * the selection — which chunk is open and which attempt tab is active, both
- * bound to the URL's query params so a link is shareable and a reload keeps
- * its place (issue #99). Every panel below it (via {@link LocalPanelLayout})
- * is presentational or owns just its own read.
+ * the selection — which chunk is open, bound to the URL's `?chunk=` query
+ * param so a link is shareable and a reload keeps its place (issue #99).
+ * Every panel below it (via {@link LocalPanelLayout}) is presentational or
+ * owns just its own read.
  *
  * The fold and the selection stay here rather than in the layout, per the
  * epic's design decision: the layout takes `machineChunks`/`selected*` as
@@ -52,7 +45,7 @@ export interface MachineChunkRow {
 @Component({
   selector: 'local-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [LocalPanelLayout, LocalPanelMobile, MobileTabBar],
+  imports: [LocalPanelLayout, LocalPanelMobile],
   template: `
     <div class="lp-shell">
       <div class="lp-content">
@@ -69,12 +62,10 @@ export interface MachineChunkRow {
             [openAskCount]="openAskCount()"
             [selectedChunkId]="selectedChunkId()"
             [selectedChunkLeases]="selectedChunkLeases()"
-            [selectedAttemptLeaseId]="selectedAttemptLeaseId()"
             [selectedStatus]="selectedStatus()"
             [selectedEscalation]="selectedEscalation()"
             (selectLease)="selectLease($event)"
             (selectChunk)="selectChunk($event)"
-            (selectAttempt)="selectAttempt($event)"
             (toggleShowAllChunks)="showAllChunks.set($event)"
             (dismiss)="clearSelection()"
           />
@@ -89,18 +80,13 @@ export interface MachineChunkRow {
               [selectedChunkLeases]="selectedChunkLeases()"
               [selectedStatus]="selectedStatus()"
               [selectedEscalation]="selectedEscalation()"
-              [selectedAttemptLeaseId]="selectedAttemptLeaseId()"
               (selectChunk)="selectChunk($event)"
               (selectLease)="selectLease($event)"
-              (selectAttempt)="selectAttempt($event)"
               (closeDetail)="clearSelection()"
             />
           }
         }
       </div>
-      @if (mode() === 'mobile') {
-        <fleet-mobile-tab-bar [items]="tabItems()" testid="local-panel-mobile-tab-bar" />
-      }
     </div>
   `,
   styles: `
@@ -125,13 +111,14 @@ export class LocalPanel {
    * "adaptive shells over shared guts") — desktop renders the existing
    * three-column {@link LocalPanelLayout} unchanged; mobile renders
    * {@link LocalPanelMobile} instead, `@defer`-loaded so the desktop bundle
-   * doesn't carry it, plus the persistent {@link MobileTabBar} below the
-   * scrolling `.lp-content` (mirroring the hub app-root's own placement,
-   * issue #92) so it never scrolls out of view. The viewport override itself
-   * lives behind each shell's own header menu (`KitMenu`, mobile polish
-   * feedback item 5) — the shared header's `[header-trailing]` slot and
-   * `LocalPanelMobile`'s shared `MobileTitlebar` menu slot — rather than an
-   * always-visible strip above both. */
+   * doesn't carry it. The persistent mobile bottom tab bar lives at the app
+   * root now (issue #313, `../../runner/src/app/nav/mobile-tab-bar.ts`), not
+   * here, so it survives navigating to `/events` where this component isn't
+   * mounted at all. The viewport override itself lives behind each shell's
+   * own header menu (`KitMenu`, mobile polish feedback item 5) — the shared
+   * header's `[header-trailing]` slot and `LocalPanelMobile`'s shared
+   * `MobileTitlebar` menu slot — rather than an always-visible strip above
+   * both. */
   protected readonly viewport = inject(ViewportService);
 
   protected readonly mode = this.viewport.mode;
@@ -228,9 +215,8 @@ export class LocalPanel {
    * orders actives first, then the recent-closed block, so the first lease
    * seen per `chunk_id` is the freshest attempt) plus every attempt of the
    * chunk and the derived status — folded once here, handed to the row and the
-   * detail dock alike. Each row's `leases` is ordered oldest → newest for the
-   * detail dock's attempt tabs; `lease` (the summary/status subject) is that
-   * list's newest entry.
+   * detail dock alike. Each row's `leases` is ordered oldest → newest, so
+   * `lease` (the summary/status subject) is that list's own newest entry.
    */
   protected readonly machineChunks = computed<MachineChunkRow[]>(() => {
     const dashboard = this.dashboardQuery.data();
@@ -252,7 +238,7 @@ export class LocalPanel {
       const newest = group[0];
       rows.push({
         lease: newest,
-        leases: [...group].reverse(), // oldest → newest for the attempt tabs
+        leases: [...group].reverse(), // oldest → newest
         status: deriveMachineChunkStatus(newest, facts),
       });
     }
@@ -277,30 +263,10 @@ export class LocalPanel {
     return this.machineChunks().filter((chunk) => chunk.status.tone !== 'done' && chunk.status.tone !== 'idle');
   });
 
-  /** The open-ask count for the asks panel's header note. */
+  /** The open-ask count for the asks panel's header note — also read by the
+   * app root's own mobile tab bar (issue #313) off the same shared dashboard
+   * query, folded independently there rather than through this component. */
   protected readonly openAskCount = computed(() => (this.dashboardQuery.data()?.asks?.items ?? []).length);
-
-  /**
-   * The mobile bottom tab bar's items (issue #92) — Machine is this shell's
-   * one always-current screen (the runner app has no *page* routes — the router
-   * carries only the panel's selection query params, issue #99 — so Machine is a
-   * statically `active` tab rather than a routed one, unlike the hub's Board);
-   * Asks carries the same {@link openAskCount} the local-asks
-   * section's own header note reads; Transcripts has no mobile screen of its
-   * own yet (a future chunk), so it renders inert — the same "not yet"
-   * treatment the hub gives Asks/Fleet today.
-   */
-  protected readonly tabItems = computed<readonly MobileTabItem[]>(() => [
-    { testid: 'tab-machine', label: 'Machine', active: true },
-    {
-      testid: 'tab-asks-runner',
-      label: 'Asks',
-      inert: true,
-      badge: this.openAskCount(),
-      badgeTestid: 'tab-asks-runner-badge',
-    },
-    { testid: 'tab-transcripts-runner', label: 'Transcripts', inert: true },
-  ]);
 
   /** What is open in the panel, held in the URL (issue #99) — see
    * `panel-selection.ts` for why the router coupling lives there. */
@@ -316,19 +282,14 @@ export class LocalPanel {
   /** Write a chunk selection to the URL, clearing any stale `attempt` (attempt
    * lease ids are chunk-specific, so a new chunk defaults to its newest). */
   protected selectChunk(chunkId: string): void {
-    this.selection.select(chunkId, null);
+    this.selection.select(chunkId);
   }
 
   /** Selecting a lease row selects its chunk — the shared selection both rails
    * reflect; the detail dock defaults to the chunk's newest attempt. */
   protected selectLease(leaseId: string): void {
     const lease = this.leases().find((candidate) => candidate.lease_id === leaseId);
-    if (lease) this.selection.select(lease.chunk_id, null);
-  }
-
-  /** Write an attempt pick to the URL, keeping the current chunk selection. */
-  protected selectAttempt(leaseId: string): void {
-    this.selection.select(this.selectedChunkId(), leaseId);
+    if (lease) this.selection.select(lease.chunk_id);
   }
 
   /** Clear the selection entirely — the mobile shell's back affordance, which
@@ -337,35 +298,17 @@ export class LocalPanel {
    * and this button walk the same history. Desktop has no caller: its dock
    * simply falls back to `SELECT A CHUNK`. */
   protected clearSelection(): void {
-    this.selection.select(null, null);
+    this.selection.select(null);
   }
 
   /**
-   * The selected chunk's attempts (oldest → newest) — what the detail dock
-   * renders: its summary/status off the newest, one transcript tab per attempt.
-   * Empty when nothing is selected.
+   * The selected chunk's attempts (oldest → newest) — what the detail dock's
+   * summary/status renders off the newest. Empty when nothing is selected.
    */
   protected readonly selectedChunkLeases = computed<readonly runnerApi.LeaseView[]>(() => {
     const chunkId = this.selectedChunkId();
     if (chunkId === null) return [];
     return this.machineChunks().find((chunk) => chunk.lease.chunk_id === chunkId)?.leases ?? [];
-  });
-
-  /**
-   * The attempt whose transcript the dock shows — the URL's `attempt` lease id
-   * when it still names an attempt of the selected chunk, else the newest attempt
-   * (the default). Deriving the *effective* pick here (rather than trusting the
-   * raw param) folds in every fallback the old in-dock state carried: a poll
-   * refresh keeps the same attempt (its id is unchanged), while a pick that ages
-   * out of the recent-lease window — or one left over from another chunk — is no
-   * longer among the leases, so it falls back to newest.
-   */
-  protected readonly selectedAttemptLeaseId = computed<string | null>(() => {
-    const leases = this.selectedChunkLeases();
-    const newest = leases.at(-1) ?? null;
-    const wanted = this.selection.attemptLeaseId();
-    if (wanted !== null && leases.some((att) => att.lease_id === wanted)) return wanted;
-    return newest?.lease_id ?? null;
   });
 
   protected readonly selectedStatus = computed<MachineChunkStatus | null>(() => {

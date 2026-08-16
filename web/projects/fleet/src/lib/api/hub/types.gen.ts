@@ -563,8 +563,9 @@ export type CheckResult = {
 /**
  * ChunkDetail
  *
- * The chunk aggregate in full, carrying its **transition history** — every node it visited,
- * including a review that failed and looped back — and its inline **artifact store**.
+ * The whole chunk aggregate — one response model behind both the hub's own detail read and the
+ * runner's pass-through proxy of it (issue #314): transition history, inline artifact store, and the
+ * open escalation. Declared once, never re-typed per route, so a field reaches both specs at once.
  */
 export type ChunkDetail = {
     /**
@@ -601,7 +602,7 @@ export type ChunkDetail = {
      * Default Model
      */
     default_model?: Array<string>;
-    escalation?: EscalationView | null;
+    escalation?: ChunkEscalationView | null;
     /**
      * Graph Created At
      */
@@ -651,6 +652,30 @@ export type ChunkDetail = {
      * Work Refs
      */
     work_refs?: Array<WorkRefView>;
+};
+
+/**
+ * ChunkEscalationView
+ *
+ * An open escalation on a ``needs_human`` chunk — the takeover command(s) for the parked session,
+ * present only while the escalation is open — a later lease mint, requeue, or completion supersedes it.
+ * ``wrapped_takeover_command`` is optional, empty when none was composed. Named for the chunk rather
+ * than the bare concept: ``wire.runner_status`` publishes its own differently-shaped
+ * ``EscalationView``, and the runner serves both — two same-names in one app mangle each.
+ */
+export type ChunkEscalationView = {
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Takeover Command
+     */
+    takeover_command: string;
+    /**
+     * Wrapped Takeover Command
+     */
+    wrapped_takeover_command?: string;
 };
 
 /**
@@ -1218,28 +1243,6 @@ export type EscalationReport = {
      * Takeover Command
      */
     takeover_command?: string;
-    /**
-     * Wrapped Takeover Command
-     */
-    wrapped_takeover_command?: string;
-};
-
-/**
- * EscalationView
- *
- * An open escalation on a ``needs_human`` chunk — the takeover command(s) for the parked session,
- * present only while the escalation is open — a later lease mint, requeue, or completion supersedes it.
- * ``wrapped_takeover_command`` is optional, empty when none was composed.
- */
-export type EscalationView = {
-    /**
-     * Epoch
-     */
-    epoch: number;
-    /**
-     * Takeover Command
-     */
-    takeover_command: string;
     /**
      * Wrapped Takeover Command
      */

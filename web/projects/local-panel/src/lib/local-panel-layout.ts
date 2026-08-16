@@ -12,6 +12,7 @@ import {
   KitMenuItem,
   KitMenuPanel,
   KitPanel,
+  KitPanelHeader,
   ViewportMenu,
 } from 'fleet';
 
@@ -20,7 +21,6 @@ import { MachineDetail } from './chunk-detail';
 import type { MachineChunkStatus } from './chunk-status';
 import { ChunkRow } from './chunk-row';
 import { EnvList } from './env-list';
-import { FactLog } from './fact-log';
 import { LocalAsks } from './local-asks';
 import { LocalIdentity } from './local-identity';
 import { LocalInfo } from './local-info';
@@ -31,18 +31,20 @@ import type { MachineChunkRow } from './local-panel';
  * The runner's machine-local panel's layout half (issue #80) — shaped like
  * the discovery mock's machine panel: a three-column grid over the runner's
  * local API, hub-free save for the rails that proxy through it — the
- * fleet-summary strip (`local-info`) and, for a closed lease, the transcript
- * dock below (issue #249).
+ * fleet-summary strip (`local-info`).
  *
  * - **Left (340px)** — liveness: the *active* leases (closed rows are history,
  *   not liveness — they live on the chunks list), each with a heartbeat
  *   freshness bar, over the held-environments rail, split 60/40.
  * - **Center (1fr)** — work: the chunks on this machine (one row per chunk,
  *   work-item-enriched, derived status in the hub board's colors) over the machine
- *   detail dock for the selected chunk, transcript inline.
+ *   detail dock for the selected chunk's execution facts — the transcript and
+ *   per-attempt selection moved to the runner-local chunk detail route
+ *   (issue #318).
  * - **Right (330px)** — the machine's account of itself: the hub link
- *   (endpoint, reachability, last flush, buffer), the open local asks, and
- *   the local fact log off the outbound ledger.
+ *   (endpoint, reachability, last flush, buffer) and the open local asks. The
+ *   local fact log moved to its own `/events` route (issue #313) — full
+ *   width there rather than a rail-sized panel.
  *
  * Presentational only: it renders exactly the leases/chunks/selection it is
  * handed and emits `selectLease`/`selectChunk`; the derived-status fold and
@@ -85,13 +87,13 @@ import type { MachineChunkRow } from './local-panel';
     MachineDetail,
     ChunkRow,
     EnvList,
-    FactLog,
     KitAsyncState,
     KitAvatar,
     KitMenu,
     KitMenuItem,
     KitMenuPanel,
     KitPanel,
+  KitPanelHeader,
     LocalAsks,
     LocalIdentity,
     LocalInfo,
@@ -136,7 +138,7 @@ import type { MachineChunkRow } from './local-panel';
             data-testid="lease-pane"
             label="active leases"
           >
-            <span header class="p-note" data-testid="lease-count">{{ activeLeases().length }} live</span>
+            <span fleetKitPanelHeader class="p-note" data-testid="lease-count">{{ activeLeases().length }} live</span>
             <fleet-kit-async-state
               [state]="leasesTriadState()"
               loadingText="LOADING…"
@@ -189,27 +191,21 @@ import type { MachineChunkRow } from './local-panel';
               }
             </fleet-kit-async-state>
           </fleet-kit-panel>
-          <div class="detail-frame">
-            <local-machine-detail
-              [leases]="selectedChunkLeases()"
-              [activeAttemptLeaseId]="selectedAttemptLeaseId()"
-              [status]="selectedStatus()"
-              [escalation]="selectedEscalation()"
-              (selectAttempt)="selectAttempt.emit($event)"
-              (dismiss)="dismiss.emit()"
-            />
-          </div>
+          <local-machine-detail
+            class="detail-frame"
+            [leases]="selectedChunkLeases()"
+            [status]="selectedStatus()"
+            [escalation]="selectedEscalation()"
+            (dismiss)="dismiss.emit()"
+          />
         </section>
         <section class="col right">
           <fleet-kit-panel class="hub-panel" label="hub">
             <local-info />
           </fleet-kit-panel>
           <fleet-kit-panel class="asks-panel" label="local asks">
-            <span header class="p-note">{{ openAskCount() }} open</span>
+            <span fleetKitPanelHeader class="p-note">{{ openAskCount() }} open</span>
             <local-asks />
-          </fleet-kit-panel>
-          <fleet-kit-panel class="facts-panel" label="local fact log">
-            <local-fact-log />
           </fleet-kit-panel>
         </section>
       </main>
@@ -292,12 +288,11 @@ import type { MachineChunkRow } from './local-panel';
       text-transform: uppercase;
       cursor: pointer;
     }
+    /* Sizing only — local-machine-detail paints its own panel chrome via
+       KitPanel now (issue #307), so this no longer hand-copies a
+       background/border of its own. */
     .detail-frame {
-      display: flex;
-      flex-direction: column;
       min-height: 0;
-      background: var(--panel);
-      border: 1px solid var(--bezel);
       flex: 1.15;
     }
     /* The mock's split weights: leases over envs 60/40; chunks under detail 1:1.15. */
@@ -311,9 +306,6 @@ import type { MachineChunkRow } from './local-panel';
     }
     fleet-kit-panel.hub-panel {
       flex: none;
-    }
-    fleet-kit-panel.facts-panel {
-      flex: 1.25;
     }
     .rows {
       display: flex;
@@ -361,13 +353,10 @@ export class LocalPanelLayout {
   /** The `chunk_id` currently selected, or `null`. */
   readonly selectedChunkId = input.required<string | null>();
 
-  /** The selected chunk's attempts (oldest → newest) — what the detail dock
-   * renders: summary/status off the newest, one transcript tab per attempt. */
+  /** The selected chunk's attempts (oldest → newest) — the detail dock reads
+   * only the newest for its summary/status; per-attempt selection and the
+   * transcript live on the chunk detail route instead (issue #318). */
   readonly selectedChunkLeases = input.required<readonly runnerApi.LeaseView[]>();
-
-  /** The attempt whose transcript the detail dock shows — the container's
-   * URL-derived effective pick (issue #99), fed straight to the detail dock. */
-  readonly selectedAttemptLeaseId = input.required<string | null>();
 
   readonly selectedStatus = input.required<MachineChunkStatus | null>();
 
@@ -384,10 +373,6 @@ export class LocalPanelLayout {
   /** Emitted with the checkbox's new checked state when the operator toggles
    * "show all" (issue #134). */
   readonly toggleShowAllChunks = output<boolean>();
-
-  /** Emitted with an attempt lease id when the operator picks an attempt tab in
-   * the detail dock — the container writes it to the URL. */
-  readonly selectAttempt = output<string>();
 
   /** Emitted when the operator dismisses the detail dock (issue #185) via its
    * own close button — the container clears the selection. */

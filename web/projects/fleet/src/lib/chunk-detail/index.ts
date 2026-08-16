@@ -5,11 +5,13 @@ export { ChunkDetail } from './chunk-detail';
 // belong here is `bzh:frontend-disjoint-diffs`.
 export { ChunkArtifactBody } from './chunk-artifact-body';
 export { sortArtifacts } from './sort-artifacts';
+export { ChunkArtifacts } from './chunk-artifacts';
 export { ChunkAwaitingHuman } from './chunk-awaiting-human';
 export { ChunkFacts } from './chunk-facts';
 export type { EditGraphEvent } from './chunk-facts';
 export { ChunkIssuePane } from './chunk-issue-pane';
-export type { WorkItemsState } from './chunk-issue-pane';
+export { deriveWorkItemsState } from './work-items-state';
+export type { WorkItemsState, WorkItemsQuery } from './work-items-state';
 export { ChunkTimeline } from './chunk-timeline';
 export { ChunkTokenBreakdown } from './chunk-token-breakdown';
-export type { TransitionView, ArtifactView, DecisionView, EscalationView, ChunkUsageTotalView, ChunkUsageView } from '../api/hub';
+export type { TransitionView, ArtifactView, DecisionView, ChunkEscalationView, ChunkUsageTotalView, ChunkUsageView } from '../api/hub';

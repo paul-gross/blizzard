@@ -28,6 +28,29 @@ _DETAIL: dict[str, object] = {
     "latest_epoch": 1,
     "work_refs": [{"source": "widget", "ref": "42", "label": "widget#42", "web_url": "http://forge.local/42"}],
     "pause": None,
+    "history": [
+        {
+            "from_node_id": "nd_plan",
+            "from_node_name": "plan",
+            "to_node_id": "nd_build",
+            "to_node_name": "build",
+            "choice_name": "acceptable",
+            "epoch": 1,
+            "recorded_at": "2026-08-16T00:00:00Z",
+        }
+    ],
+    "artifacts": [
+        {
+            "key": "build.retrospective.1",
+            "kind": "asset",
+            "name": "retrospective",
+            "node_id": "nd_build",
+            "node_name": "build",
+            "epoch": 1,
+            "content": "went fine",
+        }
+    ],
+    "escalation": {"epoch": 1, "takeover_command": "blizzard runner takeover ch_pass"},
 }
 _SUMMARY: dict[str, object] = {
     "chunk_id": _CHUNK,
@@ -71,8 +94,12 @@ def test_get_chunk_forwards_to_the_fleet_route(tmp_path: Path, monkeypatch: pyte
     resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}")
 
     assert resp.status_code == 200, resp.text
-    assert resp.json()["chunk_id"] == _CHUNK
-    assert resp.json()["work_refs"][0]["web_url"] == "http://forge.local/42"
+    body = resp.json()
+    assert body["chunk_id"] == _CHUNK
+    assert body["work_refs"][0]["web_url"] == "http://forge.local/42"
+    assert body["history"][0]["to_node_name"] == "build"
+    assert body["artifacts"][0]["content"] == "went fine"
+    assert body["escalation"]["takeover_command"] == "blizzard runner takeover ch_pass"
     assert seen == [("GET", f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}")]
 
 

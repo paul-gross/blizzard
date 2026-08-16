@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import type { ArtifactView, ChunkDetail } from '../api/hub';
@@ -7,19 +7,32 @@ import { sortArtifacts } from './sort-artifacts';
 
 /**
  * The chunk's artifact store (issue #79, relinked #160) — every entry keyed
- * `{node}.{artifact-name}.{epoch}`, listed as **links**. Owns the ordering and
- * the empty state; each row's own rendering (the head, and for a `git_commit`
- * its pinned reference) belongs to {@link ChunkArtifactBody} in `summary` mode
- * — the same single owner the chunk detail page's Artifacts tab and the hub's
- * mobile artifact page compose too. Presentational only: the row is a plain
- * `routerLink`, not an injected `Router`.
+ * `{node}.{artifact-name}.{epoch}`, listed as rows. Owns the ordering and the
+ * empty state; each row's own rendering (the head, and for a `git_commit` its
+ * pinned reference) belongs to {@link ChunkArtifactBody} — the same single
+ * owner the chunk detail page's Artifacts tab and the hub's mobile artifact
+ * page compose too.
  *
- * A row navigates to the chunk detail page's Artifacts tab with that artifact
- * pre-selected — an `asset`'s content can run hundreds of lines, which used to
- * bury every other artifact and every dock section below it inline. `linkBase`
- * defaults to the desktop board's own route (`/board/chunk`) so this `fleet`
- * library component needs no forwarding through {@link ChunkDetailPanel} /
- * {@link ChunkDetail} to reach it.
+ * Two row modes, since not every host has somewhere to send a click: `link`
+ * (default) — a row is a plain `routerLink` (no injected `Router`) that
+ * navigates to the chunk detail page's Artifacts tab with that artifact
+ * pre-selected, rendering {@link ChunkArtifactBody} in `summary` mode. An
+ * `asset`'s content can run hundreds of lines, which used to bury every
+ * other artifact and every dock section below it inline. `linkBase` defaults
+ * to the desktop board's own route (`/board/chunk`) so this `fleet` library
+ * component needs no forwarding through {@link ChunkDetailPanel} /
+ * {@link ChunkDetail} to reach it. The link carries only its own
+ * `tab`/`artifact` pair: the chunk rides the destination route's own path,
+ * and the one host still on this mode navigates from `/board`, whose
+ * `?chunk=` selection means nothing on the page it opens.
+ *
+ * `expandable` — for a host with no Artifacts tab of its own (the runner's
+ * single-column chunk detail route, issue #318, which has nowhere for
+ * `linkBase` to point): a row with a body worth hiding is a `<button>` that
+ * toggles its own {@link ChunkArtifactBody} between `summary` and `full` in
+ * place, an accordion rather than a navigation, at most one row expanded at a
+ * time. A row with nothing to reveal renders as plain content and no toggle
+ * at all — see {@link hasBodyToExpand}.
  */
 @Component({
   selector: 'fleet-chunk-detail-artifacts',
@@ -34,15 +47,37 @@ import { sortArtifacts } from './sort-artifacts';
         <ul class="artifacts" data-testid="artifacts">
           @for (art of artifacts(); track art.key) {
             <li class="artifact" data-testid="artifact" [attr.data-kind]="art.kind">
-              <a
-                class="artifact-link"
-                data-testid="artifact-link"
-                [attr.data-artifact-key]="art.key"
-                [routerLink]="[...linkBase(), chunkId()]"
-                [queryParams]="{ tab: 'artifacts', artifact: art.key }"
-              >
-                <fleet-chunk-detail-artifact-body [artifact]="art" body="summary" />
-              </a>
+              @if (expandable()) {
+                @if (hasBodyToExpand(art)) {
+                  <button
+                    type="button"
+                    class="artifact-link"
+                    data-testid="artifact-link"
+                    [attr.data-artifact-key]="art.key"
+                    [attr.aria-expanded]="expandedKey() === art.key"
+                    (click)="toggle(art.key)"
+                  >
+                    <fleet-chunk-detail-artifact-body
+                      [artifact]="art"
+                      [body]="expandedKey() === art.key ? 'full' : 'summary'"
+                    />
+                  </button>
+                } @else {
+                  <div class="artifact-plain" data-testid="artifact-plain" [attr.data-artifact-key]="art.key">
+                    <fleet-chunk-detail-artifact-body [artifact]="art" body="full" />
+                  </div>
+                }
+              } @else {
+                <a
+                  class="artifact-link"
+                  data-testid="artifact-link"
+                  [attr.data-artifact-key]="art.key"
+                  [routerLink]="[...linkBase(), chunkId()]"
+                  [queryParams]="{ tab: 'artifacts', artifact: art.key }"
+                >
+                  <fleet-chunk-detail-artifact-body [artifact]="art" body="summary" />
+                </a>
+              }
             </li>
           }
         </ul>
@@ -82,10 +117,21 @@ import { sortArtifacts } from './sort-artifacts';
       background: var(--overlay-20);
       padding: 4px 5px;
     }
-    .artifact-link {
+    .artifact-link,
+    .artifact-plain {
       display: block;
+      width: 100%;
       color: inherit;
       text-decoration: none;
+    }
+    button.artifact-link {
+      background: none;
+      border: 0;
+      margin: 0;
+      padding: 0;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
     }
     .artifact-link:hover,
     .artifact-link:focus-visible {
@@ -103,8 +149,32 @@ export class ChunkArtifacts {
    * `fleet` hardcoding a hub route. */
   readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
 
+  /** `true` renders each row as an in-place expand/collapse toggle instead of
+   * a `routerLink` — for a host with no Artifacts tab of its own to link to.
+   * `false` (the default) is every existing consumer's current behavior. */
+  readonly expandable = input(false);
+
   protected readonly chunkId = computed(() => this.detail().chunk_id);
 
   /** The artifact store, oldest attachment first — see {@link sortArtifacts}. */
   protected readonly artifacts = computed<readonly ArtifactView[]>(() => sortArtifacts(this.detail().artifacts ?? []));
+
+  /** The one row currently expanded in {@link expandable} mode, or `null`. */
+  protected readonly expandedKey = signal<string | null>(null);
+
+  /** Whether an {@link expandable}-mode row has anything an expand would reveal:
+   * only an `asset` with content does. {@link ChunkArtifactBody} renders a
+   * `git_commit` identically in `summary` and `full` — its ref line is a one-liner
+   * with nothing to summarize away — so a toggle over one announces an expansion
+   * that changes nothing on screen, and wraps that line's real branch `<a>` in a
+   * `<button>`: an interactive anchor inside an interactive control, which is
+   * invalid content model and gives a click two conflicting targets. Such a row
+   * renders as plain content instead, with no toggle at all. */
+  protected hasBodyToExpand(artifact: ArtifactView): boolean {
+    return artifact.kind === 'asset' && !!artifact.content;
+  }
+
+  protected toggle(key: string): void {
+    this.expandedKey.update((current) => (current === key ? null : key));
+  }
 }

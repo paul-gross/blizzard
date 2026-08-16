@@ -130,10 +130,12 @@ class RouteView(BaseModel):
     environment_ids: list[str] = []
 
 
-class EscalationView(BaseModel):
+class ChunkEscalationView(BaseModel):
     """An open escalation on a ``needs_human`` chunk — the takeover command(s) for the parked session,
     present only while the escalation is open — a later lease mint, requeue, or completion supersedes it.
-    ``wrapped_takeover_command`` is optional, empty when none was composed."""
+    ``wrapped_takeover_command`` is optional, empty when none was composed. Named for the chunk rather
+    than the bare concept: ``wire.runner_status`` publishes its own differently-shaped
+    ``EscalationView``, and the runner serves both — two same-names in one app mangle each."""
 
     epoch: int
     takeover_command: str
@@ -318,8 +320,9 @@ class PauseView(BaseModel):
 
 
 class ChunkDetail(BaseModel):
-    """The chunk aggregate in full, carrying its **transition history** — every node it visited,
-    including a review that failed and looped back — and its inline **artifact store**."""
+    """The whole chunk aggregate — one response model behind both the hub's own detail read and the
+    runner's pass-through proxy of it (issue #314): transition history, inline artifact store, and the
+    open escalation. Declared once, never re-typed per route, so a field reaches both specs at once."""
 
     chunk_id: str
     graph_id: str
@@ -339,7 +342,6 @@ class ChunkDetail(BaseModel):
     # is set. See IntendedMigrationView.
     intended_migration: IntendedMigrationView | None = None
     route: RouteView | None = None
-    escalation: EscalationView | None = None
     # The operator's per-chunk pause brake (issue #46) — non-None iff currently paused, and carried
     # independently of ``status`` so a gated-and-paused chunk stays legible (see PauseView).
     pause: PauseView | None = None
@@ -371,18 +373,7 @@ class ChunkDetail(BaseModel):
     # The chunk's recorded delivery kick-backs (#64), oldest first — informational, never a status:
     # a bounce is contention, not failure.
     bounces: list[BounceView] = []
-
-
-# Pydantic's default ``extra="ignore"`` lets this validate straight off a ``ChunkDetail``
-# payload, which keeps ``EscalationView`` out of the runner's own OpenAPI schema.
-class ChunkHeaderView(BaseModel):
-    """A chunk-detail header aggregate (issue #185) — identity, work-item links, live state, and the
-    pause fact, without the transition/artifact history the hub's own chunk aggregate carries."""
-
-    chunk_id: str
-    status: ChunkStatus
-    work_refs: list[WorkRefView] = []
-    pause: PauseView | None = None
+    escalation: ChunkEscalationView | None = None
 
 
 class WorkItemEntry(BaseModel):

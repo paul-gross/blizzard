@@ -18,10 +18,10 @@ from blizzard.wire.chunk import (
     ArtifactView,
     BounceView,
     ChunkDetail,
+    ChunkEscalationView,
     ChunkSummary,
     ChunkUsageTotalView,
     ChunkUsageView,
-    EscalationView,
     IntendedMigrationView,
     MigrationView,
     PauseView,
@@ -160,11 +160,11 @@ class ChunkView:
             runner_id=route.runner_id, workspace_id=route.workspace_id, environment_ids=route.environment_ids
         )
 
-    def _escalation(self) -> EscalationView | None:
+    def _escalation(self) -> ChunkEscalationView | None:
         escalation = self.facts.open_escalation()
         if escalation is None:
             return None
-        return EscalationView(
+        return ChunkEscalationView(
             epoch=escalation.epoch,
             takeover_command=escalation.takeover_command,
             wrapped_takeover_command=escalation.wrapped_takeover_command,

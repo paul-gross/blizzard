@@ -8,17 +8,17 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, status
 
 from blizzard.runner.api.hub_proxy import HubProxy
-from blizzard.wire.chunk import ChunkHeaderView, ChunkSummary
+from blizzard.wire.chunk import ChunkDetail, ChunkSummary
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
-@router.get("/chunks/{chunk_id}", response_model=ChunkHeaderView)
-def get_chunk(chunk_id: str, request: Request) -> ChunkHeaderView:
-    """Forward a chunk's detail read to the hub — the header aggregate only, with the
-    upstream transition/artifact history dropped rather than served."""
+@router.get("/chunks/{chunk_id}", response_model=ChunkDetail)
+def get_chunk(chunk_id: str, request: Request) -> ChunkDetail:
+    """Forward a chunk's detail read to the hub — the whole aggregate (issue #314), including
+    transition history, artifacts, and the open escalation."""
     upstream = HubProxy.of(request, "chunk-detail").get(f"/api/fleet/chunks/{chunk_id}")
-    return ChunkHeaderView.model_validate(upstream.json())
+    return ChunkDetail.model_validate(upstream.json())
 
 
 @router.post("/chunks/{chunk_id}/pause", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)

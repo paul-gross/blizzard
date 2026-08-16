@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
-import type { ChunkDetail, EscalationView } from '../api/hub';
+import type { ChunkDetail, ChunkEscalationView } from '../api/hub';
 import { KitButton } from '../kit/kit-button';
 
 /**
@@ -16,7 +16,7 @@ import { KitButton } from '../kit/kit-button';
  * no discriminator between a runner-composed resume command and the hub-authored
  * guidance prose that occupies the same field.
  * Wrapped-vs-raw rules and the wire field's own optionality:
- * `blizzard-context:/domain/humans.md` §Escalation and `EscalationView` in
+ * `blizzard-context:/domain/humans.md` §Escalation and `ChunkEscalationView` in
  * `src/blizzard/wire/chunk.py`.
  */
 @Component({
@@ -137,7 +137,7 @@ export class ChunkEscalation {
   protected readonly copied = signal(false);
 
   /** The chunk's open escalation, if it currently needs a human takeover. */
-  protected readonly escalation = computed<EscalationView | null>(() => this.detail().escalation ?? null);
+  protected readonly escalation = computed<ChunkEscalationView | null>(() => this.detail().escalation ?? null);
 
   /** Whether the escalation carries a runner-composed wrapped command — the
    * primary form once present. */

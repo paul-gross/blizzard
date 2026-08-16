@@ -8,8 +8,9 @@ import { injectHubQuestionsQuery, MobileTabBar as FleetMobileTabBar, type Mobile
  * mobile screen rather than being a per-page fixture.
  *
  * A thin wrapper around the shared {@link FleetMobileTabBar} (issue #92) —
- * the runner's `local-panel.ts` mounts the same fleet component with its own
- * item list. This layer builds the hub's {@link MobileTabItem}s: Board and
+ * the runner's own `app/nav/mobile-tab-bar.ts` (issue #313) mounts the same
+ * fleet component with its own item list. This layer builds the hub's
+ * {@link MobileTabItem}s: Board and
  * Events (blizzard#125 Phase 4) are wired to a route today
  * (`routerLink`/`routerLinkActive`, same idiom as the desktop {@link AppNav});
  * Asks and Fleet are the mock's other two tabs but have no screen of their own

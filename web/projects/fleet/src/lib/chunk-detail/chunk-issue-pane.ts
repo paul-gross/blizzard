@@ -1,18 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import type { WorkItemEntry } from '../api/hub';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
-
-/** The chunk's related work items and the state of the pass-through fetch, for the work-item column.
- *
- * `loading` while the forge read is in flight, `error` when the whole read failed (an
- * unreachable hub or no work-source configured — the pane shows a visible notice, AC5), and
- * `success` with `items` (possibly empty for a chunk with no pointers — the empty state, AC4;
- * a per-item `error` carries a single pointer's forge failure the pane notices in place). */
-export interface WorkItemsState {
-  readonly status: 'loading' | 'error' | 'success';
-  readonly items: readonly WorkItemEntry[];
-}
+import { type WorkItemsState } from './work-items-state';
 
 /**
  * The work item's issue pass-through (issue #24, issue #79) — the chunk's
@@ -20,6 +9,14 @@ export interface WorkItemsState {
  * loading/error/empty triad through the shared kit's async-state component
  * (issue #78) rather than a re-typed `<p class="status">`. Presentational
  * only; the forge read itself lives in the container.
+ *
+ * `placement` (issue #318) forwards to the inner `fleet-kit-async-state`,
+ * defaulting to its own `'center'` — every existing mount (the desktop dock's
+ * `chunk-detail-panel.ts`, the hub's `chunk-general-tab.ts`) keeps its prior
+ * rendering unchanged. The runner's narrow single-column chunk detail route
+ * is the one caller that opts into `'inline'`: its full-sentence error copy
+ * overflowed `'center'`'s absolutely-positioned box at phone widths, an issue
+ * a wide desktop layout never hits.
  */
 @Component({
   selector: 'fleet-chunk-detail-issue-pane',
@@ -29,6 +26,7 @@ export interface WorkItemsState {
     <div class="wrap" data-testid="issue-pane">
       <fleet-kit-async-state
         [state]="triadState()"
+        [placement]="placement()"
         loadingText="Loading issue…"
         loadingTestid="issue-loading"
         errorText="Could not reach the forge — issue content is unavailable."
@@ -82,9 +80,12 @@ export interface WorkItemsState {
     :host {
       display: block;
     }
-    /* The async-state triad's status line centers within the nearest positioned
-       ancestor (kit-async-state.ts) — this is it, with enough height for the
-       centered text not to look stranded before any issue content lands. */
+    /* position: relative scopes the center-placement absolutely-centered
+       status line to this pane rather than the enclosing fleet-kit-panel's
+       whole body (kit-panel.ts's own .p-body positioning comment); harmless
+       for placement=inline, which never positions absolutely. min-height
+       keeps the centered status from looking stranded before any issue
+       content lands; an inline consumer flows normally and grows past it. */
     .wrap {
       position: relative;
       min-height: 40px;
@@ -173,6 +174,11 @@ export class ChunkIssuePane {
   /** The chunk's related work items + fetch state, from the container (issue #24).
    * Defaults to `loading` so the pane constructs without the container wiring it. */
   readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });
+
+  /** Forwarded to the inner `fleet-kit-async-state` — `'center'` (the default,
+   * every existing mount's prior behavior) or `'inline'` (the runner's narrow
+   * chunk detail route, issue #318). */
+  readonly placement = input<'center' | 'inline'>('center');
 
   /** The async triad's resolved state — loading/error take precedence, then no
    * linked issue, else the issue items render. */

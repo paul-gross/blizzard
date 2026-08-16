@@ -7,6 +7,7 @@ import {
   KitMenuItem,
   KitMenuPanel,
   KitPanel,
+  KitPanelHeader,
   MobileTitlebar,
   ViewportMenu,
   type runnerApi,
@@ -38,10 +39,9 @@ import { injectRunnerDashboardQuery } from './status.query';
  * mobile answer to the desktop layout's side-by-side detail dock, which
  * assumes width a single column doesn't have. The screen itself is
  * {@link MachineDetail} reused verbatim (`bzh:frontend-kit`) — the same
- * execution facts (lease/session/pid/env/workdir/heartbeat), the same
- * per-attempt tabs, and the same transcript the desktop dock renders; this
- * shell only swaps which of the two screens is mounted and adds the back
- * affordance a drill-down needs. Selection itself stays the container's
+ * execution facts (lease/session/pid/env/workdir/heartbeat) the desktop dock
+ * renders; this shell only swaps which of the two screens is mounted and adds
+ * the back affordance a drill-down needs. Selection itself stays the container's
  * (and the URL's, issue #99), so a detail screen is deep-linkable and the
  * device back button walks out of it like any other navigation.
  *
@@ -49,8 +49,7 @@ import { injectRunnerDashboardQuery } from './status.query';
  * a deliberate scope decision, not an oversight: #133 shipped desktop-only,
  * so a mobile operator sees neither the local pause toggle nor the "paused
  * by hub" badge today. Mounting it (and wiring a home for it in this single
- * scrolling column) is left to the next mobile chunk, alongside the
- * transcript panel and detail docks above.
+ * scrolling column) is left to the next mobile chunk.
  *
  * Mounts the shared {@link MobileTitlebar} (issue #92) in place of its old
  * bespoke header — the same fleet component the hub's app-root mounts —
@@ -74,6 +73,7 @@ import { injectRunnerDashboardQuery } from './status.query';
     KitAsyncState,
     KitBackBar,
     KitPanel,
+  KitPanelHeader,
     LocalAsks,
     LocalIdentity,
     LocalInfo,
@@ -125,8 +125,6 @@ import { injectRunnerDashboardQuery } from './status.query';
             [leases]="selectedChunkLeases()"
             [status]="selectedStatus()"
             [escalation]="selectedEscalation()"
-            [activeAttemptLeaseId]="selectedAttemptLeaseId()"
-            (selectAttempt)="selectAttempt.emit($event)"
             (dismiss)="closeDetail.emit()"
           />
         </div>
@@ -136,7 +134,7 @@ import { injectRunnerDashboardQuery } from './status.query';
             <local-info />
           </fleet-kit-panel>
           <fleet-kit-panel class="section" label="agents · leases" data-testid="mobile-agents-pane">
-            <span header class="p-note" data-testid="mobile-lease-count">{{ activeLeases().length }} live</span>
+            <span fleetKitPanelHeader class="p-note" data-testid="mobile-lease-count">{{ activeLeases().length }} live</span>
             <div class="pane-body">
               <fleet-kit-async-state
                 [state]="leasesTriadState()"
@@ -175,7 +173,7 @@ import { injectRunnerDashboardQuery } from './status.query';
             </div>
           </fleet-kit-panel>
           <fleet-kit-panel class="section" label="local asks" data-testid="mobile-asks-pane">
-            <span header class="p-note">{{ openAskCount() }} open</span>
+            <span fleetKitPanelHeader class="p-note">{{ openAskCount() }} open</span>
             <local-asks />
           </fleet-kit-panel>
         </div>
@@ -211,10 +209,8 @@ import { injectRunnerDashboardQuery } from './status.query';
       gap: 8px;
       padding: 8px;
     }
-    /* The drill-down screen fills the same box the sections list would have,
-       so MachineDetail's own transcript pane keeps the scrolling region it
-       sizes against on desktop — the facts and attempt tabs stay put while
-       the transcript scrolls under them. */
+    /* The drill-down screen fills the same box the sections list would have —
+       the same sizing MachineDetail gets on desktop. */
     .lpm-detail {
       display: flex;
       flex-direction: column;
@@ -290,10 +286,6 @@ export class LocalPanelMobile {
   /** The selected chunk's open escalation, when there is one. */
   readonly selectedEscalation = input<runnerApi.EscalationView | null>(null);
 
-  /** The attempt whose transcript the detail screen shows — the container's
-   * effective, URL-derived pick. */
-  readonly selectedAttemptLeaseId = input<string | null>(null);
-
   /** A chunk card tap — the container writes it to the URL, which opens the
    * detail screen on the next render. */
   readonly selectChunk = output<string>();
@@ -301,9 +293,6 @@ export class LocalPanelMobile {
   /** An agent row tap — selects that lease's chunk, the same shared selection
    * the desktop rails have. */
   readonly selectLease = output<string>();
-
-  /** An attempt tab pick within the detail screen. */
-  readonly selectAttempt = output<string>();
 
   /** The back affordance — the container clears the selection. */
   readonly closeDetail = output<void>();

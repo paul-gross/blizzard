@@ -70,12 +70,16 @@ def test_chunk_detail_carries_no_transcript_field() -> None:
     assert not [name for name in ChunkDetail.model_fields if "transcript" in name.lower()]
 
 
-def test_the_runner_spec_carries_no_chunk_detail_history_views() -> None:
-    """The history route answers with a flat, fresh ``HistoryRowView`` (issue #237), so
-    the board's own transition/migration/bounce views stay out of the runner's spec."""
-    schemas = _runner_schemas()
-    assert not {"TransitionView", "MigrationView", "BounceView"} & set(schemas)
+def test_the_lease_history_route_still_answers_a_flat_history_row_view() -> None:
+    """The lease-scoped history route still answers a flat, fresh ``HistoryRowView`` (issue #237) — unwidened by
+    the chunk-detail proxy's own ``history`` field, which legitimately carries the board's own views (issue #314)."""
+    spec = create_app_for_export().openapi()
+    schemas = spec["components"]["schemas"]
+    route = spec["paths"]["/api/leases/{lease_id}/history"]["get"]
+    response_schema = route["responses"]["200"]["content"]["application/json"]["schema"]
+    assert response_schema["items"] == {"$ref": "#/components/schemas/HistoryRowView"}
     assert "HistoryRowView" in schemas
+    assert {"TransitionView", "MigrationView", "BounceView"} <= set(schemas)
 
 
 def test_tool_call_segment_view_defaults_a_missing_input_truncated_to_false() -> None:
@@ -93,14 +97,16 @@ def test_tool_call_segment_view_defaults_a_missing_input_truncated_to_false() ->
     assert ToolCallSegmentView.model_validate(without_field).input_truncated is False
 
 
-def test_the_runner_spec_escalation_view_is_the_runners_own() -> None:
-    """``ChunkHeaderView`` projects the proxied ``ChunkDetail`` down (issue #185), so the
-    runner's one ``EscalationView`` is ``wire.runner_status``' status view — pulling
-    ``wire.chunk``'s identically-named view in collides and mangles the generated client."""
+def test_the_runner_spec_carries_both_escalation_views_under_distinct_names() -> None:
+    """The runner serves two differently-shaped escalations — its own status view
+    (``runner_status.EscalationView``, ``resume_command``) and the chunk's on the proxied
+    ``ChunkDetail`` (``ChunkEscalationView``). Distinct names keep both un-mangled in the client."""
     schemas = _runner_schemas()
     assert not [name for name in schemas if "__" in name]  # a collision mangles both names
     assert "resume_command" in schemas["EscalationView"]["properties"]
-    assert "ChunkHeaderView" in schemas and "ChunkDetail" not in schemas
+    assert "takeover_command" in schemas["ChunkEscalationView"]["properties"]
+    assert "ChunkDetail" in schemas and "ChunkDetailView" not in schemas
+    assert {"history", "artifacts", "escalation"} <= set(schemas["ChunkDetail"]["properties"])
 
 
 def test_the_runner_spec_serves_the_shared_segment_turn_shape_not_a_retired_turn_view() -> None:

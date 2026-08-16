@@ -58,8 +58,10 @@ const PROJECTS_DIR = path.join(ROOT, 'projects');
  * - local-panel's `chunk-detail.ts` is the local-panel counterpart of the
  *   fleet chunk-detail monolith — `fleet/src/lib/chunk-detail/` came under
  *   the cap via its decomposition (blizzard#79); local-panel's own is
- *   deferred to #83's rename, and still carries residual `.lbl`/`.status`
- *   today.
+ *   deferred to #83's rename, and still carries a residual `.lbl` (the
+ *   escalation resume box's label) today. Its own `*-empty` rest state now
+ *   renders through `fleet-kit-async-state` directly (issue #318 review
+ *   round 2), so it no longer needs `EMPTY_STATE_EXEMPT_FILES` below.
  * - local-panel's `heartbeat-freshness.ts` carries its own small `.lbl`
  *   ("hb") — a single-use bar label, not a panel/status block, and outside
  *   Phase 1's enumerated adoption list; noted as a further drift instance for
@@ -114,9 +116,6 @@ const EMPTY_STATE_EXEMPT_FILES = [
   // rest state inside a diagram `graph-detail.ts` already renders behind its
   // own triad, not a second query result.
   path.join('fleet', 'src', 'lib', 'graphs', 'graph-diagram-detail.ts'),
-  // local-panel's chunk-detail counterpart — same reasoning as the fleet pair
-  // above; deferred to issue #83's rename per this file's other exemption.
-  path.join('local-panel', 'src', 'lib', 'chunk-detail.ts'),
 ];
 
 // The retired chrome-class blocks (blizzard-context bzh:frontend-kit Detect).

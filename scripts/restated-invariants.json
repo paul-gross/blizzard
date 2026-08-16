@@ -20,8 +20,8 @@
   },
   {
    "id": "escalation-view-wrapped-field-optional",
-   "statement": "EscalationView.wrapped_takeover_command is optional on the wire and defaults to empty; empty means no wrapped verb was composed.",
-   "owner": "src/blizzard/wire/chunk.py#EscalationView",
+   "statement": "ChunkEscalationView.wrapped_takeover_command is optional on the wire and defaults to empty; empty means no wrapped verb was composed.",
+   "owner": "src/blizzard/wire/chunk.py#ChunkEscalationView",
    "owner_kind": "wire",
    "owner_assert": {
     "quote": "empty when none was composed"
@@ -32,7 +32,7 @@
    "sites": [
     {
      "file": "src/blizzard/wire/chunk.py",
-     "symbol": "EscalationView",
+     "symbol": "ChunkEscalationView",
      "role": "owner"
     }
    ]

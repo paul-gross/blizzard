@@ -822,7 +822,7 @@
         "type": "object"
       },
       "ChunkDetail": {
-        "description": "The chunk aggregate in full, carrying its **transition history** \u2014 every node it visited,\nincluding a review that failed and looped back \u2014 and its inline **artifact store**.",
+        "description": "The whole chunk aggregate \u2014 one response model behind both the hub's own detail read and the\nrunner's pass-through proxy of it (issue #314): transition history, inline artifact store, and the\nopen escalation. Declared once, never re-typed per route, so a field reaches both specs at once.",
         "properties": {
           "artifacts": {
             "default": [],
@@ -906,7 +906,7 @@
           "escalation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/EscalationView"
+                "$ref": "#/components/schemas/ChunkEscalationView"
               },
               {
                 "type": "null"
@@ -1055,6 +1055,30 @@
           "latest_epoch"
         ],
         "title": "ChunkDetail",
+        "type": "object"
+      },
+      "ChunkEscalationView": {
+        "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) for the parked session,\npresent only while the escalation is open \u2014 a later lease mint, requeue, or completion supersedes it.\n``wrapped_takeover_command`` is optional, empty when none was composed. Named for the chunk rather\nthan the bare concept: ``wire.runner_status`` publishes its own differently-shaped\n``EscalationView``, and the runner serves both \u2014 two same-names in one app mangle each.",
+        "properties": {
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "takeover_command": {
+            "title": "Takeover Command",
+            "type": "string"
+          },
+          "wrapped_takeover_command": {
+            "default": "",
+            "title": "Wrapped Takeover Command",
+            "type": "string"
+          }
+        },
+        "required": [
+          "epoch",
+          "takeover_command"
+        ],
+        "title": "ChunkEscalationView",
         "type": "object"
       },
       "ChunkGroupRequest": {
@@ -1902,30 +1926,6 @@
           "runner_id"
         ],
         "title": "EscalationReport",
-        "type": "object"
-      },
-      "EscalationView": {
-        "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) for the parked session,\npresent only while the escalation is open \u2014 a later lease mint, requeue, or completion supersedes it.\n``wrapped_takeover_command`` is optional, empty when none was composed.",
-        "properties": {
-          "epoch": {
-            "title": "Epoch",
-            "type": "integer"
-          },
-          "takeover_command": {
-            "title": "Takeover Command",
-            "type": "string"
-          },
-          "wrapped_takeover_command": {
-            "default": "",
-            "title": "Wrapped Takeover Command",
-            "type": "string"
-          }
-        },
-        "required": [
-          "epoch",
-          "takeover_command"
-        ],
-        "title": "EscalationView",
         "type": "object"
       },
       "EventView": {

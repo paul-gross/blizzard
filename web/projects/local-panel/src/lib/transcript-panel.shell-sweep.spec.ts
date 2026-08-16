@@ -13,9 +13,11 @@ const TRANSCRIPT_ROUTE = '/api/leases/L-903/transcript';
  * A closed lease's archived read (blizzard#249): the archived badge stacked above the
  * truncation banner, the widest pairing this change adds to the populated state — and a
  * narrow width is the only tier that can judge it, since the transcript panel is reachable
- * from the mobile chunk-detail screen (`data-testid="detail-transcript"`). No turns beyond
- * the two banners: turn-row wrapping belongs to the shared `TranscriptViewer` (blizzard#248),
- * not to this change, and this sweep does not exist to re-prove it.
+ * from the mobile runner's chunk detail route (`data-testid="section-transcript"`,
+ * `chunk-detail-page.ts`, issue #318 — this panel moved there from the dock's own
+ * `detail-transcript`, which #318 removed). No turns beyond the two banners: turn-row
+ * wrapping belongs to the shared `TranscriptViewer` (blizzard#248), not to this change,
+ * and this sweep does not exist to re-prove it.
  */
 const ARCHIVED_TRANSCRIPT = {
   lease_id: 'L-903',

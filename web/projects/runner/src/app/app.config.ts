@@ -11,10 +11,10 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideZonelessChangeDetection(),
     provideTanStackQuery(new QueryClient()),
-    // Panel selection (which chunk is open, which attempt tab is active) lives in
-    // the URL's query params so it is shareable and refresh-safe (issue #99);
-    // `LocalPanel` reads and writes them through the router. See `app.routes.ts`
-    // for why a single catch-all route is all the table needs.
+    // Panel selection (which chunk is open) lives in the URL's `?chunk=` query
+    // param so it is shareable and refresh-safe (issue #99); `LocalPanel` reads
+    // and writes it through the router. See `app.routes.ts` for the route table
+    // this now resolves against (issue #313).
     provideRouter(routes),
     // Session reacquisition on a 401 (issue #312) — the runner client's own
     // interceptor, mirroring the hub app's `provideAuthInterceptor()`.
