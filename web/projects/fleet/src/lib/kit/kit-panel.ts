@@ -37,7 +37,9 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="p-hdr">
-      <span class="lbl" [style.color]="accent()">{{ label() }}</span>
+      @if (label()) {
+        <span class="lbl" [style.color]="accent()">{{ label() }}</span>
+      }
       @if (hasCount()) {
         <span class="lbl" [class.cnt-accent]="!!accent()" [attr.data-testid]="countTestid()">{{ count() }}</span>
       }
@@ -98,8 +100,12 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   `,
 })
 export class KitPanel {
-  /** The header's engraved label — the panel's name. */
-  readonly label = input.required<string>();
+  /** The header's engraved label — the panel's name. `null`/`''` (a consumer
+   * whose header is entirely `[header]`-slotted, e.g. the runner dock
+   * projecting {@link MachineDetailHeader}'s own bar in whole) renders no
+   * `.lbl` span at all, rather than an empty one sitting beside the slot's
+   * content. */
+  readonly label = input<string | null>(null);
 
   /** An optional trailing header value (a count, or any short string); omitted
    * entirely (not rendered as `0` or empty) when `null`/`undefined`/`''`. */

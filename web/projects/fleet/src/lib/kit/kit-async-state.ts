@@ -65,12 +65,20 @@ export type KitAsyncStateValue = 'loading' | 'error' | 'empty' | 'ready';
     :host {
       display: contents;
     }
+    /* Horizontal centering is left:0/right:0 (not left:50%/translateX(-50%)):
+       for an absolutely-positioned box with width:auto, the CSS shrink-to-fit
+       algorithm sizes against the space between left and the containing
+       block's edge — left:50% leaves only the right half to shrink-fit
+       against, so a max-width set against the full container never actually
+       binds and long text wraps at half width instead of the full width it
+       reads as centered within. left:0/right:0 makes the box exactly the
+       container's width up front, so centered text wraps at the real edge. */
     .status {
       position: absolute;
-      left: 50%;
+      left: 0;
+      right: 0;
       top: 50%;
-      transform: translate(-50%, -50%);
-      max-width: 100%;
+      transform: translateY(-50%);
       text-align: center;
       color: var(--label-dim);
       font-size: var(--fs-sm);
@@ -79,9 +87,9 @@ export type KitAsyncStateValue = 'loading' | 'error' | 'empty' | 'ready';
     .status.inline {
       position: static;
       left: auto;
+      right: auto;
       top: auto;
       transform: none;
-      max-width: none;
       text-align: left;
       display: block;
       padding: 10px 8px;

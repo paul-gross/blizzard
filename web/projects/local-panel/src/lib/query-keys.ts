@@ -32,6 +32,18 @@ export function runnerChunkWorkItemsKey(chunkId: string): readonly unknown[] {
 }
 
 /**
+ * One chunk's work items for the chunk detail route's Issues section (issue
+ * #318) — full-fidelity, not the severable row-decoration read above: this
+ * page renders a real loading/error/empty triad for it, so it needs a real
+ * fetch (retried, not silently swallowed after one attempt) rather than the
+ * list rows' single-shot decoration. Its own key so it shares neither cache
+ * entry nor observer options with {@link runnerChunkWorkItemsKey}.
+ */
+export function runnerChunkWorkItemsDetailKey(chunkId: string): readonly unknown[] {
+  return ['runner', 'chunk', chunkId, 'work-items-detail'];
+}
+
+/**
  * One lease's transcript read (issue #29), keyed by lease id — switching the
  * selected row is a distinct cache entry, never invalidated by the leases poll.
  */

@@ -48,12 +48,12 @@ import { MobileTabBar } from './nav/mobile-tab-bar';
       <local-session-recovery (retry)="onRetry()" />
     } @else {
       <div class="shell">
-        @if (mobile()) {
-          <router-outlet />
-          <app-mobile-tab-bar />
-        } @else {
+        @if (!mobile()) {
           <app-nav />
-          <router-outlet />
+        }
+        <router-outlet />
+        @if (mobile()) {
+          <app-mobile-tab-bar />
         }
       </div>
     }

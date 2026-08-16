@@ -19,7 +19,10 @@ import { sortArtifacts } from './sort-artifacts';
  * bury every other artifact and every dock section below it inline. `linkBase`
  * defaults to the desktop board's own route (`/board/chunk`) so this `fleet`
  * library component needs no forwarding through {@link ChunkDetailPanel} /
- * {@link ChunkDetail} to reach it.
+ * {@link ChunkDetail} to reach it. `queryParamsHandling="merge"` so a
+ * consumer whose destination route carries its own selection param (the
+ * runner page's `?attempt=`) doesn't lose it under this link's `tab`/
+ * `artifact` pair — replace would drop anything not named here.
  */
 @Component({
   selector: 'fleet-chunk-detail-artifacts',
@@ -40,6 +43,7 @@ import { sortArtifacts } from './sort-artifacts';
                 [attr.data-artifact-key]="art.key"
                 [routerLink]="[...linkBase(), chunkId()]"
                 [queryParams]="{ tab: 'artifacts', artifact: art.key }"
+                queryParamsHandling="merge"
               >
                 <fleet-chunk-detail-artifact-body [artifact]="art" body="summary" />
               </a>

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 
 import {
@@ -11,8 +11,10 @@ import {
   ChunkIssuePane,
   ChunkTimeline,
   ChunkTokenBreakdown,
+  deriveWorkItemsState,
   KitAsyncState,
   type KitAsyncStateValue,
+  KitBackBar,
   type KitChipOption,
   KitChips,
   KitPanel,
@@ -21,7 +23,7 @@ import {
 } from 'fleet';
 import {
   injectChunkDetailQuery,
-  injectChunkTitleQuery,
+  injectChunkWorkItemsDetailQuery,
   injectRunnerLeasesQuery,
   TranscriptPanel,
 } from 'local-panel';
@@ -35,17 +37,21 @@ import {
  * dock (`MachineDetail`, issue #185) — moved here per D2/D4, a deliberate
  * replacement rather than a regression.
  *
- * A container mapping its two severable reads down to presentational
- * children (`bzh:frontend-container-presentational`):
- * {@link injectChunkDetailQuery} for the widened aggregate ({@link ChunkFacts}
- * and siblings all declare `detail: hubApi.ChunkDetail` — TypeScript is
- * structural and the runner's `ChunkDetailView` carries every field that
- * type requires, so no runner-local wrapper type is owed), and
- * {@link injectChunkTitleQuery} for the work-item pass-through
- * ({@link ChunkIssuePane}'s `WorkItemsState`). The chunk id rides the URL's
- * path (`:chunkId`); the attempt selector stays on the existing `?attempt=`
- * query param (D4) — the same param `panel-selection.ts` reads on `/board`,
- * read from this new place rather than re-encoded.
+ * A container mapping its three reads down to presentational children
+ * (`bzh:frontend-container-presentational`): {@link injectChunkDetailQuery}
+ * for the widened aggregate ({@link ChunkFacts} and siblings all declare
+ * `detail: hubApi.ChunkDetail` — TypeScript is structural and the runner's
+ * `ChunkDetailView` carries every field that type requires, so no
+ * runner-local wrapper type is owed), {@link injectChunkWorkItemsDetailQuery}
+ * for the full-fidelity work-item read ({@link ChunkIssuePane}'s
+ * `WorkItemsState` triad — deliberately not the severable
+ * `injectChunkTitleQuery` the board's list rows use, since this section
+ * renders a real error state rather than silently dropping one), and
+ * {@link injectRunnerLeasesQuery} for the transcript section's attempt
+ * picker. The chunk id rides the URL's path (`:chunkId`); the attempt
+ * selector stays on the existing `?attempt=` query param (D4) — the same
+ * param `panel-selection.ts` reads on `/board`, read from this new place
+ * rather than re-encoded.
  */
 @Component({
   selector: 'app-chunk-detail-page',
@@ -58,12 +64,17 @@ import {
     ChunkTimeline,
     ChunkTokenBreakdown,
     KitAsyncState,
+    KitBackBar,
     KitChips,
     KitPanel,
+    RouterLink,
     TranscriptPanel,
   ],
   template: `
     <div class="page" data-testid="chunk-detail-page">
+      <a class="back-row" routerLink="/board" [queryParams]="backQueryParams()" data-testid="chunk-detail-back">
+        <fleet-kit-back-bar label="Board" />
+      </a>
       <fleet-kit-async-state
         [state]="detailState()"
         loadingText="LOADING…"
@@ -78,7 +89,7 @@ import {
             </fleet-chunk-detail-facts>
           </fleet-kit-panel>
           <fleet-kit-panel class="section" data-testid="section-issues" label="issues">
-            <fleet-chunk-detail-issue-pane [workItems]="workItems()" />
+            <fleet-chunk-detail-issue-pane [workItems]="workItems()" placement="inline" />
           </fleet-kit-panel>
           <fleet-kit-panel class="section" data-testid="section-node-history" label="node history">
             <fleet-chunk-detail-timeline [detail]="d" />
@@ -128,6 +139,10 @@ import {
       gap: 8px;
       padding: 8px;
     }
+    .back-row {
+      flex: none;
+      text-decoration: none;
+    }
     fleet-kit-panel.section {
       flex: none;
     }
@@ -146,10 +161,15 @@ export class ChunkDetailPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
-  /** The route's own `:chunkId` path segment — never null on a matched route. */
+  /** The route's own `:chunkId` path segment — structurally never null once
+   * this component is instantiated (the route requires the segment), but
+   * left nullable rather than coerced to `''` so it stays the sentinel
+   * {@link injectChunkDetailQuery}/{@link injectChunkWorkItemsDetailQuery}
+   * both declare (`enabled: id !== null`) — an empty string reads as a real,
+   * if pathological, id to either, not "no id yet". */
   protected readonly chunkId = toSignal(
-    this.route.paramMap.pipe(map((params) => params.get('chunkId') ?? '')),
-    { initialValue: this.route.snapshot.paramMap.get('chunkId') ?? '' },
+    this.route.paramMap.pipe(map((params) => params.get('chunkId'))),
+    { initialValue: this.route.snapshot.paramMap.get('chunkId') },
   );
 
   /** The `?attempt=` query param — the requested attempt lease, before falling
@@ -161,7 +181,7 @@ export class ChunkDetailPage {
   );
 
   private readonly detailQuery = injectChunkDetailQuery(() => this.chunkId());
-  private readonly workItemsQuery = injectChunkTitleQuery(() => this.chunkId());
+  private readonly workItemsQuery = injectChunkWorkItemsDetailQuery(() => this.chunkId());
   private readonly leasesQuery = injectRunnerLeasesQuery();
 
   protected readonly detail = computed(() => this.detailQuery.data());
@@ -171,12 +191,9 @@ export class ChunkDetailPage {
   protected readonly pointerCount = computed(() => this.detail()?.work_refs?.length ?? 0);
 
   /** The open chunk's related work items + fetch state for the Issue pane —
-   * mirrors `fleet`'s own `ChunkDetail` container fold. */
-  protected readonly workItems = computed<WorkItemsState>(() => {
-    if (this.workItemsQuery.isError()) return { status: 'error', items: [] };
-    if (this.workItemsQuery.isPending()) return { status: 'loading', items: [] };
-    return { status: 'success', items: this.workItemsQuery.data()?.items ?? [] };
-  });
+   * the same {@link deriveWorkItemsState} fold `fleet`'s own `ChunkDetail`
+   * container and the hub's `chunk-page.ts` use. */
+  protected readonly workItems = computed<WorkItemsState>(() => deriveWorkItemsState(this.workItemsQuery));
 
   /** This chunk's attempts, oldest → newest — the server orders actives first
    * then recent-closed, so reversing the filtered slice restores oldest-first
@@ -209,6 +226,14 @@ export class ChunkDetailPage {
     if (wanted !== null && leases.some((att) => att.lease_id === wanted)) return wanted;
     return newest?.lease_id ?? null;
   });
+
+  /** The back link's query params — restores `/board`'s own `?chunk=&attempt=`
+   * selection (`panel-selection.ts`) to exactly what this page had open,
+   * rather than landing back on the board with no chunk selected. */
+  protected readonly backQueryParams = computed(() => ({
+    chunk: this.chunkId(),
+    attempt: this.activeAttemptLeaseId(),
+  }));
 
   /** Write an attempt pick to the URL's `?attempt=` param — a client-side
    * navigation that stays on this route. */

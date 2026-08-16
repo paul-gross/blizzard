@@ -3,6 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   type AnswerQuestionEvent,
+  deriveWorkItemsState,
   type EditGraphEvent,
   KitAsyncState,
   type KitAsyncStateValue,
@@ -328,11 +329,7 @@ export class ChunkPage {
 
   /** The chunk's related work-source items, in the shape the issue pane reads.
    * Mirrors the desktop container's own fold (`fleet`'s `chunk-detail.ts`). */
-  protected readonly workItems = computed<WorkItemsState>(() => {
-    if (this.workItemsQuery.isError()) return { status: 'error', items: [] };
-    if (this.workItemsQuery.isPending()) return { status: 'loading', items: [] };
-    return { status: 'success', items: this.workItemsQuery.data()?.items ?? [] };
-  });
+  protected readonly workItems = computed<WorkItemsState>(() => deriveWorkItemsState(this.workItemsQuery));
 
   protected readonly shortId = computed(() => compactRef(this.chunkId() ?? ''));
   protected readonly tone = computed(() => STATUS_TONE[this.detail()?.status ?? 'ready']);

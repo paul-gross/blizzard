@@ -24,7 +24,7 @@ import { KitButton, type runnerApi, type Tone } from 'fleet';
   template: `
     <header class="d-hdr">
       <div class="d-title">
-        <a class="cid" data-testid="detail-chunk-ref" [routerLink]="['/board', 'chunk', chunkId()]">{{ chunkId() }}</a>
+        <a class="cid" data-testid="detail-chunk-ref" [routerLink]="[...linkBase(), chunkId()]">{{ chunkId() }}</a>
         <span class="d-sub">
           @for (ref of workRefs(); track ref.source + ':' + ref.ref) {
             @if (ref.web_url) {
@@ -168,6 +168,11 @@ import { KitButton, type runnerApi, type Tone } from 'fleet';
 export class MachineDetailHeader {
   /** The selected chunk's full id — never the compact shortname (issue #185). */
   readonly chunkId = input.required<string>();
+
+  /** The chunk detail route's own path segments, before the chunk id — mirrors
+   * `fleet`'s `ChunkArtifacts`/`ChunkDetailHeader` `linkBase` (`bzh:frontend-kit-floor`)
+   * so this component doesn't independently hardcode the route it links to. */
+  readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
 
   /** The chunk's work refs — each linked out to its source's web address when the
    * configured binding rendered one (a null `web_url` degrades to plain text, no

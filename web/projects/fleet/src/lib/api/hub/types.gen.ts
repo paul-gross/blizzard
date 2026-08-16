@@ -563,8 +563,9 @@ export type CheckResult = {
 /**
  * ChunkDetail
  *
- * ``ChunkDetailView`` plus the open escalation on a ``needs_human`` chunk, if any — the hub's own
- * response model.
+ * The hub's own response model for a chunk's detail read — this module's ``ChunkDetailView`` (the
+ * subset the runner serves, source-only cross-reference: ``ChunkDetailView`` is not a schema in this
+ * class's own generated spec) plus the open escalation on a ``needs_human`` chunk, if any.
  */
 export type ChunkDetail = {
     /**

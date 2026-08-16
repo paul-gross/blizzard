@@ -238,10 +238,14 @@ export type CapacitiesView = {
 /**
  * ChunkDetailView
  *
- * The chunk aggregate minus ``escalation`` (issue #314) — the shared definition ``ChunkDetail`` extends
- * and the runner's detail proxy serves whole, carrying its **transition history** and inline **artifact
- * store**. ``escalation`` stays ``ChunkDetail``-only: the runner already serves its own, differently-shaped
- * one on ``GET /api/escalations``, and one app cannot carry two same-named schemas without mangling both.
+ * The chunk aggregate minus ``escalation`` (issue #314) — the response model the runner's own detail
+ * proxy serves whole, carrying its **transition history** and inline **artifact store**. A subset of the
+ * hub's own response model for the same read (this module's ``ChunkDetail``, which extends this class
+ * with the one field below) — the two live in the same Python module but publish to separate OpenAPI
+ * specs, so this docstring names ``ChunkDetail`` for a reader of the source, not a schema resolvable from
+ * this class's own generated spec. ``escalation`` stays hub-only: the runner already serves its own,
+ * differently-shaped one on ``GET /api/escalations``, and one app cannot carry two same-named schemas
+ * without mangling both.
  */
 export type ChunkDetailView = {
     /**

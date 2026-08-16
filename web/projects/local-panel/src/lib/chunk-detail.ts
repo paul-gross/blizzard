@@ -44,16 +44,17 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
  * same bezel/background every sibling region in `local-panel-layout.ts` wears —
  * rather than mounting bare. `KitPanel`'s `[header]` slot can only be filled
  * from the template that mounts the panel, so this container is the one place
- * that projection can happen; `MachineDetailHeader` is projected in with an
- * empty `label` on the panel itself, so exactly one header bar renders rather
- * than {@link MachineDetailHeader}'s own bar stacking below `KitPanel`'s.
+ * that projection can happen; `MachineDetailHeader` is projected in with
+ * `KitPanel`'s own `label` left unset, so exactly one header bar renders —
+ * {@link MachineDetailHeader}'s own — rather than stacking below a second,
+ * empty one.
  */
 @Component({
   selector: 'local-machine-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [HeartbeatFreshness, KitPanel, MachineDetailHeader],
   template: `
-    <fleet-kit-panel class="dock" data-testid="machine-detail" label="">
+    <fleet-kit-panel class="dock" data-testid="machine-detail">
       @if (newestLease(); as l) {
         <local-machine-detail-header
           header

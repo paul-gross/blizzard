@@ -146,15 +146,19 @@ describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', (
   });
 
   /**
-   * The issue pane's error status (`ChunkIssuePane`'s `fleet-kit-async-state`,
-   * default `placement="center"`) centers a full sentence rather than a short
-   * label — unlike the loading/empty copy elsewhere on this page, long enough
-   * that a real environment with no forge configured (this env's own runner
-   * API returns 503 for `/work-items`) renders it at real phone widths. A
-   * page-level `scrollWidth` check alone (the test above) cannot catch this:
-   * the status line is `position: absolute` and was clipped by an ancestor
-   * without ever pushing the page wider, so a bare word-clipped fragment
-   * rendered with no page-wide horizontal scroll to show for it.
+   * Regression coverage for a live-click-through defect (issue #318's verify
+   * node-step): `ChunkIssuePane`'s error status used `fleet-kit-async-state`'s
+   * default `placement="center"` — a full sentence, not a short label, so it
+   * overflowed and got clipped mid-word at phone widths, invisible to a
+   * page-level `scrollWidth` check (the test above) since the status line was
+   * `position: absolute` and clipped by an ancestor without ever pushing the
+   * page wider. Fixed by this page's own mount opting `ChunkIssuePane` into
+   * `placement="inline"` (`chunk-detail-page.ts`) — normal flow, not
+   * absolutely positioned, and scoped to this narrow-layout consumer rather
+   * than every mount (the desktop dock and hub keep `'center'`, their prior
+   * rendering, unaffected). This pins the fix: the full text renders, in-bounds, at phone widths, for a
+   * real environment with no forge configured (this env's own runner API
+   * returns 503 for `/work-items`).
    */
   it('keeps the issue pane error status text within its section at phone widths', async () => {
     const stub = stubRequestClient(runnerClient, (method: string, path: string): unknown => {

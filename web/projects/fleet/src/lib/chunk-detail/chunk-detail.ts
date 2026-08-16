@@ -21,6 +21,7 @@ import {
   type WorkItemsState,
   type ResolveDecisionEvent,
 } from './chunk-detail-panel';
+import { deriveWorkItemsState } from './chunk-issue-pane';
 
 /**
  * The chunk detail **container** — owns the reactive detail query and the
@@ -177,9 +178,7 @@ export class ChunkDetail {
    * read (unreachable hub / no work-source) becomes `error` so the tab shows a visible notice. */
   protected readonly workItems = computed<WorkItemsState>(() => {
     if (this.chunkId() === null) return { status: 'loading', items: [] };
-    if (this.workItemsQuery.isError()) return { status: 'error', items: [] };
-    if (this.workItemsQuery.isPending()) return { status: 'loading', items: [] };
-    return { status: 'success', items: this.workItemsQuery.data()?.items ?? [] };
+    return deriveWorkItemsState(this.workItemsQuery);
   });
 
   /** Answer an open question. A lost first-write-wins race comes back as a 409 whose body

@@ -49,7 +49,13 @@ export interface MobileTabItem {
     <nav class="tabbar" [attr.data-testid]="testid()">
       @for (item of items(); track item.testid) {
         @if (item.route && !item.inert) {
-          <a class="tab" [routerLink]="item.route" routerLinkActive="on" [attr.data-testid]="item.testid">
+          <a
+            class="tab"
+            [routerLink]="item.route"
+            queryParamsHandling="preserve"
+            routerLinkActive="on"
+            [attr.data-testid]="item.testid"
+          >
             {{ item.label }}
             @if (item.badge) {
               <span class="badge" [attr.data-testid]="item.badgeTestid ?? null">{{ item.badge }}</span>

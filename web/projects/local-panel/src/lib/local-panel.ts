@@ -282,14 +282,14 @@ export class LocalPanel {
   /** Write a chunk selection to the URL, clearing any stale `attempt` (attempt
    * lease ids are chunk-specific, so a new chunk defaults to its newest). */
   protected selectChunk(chunkId: string): void {
-    this.selection.select(chunkId, null);
+    this.selection.select(chunkId);
   }
 
   /** Selecting a lease row selects its chunk — the shared selection both rails
    * reflect; the detail dock defaults to the chunk's newest attempt. */
   protected selectLease(leaseId: string): void {
     const lease = this.leases().find((candidate) => candidate.lease_id === leaseId);
-    if (lease) this.selection.select(lease.chunk_id, null);
+    if (lease) this.selection.select(lease.chunk_id);
   }
 
   /** Clear the selection entirely — the mobile shell's back affordance, which
@@ -298,7 +298,7 @@ export class LocalPanel {
    * and this button walk the same history. Desktop has no caller: its dock
    * simply falls back to `SELECT A CHUNK`. */
   protected clearSelection(): void {
-    this.selection.select(null, null);
+    this.selection.select(null);
   }
 
   /**
