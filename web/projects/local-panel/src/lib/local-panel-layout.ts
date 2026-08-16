@@ -20,7 +20,6 @@ import { MachineDetail } from './chunk-detail';
 import type { MachineChunkStatus } from './chunk-status';
 import { ChunkRow } from './chunk-row';
 import { EnvList } from './env-list';
-import { FactLog } from './fact-log';
 import { LocalAsks } from './local-asks';
 import { LocalIdentity } from './local-identity';
 import { LocalInfo } from './local-info';
@@ -41,8 +40,9 @@ import type { MachineChunkRow } from './local-panel';
  *   work-item-enriched, derived status in the hub board's colors) over the machine
  *   detail dock for the selected chunk, transcript inline.
  * - **Right (330px)** — the machine's account of itself: the hub link
- *   (endpoint, reachability, last flush, buffer), the open local asks, and
- *   the local fact log off the outbound ledger.
+ *   (endpoint, reachability, last flush, buffer) and the open local asks. The
+ *   local fact log moved to its own `/events` route (issue #313) — full
+ *   width there rather than a rail-sized panel.
  *
  * Presentational only: it renders exactly the leases/chunks/selection it is
  * handed and emits `selectLease`/`selectChunk`; the derived-status fold and
@@ -85,7 +85,6 @@ import type { MachineChunkRow } from './local-panel';
     MachineDetail,
     ChunkRow,
     EnvList,
-    FactLog,
     KitAsyncState,
     KitAvatar,
     KitMenu,
@@ -208,9 +207,6 @@ import type { MachineChunkRow } from './local-panel';
             <span header class="p-note">{{ openAskCount() }} open</span>
             <local-asks />
           </fleet-kit-panel>
-          <fleet-kit-panel class="facts-panel" label="local fact log">
-            <local-fact-log />
-          </fleet-kit-panel>
         </section>
       </main>
     </div>
@@ -311,9 +307,6 @@ import type { MachineChunkRow } from './local-panel';
     }
     fleet-kit-panel.hub-panel {
       flex: none;
-    }
-    fleet-kit-panel.facts-panel {
-      flex: 1.25;
     }
     .rows {
       display: flex;

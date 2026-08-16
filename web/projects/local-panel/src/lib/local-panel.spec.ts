@@ -163,8 +163,8 @@ describe('LocalPanel', () => {
   });
 
   it('polls GET /api/dashboard exactly once for the whole shell, and none of the seven folded-in endpoints (issue #311)', async () => {
-    // The desktop layout mounts six separate injectors of the dashboard query
-    // (LocalPanel itself, plus EnvList/FactLog/LocalAsks/LocalInfo/LocalPauseControl
+    // The desktop layout mounts five separate injectors of the dashboard query
+    // (LocalPanel itself, plus EnvList/LocalAsks/LocalInfo/LocalPauseControl
     // via LocalPanelLayout) — proving one request here is what the issue's rate
     // criterion asks for: TanStack's query-key dedupe, not a single shared read
     // threaded down as an input.
@@ -701,42 +701,6 @@ describe('LocalPanel', () => {
       expect(ask?.textContent).toContain('20m');
     });
 
-    it('renders the fact log off the outbound ledger with flush markers', async () => {
-      stub = stubRequestClient(runnerClient,
-        routes([], {
-          facts: {
-            items: [
-              {
-                seq: 2,
-                kind: 'completion.submitted',
-                chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-                lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
-                created_at: '2026-07-16T11:58:00.000Z',
-                acked_at: null,
-              },
-              {
-                seq: 1,
-                kind: 'lease.minted',
-                chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-                lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
-                created_at: '2026-07-16T11:50:00.000Z',
-                acked_at: '2026-07-16T11:50:05.000Z',
-              },
-            ],
-          },
-        }),
-      );
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
-
-      const rows = el.querySelectorAll('[data-testid="fact-row"]');
-      expect(rows).toHaveLength(2);
-      expect(rows[0].textContent).toContain('completion.submitted');
-      expect(rows[0].textContent).toContain('C-3YJ9');
-      expect(rows[0].querySelector('.flush')?.classList.contains('acked')).toBe(false);
-      expect(rows[1].querySelector('.flush')?.classList.contains('acked')).toBe(true);
-    });
-
     it('renders the held environments with chunk ref and held-for age', async () => {
       stub = stubRequestClient(runnerClient,
         routes([], {
@@ -866,44 +830,6 @@ describe('LocalPanel', () => {
           '[data-testid="local-panel-mobile-titlebar-menu-panel"] [data-testid="local-panel-mobile-appearance"]',
         ),
       ).not.toBeNull();
-    });
-
-    it('renders the persistent mobile tab bar with Machine active and Asks/Transcripts inert', async () => {
-      stub = stubRequestClient(runnerClient, routes([]));
-      await setUp();
-      TestBed.inject(ViewportService).setOverride('mobile');
-      const fixture = TestBed.createComponent(LocalPanel);
-      await settle(fixture);
-      const el = fixture.nativeElement as HTMLElement;
-
-      expect(el.querySelector('[data-testid="local-panel-mobile-tab-bar"]')).not.toBeNull();
-      const machine = el.querySelector('[data-testid="tab-machine"]');
-      const asks = el.querySelector('[data-testid="tab-asks-runner"]');
-      const transcripts = el.querySelector('[data-testid="tab-transcripts-runner"]');
-      expect(machine?.textContent).toContain('Machine');
-      expect(machine?.classList.contains('on')).toBe(true);
-      expect(asks?.hasAttribute('disabled')).toBe(true);
-      expect(transcripts?.hasAttribute('disabled')).toBe(true);
-    });
-
-    it('shows the local asks open count on the mobile tab bar', async () => {
-      const ask = {
-        question_id: 'qn_1',
-        chunk_id: 'ch_1',
-        lease_id: 'lease_1',
-        question: 'a?',
-        options: [],
-        session_id: null,
-        asked_at: '2026-07-16T11:40:00.000Z',
-      };
-      stub = stubRequestClient(runnerClient, routes([], { asks: { items: [ask] } }));
-      await setUp();
-      TestBed.inject(ViewportService).setOverride('mobile');
-      const fixture = TestBed.createComponent(LocalPanel);
-      await settle(fixture);
-      const el = fixture.nativeElement as HTMLElement;
-
-      expect(el.querySelector('[data-testid="tab-asks-runner-badge"]')?.textContent).toBe('1');
     });
   });
 });

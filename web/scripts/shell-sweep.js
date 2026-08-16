@@ -18,7 +18,7 @@
  *
  *   npm run shell-sweep   (from web/)
  *
- * The seven specs:
+ * The eight specs:
  *   - projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts — the hub
  *     board shell (BoardHeader + AppNavMenu), swept over width only (no
  *     username is ever shown there): never lets the profile menu drift
@@ -57,6 +57,9 @@
  *     whole panel while a bounce could not be silently completed: the
  *     headline, detail copy, and retry control hold their layout with no
  *     horizontal overflow at phone widths.
+ *   - projects/runner/src/app/nav/app-nav.shell-sweep.spec.ts — the runner
+ *     shell's own top tab strip (issue #313, `AppNav`): the Board/Events
+ *     labels never force the strip to overflow its own width.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -69,6 +72,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/runners/runner-view.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/transcript-panel.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/session-recovery-view.shell-sweep.spec.ts' },
+  { project: 'runner', spec: 'projects/runner/src/app/nav/app-nav.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {
@@ -91,7 +95,7 @@ function main() {
     return;
   }
 
-  console.log('\nshell-sweep: all seven specs clean.\n');
+  console.log('\nshell-sweep: all eight specs clean.\n');
 }
 
 main();
