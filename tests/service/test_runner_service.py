@@ -565,6 +565,25 @@ def test_runner_stream_delivers_live_and_replays_from_last_event_id(tmp_path: Pa
         assert json.loads(frames[0]["data"])["cause"] == "transitioned"
 
 
+def test_runner_stream_resumes_live_after_a_restart_reset_the_broker_ids(tmp_path: Path) -> None:
+    """The restart shape a single-instance reconnect never presents: a **second** daemon
+    behind the same port, its own broker minting ids from zero, resuming a cursor the first
+    minted — the clamp's route wiring, its cursor a real header off the wire."""
+    config = _bare_runner_config(tmp_path)
+
+    first = EventBroker()
+    with _runner_api(config, events=first), sse_tap(config.port) as tap:
+        for cause in ("created", "transitioned", "released"):
+            stale_cursor = first.publish_lease_changed("ls_1", "ch_1", cause=cause)
+        assert tap.collect(window=3.0).count("lease-changed") == 3
+
+    second = EventBroker()  # the restart: a fresh instance, its ids starting over
+    with _runner_api(config, events=second), sse_tap(config.port, last_event_id=stale_cursor) as tap:
+        live_id = second.publish_lease_changed("ls_2", "ch_2", cause="created")
+        assert live_id < stale_cursor, "the fresh broker must mint an id below the stale cursor"
+        assert tap.collect(window=5.0).count("lease-changed") == 1
+
+
 def test_events_stream_401s_without_a_session_over_tcp_under_oauth(tmp_path: Path) -> None:
     """``test_runner_route_gating.py`` proves this generically, in-process, over every
     human-lane route; this reproves it against a genuinely running daemon, whose

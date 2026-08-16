@@ -33,6 +33,9 @@ pytestmark = [
 _SECRET_ENV = "BZ_OAUTH_E2E_SECRET"
 _SECRET = "e2e-oauth-secret"
 _PROVIDER_NAME = "oidc-co"
+#: Deadline for a redirect driven by an SSE reconnect's own ``401`` — clears ``SseService``'s
+#: backoff ladder (1s/2s/4s/8s/16s/30s, ~30s cumulative) plus a restarted daemon's startup.
+_RECONNECT_401_TIMEOUT_MS = 45_000
 
 
 def _hub_bin() -> str:
@@ -189,7 +192,9 @@ def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> No
             _expire_session(hub_dir)
             proc = _start_hub(hub_dir, hub_port)
 
-            expect(page.get_by_test_id("login-page")).to_be_visible()
+            # Which reconnect attempt carries the 401 is not fixed, so this waits the
+            # ladder out (_RECONNECT_401_TIMEOUT_MS); the file's 20s default sits under it.
+            expect(page.get_by_test_id("login-page")).to_be_visible(timeout=_RECONNECT_401_TIMEOUT_MS)
             expect(page.get_by_test_id(f"login-provider-{_PROVIDER_NAME}")).to_be_visible()
         finally:
             browser.close()

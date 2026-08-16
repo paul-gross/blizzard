@@ -2805,9 +2805,9 @@
    "total": 454
   },
   "e2e/test_login_session_e2e.py": {
-   "comments": 10,
+   "comments": 14,
    "docstrings": 16,
-   "total": 196
+   "total": 201
   },
   "e2e/test_migration_e2e.py": {
    "comments": 17,
@@ -2886,8 +2886,8 @@
   },
   "service/support.py": {
    "comments": 6,
-   "docstrings": 38,
-   "total": 367
+   "docstrings": 41,
+   "total": 371
   },
   "service/test_analytics_events_service.py": {
    "comments": 3,
@@ -2955,9 +2955,9 @@
    "total": 122
   },
   "service/test_runner_service.py": {
-   "comments": 53,
-   "docstrings": 36,
-   "total": 646
+   "comments": 54,
+   "docstrings": 39,
+   "total": 665
   },
   "service/test_transcript_segments_service.py": {
    "comments": 3,
