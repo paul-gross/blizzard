@@ -17,6 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.transcripts import RECORD_MAX_BYTES as HUB_RECORD_MAX_BYTES
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.transcript import (
+    LateToolOutput,
     NormalizedTurn,
     SidechainConversation,
     ToolCall,
@@ -192,6 +193,8 @@ def _batch(
     unlinked_sidechains: list[SidechainConversation] | None = None,
     truncated: bool = False,
     sidechain_truncated: bool = False,
+    late_tool_outputs: list[LateToolOutput] | None = None,
+    agent_tool_use_ids: dict[str, str] | None = None,
 ) -> TranscriptBatch:
     return TranscriptBatch(
         session_id="sess-a",
@@ -205,6 +208,8 @@ def _batch(
         sidechain_truncated=sidechain_truncated,
         normalizer_version="fake/1",
         harness_version=None,
+        late_tool_outputs=late_tool_outputs or [],
+        agent_tool_use_ids=agent_tool_use_ids or {},
     )
 
 
@@ -1978,3 +1983,140 @@ def test_unconfigured_caps_leave_the_module_defaults_in_force() -> None:
 
     assert pump._record_max_bytes == TRANSCRIPT_RECORD_MAX_BYTES
     assert pump._chunk_max_bytes == CHUNK_TRANSCRIPT_MAX_BYTES
+
+
+# --- cross-window correlation (blizzard#338) ----------------------------------------
+
+
+def _shipped_turns(ctx) -> list[dict]:  # type: ignore[no-untyped-def]
+    """Every turn the pump actually enqueued, in wire order across all its records."""
+    return [
+        turn
+        for delta in ctx.store.pending_transcript_outbound(limit=50)
+        if not delta.final
+        for turn in json.loads(delta.payload)["turns"]
+    ]
+
+
+def test_a_result_whose_call_shipped_last_window_rides_as_an_output_patch() -> None:
+    """Defect 2: the `tool_result` lands in a later window than its `tool_use`, so no turn in
+    this batch can carry it. It ships by id instead of being dropped."""
+    ctx, _source = _ctx(
+        ship=True,
+        batches={
+            "sess-a": _batch([], next_token="pos-2", late_tool_outputs=[LateToolOutput("toolu_A", "the result", False)])
+        },
+    )
+    _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    [patch] = [t for t in _shipped_turns(ctx) if t["tool"] and t["tool"]["output_patch"]]
+    assert patch["kind"] == "tool"
+    assert patch["tool"]["tool_use_id"] == "toolu_A"
+    assert patch["tool"]["output"] == "the result"
+
+
+def test_a_sidechain_links_by_a_pair_a_previous_window_persisted() -> None:
+    """Defect 1, and the reason the ledger column exists: the window holding the sidecar knows
+    no pair at all — only the segment's own accumulated map still names the parent."""
+    ctx, _source = _ctx(
+        ship=True,
+        batches={"sess-a": _batch([], next_token="pos-2", unlinked_sidechains=[_unlinked_sidechain("agent-7")])},
+    )
+    segment_id = _spawn_one_segment(ctx)
+    ctx.store.advance_transcript_cursor(
+        segment_id,
+        cursor="pos-1",
+        normalizer_version="fake/1",
+        harness_version=None,
+        agent_tool_use_ids={"agent-7": "toolu_TASK"},
+    )
+
+    TranscriptPump(ctx).run()
+
+    [linked] = [t for t in _shipped_turns(ctx) if t["kind"] == "sidechain"]
+    assert linked["sidechain"]["parent_tool_use_id"] == "toolu_TASK"
+    assert linked["sidechain"]["link"] == "agent-id-late"
+    assert linked["sidechain"]["agent_id"] == "agent-7"
+
+
+def test_a_pair_learned_this_window_is_persisted_for_the_next_one() -> None:
+    """The write that makes the test above possible — and it rides the SAME call as the cursor,
+    so a crash cannot leave a pair remembered for content the segment never read."""
+    ctx, _source = _ctx(
+        ship=True,
+        batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-2", agent_tool_use_ids={"agent-7": "toolu_T"})},
+    )
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.agent_tool_use_ids == {"agent-7": "toolu_T"}
+
+
+def test_a_sidechain_with_no_pair_anywhere_is_still_dropped_and_warned() -> None:
+    """The residual case the fix does not close: nothing ever named this agent's parent, so
+    there is no id to link by and the warning stays truthful."""
+    ctx, _source = _ctx(
+        ship=True,
+        batches={
+            "sess-a": _batch([_turn(0, "hi")], next_token="pos-2", unlinked_sidechains=[_unlinked_sidechain("ghost")])
+        },
+    )
+    _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    assert [t for t in _shipped_turns(ctx) if t["kind"] == "sidechain"] == []
+    kinds = [json.loads(e.payload)["kind"] for e in ctx.store.pending_outbound()]
+    assert "transcript-sidechain-dropped" in kinds
+
+
+def test_a_linked_sidechain_no_longer_warns_as_dropped() -> None:
+    """The warning must not survive its own cause: an operator who keeps seeing it after the
+    fix has no way to tell a real residual case from noise."""
+    ctx, _source = _ctx(
+        ship=True,
+        batches={
+            "sess-a": _batch(
+                [_turn(0, "hi")],
+                next_token="pos-2",
+                unlinked_sidechains=[_unlinked_sidechain("agent-7")],
+                agent_tool_use_ids={"agent-7": "toolu_T"},
+            )
+        },
+    )
+    _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    kinds = [json.loads(e.payload)["kind"] for e in ctx.store.pending_outbound()]
+    assert "transcript-sidechain-dropped" not in kinds
+
+
+def test_synthesized_turns_advance_the_range_so_the_next_window_does_not_overlap() -> None:
+    """The hub's natural key is `(segment_id, turn_range_start)`: a synthesized turn the count
+    ignores would put the next window's record on a range this one already claimed."""
+    ctx, _source = _ctx(
+        ship=True,
+        batches={
+            "sess-a": _batch(
+                [_turn(0, "hi")],
+                next_token="pos-2",
+                late_tool_outputs=[LateToolOutput("toolu_A", "out", False)],
+                unlinked_sidechains=[_unlinked_sidechain("agent-7")],
+                agent_tool_use_ids={"agent-7": "toolu_T"},
+            )
+        },
+    )
+    segment_id = _spawn_one_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    segment = ctx.store.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.shipped_turns == 3  # the real turn, the output patch, the sidechain
+    assert [t["index"] for t in _shipped_turns(ctx)] == [0, 1, 2]

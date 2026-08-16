@@ -1,4 +1,5 @@
 export { TranscriptViewer, type SidechainOpenEvent } from './transcript-viewer';
+export { mergeLateLinks } from './merge-late-links';
 export { deriveTranscriptSteps, resolveSegmentSeams, type SegmentSeams, type TranscriptStep } from './transcript-steps';
 export {
   encodeSidechainPath,

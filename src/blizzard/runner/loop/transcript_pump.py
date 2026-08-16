@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
@@ -17,6 +18,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import (
+    LateToolOutput,
     NormalizedTurn,
     SidechainConversation,
     ToolCall,
@@ -40,6 +42,10 @@ PUMP_LEASE_MAX_SECONDS = 5.0
 #: Safety valve on :meth:`TranscriptPump.drain_segment` — bounds a source that never
 #: reports ``complete=True`` from looping forever if ``deadline`` is ever ``None``.
 _PUMP_LEASE_MAX_ITERATIONS = 1000
+
+#: The sidechain link route this pump resolves (blizzard#338): the agent-id join, made
+#: across a window boundary out of the segment's own persisted map rather than in-window.
+LATE_AGENT_ID_LINK = "agent-id-late"
 
 #: Never-silent reasons (D4) — only `_CHUNK_BUDGET_EXCEEDED` latches `stop_transcript_segment_shipping`.
 _RECORD_CAP_EXCEEDED = "record_cap_exceeded"
@@ -199,11 +205,14 @@ class TranscriptPump:
         if batch.truncated or batch.sidechain_truncated:
             self._mark_record_truncated(segment, _SOURCE_READ_TRUNCATED)
         new_cursor = batch.next_position.token if batch.next_position is not None else segment.cursor
-        # Never silently dropped. The per-(segment, agent_id) latch is taken where the warning
-        # is emitted, so a raise before it cannot latch an agent nothing ever warned about.
-        dropped_sidechains = [sc.agent_id for sc in batch.unlinked_sidechains]
+        # This segment's whole accumulated map, plus whatever this window just named — the
+        # link the LATE branches below resolve against (blizzard#338).
+        parents = {**segment.agent_tool_use_ids, **batch.agent_tool_use_ids}
+        # Only a sidechain with no resolvable parent is still dropped. The latch is taken where
+        # the warning is emitted, so a raise before it cannot latch an unwarned agent.
+        dropped_sidechains = [sc.agent_id for sc in batch.unlinked_sidechains if _parent_of(sc, parents) is None]
 
-        if not batch.turns:
+        if not (batch.turns or batch.late_tool_outputs or _linkable(batch, parents)):
             if new_cursor != segment.cursor:
                 assert new_cursor is not None
                 self.ctx.store.advance_transcript_cursor(
@@ -211,12 +220,13 @@ class TranscriptPump:
                     cursor=new_cursor,
                     normalizer_version=batch.normalizer_version,
                     harness_version=batch.harness_version,
+                    agent_tool_use_ids=batch.agent_tool_use_ids,
                 )
             if dropped_sidechains:
                 self._warn_sidechains_dropped(segment, dropped_sidechains)
             return _CAUGHT_UP if batch.complete else _INCOMPLETE
 
-        # Turns present, so the cursor must advance past them or the same turns re-ship every
+        # Content present, so the cursor must advance past it or the same turns re-ship every
         # tick. A conditional, not an `assert`: `python -O` would strip the guard away.
         if new_cursor is None or new_cursor == segment.cursor:
             _log.error(
@@ -233,9 +243,10 @@ class TranscriptPump:
             return _STUCK
 
         turn_range_start = segment.shipped_turns
-        records, any_shrunk, any_unshippable = _build_records(
-            segment, batch, turn_range_start, record_max_bytes=self._record_max_bytes
+        built = _build_records(
+            segment, batch, turn_range_start, record_max_bytes=self._record_max_bytes, parents=parents
         )
+        records, any_shrunk, any_unshippable = built.records, built.any_shrunk, built.any_unshippable
         # The source's own tail-cap signal (D4) rides the LAST record this batch produced.
         if batch.truncated or batch.sidechain_truncated:
             records[-1]["record_truncated"] = True
@@ -255,11 +266,14 @@ class TranscriptPump:
             chunk_id=segment.chunk_id,
             cursor=new_cursor,
             shipped_bytes=segment.shipped_bytes + total_bytes,
-            shipped_turns=segment.shipped_turns + len(batch.turns),
+            # The SYNTHESIZED turns count too, or the next window's `turn_range_start`
+            # overlaps them and the hub's natural key rejects the re-used range.
+            shipped_turns=segment.shipped_turns + built.turn_count,
             normalizer_version=batch.normalizer_version,
             harness_version=batch.harness_version,
             payloads=payloads,
             created_at=self.ctx.clock.now(),
+            agent_tool_use_ids=batch.agent_tool_use_ids,
         )
         # Order here does not matter: the store keeps the worse of the two
         # by the explicit severity each call carries, not by which call happened last.
@@ -348,6 +362,69 @@ def _tool_wire(tool: ToolCall) -> dict[str, Any]:
     }
 
 
+def _late_link_wires(batch: TranscriptBatch, start_index: int, parents: Mapping[str, str]) -> list[dict[str, Any]]:
+    """The turns this window synthesizes for content whose own anchor shipped in an earlier
+    one (blizzard#338): an output for a call already on the hub, and a subagent conversation
+    whose spawning turn likewise. Both name that anchor by ``tool_use_id``, the only handle
+    that survives a window boundary — and `lease_content_view`'s own index renumbering."""
+    wires: list[dict[str, Any]] = []
+    for late in batch.late_tool_outputs:
+        wires.append(_output_patch_wire(late, start_index + len(wires)))
+    for sidechain in batch.unlinked_sidechains:
+        parent = _parent_of(sidechain, parents)
+        if parent is None:
+            continue  # genuinely unlinkable — the caller warns, and it stays dropped
+        wires.append(_late_sidechain_wire(sidechain, start_index + len(wires), parent))
+    return wires
+
+
+def _output_patch_wire(late: LateToolOutput, index: int) -> dict[str, Any]:
+    """A `tool` turn carrying ONLY an output, for the call named by ``tool_use_id``. A reader
+    merges it onto that call; one that does not is left with a card it can recognize and skip,
+    never a second call that looks like it really happened."""
+    return {
+        "index": index,
+        "kind": "tool",
+        "timestamp": None,
+        "text": "",
+        "tool": {
+            "name": "",
+            "input": {},
+            "input_unparsed": None,
+            "input_shape": "absent",
+            "tool_use_id": late.tool_use_id,
+            "output": late.output,
+            "output_truncated": late.output_truncated,
+            "input_truncated": False,
+            "output_patch": True,
+        },
+        "thinking_redacted": False,
+        "sidechain": None,
+        "truncated": False,
+    }
+
+
+def _late_sidechain_wire(sidechain: SidechainConversation, index: int, parent_tool_use_id: str) -> dict[str, Any]:
+    """A top-level `sidechain` turn for a conversation whose spawning turn already shipped —
+    the wire's own shape for one carried apart from its parent, now naming that parent."""
+    return {
+        "index": index,
+        "kind": "sidechain",
+        "timestamp": None,
+        "text": "",
+        "tool": None,
+        "thinking_redacted": False,
+        # `link` names the route that ATTACHED it, and this one did attach — leaving
+        # "unlinked" here would label a linked conversation as orphaned on every board.
+        "sidechain": {
+            **_sidechain_wire(sidechain),
+            "link": LATE_AGENT_ID_LINK,
+            "parent_tool_use_id": parent_tool_use_id,
+        },
+        "truncated": False,
+    }
+
+
 def _sidechain_wire(sidechain: SidechainConversation) -> dict[str, Any]:
     # Sidechain turns carry no index of their own — #247's TurnSegmentView.index offsets the
     # *linked* stream, so these are addressed by position within `turns`.
@@ -400,19 +477,41 @@ _ARRAY_SEPARATOR_BYTES = 2
 _GroupOutcome = Literal["ok", "shrunk", "unshippable"]
 
 
+def _parent_of(sidechain: SidechainConversation, parents: Mapping[str, str]) -> str | None:
+    """The ``tool_use_id`` of the call that spawned ``sidechain``, or ``None`` when nothing
+    ever named the pair — the one case still dropped and warned about (blizzard#338)."""
+    return parents.get(sidechain.agent_id) if sidechain.agent_id is not None else None
+
+
+def _linkable(batch: TranscriptBatch, parents: Mapping[str, str]) -> bool:
+    return any(_parent_of(sc, parents) is not None for sc in batch.unlinked_sidechains)
+
+
+@dataclass(frozen=True)
+class _BuiltRecords:
+    """:func:`_build_records`'s return. ``turn_count`` is the SHIPPED count — real turns plus
+    the synthesized late-link ones — which is what the next window's range starts at."""
+
+    records: list[dict[str, Any]]
+    any_shrunk: bool
+    any_unshippable: bool
+    turn_count: int
+
+
 def _build_records(
     segment: TranscriptSegmentLedgerRow,
     batch: TranscriptBatch,
     turn_range_start: int,
     *,
     record_max_bytes: int = TRANSCRIPT_RECORD_MAX_BYTES,
-) -> tuple[list[dict[str, Any]], bool, bool]:
-    """Greedily pack ``batch.turns`` into ``record_max_bytes``-or-smaller records
+    parents: Mapping[str, str] | None = None,
+) -> _BuiltRecords:
+    """Greedily pack this window's turns into ``record_max_bytes``-or-smaller records,
     closing a group once the next turn's estimated cost would push it over cap; each
     closed group's REAL size is then verified (and shrunk/emptied if needed). A turn whose
-    own cost alone exceeds the cap forms a group of one, scoping any fallback to it alone.
-    Returns ``(records, any_shrunk, any_unshippable)`` for the caller's own worse-last mark."""
+    own cost alone exceeds the cap forms a group of one, scoping any fallback to it alone."""
     wire_turns = [_turn_wire(t, turn_range_start + i) for i, t in enumerate(batch.turns)]
+    wire_turns += _late_link_wires(batch, turn_range_start + len(wire_turns), parents or {})
     turn_costs = [len(json.dumps(wt).encode("utf-8")) for wt in wire_turns]
     overhead = _record_overhead(segment, batch, turn_range_start=turn_range_start, turn_count=len(wire_turns))
 
@@ -452,7 +551,7 @@ def _build_records(
         running += separator + cost
     close_group(group_start, len(wire_turns))
 
-    return records, "shrunk" in outcomes, "unshippable" in outcomes
+    return _BuiltRecords(records, "shrunk" in outcomes, "unshippable" in outcomes, len(wire_turns))
 
 
 #: Safety valve on the proportional shrink below — real convergence takes 1-3 passes; this

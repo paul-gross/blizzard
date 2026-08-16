@@ -19,6 +19,9 @@ export interface TranscriptTool {
   tool_use_id: string | null;
   output: string | null;
   output_truncated: boolean;
+  /** This turn carries ONLY a result for the call `tool_use_id` names, shipped in an
+   * earlier window (blizzard#338) — {@link mergeLateLinks} folds it onto that call. */
+  output_patch?: boolean;
 }
 
 export interface TranscriptSidechain {
@@ -26,6 +29,9 @@ export interface TranscriptSidechain {
   agent_type: string | null;
   link: string;
   turns: TranscriptTurn[];
+  /** The call that spawned this conversation, when the two shipped in different windows
+   * (blizzard#338) — an id, never an index, which a lease read renumbers. */
+  parent_tool_use_id?: string | null;
 }
 
 export interface TranscriptTurn {

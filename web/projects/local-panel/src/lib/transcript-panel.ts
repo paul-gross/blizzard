@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { KitAsyncState, TranscriptViewer, type runnerApi } from 'fleet';
+import { KitAsyncState, mergeLateLinks, TranscriptViewer, type runnerApi } from 'fleet';
 
 import { injectTranscriptQuery } from './transcript.query';
 
@@ -107,7 +107,7 @@ import { injectTranscriptQuery } from './transcript.query';
         @if (transcript()?.truncated) {
           <p class="banner" data-testid="transcript-truncated">TRUNCATED — SOME CONTENT WAS DROPPED</p>
         }
-        <fleet-transcript-viewer [turns]="transcript()?.turns ?? []" />
+        <fleet-transcript-viewer [turns]="mergedTurns()" />
       </div>
     }
   `,
@@ -154,4 +154,9 @@ export class TranscriptPanel {
   protected readonly transcriptQuery = injectTranscriptQuery(this.leaseId);
 
   protected readonly transcript = computed<runnerApi.TranscriptResponse | undefined>(() => this.transcriptQuery.data());
+
+  /** This panel reads a transcript WHOLE (cold), so it has no late links of its own to fold —
+   * but a closed lease's transcript is served from the hub (blizzard#249), which does. Applied
+   * unconditionally: a no-op on the local read, correct on the resolved one. */
+  protected readonly mergedTurns = computed(() => mergeLateLinks(this.transcript()?.turns ?? []));
 }

@@ -24,6 +24,9 @@ class ToolCallSegmentView(BaseModel):
     # Defaulted like `TranscriptSegmentRecord.record_truncated`: a turn stored before this field
     # existed must still validate on read-back through `_content_view`.
     input_truncated: bool = False
+    #: This turn carries ONLY a result for the call `tool_use_id` names, shipped in an earlier
+    #: window (blizzard#338) — a reader merges it onto that call rather than rendering it.
+    output_patch: bool = False
 
 
 class SidechainSegmentView(BaseModel):
@@ -35,6 +38,9 @@ class SidechainSegmentView(BaseModel):
     agent_type: str | None
     link: str
     turns: list[TurnSegmentView]
+    #: The call that spawned this conversation, when it shipped in an earlier window than the
+    #: conversation did (blizzard#338) — an id, never an index, which a lease read renumbers.
+    parent_tool_use_id: str | None = None
 
 
 class TurnSegmentView(BaseModel):

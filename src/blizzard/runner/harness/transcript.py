@@ -8,7 +8,7 @@ Stdlib-only and dependency-free (``bzh:domain-core``), :class:`TranscriptErrorFa
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol
 
@@ -51,6 +51,17 @@ class ToolCall:
     input_shape: ToolInputShape
     tool_use_id: str | None
     output: str | None
+    output_truncated: bool
+
+
+@dataclass(frozen=True)
+class LateToolOutput:
+    """A tool result whose own ``tool_use`` fell outside this read window (blizzard#338), so no
+    turn here can carry it. Named by ``tool_use_id`` alone — the only handle that survives the
+    window boundary — for a consumer to merge onto the call it already holds."""
+
+    tool_use_id: str
+    output: str
     output_truncated: bool
 
 
@@ -101,6 +112,12 @@ class TranscriptBatch:
     sidechain_truncated: bool
     normalizer_version: str
     harness_version: str | None
+    #: Results whose own call fell outside this window (blizzard#338); defaulted empty, so a
+    #: source that resolves every result in-window constructs exactly as before.
+    late_tool_outputs: list[LateToolOutput] = field(default_factory=list)
+    #: Agent-id -> spawning ``tool_use_id`` pairs this window revealed — the handle a LATER
+    #: window's sidecar read links by, once the result that named the pair has scrolled away.
+    agent_tool_use_ids: dict[str, str] = field(default_factory=dict)
 
 
 class TranscriptErrorFactory:

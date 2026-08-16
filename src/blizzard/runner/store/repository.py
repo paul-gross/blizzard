@@ -7,7 +7,7 @@ passed in from the injected clock — the store never reads a wall clock.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
@@ -150,6 +150,9 @@ class TranscriptSegmentLedgerRow:
     supersedes: str | None
     finalized_at: datetime | None
     stamped_at: datetime
+    #: agent_id -> spawning `tool_use_id` (blizzard#338), accumulated across every window
+    #: this segment has read; empty until one names a pair.
+    agent_tool_use_ids: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -791,6 +794,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         harness_version: str | None,
         payloads: list[str],
         created_at: datetime,
+        agent_tool_use_ids: dict[str, str] | None = None,
     ) -> list[int]:
         """Advance a segment's cursor/shipped counts/version stamp and atomically enqueue
         ``len(payloads)`` buffer rows (issue #246; F1) — ONE transaction, so a batch split
@@ -823,7 +827,13 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         ...
 
     def advance_transcript_cursor(
-        self, segment_id: str, *, cursor: str, normalizer_version: str, harness_version: str | None
+        self,
+        segment_id: str,
+        *,
+        cursor: str,
+        normalizer_version: str,
+        harness_version: str | None,
+        agent_tool_use_ids: dict[str, str] | None = None,
     ) -> None:
         """Advance a segment's read cursor (and version stamp) with nothing to enqueue — a
         window that moved the source's read position but produced no turn (e.g. a run of

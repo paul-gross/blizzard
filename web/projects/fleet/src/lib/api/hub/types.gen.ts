@@ -2828,6 +2828,10 @@ export type SidechainSegmentViewInput = {
      */
     link: string;
     /**
+     * Parent Tool Use Id
+     */
+    parent_tool_use_id?: string | null;
+    /**
      * Turns
      */
     turns: Array<TurnSegmentViewInput>;
@@ -2853,6 +2857,10 @@ export type SidechainSegmentViewOutput = {
      * Link
      */
     link: string;
+    /**
+     * Parent Tool Use Id
+     */
+    parent_tool_use_id?: string | null;
     /**
      * Turns
      */
@@ -2928,6 +2936,10 @@ export type ToolCallSegmentView = {
      * Output
      */
     output: string | null;
+    /**
+     * Output Patch
+     */
+    output_patch?: boolean;
     /**
      * Output Truncated
      */

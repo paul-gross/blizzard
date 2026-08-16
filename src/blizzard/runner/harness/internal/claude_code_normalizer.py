@@ -11,11 +11,12 @@ import json
 import re
 from collections import deque
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 
 from blizzard.runner.harness.transcript import (
+    LateToolOutput,
     NormalizedTurn,
     NormalizedTurnKind,
     SidechainConversation,
@@ -332,6 +333,10 @@ class NormalizedFile:
     agent_id_by_tool_turn: dict[int, str]
     discovered_agent_ids: frozenset[str]
     harness_version: str | None
+    #: The two cross-window handles (blizzard#338): results whose call this window never saw,
+    #: and the agent-id -> spawning ``tool_use_id`` pairs it revealed.
+    late_tool_outputs: list[LateToolOutput] = field(default_factory=list)
+    agent_tool_use_ids: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def of_lines(cls, lines: list[str], *, is_sidechain_file: bool = False) -> NormalizedFile:
@@ -366,6 +371,8 @@ class NormalizedFile:
             agent_id_by_tool_turn=collapser.agent_id_by_tool_turn,
             discovered_agent_ids=frozenset(collapser.discovered_agent_ids),
             harness_version=harness_version,
+            late_tool_outputs=collapser.late_tool_outputs,
+            agent_tool_use_ids=collapser.agent_tool_use_ids,
         )
 
     @classmethod
@@ -421,6 +428,10 @@ class _TurnCollapser:
         self.tool_turns_by_record_uuid: dict[str, list[int]] = {}
         self.agent_id_by_tool_turn: dict[int, str] = {}
         self.discovered_agent_ids: set[str] = set()
+        #: The two cross-window handles (blizzard#338) — see `LateToolOutput` and
+        #: `NormalizedFile.agent_tool_use_ids`.
+        self.late_tool_outputs: list[LateToolOutput] = []
+        self.agent_tool_use_ids: dict[str, str] = {}
         #: `tool_use_id` → turn index, so a later `tool_result` lands its output.
         self._pending_tool_index: dict[str, int] = {}
 
@@ -515,9 +526,16 @@ class _TurnCollapser:
             if not isinstance(tool_use_id, str):
                 continue
             index = self._pending_tool_index.get(tool_use_id)
-            if index is None:
-                continue  # unmatched tool_result — its tool_use fell outside this call's lines
             output = Text.of_content(block.get("content"))
+            if index is None:
+                # Its `tool_use` fell outside this window, so no turn here can carry the
+                # output — surfaced by id rather than dropped (blizzard#338).
+                self.late_tool_outputs.append(
+                    LateToolOutput(tool_use_id=tool_use_id, output=output.text, output_truncated=output.truncated)
+                )
+                if unambiguous and agent_id is not None:
+                    self.agent_tool_use_ids[agent_id] = tool_use_id
+                continue
             turn = self.turns[index]
             assert turn.tool is not None
             updated_tool = replace(
@@ -526,6 +544,9 @@ class _TurnCollapser:
             self.turns[index] = replace(turn, tool=updated_tool, truncated=turn.truncated or output.truncated)
             if unambiguous and agent_id is not None:
                 self.agent_id_by_tool_turn[index] = agent_id
+                # Recorded even when the turn IS in-window: the sidecar keeps growing for
+                # ticks after this one, and only this record ever names the pair.
+                self.agent_tool_use_ids[agent_id] = tool_use_id
 
 
 class _SidechainAssembler:

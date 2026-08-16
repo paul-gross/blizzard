@@ -301,6 +301,8 @@ class ClaudeCodeTranscriptSource:
             sidechain_truncated=sidecars.budget_exhausted or sidecars.truncated,
             normalizer_version=NORMALIZER_VERSION,
             harness_version=normalized.harness_version,
+            late_tool_outputs=normalized.late_tool_outputs,
+            agent_tool_use_ids=normalized.agent_tool_use_ids,
         )
 
     def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:

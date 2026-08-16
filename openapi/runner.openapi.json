@@ -2431,6 +2431,17 @@
             "title": "Link",
             "type": "string"
           },
+          "parent_tool_use_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Tool Use Id"
+          },
           "turns": {
             "items": {
               "$ref": "#/components/schemas/TurnSegmentView"
@@ -2572,6 +2583,11 @@
               }
             ],
             "title": "Output"
+          },
+          "output_patch": {
+            "default": false,
+            "title": "Output Patch",
+            "type": "boolean"
           },
           "output_truncated": {
             "title": "Output Truncated",

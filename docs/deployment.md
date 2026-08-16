@@ -1496,6 +1496,13 @@ ship = false
   recorded on the segment and surfaced as a `warning` operational event (see
   [the event log](#operational-visibility--the-event-log) below), the same way a captured
   command failure is.
+- **Late links, for content whose call shipped earlier.** The runner reads a session in
+  windows, so a tool's result and a subagent's conversation routinely arrive in a later
+  record than the call that produced them. Both ship carrying the `tool_use_id` of that
+  call — a result as a `tool` turn flagged `output_patch`, a conversation as a top-level
+  `sidechain` turn naming `parent_tool_use_id` — and the board folds each back onto its
+  call when rendering. Reading the API directly, expect to see them unmerged; a late turn
+  whose call is outside the segment you fetched stays standalone rather than being dropped.
 - **Reads are operator-only.** A transcript holds everything a worker saw; reading one back
   (`GET /api/chunks/{id}/transcripts` and its per-segment content route) requires the
   `transcript:read` permission, `contributor` role and above — a runner's own fleet-plane

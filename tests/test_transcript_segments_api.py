@@ -461,3 +461,87 @@ def test_lease_transcript_read_renumbers_index_across_spawn_generations(tmp_path
 
     assert resp.status_code == 200, resp.text
     assert [t["index"] for t in resp.json()["turns"]] == [0, 1, 2, 3]
+
+
+# --- the cross-window link handles (blizzard#338) ------------------------------------
+
+
+def _late_link_record(chunk_id: str, *, seq: int, turn_range_start: int, segment_id: str = "sg_1") -> dict:
+    """A record whose turns are the two late-link shapes: an output for a call shipped in an
+    earlier window, and that call's subagent conversation, both naming it by `tool_use_id`."""
+    record = _record(chunk_id, seq=seq, turn_range_start=turn_range_start, turn_range_end=turn_range_start + 1)
+    record["segment_id"] = segment_id
+    record["turns"] = [
+        {
+            **_turn(turn_range_start),
+            "kind": "tool",
+            "tool": {
+                "name": "",
+                "input": {},
+                "input_unparsed": None,
+                "input_shape": "absent",
+                "tool_use_id": "toolu_T",
+                "output": "3 blockers",
+                "output_truncated": False,
+                "output_patch": True,
+            },
+        },
+        {
+            **_turn(turn_range_start + 1),
+            "kind": "sidechain",
+            "sidechain": {
+                "agent_id": "agent-1",
+                "agent_type": "reviewer",
+                "link": "agent-id-late",
+                "turns": [],
+                "parent_tool_use_id": "toolu_T",
+            },
+        },
+    ]
+    return record
+
+
+def test_the_late_link_handles_survive_the_lease_reads_own_renumbering(tmp_path: Path) -> None:
+    """Why the link is an id and not an index: this route renumbers `index` across a lease's
+    generations, so an index-based parent would name a different turn after the rewrite."""
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest_chunk(hub)
+    token = _seed_enrolled(hub, runner_id="r1")
+    pushed = hub.client.post(
+        "/api/fleet/transcripts",
+        json={"runner_id": "r1", "records": [_late_link_record(chunk_id, seq=1, turn_range_start=8)]},
+        headers=_bearer(token),
+    )
+    assert pushed.status_code == 200, pushed.text
+
+    resp = hub.client.get(
+        f"/api/fleet/chunks/{chunk_id}/transcript-segments",
+        params={"node_id": "nd_build", "epoch": 1},
+        headers=_bearer(token),
+    )
+
+    turns = resp.json()["turns"]
+    assert [t["index"] for t in turns] == [0, 1]  # renumbered off the producer's own 8/9
+    assert turns[0]["tool"]["output_patch"] is True
+    assert turns[0]["tool"]["tool_use_id"] == "toolu_T"
+    assert turns[1]["sidechain"]["parent_tool_use_id"] == "toolu_T"
+
+
+def test_a_turn_stored_before_the_late_link_fields_still_validates_on_read_back(tmp_path: Path) -> None:
+    """Both fields are optional and defaulted for exactly this: `_content_view` re-validates
+    every stored turn, and a record written before they existed must not 500 the route."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
+    token = seed_session(hub, contributor)
+    chunk_id = _ingest_chunk(hub, headers=_cookie(token))
+    hub.client.post(
+        "/api/fleet/transcripts",
+        json={"runner_id": "r1", "records": [_record(chunk_id, seq=1, turn_range_start=0, turn_range_end=0)]},
+    )
+
+    content = hub.client.get(f"/api/chunks/{chunk_id}/transcripts/sg_1", headers=_cookie(token))
+
+    assert content.status_code == 200, content.text
+    [turn] = content.json()["turns"]
+    assert turn["sidechain"] is None
+    assert turn["tool"] is None

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Engine, and_, case, func, or_, select
+from sqlalchemy import Connection, Engine, and_, case, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard.foundation.ids import SEGMENT_PREFIX, Id
@@ -1056,6 +1056,7 @@ class SqlAlchemyRunnerStore:
         harness_version: str | None,
         payloads: list[str],
         created_at: datetime,
+        agent_tool_use_ids: dict[str, str] | None = None,
     ) -> list[int]:
         with self._begin() as conn:
             conn.execute(
@@ -1067,6 +1068,7 @@ class SqlAlchemyRunnerStore:
                     shipped_turns=shipped_turns,
                     normalizer_version=normalizer_version,
                     harness_version=harness_version,
+                    **self._merged_agent_tool_use_ids(conn, segment_id, agent_tool_use_ids),
                 )
             )
             seqs: list[int] = []
@@ -1143,14 +1145,41 @@ class SqlAlchemyRunnerStore:
         return True
 
     def advance_transcript_cursor(
-        self, segment_id: str, *, cursor: str, normalizer_version: str, harness_version: str | None
+        self,
+        segment_id: str,
+        *,
+        cursor: str,
+        normalizer_version: str,
+        harness_version: str | None,
+        agent_tool_use_ids: dict[str, str] | None = None,
     ) -> None:
         with self._begin() as conn:
             conn.execute(
                 transcript_segments.update()
                 .where(transcript_segments.c.segment_id == segment_id)
-                .values(cursor=cursor, normalizer_version=normalizer_version, harness_version=harness_version)
+                .values(
+                    cursor=cursor,
+                    normalizer_version=normalizer_version,
+                    harness_version=harness_version,
+                    **self._merged_agent_tool_use_ids(conn, segment_id, agent_tool_use_ids),
+                )
             )
+
+    @staticmethod
+    def _merged_agent_tool_use_ids(conn: Connection, segment_id: str, learned: dict[str, str] | None) -> dict[str, str]:
+        """The stored map merged with this window's pairs, as `values()` kwargs — empty when
+        nothing was learned, so the column is left untouched rather than rewritten. Merged in
+        the CALLER's transaction: a pair persisted without the cursor that read it re-learns
+        nothing (blizzard#338)."""
+        if not learned:
+            return {}
+        row = conn.execute(
+            select(transcript_segments.c.agent_tool_use_ids).where(transcript_segments.c.segment_id == segment_id)
+        ).first()
+        stored: dict[str, str] = json.loads(row[0]) if row is not None and row[0] else {}
+        # Stored wins: the first window to name a pair saw the `tool_result` that defines it,
+        # and a later re-read of the same result must not renumber an established link.
+        return {"agent_tool_use_ids": json.dumps({**learned, **stored})}
 
     def record_ask(
         self,
@@ -1632,6 +1661,7 @@ class SqlAlchemyRunnerStore:
             supersedes=str(r.supersedes) if r.supersedes is not None else None,
             finalized_at=r.finalized_at,
             stamped_at=r.stamped_at,
+            agent_tool_use_ids=json.loads(r.agent_tool_use_ids) if r.agent_tool_use_ids else {},
         )
 
     @staticmethod

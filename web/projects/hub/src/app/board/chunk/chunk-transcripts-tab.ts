@@ -5,6 +5,7 @@ import {
   KitAsyncState,
   type KitAsyncStateValue,
   parseSidechainPath,
+  mergeLateLinks,
   resolveSegmentSeams,
   resolveSidechainByPath,
   type SidechainOpenEvent,
@@ -338,15 +339,20 @@ export class ChunkTranscriptsTab {
 
   protected readonly continuesIn = computed<TranscriptSegmentIndexEntry | null>(() => this.seams().continuesIn);
 
-  /** {@link segmentData}'s turns, tail-capped at {@link MAX_RENDERED_TURNS} the same way
+  /** {@link segmentData}'s turns with every late link folded onto its call (blizzard#338).
+   * Derived ONCE, ahead of both the cap and the standalone path resolver: merging fewer turns
+   * than the path is resolved against would open the wrong sidechain. */
+  private readonly mergedTurns = computed(() => mergeLateLinks(this.segmentData()?.turns ?? []));
+
+  /** {@link mergedTurns}, tail-capped at {@link MAX_RENDERED_TURNS} the same way
    * the runner panel caps its own list (`review:F7`). A sidechain's own turns pass
    * through {@link TranscriptViewer} uncapped, same as the runner side. */
   protected readonly cappedTurns = computed(() => {
-    const turns = this.segmentData()?.turns ?? [];
+    const turns = this.mergedTurns();
     return turns.length > MAX_RENDERED_TURNS ? turns.slice(-MAX_RENDERED_TURNS) : turns;
   });
 
-  protected readonly turnsCapped = computed(() => (this.segmentData()?.turns?.length ?? 0) > MAX_RENDERED_TURNS);
+  protected readonly turnsCapped = computed(() => this.mergedTurns().length > MAX_RENDERED_TURNS);
 
   /** {@link sidechainPath}, parsed — `[]` when none is open. */
   private readonly parsedSidechainPath = computed(() => parseSidechainPath(this.sidechainPath()));
@@ -355,7 +361,7 @@ export class ChunkTranscriptsTab {
    * {@link parsedSidechainPath} down through every nesting level it names, not just a
    * single top-level index: a nested sidechain's own turns index independently from 0. */
   protected readonly standaloneSidechain = computed(() =>
-    resolveSidechainByPath(this.segmentData()?.turns ?? [], this.parsedSidechainPath()),
+    resolveSidechainByPath(this.mergedTurns(), this.parsedSidechainPath()),
   );
 
   /** A top-level "open standalone" click — the event's path is already the full address

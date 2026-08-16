@@ -995,3 +995,85 @@ def test_size_bytes_unreadable_logs_warning_not_error(tmp_path: Path) -> None:
 
     assert size is None
     assert [entry["log_level"] for entry in logs] == ["warning"]
+
+
+# --- cross-window correlation (blizzard#338) ----------------------------------------
+
+
+def _append(path: Path, lines: list[str]) -> None:
+    with path.open("a") as fh:
+        fh.write("\n".join(lines) + "\n")
+
+
+def _two_window_session(tmp_path: Path) -> tuple[ClaudeCodeTranscriptSource, Path]:
+    """A Task fired in one window, its result and sidecar arriving in the next — the shape
+    every fleet worker spawning a subagent produces, and the one that used to lose both."""
+    main = _write_main(tmp_path, [fx.user_env("go"), fx.assistant_tool_use("toolu_T", "Task", {"prompt": "review"})])
+    return ClaudeCodeTranscriptSource(str(tmp_path), _error_factory()), main
+
+
+def test_a_result_arriving_after_its_call_scrolled_away_is_surfaced_not_dropped(tmp_path: Path) -> None:
+    source, main = _two_window_session(tmp_path)
+    first = source.turns_since("sess-1", spawn_cwd=None, since=None)
+    assert [t.kind for t in first.turns] == ["env", "tool"]
+    _append(main, [fx.tool_result("toolu_T", "3 blockers", agent_id="agent-1")])
+
+    second = source.turns_since("sess-1", spawn_cwd=None, since=first.next_position)
+
+    [late] = second.late_tool_outputs
+    assert late.tool_use_id == "toolu_T"
+    assert late.output == "3 blockers"
+    assert second.agent_tool_use_ids == {"agent-1": "toolu_T"}
+
+
+def test_a_pair_is_recorded_even_when_the_call_is_in_the_same_window(tmp_path: Path) -> None:
+    """The sidecar keeps growing for ticks after this one, and only the result record ever
+    names the pair — so an in-window match must record it too, not just consume it."""
+    _write_main(
+        tmp_path,
+        [
+            fx.assistant_tool_use("toolu_T", "Task", {"prompt": "review"}),
+            fx.tool_result("toolu_T", "done", agent_id="agent-1"),
+        ],
+    )
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    batch = source.turns_since("sess-1", spawn_cwd=None, since=None)
+
+    assert batch.agent_tool_use_ids == {"agent-1": "toolu_T"}
+    assert batch.late_tool_outputs == []  # matched in-window, so it rode its own turn
+
+
+def test_a_sidecar_read_after_its_spawning_turn_still_reports_the_pair(tmp_path: Path) -> None:
+    """The full defect: by the window the sidecar is readable, the spawning turn is gone —
+    the conversation surfaces unlinked, but the pair naming its parent rides alongside."""
+    source, main = _two_window_session(tmp_path)
+    first = source.turns_since("sess-1", spawn_cwd=None, since=None)
+    sidecar = tmp_path / "-home-user-workspace" / "sess-1" / "subagents"
+    sidecar.mkdir(parents=True)
+    (sidecar / "agent-agent-1.jsonl").write_text(fx.sidecar_record("found 3", agent_id="agent-1") + "\n")
+    _append(main, [fx.tool_result("toolu_T", "3 blockers", agent_id="agent-1")])
+
+    second = source.turns_since("sess-1", spawn_cwd=None, since=first.next_position)
+
+    [conversation] = second.unlinked_sidechains
+    assert conversation.agent_id == "agent-1"
+    assert second.agent_tool_use_ids["agent-1"] == "toolu_T"
+
+
+def test_one_cold_read_of_the_same_file_still_links_in_place(tmp_path: Path) -> None:
+    """The control: read whole rather than in windows, nothing is late and nothing is
+    unlinked — the property that made the runner's own panel correct all along."""
+    source, main = _two_window_session(tmp_path)
+    sidecar = tmp_path / "-home-user-workspace" / "sess-1" / "subagents"
+    sidecar.mkdir(parents=True)
+    (sidecar / "agent-agent-1.jsonl").write_text(fx.sidecar_record("found 3", agent_id="agent-1") + "\n")
+    _append(main, [fx.tool_result("toolu_T", "3 blockers", agent_id="agent-1")])
+
+    cold = source.turns_since("sess-1", spawn_cwd=None, since=None)
+
+    assert cold.unlinked_sidechains == []
+    assert cold.late_tool_outputs == []
+    [tool_turn] = [t for t in cold.turns if t.kind == "tool"]
+    assert tool_turn.tool is not None and tool_turn.tool.output == "3 blockers"
+    assert tool_turn.sidechain is not None and tool_turn.sidechain.link == "agent-id"

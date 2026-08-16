@@ -510,6 +510,9 @@ transcript_segments = Table(
     Column("shipping_stopped_reason", String, nullable=True),  # NULL = still shipping (D4)
     # JSON array of subagent `agent_id`s already warned about on the fact lane.
     Column("sidechain_warned_agents", Text, nullable=True),  # NULL = none warned yet
+    # JSON object, agent_id -> spawning `tool_use_id` (blizzard#338) — the cross-window
+    # link handle; a sidecar read after its result scrolled away has no other parent.
+    Column("agent_tool_use_ids", Text, nullable=True),  # NULL = none learned yet
     # JSON array of truncation `reason`s warned about — the warn-once latch,
     # independent of `truncated_reason`'s own worst-of display value.
     Column("truncated_reasons_warned", Text, nullable=True),  # NULL = none warned yet
