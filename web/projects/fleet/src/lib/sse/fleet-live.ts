@@ -17,7 +17,7 @@ import { type SseStatus, SseService } from './sse.service';
 export const HUB_EVENT_STREAM_URL = '/api/events/stream';
 
 /**
- * How long {@link FleetLiveUpdates.dispatch} accumulates invalidation keys before
+ * How long {@link LiveInvalidationSpine.dispatch} accumulates invalidation keys before
  * flushing them as one pass (issue #310). A burst of frames — a batch promote, a
  * runner claiming several chunks — would otherwise fire one `invalidateQueries` call
  * per key per frame; this window lets the overlapping key sets from a burst collapse
@@ -127,7 +127,7 @@ export type RunnerChangeKind =
  * majority of all frames and carry no news an operator can act on — left in, they would
  * evict every other event out of the {@link LOG_LIMIT} ring within a few cycles, so this
  * is what keeps the feed legible rather than merely tidier. Dropping is scoped to the
- * feed: {@link FleetLiveUpdates.dispatch} still invalidates on them, so the fleet
+ * feed: {@link LiveInvalidationSpine.dispatch} still invalidates on them, so the fleet
  * registry's liveness column keeps refreshing on every heartbeat exactly as before.
  *
  * `external-usage` (issue #218) is muted for a different reason: it is not an
@@ -180,7 +180,7 @@ function chunkDecisionKeys(data: HubEventPayload): readonly (readonly unknown[])
 /**
  * The event → query-key invalidation registry (issue #82) — the single place a live
  * event names what it stales, so wiring a new live feature into the SSE spine is
- * adding a row here, not a `case` in {@link FleetLiveUpdates.dispatch}. Exhaustive
+ * adding a row here, not a `case` in {@link LiveInvalidationSpine.dispatch}. Exhaustive
  * over {@link HubEventType} (a compile-time guard, same intent as `STATUS_LANE`): a
  * new event type added to {@link HUB_EVENT_TYPES} is then a compile error here until
  * it is given a row, instead of silently dispatching to nothing.

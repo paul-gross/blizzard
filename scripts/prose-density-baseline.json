@@ -670,7 +670,7 @@
   "blizzard/foundation/events/stream.py": {
    "comments": 5,
    "docstrings": 15,
-   "total": 96
+   "total": 98
   },
   "blizzard/foundation/forwarded.py": {
    "comments": 0,
@@ -2885,9 +2885,9 @@
    "total": 0
   },
   "service/support.py": {
-   "comments": 6,
+   "comments": 8,
    "docstrings": 41,
-   "total": 371
+   "total": 378
   },
   "service/test_analytics_events_service.py": {
    "comments": 3,
@@ -2955,9 +2955,9 @@
    "total": 122
   },
   "service/test_runner_service.py": {
-   "comments": 54,
-   "docstrings": 39,
-   "total": 665
+   "comments": 55,
+   "docstrings": 42,
+   "total": 690
   },
   "service/test_transcript_segments_service.py": {
    "comments": 3,
@@ -3425,9 +3425,9 @@
    "total": 141
   },
   "test_foundation_events.py": {
-   "comments": 18,
-   "docstrings": 12,
-   "total": 193
+   "comments": 20,
+   "docstrings": 15,
+   "total": 208
   },
   "test_gate_derivation.py": {
    "comments": 9,
@@ -4006,8 +4006,8 @@
   },
   "test_runner_event_publish.py": {
    "comments": 34,
-   "docstrings": 31,
-   "total": 789
+   "docstrings": 36,
+   "total": 831
   },
   "test_runner_events_stream.py": {
    "comments": 5,

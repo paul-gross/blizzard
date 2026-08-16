@@ -143,6 +143,21 @@ async def test_stream_delivers_live_events_past_a_cursor_that_outruns_a_fresh_br
         await frames.aclose()  # type: ignore[attr-defined]
 
 
+async def test_stream_replays_a_fresh_brokers_buffered_tail_past_a_stale_cursor() -> None:
+    """The replay half of the same clamp (round 6's F1): the live-delivery test above
+    never publishes before connecting, so it can't catch a stale cursor reaching
+    ``replay_since`` unresolved, which silently empties the tail."""
+    broker = EventBroker()  # a fresh broker, already holding buffered events before connect
+    broker.publish("widget-changed", {"id": "w1"})
+    broker.publish("widget-changed", {"id": "w2"})
+    stream = Stream(broker, _DisconnectedRequest(), Cursor(500), _RESERVED_COMMENT)  # type: ignore[arg-type]
+    frames = [chunk async for chunk in stream.frames()]
+    assert frames[0] == _RESERVED_COMMENT.encode()
+    assert len(frames) == 3, frames
+    assert b"w1" in frames[1]
+    assert b"w2" in frames[2]
+
+
 async def test_stream_emits_a_keepalive_on_an_idle_connection_at_the_injected_interval() -> None:
     """The keepalive interval is an injected value (D1) — bounding it well below the
     production default (15s) lets this observe an emission without waiting it out."""

@@ -20,6 +20,7 @@ from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.takeover import TakeoverService
+from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot, ExternalSubscriptionUsageWindow
@@ -210,6 +211,28 @@ def test_pull_abandon_publishes_environment_released(tmp_path: Path) -> None:
     assert env_frames == [{"chunk_id": "ch_1", "environment_id": "e1", "cause": "released", "key": "environments:e1"}]
     lease_frames = _frames(events, "lease-changed")
     assert lease_frames[-1]["cause"] == "released"
+
+
+def test_env_release_release_binding_publishes_environment_released(tmp_path: Path) -> None:
+    """`release_binding` (undoing a just-recorded claim that never landed) shares
+    `_publish_released` with `release_chunk` above, but census F6 (review round 6) found
+    no test drove this call site on its own — pinned directly here."""
+    store = _store(tmp_path)
+    events = EventBroker()
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict=None),
+        probe=FakeProbe(),
+        events=events,
+    )
+
+    ctx.env_release.release_binding("ch_1", [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")])
+
+    env_frames = _frames(events, "environment-changed")
+    assert env_frames == [{"chunk_id": "ch_1", "environment_id": "e1", "cause": "released", "key": "environments:e1"}]
 
 
 # --- ask-changed(asked) — the API route ------------------------------------------------- #
@@ -629,6 +652,25 @@ def test_ceiling_pause_publishes_fact_changed(tmp_path: Path) -> None:
 
     SpendCeiling(ctx).run()
 
+    fact_frames = _frames(events, "fact-changed")
+    assert len(fact_frames) == 1
+    assert fact_frames[0]["kind"] == RUNNER_LOCALLY_PAUSED
+    assert fact_frames[0]["chunk_id"] is None
+    assert fact_frames[0]["lease_id"] is None
+
+
+def test_patch_runner_route_publishes_fact_changed(tmp_path: Path) -> None:
+    """`record_local_pause`'s other call site (review round 6's F6): `SpendCeiling.run`
+    above is pinned, but nothing drove `PATCH /api/runner` itself before this."""
+    store = _store(tmp_path)
+    events = EventBroker()
+    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
+    app = create_app(config, runner_store=store, events=events)
+
+    with TestClient(app) as client:
+        resp = client.patch("/api/runner", json={"paused": True, "by": "operator"})
+
+    assert resp.status_code == 200, resp.text
     fact_frames = _frames(events, "fact-changed")
     assert len(fact_frames) == 1
     assert fact_frames[0]["kind"] == RUNNER_LOCALLY_PAUSED

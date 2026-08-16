@@ -302,6 +302,7 @@ class SseTap:
         self._headers = {} if last_event_id is None else {"Last-Event-ID": str(last_event_id)}
         self._ready = threading.Event()
         self._stop = threading.Event()
+        self._response: httpx.Response | None = None
         self._thread = threading.Thread(target=self._run, daemon=True)
 
     def start(self) -> None:
@@ -313,6 +314,7 @@ class SseTap:
             httpx.Client(base_url=self.base_url, timeout=None) as client,
             client.stream("GET", "/api/events/stream", headers=self._headers) as resp,
         ):
+            self._response = resp
             event_type: str | None = None
             for raw in resp.iter_lines():
                 if not self._ready.is_set():
@@ -342,7 +344,12 @@ class SseTap:
         return seen
 
     def stop(self) -> None:
+        # A flag alone leaves the reader thread parked in iter_lines() until the next
+        # keepalive; closing the response aborts the read so stop() actually returns promptly.
         self._stop.set()
+        if self._response is not None:
+            with contextlib.suppress(Exception):
+                self._response.close()
 
 
 @contextlib.contextmanager

@@ -42,6 +42,7 @@ from tests.e2e.test_acceptance_loop import (
 )
 from tests.service.support import (
     JUDGEMENT_SCRIPT,
+    SseTap,
     mint_fixture,
     mock_hub,
     mock_hub_chunk_spec,
@@ -582,6 +583,30 @@ def test_runner_stream_resumes_live_after_a_restart_reset_the_broker_ids(tmp_pat
         live_id = second.publish_lease_changed("ls_2", "ch_2", cause="created")
         assert live_id < stale_cursor, "the fresh broker must mint an id below the stale cursor"
         assert tap.collect(window=5.0).count("lease-changed") == 1
+
+
+def test_runner_stream_replays_a_restarted_brokers_buffered_tail_past_a_stale_cursor(tmp_path: Path) -> None:
+    """Unlike the restart case above, the fresh broker here already holds buffered events
+    *before* the reconnect — the ordinary case — so this exercises the replay-read half of
+    the clamp, not just the live-dedup half."""
+    config = _bare_runner_config(tmp_path)
+
+    first = EventBroker()
+    for cause in ("created", "transitioned", "released"):
+        stale_cursor = first.publish_lease_changed("ls_1", "ch_1", cause=cause)
+
+    second = EventBroker()  # the restart, already carrying buffered events before reconnect
+    second.publish_lease_changed("ls_2", "ch_2", cause="created")
+    second.publish_lease_changed("ls_2", "ch_2", cause="transitioned")
+    assert second.latest_id() < stale_cursor, "the fresh broker's buffered ids must stay below the stale cursor"
+
+    with _runner_api(config, events=second):
+        tap = SseTap(f"http://127.0.0.1:{config.port}", last_event_id=stale_cursor)
+        tap.start()
+        try:
+            assert tap.collect(window=5.0).count("lease-changed") == 2
+        finally:
+            tap.stop()
 
 
 def test_events_stream_401s_without_a_session_over_tcp_under_oauth(tmp_path: Path) -> None:
