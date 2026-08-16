@@ -188,16 +188,15 @@ import type { MachineChunkRow } from './local-panel';
               }
             </fleet-kit-async-state>
           </fleet-kit-panel>
-          <div class="detail-frame">
-            <local-machine-detail
-              [leases]="selectedChunkLeases()"
-              [activeAttemptLeaseId]="selectedAttemptLeaseId()"
-              [status]="selectedStatus()"
-              [escalation]="selectedEscalation()"
-              (selectAttempt)="selectAttempt.emit($event)"
-              (dismiss)="dismiss.emit()"
-            />
-          </div>
+          <local-machine-detail
+            class="detail-frame"
+            [leases]="selectedChunkLeases()"
+            [activeAttemptLeaseId]="selectedAttemptLeaseId()"
+            [status]="selectedStatus()"
+            [escalation]="selectedEscalation()"
+            (selectAttempt)="selectAttempt.emit($event)"
+            (dismiss)="dismiss.emit()"
+          />
         </section>
         <section class="col right">
           <fleet-kit-panel class="hub-panel" label="hub">
@@ -288,12 +287,11 @@ import type { MachineChunkRow } from './local-panel';
       text-transform: uppercase;
       cursor: pointer;
     }
+    /* Sizing only — local-machine-detail paints its own panel chrome via
+       KitPanel now (issue #307), so this no longer hand-copies a
+       background/border of its own. */
     .detail-frame {
-      display: flex;
-      flex-direction: column;
       min-height: 0;
-      background: var(--panel);
-      border: 1px solid var(--bezel);
       flex: 1.15;
     }
     /* The mock's split weights: leases over envs 60/40; chunks under detail 1:1.15. */

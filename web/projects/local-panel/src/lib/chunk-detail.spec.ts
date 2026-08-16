@@ -315,3 +315,32 @@ describe('MachineDetail header', () => {
     expect(el.querySelector('[data-testid="resume-chunk"]')).toBeNull();
   });
 });
+
+/**
+ * The dock's panel chrome (issue #307) — it paints through `fleet-kit-panel`
+ * now, the same chrome every sibling region in `local-panel-layout.ts` wears,
+ * rather than mounting bare. `MachineDetailHeader` projects into the panel's
+ * own `[header]` slot, so exactly one header bar (`KitPanel`'s own `.p-hdr`)
+ * ever renders — never a second, stacked one.
+ */
+describe('MachineDetail panel chrome', () => {
+  let stub: RequestClientStub;
+
+  afterEach(() => stub.restore());
+
+  it('renders inside a fleet-kit-panel with exactly one header bar when nothing is selected', async () => {
+    const empty = await render([]);
+    stub = empty.stub;
+    expect(empty.el.querySelector('[data-testid="machine-detail"]')?.tagName.toLowerCase()).toBe('fleet-kit-panel');
+    expect(empty.el.querySelectorAll('.p-hdr')).toHaveLength(1);
+  });
+
+  it('renders inside a fleet-kit-panel with exactly one header bar, the header content inside it', async () => {
+    const selected = await render([NEWEST()]);
+    stub = selected.stub;
+    expect(selected.el.querySelector('[data-testid="machine-detail"]')?.tagName.toLowerCase()).toBe('fleet-kit-panel');
+    expect(selected.el.querySelectorAll('.p-hdr')).toHaveLength(1);
+    // The header's own content lives inside that one bar, not stacked below it.
+    expect(selected.el.querySelector('.p-hdr [data-testid="detail-chunk-ref"]')).not.toBeNull();
+  });
+});

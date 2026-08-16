@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { ageMs, compactRef, formatAge, KitChips, type KitChipOption, type runnerApi } from 'fleet';
+import { ageMs, compactRef, formatAge, KitChips, KitPanel, type KitChipOption, type runnerApi } from 'fleet';
 
 import { injectChunkDetailQuery } from './chunk-detail.query';
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
@@ -43,15 +43,27 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
  * {@link status}, which folds in machine-only facts the hub aggregate does not
  * carry), so Pause/Resume's own gating reads the fresh `pause`/`status` off that
  * read, never the machine-derived one.
+ *
+ * The dock paints its own panel chrome via {@link KitPanel} (issue #307) — the
+ * same bezel/background every sibling region in `local-panel-layout.ts` wears —
+ * rather than mounting bare. `KitPanel`'s `[header]` slot can only be filled
+ * from the template that mounts the panel, so this container is the one place
+ * that projection can happen; `MachineDetailHeader` is projected in with an
+ * empty `label` on the panel itself, so exactly one header bar renders rather
+ * than {@link MachineDetailHeader}'s own bar stacking below `KitPanel`'s. `.p-body`
+ * scroll is disabled (`bodyScroll="false"`) because the content below manages
+ * its own scrolling internally (the transcript's `.transcript` region) —
+ * `KitPanel`'s own doc comment names this exact shape.
  */
 @Component({
   selector: 'local-machine-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HeartbeatFreshness, KitChips, MachineDetailHeader, TranscriptPanel],
+  imports: [HeartbeatFreshness, KitChips, KitPanel, MachineDetailHeader, TranscriptPanel],
   template: `
-    <div class="detail" data-testid="machine-detail">
+    <fleet-kit-panel class="dock" data-testid="machine-detail" label="" [bodyScroll]="false">
       @if (newestLease(); as l) {
         <local-machine-detail-header
+          header
           [chunkId]="l.chunk_id"
           [workRefs]="workRefs()"
           [statusLabel]="status()?.label ?? null"
@@ -64,55 +76,59 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
           (pauseChunk)="pauseMutation.mutate({ chunkId: $event, paused: true })"
           (resumeChunk)="pauseMutation.mutate({ chunkId: $event, paused: false })"
         />
-        <div class="facts">
-          <dl class="kv" data-testid="detail-facts">
-            <dt>lease</dt>
-            <dd>
-              {{ leaseRef() }} · epoch {{ l.epoch }} <small class="full">{{ l.lease_id }}</small>
-            </dd>
-            <dt>session</dt>
-            <dd>{{ l.session_id ?? '—' }}</dd>
-            <dt>pid</dt>
-            <dd>{{ l.pid ?? '—' }}</dd>
-            <dt>env</dt>
-            <dd>{{ l.environment_id ?? 'released' }}</dd>
-            <dt>workdir</dt>
-            <dd class="path">{{ l.workdir ?? '—' }}</dd>
-            <dt>heartbeat</dt>
-            <dd>
-              <span class="hb-line">
-                <span>{{ heartbeatLabel() }}</span>
-                <local-heartbeat-freshness
-                  class="hb-bar"
-                  [lastHeartbeatAt]="l.last_heartbeat_at"
-                  [stale]="l.state === 'stale'"
-                />
-              </span>
-            </dd>
-          </dl>
-          @if (escalation(); as esc) {
-            <div class="resume-box" data-testid="detail-resume">
-              <span class="lbl">escalated — resume session</span>
-              <code>{{ esc.resume_command || '(no session to resume)' }}</code>
+      }
+      <div class="detail">
+        @if (newestLease(); as l) {
+          <div class="facts">
+            <dl class="kv" data-testid="detail-facts">
+              <dt>lease</dt>
+              <dd>
+                {{ leaseRef() }} · epoch {{ l.epoch }} <small class="full">{{ l.lease_id }}</small>
+              </dd>
+              <dt>session</dt>
+              <dd>{{ l.session_id ?? '—' }}</dd>
+              <dt>pid</dt>
+              <dd>{{ l.pid ?? '—' }}</dd>
+              <dt>env</dt>
+              <dd>{{ l.environment_id ?? 'released' }}</dd>
+              <dt>workdir</dt>
+              <dd class="path">{{ l.workdir ?? '—' }}</dd>
+              <dt>heartbeat</dt>
+              <dd>
+                <span class="hb-line">
+                  <span>{{ heartbeatLabel() }}</span>
+                  <local-heartbeat-freshness
+                    class="hb-bar"
+                    [lastHeartbeatAt]="l.last_heartbeat_at"
+                    [stale]="l.state === 'stale'"
+                  />
+                </span>
+              </dd>
+            </dl>
+            @if (escalation(); as esc) {
+              <div class="resume-box" data-testid="detail-resume">
+                <span class="lbl">escalated — resume session</span>
+                <code>{{ esc.resume_command || '(no session to resume)' }}</code>
+              </div>
+            }
+          </div>
+          @if (attemptOptions().length > 1) {
+            <div class="attempts" data-testid="attempt-tabs">
+              <fleet-kit-chips
+                [options]="attemptOptions()"
+                [selectedValue]="activeAttemptLeaseId()"
+                (choose)="selectAttempt.emit($event)"
+              />
             </div>
           }
-        </div>
-        @if (attemptOptions().length > 1) {
-          <div class="attempts" data-testid="attempt-tabs">
-            <fleet-kit-chips
-              [options]="attemptOptions()"
-              [selectedValue]="activeAttemptLeaseId()"
-              (choose)="selectAttempt.emit($event)"
-            />
+          <div class="transcript" data-testid="detail-transcript">
+            <local-transcript-panel [leaseId]="activeAttemptLeaseId()" />
           </div>
+        } @else {
+          <p class="status" data-testid="detail-empty">SELECT A CHUNK</p>
         }
-        <div class="transcript" data-testid="detail-transcript">
-          <local-transcript-panel [leaseId]="activeAttemptLeaseId()" />
-        </div>
-      } @else {
-        <p class="status" data-testid="detail-empty">SELECT A CHUNK</p>
-      }
-    </div>
+      </div>
+    </fleet-kit-panel>
   `,
   styles: `
     :host {
@@ -120,6 +136,9 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
       height: 100%;
       font-family: var(--mono);
       font-variant-numeric: tabular-nums;
+    }
+    .dock {
+      height: 100%;
     }
     .detail {
       display: flex;

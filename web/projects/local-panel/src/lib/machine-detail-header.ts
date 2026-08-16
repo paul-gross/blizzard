@@ -64,17 +64,18 @@ import { KitButton, type runnerApi, type Tone } from 'fleet';
     }
     /* Two clusters, space-between — the hub board's own header shape: identity
        on the left, actions on the right. Wraps rather than overflows once the
-       dock is only as wide as a phone. */
+       dock is only as wide as a phone. Paints no chrome of its own (issue
+       #307) — projected into KitPanel's own [header] slot (chunk-detail.ts),
+       which already supplies the bar's background and border; a second copy
+       here would stack two header bars. */
     .d-hdr {
-      flex: none;
+      flex: 1;
+      min-width: 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
       gap: 10px;
-      padding: 6px 8px;
-      border-bottom: 1px solid var(--bezel);
-      background: linear-gradient(180deg, var(--header-hi), var(--header-lo));
       font-family: var(--mono);
     }
     .d-title {
