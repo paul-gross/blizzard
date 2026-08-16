@@ -1,12 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { ageMs, compactRef, formatAge, KitChips, KitPanel, type KitChipOption, type runnerApi } from 'fleet';
+import { ageMs, compactRef, formatAge, KitPanel, type runnerApi } from 'fleet';
 
 import { injectChunkDetailQuery } from './chunk-detail.query';
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
 import type { MachineChunkStatus } from './chunk-status';
 import { HeartbeatFreshness } from './heartbeat-freshness';
 import { MachineDetailHeader } from './machine-detail-header';
-import { TranscriptPanel } from './transcript-panel';
 
 /** Statuses the hub's `PauseService` refuses to pause (`ChunkNotPausable`), mirrored
  * here so the dock never offers a Pause the server would answer with a 409 — the
@@ -17,19 +16,16 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
 /**
  * The machine detail dock's container (`bzh:frontend-container-presentational`) —
  * the discovery mock's "machine detail" panel for the selected chunk: execution
- * facts *from this box only* (lease, session, pid, env, workdir, heartbeat), the
- * escalation resume command when one is open, and the transcript inline at the
- * bottom (there is no cross-view navigation yet, so the transcript list lives
- * here rather than behind a link).
+ * facts *from this box only* (lease, session, pid, env, workdir, heartbeat), and
+ * the escalation resume command when one is open. Per-attempt selection and the
+ * transcript moved to the runner-local chunk detail route (issue #318) — the
+ * chunk name in the header links there now that one exists, a deliberate
+ * replacement rather than a regression: it restores the design this dock's own
+ * docstring used to describe as deferred ("no cross-view navigation yet").
  *
  * The summary facts, status, and escalation all render off the chunk's newest
  * lease (the last entry of the `leases` list the shell hands in, oldest →
- * newest) — this dock owns no list read of its own. A chunk is often processed
- * across several attempts, each its own lease with its own transcript, so when
- * there is more than one the dock renders a tab per attempt (issue #98): the
- * newest is selected by default, and picking a tab feeds that attempt's lease
- * id to {@link TranscriptPanel}'s existing `leaseId` input. The dock only
- * passes the id and never branches on the transcript's states.
+ * newest) — this dock owns no list read of its own.
  *
  * The header ({@link MachineDetailHeader}, a presentational sibling) matches the
  * hub board's own chunk-detail header shape (issue #185, the model at
@@ -50,17 +46,14 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
  * from the template that mounts the panel, so this container is the one place
  * that projection can happen; `MachineDetailHeader` is projected in with an
  * empty `label` on the panel itself, so exactly one header bar renders rather
- * than {@link MachineDetailHeader}'s own bar stacking below `KitPanel`'s. `.p-body`
- * scroll is disabled (`bodyScroll="false"`) because the content below manages
- * its own scrolling internally (the transcript's `.transcript` region) —
- * `KitPanel`'s own doc comment names this exact shape.
+ * than {@link MachineDetailHeader}'s own bar stacking below `KitPanel`'s.
  */
 @Component({
   selector: 'local-machine-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HeartbeatFreshness, KitChips, KitPanel, MachineDetailHeader, TranscriptPanel],
+  imports: [HeartbeatFreshness, KitPanel, MachineDetailHeader],
   template: `
-    <fleet-kit-panel class="dock" data-testid="machine-detail" label="" [bodyScroll]="false">
+    <fleet-kit-panel class="dock" data-testid="machine-detail" label="">
       @if (newestLease(); as l) {
         <local-machine-detail-header
           header
@@ -111,18 +104,6 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
                 <code>{{ esc.resume_command || '(no session to resume)' }}</code>
               </div>
             }
-          </div>
-          @if (attemptOptions().length > 1) {
-            <div class="attempts" data-testid="attempt-tabs">
-              <fleet-kit-chips
-                [options]="attemptOptions()"
-                [selectedValue]="activeAttemptLeaseId()"
-                (choose)="selectAttempt.emit($event)"
-              />
-            </div>
-          }
-          <div class="transcript" data-testid="detail-transcript">
-            <local-transcript-panel [leaseId]="activeAttemptLeaseId()" />
           </div>
         } @else {
           <p class="status" data-testid="detail-empty">SELECT A CHUNK</p>
@@ -214,17 +195,6 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
       font-size: var(--fs-sm);
       user-select: all;
     }
-    .attempts {
-      flex: none;
-      padding: 6px 8px;
-      border-bottom: 1px solid var(--bezel);
-    }
-    .transcript {
-      flex: 1;
-      min-height: 0;
-      overflow-y: auto;
-      position: relative;
-    }
     .status {
       position: absolute;
       left: 50%;
@@ -239,7 +209,7 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
 })
 export class MachineDetail {
   /** The selected chunk's attempts, oldest → newest; empty when nothing is
-   * selected. The newest is the summary/status subject; each is a transcript tab. */
+   * selected. The newest is the summary/status subject. */
   readonly leases = input.required<readonly runnerApi.LeaseView[]>();
 
   /** The derived machine-side status for the selected chunk (shell-folded). */
@@ -249,42 +219,12 @@ export class MachineDetail {
   readonly escalation = input<runnerApi.EscalationView | null>(null);
 
   /** The chunk's newest attempt (the `leases` list's last entry) — the summary,
-   * status, and escalation all render off it, whichever attempt tab is active. */
+   * status, and escalation all render off it. */
   protected readonly newestLease = computed<runnerApi.LeaseView | null>(() => this.leases().at(-1) ?? null);
-
-  /**
-   * The attempt whose transcript the dock shows — the container's effective pick,
-   * URL-derived (issue #99). Presentational: the dock renders whichever tab this
-   * names and emits {@link selectAttempt} on a pick; the container owns which
-   * attempt applies (falling back to newest when a pick ages out or the chunk
-   * changes) and writes it to the URL. Defaults to `null` before a chunk is
-   * selected — the summary already falls back to the newest lease.
-   */
-  readonly activeAttemptLeaseId = input<string | null>(null);
-
-  /** Emitted with an attempt's lease id when the operator picks its tab — the
-   * container writes it to the URL as the new selection. */
-  readonly selectAttempt = output<string>();
 
   /** Emitted when the operator dismisses the dock (issue #185) — the container
    * clears the selection, mirroring the hub header's own `dismiss`. */
   readonly dismiss = output<void>();
-
-  /** One selectable chip per attempt (oldest → newest), keyed by lease id and
-   * labelled with the attempt ordinal + its state, for the `KitChips` tab row. */
-  protected readonly attemptOptions = computed<readonly KitChipOption[]>(() =>
-    this.leases().map((att) => ({
-      value: att.lease_id,
-      label: `a${att.epoch} ${this.attemptState(att)}`,
-      testid: 'attempt-tab',
-    })),
-  );
-
-  /** An attempt tab's state hint: the closure reason for a closed attempt (why
-   * that attempt ended), else the live lease state. */
-  private attemptState(att: runnerApi.LeaseView): string {
-    return att.state === 'closed' ? (att.closure_reason ?? 'closed') : att.state;
-  }
 
   /** The selected chunk's id — the severable detail read's subject. */
   protected readonly chunkId = computed<string | null>(() => this.newestLease()?.chunk_id ?? null);

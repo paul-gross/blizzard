@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { KitButton, type runnerApi, type Tone } from 'fleet';
 
 /**
@@ -6,7 +7,9 @@ import { KitButton, type runnerApi, type Tone } from 'fleet';
  * chunk-detail header shape (`fleet/chunk-detail/chunk-detail-header.ts`, the
  * model): the full chunk id, its work items as links, the derived state, a
  * working Pause/Resume, and a close button. Detach is deliberately omitted —
- * it is a hub-side concern.
+ * it is a hub-side concern. The chunk id itself links to the runner-local
+ * chunk detail route (issue #318) — the operator's way into the shared
+ * `fleet` sections and the transcript, both of which moved out of this dock.
  *
  * Presentational (`bzh:frontend-container-presentational`): {@link MachineDetail}
  * owns the severable `ChunkDetailView` read and the pause mutation, and forwards
@@ -17,11 +20,11 @@ import { KitButton, type runnerApi, type Tone } from 'fleet';
 @Component({
   selector: 'local-machine-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton],
+  imports: [KitButton, RouterLink],
   template: `
     <header class="d-hdr">
       <div class="d-title">
-        <span class="cid" data-testid="detail-chunk-ref">{{ chunkId() }}</span>
+        <a class="cid" data-testid="detail-chunk-ref" [routerLink]="['/board', 'chunk', chunkId()]">{{ chunkId() }}</a>
         <span class="d-sub">
           @for (ref of workRefs(); track ref.source + ':' + ref.ref) {
             @if (ref.web_url) {
@@ -85,11 +88,18 @@ import { KitButton, type runnerApi, type Tone } from 'fleet';
       min-width: 0;
     }
     .cid {
+      display: block;
       color: var(--amber-hi);
       font-size: var(--fs-md);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      text-decoration: none;
+    }
+    .cid:hover,
+    .cid:focus-visible {
+      text-decoration: underline;
+      outline: none;
     }
     .d-sub {
       display: flex;

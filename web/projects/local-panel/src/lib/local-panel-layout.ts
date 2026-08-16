@@ -191,10 +191,8 @@ import type { MachineChunkRow } from './local-panel';
           <local-machine-detail
             class="detail-frame"
             [leases]="selectedChunkLeases()"
-            [activeAttemptLeaseId]="selectedAttemptLeaseId()"
             [status]="selectedStatus()"
             [escalation]="selectedEscalation()"
-            (selectAttempt)="selectAttempt.emit($event)"
             (dismiss)="dismiss.emit()"
           />
         </section>
@@ -356,10 +354,6 @@ export class LocalPanelLayout {
    * renders: summary/status off the newest, one transcript tab per attempt. */
   readonly selectedChunkLeases = input.required<readonly runnerApi.LeaseView[]>();
 
-  /** The attempt whose transcript the detail dock shows — the container's
-   * URL-derived effective pick (issue #99), fed straight to the detail dock. */
-  readonly selectedAttemptLeaseId = input.required<string | null>();
-
   readonly selectedStatus = input.required<MachineChunkStatus | null>();
 
   /** The open escalation for the selected chunk, when one exists. */
@@ -375,10 +369,6 @@ export class LocalPanelLayout {
   /** Emitted with the checkbox's new checked state when the operator toggles
    * "show all" (issue #134). */
   readonly toggleShowAllChunks = output<boolean>();
-
-  /** Emitted with an attempt lease id when the operator picks an attempt tab in
-   * the detail dock — the container writes it to the URL. */
-  readonly selectAttempt = output<string>();
 
   /** Emitted when the operator dismisses the detail dock (issue #185) via its
    * own close button — the container clears the selection. */

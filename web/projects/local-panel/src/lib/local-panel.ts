@@ -62,12 +62,10 @@ export interface MachineChunkRow {
             [openAskCount]="openAskCount()"
             [selectedChunkId]="selectedChunkId()"
             [selectedChunkLeases]="selectedChunkLeases()"
-            [selectedAttemptLeaseId]="selectedAttemptLeaseId()"
             [selectedStatus]="selectedStatus()"
             [selectedEscalation]="selectedEscalation()"
             (selectLease)="selectLease($event)"
             (selectChunk)="selectChunk($event)"
-            (selectAttempt)="selectAttempt($event)"
             (toggleShowAllChunks)="showAllChunks.set($event)"
             (dismiss)="clearSelection()"
           />
@@ -82,10 +80,8 @@ export interface MachineChunkRow {
               [selectedChunkLeases]="selectedChunkLeases()"
               [selectedStatus]="selectedStatus()"
               [selectedEscalation]="selectedEscalation()"
-              [selectedAttemptLeaseId]="selectedAttemptLeaseId()"
               (selectChunk)="selectChunk($event)"
               (selectLease)="selectLease($event)"
-              (selectAttempt)="selectAttempt($event)"
               (closeDetail)="clearSelection()"
             />
           }
@@ -297,11 +293,6 @@ export class LocalPanel {
     if (lease) this.selection.select(lease.chunk_id, null);
   }
 
-  /** Write an attempt pick to the URL, keeping the current chunk selection. */
-  protected selectAttempt(leaseId: string): void {
-    this.selection.select(this.selectedChunkId(), leaseId);
-  }
-
   /** Clear the selection entirely — the mobile shell's back affordance, which
    * closes its drill-down by removing what the detail screen renders off. A
    * plain navigation like any other selection write, so the device back button
@@ -312,31 +303,13 @@ export class LocalPanel {
   }
 
   /**
-   * The selected chunk's attempts (oldest → newest) — what the detail dock
-   * renders: its summary/status off the newest, one transcript tab per attempt.
-   * Empty when nothing is selected.
+   * The selected chunk's attempts (oldest → newest) — what the detail dock's
+   * summary/status renders off the newest. Empty when nothing is selected.
    */
   protected readonly selectedChunkLeases = computed<readonly runnerApi.LeaseView[]>(() => {
     const chunkId = this.selectedChunkId();
     if (chunkId === null) return [];
     return this.machineChunks().find((chunk) => chunk.lease.chunk_id === chunkId)?.leases ?? [];
-  });
-
-  /**
-   * The attempt whose transcript the dock shows — the URL's `attempt` lease id
-   * when it still names an attempt of the selected chunk, else the newest attempt
-   * (the default). Deriving the *effective* pick here (rather than trusting the
-   * raw param) folds in every fallback the old in-dock state carried: a poll
-   * refresh keeps the same attempt (its id is unchanged), while a pick that ages
-   * out of the recent-lease window — or one left over from another chunk — is no
-   * longer among the leases, so it falls back to newest.
-   */
-  protected readonly selectedAttemptLeaseId = computed<string | null>(() => {
-    const leases = this.selectedChunkLeases();
-    const newest = leases.at(-1) ?? null;
-    const wanted = this.selection.attemptLeaseId();
-    if (wanted !== null && leases.some((att) => att.lease_id === wanted)) return wanted;
-    return newest?.lease_id ?? null;
   });
 
   protected readonly selectedStatus = computed<MachineChunkStatus | null>(() => {

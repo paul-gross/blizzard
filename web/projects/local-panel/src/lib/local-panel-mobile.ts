@@ -38,10 +38,9 @@ import { injectRunnerDashboardQuery } from './status.query';
  * mobile answer to the desktop layout's side-by-side detail dock, which
  * assumes width a single column doesn't have. The screen itself is
  * {@link MachineDetail} reused verbatim (`bzh:frontend-kit`) — the same
- * execution facts (lease/session/pid/env/workdir/heartbeat), the same
- * per-attempt tabs, and the same transcript the desktop dock renders; this
- * shell only swaps which of the two screens is mounted and adds the back
- * affordance a drill-down needs. Selection itself stays the container's
+ * execution facts (lease/session/pid/env/workdir/heartbeat) the desktop dock
+ * renders; this shell only swaps which of the two screens is mounted and adds
+ * the back affordance a drill-down needs. Selection itself stays the container's
  * (and the URL's, issue #99), so a detail screen is deep-linkable and the
  * device back button walks out of it like any other navigation.
  *
@@ -125,8 +124,6 @@ import { injectRunnerDashboardQuery } from './status.query';
             [leases]="selectedChunkLeases()"
             [status]="selectedStatus()"
             [escalation]="selectedEscalation()"
-            [activeAttemptLeaseId]="selectedAttemptLeaseId()"
-            (selectAttempt)="selectAttempt.emit($event)"
             (dismiss)="closeDetail.emit()"
           />
         </div>
@@ -290,10 +287,6 @@ export class LocalPanelMobile {
   /** The selected chunk's open escalation, when there is one. */
   readonly selectedEscalation = input<runnerApi.EscalationView | null>(null);
 
-  /** The attempt whose transcript the detail screen shows — the container's
-   * effective, URL-derived pick. */
-  readonly selectedAttemptLeaseId = input<string | null>(null);
-
   /** A chunk card tap — the container writes it to the URL, which opens the
    * detail screen on the next render. */
   readonly selectChunk = output<string>();
@@ -301,9 +294,6 @@ export class LocalPanelMobile {
   /** An agent row tap — selects that lease's chunk, the same shared selection
    * the desktop rails have. */
   readonly selectLease = output<string>();
-
-  /** An attempt tab pick within the detail screen. */
-  readonly selectAttempt = output<string>();
 
   /** The back affordance — the container clears the selection. */
   readonly closeDetail = output<void>();

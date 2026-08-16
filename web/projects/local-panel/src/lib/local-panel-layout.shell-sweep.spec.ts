@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient } from 'fleet';
 import { stubRequestClient } from 'fleet/testing';
@@ -34,6 +35,8 @@ async function render() {
     providers: [
       provideZonelessChangeDetection(),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      // The detail dock's header links the chunk name to its route now (issue #318).
+      provideRouter([]),
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(LocalPanelLayout);
@@ -73,7 +76,6 @@ async function render() {
     openAskCount: 0,
     selectedChunkId: null,
     selectedChunkLeases: [],
-    selectedAttemptLeaseId: null,
     selectedStatus: null,
     selectedEscalation: null,
   };

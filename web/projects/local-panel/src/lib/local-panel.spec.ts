@@ -1,49 +1,12 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap, type ParamMap, Router } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient, type runnerApi, ViewportService } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
-import { BehaviorSubject } from 'rxjs';
-import { type Mock, vi } from 'vitest';
+import { type MockInstance, vi } from 'vitest';
 
 import { LocalPanel } from './local-panel';
-
-/**
- * A round-tripping stand-in for the router's query-param binding — the URL that
- * drives selection (issue #99). `LocalPanel` reads `ActivatedRoute.queryParamMap`
- * and writes via `Router.navigate([], { queryParams, queryParamsHandling: 'merge' })`;
- * this stub honors that merge (a `null` value clears a param) and pushes the
- * result back through the same `queryParamMap` subject, so a click genuinely
- * flows URL → state the way the real router would. `navigate` is a spy so writes
- * can be asserted and a no-write ("leave the URL untouched") verified. Seed
- * `initial` to model loading a deep-linked URL.
- */
-function makeRouterStub(initial: Record<string, string> = {}): {
-  activatedRoute: unknown;
-  router: unknown;
-  navigate: Mock;
-} {
-  const params: Record<string, string> = { ...initial };
-  const queryParamMap$ = new BehaviorSubject<ParamMap>(convertToParamMap({ ...params }));
-  const navigate = vi.fn((_commands: unknown[], extras: { queryParams: Record<string, string | null> }) => {
-    for (const [key, value] of Object.entries(extras.queryParams)) {
-      if (value === null) delete params[key];
-      else params[key] = value;
-    }
-    queryParamMap$.next(convertToParamMap({ ...params }));
-    return Promise.resolve(true);
-  });
-  const activatedRoute = {
-    queryParamMap: queryParamMap$,
-    snapshot: {
-      get queryParamMap(): ParamMap {
-        return queryParamMap$.value;
-      },
-    },
-  };
-  return { activatedRoute, router: { navigate }, navigate };
-}
 
 /** Matches `GET /api/chunks/{chunk_id}/work-items` for any chunk id. */
 const WORK_ITEMS_ROUTE = /^\/api\/chunks\/[^/]+\/work-items$/;
@@ -119,20 +82,32 @@ function routes(
   };
 }
 
-let navigateSpy: Mock;
+let navigateSpy: MockInstance<Router['navigate']>;
 
+/**
+ * A real router (issue #318 needs one anyway — `MachineDetailHeader`'s chunk
+ * name is now a `routerLink`), seeded with `initialQuery` before the panel
+ * mounts so its first render already reflects a deep-linked URL. The catch-all
+ * route is a no-op destination: `LocalPanel` is created directly rather than
+ * through an outlet, so only the router's shared query-param state (what
+ * `injectPanelSelection` reads/writes) matters here, never the matched path.
+ * `navigate` is spied (not replaced) so a write genuinely round-trips through
+ * `ActivatedRoute.queryParamMap` the way it does in the app, and can still be
+ * asserted or checked for a no-write.
+ */
 async function setUp(initialQuery: Record<string, string> = {}): Promise<void> {
-  const { activatedRoute, router, navigate } = makeRouterStub(initialQuery);
-  navigateSpy = navigate;
   await TestBed.configureTestingModule({
     imports: [LocalPanel],
     providers: [
       provideZonelessChangeDetection(),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      { provide: ActivatedRoute, useValue: activatedRoute },
-      { provide: Router, useValue: router },
+      provideRouter([{ path: '**', children: [] }]),
     ],
   }).compileComponents();
+  const router = TestBed.inject(Router);
+  const query = new URLSearchParams(initialQuery).toString();
+  await router.navigateByUrl(query ? `/?${query}` : '/');
+  navigateSpy = vi.spyOn(router, 'navigate');
 }
 
 async function render(initialQuery: Record<string, string> = {}) {
@@ -378,7 +353,7 @@ describe('LocalPanel', () => {
       expect(el.querySelector('[data-testid="detail-empty"]')?.textContent).toContain('SELECT A CHUNK');
     });
 
-    it('selecting a chunk row renders its execution facts and fires the transcript read for its lease', async () => {
+    it('selecting a chunk row renders its execution facts', async () => {
       stub = stubRequestClient(runnerClient, routes([LEASE()]));
       const fixture = await render();
       const el = fixture.nativeElement as HTMLElement;
@@ -392,17 +367,15 @@ describe('LocalPanel', () => {
       expect(facts).toContain('4821');
       expect(facts).toContain('/ws/beta');
       expect(facts).toContain('sess-77');
-      expect(stub.forRoute('/api/leases/lease_01KXKVVF1J3D6H6VYZ3XYNZPRR/transcript', 'GET').length).toBeGreaterThan(
-        0,
-      );
     });
 
-    it('renders one attempt tab per lease of the selected multi-attempt chunk, newest selected', async () => {
+    it('shows facts for the newest attempt of a multi-attempt chunk once selected', async () => {
       const older = LEASE({
         lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB',
         epoch: 1,
         state: 'closed',
         closure_reason: 'failed',
+        session_id: 'sess-old',
       });
       // Server order: newest active first, then the closed attempt.
       stub = stubRequestClient(runnerClient, routes([LEASE(), older]));
@@ -412,16 +385,9 @@ describe('LocalPanel', () => {
       el.querySelector<HTMLElement>('[data-testid="chunk-row"]')?.click();
       await settle(fixture);
 
-      const tabs = el.querySelectorAll('[data-testid="attempt-tab"]');
-      expect(tabs).toHaveLength(2);
-      // Oldest attempt first, newest last and selected by default.
-      expect(tabs[0].textContent).toContain('a1');
-      expect(tabs[1].textContent).toContain('a2');
-      expect(tabs[1].getAttribute('aria-pressed')).toBe('true');
-      // The newest attempt's transcript is the default read.
-      expect(stub.forRoute('/api/leases/lease_01KXKVVF1J3D6H6VYZ3XYNZPRR/transcript', 'GET').length).toBeGreaterThan(
-        0,
-      );
+      const facts = el.querySelector('[data-testid="detail-facts"]')?.textContent ?? '';
+      expect(facts).toContain('sess-77');
+      expect(facts).not.toContain('sess-old');
     });
 
     it('selecting a lease row selects its chunk — one shared selection across both rails', async () => {
@@ -469,7 +435,6 @@ describe('LocalPanel', () => {
 
   describe('the URL drives selection (issue #99)', () => {
     const CHUNK = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
-    const NEWEST_LEASE = 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR';
     const OLDER = () =>
       LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed', closure_reason: 'failed' });
 
@@ -485,19 +450,6 @@ describe('LocalPanel', () => {
       expect(navigateSpy).not.toHaveBeenCalled();
     });
 
-    it('hydrates the attempt tab from the URL when one is encoded', async () => {
-      // Server order: newest active first, then the closed older attempt.
-      stub = stubRequestClient(runnerClient, routes([LEASE(), OLDER()]));
-      const fixture = await render({ chunk: CHUNK, attempt: OLDER().lease_id });
-      const el = fixture.nativeElement as HTMLElement;
-
-      const tabs = el.querySelectorAll('[data-testid="attempt-tab"]');
-      // The URL's attempt (the older a1), not the newest default, is active.
-      expect(tabs[0].getAttribute('aria-pressed')).toBe('true');
-      expect(tabs[1].getAttribute('aria-pressed')).toBe('false');
-      expect(stub.forRoute(`/api/leases/${OLDER().lease_id}/transcript`, 'GET').length).toBeGreaterThan(0);
-    });
-
     it('writes the chunk selection into the URL when a chunk row is clicked — no full reload', async () => {
       stub = stubRequestClient(runnerClient, routes([LEASE()]));
       const fixture = await render();
@@ -510,20 +462,6 @@ describe('LocalPanel', () => {
       expect(navigateSpy).toHaveBeenCalledWith(
         [],
         expect.objectContaining({ queryParams: { chunk: CHUNK, attempt: null }, queryParamsHandling: 'merge' }),
-      );
-    });
-
-    it('writes the attempt pick into the URL when an attempt tab is clicked, keeping the chunk', async () => {
-      stub = stubRequestClient(runnerClient, routes([LEASE(), OLDER()]));
-      const fixture = await render({ chunk: CHUNK });
-      const el = fixture.nativeElement as HTMLElement;
-
-      el.querySelectorAll<HTMLElement>('[data-testid="attempt-tab"]')[0].click();
-      await settle(fixture);
-
-      expect(navigateSpy).toHaveBeenCalledWith(
-        [],
-        expect.objectContaining({ queryParams: { chunk: CHUNK, attempt: OLDER().lease_id } }),
       );
     });
 
@@ -557,19 +495,6 @@ describe('LocalPanel', () => {
       expect(el.querySelector('[data-testid="detail-empty"]')?.textContent).toContain('SELECT A CHUNK');
       expect(el.querySelector('[data-testid="chunk-row"]')?.classList.contains('selected')).toBe(false);
       // …and the panel never rewrote the URL to "correct" it.
-      expect(navigateSpy).not.toHaveBeenCalled();
-    });
-
-    it('ignores an attempt id that is not one of the selected chunk’s leases, defaulting to newest', async () => {
-      stub = stubRequestClient(runnerClient, routes([LEASE(), OLDER()]));
-      const fixture = await render({ chunk: CHUNK, attempt: 'lease_STALE0000000000000000' });
-      const el = fixture.nativeElement as HTMLElement;
-
-      const tabs = el.querySelectorAll('[data-testid="attempt-tab"]');
-      // The stale attempt is not among the chunk's leases → newest is active.
-      expect(tabs[1].getAttribute('aria-pressed')).toBe('true');
-      expect(stub.forRoute(`/api/leases/${NEWEST_LEASE}/transcript`, 'GET').length).toBeGreaterThan(0);
-      // No rewrite — an ignored param is left as-is until the next real pick.
       expect(navigateSpy).not.toHaveBeenCalled();
     });
 

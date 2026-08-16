@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient, type runnerApi } from 'fleet';
 import { type RequestClientStub, hiddenAtContainerWidth, settle, stubRequestClient } from 'fleet/testing';
@@ -41,6 +42,8 @@ async function render(overrides: Record<string, unknown> = {}) {
       // `LocalPauseControl` (issue #133), and `LocalIdentity` — so a TanStack
       // Query context has to exist for the fixture to construct at all.
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      // The detail dock's header links the chunk name to its route now (issue #318).
+      provideRouter([]),
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(LocalPanelLayout);
@@ -59,7 +62,6 @@ async function render(overrides: Record<string, unknown> = {}) {
     openAskCount: 0,
     selectedChunkId: null,
     selectedChunkLeases: [],
-    selectedAttemptLeaseId: null,
     selectedStatus: null,
     selectedEscalation: null,
     ...overrides,
@@ -213,36 +215,6 @@ describe('LocalPanelLayout', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
-  });
-
-  it('marks the attempt tab named by selectedAttemptLeaseId as active in the detail dock', async () => {
-    const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNOLD1', epoch: 1, state: 'closed', closure_reason: 'failed' });
-    const fixture = await render({
-      selectedChunkLeases: [older, LEASE()],
-      selectedStatus: MACHINE_CHUNK.status,
-      selectedAttemptLeaseId: older.lease_id,
-    });
-    const el = fixture.nativeElement as HTMLElement;
-
-    const tabs = el.querySelectorAll('[data-testid="attempt-tab"]');
-    // The older attempt (index 0) is the one selectedAttemptLeaseId names.
-    expect(tabs[0].getAttribute('aria-pressed')).toBe('true');
-    expect(tabs[1].getAttribute('aria-pressed')).toBe('false');
-  });
-
-  it('re-emits selectAttempt when an attempt tab is picked in the detail dock', async () => {
-    const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNOLD1', epoch: 1, state: 'closed', closure_reason: 'failed' });
-    const fixture = await render({
-      selectedChunkLeases: [older, LEASE()],
-      selectedStatus: MACHINE_CHUNK.status,
-      selectedAttemptLeaseId: LEASE().lease_id,
-    });
-    let picked: string | undefined;
-    fixture.componentInstance.selectAttempt.subscribe((id) => (picked = id));
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelectorAll<HTMLElement>('[data-testid="attempt-tab"]')[0].click();
-    expect(picked).toBe(older.lease_id);
   });
 
   it('buries the appearance switcher behind the header menu, closed by default', async () => {
