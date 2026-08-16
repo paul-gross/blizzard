@@ -18,6 +18,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
+from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptErrorFactory as HarnessTranscriptErrorFactory
@@ -55,11 +56,14 @@ class LoopWiring:
     config: RunnerConfig
     workspace_prompt: str
     runner_prompt: str
+    #: The SSE broker (D2, blizzard#317) shared with the served app when one composer
+    #: builds both; ``None`` for a loop-only caller (``blizzard runner tick`` and siblings).
+    events: EventBroker | None = None
 
     @classmethod
-    def of(cls, config: RunnerConfig) -> LoopWiring:
+    def of(cls, config: RunnerConfig, *, broker: EventBroker | None = None) -> LoopWiring:
         """Read the prompt files now, on the calling thread."""
-        return cls(config, config.resolved_workspace_prompt(), config.resolved_runner_prompt())
+        return cls(config, config.resolved_workspace_prompt(), config.resolved_runner_prompt(), broker)
 
     def context(self, hub: IHubClient) -> LoopContext:
         """Wire a :class:`LoopContext`; the caller owns the ``httpx.Client`` behind ``hub``."""
@@ -135,12 +139,16 @@ class LoopWiring:
                 worker_files=_worker_files,
                 workspace_root=config.workspace_root,
                 transcripts=harness_transcript_source,
+                events=self.events,
             ),
             sessions=SessionResolver(store=store, harness=harness, transcripts=harness_transcript_source),
-            env_release=EnvironmentRelease(store=store, clock=_clock, provider=provider, worker_files=_worker_files),
+            env_release=EnvironmentRelease(
+                store=store, clock=_clock, provider=provider, worker_files=_worker_files, events=self.events
+            ),
             # The same source injected into `harness` above, declared here too so the loop's
             # direct readers don't reach through `ctx.harness` for it.
             transcripts=harness_transcript_source,
+            events=self.events,
         )
 
     def tick_once(self) -> None:
@@ -196,10 +204,10 @@ class PeriodicDriver:
     Owns its own ``httpx.Client`` for the driver's lifetime. A tick that raises is logged
     and swallowed so one bad pass never kills the daemon."""
 
-    def __init__(self, config: RunnerConfig, *, interval_seconds: float) -> None:
+    def __init__(self, config: RunnerConfig, *, interval_seconds: float, broker: EventBroker | None = None) -> None:
         # Wired eagerly on the constructing (``host``) thread so a missing prompt file
         # fails startup rather than the loop thread (`tests/test_runner_loop_build.py`).
-        self._wiring = LoopWiring.of(config)
+        self._wiring = LoopWiring.of(config, broker=broker)
         self._interval = interval_seconds
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="blizzard-runner-loop", daemon=True)

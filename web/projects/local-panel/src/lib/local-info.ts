@@ -238,7 +238,9 @@ export class LocalInfo {
   });
 
   /** Ticks once a second (issue #178) so `lastFlushLabel`/`lastTickLabel` advance
-   * between polls instead of sitting frozen at whatever age the last read carried. */
+   * between polls instead of sitting frozen at whatever age the last read carried —
+   * both elapsed-time-derived off `status.query.ts`'s backstop; see
+   * `RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS` (`polling.ts`) for that anchor's own bound. */
   private readonly now = injectNowSignal(1000);
 
   /** `-34s` since the last successful PULL, or `never` before first contact. */

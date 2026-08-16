@@ -27,9 +27,8 @@ from blizzard.wire.runner_status import DashboardView
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
-#: Bounded well below the panel's 5s poll floor (``status.query.ts``) — a slow hub must
-#: not stall the six local sections behind it, so this route's own outbound call fails
-#: fast rather than riding the ``HubProxy`` module default (15s).
+#: A slow hub must not stall the six local sections behind it, so this route's own
+#: outbound call fails fast rather than riding the ``HubProxy`` module default (15s).
 _DASHBOARD_HUB_TIMEOUT = 3.0
 
 

@@ -7,13 +7,11 @@ daemon. This module is CLI top-level glue, so ``echo`` for user output is fine h
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from types import FrameType
 from typing import Any
 
 import click
@@ -22,6 +20,7 @@ import uvicorn
 import yaml
 
 from blizzard.cli.host_directory import HostDirectory
+from blizzard.foundation.events.server import EarlyShutdownServer as _EarlyShutdownServer
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub import cli_login, session_store
@@ -163,23 +162,8 @@ def migrate_cmd(directory: str, down: str | None, allow_external_db: bool) -> No
 
 
 # Bounds uvicorn's own connection-drain wait — defense-in-depth, not the fix for issue #47
-# (see ``_EarlyShutdownServer`` below).
+# (see ``_EarlyShutdownServer``, the shared foundation wrapper, imported above).
 _GRACEFUL_SHUTDOWN_SECONDS = 5
-
-
-class _EarlyShutdownServer(uvicorn.Server):
-    """Sets ``shutdown_signal`` the instant SIGTERM/SIGINT is caught (issue #47).
-
-    ``handle_exit`` runs synchronously before uvicorn's graceful drain, which an SSE
-    response never finishes (pinned by ``tests/test_pin_hub_api.py``)."""
-
-    def __init__(self, config: uvicorn.Config, *, shutdown_signal: asyncio.Event) -> None:
-        super().__init__(config)
-        self._shutdown_signal = shutdown_signal
-
-    def handle_exit(self, sig: int, frame: FrameType | None) -> None:
-        self._shutdown_signal.set()
-        super().handle_exit(sig, frame)
 
 
 @hub.command()

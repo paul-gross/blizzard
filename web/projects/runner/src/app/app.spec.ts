@@ -2,9 +2,24 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource } from 'fleet';
 
 import { App } from './app';
 import { routes } from './app.routes';
+
+/** A do-nothing EventSource so `RunnerLiveUpdates` (blizzard#317 Phase 4) can open
+ * without a real stream — mirrors the hub app-root's own `FakeEventSource`. */
+class FakeEventSource {
+  onopen: (() => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: (() => void) | null = null;
+  addEventListener(): void {
+    /* no-op: the test never drives the stream */
+  }
+  close(): void {
+    /* no-op */
+  }
+}
 
 describe('runner App', () => {
   const previousFetch = globalThis.fetch;
@@ -18,6 +33,7 @@ describe('runner App', () => {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })) as typeof fetch;
+    const factory: EventSourceFactory = () => new FakeEventSource() as unknown as FleetEventSource;
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [
@@ -26,6 +42,9 @@ describe('runner App', () => {
         // `LocalPanel` now binds its selection to the URL's query params (issue #99),
         // so it injects the router — the shell test wires the real route table.
         provideRouter(routes),
+        // `App` now starts `RunnerLiveUpdates` unconditionally (blizzard#317 Phase 4) —
+        // a fake transport so the stream opens without ever reaching real `fetch`.
+        { provide: EVENT_SOURCE_FACTORY, useValue: factory },
       ],
     }).compileComponents();
   });

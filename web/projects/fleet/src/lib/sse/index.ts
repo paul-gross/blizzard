@@ -20,3 +20,22 @@ export {
   type LoggedEvent,
   type RunnerChangeKind,
 } from './fleet-live';
+export { LiveInvalidationSpine, type LiveInvalidationSpineOptions } from './live-invalidation-spine';
+export {
+  RUNNER_EVENT_STREAM_URL,
+  RUNNER_EVENT_TYPES,
+  type AskChangeCause,
+  type AskChanged,
+  type EnvironmentChangeCause,
+  type EnvironmentChanged,
+  type EscalationChangeCause,
+  type EscalationChanged,
+  type FactChanged,
+  type LeaseChangeCause,
+  type LeaseChanged,
+  type RunnerEventPayload,
+  type RunnerEventType,
+  type RunnerKeyedEvent,
+  type TakeoverChangeCause,
+  type TakeoverChanged,
+} from './runner-events';

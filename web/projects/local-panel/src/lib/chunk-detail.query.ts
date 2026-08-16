@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 import { runnerApi } from 'fleet';
 
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './polling';
 import { runnerChunkDetailKey } from './query-keys';
 
 /**
@@ -10,8 +11,13 @@ import { runnerChunkDetailKey } from './query-keys';
  * (issue #185): the full chunk id, work-item links, live status, and the
  * `pause` fact — the only way the panel learns a chunk is paused
  * (`ChunkHeaderView`'s own doc comment). Enabled only while a chunk is
- * selected; polls at the same 5s floor as {@link injectRunnerLeasesQuery} so
- * Pause/Resume reflects the server's answer without a manual refresh.
+ * selected. The `pause` fact is itself hub-sourced, so no runner event proves
+ * it directly — but every runner event that names this chunk stales this key
+ * too (`runner-live-updates.ts`'s registry, blizzard#317 Phase 4), so the
+ * interval below is the backstop that closes the rest (D7), not the primary
+ * signal — kept at the same floor as {@link injectRunnerLeasesQuery} so
+ * Pause/Resume still self-heals within one operator-visible cadence even with
+ * no covering event at all.
  */
 export function injectChunkDetailQuery(chunkId: () => string | null) {
   return injectQuery(() => {
@@ -27,7 +33,8 @@ export function injectChunkDetailQuery(chunkId: () => string | null) {
         if (error) throw error;
         return data!;
       },
-      refetchInterval: 5000,
+      // See RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS.
+      refetchInterval: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
     };
   });
 }

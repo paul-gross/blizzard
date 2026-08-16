@@ -16,6 +16,7 @@ from blizzard.runner.loop.spawn import Environments, Spawner
 from blizzard.runner.loop.transcript_pump import PUMP_LEASE_MAX_SECONDS, TranscriptPump
 from blizzard.runner.store.repository import LeaseRecord
 from blizzard.wire.facts import EVENT_RECORDED
+from blizzard.wire.sse_runner import LeaseChangeCause
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -60,7 +61,7 @@ class Attempt:
     ctx: LoopContext
     lease: LeaseRecord
 
-    def fail(self, *, reason: str, via: str) -> None:
+    def fail(self, *, reason: LeaseChangeCause, via: str) -> None:
         """Close a failed attempt, then requeue at the node or escalate per the budget.
 
         An escalation is a one-way door this same tick's flush cannot retract, so the
@@ -199,6 +200,16 @@ class Attempt:
         _CP_PAUSE_PARK_AFTER_KILL.reached()  # worker dead; the park is not yet durable
         self.ctx.store.record_pause_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, parked_at=now)
         self.ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+        if self.ctx.events is not None:
+            # Same "dormant" cause `park_on_ask` publishes (dormant.py) — this write flips the
+            # same LeaseActivity.state to "parked", just via the operator-pause path.
+            self.ctx.events.publish_lease_changed(
+                lease.lease_id,
+                lease.chunk_id,
+                cause="dormant",
+                node_name=lease.node_name,
+                key=f"leases:{lease.lease_id}",
+            )
         _log.info(
             "parked chunk on an operator pause — claim retained",
             chunk_id=lease.chunk_id,
@@ -220,13 +231,13 @@ class Attempt:
             return False  # hub unreachable — last-known directive holds; keep working
         return detail.route is None or detail.route.runner_id != self.ctx.config.runner_id
 
-    def close(self, reason: str, at: datetime, event: dict[str, object] | None = None) -> None:
+    def close(self, reason: LeaseChangeCause, at: datetime, event: dict[str, object] | None = None) -> None:
         """Close this lease. An ``event`` lands in the outbound buffer in the same transaction
         as the closure it describes (issue #125), so the two are never seen apart. Every
         closure path funnels through here — the one place to pump this lease's own open
         transcript segment(s) before ``record_closure`` finalizes them (issue #246)."""
         self._pump_lease_before_close()
-        self.ctx.store.record_closure(
+        event_seq = self.ctx.store.record_closure(
             lease_id=self.lease.lease_id,
             chunk_id=self.lease.chunk_id,
             node_id=self.lease.node_id,
@@ -235,6 +246,33 @@ class Attempt:
             event_kind=EVENT_RECORDED if event else None,
             event_payload=json.dumps(event) if event else None,
         )
+        if self.ctx.events is not None:
+            lease_id = self.lease.lease_id
+            # `reason` IS the LeaseChangeCause vocabulary (D4) — enforced by `close`'s and
+            # `fail`'s own parameter type now, not by a comment's claim about callers.
+            self.ctx.events.publish_lease_changed(
+                lease_id,
+                self.lease.chunk_id,
+                cause=reason,
+                node_name=self.lease.node_name,
+                key=f"leases:{lease_id}",
+            )
+            if reason == ESCALATED:
+                # `open_escalations()`'s derivation (D4) — a closed-`escalated` lease not yet
+                # superseded — begins reading open at exactly this instant.
+                self.ctx.events.publish_escalation_changed(
+                    self.lease.chunk_id, cause="opened", lease_id=lease_id, key=f"escalations:{self.lease.chunk_id}"
+                )
+            if event_seq is not None:
+                # The optional operational event `record_closure` buffered alongside the
+                # closure — its own fact-log row, distinct from the lease-changed frame above.
+                self.ctx.events.publish_fact_changed(
+                    seq=event_seq,
+                    kind=EVENT_RECORDED,
+                    chunk_id=self.lease.chunk_id,
+                    lease_id=lease_id,
+                    key=f"outbound_buffer:{event_seq}",
+                )
 
     def _pump_lease_before_close(self) -> None:
         """D3's promise applies here too, weaker: exceptions never fail the closure,

@@ -21,6 +21,7 @@ import httpx
 import uvicorn
 
 from blizzard.cli.host_directory import HostDirectory
+from blizzard.foundation.events.server import EarlyShutdownServer
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.artifacts import ArtifactKind
@@ -28,6 +29,7 @@ from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli_daemon import LOCAL_CLIENT_TIMEOUT, RunnerDaemon
 from blizzard.runner.cli_worker import WorkerCall
 from blizzard.runner.config import ConfigError, RunnerConfig
+from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
 from blizzard.runner.loop.build import (
@@ -55,6 +57,10 @@ _SELFTEST_POLL_INTERVAL = 0.2
 # A CLI-side backstop above the server's own authoritative run budget, so the CLI never spins forever
 # against a runner that cannot reach that code.
 _SELFTEST_POLL_TIMEOUT = 600.0
+
+# Bounds uvicorn's own connection-drain wait — defense-in-depth, not the actual fix
+# for an SSE response held open (`EarlyShutdownServer` above, D1/D3).
+_GRACEFUL_SHUTDOWN_SECONDS = 5
 
 
 def _set_local_paused(*, paused: bool, by: str, directory: str, runner_url: str | None) -> None:
@@ -140,12 +146,15 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         ensure_current_revision(config)
     except RevisionMismatchError as exc:
         raise click.ClickException(str(exc)) from exc
-    app = build_hosted_app(config)
+    # One broker for the process (D2): `host` is the one composer building both the
+    # served app and the ticked loop, so every writer and the stream route share it.
+    broker = EventBroker()
+    app = build_hosted_app(config, events=broker)
     interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
     # `PeriodicDriver` resolves its prompt files on this thread, not in the loop thread: a
     # configured-but-missing prompt raises here, before any socket binds.
     try:
-        driver = PeriodicDriver(config, interval_seconds=interval)
+        driver = PeriodicDriver(config, interval_seconds=interval, broker=broker)
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -159,17 +168,20 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         f"serving blizzard-runner on {config.host}:{config.port} and {config.socket_path} (loop tick {interval}s)"
     )
 
-    # SIGTERM must drain the server (set `should_exit`) rather than hard-exit, or `run()` never returns
-    # and the `finally` resume-marking below is never reached (tests/crash/test_kill9_sweep.py).
-    server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port))
+    # The shared early-shutdown wrapper (D1/D3): sets `app.state.shutdown` ahead of
+    # uvicorn's own drain, so `server.run()` returns and the `finally` below still runs.
+    server = EarlyShutdownServer(
+        uvicorn.Config(app, host=config.host, port=config.port, timeout_graceful_shutdown=_GRACEFUL_SHUTDOWN_SECONDS),
+        shutdown_signal=app.state.shutdown,
+    )
 
-    def _drain(_signum: int, _frame: types.FrameType | None) -> None:
-        server.should_exit = True
+    # Installed before `server.run()`'s own `capture_signals()` window opens, so a signal in
+    # that gap still primes shutdown (D3) rather than being discarded; re-invoking it later is idempotent.
+    def _handle_signal(signum: int, frame: types.FrameType | None) -> None:
+        server.handle_exit(signum, frame)
 
-    signal.signal(signal.SIGTERM, _drain)
-    signal.signal(signal.SIGINT, _drain)
-    if hasattr(server, "install_signal_handlers"):
-        server.install_signal_handlers = lambda: None  # type: ignore[method-assign]
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
 
     # Ungraceful-restart recovery (#13): a `kill -9` never ran the graceful shutdown marker below, so
     # sessions killed mid-work are marked here for the same startup RESUME the first tick runs.

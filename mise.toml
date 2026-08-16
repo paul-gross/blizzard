@@ -36,7 +36,7 @@ description = "Run the service tier — a running daemon's HTTP API exercised fr
 run = "BLIZZARD_SERVICE=1 uv run pytest tests/service/"
 
 [tasks.sse-contract]
-description = "blizzard:sse-contract — gate the SSE frame shape contract (issue #235): the Python producer+parse suite against contracts/sse/'s golden corpus, then the board's contract spec driving the same goldens through the real SseService/FetchEventSource transport"
+description = "blizzard:sse-contract — gate the SSE frame shape contract (issue #235, broadened to the runner in blizzard#317): the Python producer+parse suite against contracts/sse/'s golden corpus (hub top-level + runner/ scope), then fleet's contract spec driving the same goldens through the real SseService/FetchEventSource transport"
 run = "uv run pytest tests/test_sse_contract.py && (cd web && npx ng test fleet --include='**/sse-contract.spec.ts')"
 
 [tasks.prose-check]

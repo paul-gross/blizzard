@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.runner.environments.provider import AcquiredEnvironment, IWorkspaceProvider
+from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.store.repository import IWriteRunnerStore
 
@@ -19,6 +20,9 @@ class EnvironmentRelease:
     clock: IClock
     provider: IWorkspaceProvider
     worker_files: WorkerStdoutFiles
+    #: The SSE publish seam (D2, blizzard#317), typed against the Protocol
+    #: (``bzh:dependency-inversion``); ``None`` on a loop-only caller, a no-op there.
+    events: IRunnerEventPublisher | None = None
 
     def release_chunk(self, chunk_id: str) -> None:
         """Release every held environment at the chunk's tenure end, and sweep the
@@ -28,6 +32,7 @@ class EnvironmentRelease:
         for binding in self.store.bindings_for_chunk(chunk_id):
             self.provider.release(binding.environment_id)
             self.store.record_release(chunk_id=chunk_id, environment_id=binding.environment_id, released_at=now)
+            self._publish_released(chunk_id, binding.environment_id)
         for lease_id in self.store.lease_ids_for_chunk(chunk_id):
             self.worker_files.cleanup(lease_id)
 
@@ -40,4 +45,11 @@ class EnvironmentRelease:
         now = self.clock.now()
         for a in acquired:
             self.store.record_release(chunk_id=chunk_id, environment_id=a.environment_id, released_at=now)
+            self._publish_released(chunk_id, a.environment_id)
             self.provider.release(a.environment_id)
+
+    def _publish_released(self, chunk_id: str, environment_id: str) -> None:
+        if self.events is not None:
+            self.events.publish_environment_changed(
+                chunk_id, environment_id, cause="released", key=f"environments:{environment_id}"
+            )

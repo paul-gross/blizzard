@@ -891,6 +891,14 @@ Same app, same routes — two doors, not two APIs. A browser cannot open a unix 
 which is why the TCP listener exists; the socket exists because the operator's controls
 should not depend on a port, and filesystem permissions are their access control.
 
+The TCP door also carries `GET /api/events/stream` (issue #317) — a `text/event-stream`
+route in the same human-facing lane as the web app, deliberately absent from the OpenAPI
+spec since no generated client calls it. It publishes a lease, ask, escalation, takeover,
+environment, or fact change the instant it happens, replaying from a `Last-Event-ID` on
+reconnect exactly as the hub's own stream does; see "Operational visibility — the event
+log" below for the hub side of the same mechanism. The runner's own web panel is its one
+subscriber (see below).
+
 **Run the local verbs as the service account.** The socket is mode 0600 and the unit runs
 as `blizzard`, so the filesystem access control above is doing its job: another account —
 including root's shell habits — is not the owner, and the verb fails with `EACCES`. Use
@@ -931,6 +939,14 @@ not a drain), and every lease, route, and retry budget the brake defers is picke
 exactly where it left off once the brake clears — see `blizzard-runner pause --help` for
 the full contract. Each brake is cleared only where it was set — `runner start` locally,
 `blizzard hub runner resume` at the hub.
+
+The panel's leases, environments, asks, escalations, takeovers, and facts render live: new
+events fan out over the runner's own SSE spine (`/api/events/stream`, issue #317), so an
+open panel updates without polling — the parallel of what the board's Events tab does off
+the hub's stream, above. The panel's own dashboard/leases reads keep a one-minute poll as
+a backstop against a dropped frame rather than as the primary signal, and the session read
+carries no poll of its own: a stream `401` routes into the same recovery seam a `401` from
+any other read does.
 
 The runner's own web panel (issue #133) carries the same local brake as a second local
 door: a Pause/Resume control in its top bar issues the identical `PATCH /api/runner` the

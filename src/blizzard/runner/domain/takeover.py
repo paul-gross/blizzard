@@ -15,6 +15,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import TAKEOVER_PREFIX, Id
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.environments.provider import AcquiredEnvironment
+from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerPreamble
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.store.repository import IWriteRunnerStore, LeaseRecord
@@ -100,12 +101,16 @@ class TakeoverService:
         process: IProcessProbe,
         *,
         local_api_url: str,
+        events: IRunnerEventPublisher | None = None,
     ) -> None:
         self._store = store
         self._clock = clock
         self._harness = harness
         self._process = process
         self._local_api_url = local_api_url
+        # The SSE publish seam (D2), typed against the Protocol (``bzh:dependency-inversion``);
+        # ``None`` on a broker-less app, a no-op there.
+        self._events = events
 
     def open(self, chunk_id: str, *, force: bool) -> OpenedTakeover:
         if self._store.open_takeover_for_chunk(chunk_id) is not None:
@@ -142,17 +147,23 @@ class TakeoverService:
             fence_epoch=fence_epoch,
             opened_at=now,
         )
+        if self._events is not None:
+            self._events.publish_takeover_changed(chunk_id, takeover_id, cause="opened", key=f"takeovers:{takeover_id}")
 
         if live and active is not None:
             # The fence bump: reported like a fresh lease mint, so the killed worker's
             # buffered completion lands on a stale epoch.
-            self._store.enqueue_outbound(
+            seq = self._store.enqueue_outbound(
                 kind=LEASE_MINTED,
                 chunk_id=chunk_id,
                 lease_id=None,
                 payload=json.dumps({"chunk_id": chunk_id, "epoch": fence_epoch}),
                 created_at=now,
             )
+            if self._events is not None:
+                self._events.publish_fact_changed(
+                    seq=seq, kind=LEASE_MINTED, chunk_id=chunk_id, lease_id=None, key=f"outbound_buffer:{seq}"
+                )
             if active.pid is not None:
                 self._process.kill(active.pid)  # the reap machinery's own best-effort kill
 
@@ -202,3 +213,5 @@ class TakeoverService:
         if record is None:
             return
         self._store.record_takeover_end(takeover_id=takeover_id, ended_at=self._clock.now())
+        if self._events is not None:
+            self._events.publish_takeover_changed(chunk_id, takeover_id, cause="closed", key=f"takeovers:{takeover_id}")

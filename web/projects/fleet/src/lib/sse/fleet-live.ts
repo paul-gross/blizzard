@@ -1,4 +1,4 @@
-import { DestroyRef, EnvironmentInjector, Injectable, type Signal, effect, inject, signal, untracked } from '@angular/core';
+import { DestroyRef, EnvironmentInjector, Injectable, type Signal, inject, signal } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
 import {
@@ -10,13 +10,14 @@ import {
   hubQueueKey,
   hubRunnersKey,
 } from '../query-keys';
-import { type SseHandle, type SseStatus, SseService } from './sse.service';
+import { LiveInvalidationSpine } from './live-invalidation-spine';
+import { type SseStatus, SseService } from './sse.service';
 
 /** The hub's SSE stream endpoint (deliberately not in OpenAPI — native EventSource). */
 export const HUB_EVENT_STREAM_URL = '/api/events/stream';
 
 /**
- * How long {@link FleetLiveUpdates.dispatch} accumulates invalidation keys before
+ * How long {@link LiveInvalidationSpine.dispatch} accumulates invalidation keys before
  * flushing them as one pass (issue #310). A burst of frames — a batch promote, a
  * runner claiming several chunks — would otherwise fire one `invalidateQueries` call
  * per key per frame; this window lets the overlapping key sets from a burst collapse
@@ -126,7 +127,7 @@ export type RunnerChangeKind =
  * majority of all frames and carry no news an operator can act on — left in, they would
  * evict every other event out of the {@link LOG_LIMIT} ring within a few cycles, so this
  * is what keeps the feed legible rather than merely tidier. Dropping is scoped to the
- * feed: {@link FleetLiveUpdates.dispatch} still invalidates on them, so the fleet
+ * feed: {@link LiveInvalidationSpine.dispatch} still invalidates on them, so the fleet
  * registry's liveness column keeps refreshing on every heartbeat exactly as before.
  *
  * `external-usage` (issue #218) is muted for a different reason: it is not an
@@ -179,7 +180,7 @@ function chunkDecisionKeys(data: HubEventPayload): readonly (readonly unknown[])
 /**
  * The event → query-key invalidation registry (issue #82) — the single place a live
  * event names what it stales, so wiring a new live feature into the SSE spine is
- * adding a row here, not a `case` in {@link FleetLiveUpdates.dispatch}. Exhaustive
+ * adding a row here, not a `case` in {@link LiveInvalidationSpine.dispatch}. Exhaustive
  * over {@link HubEventType} (a compile-time guard, same intent as `STATUS_LANE`): a
  * new event type added to {@link HUB_EVENT_TYPES} is then a compile error here until
  * it is given a row, instead of silently dispatching to nothing.
@@ -225,27 +226,20 @@ export interface LoggedEvent {
 const LOG_LIMIT = 256;
 
 /**
- * The live-update spine of the board: one SSE subscription to the hub's
- * event stream that **invalidates or patches TanStack queries** so every live view
- * keeps streaming while the cache stays truthful. It is the sanctioned bridge from
- * the {@link SseService} transport to the query cache — the one place SSE meets reads.
+ * The live-update spine of the board: one SSE subscription to the hub's event stream
+ * that **invalidates or patches TanStack queries** so every live view keeps streaming
+ * while the cache stays truthful. It is the sanctioned bridge from the
+ * {@link SseService} transport to the query cache — the one place SSE meets reads.
  *
- * `dispatch` is a lookup into {@link EVENT_INVALIDATION_REGISTRY}, not a per-event
- * branch — see that registry's doc for what each event type stales. The keys it looks
- * up are not invalidated immediately: they accumulate into a pending set that flushes
- * once per {@link INVALIDATION_COALESCE_WINDOW_MS} (issue #310), so a burst of frames
- * whose key sets overlap collapses to one invalidation pass per distinct key.
- *
- * Gap recovery is reconnect-then-re-GET: on every reconnect the service invalidates
- * the whole `hub` tree, so any events missed while the socket was down are closed by
- * a fresh read — and the transport also resumes with `last_event_id` for the replay.
- *
- * It also tees the same event feed into {@link log}, a bounded ring the Event log panel
- * renders (issue #25): because the same single subscription records each frame, the
+ * The coalescing dispatch and reconnect-then-re-GET gap recovery are
+ * {@link LiveInvalidationSpine}'s (`review:F5`), configured here with
+ * {@link EVENT_INVALIDATION_REGISTRY} — see that registry's doc for what each event
+ * type stales. What stays here is what only the hub's own service does: tee the same
+ * event feed into {@link log}, a bounded ring the Event log panel renders (issue #25).
+ * Because the spine's `onFrame` hook records every frame before dispatch runs, the
  * broker's connect-time replay (its buffered history) lands in the log as backfill for
- * free, and the query-invalidation dispatch stays exactly as it was. The tee is where
- * the feed's noise floor is set — {@link isLoggable} mutes frames an operator cannot act
- * on, and only there, never on the dispatch side.
+ * free. The tee is where the feed's noise floor is set — {@link isLoggable} mutes
+ * frames an operator cannot act on, and only there, never on the dispatch side.
  */
 @Injectable({ providedIn: 'root' })
 export class FleetLiveUpdates {
@@ -253,25 +247,30 @@ export class FleetLiveUpdates {
   private readonly queryClient = inject(QueryClient);
   private readonly injector = inject(EnvironmentInjector);
   private readonly destroyRef = inject(DestroyRef);
-  private handle: SseHandle<HubEventPayload> | null = null;
   private seq = 0;
   private readonly _log = signal<readonly LoggedEvent[]>([]);
-  /** Keys queued by {@link dispatch} since the last flush, keyed by their serialized
-   * form so a repeated key collapses to one entry regardless of how many frames named
-   * it. */
-  private readonly pendingInvalidations = new Map<string, readonly unknown[]>();
-  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly spine = new LiveInvalidationSpine<HubEventPayload, HubEventType>({
+    sse: this.sse,
+    queryClient: this.queryClient,
+    injector: this.injector,
+    destroyRef: this.destroyRef,
+    streamUrl: HUB_EVENT_STREAM_URL,
+    eventTypes: HUB_EVENT_TYPES,
+    registry: EVENT_INVALIDATION_REGISTRY,
+    coalesceWindowMs: INVALIDATION_COALESCE_WINDOW_MS,
+    onFrame: (type, data) => this.record(type, data),
+  });
 
   /** Connection lifecycle for the header status, or `idle` before {@link start}. */
   get status(): Signal<SseStatus> {
-    return this.handle?.status ?? IDLE_STATUS;
+    return this.spine.status;
   }
 
   /** `true` once the stream closed on a `401` (issue #93) — a session that expired
    * mid-stream. The app root watches this and routes to `/login`; `false` before
    * {@link start} and for the whole life of a stream that never sees one. */
   get authFailed(): Signal<boolean> {
-    return this.handle?.authFailed ?? FALSE_STATUS;
+    return this.spine.authFailed;
   }
 
   /**
@@ -288,47 +287,7 @@ export class FleetLiveUpdates {
    * is a no-op. Auto-closes on the caller's {@link DestroyRef} (the app teardown).
    */
   start(): void {
-    if (this.handle) return;
-    const handle = this.sse.connect<HubEventPayload>(HUB_EVENT_STREAM_URL, {
-      events: [...HUB_EVENT_TYPES],
-    });
-    this.handle = handle;
-
-    const sub = handle.events.subscribe(({ type, data }) => {
-      this.record(type, data);
-      this.dispatch(type, data);
-    });
-
-    // Reconnect-then-re-GET: a fresh reconnect re-reads the whole tree to close any gap.
-    // `untracked` around the `effect()` call itself (not its body): `start()` may be
-    // invoked from within another reactive context (the app root's `afterRenderEffect`
-    // wiring, which tracks signals same as `effect`), and `effect()` asserts it is not
-    // called from one (NG0602) — `untracked` clears the active consumer for the
-    // duration of this call, so `start()` stays safe regardless of its caller's context.
-    let lastReopens = handle.reopens();
-    const ref = untracked(() =>
-      effect(
-        () => {
-          const reopens = handle.reopens();
-          if (reopens > lastReopens) {
-            lastReopens = reopens;
-            void this.queryClient.invalidateQueries();
-          }
-        },
-        { injector: this.injector },
-      ),
-    );
-
-    this.destroyRef.onDestroy(() => {
-      sub.unsubscribe();
-      ref.destroy();
-      handle.close();
-      if (this.flushTimer !== null) {
-        clearTimeout(this.flushTimer);
-        this.flushTimer = null;
-      }
-      this.handle = null;
-    });
+    this.spine.start();
   }
 
   /** Append one frame to the bounded Event log ring, dropping the oldest past the cap.
@@ -342,40 +301,4 @@ export class FleetLiveUpdates {
       return next.length > LOG_LIMIT ? next.slice(next.length - LOG_LIMIT) : next;
     });
   }
-
-  /** Queue this frame's keys for the next flush rather than invalidating them
-   * immediately — see {@link INVALIDATION_COALESCE_WINDOW_MS}. Reconnect-driven
-   * whole-tree invalidation (the `reopens()` watcher in {@link start}) bypasses this
-   * entirely and stays synchronous. */
-  private dispatch(type: string, data: HubEventPayload): void {
-    const keys = EVENT_INVALIDATION_REGISTRY[type as HubEventType]?.(data) ?? [];
-    for (const queryKey of keys) {
-      this.pendingInvalidations.set(JSON.stringify(queryKey), queryKey);
-    }
-    if (keys.length > 0 && this.flushTimer === null) {
-      this.flushTimer = setTimeout(() => this.flushInvalidations(), INVALIDATION_COALESCE_WINDOW_MS);
-    }
-  }
-
-  /** Invalidate every key accumulated since the last flush, once each. */
-  private flushInvalidations(): void {
-    this.flushTimer = null;
-    const keys = [...this.pendingInvalidations.values()];
-    this.pendingInvalidations.clear();
-    for (const queryKey of keys) {
-      void this.queryClient.invalidateQueries({ queryKey });
-    }
-  }
 }
-
-/** A frozen `idle` status used before the stream is opened. */
-const IDLE_STATUS: Signal<SseStatus> = (() => {
-  const s = () => 'idle' as const;
-  return s as Signal<SseStatus>;
-})();
-
-/** A frozen `false` used for {@link FleetLiveUpdates.authFailed} before the stream is opened. */
-const FALSE_STATUS: Signal<boolean> = (() => {
-  const s = () => false;
-  return s as Signal<boolean>;
-})();

@@ -120,6 +120,10 @@ class OutboundFacts:
     def _enqueue(
         self, kind: str, chunk_id: str | None, lease_id: str | None, payload: Mapping[str, object], at: datetime
     ) -> None:
-        self.ctx.store.enqueue_outbound(
+        seq = self.ctx.store.enqueue_outbound(
             kind=kind, chunk_id=chunk_id, lease_id=lease_id, payload=json.dumps(payload), created_at=at
         )
+        if self.ctx.events is not None:
+            self.ctx.events.publish_fact_changed(
+                seq=seq, kind=kind, chunk_id=chunk_id, lease_id=lease_id, key=f"outbound_buffer:{seq}"
+            )

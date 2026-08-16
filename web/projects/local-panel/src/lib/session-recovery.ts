@@ -39,20 +39,21 @@ function loginUrl(): string {
 /**
  * The runner webapp's session-recovery seam (issue #312) — the response interceptor
  * body `provideSessionRecovery` (`session-recovery.provider.ts`) registers on
- * `runnerClient`. Classifies every `401` the client sees and drives the federation
- * bounce for the one case it can fix: a gated surface whose runner session has
- * expired. Every other `401` — an
- * upstream rejection with a resolved username, or an authless surface — passes
- * through untouched, left to degrade in its own region exactly as it does today
- * (`chunk-title.query.ts` et al.).
+ * `runnerClient`, and (blizzard#317 D9) {@link "./runner-live-updates".RunnerLiveUpdates}'s stream
+ * auth-failure channel. Classifies every `401` either caller sees and drives the
+ * federation bounce for the one case it can fix: a gated surface whose runner
+ * session has expired. Every other `401` — an upstream rejection with a resolved
+ * username, or an authless surface — passes through untouched, left to degrade in
+ * its own region exactly as it does today (`chunk-title.query.ts` et al.).
  *
  * Two guards keep a session drop from looping (D4): an in-memory single-flight flag
- * coalesces the burst of `401`s the panel's concurrent polls produce into one
- * classification, and the `sessionStorage` mark above survives the navigation itself
- * — a further no-session `401` arriving while it is still set sets
- * {@link recovering} instead of firing a second bounce. A logout already in flight
- * ({@link runnerLogoutInFlight}) suspends the seam entirely: that flow clears the
- * session deliberately and drives its own navigation once it settles.
+ * coalesces the burst of `401`s the panel's concurrent polls — and now the stream's
+ * own terminal auth failure — produce into one classification, and the
+ * `sessionStorage` mark above survives the navigation itself — a further no-session
+ * `401` arriving while it is still set sets {@link recovering} instead of firing a
+ * second bounce. A logout already in flight ({@link runnerLogoutInFlight}) suspends
+ * the seam entirely: that flow clears the session deliberately and drives its own
+ * navigation once it settles.
  */
 @Injectable({ providedIn: 'root' })
 export class SessionRecovery {
@@ -77,13 +78,30 @@ export class SessionRecovery {
       return response;
     }
 
-    if (response.status !== 401 || runnerLogoutInFlight() || this.inFlight) return response;
+    if (response.status === 401) await this.recoverFromUnauthenticated();
+    return response;
+  }
+
+  /**
+   * Classify a `401` — from the interceptor's `handle` above, or from
+   * {@link "./runner-live-updates".RunnerLiveUpdates}'s stream on `SseService`'s `authFailed` (D9) — by
+   * re-reading `GET /api/auth/session`, and drive the federation bounce for the one
+   * case it can fix: a no-session `401` while the surface is gated. Lifted out of
+   * `handle`'s body (D9) so a caller with no `Response`/`Request` of its own — the
+   * stream's transport never produces either — can still drive the same
+   * classify-and-bounce logic and land in the same {@link recovering} state on a
+   * repeat. Guarded exactly as `handle` always was: a logout in flight suspends the
+   * seam, and the in-memory flag coalesces overlapping callers (a burst of `401`s,
+   * or one racing the stream's own auth failure) into one classification.
+   */
+  async recoverFromUnauthenticated(): Promise<void> {
+    if (runnerLogoutInFlight() || this.inFlight) return;
 
     this.inFlight = true;
     try {
       const { data } = await runnerApi.readSessionApiAuthSessionGet({ throwOnError: false });
       const noSession = data !== undefined && data.auth_enabled && !data.username;
-      if (!noSession) return response;
+      if (!noSession) return;
 
       if (markSet()) {
         this.attemptFailed.set(true);
@@ -94,7 +112,6 @@ export class SessionRecovery {
     } finally {
       this.inFlight = false;
     }
-    return response;
   }
 
   /** The recovery view's retry action — clears the mark first so a `401` racing

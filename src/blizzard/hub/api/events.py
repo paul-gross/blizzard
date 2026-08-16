@@ -1,14 +1,14 @@
 """The hub live-event stream — ``GET /api/events/stream`` (SSE), excluded from the OpenAPI schema.
 
-A subscriber registers with the :class:`~blizzard.hub.events.broker.EventBroker`, replays the buffered
-tail newer than its ``Last-Event-ID``, then streams live until it disconnects. Ids are monotonic, so an
-event caught in both the replay and the live queue is emitted once. A periodic keepalive comment keeps
-intermediaries from idling the connection out."""
+A subscriber registers with :class:`~blizzard.hub.events.broker.EventBroker`, replays the
+buffered tail newer than its ``Last-Event-ID``, then streams live until it disconnects — ids
+are monotonic, so an event caught in both is emitted once. :class:`Cursor`/:class:`Stream` are
+the runner-shared machinery (D1); only the reserved open-of-stream comment names this daemon."""
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Annotated
@@ -17,6 +17,8 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
 from blizzard.auth_core import FLEET_VIEW
+from blizzard.foundation.events.broker import EventBroker
+from blizzard.foundation.events.stream import Cursor, Stream
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -24,87 +26,12 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.work import ActivityFeed, ActivityRow, EventFeed, EventRow
-from blizzard.hub.events.broker import EventBroker
 from blizzard.wire.activity import ActivityResponse, ActivityView
 from blizzard.wire.events import EventsResponse, EventView
 
 router = APIRouter(prefix="/api", tags=["meta"])
 
 _RESERVED_COMMENT = ": blizzard hub event stream\n\n"
-#: Keepalive cadence for an idle connection — shorter than typical proxy idle timeouts.
-_KEEPALIVE_SECONDS = 15.0
-
-
-@dataclass(frozen=True)
-class Cursor:
-    """A subscriber's resume point, read tolerantly: a missing, empty, or malformed
-    ``Last-Event-ID`` header (or ``?last_event_id=``) degrades to ``0`` — the whole tail."""
-
-    last_event_id: int
-
-    @classmethod
-    def of(cls, request: Request) -> Cursor:
-        raw = request.headers.get("last-event-id") or request.query_params.get("last_event_id")
-        try:
-            return cls(int(raw) if raw is not None else 0)
-        except ValueError:
-            return cls(0)
-
-
-@dataclass(frozen=True)
-class Stream:
-    """One subscriber's live connection — its broker, its request, and its resume cursor."""
-
-    broker: EventBroker | None
-    request: Request
-    cursor: Cursor
-    shutdown: asyncio.Event | None = None
-
-    async def frames(self) -> AsyncIterator[bytes]:
-        """Yield the reserved comment, the buffered replay tail, then live events forever. Subscribing
-        *before* reading the replay tail means an event published in the window between the two is caught by
-        one side or the other; dedup by monotonic id makes the seam exact. Each live-wait races ``shutdown``
-        against the queue read, so the generator returns promptly instead of on its next keepalive wake. It
-        unsubscribes on any exit."""
-        broker = self.broker
-        if broker is None:
-            # The store-free export/unit app carries no broker: open cleanly and idle.
-            yield _RESERVED_COMMENT.encode()
-            return
-
-        shutdown = self.shutdown if self.shutdown is not None else asyncio.Event()
-        sub = broker.subscribe()
-        last_sent = self.cursor.last_event_id
-        try:
-            yield _RESERVED_COMMENT.encode()
-            for event in broker.replay_since(self.cursor.last_event_id):
-                yield event.framed().encode()
-                last_sent = event.id
-            while True:
-                if await self.request.is_disconnected():
-                    return
-                get_task = asyncio.ensure_future(sub.queue.get())
-                shutdown_task = asyncio.ensure_future(shutdown.wait())
-                try:
-                    done, _ = await asyncio.wait(
-                        {get_task, shutdown_task}, timeout=_KEEPALIVE_SECONDS, return_when=asyncio.FIRST_COMPLETED
-                    )
-                finally:
-                    for task in (get_task, shutdown_task):
-                        if not task.done():
-                            task.cancel()
-                if shutdown_task in done:
-                    return
-                if get_task not in done:
-                    yield b": keepalive\n\n"
-                    continue
-                event = get_task.result()
-                if event.id <= last_sent:
-                    continue  # already emitted in the replay tail (dedup at the seam)
-                yield event.framed().encode()
-                last_sent = event.id
-        finally:
-            broker.unsubscribe(sub)
 
 
 @router.get("/events/stream", include_in_schema=False)
@@ -118,7 +45,7 @@ async def events_stream(
     del identity
     broker: EventBroker | None = getattr(request.app.state, "events", None)
     shutdown: asyncio.Event | None = getattr(request.app.state, "shutdown", None)
-    stream = Stream(broker, request, Cursor.of(request), shutdown)
+    stream = Stream(broker, request, Cursor.of(request), _RESERVED_COMMENT, shutdown)
     return StreamingResponse(stream.frames(), media_type="text/event-stream")
 
 

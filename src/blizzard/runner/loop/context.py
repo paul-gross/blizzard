@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.runner.environments.provider import IWorkspaceProvider
+from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.loop.checks import ICheckRunner
@@ -105,3 +106,6 @@ class LoopContext:
     #: The harness transcript source (blizzard#245) — a declared field so the loop's own
     #: dependency is visible here; ``None`` when not wired.
     transcripts: IHarnessTranscriptSource | None = None
+    #: The SSE publish seam (D2, blizzard#317), typed against the Protocol
+    #: (``bzh:dependency-inversion``); ``None`` on ``blizzard runner tick``, a no-op there.
+    events: IRunnerEventPublisher | None = None

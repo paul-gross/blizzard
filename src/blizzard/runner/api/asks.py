@@ -57,6 +57,9 @@ def record_ask(lease_id: str, request_body: AskRequest, request: Request) -> Ask
         session_id=lease.session_id,
         asked_at=clock.now(),
     )
+    events = wiring.events()
+    if events is not None:
+        events.publish_ask_changed(lease_id, lease.chunk_id, question_id, cause="asked", key=f"asks:{question_id}")
     return AskResponse(recorded=True, question_id=question_id, lease_id=lease_id)
 
 

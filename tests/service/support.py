@@ -292,24 +292,29 @@ def http_hub_client(port: int) -> Iterator[HttpHubClient]:
 
 
 class SseTap:
-    """A background ``text/event-stream`` reader. Prefer the :func:`sse_tap` context manager."""
+    """A background ``text/event-stream`` reader. Prefer the :func:`sse_tap` context manager.
+    ``last_event_id`` presents a resume cursor as the real ``Last-Event-ID`` header, the way a
+    reconnecting browser does."""
 
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, base_url: str, *, last_event_id: int | None = None) -> None:
         self.base_url = base_url
         self.events: queue.Queue[str] = queue.Queue()
+        self._headers = {} if last_event_id is None else {"Last-Event-ID": str(last_event_id)}
         self._ready = threading.Event()
         self._stop = threading.Event()
+        self._response: httpx.Response | None = None
         self._thread = threading.Thread(target=self._run, daemon=True)
 
     def start(self) -> None:
         self._thread.start()
-        assert self._ready.wait(20), "the hub's SSE stream never delivered its first line"
+        assert self._ready.wait(20), "the daemon's SSE stream never delivered its first line"
 
     def _run(self) -> None:
         with (
             httpx.Client(base_url=self.base_url, timeout=None) as client,
-            client.stream("GET", "/api/events/stream") as resp,
+            client.stream("GET", "/api/events/stream", headers=self._headers) as resp,
         ):
+            self._response = resp
             event_type: str | None = None
             for raw in resp.iter_lines():
                 if not self._ready.is_set():
@@ -339,16 +344,22 @@ class SseTap:
         return seen
 
     def stop(self) -> None:
+        # A flag alone leaves the reader thread parked in iter_lines() until the next
+        # keepalive; closing the response aborts the read so stop() actually returns promptly.
         self._stop.set()
+        if self._response is not None:
+            with contextlib.suppress(Exception):
+                self._response.close()
 
 
 @contextlib.contextmanager
-def sse_tap(hub_port: int, *, settle: float = 2.0) -> Iterator[SseTap]:
-    """A **live** SSE subscriber on the hub's ``/api/events/stream``, connected before the
-    act, proving an event was actually **delivered** rather than merely recorded. Drains
-    and discards the broker's connect-time replay, so :meth:`SseTap.collect` reports only
-    live fan-out."""
-    tap = SseTap(f"http://127.0.0.1:{hub_port}")
+def sse_tap(port: int, *, settle: float = 2.0, last_event_id: int | None = None) -> Iterator[SseTap]:
+    """A **live** SSE subscriber on the daemon under test's ``/api/events/stream``,
+    connected before the act, proving an event was actually **delivered** rather than
+    merely recorded. Drains and discards the broker's connect-time replay, so
+    :meth:`SseTap.collect` reports only live fan-out. ``last_event_id`` resumes from a
+    cursor (:class:`SseTap`)."""
+    tap = SseTap(f"http://127.0.0.1:{port}", last_event_id=last_event_id)
     tap.start()
     try:
         tap.drain(settle=settle)

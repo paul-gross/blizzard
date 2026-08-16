@@ -54,6 +54,16 @@ class DormantSession:
         self.ctx.store.record_park(
             lease_id=lease.lease_id, chunk_id=lease.chunk_id, question_id=ask.question_id, parked_at=now
         )
+        if self.ctx.events is not None:
+            # LeaseActivity.state (D4) flips to "parked" — see LeaseChangeCause's own doc
+            # (wire/sse_runner.py) for why this cause isn't record_closure's "parked".
+            self.ctx.events.publish_lease_changed(
+                lease.lease_id,
+                lease.chunk_id,
+                cause="dormant",
+                node_name=lease.node_name,
+                key=f"leases:{lease.lease_id}",
+            )
         _log.info("chunk parked on question", chunk_id=lease.chunk_id, question_id=ask.question_id)
 
     def restart_or_release(self) -> None:
@@ -108,6 +118,14 @@ class DormantSession:
         who = question.answered_by or "operator"
         pid, now = self._wake(f"# Answer from {who}. Continue.\n{question.answer}", bindings)
         self.ctx.store.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)
+        if self.ctx.events is not None:
+            self.ctx.events.publish_ask_changed(
+                lease.lease_id,
+                lease.chunk_id,
+                park.question_id,
+                cause="answered",
+                key=f"asks:{park.question_id}",
+            )
         OutboundFacts(self.ctx).answer_delivered(lease, park.question_id, at=now)
         _log.info("resumed dormant session with answer", chunk_id=lease.chunk_id, question_id=park.question_id, pid=pid)
 
@@ -212,4 +230,14 @@ class DormantSession:
             session_id=lease.session_id or "",  # unchanged — same session under the same lease
             spawned_at=stamped,
         )
+        if self.ctx.events is not None:
+            # Same 'spawned' cause the fresh-spawn path publishes (spawn.py) — a resumed
+            # session's own flip back to a live pid is exactly as un-announced otherwise.
+            self.ctx.events.publish_lease_changed(
+                lease.lease_id,
+                lease.chunk_id,
+                cause="spawned",
+                node_name=lease.node_name,
+                key=f"leases:{lease.lease_id}",
+            )
         return pid, stamped

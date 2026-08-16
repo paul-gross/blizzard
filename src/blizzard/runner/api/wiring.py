@@ -20,6 +20,7 @@ from blizzard.runner.domain.leases import LocalLeaseService
 from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
+from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.store.repository import IReadRunnerStore, IWriteRunnerStore, LeaseRecord
 from blizzard.runner.transcripts.service import TranscriptService
@@ -98,6 +99,13 @@ class RunnerWiring:
     def selftests(self) -> SelfTestService:
         service: SelfTestService | None = getattr(self.state, "selftests", None)
         return service if service is not None else self._refuse("selftest service")
+
+    def events(self) -> IRunnerEventPublisher | None:
+        """The publish seam (D2/D4, blizzard#317) — see :mod:`~blizzard.runner.events.publisher`
+        for why this is typed against the Protocol, not the concrete broker a composition root
+        wires. ``None`` on a composer with no stream to feed — never refused: a mutating route
+        publishes when one is wired and is a no-op otherwise, the stream route's own shape."""
+        return getattr(self.state, "events", None)
 
     def maybe_config(self) -> RunnerConfig | None:
         return getattr(self.state, "config", None)

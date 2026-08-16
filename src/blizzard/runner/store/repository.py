@@ -737,7 +737,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         closed_at: datetime,
         event_kind: str | None = None,
         event_payload: str | None = None,
-    ) -> None:
+    ) -> int | None:
         """Close a lease — a clean transition or a failure/escalation.
 
         When ``event_kind``/``event_payload`` are given (issue #125), the event is
@@ -876,7 +876,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def record_local_pause(
         self, runner_id: str, *, paused: bool, at: datetime, by: str, report_kind: str, report_payload: str
-    ) -> None:
+    ) -> int:
         """Append a local pause/start fact **and** its hub-bound report, atomically (issue #43).
 
         Appends rather than upserts: this is a locally-minted fact, not a mirror. Taking
@@ -956,7 +956,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         generation: int,
         sample: UsageSample,
         recorded_at: datetime,
-    ) -> None:
+    ) -> int | None:
         """Idempotently record one usage fact **and** buffer its outbound report,
         atomically (issue #58).
 
@@ -974,21 +974,22 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         sampled_at: datetime,
         report_kind: str = "",
         report_payload: str = "",
-    ) -> None:
+    ) -> int | None:
         """Append one context-sample attempt, and buffer its outbound report when one is given,
         atomically. ``context_tokens is None`` records an attempt that measured nothing, which
         still advances the cadence anchor. An empty ``report_kind`` records the sample alone —
-        the ordinary case, since only a first crossing reports."""
+        the ordinary case, since only a first crossing reports — and returns ``None`` then,
+        since no report was buffered."""
         ...
 
     def record_external_usage_attempt(
         self, *, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str
-    ) -> None:
+    ) -> int | None:
         """Append one external-subscription-usage sampling attempt **and**, only when it
         produced a sample, buffer its outbound report — atomically (issue #218).
 
         The attempt row is always appended, whether or not the harness had anything to
-        report; the outbound fact is enqueued only when ``payload`` is not ``None``."""
+        report; the outbound fact exists only when ``payload`` is not ``None``."""
         ...
 
     def record_attachment(

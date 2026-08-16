@@ -19,7 +19,12 @@ export const STALE_AFTER_MS = 60 * 60_000;
  * lease at ~99% and give the operator nothing. The drain is logarithmic —
  * `1 - log(1+age)/log(1+threshold)` — so the seconds-to-minutes band where a
  * lease actually lives is where the bar visibly moves (≈50% at one minute,
- * ≈20% at ten), and the long tail to reap drains out the rest.
+ * ≈20% at ten), and the long tail to reap drains out the rest. `record_heartbeat`
+ * is deliberately Silent (D7, no SSE event announces it), so on a healthy,
+ * actively-beating lease this bar's anchor only advances on
+ * `RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS` (`polling.ts`, 60s) or an unrelated
+ * lease-changed frame — real cadence is far tighter, but the ≈50%-at-one-minute
+ * checkpoint above can render for stretches of a node-step regardless.
  *
  * Renders nothing bar-shaped for a lease with no heartbeat fact yet
  * (`spawning` — `last_heartbeat_at` null) or one whose timestamp reads ahead of
@@ -96,8 +101,9 @@ export class HeartbeatFreshness {
   /** Whether the server already derived this lease `stale` — colors the bar red. */
   readonly stale = input(false);
 
-  /** Ticks once a second (issue #178) so the bar drains between polls, not just
-   * when the 5s leases poll hands this row a fresh object. */
+  /** Ticks once a second (issue #178) so the bar drains between polls, not just when
+   * `leases.query.ts`'s backstop hands this row a fresh `lastHeartbeatAt` — see
+   * `RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS` (`polling.ts`) for that anchor's own bound. */
   private readonly now = injectNowSignal(1000);
 
   protected readonly freshAgeMs = computed(() => ageMs(this.lastHeartbeatAt(), this.now()));

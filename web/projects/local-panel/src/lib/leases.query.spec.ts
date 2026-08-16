@@ -6,6 +6,7 @@ import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fl
 import { vi } from 'vitest';
 
 import { injectRunnerLeasesQuery } from './leases.query';
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './polling';
 import { runnerLeasesKey } from './query-keys';
 
 const LEASES = {
@@ -80,11 +81,13 @@ describe('injectRunnerLeasesQuery', () => {
     expect(fixture.componentInstance.query.data()).toEqual([]);
   });
 
-  it('re-reads GET /api/leases every 5s — the poll is the runner panel\'s only liveness signal', async () => {
-    // Unlike `fleet`'s hub queries, where the poll is a floor under an SSE stream,
-    // the runner has no event stream: drop the interval and the panel silently
-    // becomes a permanently static snapshot. This pins the refresh as behavior
-    // (a second request actually fires), not as a constant equal to 5000.
+  it('re-reads GET /api/leases on the backstop interval — insurance under lease-changed, not the primary signal', async () => {
+    // Unlike the pre-blizzard#317 shape, the runner now has an event stream:
+    // `lease-changed` (`runner-live-updates.ts`) is the primary freshness path, and
+    // this interval is what closes the one gap no event marks — a lease gone quiet
+    // without a further transition, whose `stale` flip depends on elapsed time, not
+    // a frame. This pins the refresh as behavior (a second request actually fires
+    // on RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS), not as a bare constant equality.
     vi.useFakeTimers();
     try {
       stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/api/leases' ? LEASES : {}));
@@ -102,14 +105,14 @@ describe('injectRunnerLeasesQuery', () => {
       expect(stub.forRoute('/api/leases', 'GET')).toHaveLength(1);
 
       // Just shy of the interval: still the one initial read.
-      await vi.advanceTimersByTimeAsync(4_000);
+      await vi.advanceTimersByTimeAsync(RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS - 1_000);
       expect(stub.forRoute('/api/leases', 'GET')).toHaveLength(1);
 
-      // Crossing 5s fires the poll, and it keeps firing.
+      // Crossing the interval fires the poll, and it keeps firing.
       await vi.advanceTimersByTimeAsync(1_000);
       expect(stub.forRoute('/api/leases', 'GET')).toHaveLength(2);
 
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS);
       expect(stub.forRoute('/api/leases', 'GET')).toHaveLength(3);
     } finally {
       vi.useRealTimers();
