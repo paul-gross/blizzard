@@ -18,6 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
+from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.store.repository import (
@@ -30,6 +31,7 @@ from blizzard.runner.store.repository import (
     EnvBindingRecord,
     EscalationRecord,
     GitCommitDeclarationRecord,
+    GraphArtifactRecord,
     IWriteRunnerStore,
     LeaseRecord,
     NewLease,
@@ -54,6 +56,7 @@ from blizzard.runner.store.schema import (
     escalation_closures,
     external_usage_samples,
     git_commit_declarations,
+    graph_artifacts,
     heartbeats,
     hub_control,
     lease_closures,
@@ -682,6 +685,18 @@ class SqlAlchemyRunnerStore:
             for r in rows
         ]
 
+    def graph_artifacts_for_graph(self, graph_id: str) -> list[GraphArtifactRecord]:
+        # Explicit order_by (`bzh:sql-portable`) — authored `artifacts:` position, not insert order.
+        rows = self._all(
+            select(graph_artifacts).where(graph_artifacts.c.graph_id == graph_id).order_by(graph_artifacts.c.ordinal)
+        )
+        return [
+            GraphArtifactRecord(
+                name=str(r.name), ordinal=int(r.ordinal), kind=ArtifactKind(str(r.kind)), content=str(r.content)
+            )
+            for r in rows
+        ]
+
     def session_preamble_fingerprint(self, session_id: str) -> PreambleFingerprint | None:
         # Ordered on the autoincrement pk, not on `recorded_at` or implicit insert order
         # (`bzh:sql-portable`).
@@ -755,6 +770,34 @@ class SqlAlchemyRunnerStore:
         return value
 
     # --- writes -------------------------------------------------------------
+
+    def record_graph_artifacts(
+        self, *, graph_id: str, artifacts: list[GraphArtifactRecord], recorded_at: datetime
+    ) -> None:
+        # A mint declaring nothing writes no row, so the presence check below would never
+        # find one and every later lease off that mint would redo the check and re-log it.
+        if not artifacts:
+            return
+        # Check-then-insert in one transaction (`bzh:sql-portable`) — an immutable mint's
+        # declarations never change, so a second call for the same graph_id is a no-op.
+        with self._begin() as conn:
+            existing = conn.execute(
+                select(graph_artifacts.c.graph_id).where(graph_artifacts.c.graph_id == graph_id)
+            ).first()
+            if existing is not None:
+                return
+            for artifact in artifacts:
+                conn.execute(
+                    graph_artifacts.insert().values(
+                        graph_id=graph_id,
+                        name=artifact.name,
+                        ordinal=artifact.ordinal,
+                        kind=artifact.kind.value,
+                        content=artifact.content,
+                        recorded_at=recorded_at,
+                    )
+                )
+        _log.info("graph artifacts pinned", graph_id=graph_id, count=len(artifacts))
 
     def record_lease(self, lease: NewLease) -> None:
         with self._begin() as conn:

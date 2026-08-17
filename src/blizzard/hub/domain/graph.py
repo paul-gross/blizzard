@@ -430,6 +430,9 @@ class GraphDoc:
     # The graph-level named-session declarations (issue #144), keyed by name — a top-level
     # sibling of ``nodes:``, empty for every graph that declares none.
     sessions: dict[str, SessionDecl] = field(default_factory=dict)
+    # The graph-scoped `artifacts:` map, name -> baked content — a top-level sibling of
+    # `nodes:`/`sessions:`. Every value is already inlined text by the time this parses.
+    artifacts: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def of(cls, raw: dict[str, object]) -> GraphDoc:
@@ -447,6 +450,7 @@ class GraphDoc:
             entry=entry,
             nodes=[NodeDoc.of(node_name, body) for node_name, body in nodes_raw.items()],
             sessions=cls._sessions(raw.get("sessions")),
+            artifacts=cls._artifacts(raw.get("artifacts")),
         )
 
     @staticmethod
@@ -455,6 +459,21 @@ class GraphDoc:
             return {}
         body = Parser.of(raw, "`sessions`").body
         return {str(name): SessionDecl.of(name, decl) for name, decl in body.items()}
+
+    @staticmethod
+    def _artifacts(raw: object) -> dict[str, str]:
+        if raw is None:
+            return {}
+        body = Parser.of(raw, "`artifacts`").body
+        artifacts: dict[str, str] = {}
+        for name, content in body.items():
+            # Text, never coerced: a valueless `docket:` or a nested block is a malformation,
+            # not an artifact whose content is that value's repr.
+            if not isinstance(content, str):
+                where = f"`artifacts.{name}`"
+                raise GraphParseError(f"expected text at {where!r}, got {type(content).__name__}")
+            artifacts[str(name)] = content
+        return artifacts
 
     def node(self, name: str) -> NodeDoc | None:
         return next((n for n in self.nodes if n.name == name), None)
@@ -531,6 +550,16 @@ class Node(NodeShape[RunStep]):
 
 
 @dataclass(frozen=True)
+class GraphArtifact:
+    """One graph-scoped artifact baked into the mint — its authored name, the
+    loader-inlined content, and its authored-order position."""
+
+    name: str
+    content: str
+    ordinal: int
+
+
+@dataclass(frozen=True)
 class Graph:
     graph_id: str
     name: str
@@ -540,6 +569,8 @@ class Graph:
     created_at: datetime
     # The graph-level named-session declarations (issue #144), in authored order.
     sessions: list[SessionDecl] = field(default_factory=list)
+    # The graph-scoped `artifacts:` declarations, in authored order.
+    artifacts: list[GraphArtifact] = field(default_factory=list)
 
     @property
     def declares_git_commit(self) -> bool:

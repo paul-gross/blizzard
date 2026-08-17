@@ -1,14 +1,16 @@
 """Mint-time graph validation.
 
-The rules ``POST /graphs`` runs before minting a graph immutable: errors reject the
+The rules ``POST /api/graphs`` runs before minting a graph immutable: errors reject the
 definition, warnings mint it flagged. Pure domain logic over an already-parsed
 :class:`GraphDoc` (``bzh:domain-core``) — no filesystem, no framework. Reachability is
 a warning, not an error: cycles are intentional and retries escape to escalation."""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
+from blizzard.hub.domain.artifacts import is_valid_graph_artifact_name
 from blizzard.hub.domain.graph import (
     RESERVED_TERMINAL,
     SESSION_LEGAL_FORMS,
@@ -21,6 +23,21 @@ from blizzard.hub.domain.graph import (
     SessionDecl,
     SessionMode,
 )
+
+# A filename's trailing extension. Bounded at 8 characters so a long dotted token — a
+# version string, a sentence-ending abbreviation — is not read as one.
+_FILE_EXTENSION = re.compile(r"\.[A-Za-z0-9]{1,8}$")
+
+
+def _is_uninlined_file_reference(content: str) -> bool:
+    """An ``artifacts:`` value that still reads as a bare path — one whitespace-free token, no
+    URL scheme, carrying either a ``/`` separator or a filename extension. Baked content is prose
+    carrying whitespace, so no real artifact fits the shape; the shape survives only when nothing
+    inlined it. One residual hole, deliberate: an extension-less lone token (``notes``) is
+    indistinguishable from one-word content, so it passes."""
+    if content.split() != [content] or "://" in content:
+        return False
+    return "/" in content or bool(_FILE_EXTENSION.search(content))
 
 
 @dataclass(frozen=True)
@@ -61,6 +78,7 @@ class Validator:
     def _check(self) -> None:
         self._check_entry()
         self._check_sessions()
+        self._check_artifacts()
         for node in self.doc.nodes:
             check = NodeCheck.of(node, node_names=self.node_names, session_names=self.session_names)
             self.errors.extend(check.errors)
@@ -98,6 +116,28 @@ class Validator:
         ):
             if value is not None and value <= 0:
                 self.errors.append(f"session `{name}`: `rotate.{field_name}` must be a positive number")
+
+    def _check_artifacts(self) -> None:
+        """Every graph-scoped `artifacts:` name is legal, collides with no node's `produces:`
+        name — both scopes are retrieved through the one artifact CLI, so a shared name would be
+        genuinely ambiguous, not a legal shadow — and carries content rather than an unresolved
+        file path."""
+        produces_names = {spec.name for node in self.doc.nodes for spec in node.produces}
+        for name, content in self.doc.artifacts.items():
+            if not is_valid_graph_artifact_name(name):
+                self.errors.append(
+                    f"artifact `{name}`: name must be alphanumerics with internal `-`, `_`, `.` only "
+                    f"— non-empty, no leading/trailing separator, no two separators in a row, no `/`"
+                )
+            if name in produces_names:
+                self.errors.append(f"artifact `{name}`: collides with a node's `produces:` name")
+            # A definition arriving with no directory to resolve against would otherwise bake the
+            # path itself as the content and serve it to workers as the artifact.
+            if _is_uninlined_file_reference(content):
+                self.errors.append(
+                    f"artifact `{name}`: value `{content}` is a file path, not content — a definition "
+                    f"posted without a directory to resolve against must carry the file's text inline"
+                )
 
 
 @dataclass(frozen=True)

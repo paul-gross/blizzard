@@ -118,6 +118,38 @@ def test_list_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch
     assert calls == [{}]
 
 
+@pytest.mark.unit
+def test_list_scope_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict | None] = []
+
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(payload=[])
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["artifact", "list", "--scope", "graph"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{"scope": "graph"}]
+
+
+@pytest.mark.unit
+def test_list_omits_the_scope_param_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bare ``list`` sends no ``scope`` at all — never an empty string a route would have
+    to special-case — so the hub-proxied node half and the store-read graph half both run."""
+    calls: list[dict | None] = []
+
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(payload=[])
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["artifact", "list"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls == [None]
+
+
 def test_list_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     attempted = False
 
@@ -198,6 +230,40 @@ def test_get_node_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatc
     assert calls == [{"node": "plan"}]
 
 
+@pytest.mark.unit
+def test_get_scope_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict | None] = []
+
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(text='{"scope": "graph", "name": "docket", "kind": "asset", "content": "hi"}')
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["artifact", "get", "docket", "--scope", "graph"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{"scope": "graph"}]
+
+
+@pytest.mark.unit
+def test_get_node_and_scope_flags_both_land_in_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Both disambiguators wired independently — a fix that carries only one of the two
+    flags through would still pass a test that omits the other."""
+    calls: list[dict | None] = []
+
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(text='{"scope": "node", "name": "zulu", "kind": "asset", "content": "hi"}')
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(
+        runner_group, ["artifact", "get", "zulu", "--node", "review", "--scope", "node"], env=_ENV
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{"node": "review", "scope": "node"}]
+
+
 def test_get_content_prints_raw_asset_text_without_added_newline(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
         return _FakeResponse(payload={"name": "plan", "kind": "asset", "content": "the plan text"})
@@ -234,14 +300,30 @@ def test_get_surfaces_an_ambiguous_name_rejection_naming_the_candidate_nodes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     detail = (
-        "artifact 'retrospective' is ambiguous — produced by nodes: build, plan, review (pass --node to disambiguate)"
+        "artifact 'retrospective' is ambiguous — found for: node build, node plan, node review "
+        "(pass --scope and/or --node to disambiguate)"
     )
     monkeypatch.setattr(httpx, "get", lambda *a, **k: _RejectingResponse({"detail": detail}))
     result = CliRunner().invoke(runner_group, ["artifact", "get", "retrospective"], env=_ENV)
 
     assert result.exit_code != 0
     assert "ambiguous" in result.output
-    assert "build, plan, review" in result.output
+    assert "node build, node plan, node review" in result.output
+
+
+@pytest.mark.unit
+def test_get_surfaces_a_cross_scope_ambiguity_naming_both_scopes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bare ``get`` matching a graph declaration and a node artifact of the same name
+    exits non-zero, naming both — the route's own message shape, the CLI just surfaces it."""
+    detail = (
+        "artifact 'docket' is ambiguous — found for: graph, node build (pass --scope and/or --node to disambiguate)"
+    )
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: _RejectingResponse({"detail": detail}))
+    result = CliRunner().invoke(runner_group, ["artifact", "get", "docket"], env=_ENV)
+
+    assert result.exit_code != 0
+    assert "ambiguous" in result.output
+    assert "graph" in result.output and "node build" in result.output
 
 
 # create — write parity with attach
@@ -307,6 +389,43 @@ def test_create_surfaces_a_rejection_as_a_nonzero_exit(monkeypatch: pytest.Monke
     assert "could not record" in result.output
 
 
+@pytest.mark.unit
+def test_create_refuses_graph_scope_without_posting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Graph scope is read-only, so ``create --scope graph`` refuses before ever
+    reaching the network — the point of the flag existing on a write verb at all."""
+    posted = False
+
+    def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
+        nonlocal posted
+        posted = True
+        return _FakeResponse()
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        runner_group, ["artifact", "create", "--name", "n", "--scope", "graph"], env=_ENV, input="content"
+    )
+
+    assert result.exit_code != 0
+    assert "read-only" in result.output
+    assert posted is False
+
+
+@pytest.mark.unit
+def test_create_accepts_explicit_node_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The flag exists for the refusal above — an explicit ``node`` value is a no-op, not a
+    second refusal path."""
+    monkeypatch.setattr(
+        httpx,
+        "post",
+        lambda *a, **k: _FakeResponse(payload={"recorded": True, "lease_id": "lease_9", "name": "n", "bytes": 1}),
+    )
+    result = CliRunner().invoke(
+        runner_group, ["artifact", "create", "--name", "n", "--scope", "node"], env=_ENV, input="c"
+    )
+
+    assert result.exit_code == 0, result.output
+
+
 # staged — a worker's read-back of its own not-yet-published submissions
 
 
@@ -343,6 +462,25 @@ def test_staged_surfaces_a_rejection_as_a_nonzero_exit(monkeypatch: pytest.Monke
 
     assert result.exit_code != 0
     assert "could not read" in result.output
+
+
+@pytest.mark.unit
+def test_staged_refuses_graph_scope_without_fetching(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Graph scope has no staged submissions by construction — refused before the
+    runner-local read, not just answered empty."""
+    fetched = False
+
+    def fake_get(*args: object, **kwargs: object) -> _FakeResponse:
+        nonlocal fetched
+        fetched = True
+        return _FakeResponse(payload=[])
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["artifact", "staged", "--scope", "graph"], env=_ENV)
+
+    assert result.exit_code != 0
+    assert "read-only" in result.output
+    assert fetched is False
 
 
 # the deprecated `attach` alias — warns on stderr, delegates to `artifact create`

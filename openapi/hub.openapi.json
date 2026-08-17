@@ -2177,6 +2177,29 @@
         "title": "FleetSummaryView",
         "type": "object"
       },
+      "GraphArtifact": {
+        "description": "One graph-scoped artifact baked into the mint \u2014 the loader-inlined content of\na graph's ``artifacts:`` entry, carried to the runner alongside every envelope for that\ngraph.",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ArtifactKind"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "content"
+        ],
+        "title": "GraphArtifact",
+        "type": "object"
+      },
       "GraphChoiceView": {
         "description": "One selectable outcome of a node's judgement.",
         "properties": {
@@ -2587,6 +2610,14 @@
       "GraphView": {
         "description": "A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.\n\n``enabled`` and ``retired`` are one lifecycle fact (issue #101), saying nothing about\nwhether this mint is newest. ``follow_latest`` is the **stored** tri-state (#164).",
         "properties": {
+          "artifacts": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
           "edges": {
             "default": [],
             "items": {
@@ -3235,6 +3266,14 @@
           "epoch": {
             "title": "Epoch",
             "type": "integer"
+          },
+          "graph_artifacts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GraphArtifact"
+            },
+            "title": "Graph Artifacts",
+            "type": "array"
           },
           "graph_id": {
             "title": "Graph Id",

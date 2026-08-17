@@ -12,6 +12,14 @@ export type ClientOptions = {
 export type ArtifactKind = 'git_commit' | 'asset';
 
 /**
+ * ArtifactScope
+ *
+ * Where an artifact is pinned — a chunk's node-step, or the graph mint that baked it
+ * into the graph itself (``artifacts:``).
+ */
+export type ArtifactScope = 'node' | 'graph';
+
+/**
  * ArtifactView
  *
  * One entry of a chunk's inline artifact store. ``key`` is ``{node}.{artifact-name}.{epoch}`` —
@@ -579,43 +587,6 @@ export type DecisionView = {
      * Transitioned
      */
     transitioned?: boolean;
-};
-
-/**
- * EnvelopeArtifact
- *
- * One artifact carried into a node-step, resolved latest-by-epoch.
- */
-export type EnvelopeArtifact = {
-    /**
-     * Branch Name
-     */
-    branch_name?: string | null;
-    /**
-     * Commit Hash
-     */
-    commit_hash?: string | null;
-    /**
-     * Content
-     */
-    content?: string | null;
-    /**
-     * Epoch
-     */
-    epoch: number;
-    kind: ArtifactKind;
-    /**
-     * Name
-     */
-    name: string;
-    /**
-     * Node Name
-     */
-    node_name: string;
-    /**
-     * Repo
-     */
-    repo?: string | null;
 };
 
 /**
@@ -1909,6 +1880,47 @@ export type WorkRefView = {
 };
 
 /**
+ * WorkerArtifact
+ *
+ * One artifact as the worker's own artifact routes serve it, node- or graph-scoped.
+ * A node-scope row is resolved latest-by-epoch and names its producing node and
+ * epoch; a graph-scope row is one of the pinned graph mint's own baked-in declarations
+ * and carries neither, since no node-step produced it.
+ */
+export type WorkerArtifact = {
+    /**
+     * Branch Name
+     */
+    branch_name?: string | null;
+    /**
+     * Commit Hash
+     */
+    commit_hash?: string | null;
+    /**
+     * Content
+     */
+    content?: string | null;
+    /**
+     * Epoch
+     */
+    epoch?: number | null;
+    kind: ArtifactKind;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Node Name
+     */
+    node_name?: string | null;
+    /**
+     * Repo
+     */
+    repo?: string | null;
+    scope: ArtifactScope;
+};
+
+/**
  * WorkspacePromptReplacement
  *
  * A replacement workspace prompt — applies to subsequent spawns with no restart.
@@ -2449,7 +2461,12 @@ export type ListArtifactsApiLeasesLeaseIdArtifactsGetData = {
          */
         lease_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Scope
+         */
+        scope?: ArtifactScope | null;
+    };
     url: '/api/leases/{lease_id}/artifacts';
 };
 
@@ -2468,7 +2485,7 @@ export type ListArtifactsApiLeasesLeaseIdArtifactsGetResponses = {
      *
      * Successful Response
      */
-    200: Array<EnvelopeArtifact>;
+    200: Array<WorkerArtifact>;
 };
 
 export type ListArtifactsApiLeasesLeaseIdArtifactsGetResponse = ListArtifactsApiLeasesLeaseIdArtifactsGetResponses[keyof ListArtifactsApiLeasesLeaseIdArtifactsGetResponses];
@@ -2490,6 +2507,10 @@ export type GetArtifactApiLeasesLeaseIdArtifactsNameGetData = {
          * Node
          */
         node?: string | null;
+        /**
+         * Scope
+         */
+        scope?: ArtifactScope | null;
     };
     url: '/api/leases/{lease_id}/artifacts/{name}';
 };
@@ -2507,7 +2528,7 @@ export type GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses = {
     /**
      * Successful Response
      */
-    200: EnvelopeArtifact;
+    200: WorkerArtifact;
 };
 
 export type GetArtifactApiLeasesLeaseIdArtifactsNameGetResponse = GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses[keyof GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses];

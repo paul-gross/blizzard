@@ -57,6 +57,8 @@ stall — implement the work items' intent directly and say so.
    including any a reviewer already accepted, each marked `open` or `accepted`. A round where you fixed everything is
    exactly where this goes wrong: a bare "nothing to refute" drops the refutations still standing, and the next cold
    pass re-raises those findings. Write it only when nothing is standing — on a first build, or once every refuted
-   finding is fixed or withdrawn.
+   finding is fixed or withdrawn. The full docket this restates is retrievable directly:
+   `blizzard runner artifact get docket --scope graph --content`; if that command fails — any error, rather than the
+   docket's text — proceed on the restatement above and do not retry.
 
 A green build or type-check is not the bar — the verify node closes your work against runtime behavior next.

@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
+from pydantic import ValidationError
 
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.envelope import Envelope, LatestArtifacts
@@ -13,6 +14,7 @@ from blizzard.hub.domain.graph import (
     Choice,
     Executor,
     Graph,
+    GraphArtifact,
     JudgedBy,
     Node,
     ProducesSpec,
@@ -21,6 +23,7 @@ from blizzard.hub.domain.graph import (
     SessionMode,
 )
 from blizzard.hub.domain.work import Chunk, WorkRef
+from blizzard.wire.envelope import EnvelopeArtifact
 
 pytestmark = pytest.mark.unit
 
@@ -59,7 +62,7 @@ def _node() -> Node:
     )
 
 
-def _graph(*sessions: SessionDecl) -> Graph:
+def _graph(*sessions: SessionDecl, artifacts: list[GraphArtifact] | None = None) -> Graph:
     """The node's own graph — required since #144, since the node's effective session
     declaration is resolved against its ``sessions:`` map."""
     return Graph(
@@ -70,6 +73,7 @@ def _graph(*sessions: SessionDecl) -> Graph:
         edges=[],
         created_at=datetime(2026, 7, 13, tzinfo=UTC),
         sessions=list(sessions),
+        artifacts=artifacts or [],
     )
 
 
@@ -101,6 +105,35 @@ def test_envelope_carries_authored_judgement_prose_and_choice_set() -> None:
     assert "<Choice>" not in (env.judgement_prompt or "")  # the tail is the runner's to render
     assert env.work_refs == [{"source": "default", "ref": "1"}]
     assert [a.name for a in env.artifacts] == ["f"]
+
+
+def test_envelope_carries_graph_artifacts_in_authored_order() -> None:
+    # A non-alphabetical name set: an `order_by(name)` regression would still pass an
+    # alphabetically-sorted fixture, so this pins the ordinal, not the name.
+    artifacts = [
+        GraphArtifact(name="zebra", content="z content", ordinal=0),
+        GraphArtifact(name="apple", content="a content", ordinal=1),
+    ]
+    env = Envelope(chunk=_chunk(), graph=_graph(artifacts=artifacts), node=_node(), artifacts=[], epoch=1).wire
+    assert [(a.name, a.content) for a in env.graph_artifacts] == [("zebra", "z content"), ("apple", "a content")]
+    assert all(a.kind is ArtifactKind.ASSET for a in env.graph_artifacts)
+
+
+def test_envelope_graph_artifacts_empty_for_a_graph_declaring_none() -> None:
+    # `wire` sets the field, so a vanished population site reds here too — an `== []` alone
+    # passes on the model's own default whether `wire` populated it or not.
+    env = Envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1).wire
+    assert env.graph_artifacts == []
+    assert "graph_artifacts" in env.model_fields_set
+
+
+def test_envelope_artifact_still_requires_node_name_and_epoch() -> None:
+    # `EnvelopeArtifact` (node-scoped) is untouched by the new graph-scoped wire model. One
+    # field omitted per case: omitting both still raises with either one relaxed to optional.
+    with pytest.raises(ValidationError):
+        EnvelopeArtifact(name="f", kind=ArtifactKind.ASSET, epoch=1)  # type: ignore[call-arg]
+    with pytest.raises(ValidationError):
+        EnvelopeArtifact(name="f", kind=ArtifactKind.ASSET, node_name="build")  # type: ignore[call-arg]
 
 
 def test_envelope_carries_session_source() -> None:

@@ -43,4 +43,6 @@ Before declaring done:
   rather than adding to it, and the gate never looks for an older one. Read your own previous submission first
   (`blizzard runner artifact get plan-finding-refutes --content`) and restate **every refutation still standing**,
   including any the gate already accepted, each marked `open` or `accepted`. Write "nothing to refute" only when nothing
-  is standing — on a first draft, or once every refuted finding is resolved or withdrawn.
+  is standing — on a first draft, or once every refuted finding is resolved or withdrawn. The full docket this restates
+  is retrievable directly: `blizzard runner artifact get docket --scope graph --content`; if that command fails — any
+  error, rather than the docket's text — proceed on the restatement above and do not retry.

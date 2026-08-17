@@ -10,6 +10,15 @@
         "title": "ArtifactKind",
         "type": "string"
       },
+      "ArtifactScope": {
+        "description": "Where an artifact is pinned \u2014 a chunk's node-step, or the graph mint that baked it\ninto the graph itself (``artifacts:``).",
+        "enum": [
+          "node",
+          "graph"
+        ],
+        "title": "ArtifactScope",
+        "type": "string"
+      },
       "ArtifactView": {
         "description": "One entry of a chunk's inline artifact store. ``key`` is ``{node}.{artifact-name}.{epoch}`` \u2014\nappend-only, so latest-by-epoch resolution is the reader's. ``content`` carries an **asset**'s text\nverbatim; ``repo``/``branch_name``/``commit_hash`` carry a ``git_commit``'s pinned reference, never\nthe code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp.",
         "properties": {
@@ -951,78 +960,6 @@
           "submitted_at"
         ],
         "title": "DecisionView",
-        "type": "object"
-      },
-      "EnvelopeArtifact": {
-        "description": "One artifact carried into a node-step, resolved latest-by-epoch.",
-        "properties": {
-          "branch_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Branch Name"
-          },
-          "commit_hash": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Commit Hash"
-          },
-          "content": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Content"
-          },
-          "epoch": {
-            "title": "Epoch",
-            "type": "integer"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/ArtifactKind"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "node_name": {
-            "title": "Node Name",
-            "type": "string"
-          },
-          "repo": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Repo"
-          }
-        },
-        "required": [
-          "name",
-          "kind",
-          "node_name",
-          "epoch"
-        ],
-        "title": "EnvelopeArtifact",
         "type": "object"
       },
       "EnvironmentListResponse": {
@@ -3042,6 +2979,94 @@
         "title": "WorkRefView",
         "type": "object"
       },
+      "WorkerArtifact": {
+        "description": "One artifact as the worker's own artifact routes serve it, node- or graph-scoped.\nA node-scope row is resolved latest-by-epoch and names its producing node and\nepoch; a graph-scope row is one of the pinned graph mint's own baked-in declarations\nand carries neither, since no node-step produced it.",
+        "properties": {
+          "branch_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Name"
+          },
+          "commit_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit Hash"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "epoch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Epoch"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ArtifactKind"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Name"
+          },
+          "repo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ArtifactScope"
+          }
+        },
+        "required": [
+          "scope",
+          "name",
+          "kind"
+        ],
+        "title": "WorkerArtifact",
+        "type": "object"
+      },
       "WorkspacePromptReplacement": {
         "description": "A replacement workspace prompt \u2014 applies to subsequent spawns with no restart.",
         "properties": {
@@ -3817,7 +3842,7 @@
     },
     "/api/leases/{lease_id}/artifacts": {
       "get": {
-        "description": "The worker's own node-step inputs \u2014 every artifact resolved latest-by-epoch,\nboth kinds, kind-discriminated.",
+        "description": "The worker's own artifacts \u2014 every node-step input resolved latest-by-epoch, plus the\ngraph mint's own baked-in declarations, both kind-discriminated. ``scope`` narrows to one;\nomitted, both are read. ``scope=graph`` never reaches the hub.",
         "operationId": "list_artifacts_api_leases__lease_id__artifacts_get",
         "parameters": [
           {
@@ -3828,6 +3853,22 @@
               "title": "Lease Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ArtifactScope"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
           }
         ],
         "responses": {
@@ -3836,7 +3877,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/EnvelopeArtifact"
+                    "$ref": "#/components/schemas/WorkerArtifact"
                   },
                   "title": "Response List Artifacts Api Leases  Lease Id  Artifacts Get",
                   "type": "array"
@@ -3864,7 +3905,7 @@
     },
     "/api/leases/{lease_id}/artifacts/{name}": {
       "get": {
-        "description": "One artifact by ``produces:`` name, optionally narrowed by ``node``; ``404`` when this node-step\nhas none by that name. More than one upstream node can emit the same name (issue #169), so a bare\nname resolving to several candidates is ``409`` naming them, never an arbitrary pick.",
+        "description": "One artifact by name, optionally narrowed by ``scope`` and, for node scope, by ``node``;\n``404`` when nothing under the searched scope(s) matches. A supplied ``node`` narrows to node\nscope on its own, a graph declaration having no producing node, so pairing it with\n``scope=graph`` is ``400``. More than one candidate \u2014 several upstream nodes emitting the same\nname (issue #169), or a name in both scopes \u2014 is ``409`` naming them, never an arbitrary pick.",
         "operationId": "get_artifact_api_leases__lease_id__artifacts__name__get",
         "parameters": [
           {
@@ -3900,6 +3941,22 @@
               ],
               "title": "Node"
             }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ArtifactScope"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
           }
         ],
         "responses": {
@@ -3907,7 +3964,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EnvelopeArtifact"
+                  "$ref": "#/components/schemas/WorkerArtifact"
                 }
               }
             },

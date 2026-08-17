@@ -198,17 +198,20 @@ export const listLeasesApiLeasesGet = <ThrowOnError extends boolean = false>(opt
 /**
  * List Artifacts
  *
- * The worker's own node-step inputs — every artifact resolved latest-by-epoch,
- * both kinds, kind-discriminated.
+ * The worker's own artifacts — every node-step input resolved latest-by-epoch, plus the
+ * graph mint's own baked-in declarations, both kind-discriminated. ``scope`` narrows to one;
+ * omitted, both are read. ``scope=graph`` never reaches the hub.
  */
 export const listArtifactsApiLeasesLeaseIdArtifactsGet = <ThrowOnError extends boolean = false>(options: Options<ListArtifactsApiLeasesLeaseIdArtifactsGetData, ThrowOnError>): RequestResult<ListArtifactsApiLeasesLeaseIdArtifactsGetResponses, ListArtifactsApiLeasesLeaseIdArtifactsGetErrors, ThrowOnError> => (options.client ?? client).get<ListArtifactsApiLeasesLeaseIdArtifactsGetResponses, ListArtifactsApiLeasesLeaseIdArtifactsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/artifacts', ...options });
 
 /**
  * Get Artifact
  *
- * One artifact by ``produces:`` name, optionally narrowed by ``node``; ``404`` when this node-step
- * has none by that name. More than one upstream node can emit the same name (issue #169), so a bare
- * name resolving to several candidates is ``409`` naming them, never an arbitrary pick.
+ * One artifact by name, optionally narrowed by ``scope`` and, for node scope, by ``node``;
+ * ``404`` when nothing under the searched scope(s) matches. A supplied ``node`` narrows to node
+ * scope on its own, a graph declaration having no producing node, so pairing it with
+ * ``scope=graph`` is ``400``. More than one candidate — several upstream nodes emitting the same
+ * name (issue #169), or a name in both scopes — is ``409`` naming them, never an arbitrary pick.
  */
 export const getArtifactApiLeasesLeaseIdArtifactsNameGet = <ThrowOnError extends boolean = false>(options: Options<GetArtifactApiLeasesLeaseIdArtifactsNameGetData, ThrowOnError>): RequestResult<GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError> => (options.client ?? client).get<GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/artifacts/{name}', ...options });
 

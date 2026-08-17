@@ -16,7 +16,7 @@ from blizzard.runner.harness.preamble import Preamble
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.store.repository import EnvBindingRecord, LeaseRecord, NewLease
+from blizzard.runner.store.repository import EnvBindingRecord, GraphArtifactRecord, LeaseRecord, NewLease
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.loop")
@@ -169,7 +169,8 @@ class Spawner:
         )
 
     def _mint(self, chunk_id: str, envelope: NodeEnvelope, *, resume_from: str | None, at: datetime) -> MintedLease:
-        """Record the lease, stash its capability-token hash, and buffer the hub's fact."""
+        """Pin the mint's graph artifacts, record the lease, stash its capability-token
+        hash, and buffer the hub's fact."""
         # Mint above the max of both floors (bzh:epoch-fencing, #112): the local fence alone is 0
         # for a chunk this runner never drove, so a migrated chunk would mint below hub truth.
         epoch = max(self.ctx.store.latest_epoch(chunk_id), envelope.epoch) + 1
@@ -177,6 +178,16 @@ class Spawner:
         node = envelope.node
         retries_max = node.retries_max if node.retries_max is not None else self.ctx.config.default_retries_max
         model, effort = self.ctx.sessions.model_and_effort(node, resume_from)
+        # Before `record_lease`: a crash here leaves only an orphan row a retry
+        # writes again identically — never a lease whose mint's declarations are absent.
+        self.ctx.store.record_graph_artifacts(
+            graph_id=envelope.graph_id,
+            artifacts=[
+                GraphArtifactRecord(name=a.name, ordinal=i, kind=a.kind, content=a.content)
+                for i, a in enumerate(envelope.graph_artifacts)
+            ],
+            recorded_at=at,
+        )
         self.ctx.store.record_lease(
             NewLease(
                 lease_id=lease_id,

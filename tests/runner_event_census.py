@@ -60,6 +60,10 @@ _INTERNAL_BOOKKEEPING = (
 #: method names ``tests/test_runner_write_protocol_census.py`` introspects at runtime.
 WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     # --- lease lifecycle ---------------------------------------------------
+    "record_graph_artifacts": Silent(
+        "Spawner._mint (runner/loop/spawn.py) — the pinned mint's graph-scoped declarations, "
+        "read only by the worker's own scoped artifact verb; no panel-facing kind represents it."
+    ),
     "record_lease": Published(LEASE_CHANGED, "Spawner._mint (runner/loop/spawn.py) — cause='created'"),
     "record_spawn": Published(
         LEASE_CHANGED,

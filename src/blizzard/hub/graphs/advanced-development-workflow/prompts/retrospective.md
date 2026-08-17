@@ -52,12 +52,14 @@ disposition, using the same filing convention as the fold below.
 
 ## Fold the findings docket
 
-Before the closing reflection, fold the chunk's findings. Enumerate every id in the **newest** `plan-findings` asset and
-the **newest** `review-findings` asset — either may be an empty list. An earlier round is superseded and out of the fold
-entirely, its undisposed findings abandoned by design: the review is a full cold pass over the change as it stands, so a
-defect still present is re-reported under a new id in the newest asset, where the fold sees it. When a round was
-superseded, name that in the fold table. Match each id against the disposition records across the chunk's node
-`retrospective` assets, then:
+Before the closing reflection, fold the chunk's findings. What follows restates the docket's own fold rules; read the
+full docket with `blizzard runner artifact get docket --scope graph --content` if anything below is ambiguous, and fold
+on the rules as stated here if that command fails — any error, rather than the docket's text — without retrying.
+Enumerate every id in the **newest** `plan-findings` asset and the **newest** `review-findings` asset — either may be an
+empty list. An earlier round is superseded and out of the fold entirely, its undisposed findings abandoned by design:
+the review is a full cold pass over the change as it stands, so a defect still present is re-reported under a new id in
+the newest asset, where the fold sees it. When a round was superseded, name that in the fold table. Match each id
+against the disposition records across the chunk's node `retrospective` assets, then:
 
 - A matched id is closed — carry its disposition into the fold table.
 - An unmatched `should-fix` id whose target is a real repo file, describing a defect still present in the change, is

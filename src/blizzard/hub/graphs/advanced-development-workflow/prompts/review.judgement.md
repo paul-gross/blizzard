@@ -14,3 +14,7 @@ node.
 Alongside your verdict, submit this node's retrospective: run `blizzard runner artifact create --name retrospective`
 with a few honest lines on stdin — what went well, what didn't, and what the next node or run should know. The terminal
 retrospective node synthesizes these.
+
+The severity values named above are the docket's; if their exact meaning is unclear, read the docket itself with
+`blizzard runner artifact get docket --scope graph --content`. If that command fails — any error, rather than the
+docket's text — the values as stated above are what you judge against; do not retry.

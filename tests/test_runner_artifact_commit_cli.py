@@ -185,3 +185,27 @@ def test_commit_verb_has_no_forge_flag() -> None:
 
     assert result.exit_code != 0
     assert "no such option" in result.output.lower()
+
+
+@pytest.mark.unit
+def test_commit_verb_refuses_graph_scope_without_posting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A git-commit declaration is node-scoped by nature — ``--scope graph`` refuses
+    before ever reaching the network, rather than posting a declaration nothing baked into
+    the graph mint could ever hold."""
+    posted = False
+
+    def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
+        nonlocal posted
+        posted = True
+        return _FakeResponse()
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        runner_group,
+        ["artifact", "commit", "--repo", "blizzard", "--branch", "feat/x", "--commit", "abc123", "--scope", "graph"],
+        env=_ENV,
+    )
+
+    assert result.exit_code != 0
+    assert "read-only" in result.output
+    assert posted is False

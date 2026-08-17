@@ -21,6 +21,7 @@ from blizzard.hub.domain.graph import (
     Edge,
     Executor,
     Graph,
+    GraphArtifact,
     IWriteGraphRepository,
     JudgedBy,
     Node,
@@ -31,6 +32,7 @@ from blizzard.hub.domain.graph import (
     SessionMode,
 )
 from blizzard.hub.store.schema import (
+    graph_artifacts,
     graph_choices,
     graph_edges,
     graph_lifecycle_facts,
@@ -127,6 +129,20 @@ class SessionRow:
             effort=row.effort,
             rotate=RotatePolicy(*bounds) if any(b is not None for b in bounds) else None,
         )
+
+
+@dataclass(frozen=True)
+class GraphArtifactRow:
+    def values(self, artifact: GraphArtifact, *, graph_id: str) -> dict[str, Any]:
+        return {
+            "graph_id": graph_id,
+            "name": artifact.name,
+            "ordinal": artifact.ordinal,
+            "content": artifact.content,
+        }
+
+    def of(self, row: Any) -> GraphArtifact:
+        return GraphArtifact(name=row.name, content=row.content, ordinal=row.ordinal)
 
 
 @dataclass(frozen=True)
@@ -229,6 +245,7 @@ class NodeRow:
 
 
 SESSIONS = SessionRow()
+GRAPH_ARTIFACTS = GraphArtifactRow()
 CHOICES = ChoiceRow()
 EDGES = EdgeRow()
 NODES = NodeRow()
@@ -254,6 +271,8 @@ class GraphStore:
             for ordinal, decl in enumerate(graph.sessions):
                 values = SESSIONS.values(decl, graph_id=graph.graph_id, ordinal=ordinal)
                 conn.execute(insert(graph_sessions).values(values))
+            for artifact in graph.artifacts:
+                conn.execute(insert(graph_artifacts).values(GRAPH_ARTIFACTS.values(artifact, graph_id=graph.graph_id)))
             for node in graph.nodes:
                 conn.execute(insert(graph_nodes).values(NODES.values(node, graph_id=graph.graph_id)))
                 for choice in node.choices:
@@ -370,6 +389,11 @@ class GraphStore:
             .where(graph_sessions.c.graph_id == graph_row.graph_id)
             .order_by(graph_sessions.c.ordinal)
         ).all()
+        artifact_rows = conn.execute(
+            select(graph_artifacts)
+            .where(graph_artifacts.c.graph_id == graph_row.graph_id)
+            .order_by(graph_artifacts.c.ordinal)
+        ).all()
         return Graph(
             graph_id=graph_row.graph_id,
             name=graph_row.name,
@@ -378,6 +402,7 @@ class GraphStore:
             edges=edges,
             created_at=graph_row.created_at,
             sessions=[SESSIONS.of(sr) for sr in session_rows],
+            artifacts=[GRAPH_ARTIFACTS.of(ar) for ar in artifact_rows],
         )
 
 

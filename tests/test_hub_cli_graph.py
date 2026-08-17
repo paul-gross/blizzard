@@ -142,6 +142,32 @@ def test_graph_show_prints_the_reified_graph(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.unit
+def test_graph_show_surfaces_the_baked_artifact_names_only_under_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The read-back for what a mint actually baked, and its one working form: the human
+    rendering is nodes and edges, so a graph's `artifacts:` names — and the authored order
+    a reorder-only edit silently leaves alone — reach an operator only through ``--json``."""
+    body = {
+        "graph_id": "gr_1",
+        "name": "alpha",
+        "entry_node_id": "nd_1",
+        "retired": False,
+        "nodes": [{"node_id": "nd_1", "name": "build", "executor": "runner"}],
+        "edges": [],
+        "artifacts": ["zebra", "apple"],
+    }
+
+    monkeypatch.setattr(hub_cli.httpx, "get", lambda url, *, timeout: _FakeResponse(200, body))
+    env = {"BZ_HUB_URL": "http://hub.local:8421"}
+    plain = CliRunner().invoke(hub_group, ["graph", "show", "gr_1"], env=env)
+    as_json = CliRunner().invoke(hub_group, ["graph", "show", "gr_1", "--json"], env=env)
+
+    assert plain.exit_code == 0, plain.output
+    assert "zebra" not in plain.output
+    assert as_json.exit_code == 0, as_json.output
+    assert as_json.output.index("zebra") < as_json.output.index("apple")
+
+
+@pytest.mark.unit
 def test_graph_show_maps_an_unknown_graph(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
@@ -273,6 +299,26 @@ def test_graph_mint_validation_failure_also_renders_warnings(monkeypatch: pytest
     assert result.exit_code != 0
     assert "entry node 'build' not found" in result.output
     assert "node build has no incoming edges" in result.output
+
+
+@pytest.mark.unit
+def test_graph_mint_a_missing_artifact_file_is_a_click_exception_naming_the_entry(tmp_path: Path) -> None:
+    """The loader raises before any HTTP call is made, so this never reaches
+    ``httpx.post`` at all — the ``ClickException`` names both the entry and its path, which
+    are deliberately unalike so that neither assertion can pass on the other's strength."""
+    graph_path = tmp_path / "graph.yaml"
+    graph_path.write_text(
+        "name: tiny\nentry: build\nartifacts:\n  docket: ./reference-notes.md\n"
+        "nodes:\n  build:\n    executor: runner\n    prompt: do the work\n"
+        "    judgement:\n      prompt: judge it\n      choices:\n"
+        "        pass:\n          description: it works\n          to: done\n"
+    )
+
+    result = CliRunner().invoke(hub_group, ["graph", "mint", str(graph_path)])
+
+    assert result.exit_code != 0
+    assert "docket" in result.output
+    assert str(tmp_path / "reference-notes.md") in result.output
 
 
 @pytest.mark.unit

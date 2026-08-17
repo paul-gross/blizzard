@@ -116,6 +116,17 @@ graph_sessions = Table(
     Column("rotate_max_invocations", Integer, nullable=True),
 )
 
+# The graph-scoped `artifacts:` declarations — the `graph_sessions` shape, one row
+# per entry keyed `(graph_id, name)`, not a JSON column on `graphs`.
+graph_artifacts = Table(
+    "graph_artifacts",
+    metadata,
+    Column("graph_id", String, ForeignKey("graphs.graph_id"), primary_key=True),
+    Column("name", String, primary_key=True),
+    Column("ordinal", Integer, nullable=False),  # authored `artifacts:` position — every read orders by it
+    Column("content", Text, nullable=False),
+)
+
 # --- Graph lifecycle facts (graph.retired / graph.enabled — issue #101) -------
 # The reversible retire/re-enable brake over one graph_id: append-only, newest-fact-wins.
 

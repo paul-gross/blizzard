@@ -1432,6 +1432,25 @@ export type FleetSummaryView = {
 };
 
 /**
+ * GraphArtifact
+ *
+ * One graph-scoped artifact baked into the mint — the loader-inlined content of
+ * a graph's ``artifacts:`` entry, carried to the runner alongside every envelope for that
+ * graph.
+ */
+export type GraphArtifact = {
+    /**
+     * Content
+     */
+    content: string;
+    kind: ArtifactKind;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
  * GraphChoiceView
  *
  * One selectable outcome of a node's judgement.
@@ -1708,6 +1727,10 @@ export type GraphSyncResponse = {
  * whether this mint is newest. ``follow_latest`` is the **stored** tri-state (#164).
  */
 export type GraphView = {
+    /**
+     * Artifacts
+     */
+    artifacts?: Array<string>;
     /**
      * Edges
      */
@@ -2104,6 +2127,10 @@ export type NodeEnvelope = {
      * Epoch
      */
     epoch: number;
+    /**
+     * Graph Artifacts
+     */
+    graph_artifacts?: Array<GraphArtifact>;
     /**
      * Graph Id
      */

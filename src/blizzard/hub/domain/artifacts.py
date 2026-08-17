@@ -7,6 +7,7 @@ Dependency-free (``bzh:domain-core``): no SQLAlchemy here."""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -16,6 +17,25 @@ class ArtifactKind(StrEnum):
 
     GIT_COMMIT = "git_commit"
     ASSET = "asset"
+
+
+class ArtifactScope(StrEnum):
+    """Where an artifact is pinned — a chunk's node-step, or the graph mint that baked it
+    into the graph itself (``artifacts:``)."""
+
+    NODE = "node"
+    GRAPH = "graph"
+
+
+# One conservative URL path segment — no `/`, since the consuming route
+# percent-encodes a bare name into it, so a `/` would reach it as a real separator.
+_GRAPH_ARTIFACT_NAME = re.compile(r"^[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)*$")
+
+
+def is_valid_graph_artifact_name(name: str) -> bool:
+    """The single owner of graph-artifact name validity (``canon:one-owner``) — a
+    `produces:` name is a different, unvalidated namespace."""
+    return bool(_GRAPH_ARTIFACT_NAME.fullmatch(name))
 
 
 @dataclass(frozen=True)

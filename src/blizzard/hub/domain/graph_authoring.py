@@ -18,6 +18,7 @@ from blizzard.hub.domain.graph import (
     ChoiceDoc,
     Edge,
     Graph,
+    GraphArtifact,
     GraphDoc,
     IWriteGraphRepository,
     JudgedBy,
@@ -88,6 +89,12 @@ class Reification:
             # A session declaration mints no id (issue #144): its authored name identifies
             # it, and dict insertion order is the only source of authored ordering.
             sessions=list(self.doc.sessions.values()),
+            # A graph artifact mints no id either — its authored name identifies it, and
+            # its ordinal is struck from dict insertion order.
+            artifacts=[
+                GraphArtifact(name=name, content=content, ordinal=ordinal)
+                for ordinal, (name, content) in enumerate(self.doc.artifacts.items())
+            ],
         )
 
     @staticmethod

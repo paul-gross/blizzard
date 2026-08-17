@@ -61,3 +61,7 @@ passed, how you adjudicated every refutation, and every finding with:
 - **anchor** — `<repo>/<path>:<line>` or `<repo>/<path>::<symbol>`; the repo prefix is what keeps an anchor unambiguous
   once a chunk spans more than one repo.
 - one or two specific, actionable sentences — what is wrong, not just where.
+
+The entry fields above are restated from the docket, the canonical definition of this format; read it in full with
+`blizzard runner artifact get docket --scope graph --content`. If that command fails — any error, rather than the
+docket's text — record your findings in the fields as stated above and do not retry.

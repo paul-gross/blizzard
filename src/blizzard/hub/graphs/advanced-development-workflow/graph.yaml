@@ -88,6 +88,22 @@ sessions:
     # judgement-heavy authoring stays in `planning`.
     model: ["blizzard:basic"]
 
+# `docket` is this graph's own findings-docket definition — the format every plan-review/review
+# finding, refutation, disposition and fold restates.
+#
+# MAINTAINERS: a prompt restates the slice of this format its node needs, and a worker reads that
+# restatement first — it retrieves the full docket only on request. So an edit to docket.md is not
+# done until it has been carried into every prompt restating the affected slice; the prompt set is
+# the census tests/test_adw_docket.py pins. This note lives here rather than in docket.md because
+# docket.md is baked into the mint verbatim and reaches worker sessions, where maintainer
+# bookkeeping is noise — YAML comments are dropped when the mint parses this file, so nothing here
+# travels with it.
+#
+# On the `artifacts:` key itself, see
+# https://github.com/paul-gross/blizzard/blob/master/docs/deployment.md#graph-scoped-artifacts
+artifacts:
+  docket: ./docket.md
+
 nodes:
   plan:
     executor: runner

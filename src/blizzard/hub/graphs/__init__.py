@@ -17,6 +17,48 @@ from blizzard.hub.domain.graph import GraphDoc
 # The prompt-carrying fields whose file references are inlined at load.
 _PROMPT_KEYS = ("prompt", "prompt_addendum")
 
+# The top-level key `Inliner`'s tree walk never descends into — `artifacts:` is inlined by
+# its own pass below instead, popped before the walk runs.
+_TOP_LEVEL_ARTIFACTS_KEY = "artifacts"
+
+
+class GraphArtifactFileMissing(ValueError):
+    """A graph's ``artifacts:`` entry names a file that does not resolve — naming the
+    entry and the path it failed to resolve to."""
+
+    def __init__(self, name: str, path: Path) -> None:
+        super().__init__(f"artifact `{name}`: no file at `{path}`")
+        self.name = name
+        self.path = path
+
+
+@dataclass(frozen=True)
+class ArtifactInliner:
+    """The graph-scoped ``artifacts:`` pass: every entry is always a file reference (no
+    ``is_ref`` heuristic; a typo becomes a load-time error, never a literal-content
+    artifact). Runs separately from — and before mint-time validation ever sees — the
+    prompt tree walk, over one directory."""
+
+    base: Path
+
+    def inline(self, raw: object) -> object:
+        """Resolve every entry's file reference to its text; a shape that is not a mapping
+        is left untouched — that malformation is ``GraphDoc.of``'s to report, not the
+        loader's (``bzh:domain-core``)."""
+        if not isinstance(raw, dict):
+            return raw
+        inlined: dict[str, object] = {}
+        for name, value in raw.items():
+            if not isinstance(value, str):
+                inlined[name] = value
+                continue
+            path = self.base / value
+            try:
+                inlined[name] = path.read_text()
+            except OSError as exc:
+                raise GraphArtifactFileMissing(str(name), path) from exc
+        return inlined
+
 
 @dataclass(frozen=True)
 class Inliner:
@@ -54,12 +96,18 @@ class GraphFile:
 
     @property
     def body(self) -> dict[str, object]:
-        """The definition mapping, with every prompt reference replaced by the referenced file's text
-        resolved relative to :attr:`path`. A missing referenced file raises :class:`FileNotFoundError`."""
+        """The definition mapping, with every prompt reference and every top-level
+        ``artifacts:`` entry replaced by its referenced file's text, resolved relative to
+        :attr:`path`. A missing prompt file raises :class:`FileNotFoundError`; a missing
+        ``artifacts:`` file raises :class:`GraphArtifactFileMissing`, naming the entry."""
         raw = yaml.safe_load(self.text)
         if not isinstance(raw, dict):
             raise ValueError(f"{self.path} is not a graph-definition mapping")
+        # Popped before the prompt walk runs, so it never descends into `artifacts:`.
+        artifacts = raw.pop(_TOP_LEVEL_ARTIFACTS_KEY, None)
         Inliner(self.path.parent).inline(raw)
+        if artifacts is not None:
+            raw[_TOP_LEVEL_ARTIFACTS_KEY] = ArtifactInliner(self.path.parent).inline(artifacts)
         return raw
 
     @property

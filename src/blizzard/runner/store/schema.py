@@ -543,3 +543,17 @@ transcript_outbound_buffer = Table(
     # exemption in blizzard-context:/standards/persistence.md. Pinned in test_pin_runner_store.py.
     sqlite_autoincrement=True,
 )
+
+# --- Graph artifacts (the pinned mint's `artifacts:` declarations) ------
+# Keyed `(graph_id, name)`: one immutable mint's rows, stored once however many leases pin it. No FK, no `graphs` table.
+
+graph_artifacts = Table(
+    "graph_artifacts",
+    metadata,
+    Column("graph_id", String, primary_key=True),
+    Column("name", String, primary_key=True),
+    Column("ordinal", Integer, nullable=False),  # authored `artifacts:` position — every read orders by it
+    Column("kind", String, nullable=False),
+    Column("content", Text, nullable=False),
+    Column("recorded_at", UtcDateTime, nullable=False),
+)

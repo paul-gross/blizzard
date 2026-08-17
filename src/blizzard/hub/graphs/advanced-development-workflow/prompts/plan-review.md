@@ -102,3 +102,7 @@ you adjudicated every refutation, and every finding with:
 
 Recording `folded` is itself the finding's closure — no node ever owes it a disposition — so record it; it is the trail
 from finding to edit.
+
+The entry fields above are restated from the docket, the canonical definition of this format; read it in full with
+`blizzard runner artifact get docket --scope graph --content`. If that command fails — any error, rather than the
+docket's text — record your findings in the fields as stated above and do not retry.

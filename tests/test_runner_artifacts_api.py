@@ -1,9 +1,9 @@
-"""``GET /api/leases/{id}/artifacts`` and ``.../artifacts/{name}`` (issue #127).
+"""``GET /api/leases/{id}/artifacts`` and ``.../artifacts/{name}``.
 
-Exercised over a real store via TestClient, hub reached through a stubbed ``httpx.get``
-so the forward, status pass-through, and 502-on-unreachable are asserted for real.
-Layered like the attach write — lease-scoped, token-authorized, then proxied.
-"""
+Exercised over a real store via TestClient, hub reached through a stubbed ``httpx.request``
+so the forward, status pass-through, and 502-on-unreachable are asserted for real. Layered
+like the attach write — lease-scoped, token-authorized, then proxied; a ``--scope graph``
+read resolves from the store's own pinned mirror and never reaches the stub."""
 
 from __future__ import annotations
 
@@ -16,10 +16,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 import blizzard.runner.api.hub_proxy as hub_proxy
+from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.enrollment import TokenHash
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.store.repository import NewLease
+from blizzard.runner.store.repository import GraphArtifactRecord, NewLease
 from tests.runner_fakes import make_store
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
@@ -255,6 +256,7 @@ def test_get_returns_one_artifact_by_name(tmp_path: Path, monkeypatch: pytest.Mo
         resp = client.get("/api/leases/lease_1/artifacts/plan", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
     assert resp.json() == {
+        "scope": "node",
         "name": "plan",
         "kind": "asset",
         "node_name": "plan",
@@ -383,3 +385,229 @@ def test_502_when_the_hub_is_unreachable(tmp_path: Path, monkeypatch: pytest.Mon
         resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 502
     assert "unreachable" in resp.json()["detail"]
+
+
+# Graph scope — the runner's own store-read mirror, never the hub
+
+
+def _seed_graph_artifacts(store, graph_id: str = "gr_1") -> None:  # type: ignore[no-untyped-def]
+    store.record_graph_artifacts(
+        graph_id=graph_id,
+        artifacts=[GraphArtifactRecord(name="docket", ordinal=0, kind=ArtifactKind.ASSET, content="the docket text")],
+        recorded_at=_NOW,
+    )
+
+
+@pytest.mark.component
+def test_list_with_no_scope_combines_node_and_graph_rows_each_carrying_its_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _seed_graph_artifacts(store)
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE))
+    with TestClient(app) as client:
+        resp = client.get("/api/leases/lease_1/artifacts", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    scopes = {a["name"]: a["scope"] for a in body}
+    assert scopes["plan"] == "node"
+    assert scopes["docket"] == "graph"
+    docket = next(a for a in body if a["name"] == "docket")
+    assert docket["kind"] == "asset"
+    assert docket["node_name"] is None
+    assert docket["epoch"] is None
+    assert docket["content"] == "the docket text"
+
+
+@pytest.mark.component
+def test_list_scope_node_excludes_graph_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _seed_graph_artifacts(store)
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE))
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/leases/lease_1/artifacts", params={"scope": "node"}, headers={"X-Blizzard-Lease-Token": _TOKEN}
+        )
+    assert resp.status_code == 200, resp.text
+    assert {a["name"] for a in resp.json()} == {"plan", "build-branch"}
+
+
+@pytest.mark.component
+def test_list_scope_graph_returns_only_graph_rows_and_never_calls_the_hub(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The scoped read is the property under test, asserted independently of ``get``'s
+    own version below — a filter applied after an unconditional proxy call would satisfy
+    the row-shape assertion above while still round-tripping to the hub."""
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _seed_graph_artifacts(store)
+    seen: list[str] = []
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE), seen)
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/leases/lease_1/artifacts", params={"scope": "graph"}, headers={"X-Blizzard-Lease-Token": _TOKEN}
+        )
+    assert resp.status_code == 200, resp.text
+    assert [a["name"] for a in resp.json()] == ["docket"]
+    assert seen == []
+
+
+@pytest.mark.component
+def test_get_scope_graph_resolves_from_the_store_and_never_calls_the_hub(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _seed_graph_artifacts(store)
+    seen: list[str] = []
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE), seen)
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/leases/lease_1/artifacts/docket",
+            params={"scope": "graph"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {
+        "scope": "graph",
+        "name": "docket",
+        "kind": "asset",
+        "node_name": None,
+        "epoch": None,
+        "repo": None,
+        "branch_name": None,
+        "commit_hash": None,
+        "content": "the docket text",
+    }
+    assert seen == []
+
+
+@pytest.mark.component
+def test_get_scope_graph_404s_naming_the_pinned_mint_without_falling_back_to_node(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _seed_graph_artifacts(store)
+    seen: list[str] = []
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE), seen)
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/leases/lease_1/artifacts/plan",
+            params={"scope": "graph"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 404
+    assert "gr_1" in resp.json()["detail"]
+    assert seen == []
+
+
+@pytest.mark.component
+def test_get_node_under_scope_graph_is_refused_not_silently_dropped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``node`` narrows to node scope and ``scope=graph`` excludes node scope, so the pair names
+    two different searches — answering either discards a flag the caller passed."""
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _seed_graph_artifacts(store)
+    seen: list[str] = []
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE), seen)
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/leases/lease_1/artifacts/docket",
+            params={"node": "plan", "scope": "graph"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 400, resp.text
+    detail = resp.json()["detail"]
+    assert "--node" in detail and "--scope graph" in detail
+    assert seen == []
+
+
+_ENVELOPE_WITH_A_GRAPH_COLLIDING_NAME: dict[str, object] = {
+    **_ENVELOPE,
+    "artifacts": [
+        {"name": "docket", "kind": "asset", "node_name": "plan", "epoch": 1, "content": "a node's own docket"},
+    ],
+}
+
+
+@pytest.mark.component
+def test_get_bare_name_ambiguous_across_both_scopes_names_them(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A cross-graph migration can leave a node artifact colliding with a graph
+    declaration — the mint-time collision check only protects the same-graph case, so this
+    route owns its own 409 rather than assuming the collision was already impossible."""
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _seed_graph_artifacts(store)
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE_WITH_A_GRAPH_COLLIDING_NAME))
+    with TestClient(app) as client:
+        resp = client.get("/api/leases/lease_1/artifacts/docket", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 409, resp.text
+    detail = resp.json()["detail"]
+    assert "graph" in detail and "plan" in detail
+    assert "--scope" in detail and "--node" in detail
+
+
+@pytest.mark.component
+def test_get_node_alone_settles_a_cross_scope_collision(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``node`` names a *producing* node, and a graph declaration has none — so supplying it
+    is already a narrowing to node scope, and must resolve the collision above without the
+    caller also having to pass ``scope``."""
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _seed_graph_artifacts(store)
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE_WITH_A_GRAPH_COLLIDING_NAME))
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/leases/lease_1/artifacts/docket",
+            params={"node": "plan"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["scope"] == "node"
+    assert resp.json()["content"] == "a node's own docket"
+
+
+@pytest.mark.component
+def test_get_409_names_only_the_levers_the_caller_has_left(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A caller who already passed ``scope=node`` and still hit several producing nodes has
+    only ``--node`` left; naming ``--scope`` again is advice they cannot act on."""
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/leases/lease_1/artifacts/retrospective",
+            params={"scope": "node"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 409, resp.text
+    detail = resp.json()["detail"]
+    assert "--node" in detail
+    assert "--scope" not in detail
+
+
+@pytest.mark.component
+def test_get_404_after_searching_both_scopes_says_so(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bare miss searched the mint's declarations too, so the detail names that mint —
+    rather than reporting only the node-step it also failed to find the name in."""
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _seed_graph_artifacts(store)
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE))
+    with TestClient(app) as client:
+        bare = client.get("/api/leases/lease_1/artifacts/ghost", headers={"X-Blizzard-Lease-Token": _TOKEN})
+        narrowed = client.get(
+            "/api/leases/lease_1/artifacts/ghost",
+            params={"node": "plan"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert bare.status_code == 404 and narrowed.status_code == 404
+    assert "gr_1" in bare.json()["detail"]
+    # The narrowed miss never looked at graph scope, so it claims no graph-scoped search.
+    assert "gr_1" not in narrowed.json()["detail"]

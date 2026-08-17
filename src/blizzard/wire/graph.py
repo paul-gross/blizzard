@@ -130,6 +130,9 @@ class GraphView(BaseModel):
     follow_latest: bool | None = None
     # The graph-level named-session declarations (issue #144), in authored order.
     sessions: list[GraphSessionView] = []
+    # The graph-scoped `artifacts:` declarations' names, in authored order — content is not
+    # served here; a worker reads it through the fleet protocol under a lease.
+    artifacts: list[str] = []
     nodes: list[GraphNodeView] = []
     edges: list[GraphEdgeView] = []
     warnings: list[str] = []

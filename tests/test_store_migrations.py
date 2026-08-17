@@ -16,6 +16,7 @@ from blizzard.foundation.store.migrations import MigrationRunner, RevisionMismat
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.store import MIGRATIONS_DIR as HUB_MIGRATIONS_DIR
 from blizzard.hub.store import schema as hub_schema
+from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.store import MIGRATIONS_DIR as RUNNER_MIGRATIONS_DIR
 from blizzard.runner.store import schema as runner_schema
 from tests.conftest import Daemon
@@ -99,6 +100,52 @@ def test_wrapped_takeover_command_column_survives_migration_roundtrip(tmp_path: 
 
     runner.upgrade("head")
     assert _has_column()
+
+
+def test_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Path) -> None:
+    """Hub-only (the graph mint's own child table) — downgrades to this revision's own
+    parent by id, so the drop half is asserted rather than inferred from a revision
+    marker, which a ``downgrade()`` that dropped nothing would satisfy just as well."""
+    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = hub_runtime.migration_runner(config)
+
+    def _has_table() -> bool:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return "graph_artifacts" in sa.inspect(engine).get_table_names()
+        finally:
+            engine.dispose()
+
+    assert _has_table()
+
+    runner.downgrade("20260812_1300_hub_transcript_events_subject_tool")
+    assert not _has_table()
+
+    runner.upgrade("head")
+    assert _has_table()
+
+
+def test_runner_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Path) -> None:
+    """The runner's own graph-artifact mirror table — downgrades to this
+    revision's own parent by id, so the drop half is asserted rather than inferred from a
+    revision marker, which a ``downgrade()`` that dropped nothing would satisfy just as well."""
+    config = runner_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = runner_runtime.migration_runner(config)
+
+    def _has_table() -> bool:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return "graph_artifacts" in sa.inspect(engine).get_table_names()
+        finally:
+            engine.dispose()
+
+    assert _has_table()
+
+    runner.downgrade("20260816_1100_runner_transcript_agent_tool_use_ids")
+    assert not _has_table()
+
+    runner.upgrade("head")
+    assert _has_table()
 
 
 _SCHEMA_METADATA = {"hub": hub_schema.metadata, "runner": runner_schema.metadata}

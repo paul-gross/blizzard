@@ -49,8 +49,11 @@ sanctioned way to get usage detail; it does not weaken that prohibition, and the
 which commands are yours.
 
 `blizzard runner heartbeat` and `blizzard runner session-end` fire automatically from your tool-call and session-exit
-hooks; never invoke either yourself. The `artifact` and `chunk` command groups are ambient-scoped to your own lease, so
-their verbs take no chunk or lease argument.
+hooks; never invoke either yourself. The `artifact` and `chunk` command groups are bound ambiently to your own lease,
+so their verbs take no chunk or lease argument. Artifacts come in two **scopes**, a separate axis the `artifact` verbs
+do not all share: `artifact list` and `artifact get` take `--scope node|graph` and read both scopes when it is omitted,
+while `artifact create`, `artifact commit`, and `artifact staged` are node scope only and refuse `--scope graph` — a
+graph mint's declarations are baked in at mint and read-only.
 
 - `blizzard runner work-items <chunk-id>` — reads the chunk's work items: each work ref's issue body and comments. Read
   them instead of guessing at the work from the node prompt alone.
@@ -58,12 +61,17 @@ their verbs take no chunk or lease argument.
   oldest-first. Each row is one accepted transition, cross-graph migration, or delivery bounce, and carries its `kind`
   as `transition`, `migration`, or `bounce`. A bounced attempt that produced no artifact still appears as a row; your
   own in-flight node-step does not, because a transition is recorded only once an attempt completes.
-- `blizzard runner artifact list` — lists your node-step's input artifacts as kind-discriminated JSON. Content is elided
-  by default, showing each artifact's name, kind, node_name, epoch, and byte length; `--content` includes each
-  artifact's full text.
-- `blizzard runner artifact get <name>` — reads one input artifact by its `produces:` name; its `--content` flag prints
-  the raw asset text to stdout. When more than one node produced the requested name, it exits non-zero naming the
-  candidate nodes, and `--node <node>` selects one.
+- `blizzard runner artifact list [--scope node|graph]` — lists your artifacts as kind-discriminated JSON: `node` scope
+  is your node-step's own input artifacts, `graph` scope is the graph mint's own baked-in declarations — content
+  authored alongside the graph, identical for every chunk pinned to that mint, produced by no node-step. Not every graph
+  declares any, so `blizzard runner artifact list --scope graph` is how you find out what yours has; it answers empty
+  when the graph declares none. Content is elided by default, showing each artifact's name, kind, node_name, epoch, and
+  byte length; `--content` includes each artifact's full text.
+- `blizzard runner artifact get <name> [--node <node>] [--scope node|graph] [--content]` — reads one artifact by name,
+  a `produces:` name at node scope or a declaration's name at graph scope; `--content` prints the raw asset text to
+  stdout. `blizzard runner artifact get <name> --scope graph` reads a graph-mint declaration directly, with no hub
+  round-trip. When more than one candidate matches — several nodes producing the requested name, or that name present
+  in both scopes — it exits non-zero naming the candidates, and `--node` and/or `--scope` selects one.
 - `blizzard runner artifact create --name <name>` — with content on stdin, submits an asset artifact for that
   `produces:` name. It stages the submission durably and prints a `recorded ... bytes` confirmation.
 - `blizzard runner artifact commit` — durably declares a **git-commit artifact** for a repo, for a node whose
@@ -79,8 +87,8 @@ their verbs take no chunk or lease argument.
   recorded durably before the session exits, and the fleet resumes you once an answer arrives.
 
 Input artifacts your node-step may receive include a prior `plan`, `plan-findings`, a sibling `retrospective`, or an
-upstream node's pushed `git_commit` ref. Read what your node-step consumes through the `artifact` commands rather than
-reaching around that seam.
+upstream node's pushed `git_commit` ref; a graph's own declarations are typically standing reference text — a docket, a
+rubric. Read what your node-step consumes through the `artifact` commands rather than reaching around that seam.
 
 ## Committing against work items
 

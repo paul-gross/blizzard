@@ -9,4 +9,6 @@ the foreign work `build`'s stop-and-ask rule is about. Address every failure, co
 tip before you declare done again. The work returns to verification.
 
 There is no refutation channel here, unlike a review bounce: a failed verification method is a mechanical fact, not a
-judgement to argue with — either the change is wrong, or the method is. Fix whichever it is.
+judgement to argue with — either the change is wrong, or the method is. Fix whichever it is. This is the docket's own
+rule; read the full docket with `blizzard runner artifact get docket --scope graph --content` if you want the rest of
+it.

@@ -1,19 +1,13 @@
 # The findings docket
 
-The shared format for every finding this graph records and every disposition that closes one. This file is the canonical
-definition, read by whoever maintains this graph: the prompts themselves are inlined into worker sessions as standalone
-text (`blizzard.hub.graphs` inlines each `prompt`/`prompt_addendum` file at load), so each prompt restates the slice of
-this format its own reader needs, and an edit to the format here must be carried into every prompt that restates the
-affected slice. Those are: `plan.md` and `build.md` (the refutation channel's newest-submission rule),
-`plan.from-plan-review.md` and `build.from-review.md` (the refutation and disposition records), `plan-review.md` and
-`review.md` (the entry format and refutation adjudication), `plan-review.judgement.md` and `review.judgement.md`
-(severity values and adjudication), `build.from-verify.md` (no refutation channel for verification), and
-`retrospective.md` (the fold). Grep the prompts for the edited slice's terms rather than trusting this list alone — it
-has drifted before.
+The shared format for every finding this graph records and every disposition that closes one, and the canonical
+definition of both. This graph bakes this file into its mint, so a worker holding a lease can read the whole format on
+demand with `blizzard runner artifact get docket --scope graph --content`. Each prompt also restates the slice its own
+reader needs, so a node's work never depends on making that call.
 
-The docket is built on the chunk's artifact series (`blizzard-context:/domain/artifacts.md` — append-only, per node and
-name, reads resolve to the newest entry): a docket entry lives inside a `plan-findings` or `review-findings` asset; a
-disposition lives inside the responding node's own `retrospective` asset.
+The docket is built on the chunk's artifact series — append-only per node and name, with reads resolving to the newest
+entry: a docket entry lives inside a `plan-findings` or `review-findings` asset; a disposition lives inside the
+responding node's own `retrospective` asset.
 
 ## Docket entry
 
@@ -34,7 +28,7 @@ Every finding recorded in a `plan-findings` or `review-findings` asset carries:
 Example, inside a `review-findings` asset:
 
 ```text
-F1 — should-fix — blizzard/src/blizzard/hub/runner.py:142
+F1 — should-fix — payments-api/src/payments/worker.py:142
   Retry counter isn't reset after a successful heartbeat, so a flaky-then-recovered
   worker still escalates on its next transient failure.
 ```

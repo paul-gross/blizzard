@@ -721,11 +721,11 @@ def graph_show(cli: CliContext, graph_id: str) -> None:
 @graph_group.command("mint", cls=FleetCommand)
 @click.argument("path")
 def graph_mint(cli: CliContext, path: str) -> None:
-    """Mint a graph from PATH's YAML definition; PATH may be ``-`` to read stdin.
+    """Mint a graph from PATH's YAML definition; PATH may be '-' to read stdin.
 
-    A file PATH inlines ``prompt``/``prompt_addendum`` file references relative to its
-    own directory first (issue #123); stdin carries no such directory, so its YAML
-    posts verbatim. Renders the full validation report on a 422 (issue #104)."""
+    A file PATH inlines file references relative to its own directory: a 'prompt'/'prompt_addendum' value only when it
+    reads as a path, so literal prose stays literal, but every 'artifacts:' value always — one that fails to resolve
+    fails the load, naming the entry. Stdin has no directory, so it posts verbatim; a 422 renders in full."""
     if path == "-":
         definition_yaml = click.get_text_stream("stdin").read()
     else:

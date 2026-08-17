@@ -2,7 +2,8 @@
 
 The **pre-prompt** is the node's base prompt, the inlined arrival addendum of the edge the chunk took to
 reach the node, and a generated required-artifacts table (issue #143). The **judgement prompt** is the
-node's authored prose only. Artifacts resolve **latest-by-epoch per ``{node_name}.{name}``**."""
+node's authored prose only. Node-scope artifacts resolve **latest-by-epoch per
+``{node_name}.{name}``**; the graph mint's baked-in declarations ride alongside as authored."""
 
 from __future__ import annotations
 
@@ -11,7 +12,14 @@ from dataclasses import dataclass
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.graph import Edge, Graph, Node
 from blizzard.hub.domain.work import Chunk, TransitionFact
-from blizzard.wire.envelope import EnvelopeArtifact, EnvelopeChoice, NodeConfig, NodeEnvelope, RotatePolicyView
+from blizzard.wire.envelope import (
+    EnvelopeArtifact,
+    EnvelopeChoice,
+    GraphArtifact,
+    NodeConfig,
+    NodeEnvelope,
+    RotatePolicyView,
+)
 from blizzard.wire.graph import ProducesEntry
 
 
@@ -202,4 +210,7 @@ class Envelope:
             judgement_prompt=self.judgement_prompt,
             work_refs=[{"source": p.source, "ref": p.ref} for p in self.chunk.work_refs],
             artifacts=LatestArtifacts.of(self.artifacts).wire,
+            graph_artifacts=[
+                GraphArtifact(name=a.name, kind=ArtifactKind.ASSET, content=a.content) for a in self.graph.artifacts
+            ],
         )

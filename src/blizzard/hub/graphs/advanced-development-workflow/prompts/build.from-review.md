@@ -27,3 +27,7 @@ and mark it `fixed-in-chunk` (with the commit hash), `filed-as-issue` (with the 
 a one-line reason). Leaving a should-fix finding undisposed is fine for this round — but a superseded round's undisposed
 findings are abandoned by design, not caught by retrospective's fold, so if it matters beyond this chunk, dispose it
 now.
+
+The refutation and disposition record shapes above are restated from the docket; read the whole thing with
+`blizzard runner artifact get docket --scope graph --content`. If that command fails — any error, rather than the
+docket's text — proceed on the restatement above and do not retry: it is what you need for this node.

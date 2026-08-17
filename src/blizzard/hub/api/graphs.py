@@ -93,6 +93,7 @@ def _graph_view(
             )
             for s in graph.sessions
         ],
+        artifacts=[a.name for a in graph.artifacts],
         nodes=[_node_view(n) for n in graph.nodes],
         edges=[
             GraphEdgeView(

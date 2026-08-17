@@ -10,10 +10,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml as yaml_lib
 
-from blizzard.hub.domain.graph import GraphDoc, SessionMode, SessionRef
+from blizzard.hub.domain.graph import SessionMode, SessionRef
 from blizzard.hub.domain.graph_validation import Validator
+from blizzard.hub.graphs import GraphFile
 
 pytestmark = pytest.mark.unit
 
@@ -22,8 +22,9 @@ _PACKAGED = ("advanced-development-workflow", "default", "basic-development-work
 
 
 def _doc(name: str):  # type: ignore[no-untyped-def]
-    raw = yaml_lib.safe_load((_GRAPHS_ROOT / name / "graph.yaml").read_text())
-    return GraphDoc.of(raw)
+    # Through the loader, as `graph sync` reads it: a raw parse would leave every file
+    # reference unresolved, which is not a shape the hub ever mints from.
+    return GraphFile(_GRAPHS_ROOT / name / "graph.yaml").doc
 
 
 @pytest.mark.parametrize("name", _PACKAGED)

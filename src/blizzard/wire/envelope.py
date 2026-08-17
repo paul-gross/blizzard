@@ -1,9 +1,9 @@
 """The node envelope and the apply-response.
 
 The **envelope** is what a node-step is worked from: the pre-prompt (base prompt + any arrival
-addendum, already inlined), the node's config, the chunk's work refs, and every artifact resolved
-latest-by-epoch. The **apply-response** is a completion's reply — the next envelope, a signal that a
-hub node took over, or a failure."""
+addendum, already inlined), the node's config, the chunk's work refs, node-scope artifacts resolved
+latest-by-epoch, and the mint's immutable graph-scope declarations. The **apply-response** is a
+completion's reply — the next envelope, a hub-node takeover signal, or a failure."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel
 
-from blizzard.hub.domain.artifacts import ArtifactKind
+from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactScope
 from blizzard.hub.domain.graph import Executor, JudgedBy, SessionMode
 from blizzard.wire.graph import ProducesEntry
 
@@ -23,6 +23,35 @@ class EnvelopeArtifact(BaseModel):
     kind: ArtifactKind
     node_name: str
     epoch: int
+    # git_commit variant
+    repo: str | None = None
+    branch_name: str | None = None
+    commit_hash: str | None = None
+    # asset variant
+    content: str | None = None
+
+
+class GraphArtifact(BaseModel):
+    """One graph-scoped artifact baked into the mint — the loader-inlined content of
+    a graph's ``artifacts:`` entry, carried to the runner alongside every envelope for that
+    graph."""
+
+    name: str
+    kind: ArtifactKind
+    content: str
+
+
+class WorkerArtifact(BaseModel):
+    """One artifact as the worker's own artifact routes serve it, node- or graph-scoped.
+    A node-scope row is resolved latest-by-epoch and names its producing node and
+    epoch; a graph-scope row is one of the pinned graph mint's own baked-in declarations
+    and carries neither, since no node-step produced it."""
+
+    scope: ArtifactScope
+    name: str
+    kind: ArtifactKind
+    node_name: str | None = None
+    epoch: int | None = None
     # git_commit variant
     repo: str | None = None
     branch_name: str | None = None
@@ -92,6 +121,9 @@ class NodeEnvelope(BaseModel):
     judgement_prompt: str | None
     work_refs: list[dict[str, str]] = []
     artifacts: list[EnvelopeArtifact] = []
+    # The pinned mint's graph-scoped `artifacts:` declarations, empty for a graph that
+    # declares none.
+    graph_artifacts: list[GraphArtifact] = []
 
 
 class ApplyOutcome(StrEnum):

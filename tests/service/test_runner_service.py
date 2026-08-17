@@ -17,6 +17,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -26,6 +27,7 @@ from fastapi import FastAPI
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.runtime import init_environment as init_runner_environment
@@ -388,6 +390,88 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
     asst_turn = next(t for t in turns if t["kind"] == "asst")
     assert "pass" in asst_turn["text"]
     assert "the mock harness committed the change; checks are green" in asst_turn["text"]
+
+
+def _worker_credential(config: RunnerConfig, lease_id: str) -> dict[str, str]:
+    """The lease-token header a worker presents, minted here rather than intercepted: the
+    plaintext handed to the spawn lives only in that process's environment, and
+    ``record_lease_token`` is overwrite-safe by contract — a re-mint per lease id is what
+    resume and takeover already do."""
+    token, token_hash = LeaseToken.mint()
+    engine = create_engine_from_url(config.db_url)
+    try:
+        SqlAlchemyRunnerStore(engine).record_lease_token(lease_id, token_hash, datetime.now(UTC))
+    finally:
+        engine.dispose()
+    return {"X-Blizzard-Lease-Token": token}
+
+
+def _graph_artifact_chunk_spec(work_ref: str) -> dict:
+    """``mock_hub_chunk_spec`` plus one graph-scoped declaration — the phase 2b seed
+    lever a real runner mints and pins into its own store before the node even starts."""
+    spec = mock_hub_chunk_spec(work_ref)
+    spec["graph_artifacts"] = [{"name": "docket", "kind": "asset", "content": "the docket text"}]
+    return spec
+
+
+def test_graph_scoped_artifact_reads_from_the_runners_own_pin_with_the_hub_unreachable(tmp_path: Path) -> None:
+    """Proves against a real process boundary: the runner's own mirror of the seeded
+    declaration answers ``--scope graph`` with the hub unreachable, while the node
+    half — still hub-dependent — fails the same call would otherwise take."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    fenced = _tick_env()
+
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        seeded = hub.post("/_seed/chunk", json=_graph_artifact_chunk_spec(_WORK_REF_URL))
+        assert seeded.status_code == 201, seeded.text
+        chunk_id = seeded.json()["chunk_id"]
+
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
+
+        with _runner_api(config):
+            runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+            try:
+
+                def _lease_minted() -> bool:
+                    items = runner_client.get("/api/leases").json()["items"]
+                    return any(item["chunk_id"] == chunk_id for item in items)
+
+                minted = poll_until(lambda: _tick_then(config, fenced, _lease_minted), timeout=60.0)
+                assert minted, "the chunk's first lease never minted"
+                items = runner_client.get("/api/leases").json()["items"]
+                lease_id = next(item["lease_id"] for item in items if item["chunk_id"] == chunk_id)
+                worker = _worker_credential(config, lease_id)
+
+                # No further ticks run past this point: the loop only advances when this
+                # test calls it, so the lease found above stays active for every read below.
+                assert hub.post("/_levers/unreachable", json={"remaining": 10_000}).status_code == 200
+
+                listed = runner_client.get(
+                    f"/api/leases/{lease_id}/artifacts", params={"scope": "graph"}, headers=worker
+                )
+                assert listed.status_code == 200, listed.text
+                rows = listed.json()
+                assert [r["name"] for r in rows] == ["docket"]
+                assert rows[0]["scope"] == "graph" and rows[0]["content"] == "the docket text"
+
+                fetched = runner_client.get(
+                    f"/api/leases/{lease_id}/artifacts/docket", params={"scope": "graph"}, headers=worker
+                )
+                assert fetched.status_code == 200, fetched.text
+                assert fetched.json()["content"] == "the docket text"
+
+                # Contrast: the node half still proxies, so the same outage fails it — the
+                # lever refuses at the application layer, hence its 503 passed through.
+                node_read = runner_client.get(
+                    f"/api/leases/{lease_id}/artifacts", params={"scope": "node"}, headers=worker
+                )
+                assert node_read.status_code == 503, node_read.text
+                assert "unreachable" in node_read.json()["detail"]
+            finally:
+                runner_client.close()
 
 
 #: The seq this scenario seeds its own hub-side segment under.

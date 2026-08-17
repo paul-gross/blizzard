@@ -13,6 +13,7 @@ import pytest
 from pydantic import ValidationError
 
 from blizzard.runner.app import create_app_for_export
+from blizzard.wire.attachments import AttachmentRequest
 from blizzard.wire.chunk import ChunkDetail, ChunkIngestRequest
 from blizzard.wire.git_commits import GitCommitDeclarationRequest
 from blizzard.wire.graph import GraphPolicyRequest
@@ -33,6 +34,19 @@ def test_git_commit_declaration_carries_no_forge_field() -> None:
     read from the environment's repo manifest, never from the worker — re-adding the
     field re-opens the mismatch class the manifest lookup closed."""
     assert "forge" not in GitCommitDeclarationRequest.model_fields
+
+
+def test_git_commit_declaration_request_carries_no_scope_field() -> None:
+    """The write route has nothing to refuse a graph-scoped body with: the CLI-side
+    refusal is the only guard, which only holds while this request model names no scope
+    for the CLI to smuggle one through."""
+    assert "scope" not in GitCommitDeclarationRequest.model_fields
+
+
+def test_attachment_request_carries_no_scope_field() -> None:
+    """The same pin for ``artifact create``'s write body — a scope field here would
+    give ``--scope graph`` a route to reach, defeating the CLI-side refusal."""
+    assert "scope" not in AttachmentRequest.model_fields
 
 
 def test_chunk_ingest_accepts_source_native_tokens_only() -> None:

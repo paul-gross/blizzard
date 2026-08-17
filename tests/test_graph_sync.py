@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from blizzard.hub.domain.graph import GraphArtifact
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
 from blizzard.hub.graphs import PACKAGED
 from tests.support import HubHarness, build_hub
@@ -119,6 +120,90 @@ def test_reformatting_the_yaml_is_not_a_change(tmp_path: Path) -> None:
     outcomes = _sync(hub, [path])
 
     assert _statuses(outcomes) == [("tidy", "up-to-date")]
+
+
+# One declared artifact file, its entry name deliberately unlike its filename: an error
+# message carrying only one of the two can then never satisfy an assertion for the other.
+_ARTIFACT_GRAPH_YAML = """
+name: {name}
+artifacts:
+  docket: ./reference-notes.md
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: ./prompts/build.md
+    judgement:
+      prompt: judge it
+      choices:
+        pass:
+          description: it works
+          to: done
+"""
+
+# Multi-line, blank-line-bearing, newline-terminated — the shape a real declared file has,
+# which the mint must bake byte-identically rather than reflow.
+_DOCKET_TEXT = "# Docket\n\n- one term: what it means\n- another term\n\n  a continuation line\n"
+
+
+def _docketed(tmp_path: Path, name: str, *, docket: str | None = _DOCKET_TEXT) -> Path:
+    """One packaged-graph directory declaring `artifacts:`; ``docket=None`` leaves the
+    declared file absent."""
+    graph_yaml = _packaged(tmp_path, name, body=_ARTIFACT_GRAPH_YAML.format(name=name))
+    if docket is not None:
+        (graph_yaml.parent / "reference-notes.md").write_text(docket)
+    return graph_yaml
+
+
+def test_a_declared_artifact_file_mints_with_its_own_text_baked(tmp_path: Path) -> None:
+    # The file-minted half of the declaration: reconciliation inlines `artifacts:` at load
+    # and bakes each entry's file text into the mint verbatim, multi-line content included.
+    hub = build_hub(tmp_path)
+    graph_yaml = _docketed(tmp_path, "docketed")
+
+    outcomes = _sync(hub, [graph_yaml])
+
+    assert _statuses(outcomes) == [("docketed", "minted")]
+    graph_id = outcomes[0].graph_id
+    assert graph_id is not None
+    minted = hub.services.graphs.get(graph_id)
+    assert minted is not None
+    assert minted.artifacts == [GraphArtifact(name="docket", content=_DOCKET_TEXT, ordinal=0)]
+
+
+def test_an_artifact_only_edit_is_detected_and_minted(tmp_path: Path) -> None:
+    # The same case a prompt-only edit makes: `graph.yaml` stays byte-identical while the
+    # baked content changed, so only the comparison over the parsed definition sees it.
+    hub = build_hub(tmp_path)
+    graph_yaml = _docketed(tmp_path, "docketed")
+    _sync(hub, [graph_yaml])
+    before = graph_yaml.read_text()
+
+    hub.clock.advance(timedelta(minutes=1))  # distinct created_at → a deterministic newest
+    (graph_yaml.parent / "reference-notes.md").write_text("# Docket\n\n- a revised term\n")
+    outcomes = _sync(hub, [graph_yaml])
+
+    assert graph_yaml.read_text() == before  # graph.yaml untouched
+    assert _statuses(outcomes) == [("docketed", "minted")]
+    graph_id = outcomes[0].graph_id
+    assert graph_id is not None
+    minted = hub.services.graphs.get(graph_id)
+    assert minted is not None
+    assert [a.content for a in minted.artifacts] == ["# Docket\n\n- a revised term\n"]
+
+
+def test_a_graph_declaring_a_missing_artifact_file_is_reported_failed(tmp_path: Path) -> None:
+    # A missing `artifacts:` file is a load-time error, so it surfaces here exactly
+    # like an unparseable graph.yaml — as a per-graph `failed` row naming the entry.
+    hub = build_hub(tmp_path)
+    graph_yaml = _docketed(tmp_path, "missing-artifact", docket=None)
+
+    outcomes = _sync(hub, [graph_yaml])
+
+    assert _statuses(outcomes) == [("missing-artifact", "failed")]
+    assert outcomes[0].detail is not None
+    assert "docket" in outcomes[0].detail
+    assert str(graph_yaml.parent / "reference-notes.md") in outcomes[0].detail
 
 
 def test_a_failing_graph_does_not_stop_the_others_and_is_reported(tmp_path: Path) -> None:

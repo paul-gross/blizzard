@@ -46,7 +46,14 @@ from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, RouteView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope, RotatePolicyView
+from blizzard.wire.envelope import (
+    ApplyOutcome,
+    ApplyResponse,
+    GraphArtifact,
+    NodeConfig,
+    NodeEnvelope,
+    RotatePolicyView,
+)
 from blizzard.wire.facts import RunnerFact, RunnerFactAck, RunnerFactBatch
 from blizzard.wire.graph import ProducesEntry
 from blizzard.wire.question import QuestionView
@@ -742,12 +749,13 @@ def make_envelope(
     checks_cwd: str | None = None,
     checks_timeout: int | None = None,
     requires_checks: set[str] | None = None,
+    graph_artifacts: list[GraphArtifact] | None = None,
 ) -> NodeEnvelope:
     """A minimal runner-node envelope for a step test.
 
     ``epoch`` defaults to 0 (fresh, never-leased); pass the carried-forward floor to
     model a reclaim. ``session`` defaults ``FRESH``; ``produces`` is a bare name
-    (``kind=asset``) or an explicit :class:`~blizzard.wire.graph.ProducesEntry`."""
+    (``kind=asset``) or an explicit :class:`~blizzard.wire.graph.ProducesEntry`; ``graph_artifacts`` defaults empty."""
     from blizzard.hub.domain.graph import Executor, JudgedBy
     from blizzard.wire.envelope import EnvelopeChoice
 
@@ -777,6 +785,7 @@ def make_envelope(
         node=node,
         prompt="commit('work')",
         judgement_prompt="Assess the build.",
+        graph_artifacts=graph_artifacts or [],
     )
 
 
