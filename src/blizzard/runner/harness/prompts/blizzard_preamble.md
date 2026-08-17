@@ -43,7 +43,9 @@ item's forge with your commit message verbatim, and some sources honor no such c
 every work item of a delivered chunk on its own regardless, so treat this as a courtesy that may fire sooner, never as
 the only path.
 
-The machine-local facts table below names your runner, chunk, lease, and held environment(s) for this spawn.
+The machine-local facts table below names your runner, chunk, lease, and held environment(s) for this spawn. Your held
+environments are also exported into your process environment as `BLIZZARD_ENV_IDS` and `BLIZZARD_ENV_WORKDIRS`, so a
+script can read them without parsing the table.
 
 ## Never end a turn with work you still need running
 
