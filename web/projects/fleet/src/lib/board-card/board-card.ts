@@ -141,14 +141,16 @@ export interface BoardCard {
     }
     .card:hover {
       border-color: var(--cyan);
+      background: var(--tint-hover);
     }
     /* The chunk whose detail fills the dock — an outline ring (not border-color, which
-       would repaint the status-colored left bar) plus a faint cyan wash, so the
-       board answers "which one am I looking at" at a glance. */
+       would repaint the status-colored left bar) plus a stronger cyan wash than a
+       merely hovered card carries, so the board answers "which one am I looking at"
+       at a glance even while hovering a different card. */
     .card.selected {
       outline: 1px solid var(--cyan);
       outline-offset: -1px;
-      background: color-mix(in srgb, var(--cyan) 8%, var(--overlay-25));
+      background: var(--tint-selected);
     }
     /* The DONE column's cards (issue #137: done and stopped, the two
        statuses STATUS_LANE folds onto it) keep their green accent, and an

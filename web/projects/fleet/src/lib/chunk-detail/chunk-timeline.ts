@@ -188,7 +188,7 @@ interface StepUsageTotal {
       border-bottom: 1px solid var(--line);
       font-size: var(--fs-sm);
       line-height: 1.5;
-    }
+    } .step:hover { border-bottom-color: var(--cyan); background: var(--tint-hover); }
     .step .att {
       color: var(--label-dim);
       font-size: var(--fs-label);

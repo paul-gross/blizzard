@@ -146,6 +146,16 @@ import { sortArtifacts } from './sort-artifacts';
       color: var(--cyan);
       outline: none;
     }
+    /* The activatable-row hover wash, shared with board-card and node-history —
+       on the row's own bordered box, not the plain-text color change above.
+       Scoped to a row that carries \`.artifact-link\`: a \`.artifact-plain\` row
+       (a git_commit ref, or a content-less asset — see hasBodyToExpand) has no
+       control to hover, so it takes neither this nor a pointer cursor. */
+    .artifact:has(.artifact-link:hover),
+    .artifact:has(.artifact-link:focus-visible) {
+      border-color: var(--cyan);
+      background: var(--tint-hover);
+    }
   `,
 })
 export class ChunkArtifacts {
