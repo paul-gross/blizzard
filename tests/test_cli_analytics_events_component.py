@@ -86,7 +86,7 @@ def test_each_filter_flag_round_trips_to_a_filtered_result(tmp_path: Path, monke
     assert by_kind.exit_code == 0, by_kind.output
     assert [e["subject"] for e in json.loads(by_kind.output)["events"]] == ["wf-commit"]
 
-    by_tool = _invoke("--tool", "Task", "--json")
+    by_tool = _invoke("--tool", "Agent", "--json")
     assert [e["subject"] for e in json.loads(by_tool.output)["events"]] == ["explorer"]
 
     by_prefix = _invoke("--subject-prefix", "src/", "--json")

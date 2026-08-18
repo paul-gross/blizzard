@@ -97,8 +97,9 @@ def test_a_skill_call_mints_a_skill_invocation_event() -> None:
     assert events[0].tool == "Skill"
 
 
-def test_a_task_call_mints_an_agent_spawn_event() -> None:
-    turns = [_tool_turn(0, "Task", {"subagent_type": "explorer", "prompt": "find X"})]
+def test_an_agent_call_mints_an_agent_spawn_event() -> None:
+    """The Claude Code harness names the subagent-spawn tool ``Agent`` (blizzard#327)."""
+    turns = [_tool_turn(0, "Agent", {"subagent_type": "explorer", "prompt": "find X"})]
 
     events = extract_events(turns, normalizer_version=_DIALECT)
 
@@ -106,11 +107,21 @@ def test_a_task_call_mints_an_agent_spawn_event() -> None:
     assert events[0].kind == KIND_AGENT_SPAWN
     assert events[0].payload == {"agent_type": "explorer"}
     assert events[0].subject == "explorer"
-    assert events[0].tool == "Task"
+    assert events[0].tool == "Agent"
 
 
-def test_a_task_call_with_no_subagent_type_mints_no_event() -> None:
-    turns = [_tool_turn(0, "Task", {"prompt": "find X"})]
+def test_an_agent_call_with_no_subagent_type_mints_no_event() -> None:
+    turns = [_tool_turn(0, "Agent", {"prompt": "find X"})]
+
+    events = extract_events(turns, normalizer_version=_DIALECT)
+
+    assert events == []
+
+
+@pytest.mark.parametrize("tool_name", ["TaskUpdate", "TaskCreate"])
+def test_a_non_spawn_tool_call_mints_no_agent_spawn_event(tool_name: str) -> None:
+    """Neighboring tool names never match the spawn gate (blizzard#327)."""
+    turns = [_tool_turn(0, tool_name, {"subagent_type": "explorer"})]
 
     events = extract_events(turns, normalizer_version=_DIALECT)
 
@@ -130,7 +141,7 @@ def test_a_linked_sidechain_turn_carries_depth_one_and_its_own_agent_type() -> N
     inner = _tool_turn(0, "Read", {"file_path": "inner.py"})
     spawn = _tool_turn(
         0,
-        "Task",
+        "Agent",
         {"subagent_type": "explorer", "prompt": "find X"},
         sidechain=SidechainSegmentView(agent_id="a1", agent_type="explorer", link="uuid-chain", turns=[inner]),
     )
@@ -145,18 +156,38 @@ def test_a_linked_sidechain_turn_carries_depth_one_and_its_own_agent_type() -> N
     assert kinds[KIND_FILE_READ].turn_path == "0.0"
 
 
+def test_an_agent_call_nested_in_a_sidechain_mints_an_agent_spawn_event_at_depth_one() -> None:
+    """A spawn recognized from inside a sidechain, not just the main lane (blizzard#327)."""
+    nested_spawn = _tool_turn(0, "Agent", {"subagent_type": "coder", "prompt": "implement"})
+    outer_spawn = _tool_turn(
+        0,
+        "Agent",
+        {"subagent_type": "explorer", "prompt": "find X"},
+        sidechain=SidechainSegmentView(agent_id="a1", agent_type="explorer", link="uuid-chain", turns=[nested_spawn]),
+    )
+
+    events = extract_events([outer_spawn], normalizer_version=_DIALECT)
+
+    spawns = [e for e in events if e.kind == KIND_AGENT_SPAWN]
+    assert len(spawns) == 2
+    nested = next(e for e in spawns if e.turn_path == "0.0")
+    assert nested.depth == 1
+    assert nested.agent_type == "explorer"
+    assert nested.subject == "coder"
+
+
 def test_a_nested_sidechain_turn_carries_depth_two_and_the_nearest_enclosing_agent_type() -> None:
     """A depth-2 read: the inner sidechain's own agent type wins, not the outer one's."""
     innermost = _tool_turn(0, "Read", {"file_path": "deep.py"})
     middle_spawn = _tool_turn(
         0,
-        "Task",
+        "Agent",
         {"subagent_type": "coder", "prompt": "implement"},
         sidechain=SidechainSegmentView(agent_id="a2", agent_type="coder", turns=[innermost], link="uuid-chain"),
     )
     outer_spawn = _tool_turn(
         0,
-        "Task",
+        "Agent",
         {"subagent_type": "reviewer", "prompt": "review"},
         sidechain=SidechainSegmentView(agent_id="a1", agent_type="reviewer", turns=[middle_spawn], link="uuid-chain"),
     )
@@ -176,7 +207,7 @@ def test_an_unresolved_sidechain_turn_carries_depth_but_no_agent_type() -> None:
     inner = _tool_turn(0, "Read", {"file_path": "orphan.py"})
     spawn = _tool_turn(
         0,
-        "Task",
+        "Agent",
         {"subagent_type": "explorer", "prompt": "find X"},
         sidechain=SidechainSegmentView(agent_id=None, agent_type=None, link="unlinked", turns=[inner]),
     )
@@ -196,7 +227,7 @@ def test_an_unknown_dialect_derives_zero_events() -> None:
     turns = [
         _tool_turn(0, "Read", {"file_path": "a.py"}),
         _tool_turn(1, "Skill", {"skill": "wf-commit"}),
-        _tool_turn(2, "Task", {"subagent_type": "explorer"}),
+        _tool_turn(2, "Agent", {"subagent_type": "explorer"}),
     ]
 
     events = extract_events(turns, normalizer_version="some-other-harness/1")

@@ -55,7 +55,7 @@ def _record(chunk_id: str) -> dict:
     turns = [
         _tool_turn(0, "Read", {"file_path": "src/a.py"}),
         _tool_turn(1, "Skill", {"skill": "wf-commit"}),
-        _tool_turn(2, "Task", {"subagent_type": "explorer"}),
+        _tool_turn(2, "Agent", {"subagent_type": "explorer"}),
     ]
     return {
         "seq": 1,

@@ -210,6 +210,21 @@ def test_a_superseded_segments_rows_are_dropped(fixture: _Fixture) -> None:
     assert rows == []
 
 
+def test_derive_segment_reports_true_for_a_segment_with_derivation_input(fixture: _Fixture) -> None:
+    """The re-derive route's segment-scoped branch consults this bit (blizzard#321) —
+    a derivable segment reports it actually derived."""
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+
+    assert fixture.service.derive_segment("sg_1") is True
+
+
+def test_derive_segment_reports_false_for_a_segment_with_no_derivation_input(fixture: _Fixture) -> None:
+    """An unknown segment id — a typo, a stale id, one never ingested — is the no-op the
+    route must not report as ``derived: 1`` (blizzard#321)."""
+    assert fixture.service.derive_segment("sg_does_not_exist") is False
+    assert fixture.stored_events() == []
+
+
 def test_a_content_hole_segment_derives_incomplete_then_re_derives_once_accepted(fixture: _Fixture) -> None:
     record = _segment_record()
     fixture.segments.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)

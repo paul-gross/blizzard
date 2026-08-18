@@ -17,10 +17,12 @@ from blizzard.wire.transcript_segment import TurnSegmentView
 
 #: Bumped when recognition changes — the sweep re-derives history, leaving earlier
 #: rows untouched (D5/D9).
-EXTRACTOR_VERSION = "blizzard-analytics/2"
+EXTRACTOR_VERSION = "blizzard-analytics/3"
 
-#: The one dialect this build's extractors know (A1) — Claude Code's own normalizer stamp.
-_CLAUDE_CODE_DIALECTS = frozenset({"claude-code-jsonl/2"})
+#: The one dialect this build's extractors know (A1) — Claude Code's own normalizer
+#: stamp, mapped to the tool name that dialect uses for an agent spawn (blizzard#327).
+#: A future harness naming it differently is a new dialect entry here, not a rewrite.
+_CLAUDE_CODE_DIALECTS: dict[str, str] = {"claude-code-jsonl/2": "Agent"}
 
 
 @dataclass(frozen=True)
@@ -42,13 +44,12 @@ class ExtractedEvent:
 
 
 class ITurnEventExtractor(Protocol):
-    """One kind's recognizer. ``kind``/``tool_name`` are class-level constants — a
-    recognizer matches exactly one tool, so its ``tool_name`` is a fact, not a guess.
-    :meth:`recognize` returns every payload this turn mints, ``[]`` for none;
+    """One kind's recognizer. ``kind`` is a class-level constant. :meth:`recognize`
+    returns every payload this turn mints, ``[]`` for none — including gating on which
+    tool name this turn's own dialect uses, since that can vary by dialect (blizzard#327);
     :meth:`subject` reads that payload's own subject (blizzard#255 D1)."""
 
     kind: str
-    tool_name: str
 
     def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]: ...
 
@@ -63,7 +64,6 @@ class FileReadExtractor:
     (``Grep``/``Glob``) is a different act and is not one."""
 
     kind = KIND_FILE_READ
-    tool_name = "Read"
 
     def subject(self, payload: dict[str, object]) -> str | None:
         path = payload.get("path")
@@ -84,7 +84,6 @@ class SkillInvocationExtractor:
     """A ``Skill`` call naming which skill it invoked."""
 
     kind = KIND_SKILL_INVOCATION
-    tool_name = "Skill"
 
     def subject(self, payload: dict[str, object]) -> str | None:
         skill_name = payload.get("skill_name")
@@ -102,19 +101,21 @@ class SkillInvocationExtractor:
 
 
 class AgentSpawnExtractor:
-    """A ``Task`` call naming the subagent type it spawned."""
+    """A subagent-spawn call naming the subagent type it spawned — which tool name that
+    is comes from the turn's own dialect (``_CLAUDE_CODE_DIALECTS``), since it is not the
+    same across every harness (blizzard#327)."""
 
     kind = KIND_AGENT_SPAWN
-    tool_name = "Task"
 
     def subject(self, payload: dict[str, object]) -> str | None:
         agent_type = payload.get("agent_type")
         return agent_type if isinstance(agent_type, str) else None
 
     def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
-        if normalizer_version not in _CLAUDE_CODE_DIALECTS:
+        tool_name = _CLAUDE_CODE_DIALECTS.get(normalizer_version)
+        if tool_name is None:
             return []
-        if turn.kind != "tool" or turn.tool is None or turn.tool.name != "Task":
+        if turn.kind != "tool" or turn.tool is None or turn.tool.name != tool_name:
             return []
         agent_type = turn.tool.input.get("subagent_type")
         if not isinstance(agent_type, str) or not agent_type:
@@ -180,7 +181,7 @@ def _walk(
                         occurrence=occurrence,
                         payload=payload,
                         subject=extractor.subject(payload),
-                        tool=extractor.tool_name,
+                        tool=turn.tool.name if turn.tool is not None else None,
                         depth=depth,
                         agent_type=agent_type,
                         occurred_at=_parse_occurred_at(turn.timestamp),

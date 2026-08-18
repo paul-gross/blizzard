@@ -72,8 +72,8 @@ def re_derive(request: ReDeriveRequest, services: Annotated[HubServices, Depends
         )
     service = services.event_derivation_service
     if request.segment_id is not None:
-        service.derive_segment(request.segment_id)
-        return ReDeriveResponse(derived=1, remaining=0)
+        derived = service.derive_segment(request.segment_id)
+        return ReDeriveResponse(derived=1 if derived else 0, remaining=0)
 
     candidates = service.candidate_segment_ids(chunk_id=request.chunk_id)
     to_derive = candidates[: request.limit]

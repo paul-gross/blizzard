@@ -91,7 +91,7 @@ def _seeded_hub(tmp_path: Path):  # type: ignore[no-untyped-def]
     turns = [
         _tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:00:00Z"),
         _tool_turn(1, "Skill", {"skill": "wf-commit"}, timestamp="2026-08-12T10:00:00Z"),
-        _tool_turn(2, "Task", {"subagent_type": "explorer"}, timestamp="2026-08-12T11:00:00Z"),
+        _tool_turn(2, "Agent", {"subagent_type": "explorer"}, timestamp="2026-08-12T11:00:00Z"),
     ]
     push = hub.client.post(
         "/api/fleet/transcripts", json={"runner_id": "r1", "records": [_record(chunk_id, turns=turns)]}
@@ -159,7 +159,7 @@ def test_events_filters_by_kind(tmp_path: Path) -> None:
 def test_events_filters_by_tool(tmp_path: Path) -> None:
     hub, token, _chunk_id = _seeded_hub(tmp_path)
 
-    resp = hub.client.get("/api/analytics/events", params={"tool": "Task"}, headers=_cookie(token))
+    resp = hub.client.get("/api/analytics/events", params={"tool": "Agent"}, headers=_cookie(token))
 
     assert [e["subject"] for e in resp.json()["events"]] == ["explorer"]
 
@@ -285,13 +285,13 @@ def test_counts_by_agent_type_is_empty_at_the_main_lane(tmp_path: Path) -> None:
 
 
 def test_counts_by_agent_type_counts_the_work_done_under_a_sidechain_not_the_spawn(tmp_path: Path) -> None:
-    """The discriminating case for this count's column choice: a main-lane ``Task``
+    """The discriminating case for this count's column choice: a main-lane ``Agent``
     spawning ``explorer`` whose sidechain then reads two files. Grouping on the
     sidechain's ``agent_type`` counts two; grouping on the spawn's subject, one."""
     hub = build_hub(tmp_path, auth_mode="oauth")
     token = seed_session(hub, seed_user(hub, username="ada", role=Role.CONTRIBUTOR))
     chunk_id = _ingest_chunk(hub, headers=_cookie(token))
-    spawn = _tool_turn(0, "Task", {"subagent_type": "explorer"}, timestamp="2026-08-12T09:00:00Z")
+    spawn = _tool_turn(0, "Agent", {"subagent_type": "explorer"}, timestamp="2026-08-12T09:00:00Z")
     spawn["sidechain"] = {
         "agent_id": "ag_1",
         "agent_type": "explorer",

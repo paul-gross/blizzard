@@ -98,7 +98,7 @@ def test_each_counts_datasets_applicable_filters_round_trip(tmp_path: Path, monk
     by_kind = _invoke("counts-nodes", "--kind", "file_read", "--json")
     assert json.loads(by_kind.output)["counts"] == [{"key": "nd_build", "count": 1}]
 
-    by_tool = _invoke("counts-agent-types", "--tool", "Task", "--json")
+    by_tool = _invoke("counts-agent-types", "--tool", "Agent", "--json")
     assert json.loads(by_tool.output)["counts"] == []  # main-lane spawn: agent_type unset
 
     by_node = _invoke("counts-skills", "--node", "nd_build", "--json")

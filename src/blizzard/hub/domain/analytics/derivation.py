@@ -62,14 +62,16 @@ class EventDerivationService:
                 candidates.append(segment_id)
         return candidates
 
-    def derive_segment(self, segment_id: str) -> None:
+    def derive_segment(self, segment_id: str) -> bool:
         """One transaction: recognize every event this segment's turns hold today,
         stamp the node-step context, and replace this ``(segment_id, extractor_version)``
         pair's rows and marker (D6). A no-longer-existing segment is a no-op — the
-        reconciler's own drop path (D1) is what removes a superseded segment's rows."""
+        reconciler's own drop path (D1) is what removes a superseded segment's rows.
+        Returns whether the segment actually had derivation input, so callers can
+        distinguish that no-op from an ordinary derive."""
         current = self._events.segment_derivation_input(segment_id)
         if current is None:
-            return
+            return False
         graph_id = self._resolve_graph_id(current.chunk_id, current.node_id, current.epoch)
         extracted = extract_events(
             current.turns, normalizer_version=current.normalizer_version, extractors=self._extractors
@@ -101,6 +103,7 @@ class EventDerivationService:
             content_fingerprint=current.content_fingerprint,
             at=self._clock.now(),
         )
+        return True
 
     def _resolve_graph_id(self, chunk_id: str, node_id: str, epoch: int) -> str:
         facts = self._chunks.load_facts(chunk_id)
