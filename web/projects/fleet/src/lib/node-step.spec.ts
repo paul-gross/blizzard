@@ -22,6 +22,18 @@ describe('nodeStepKey/parseNodeStepKey', () => {
     expect(parseNodeStepKey('nd_build:1.5')).toBeNull();
   });
 
+  it('rejects an epoch substring bare Number() would coerce instead of reject (review:F4)', () => {
+    // Number('') is 0, Number('0x10') is 16, Number('1e5') is 100000, and Number('-1')
+    // is -1 — every one a malformed `step` param `Number.isInteger` alone lets through,
+    // desyncing the URL's raw key from the parsed (nodeId, epoch) pair the artifact/
+    // transcript join actually uses.
+    expect(parseNodeStepKey('nd_build:')).toBeNull();
+    expect(parseNodeStepKey('nd_build:0x10')).toBeNull();
+    expect(parseNodeStepKey('nd_build:1e5')).toBeNull();
+    expect(parseNodeStepKey('nd_build:-1')).toBeNull();
+    expect(parseNodeStepKey('nd_build:+1')).toBeNull();
+  });
+
   it('returns null for an empty node id', () => {
     expect(parseNodeStepKey(':3')).toBeNull();
   });

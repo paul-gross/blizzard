@@ -17,7 +17,9 @@ export function parseNodeStepKey(key: string): { nodeId: string; epoch: number }
   const sep = key.lastIndexOf(':');
   if (sep <= 0) return null;
   const nodeId = key.slice(0, sep);
-  const epoch = Number(key.slice(sep + 1));
+  const epochStr = key.slice(sep + 1);
+  if (!/^\d+$/.test(epochStr)) return null;
+  const epoch = Number(epochStr);
   if (!Number.isInteger(epoch)) return null;
   return { nodeId, epoch };
 }

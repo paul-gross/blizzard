@@ -133,10 +133,10 @@ import {
       background: var(--overlay-20);
     }
     /* The board dock's own "which one am I looking at" idiom (board-card.ts) —
-       an accent border plus a faint cyan wash over the panel ground. */
+       an accent border plus the shared selection tint. */
     .art-item.active {
       border-left-color: var(--cyan);
-      background: color-mix(in srgb, var(--cyan) 8%, var(--overlay-25));
+      background: var(--tint-selected);
     }
     .art-item .key {
       display: block;

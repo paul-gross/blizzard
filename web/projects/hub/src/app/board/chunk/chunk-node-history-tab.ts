@@ -11,6 +11,10 @@ import {
   TranscriptViewer,
 } from 'fleet';
 
+/** Same tail-cap the sibling Transcripts tab applies (`chunk-transcripts-tab.ts`'s own
+ * `review:F7` fix) — an uncapped turn list risks a hung tab. */
+const MAX_RENDERED_TURNS = 1000;
+
 /**
  * The chunk detail page's Node history tab (blizzard#319) — {@link ChunkTimeline} with
  * row activation on, beside the selected row's own artifacts and transcript. Presentational
@@ -32,13 +36,14 @@ import {
   imports: [ChunkArtifactBody, ChunkTimeline, KitAsyncState, TranscriptViewer],
   template: `
     <div class="nh-tab" data-testid="chunk-node-history-tab">
-      <div class="nh-timeline">
+      <div class="nh-timeline" role="region" aria-labelledby="nh-timeline-heading">
+        <div class="s-head"><span class="tag" id="nh-timeline-heading">Timeline</span></div>
         <fleet-chunk-detail-timeline
           [detail]="detail()"
           [heading]="false"
           [activatable]="true"
           [selectedKey]="selectedKey()"
-          (selectStep)="selectStep.emit($event)"
+          (pickStep)="pickStep.emit($event)"
         />
       </div>
       <section class="nh-step">
@@ -79,6 +84,11 @@ import {
             } @else if (segmentState() === 'error') {
               <fleet-kit-async-state state="error" errorText="TRANSCRIPT UNAVAILABLE" errorTestid="node-history-transcript-error" />
             } @else {
+              @if (turnsCapped()) {
+                <p class="banner" data-testid="node-history-transcript-turns-capped">
+                  SHOWING THE MOST RECENT {{ MAX_RENDERED_TURNS }} TURNS
+                </p>
+              }
               <fleet-transcript-viewer [turns]="cappedTurns()" data-testid="node-history-transcript-body" />
               @if (extraSegmentCount() > 0) {
                 <p class="more" data-testid="node-history-transcript-more">
@@ -146,6 +156,12 @@ import {
       color: var(--label-dim);
       font-size: var(--fs-xs);
     }
+    .banner {
+      margin: 0;
+      padding: 4px 8px;
+      color: var(--label-dim);
+      font-size: var(--fs-xs);
+    }
     @media (min-width: 720px) {
       .nh-tab {
         flex-direction: row;
@@ -185,8 +201,21 @@ export class ChunkNodeHistoryTab {
    * the common single-segment case. */
   readonly extraSegmentCount = input(0);
 
-  /** Emitted with a row's join key when the operator activates it. */
-  readonly selectStep = output<string>();
+  /** Forwarded straight from {@link ChunkTimeline.pickStep} — a row's join key when the
+   * operator activates it, or `null` when they clear the selection by re-activating the
+   * already-selected row. */
+  readonly pickStep = output<string | null>();
 
-  protected readonly cappedTurns = computed(() => mergeLateLinks(this.segmentData()?.turns ?? []));
+  protected readonly MAX_RENDERED_TURNS = MAX_RENDERED_TURNS;
+
+  private readonly mergedTurns = computed(() => mergeLateLinks(this.segmentData()?.turns ?? []));
+
+  /** {@link mergedTurns}, tail-capped at {@link MAX_RENDERED_TURNS} the same way
+   * `chunk-transcripts-tab.ts`'s `cappedTurns` is. */
+  protected readonly cappedTurns = computed(() => {
+    const turns = this.mergedTurns();
+    return turns.length > MAX_RENDERED_TURNS ? turns.slice(-MAX_RENDERED_TURNS) : turns;
+  });
+
+  protected readonly turnsCapped = computed(() => this.mergedTurns().length > MAX_RENDERED_TURNS);
 }

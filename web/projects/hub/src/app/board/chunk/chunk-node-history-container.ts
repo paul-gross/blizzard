@@ -7,8 +7,8 @@ import {
   injectHubChunkTranscriptSegmentQuery,
   injectHubChunkTranscriptsQuery,
   type KitAsyncStateValue,
-  nodeStepKey,
   parseNodeStepKey,
+  sortArtifacts,
   TranscriptFetchError,
 } from 'fleet';
 
@@ -48,7 +48,7 @@ import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
       [segmentState]="segmentState()"
       [segmentData]="segmentQuery.data()"
       [extraSegmentCount]="extraSegmentCount()"
-      (selectStep)="selectStep.emit($event)"
+      (pickStep)="pickStep.emit($event)"
     />
   `,
   styles: `
@@ -62,7 +62,7 @@ export class ChunkNodeHistoryContainer {
   readonly chunkId = input.required<string | null>();
   readonly detail = input.required<hubApi.ChunkDetail>();
   readonly selectedKey = input<string | null>(null);
-  readonly selectStep = output<string>();
+  readonly pickStep = output<string | null>();
 
   protected readonly indexQuery = injectHubChunkTranscriptsQuery(() => this.chunkId());
 
@@ -74,7 +74,7 @@ export class ChunkNodeHistoryContainer {
   protected readonly stepArtifacts = computed(() => {
     const selection = this.parsedSelection();
     if (selection === null) return [];
-    return filterArtifactsByStep(this.detail().artifacts ?? [], selection.nodeId, selection.epoch);
+    return sortArtifacts(filterArtifactsByStep(this.detail().artifacts ?? [], selection.nodeId, selection.epoch));
   });
 
   /** The selected step's own segments, in `spawn_generation` order — {@link deriveTranscriptSteps}
@@ -88,8 +88,7 @@ export class ChunkNodeHistoryContainer {
       nodeName: d.current_node_name ?? null,
       epoch: d.latest_epoch,
     });
-    const key = nodeStepKey(selection.nodeId, selection.epoch);
-    return steps.find((s) => s.key === key)?.segments ?? [];
+    return steps.find((s) => s.key === this.selectedKey())?.segments ?? [];
   });
 
   private readonly primarySegmentId = computed(() => this.selectedStepSegments()[0]?.segment_id ?? null);

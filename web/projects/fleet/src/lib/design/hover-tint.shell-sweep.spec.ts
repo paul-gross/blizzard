@@ -77,16 +77,19 @@ const CARD: BoardCard = {
   completedAt: null,
 };
 
-// Populated by the first case, read by the second — see the describe block below.
-let boardCardResting = '';
-let boardCardHovered = '';
-
 describe('board-card hover/selection tint shell sweep (web:shell-sweep)', () => {
-  it('washes a hovered card', async () => {
+  // One case, not two: the resting/hovered readings a "selected" comparison needs were
+  // previously module-level state set by a sibling `it` and read by this one — isolate
+  // either case (`-t`, `.only`, reordering) and the second silently compared a real color
+  // against `''`, passing vacuously (`review:F9`). Self-contained here instead.
+  it('washes a hovered card, and reads a selected-but-unhovered card as distinct from both a resting and a hovered one', async () => {
     await loadDesignTokens();
-    const root = await renderCard(CARD, false);
+
+    const restingRoot = await renderCard(CARD, false);
+    let boardCardResting: string;
+    let boardCardHovered: string;
     try {
-      const card = root.querySelector<HTMLElement>('[data-testid="chunk-card"]')!;
+      const card = restingRoot.querySelector<HTMLElement>('[data-testid="chunk-card"]')!;
       boardCardResting = getComputedStyle(card).backgroundColor;
       await userEvent.hover(card);
       await nextFrame();
@@ -95,15 +98,12 @@ describe('board-card hover/selection tint shell sweep (web:shell-sweep)', () => 
         boardCardResting,
       );
     } finally {
-      root.remove();
+      restingRoot.remove();
     }
-  });
 
-  it('reads a selected-but-unhovered card as distinct from both a resting and a hovered one', async () => {
-    await loadDesignTokens();
-    const root = await renderCard(CARD, true);
+    const selectedRoot = await renderCard(CARD, true);
     try {
-      const card = root.querySelector<HTMLElement>('[data-testid="chunk-card"]')!;
+      const card = selectedRoot.querySelector<HTMLElement>('[data-testid="chunk-card"]')!;
       const selected = getComputedStyle(card).backgroundColor;
       expect(
         selected,
@@ -113,7 +113,7 @@ describe('board-card hover/selection tint shell sweep (web:shell-sweep)', () => 
         boardCardResting,
       );
     } finally {
-      root.remove();
+      selectedRoot.remove();
     }
   });
 });

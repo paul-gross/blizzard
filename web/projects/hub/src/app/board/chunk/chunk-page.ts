@@ -136,7 +136,7 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
               [chunkId]="chunkId()"
               [detail]="d"
               [selectedKey]="selection.stepKey()"
-              (selectStep)="onSelectStep($event)"
+              (pickStep)="onSelectStep($event)"
             />
           }
           @case ('artifacts') {
@@ -257,7 +257,7 @@ export class ChunkPage {
   /** A row activated in the Node history tab writes its join key back to the URL —
    * {@link ChunkNodeHistoryTab} forwards it straight from {@link ChunkTimeline}, a pure
    * function of that param, never its own selection state. */
-  protected onSelectStep(stepKey: string): void {
+  protected onSelectStep(stepKey: string | null): void {
     this.selection.selectStep(stepKey);
   }
 

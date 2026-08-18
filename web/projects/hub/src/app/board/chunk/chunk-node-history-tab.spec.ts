@@ -66,13 +66,19 @@ async function render(options: RenderOptions = {}) {
 }
 
 describe('ChunkNodeHistoryTab', () => {
-  it('renders the timeline with no heading of its own and row activation on', async () => {
+  it('renders the timeline with no heading of its own, row activation on, and its own visible/labelled region (review:F10)', async () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('#chunk-timeline-heading')).toBeNull();
     const row = el.querySelector('[data-testid="history-step"]');
     expect(row?.getAttribute('role')).toBe('button');
+
+    const region = el.querySelector('[role="region"]');
+    expect(region?.textContent).toContain('Timeline');
+    const labelId = region?.getAttribute('aria-labelledby');
+    expect(labelId).toBeTruthy();
+    expect(el.querySelector(`#${labelId}`)).not.toBeNull();
   });
 
   it('marks the row matching selectedKey as selected', async () => {
@@ -82,10 +88,10 @@ describe('ChunkNodeHistoryTab', () => {
     expect(el.querySelector('[data-testid="history-step"]')?.classList.contains('selected')).toBe(true);
   });
 
-  it("forwards the timeline's own selectStep straight through, unchanged", async () => {
+  it("forwards the timeline's own pickStep straight through, unchanged", async () => {
     const fixture = await render();
-    const emitted: string[] = [];
-    fixture.componentInstance.selectStep.subscribe((key) => emitted.push(key));
+    const emitted: (string | null)[] = [];
+    fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
     const el = fixture.nativeElement as HTMLElement;
 
     (el.querySelector('[data-testid="history-step"]') as HTMLElement).click();

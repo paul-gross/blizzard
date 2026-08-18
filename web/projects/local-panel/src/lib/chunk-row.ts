@@ -88,12 +88,12 @@ import type { MachineChunkStatus } from './chunk-status';
       background: var(--panel-deep);
     }
     /* An outline ring (not border-color, which would repaint the tone-colored
-       left edge) plus a faint cyan wash — the hub board card's own selected
-       treatment (fleet/board-card/board-card.ts), so the two read alike. */
+       left edge) plus the shared selection tint — the hub board card's own
+       selected treatment (fleet/design/tokens.css), so the two read alike. */
     .c-card.selected {
       outline: 1px solid var(--cyan);
       outline-offset: -1px;
-      background: color-mix(in srgb, var(--cyan) 8%, var(--panel-deep));
+      background: var(--tint-selected);
     }
     .c-card:focus-visible {
       outline: 1px solid var(--cyan);
