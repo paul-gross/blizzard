@@ -34,16 +34,23 @@ class SessionResolver:
             return self._pool_head(chunk_id, node, spawn_cwd)
         return self.store.latest_session_id(chunk_id, node.session_source)
 
-    def model_and_effort(self, node: NodeConfig, resume_from: str | None) -> tuple[str | None, str | None]:
-        """The model and effort this spawn runs under, and stamps (issue #144).
+    def model_and_effort(self, node: NodeConfig, resume_from: str | None) -> tuple[str | None, str | None, str | None]:
+        """The model, effort, and compaction window this spawn runs under, and stamps (issue #144,
+        blizzard#343).
 
         **The stamp describes the session, not the preference.** A spawn that *resumes* inherits
-        both from the resumed session's own stamp, and an inherited ``None`` stays *unknown*."""
+        all three from the resumed session's own stamp, and an inherited ``None`` stays *unknown*."""
         if resume_from is not None:
             prior = self.store.lease_for_session(resume_from)
-            return (prior.resolved_model, prior.resolved_effort) if prior is not None else (None, None)
+            if prior is None:
+                return (None, None, None)
+            return (prior.resolved_model, prior.resolved_effort, prior.resolved_compaction_window)
         model = self.harness.resolve_model(node.session_model)
-        return (model, self.harness.resolve_effort(node.session_effort))
+        return (
+            model,
+            self.harness.resolve_effort(node.session_effort),
+            self.harness.resolve_compaction_window(node.session_compaction_window),
+        )
 
     def _pool_head(self, chunk_id: str, node: NodeConfig, spawn_cwd: str | None) -> str | None:
         """The named pool's head if it is still resumable, else ``None`` to mint a new one."""

@@ -92,6 +92,7 @@ lease_context = Table(
     Column("session_name", String, nullable=True),
     Column("resolved_model", String, nullable=True),
     Column("resolved_effort", String, nullable=True),
+    Column("resolved_compaction_window", String, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 

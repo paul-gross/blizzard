@@ -221,6 +221,8 @@ class DormantSession:
             chunk_id=lease.chunk_id,
             # Reasserted, not sticky (issue #144) — see the judge call site's note.
             effort=lease.resolved_effort,
+            # Reasserted, not sticky either (blizzard#343) — mirrors effort's treatment.
+            compaction_window=lease.resolved_compaction_window,
         )
         stamped = at if at is not None else self.ctx.clock.now()
         self.ctx.store.record_spawn(

@@ -117,6 +117,7 @@ class SessionRow:
             "rotate_max_context_tokens": decl.rotate.max_context_tokens if decl.rotate else None,
             "rotate_max_transcript_bytes": decl.rotate.max_transcript_bytes if decl.rotate else None,
             "rotate_max_invocations": decl.rotate.max_invocations if decl.rotate else None,
+            "compaction_window": decl.compaction_window,
         }
 
     def of(self, row: Any) -> SessionDecl:
@@ -128,6 +129,7 @@ class SessionRow:
             model=TEXTS.decode(row.model),
             effort=row.effort,
             rotate=RotatePolicy(*bounds) if any(b is not None for b in bounds) else None,
+            compaction_window=row.compaction_window,
         )
 
 

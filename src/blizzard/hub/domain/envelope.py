@@ -94,12 +94,13 @@ class EffectiveSession:
     model: list[str]
     effort: str | None
     rotate: RotatePolicyView | None
+    compaction_window: str | None
 
     @classmethod
     def of(cls, chunk: Chunk, graph: Graph, node: Node) -> EffectiveSession:
         declaration = graph.session_by_name(node.session_source) if node.session_source else None
         if declaration is None:
-            return cls(None, list(chunk.default_model), chunk.default_effort, None)
+            return cls(None, list(chunk.default_model), chunk.default_effort, None, None)
         rotate = declaration.rotate
         return cls(
             declaration.name,
@@ -112,6 +113,7 @@ class EffectiveSession:
             )
             if rotate is not None
             else None,
+            declaration.compaction_window,
         )
 
 
@@ -186,6 +188,7 @@ class Envelope:
             session_model=session.model,
             session_effort=session.effort,
             session_rotate=session.rotate,
+            session_compaction_window=session.compaction_window,
             judged_by=node.judged_by,
             checks=list(node.checks),
             checks_cwd=node.checks_cwd,

@@ -40,6 +40,7 @@ class NewLease:
     session_name: str | None = None
     resolved_model: str | None = None
     resolved_effort: str | None = None
+    resolved_compaction_window: str | None = None
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,7 @@ class LeaseRecord:
     session_name: str | None = None
     resolved_model: str | None = None
     resolved_effort: str | None = None
+    resolved_compaction_window: str | None = None
     pid: int | None = None
     process_start_time: str | None = None
     session_id: str | None = None

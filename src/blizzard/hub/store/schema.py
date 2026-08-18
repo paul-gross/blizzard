@@ -114,6 +114,8 @@ graph_sessions = Table(
     Column("rotate_max_context_tokens", Integer, nullable=True),
     Column("rotate_max_transcript_bytes", Integer, nullable=True),
     Column("rotate_max_invocations", Integer, nullable=True),
+    # The compaction window, opaque like `effort`; null declares none.
+    Column("compaction_window", String, nullable=True),
 )
 
 # The graph-scoped `artifacts:` declarations — the `graph_sessions` shape, one row

@@ -90,6 +90,7 @@ class GraphSessionView(BaseModel):
     model: list[str] = []
     effort: str | None = None
     rotate: RotatePolicyView | None = None
+    compaction_window: str | None = None
 
 
 class GraphNodeView(BaseModel):

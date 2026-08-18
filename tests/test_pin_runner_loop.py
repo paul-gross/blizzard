@@ -186,6 +186,7 @@ class _RecordingNudgeHarness(FakeHarness):
         chunk_id: str = "",
         effort: str | None = None,
         model: str | None = None,
+        compaction_window: str | None = None,
     ) -> str:
         self.fired_at_judge.append(self._store.nudge_fired(self._lease_id, self._epoch))
         return super().judge(workdir, session_id, judgement_prompt, preamble=preamble, chunk_id=chunk_id)

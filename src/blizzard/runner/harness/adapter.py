@@ -63,12 +63,15 @@ class IHarnessAdapter(Protocol):
         *,
         model: str | None = None,
         effort: str | None = None,
+        compaction_window: str | None = None,
     ) -> WorkerHandle:
         """Start a headless worker; return its session id, pid, and start time.
 
         ``model``/``effort`` (issue #144) arrive already resolved; both ``None`` keeps the
         adapter default. ``model`` is applied at **mint only**, ``effort`` on **every**
-        invocation. ``resume_from`` (#115) continues a session; the returned id is authoritative."""
+        invocation — ``compaction_window`` (blizzard#343) rides alongside ``effort``, applied
+        on every invocation too. ``resume_from`` (#115) continues a session; the returned id
+        is authoritative."""
         ...
 
     def resume_with_message(
@@ -81,6 +84,7 @@ class IHarnessAdapter(Protocol):
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
         effort: str | None = None,
+        compaction_window: str | None = None,
     ) -> int:
         """Headless resume-with-message; returns the new pid. Kill first.
 
@@ -99,6 +103,7 @@ class IHarnessAdapter(Protocol):
         chunk_id: str = "",
         effort: str | None = None,
         model: str | None = None,
+        compaction_window: str | None = None,
     ) -> str:
         """Deliver the judgement prompt into the session and return the raw reply.
 
@@ -145,6 +150,15 @@ class IHarnessAdapter(Protocol):
         A single value rather than a list: every adapter can map an ordinal *somewhere*.
         ``low|medium|high|max`` is the well-known vocabulary. ``None`` in returns ``None``,
         as does a harness with no effort knob at all, which never fails a spawn over one."""
+        ...
+
+    def resolve_compaction_window(self, value: str | None) -> str | None:
+        """Resolve an authored compaction-window value to this harness's own vocabulary
+        (blizzard#343).
+
+        An unrecognized or unsupported value is dropped with one log line, never a spawn
+        failure — the same rule ``resolve_effort`` applies. ``None`` in returns ``None``, as
+        does a harness with no such knob at all."""
         ...
 
     def parse_verdict(self, output: str) -> str | None:
