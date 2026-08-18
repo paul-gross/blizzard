@@ -68,6 +68,15 @@ def test_adv_dwf_declares_the_four_tiers_and_bounds_only_the_accumulating_ones()
     assert doc.sessions["verification"].rotate is not None
     assert doc.sessions["gate"].rotate is None
     assert doc.sessions["planning"].rotate is None
+    # `code` is the one pool a session can grow long enough to compact (blizzard#343); the
+    # window sits below `code`'s own `rotate.max_context_tokens` so compaction fires first.
+    assert doc.sessions["code"].compaction_window == "150000"
+    window = doc.sessions["code"].rotate
+    assert window is not None and window.max_context_tokens is not None
+    assert int(doc.sessions["code"].compaction_window) < window.max_context_tokens
+    assert doc.sessions["planning"].compaction_window is None
+    assert doc.sessions["verification"].compaction_window is None
+    assert doc.sessions["gate"].compaction_window is None
 
 
 def test_adv_dwf_keeps_verify_off_the_pool_build_resumes() -> None:

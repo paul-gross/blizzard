@@ -451,6 +451,11 @@ class FakeHarness:
         self.spawn_model_effort: list[tuple[str | None, str | None]] = []
         self.judge_model_effort: list[tuple[str | None, str | None]] = []
         self.resume_efforts: list[str | None] = []
+        # The compaction window each invocation was handed (blizzard#343) — one entry per
+        # call, mirroring the effort lists above.
+        self.spawn_compaction_windows: list[str | None] = []
+        self.judge_compaction_windows: list[str | None] = []
+        self.resume_compaction_windows: list[str | None] = []
         self.usage_models: list[str | None] = []
         # The (model, effort) each `resume_command` composition was handed (issue #144).
         self.resume_command_config: list[tuple[str | None, str | None]] = []
@@ -458,6 +463,7 @@ class FakeHarness:
         # the input verbatim for a test that doesn't care about resolution.
         self.resolved_model = "fake-model"
         self.resolved_effort: str | None = None
+        self.resolved_compaction_window: str | None = None
         # Scripted `sample_external_subscription_usage` reply (issue #218): snapshot
         # returned verbatim, or `external_usage_raises` raised; calls counted for cadence asserts.
         self.external_usage_snapshot = external_usage_snapshot
@@ -476,10 +482,12 @@ class FakeHarness:
         *,
         model: str | None = None,
         effort: str | None = None,
+        compaction_window: str | None = None,
     ) -> WorkerHandle:
         self.spawns.append((envelope, preamble))
         self.resume_froms.append(resume_from)
         self.spawn_model_effort.append((model, effort))
+        self.spawn_compaction_windows.append(compaction_window)
         # Mirrors the real in-place adapter contract (issue #115): a resume continues
         # under the SAME id given; a fresh spawn keeps the scripted-handle behavior.
         session_id = resume_from if resume_from is not None else self._handle.session_id
@@ -499,10 +507,12 @@ class FakeHarness:
         chunk_id: str = "",
         effort: str | None = None,
         model: str | None = None,
+        compaction_window: str | None = None,
     ) -> str:
         self.judged.append((workdir, session_id, judgement_prompt))
         self.judge_preambles.append(preamble)
         self.judge_model_effort.append((model, effort))
+        self.judge_compaction_windows.append(compaction_window)
         if self._judge_side_effect is not None:
             self._judge_side_effect()
         return "<judged output>"
@@ -517,9 +527,11 @@ class FakeHarness:
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
         effort: str | None = None,
+        compaction_window: str | None = None,
     ) -> int:
         self.resumed.append((workdir, session_id, message))
         self.resume_efforts.append(effort)
+        self.resume_compaction_windows.append(compaction_window)
         # Captured separately so existing 3-tuple unpackers of `.resumed` keep working while
         # resume-identity assertions can read the preamble/chunk_id the caller supplied.
         self.resumed_identity.append((preamble, chunk_id))
@@ -560,6 +572,9 @@ class FakeHarness:
 
     def resolve_effort(self, value: str | None) -> str | None:
         return self.resolved_effort if self.resolved_effort is not None else value
+
+    def resolve_compaction_window(self, value: str | None) -> str | None:
+        return self.resolved_compaction_window if self.resolved_compaction_window is not None else value
 
     def parse_verdict(self, output: str) -> str | None:
         return self.verdict
@@ -744,6 +759,7 @@ def make_envelope(
     session_name: str | None = None,
     session_model: list[str] | None = None,
     session_effort: str | None = None,
+    session_compaction_window: str | None = None,
     session_rotate: RotatePolicyView | None = None,
     checks: list[str] | None = None,
     checks_cwd: str | None = None,
@@ -769,6 +785,7 @@ def make_envelope(
         session_name=session_name,
         session_model=session_model or [],
         session_effort=session_effort,
+        session_compaction_window=session_compaction_window,
         session_rotate=session_rotate,
         judged_by=JudgedBy.WORKER,
         retries_max=2,

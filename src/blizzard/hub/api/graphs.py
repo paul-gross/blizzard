@@ -90,6 +90,7 @@ def _graph_view(
                 )
                 if s.rotate is not None
                 else None,
+                compaction_window=s.compaction_window,
             )
             for s in graph.sessions
         ],

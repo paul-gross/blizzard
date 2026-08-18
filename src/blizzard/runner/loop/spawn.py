@@ -46,6 +46,7 @@ class MintedLease:
     token: str
     model: str | None
     effort: str | None
+    compaction_window: str | None
 
 
 @dataclass(frozen=True)
@@ -102,6 +103,7 @@ class Spawner:
                 resume_from=resume_from,
                 model=lease.model,
                 effort=lease.effort,
+                compaction_window=lease.compaction_window,
             )
         except HarnessSpawnError as exc:
             # Surface the launch-time failure (issue #125) then RE-RAISE: no worker started, so
@@ -177,7 +179,7 @@ class Spawner:
         lease_id = Id.mint(LEASE_PREFIX, self.ctx.clock).value
         node = envelope.node
         retries_max = node.retries_max if node.retries_max is not None else self.ctx.config.default_retries_max
-        model, effort = self.ctx.sessions.model_and_effort(node, resume_from)
+        model, effort, compaction_window = self.ctx.sessions.session_stamps(node, resume_from)
         # Before `record_lease`: a crash here leaves only an orphan row a retry
         # writes again identically — never a lease whose mint's declarations are absent.
         self.ctx.store.record_graph_artifacts(
@@ -201,6 +203,7 @@ class Spawner:
                 session_name=node.session_name,
                 resolved_model=model,
                 resolved_effort=effort,
+                resolved_compaction_window=compaction_window,
                 created_at=at,
             )
         )
@@ -213,7 +216,9 @@ class Spawner:
         token, token_hash = LeaseToken.mint()
         self.ctx.store.record_lease_token(lease_id, token_hash, at)
         OutboundFacts(self.ctx).lease_minted(chunk_id, lease_id, epoch=epoch, at=at)
-        return MintedLease(lease_id=lease_id, epoch=epoch, token=token, model=model, effort=effort)
+        return MintedLease(
+            lease_id=lease_id, epoch=epoch, token=token, model=model, effort=effort, compaction_window=compaction_window
+        )
 
     def _render(
         self, chunk_id: str, lease_id: str, environments: list[AcquiredEnvironment], *, resume_from: str | None

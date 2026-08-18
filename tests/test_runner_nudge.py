@@ -64,6 +64,7 @@ class _AttachingOnNudgeHarness(FakeHarness):
         chunk_id: str = "",
         effort: str | None = None,
         model: str | None = None,
+        compaction_window: str | None = None,
     ) -> str:
         output = super().judge(workdir, session_id, judgement_prompt, preamble=preamble, chunk_id=chunk_id)
         if len(self.judged) == 2:  # the nudge resume, not the original verdict elicitation
@@ -121,6 +122,7 @@ class _DeclaringGitCommitOnNudgeHarness(FakeHarness):
         chunk_id: str = "",
         effort: str | None = None,
         model: str | None = None,
+        compaction_window: str | None = None,
     ) -> str:
         output = super().judge(workdir, session_id, judgement_prompt, preamble=preamble, chunk_id=chunk_id)
         if len(self.judged) == 2:  # the nudge resume, not the original verdict elicitation

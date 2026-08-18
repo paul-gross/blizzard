@@ -254,6 +254,7 @@ class _HangingAdapter:
         *,
         model: str | None = None,
         effort: str | None = None,
+        compaction_window: str | None = None,
     ) -> WorkerHandle:
         threading.Event().wait()  # blocks forever
         raise AssertionError("unreachable")
@@ -268,6 +269,7 @@ class _HangingAdapter:
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
         effort: str | None = None,
+        compaction_window: str | None = None,
     ) -> int:
         raise AssertionError("unreachable — spawn never returns")
 
@@ -295,6 +297,7 @@ class _HangingAdapter:
         chunk_id: str = "",
         effort: str | None = None,
         model: str | None = None,
+        compaction_window: str | None = None,
     ) -> str:
         raise AssertionError("unreachable — spawn never returns")
 
@@ -308,6 +311,9 @@ class _HangingAdapter:
         return "fake-model"
 
     def resolve_effort(self, value: str | None) -> str | None:
+        return value
+
+    def resolve_compaction_window(self, value: str | None) -> str | None:
         return value
 
     def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
@@ -363,6 +369,7 @@ class _FixedPidAdapter:
         *,
         model: str | None = None,
         effort: str | None = None,
+        compaction_window: str | None = None,
     ) -> WorkerHandle:
         return WorkerHandle(session_id=session_hint or "sid", pid=self.spawn_pid, process_start_time="spawn-t")
 
@@ -376,6 +383,7 @@ class _FixedPidAdapter:
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
         effort: str | None = None,
+        compaction_window: str | None = None,
     ) -> int:
         return self.resume_pid
 
@@ -403,6 +411,7 @@ class _FixedPidAdapter:
         chunk_id: str = "",
         effort: str | None = None,
         model: str | None = None,
+        compaction_window: str | None = None,
     ) -> str:
         return json.dumps({"result": "<Choice>pass</Choice>"})
 
@@ -416,6 +425,9 @@ class _FixedPidAdapter:
         return "fake-model"
 
     def resolve_effort(self, value: str | None) -> str | None:
+        return value
+
+    def resolve_compaction_window(self, value: str | None) -> str | None:
         return value
 
     def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:

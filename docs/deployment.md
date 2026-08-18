@@ -461,6 +461,18 @@ against CLI 2.1.220). Applying it at mint only would therefore silently drop a d
 resuming pool, so the runner passes `--effort` on each turn. The cost is small and measured — 249 cache-creation tokens
 against 17 for a bare resume, nothing like the full-history rewrite a cross-model resume forces.
 
+**A declared compaction window is treated the same way as effort (blizzard#343): reasserted, never mint-only.** A
+`sessions:` entry can carry a fourth, optional facet — a compaction window, an opaque string passed straight through to
+Claude Code's `--autocompact <auto|tokens>` flag on every fleet-driven invocation (spawn, judge, resume-with-message).
+Whether the harness restores a resumed session's own window is unmeasured, so the runner does not bet on stickiness the
+way it does for `model` — it stamps the resolved window on the lease at mint and reasserts it from that stamp on every
+resume, exactly as it does for effort. An unrecognized or empty value is dropped with one log line rather than failing a
+spawn. `advanced-development-workflow`'s `code` pool declares one, below its own `rotate.max_context_tokens` (the only
+one of `code`'s three rotation bounds a window is commensurable with) — the window is never fit from measured
+compaction behavior the way the rotation bounds are, since no such data exists yet, and it makes no claim about firing
+before `code`'s actual rotation trigger, `max_invocations`; only that a session's context, when it does grow large,
+shrinks in step rather than climbing unchecked toward the model maximum.
+
 ### The worker spawn preamble
 
 A worker's **first** spawn on a session carries three ordered layers ahead of the node's own envelope prompt: (1) a

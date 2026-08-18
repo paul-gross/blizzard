@@ -2463,8 +2463,19 @@
         "type": "object"
       },
       "GraphSessionView": {
-        "description": "One graph-level named session declaration (issue #144).\n\n``model`` is a prioritized preference list of opaque strings, resolved left-to-right at\nsession mint; the hub interprets neither it nor ``effort``.",
+        "description": "One graph-level named session declaration (issue #144).\n\n``model`` is a prioritized preference list of opaque strings, resolved left-to-right at\nsession mint; the hub interprets none of it, ``effort``, or ``compaction_window``.",
         "properties": {
+          "compaction_window": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compaction Window"
+          },
           "effort": {
             "anyOf": [
               {
@@ -3185,6 +3196,17 @@
           },
           "session": {
             "$ref": "#/components/schemas/SessionMode"
+          },
+          "session_compaction_window": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Compaction Window"
           },
           "session_effort": {
             "anyOf": [

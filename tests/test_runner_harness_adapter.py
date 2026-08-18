@@ -1106,6 +1106,43 @@ def test_an_unrecognized_effort_logs_once_and_is_ignored() -> None:
     assert len([entry for entry in logs if "unrecognized effort" in entry["event"]]) == 1
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize("value", ["auto", "500k", "200000", "200"])
+def test_resolve_compaction_window_passes_a_recognized_spelling_through(value: str) -> None:
+    # `auto` or a token count (blizzard#343) — the adapter checks the shape, not the CLI's
+    # own 100k-1M range, which it never re-validates.
+    assert ClaudeCodeAdapter(binary="claude").resolve_compaction_window(value) == value
+
+
+@pytest.mark.unit
+def test_resolve_compaction_window_of_no_preference_is_none() -> None:
+    assert ClaudeCodeAdapter(binary="claude").resolve_compaction_window(None) is None
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("value", ["", "150k tokens", "True", "auto2"])
+def test_an_unrecognized_compaction_window_logs_once_per_value_and_is_ignored(value: str) -> None:
+    adapter = ClaudeCodeAdapter(binary="claude")
+
+    with capture_logs() as logs:
+        assert adapter.resolve_compaction_window(value) is None
+        assert adapter.resolve_compaction_window(value) is None
+
+    assert len([entry for entry in logs if "unrecognized compaction window" in entry["event"]]) == 1
+
+
+@pytest.mark.unit
+def test_a_missing_compaction_window_is_silently_none_never_logged() -> None:
+    # `None` means "no declaration" — not an authoring mistake, so it never logs (unlike
+    # a real bad value, or the empty string): mirrors `resolve_effort`'s treatment of `None`.
+    adapter = ClaudeCodeAdapter(binary="claude")
+
+    with capture_logs() as logs:
+        assert adapter.resolve_compaction_window(None) is None
+
+    assert not [entry for entry in logs if "compaction window" in entry["event"]]
+
+
 # The application contract (issue #144): `--model` at mint only (restored on `--resume`);
 # `--effort` on every invocation (D5: effort is not sticky).
 
@@ -1134,6 +1171,70 @@ def test_spawn_on_a_resume_carries_the_effort_but_never_the_model(monkeypatch: p
     cmd = captured["cmd"]
     assert "--model" not in cmd  # the harness restores the session's own
     assert cmd[cmd.index("--effort") + 1] == "high"  # not sticky, so reasserted
+
+
+@pytest.mark.unit
+def test_spawn_at_mint_carries_the_compaction_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+    adapter, envelope, preamble = _spawn_fixture()
+
+    adapter.spawn(envelope, preamble, session_hint="sid", model="sonnet", compaction_window="150k")
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("--autocompact") + 1] == "150k"
+
+
+@pytest.mark.unit
+def test_spawn_on_a_resume_reasserts_the_compaction_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Reasserted like effort, never sticky-by-omission (blizzard#343).
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+    adapter, envelope, preamble = _spawn_fixture()
+
+    adapter.spawn(envelope, preamble, session_hint="sid", resume_from="prior", compaction_window="150k")
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("--autocompact") + 1] == "150k"
+
+
+@pytest.mark.unit
+def test_spawn_supplying_no_compaction_window_omits_the_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+    adapter, envelope, preamble = _spawn_fixture()
+
+    adapter.spawn(envelope, preamble, session_hint="sid")
+
+    cmd = captured["cmd"]
+    assert "--autocompact" not in cmd
+
+
+@pytest.mark.unit
+def test_judge_carries_the_compaction_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, list[str]] = {}
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> object:
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+
+    ClaudeCodeAdapter(binary="claude").judge("/ws", "sid", "verdict?", compaction_window="150k")
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("--autocompact") + 1] == "150k"
+
+
+@pytest.mark.unit
+def test_resume_with_message_carries_the_compaction_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+
+    ClaudeCodeAdapter(binary="claude").resume_with_message("/ws", "sid", "msg", compaction_window="150k")
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("--autocompact") + 1] == "150k"
 
 
 @pytest.mark.unit

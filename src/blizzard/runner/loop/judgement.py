@@ -215,6 +215,9 @@ class Judgement:
             # resume that omits it drops the declared value back to the ambient default.
             effort=self.lease.resolved_effort,
             model=self.lease.resolved_model,
+            # Reassert the stamped compaction window (blizzard#343) too — not session-sticky
+            # either, mirroring effort's treatment.
+            compaction_window=self.lease.resolved_compaction_window,
         )
 
     def _gate_broken(self, choice: str, checks: list[CheckResultRecord]) -> bool:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import subprocess
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -64,6 +65,10 @@ _NATIVE_PREFIX = "claude-"
 # The well-known effort ordinal, extended by the runner's ``[effort.aliases]`` — which is
 # also how a deployment reaches a native tier outside the ordinal.
 _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
+
+# `--autocompact`'s own vocabulary shape (blizzard#343): a recognition check, not the
+# CLI's own 100k-1M range (enforced CLI-side, never re-implemented here).
+_COMPACTION_WINDOW_RE = re.compile(r"auto|[0-9]+[kK]?")
 
 # The subscription-usage seam (issue #218) — the API host and the shared credential file
 # the harness's own login writes. Both overridable via the constructor.
@@ -166,6 +171,7 @@ class ClaudeCodeAdapter:
         self._effort_aliases = dict(effort_aliases)
         # Values already logged as unrecognized, so the notice fires once per value.
         self._unrecognized_efforts: set[str] = set()
+        self._unrecognized_compaction_windows: set[str] = set()
         # A non-interactive worker has no one to approve tool use, so the default mode
         # lets it inspect but never build. ``None`` omits the flag.
         self._permission_mode = permission_mode
@@ -234,6 +240,17 @@ class ClaudeCodeAdapter:
             _log.info("unrecognized effort value; ignoring", effort=value, known=sorted(_EFFORT_ORDINAL))
         return None
 
+    def resolve_compaction_window(self, value: str | None) -> str | None:
+        """``"auto"`` or a token-count spelling, else dropped and logged once (blizzard#343)."""
+        if value is None:
+            return None
+        if _COMPACTION_WINDOW_RE.fullmatch(value):
+            return value
+        if value not in self._unrecognized_compaction_windows:
+            self._unrecognized_compaction_windows.add(value)
+            _log.info("unrecognized compaction window value; ignoring", compaction_window=value)
+        return None
+
     def spawn(
         self,
         envelope: NodeEnvelope,
@@ -243,6 +260,7 @@ class ClaudeCodeAdapter:
         *,
         model: str | None = None,
         effort: str | None = None,
+        compaction_window: str | None = None,
     ) -> WorkerHandle:
         if not preamble.environments:
             raise HarnessSpawnError("spawn requires at least one acquired environment")
@@ -253,12 +271,14 @@ class ClaudeCodeAdapter:
         # non-empty above, so the fallback is always a real workdir here.
         workdir = SpawnCwd(preamble.workspace_root, preamble.environments[0].workdir).path
         cmd = [self._binary, "-p", "--output-format", "json"]
-        # `--model` at MINT ONLY, since a resume restores the session's own; `--effort` on
-        # EVERY invocation, since it is not sticky the same way (issue #144).
+        # `--model` at MINT ONLY (a resume restores it); `--effort`/`--autocompact` on EVERY
+        # invocation — neither is sticky (issue #144, blizzard#343).
         if not resume_from:
             cmd += ["--model", model or self._model]
         if effort:
             cmd += ["--effort", effort]
+        if compaction_window:
+            cmd += ["--autocompact", compaction_window]
         if resume_from:
             cmd += ["--resume", resume_from]
         elif session_id:
@@ -301,12 +321,15 @@ class ClaudeCodeAdapter:
         chunk_id: str = "",
         effort: str | None = None,
         model: str | None = None,
+        compaction_window: str | None = None,
     ) -> str:
         cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
-        # No `--model` on a resume (sticky); `--effort` IS reasserted. `model` is taken
-        # only to attribute usage below, never to switch the session (issue #144).
+        # No `--model` (sticky); `--effort`/`--autocompact` ARE reasserted. `model` is taken
+        # only to attribute usage below, never to switch the session (issue #144, blizzard#343).
         if effort:
             cmd += ["--effort", effort]
+        if compaction_window:
+            cmd += ["--autocompact", compaction_window]
         # Prefix parity with `resume_with_message` — pinned by
         # `test_judge_prefix_matches_resume_with_messages_settings_and_effort`.
         if self._settings_path:
@@ -333,11 +356,14 @@ class ClaudeCodeAdapter:
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
         effort: str | None = None,
+        compaction_window: str | None = None,
     ) -> int:
         cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
-        # As on `judge`: no `--model` (sticky), `--effort` reasserted (not sticky).
+        # As on `judge`: no `--model` (sticky), `--effort`/`--autocompact` reasserted (not sticky).
         if effort:
             cmd += ["--effort", effort]
+        if compaction_window:
+            cmd += ["--autocompact", compaction_window]
         # Re-attach the worker hooks: this re-enters a long-lived session that later exits
         # on its own, and a resume does not carry the original spawn's `--settings`.
         if self._settings_path:

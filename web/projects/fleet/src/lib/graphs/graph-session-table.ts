@@ -5,7 +5,7 @@ import type { GraphSessionView } from '../api/hub';
 /**
  * The graph detail's **session declaration** table (issue #144) — the graph-level
  * `sessions:` map, read-only: each declaration's prioritized model preference list,
- * effort, and rotation bounds.
+ * effort, compaction window (blizzard#343), and rotation bounds.
  *
  * It is what makes a node meta line reading `fresh:code` legible: `sessionLabel`
  * recombines the wire's `session`/`session_source` pair into the authored form, but the
@@ -30,6 +30,7 @@ import type { GraphSessionView } from '../api/hub';
               <th>Session</th>
               <th>Model</th>
               <th>Effort</th>
+              <th>Compact window</th>
               <th>Rotate</th>
             </tr>
           </thead>
@@ -39,6 +40,7 @@ import type { GraphSessionView } from '../api/hub';
                 <td class="sid">{{ session.name }}</td>
                 <td>{{ listOrDash(session.model) }}</td>
                 <td>{{ session.effort ?? '—' }}</td>
+                <td>{{ session.compaction_window ?? '—' }}</td>
                 <td>{{ rotateLabel(session) }}</td>
               </tr>
             }

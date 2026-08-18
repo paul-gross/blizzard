@@ -53,6 +53,17 @@ sessions:
     effort: high
   code:
     model: ["blizzard:basic"]
+    # A compaction window (blizzard#343), NOT fit from a measured distribution the way the
+    # three numbers below are — no compaction-firing data exists yet to fit one from, which
+    # is exactly the gap `blizzard:manual-autocompact-window` closes. 150000 only argues two
+    # things: above the CLI's 100k floor, so an ordinary turn is never compacted away, and
+    # below `rotate.max_context_tokens` (300000) — a window at or above that bound could
+    # never fire at all, since rotation would end the lineage first. It does NOT claim to
+    # fire before `max_invocations` rotates `code` first, which the comment below already
+    # establishes as this pool's actual rotation trigger — only that WHEN a session's
+    # context does grow large within however many invocations occur, it shrinks in step
+    # rather than climbing unchecked toward the model maximum.
+    compaction_window: "150000"
     # All three numbers are set from the same measured distribution — 757 fleet sessions,
     # every figure below observed rather than assumed.
     rotate:
@@ -85,7 +96,9 @@ sessions:
   gate:
     # The plan gate's fold stays basic-tier deliberately: it transcribes the gate's own
     # already-rendered findings into the plan text — editing, not authoring. The
-    # judgement-heavy authoring stays in `planning`.
+    # judgement-heavy authoring stays in `planning`. No `compaction_window` either, for the
+    # same reason as no `rotate:`: `fresh:gate` mints its head on every entry, so there is
+    # never a long-lived context for a window to shrink.
     model: ["blizzard:basic"]
 
 # `docket` is this graph's own findings-docket definition — the format every plan-review/review

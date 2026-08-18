@@ -224,6 +224,7 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20260809_1200_hub_transcript_segments", "transcript_segments", ("record_truncated",)),
     ("hub", "20260809_1800_hub_transcript_segment_record_truncated", "transcript_segments", ("supersedes",)),
     ("hub", "20260812_1200_hub_transcript_events", "transcript_events", ("subject", "tool")),
+    ("hub", "20260817_0900_hub_graph_artifacts", "graph_sessions", ("compaction_window",)),
     # runner tree — instance 6
     (
         "runner",
@@ -231,6 +232,7 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
         "lease_context",
         ("session_name", "resolved_model", "resolved_effort"),
     ),
+    ("runner", "20260817_1000_runner_graph_artifacts", "lease_context", ("resolved_compaction_window",)),
     # runner tree — instance 7 (drop-and-recreate: environment_id added, forge dropped)
     ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("environment_id",)),
     ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("forge",), "removed"),

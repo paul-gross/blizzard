@@ -395,13 +395,14 @@ class RotatePolicy:
 class SessionDecl:
     """One graph-level named session declaration (issue #144).
 
-    Carries workflow *policy* only, never application knowledge
-    (``bzh:app-agnostic-graphs``); ``model`` and ``effort`` are opaque to the hub."""
+    Carries workflow *policy* only (``bzh:app-agnostic-graphs``); ``model``, ``effort``,
+    and ``compaction_window`` are all opaque to the hub."""
 
     name: str
     model: list[str] = field(default_factory=list)
     effort: str | None = None
     rotate: RotatePolicy | None = None
+    compaction_window: str | None = None
 
     @classmethod
     def of(cls, key: object, raw: object) -> SessionDecl:
@@ -417,6 +418,7 @@ class SessionDecl:
             model=model,
             effort=body.text("effort"),
             rotate=RotatePolicy.of(raw_rotate, session=name) if raw_rotate is not None else None,
+            compaction_window=body.text("compaction_window"),
         )
 
 

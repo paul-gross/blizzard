@@ -821,6 +821,7 @@ class SqlAlchemyRunnerStore:
                     session_name=lease.session_name,
                     resolved_model=lease.resolved_model,
                     resolved_effort=lease.resolved_effort,
+                    resolved_compaction_window=lease.resolved_compaction_window,
                     recorded_at=lease.created_at,
                 )
             )
@@ -1797,6 +1798,7 @@ class SqlAlchemyRunnerStore:
             lease_context.c.session_name,
             lease_context.c.resolved_model,
             lease_context.c.resolved_effort,
+            lease_context.c.resolved_compaction_window,
         ).join(lease_context, lease_context.c.lease_id == leases.c.lease_id)
 
     @staticmethod
@@ -1814,6 +1816,7 @@ class SqlAlchemyRunnerStore:
             session_name=r.session_name,
             resolved_model=r.resolved_model,
             resolved_effort=r.resolved_effort,
+            resolved_compaction_window=r.resolved_compaction_window,
             pid=int(r.pid) if r.pid is not None else None,
             process_start_time=str(r.process_start_time) if r.process_start_time is not None else None,
             session_id=str(r.session_id) if r.session_id is not None else None,

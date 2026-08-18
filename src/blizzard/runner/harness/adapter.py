@@ -63,12 +63,13 @@ class IHarnessAdapter(Protocol):
         *,
         model: str | None = None,
         effort: str | None = None,
+        compaction_window: str | None = None,
     ) -> WorkerHandle:
         """Start a headless worker; return its session id, pid, and start time.
 
-        ``model``/``effort`` (issue #144) arrive already resolved; both ``None`` keeps the
-        adapter default. ``model`` is applied at **mint only**, ``effort`` on **every**
-        invocation. ``resume_from`` (#115) continues a session; the returned id is authoritative."""
+        ``model``/``effort``/``compaction_window`` (issue #144, blizzard#343) arrive already
+        resolved; ``model`` applies at **mint only**, the other two on **every** invocation.
+        ``resume_from`` (#115) continues a session; the returned id is authoritative."""
         ...
 
     def resume_with_message(
@@ -81,12 +82,13 @@ class IHarnessAdapter(Protocol):
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
         effort: str | None = None,
+        compaction_window: str | None = None,
     ) -> int:
         """Headless resume-with-message; returns the new pid. Kill first.
 
-        The fire-and-forget resume. ``stdout_path`` is the injected per-lease stdout
-        capture; empty inherits stdout. ``preamble``/``chunk_id`` re-supply the per-lease
-        worker identity, which ``--resume`` inherits none of."""
+        The fire-and-forget resume. ``stdout_path`` is the injected stdout capture; empty
+        inherits stdout. ``preamble``/``chunk_id`` re-supply the per-lease identity
+        ``--resume`` inherits none of. ``compaction_window`` reasserts like ``effort``."""
         ...
 
     def judge(
@@ -99,12 +101,13 @@ class IHarnessAdapter(Protocol):
         chunk_id: str = "",
         effort: str | None = None,
         model: str | None = None,
+        compaction_window: str | None = None,
     ) -> str:
         """Deliver the judgement prompt into the session and return the raw reply.
 
         The synchronous half of the two-phase node judgement — the reply is captured, not
-        just the new pid. ``model`` only attributes this invocation's usage, and is never
-        passed on. ``preamble``/``chunk_id`` re-supply the per-lease worker identity."""
+        just the new pid. ``model`` only attributes usage, never passed on. ``preamble``/
+        ``chunk_id`` re-supply worker identity. ``compaction_window`` reasserts like ``effort``."""
         ...
 
     def resume_command(
@@ -118,9 +121,9 @@ class IHarnessAdapter(Protocol):
     ) -> str:
         """The literal interactive-takeover shell command for the escalation record.
 
-        ``attended=True`` composes the exec'd command (issue #258), which carries identity
-        env and so reasserts the configured permission mode; the default composes the
-        advertised paste string. ``model``/``effort`` are the session's stamped values."""
+        ``attended=True`` composes the exec'd command (#258), reasserting the configured permission mode; the default
+        composes the advertised paste string. Carries the stamped ``model``/``effort``, deliberately no
+        ``compaction_window`` (blizzard#343 — not a fleet-driven turn)."""
         ...
 
     def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
@@ -145,6 +148,12 @@ class IHarnessAdapter(Protocol):
         A single value rather than a list: every adapter can map an ordinal *somewhere*.
         ``low|medium|high|max`` is the well-known vocabulary. ``None`` in returns ``None``,
         as does a harness with no effort knob at all, which never fails a spawn over one."""
+        ...
+
+    def resolve_compaction_window(self, value: str | None) -> str | None:
+        """Resolve an authored compaction-window value to this harness's own vocabulary
+        (blizzard#343) — the same never-fails-a-spawn contract as ``resolve_effort``:
+        unrecognized, unsupported, and ``None`` all return ``None``."""
         ...
 
     def parse_verdict(self, output: str) -> str | None:

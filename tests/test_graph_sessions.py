@@ -219,6 +219,19 @@ def test_an_unrecognized_effort_value_is_accepted_by_the_hub() -> None:
     assert result.ok, result.errors
 
 
+def test_an_empty_compaction_window_string_is_rejected() -> None:
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"compaction_window": "  "}}))).result
+    assert not result.ok
+    assert any("`compaction_window` must be a non-empty string" in e for e in result.errors)
+
+
+def test_an_unrecognized_compaction_window_value_is_accepted_by_the_hub() -> None:
+    # Same rule as effort (blizzard#343): the adapter's vocabulary to recognize, not the
+    # hub's — the hub checks only that it is a non-empty string.
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"compaction_window": "bogus"}}))).result
+    assert result.ok, result.errors
+
+
 def test_an_unrecognized_model_preference_is_accepted_by_the_hub() -> None:
     # Same reason: a model entry is an opaque preference string hub-side; resolution
     # belongs to the adapter.

@@ -97,6 +97,9 @@ class NodeConfig(BaseModel):
     session_effort: str | None = None
     # The pool's rotation bounds; ``None`` when none were authored — nothing bounds the lineage.
     session_rotate: RotatePolicyView | None = None
+    # The declared pool's compaction window, opaque like ``session_effort`` — ``None`` expresses no
+    # preference. Declaration-only, like ``session_rotate``: no chunk-level default fallback.
+    session_compaction_window: str | None = None
     judged_by: JudgedBy
     checks: list[str] = []
     # Where this node's checks run, relative to the leased env's workdir, and the per-check
