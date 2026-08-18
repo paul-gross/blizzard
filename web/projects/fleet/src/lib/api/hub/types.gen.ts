@@ -1623,6 +1623,10 @@ export type GraphPolicyRequest = {
  */
 export type GraphSessionView = {
     /**
+     * Compaction Window
+     */
+    compaction_window?: string | null;
+    /**
      * Effort
      */
     effort?: string | null;
@@ -2090,6 +2094,10 @@ export type NodeConfig = {
      */
     retries_max?: number | null;
     session: SessionMode;
+    /**
+     * Session Compaction Window
+     */
+    session_compaction_window?: string | null;
     /**
      * Session Effort
      */
