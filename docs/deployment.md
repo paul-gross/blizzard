@@ -467,8 +467,11 @@ Claude Code's `--autocompact <auto|tokens>` flag on every fleet-driven invocatio
 Whether the harness restores a resumed session's own window is unmeasured, so the runner does not bet on stickiness the
 way it does for `model` — it stamps the resolved window on the lease at mint and reasserts it from that stamp on every
 resume, exactly as it does for effort. An unrecognized or empty value is dropped with one log line rather than failing a
-spawn. `advanced-development-workflow`'s `code` pool declares one, below its own `rotate.max_context_tokens`, so
-compaction shrinks a session's context in step well before rotation would end the lineage across steps.
+spawn. `advanced-development-workflow`'s `code` pool declares one, below its own `rotate.max_context_tokens` (the only
+one of `code`'s three rotation bounds a window is commensurable with) — the window is never fit from measured
+compaction behavior the way the rotation bounds are, since no such data exists yet, and it makes no claim about firing
+before `code`'s actual rotation trigger, `max_invocations`; only that a session's context, when it does grow large,
+shrinks in step rather than climbing unchecked toward the model maximum.
 
 ### The worker spawn preamble
 

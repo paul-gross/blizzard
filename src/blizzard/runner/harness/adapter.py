@@ -121,9 +121,9 @@ class IHarnessAdapter(Protocol):
     ) -> str:
         """The literal interactive-takeover shell command for the escalation record.
 
-        ``attended=True`` composes the exec'd command (issue #258), which carries identity
-        env and so reasserts the configured permission mode; the default composes the
-        advertised paste string. ``model``/``effort`` are the session's stamped values."""
+        ``attended=True`` composes the exec'd command (#258), reasserting the configured permission mode; the default
+        composes the advertised paste string. Carries the stamped ``model``/``effort``, deliberately no
+        ``compaction_window`` (blizzard#343 — not a fleet-driven turn)."""
         ...
 
     def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:

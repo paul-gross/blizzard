@@ -14,7 +14,7 @@ const SESSIONS: readonly GraphSessionView[] = [
     name: 'code',
     model: ['blizzard:basic', 'gpt-5.3-codex'],
     effort: 'medium',
-    compaction_window: '150000',
+    compaction_window: '100000',
     rotate: { max_context_tokens: 120000, max_invocations: 30 },
   },
   {
@@ -43,7 +43,7 @@ describe('GraphSessionTable', () => {
     const code = el.querySelector('[data-session-name="code"]') as HTMLElement;
     expect(code.textContent).toContain('blizzard:basic, gpt-5.3-codex');
     expect(code.textContent).toContain('medium');
-    expect(code.textContent).toContain('150000');
+    expect(code.textContent).toContain('100000');
     // Only the two thresholds the declaration actually set, and `max_invocations`
     // labelled as invocations rather than node-steps.
     expect(code.textContent).toContain('120000 ctx tokens');
@@ -58,7 +58,9 @@ describe('GraphSessionTable', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const gate = el.querySelector('[data-session-name="gate"]') as HTMLElement;
-    expect(gate.textContent).toContain('—');
+    const gateCells = gate.querySelectorAll('td');
+    // Session / Model / Effort / Compact window / Rotate, in that column order.
+    expect(gateCells[3].textContent?.trim()).toBe('—');
 
     const planning = el.querySelector('[data-session-name="planning"]') as HTMLElement;
     expect(planning.textContent).toContain('blizzard:advanced');

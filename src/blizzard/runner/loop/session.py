@@ -1,4 +1,4 @@
-"""Which prior session a node-entry spawn resumes, and the model/effort it runs under."""
+"""Which prior session a node-entry spawn resumes, and the session stamps it runs under."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ class SessionResolver:
         """The prior session id this spawn resumes, or ``None`` to mint fresh (#115, #144).
 
         **Only the resume-vs-mint decision** — the configuration a spawn runs under resolves
-        in ``model_and_effort``. No match anywhere falls back to fresh: a resume target is
+        in ``session_stamps``. No match anywhere falls back to fresh: a resume target is
         best-effort."""
         if node.session is SessionMode.FRESH:
             return None
@@ -34,9 +34,8 @@ class SessionResolver:
             return self._pool_head(chunk_id, node, spawn_cwd)
         return self.store.latest_session_id(chunk_id, node.session_source)
 
-    def model_and_effort(self, node: NodeConfig, resume_from: str | None) -> tuple[str | None, str | None, str | None]:
-        """The model, effort, and compaction window this spawn runs under, and stamps (issue #144,
-        blizzard#343).
+    def session_stamps(self, node: NodeConfig, resume_from: str | None) -> tuple[str | None, str | None, str | None]:
+        """The (model, effort, compaction_window) this spawn runs under, and stamps (#144, blizzard#343).
 
         **The stamp describes the session, not the preference.** A spawn that *resumes* inherits
         all three from the resumed session's own stamp, and an inherited ``None`` stays *unknown*."""

@@ -2059,8 +2059,8 @@
   },
   "blizzard/runner/harness/adapter.py": {
    "comments": 7,
-   "docstrings": 85,
-   "total": 206
+   "docstrings": 80,
+   "total": 201
   },
   "blizzard/runner/harness/env_allowlist.py": {
    "comments": 4,
@@ -2239,8 +2239,8 @@
   },
   "blizzard/runner/loop/session.py": {
    "comments": 9,
-   "docstrings": 18,
-   "total": 110
+   "docstrings": 17,
+   "total": 109
   },
   "blizzard/runner/loop/spawn.py": {
    "comments": 16,

@@ -179,7 +179,7 @@ class Spawner:
         lease_id = Id.mint(LEASE_PREFIX, self.ctx.clock).value
         node = envelope.node
         retries_max = node.retries_max if node.retries_max is not None else self.ctx.config.default_retries_max
-        model, effort, compaction_window = self.ctx.sessions.model_and_effort(node, resume_from)
+        model, effort, compaction_window = self.ctx.sessions.session_stamps(node, resume_from)
         # Before `record_lease`: a crash here leaves only an orphan row a retry
         # writes again identically — never a lease whose mint's declarations are absent.
         self.ctx.store.record_graph_artifacts(
