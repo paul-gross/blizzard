@@ -82,6 +82,29 @@ def test_session_end_verb_posts_inherited_identity(monkeypatch: pytest.MonkeyPat
     assert calls == ["http://127.0.0.1:8431/api/leases/lease_9/session-end"]
 
 
+def test_session_end_verb_skips_on_elicitation_marker(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A judge/nudge resume's ``SessionEnd`` fire must record no done-signal for the lease."""
+    calls: list[str] = []
+
+    def fake_post(url: str, *, timeout: float, **_: object) -> _FakeResponse:
+        calls.append(url)
+        return _FakeResponse()
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        runner_group,
+        ["session-end"],
+        env={
+            "BLIZZARD_LEASE_ID": "lease_9",
+            "BLIZZARD_RUNNER_URL": "http://127.0.0.1:8431/",
+            "BLIZZARD_ELICITATION": "1",
+        },
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == []
+
+
 def test_session_end_verb_soft_fails_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     """A hook must never break the worker's exit — no identity means a clean skip."""
     posted = False

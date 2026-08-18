@@ -183,6 +183,21 @@ def test_spawn_env_excludes_the_hub_token_and_an_unlisted_sentinel(
     assert _SENTINEL_UNLISTED_VAR not in env
 
 
+@pytest.mark.unit
+def test_spawn_env_excludes_the_elicitation_marker() -> None:
+    adapter = ClaudeCodeAdapter(binary="claude")
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    env = adapter._spawn_env(envelope, preamble, "sess-1")
+
+    assert "BLIZZARD_ELICITATION" not in env
+
+
 @pytest.mark.component
 def test_judge_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -227,6 +242,26 @@ def test_judge_injects_the_lease_identity_when_given_a_preamble(tmp_path: Path) 
     assert dumped["BLIZZARD_RUNNER_URL"] == "http://127.0.0.1:8431"
     assert dumped["BLIZZARD_LEASE_TOKEN"] == "fresh-judge-token"  # the re-minted plaintext rides the judge
     assert dumped["BLIZZARD_CHUNK_ID"] == "ch_9"
+
+
+@pytest.mark.component
+def test_judge_child_env_carries_the_elicitation_marker_when_given_a_preamble(tmp_path: Path) -> None:
+    dump_script = tmp_path / "dump-env"
+    dump_script.write_text(_ENV_DUMP_HARNESS)
+    dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=str(dump_script))
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
+        lease_id="lease_42",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    adapter.judge(str(workdir), "sess-9", "assess", preamble=preamble, chunk_id="ch_9")
+
+    dumped = json.loads((workdir / "env-dump.json").read_text())
+    assert dumped["BLIZZARD_ELICITATION"] == "1"
 
 
 @pytest.mark.component
@@ -275,6 +310,27 @@ def test_resume_with_message_injects_the_lease_identity_when_given_a_preamble(tm
     assert dumped["BLIZZARD_RUNNER_URL"] == "http://127.0.0.1:8431"
     assert dumped["BLIZZARD_LEASE_TOKEN"] == "fresh-resume-token"  # the re-minted plaintext rides the resume
     assert dumped["BLIZZARD_CHUNK_ID"] == "ch_9"
+
+
+@pytest.mark.component
+def test_resume_with_message_child_env_excludes_the_elicitation_marker(tmp_path: Path) -> None:
+    dump_script = tmp_path / "dump-env"
+    dump_script.write_text(_ENV_DUMP_HARNESS)
+    dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=str(dump_script))
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
+        lease_id="lease_42",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    pid = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
+    os.waitpid(pid, 0)
+
+    dumped = json.loads((workdir / "env-dump.json").read_text())
+    assert "BLIZZARD_ELICITATION" not in dumped
 
 
 @pytest.mark.unit
@@ -354,10 +410,10 @@ def test_spawn_env_carries_the_lease_capability_token(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.unit
-def test_the_suites_worker_identity_strip_list_covers_every_var_spawn_env_injects() -> None:
-    """The conftest strip-list and ``_spawn_env`` agree on the worker identity set — add
-    a ``BLIZZARD_*`` var to ``_spawn_env`` without adding it to the strip-list and fail
-    here, rather than only in a fleet worker where nobody is watching a red suite."""
+def test_the_suites_worker_identity_strip_list_covers_every_var_the_adapter_can_inject() -> None:
+    """The conftest strip-list agrees with every ``BLIZZARD_*`` var any adapter injection path
+    can add, judge's elicitation marker included — add one to a path without adding it here
+    and fail, rather than only in a fleet worker where nobody is watching a red suite."""
     adapter = ClaudeCodeAdapter(binary="claude")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
@@ -367,9 +423,12 @@ def test_the_suites_worker_identity_strip_list_covers_every_var_spawn_env_inject
         lease_token="plaintext-lease-token",
     )
 
-    injected = {k for k in adapter._spawn_env(envelope, preamble, "sess-1") if k.startswith("BLIZZARD_")}
+    spawn_injected = {k for k in adapter._spawn_env(envelope, preamble, "sess-1") if k.startswith("BLIZZARD_")}
+    judge_injected = {
+        k for k in adapter.identity_env(preamble, "ch_1", "sess-1", elicitation=True) if k.startswith("BLIZZARD_")
+    }
 
-    assert injected - set(_WORKER_IDENTITY_ENV) == set()
+    assert (spawn_injected | judge_injected) - set(_WORKER_IDENTITY_ENV) == set()
 
 
 _ENV_DUMP_HARNESS = """#!/usr/bin/env python3
@@ -521,18 +580,28 @@ def test_resume_with_message_carries_the_worker_settings_hooks(tmp_path: Path) -
 
 
 @pytest.mark.component
-def test_judge_omits_the_worker_settings_hooks(tmp_path: Path) -> None:
-    # ``judge``'s exit is not the worker declaring done; attaching ``SessionEnd`` here
-    # would record a spurious session-end for the still-live lease.
+def test_judge_prefix_matches_resume_with_messages_settings_and_effort(tmp_path: Path) -> None:
+    # ``judge``'s resume must reuse the same flags, in the same order, as the session's
+    # real turns, or it recreates the cache instead of reading it.
     binary = _fake_binary(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
     settings = tmp_path / "worker-settings.json"
-    adapter = ClaudeCodeAdapter(binary=binary, settings_path=str(settings))
+    adapter = ClaudeCodeAdapter(binary=binary, settings_path=str(settings), permission_mode="bypassPermissions")
 
-    adapter.judge(str(workdir), "sess-123", "Assess. Reply <Choice>name</Choice>.")
+    pid = adapter.resume_with_message(str(workdir), "sess-123", "continue", effort="high")
+    os.waitpid(pid, 0)
+    resumed_prefix, _, resumed_arg = (workdir / "argv.txt").read_text().rpartition(" ")
 
-    assert "--settings" not in (workdir / "argv.txt").read_text()
+    adapter.judge(str(workdir), "sess-123", "assess", effort="high")
+    judge_prefix, _, judge_arg = (workdir / "argv.txt").read_text().rpartition(" ")
+
+    assert judge_prefix == resumed_prefix
+    assert resumed_arg == "continue"
+    assert judge_arg == "assess"
+    assert f"--settings {settings}" in judge_prefix
+    assert "--effort high" in judge_prefix
+    assert "--permission-mode bypassPermissions" in judge_prefix
 
 
 @pytest.mark.component

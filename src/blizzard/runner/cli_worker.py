@@ -15,6 +15,8 @@ ENV_RUNNER_URL = "BLIZZARD_RUNNER_URL"
 ENV_LEASE_TOKEN = "BLIZZARD_LEASE_TOKEN"
 LEASE_TOKEN_HEADER = "X-Blizzard-Lease-Token"
 
+ENV_ELICITATION = "BLIZZARD_ELICITATION"
+
 # A hub-proxied read travels further than a runner-local write, so the two are bounded apart.
 READ_TIMEOUT = 20.0
 WRITE_TIMEOUT = 5.0

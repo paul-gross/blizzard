@@ -30,7 +30,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactScope
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli_daemon import LOCAL_CLIENT_TIMEOUT, RunnerDaemon
-from blizzard.runner.cli_worker import WorkerCall
+from blizzard.runner.cli_worker import ENV_ELICITATION, WorkerCall
 from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
@@ -302,6 +302,8 @@ def session_end() -> None:
 
     Fails **soft**, like the heartbeat: a hook must never break the worker's exit, so a failure
     is reported to stderr and this still exits 0."""
+    if os.environ.get(ENV_ELICITATION):
+        return
     worker = WorkerCall.hook("session-end")
     if worker is not None:
         worker.soft_post(worker.leased("session-end"), failure="could not reach the runner")

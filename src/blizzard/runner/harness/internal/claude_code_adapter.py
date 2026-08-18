@@ -2,8 +2,8 @@
 
 Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the ``claude``
 non-interactive CLI. ``--permission-mode`` and ``--settings`` are per-invocation, not
-session-sticky, so each is reasserted on every resume — except where a synchronous invocation
-must not fire a ``SessionEnd`` hook. Every child env comes from :class:`AllowlistedEnv`."""
+session-sticky, so each is reasserted on every resume. Every child env comes from
+:class:`AllowlistedEnv`."""
 
 from __future__ import annotations
 
@@ -307,13 +307,15 @@ class ClaudeCodeAdapter:
         # only to attribute usage below, never to switch the session (issue #144).
         if effort:
             cmd += ["--effort", effort]
+        # Prefix parity with `resume_with_message` — pinned by
+        # `test_judge_prefix_matches_resume_with_messages_settings_and_effort`.
+        if self._settings_path:
+            cmd += ["--settings", self._settings_path]
         if self._permission_mode:
             cmd += ["--permission-mode", self._permission_mode]
         cmd.append(judgement_prompt)
-        # Identity only: `--settings` stays off, so no `SessionEnd` hook fires on this
-        # synchronous exit and records a spurious done-signal for the lease.
         env = (
-            self.identity_env(preamble, chunk_id, session_id)
+            self.identity_env(preamble, chunk_id, session_id, elicitation=True)
             if preamble is not None
             else AllowlistedEnv.of(self._env_passthrough).variables
         )
@@ -609,7 +611,9 @@ class ClaudeCodeAdapter:
         envelope = ResultEnvelope.of(output)
         return envelope.result if envelope is not None else output
 
-    def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
+    def identity_env(
+        self, preamble: WorkerPreamble, chunk_id: str, session_id: str, *, elicitation: bool = False
+    ) -> dict[str, str]:
         """The child env carrying this lease's worker identity: the allowlist plus the
         ``BLIZZARD_*`` vars a worker's CLI and its hooks read to reach the runner for
         this lease. ``spawn``, ``resume_with_message``, and a takeover (via the seam,
@@ -628,6 +632,8 @@ class ClaudeCodeAdapter:
         # The command a worker runs to record an undecidable choice; `setdefault`, so a
         # caller that already named one keeps it.
         env.setdefault("BLIZZARD_RUNNER_ASK_CMD", "blizzard runner ask")
+        if elicitation:
+            env["BLIZZARD_ELICITATION"] = "1"
         return env
 
     def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
