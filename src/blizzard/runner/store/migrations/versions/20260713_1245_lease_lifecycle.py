@@ -20,8 +20,7 @@ down_revision: str | None = "20260713_1218_runner_walking_skeleton"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape — no ``session_name``/``resolved_model``/
-# ``resolved_effort`` columns, all added by a later revision (``bzh:frozen-revisions``).
+# This revision's own frozen shape, columns later revisions added excluded (``bzh:frozen-revisions``).
 _frozen_metadata = sa.MetaData()
 _lease_context = sa.Table(
     "lease_context",

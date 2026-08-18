@@ -67,11 +67,9 @@ class IHarnessAdapter(Protocol):
     ) -> WorkerHandle:
         """Start a headless worker; return its session id, pid, and start time.
 
-        ``model``/``effort`` (issue #144) arrive already resolved; both ``None`` keeps the
-        adapter default. ``model`` is applied at **mint only**, ``effort`` on **every**
-        invocation — ``compaction_window`` (blizzard#343) rides alongside ``effort``, applied
-        on every invocation too. ``resume_from`` (#115) continues a session; the returned id
-        is authoritative."""
+        ``model``/``effort``/``compaction_window`` (issue #144, blizzard#343) arrive already
+        resolved; ``model`` applies at **mint only**, the other two on **every** invocation.
+        ``resume_from`` (#115) continues a session; the returned id is authoritative."""
         ...
 
     def resume_with_message(
@@ -88,9 +86,9 @@ class IHarnessAdapter(Protocol):
     ) -> int:
         """Headless resume-with-message; returns the new pid. Kill first.
 
-        The fire-and-forget resume. ``stdout_path`` is the injected per-lease stdout
-        capture; empty inherits stdout. ``preamble``/``chunk_id`` re-supply the per-lease
-        worker identity, which ``--resume`` inherits none of."""
+        The fire-and-forget resume. ``stdout_path`` is the injected stdout capture; empty
+        inherits stdout. ``preamble``/``chunk_id`` re-supply the per-lease identity
+        ``--resume`` inherits none of. ``compaction_window`` reasserts like ``effort``."""
         ...
 
     def judge(
@@ -108,8 +106,8 @@ class IHarnessAdapter(Protocol):
         """Deliver the judgement prompt into the session and return the raw reply.
 
         The synchronous half of the two-phase node judgement — the reply is captured, not
-        just the new pid. ``model`` only attributes this invocation's usage, and is never
-        passed on. ``preamble``/``chunk_id`` re-supply the per-lease worker identity."""
+        just the new pid. ``model`` only attributes usage, never passed on. ``preamble``/
+        ``chunk_id`` re-supply worker identity. ``compaction_window`` reasserts like ``effort``."""
         ...
 
     def resume_command(
@@ -154,11 +152,8 @@ class IHarnessAdapter(Protocol):
 
     def resolve_compaction_window(self, value: str | None) -> str | None:
         """Resolve an authored compaction-window value to this harness's own vocabulary
-        (blizzard#343).
-
-        An unrecognized or unsupported value is dropped with one log line, never a spawn
-        failure — the same rule ``resolve_effort`` applies. ``None`` in returns ``None``, as
-        does a harness with no such knob at all."""
+        (blizzard#343) — the same never-fails-a-spawn contract as ``resolve_effort``:
+        unrecognized, unsupported, and ``None`` all return ``None``."""
         ...
 
     def parse_verdict(self, output: str) -> str | None:

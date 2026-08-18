@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import subprocess
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -64,6 +65,10 @@ _NATIVE_PREFIX = "claude-"
 # The well-known effort ordinal, extended by the runner's ``[effort.aliases]`` — which is
 # also how a deployment reaches a native tier outside the ordinal.
 _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
+
+# `--autocompact`'s own vocabulary shape (blizzard#343): a recognition check, not the
+# CLI's own 100k-1M range (enforced CLI-side, never re-implemented here).
+_COMPACTION_WINDOW_RE = re.compile(r"auto|[0-9]+[kK]?")
 
 # The subscription-usage seam (issue #218) — the API host and the shared credential file
 # the harness's own login writes. Both overridable via the constructor.
@@ -166,9 +171,7 @@ class ClaudeCodeAdapter:
         self._effort_aliases = dict(effort_aliases)
         # Values already logged as unrecognized, so the notice fires once per value.
         self._unrecognized_efforts: set[str] = set()
-        # Whether an empty/missing compaction window has already been logged (issue #343)
-        # — the notice fires once, not once per spawn.
-        self._logged_empty_compaction_window = False
+        self._unrecognized_compaction_windows: set[str] = set()
         # A non-interactive worker has no one to approve tool use, so the default mode
         # lets it inspect but never build. ``None`` omits the flag.
         self._permission_mode = permission_mode
@@ -238,14 +241,14 @@ class ClaudeCodeAdapter:
         return None
 
     def resolve_compaction_window(self, value: str | None) -> str | None:
-        """``"auto"`` and any non-empty token-count spelling pass through unchanged
-        (blizzard#343); the CLI itself validates the numeric range and rejects an
-        out-of-range value at spawn time, which this adapter never tries to replicate."""
-        if value:
+        """``"auto"`` or a token-count spelling, else dropped and logged once (blizzard#343)."""
+        if value is None:
+            return None
+        if _COMPACTION_WINDOW_RE.fullmatch(value):
             return value
-        if not self._logged_empty_compaction_window:
-            self._logged_empty_compaction_window = True
-            _log.info("empty compaction window; ignoring")
+        if value not in self._unrecognized_compaction_windows:
+            self._unrecognized_compaction_windows.add(value)
+            _log.info("unrecognized compaction window value; ignoring", compaction_window=value)
         return None
 
     def spawn(
@@ -268,9 +271,8 @@ class ClaudeCodeAdapter:
         # non-empty above, so the fallback is always a real workdir here.
         workdir = SpawnCwd(preamble.workspace_root, preamble.environments[0].workdir).path
         cmd = [self._binary, "-p", "--output-format", "json"]
-        # `--model` at MINT ONLY, since a resume restores the session's own; `--effort` and
-        # `--autocompact` on EVERY invocation, since neither is sticky the same way (issue
-        # #144, blizzard#343).
+        # `--model` at MINT ONLY (a resume restores it); `--effort`/`--autocompact` on EVERY
+        # invocation — neither is sticky (issue #144, blizzard#343).
         if not resume_from:
             cmd += ["--model", model or self._model]
         if effort:
@@ -322,9 +324,8 @@ class ClaudeCodeAdapter:
         compaction_window: str | None = None,
     ) -> str:
         cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
-        # No `--model` on a resume (sticky); `--effort` and `--autocompact` ARE reasserted.
-        # `model` is taken only to attribute usage below, never to switch the session
-        # (issue #144, blizzard#343).
+        # No `--model` (sticky); `--effort`/`--autocompact` ARE reasserted. `model` is taken
+        # only to attribute usage below, never to switch the session (issue #144, blizzard#343).
         if effort:
             cmd += ["--effort", effort]
         if compaction_window:

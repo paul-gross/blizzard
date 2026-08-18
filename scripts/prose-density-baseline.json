@@ -1144,8 +1144,8 @@
   },
   "blizzard/hub/domain/analytics/derivation.py": {
    "comments": 1,
-   "docstrings": 24,
-   "total": 145
+   "docstrings": 22,
+   "total": 142
   },
   "blizzard/hub/domain/analytics/events.py": {
    "comments": 5,
@@ -1153,9 +1153,9 @@
    "total": 123
   },
   "blizzard/hub/domain/analytics/extraction.py": {
-   "comments": 7,
-   "docstrings": 29,
-   "total": 201
+   "comments": 5,
+   "docstrings": 27,
+   "total": 200
   },
   "blizzard/hub/domain/analytics/operational.py": {
    "comments": 6,
@@ -1950,7 +1950,7 @@
   "blizzard/runner/cli.py": {
    "comments": 35,
    "docstrings": 163,
-   "total": 1189
+   "total": 1187
   },
   "blizzard/runner/cli_daemon.py": {
    "comments": 4,
@@ -1960,7 +1960,7 @@
   "blizzard/runner/cli_worker.py": {
    "comments": 3,
    "docstrings": 16,
-   "total": 125
+   "total": 123
   },
   "blizzard/runner/config.py": {
    "comments": 85,
@@ -2090,7 +2090,7 @@
   "blizzard/runner/harness/internal/claude_code_normalizer.py": {
    "comments": 40,
    "docstrings": 50,
-   "total": 641
+   "total": 640
   },
   "blizzard/runner/harness/internal/claude_code_transcript.py": {
    "comments": 42,
@@ -2742,7 +2742,7 @@
   "conftest.py": {
    "comments": 2,
    "docstrings": 14,
-   "total": 79
+   "total": 78
   },
   "crash/__init__.py": {
    "comments": 0,
@@ -3030,9 +3030,9 @@
    "total": 371
   },
   "test_adw_docket.py": {
-   "comments": 4,
+   "comments": 2,
    "docstrings": 20,
-   "total": 90
+   "total": 89
   },
   "test_analytics_durations_api.py": {
    "comments": 24,
@@ -4286,8 +4286,8 @@
   },
   "test_session_end.py": {
    "comments": 10,
-   "docstrings": 13,
-   "total": 150
+   "docstrings": 12,
+   "total": 127
   },
   "test_session_store.py": {
    "comments": 1,
@@ -4361,13 +4361,13 @@
   },
   "test_transcript_event_derivation.py": {
    "comments": 3,
-   "docstrings": 10,
-   "total": 245
+   "docstrings": 6,
+   "total": 230
   },
   "test_transcript_event_extraction.py": {
    "comments": 3,
-   "docstrings": 10,
-   "total": 235
+   "docstrings": 7,
+   "total": 204
   },
   "test_transcript_event_store.py": {
    "comments": 8,
@@ -4475,9 +4475,9 @@
    "total": 558
   },
   "test_worker_preamble.py": {
-   "comments": 25,
-   "docstrings": 31,
-   "total": 366
+   "comments": 28,
+   "docstrings": 34,
+   "total": 382
   },
   "test_workspace_prompt_api.py": {
    "comments": 3,

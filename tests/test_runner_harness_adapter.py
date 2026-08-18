@@ -1109,8 +1109,8 @@ def test_an_unrecognized_effort_logs_once_and_is_ignored() -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize("value", ["auto", "500k", "200000", "200"])
 def test_resolve_compaction_window_passes_a_recognized_spelling_through(value: str) -> None:
-    # The CLI's own vocabulary spans `auto` and several token-count spellings (blizzard#343);
-    # the adapter never re-validates the numeric range, only guards against empty/`None`.
+    # `auto` or a token count (blizzard#343) — the adapter checks the shape, not the CLI's
+    # own 100k-1M range, which it never re-validates.
     assert ClaudeCodeAdapter(binary="claude").resolve_compaction_window(value) == value
 
 
@@ -1120,14 +1120,27 @@ def test_resolve_compaction_window_of_no_preference_is_none() -> None:
 
 
 @pytest.mark.unit
-def test_an_empty_compaction_window_logs_once_and_is_ignored() -> None:
+@pytest.mark.parametrize("value", ["", "150k tokens", "True", "auto2"])
+def test_an_unrecognized_compaction_window_logs_once_per_value_and_is_ignored(value: str) -> None:
     adapter = ClaudeCodeAdapter(binary="claude")
 
     with capture_logs() as logs:
-        assert adapter.resolve_compaction_window("") is None
-        assert adapter.resolve_compaction_window("") is None
+        assert adapter.resolve_compaction_window(value) is None
+        assert adapter.resolve_compaction_window(value) is None
 
-    assert len([entry for entry in logs if "empty compaction window" in entry["event"]]) == 1
+    assert len([entry for entry in logs if "unrecognized compaction window" in entry["event"]]) == 1
+
+
+@pytest.mark.unit
+def test_a_missing_compaction_window_is_silently_none_never_logged() -> None:
+    # `None` means "no declaration" — not an authoring mistake, so it never logs (unlike
+    # a real bad value, or the empty string): mirrors `resolve_effort`'s treatment of `None`.
+    adapter = ClaudeCodeAdapter(binary="claude")
+
+    with capture_logs() as logs:
+        assert adapter.resolve_compaction_window(None) is None
+
+    assert not [entry for entry in logs if "compaction window" in entry["event"]]
 
 
 # The application contract (issue #144): `--model` at mint only (restored on `--resume`);
