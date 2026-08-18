@@ -29,6 +29,7 @@ import {
 import { ChunkArtifactsTab } from './chunk-artifacts-tab';
 import { type ChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-selection';
 import { ChunkGeneralTab } from './chunk-general-tab';
+import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 import { ChunkTranscriptsContainer } from './chunk-transcripts-container';
 
 /**
@@ -40,12 +41,13 @@ import { ChunkTranscriptsContainer } from './chunk-transcripts-container';
  * entirely in the tab bodies' own CSS rather than a second viewport-scoped
  * page.
  *
- * Three tabs, selected through {@link injectChunkDetailSelection} (`?tab`, so
+ * Four tabs, selected through {@link injectChunkDetailSelection} (`?tab`, so
  * the choice is a URL-held state of this one page, not a different page):
  * **General** — {@link ChunkGeneralTab}, everything this page showed before it
- * grew a second tab — **Artifacts**, and **Transcripts** (blizzard#248 Phase 2),
- * hidden from the strip without `transcript:read` ({@link canReadTranscripts}).
- * A route makes any of the three deep-linkable and back-button-navigable for free.
+ * grew more tabs — **Node history** ({@link ChunkNodeHistoryTab}), **Artifacts**,
+ * and **Transcripts** (blizzard#248 Phase 2), the last hidden from the strip
+ * without `transcript:read` ({@link canReadTranscripts}). A route makes any of
+ * the four deep-linkable and back-button-navigable for free.
  *
  * This container keeps the back bar, the shared action-error/outcome
  * channels, the identity header, the tab strip, and the queries and three
@@ -67,6 +69,7 @@ import { ChunkTranscriptsContainer } from './chunk-transcripts-container';
  */
 const BASE_TAB_OPTIONS: readonly KitTabOption[] = [
   { value: 'general', label: 'General', testid: 'tab-general' },
+  { value: 'node-history', label: 'Node history', testid: 'tab-node-history' },
   { value: 'artifacts', label: 'Artifacts', testid: 'tab-artifacts' },
 ];
 
@@ -78,6 +81,7 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
   imports: [
     ChunkArtifactsTab,
     ChunkGeneralTab,
+    ChunkNodeHistoryTab,
     ChunkPageHeader,
     ChunkPageShell,
     ChunkTranscriptsContainer,
@@ -125,6 +129,13 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
               (answerQuestion)="onAnswer($event)"
               (resolveDecision)="onResolve($event)"
               (editGraph)="onEditGraph($event)"
+            />
+          }
+          @case ('node-history') {
+            <app-chunk-node-history-tab
+              [detail]="d"
+              [selectedKey]="selection.stepKey()"
+              (selectStep)="onSelectStep($event)"
             />
           }
           @case ('artifacts') {
@@ -208,6 +219,7 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
       flex: 1;
       min-height: 0;
     }
+    app-chunk-node-history-tab,
     app-chunk-artifacts-tab {
       flex: 1;
       min-height: 0;
@@ -237,6 +249,13 @@ export class ChunkPage {
 
   protected onChooseTab(tab: string): void {
     this.selection.select(tab as ChunkDetailTab, this.selection.artifactKey());
+  }
+
+  /** A row activated in the Node history tab writes its join key back to the URL —
+   * {@link ChunkNodeHistoryTab} forwards it straight from {@link ChunkTimeline}, a pure
+   * function of that param, never its own selection state. */
+  protected onSelectStep(stepKey: string): void {
+    this.selection.selectStep(stepKey);
   }
 
   /** A nav row picked in the Artifacts tab writes its key back to the URL —

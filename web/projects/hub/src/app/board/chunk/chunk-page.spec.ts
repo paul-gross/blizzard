@@ -116,7 +116,10 @@ describe('Mobile chunk drill-down', () => {
 
   /** Click a tab button by its `KitTabs` testid and let the resulting
    * client-side navigation settle. */
-  async function chooseTab(harness: RouterTestingHarness, testid: 'tab-general' | 'tab-artifacts'): Promise<HTMLElement> {
+  async function chooseTab(
+    harness: RouterTestingHarness,
+    testid: 'tab-general' | 'tab-node-history' | 'tab-artifacts',
+  ): Promise<HTMLElement> {
     const el = harness.fixture.nativeElement as HTMLElement;
     el.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`)?.click();
     await settle(harness.fixture);
@@ -175,6 +178,31 @@ describe('Mobile chunk drill-down', () => {
     expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=general`);
     expect(el.querySelector('[data-testid="section-work-item"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="artifacts-tab-nav"]')).toBeNull();
+  });
+
+  it('renders the strip General, Node history, Artifacts, Transcripts in that order', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+    const tabs = Array.from(el.querySelectorAll('[data-testid^="tab-"]')).map((n) => n.getAttribute('data-testid'));
+    expect(tabs).toEqual(['tab-general', 'tab-node-history', 'tab-artifacts', 'tab-transcripts']);
+  });
+
+  it('switches to the Node history tab on click, writing ?tab=node-history, and selecting a row writes ?step=', async () => {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
+    await settle(harness.fixture);
+
+    const el = await chooseTab(harness, 'tab-node-history');
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=node-history`);
+    expect(el.querySelector('[data-testid="chunk-node-history-tab"]')).not.toBeNull();
+
+    (el.querySelector('[data-testid="history-step"]') as HTMLButtonElement).click();
+    await settle(harness.fixture);
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=node-history&step=nd_build:1`);
+    expect(
+      harness.fixture.nativeElement
+        .querySelector('[data-testid="history-step"]')
+        ?.classList.contains('selected'),
+    ).toBe(true);
   });
 
   it('defaults to the General tab for an absent ?tab value', async () => {

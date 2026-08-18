@@ -170,6 +170,45 @@ describe('chunk-timeline row hover tint shell sweep (web:shell-sweep)', () => {
       root.remove();
     }
   });
+
+  it('reads a selected row as distinct from a merely hovered one (blizzard#315)', async () => {
+    await loadDesignTokens();
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [ChunkTimeline],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', TIMELINE_DETAIL);
+    fixture.componentRef.setInput('activatable', true);
+    fixture.componentRef.setInput('selectedKey', 'nd_review:2'); // TIMELINE_DETAIL's own active row.
+    await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await page.viewport(390, 400);
+    await nextFrame();
+    await userEvent.unhover(root);
+    await nextFrame();
+
+    try {
+      const historyRow = root.querySelector<HTMLElement>('[data-testid="history-step"]')!;
+      const selectedRow = root.querySelector<HTMLElement>('[data-testid="history-active"]')!;
+      expect(selectedRow.classList.contains('selected'), 'fixture defect: selectedKey did not select the active row').toBe(
+        true,
+      );
+
+      await userEvent.hover(historyRow);
+      await nextFrame();
+      const hovered = getComputedStyle(historyRow).backgroundColor;
+      const selected = getComputedStyle(selectedRow).backgroundColor;
+      expect(
+        selected,
+        `a selected row (${selected}) reads identical to a hovered-but-unselected one (${hovered}) — the two states are not distinguishable`,
+      ).not.toBe(hovered);
+    } finally {
+      root.remove();
+    }
+  });
 });
 
 const ARTIFACTS_DETAIL: ChunkDetail = {
