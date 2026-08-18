@@ -49,6 +49,25 @@ adjudicate, never a veto.
 If this workspace provides review tooling, use it — blizzard builds no review machinery of its own. Exercise the
 change's end-to-end flows inside the chunk's environment, where the services are available to drive.
 
+### How wide to fan out
+
+The read stays full every round. What narrows is how many independent passes you spend on it.
+
+**A first round** — no prior `review-findings` asset — earns the full width: one isolated pass per axis, aggregated by
+you. The change is unread and its risky surfaces are unknown, so independent passes converging on the same defect is
+real signal, and it is the only round that can produce it.
+
+**Every round after that takes one consolidated pass carrying all three axes**, not one per axis. By this point the
+change's shape and its risky surfaces are already on the record in the previous round's own findings, and a second and
+third fan-out spends most of its width re-deriving them from files nobody has touched since. Read the whole change as
+always — that is what keeps a declined finding from disappearing — but weight your attention toward what the repairs
+since the last round actually touched. A repair's own blast radius is where this round's defects live: a shared
+component edited to satisfy one finding is the likeliest place the next one is hiding.
+
+Restore the full per-axis width when the change has genuinely **moved** rather than merely been repaired — a repo new
+to the change-set, commits that are not repairs of the last round's findings, or an amended plan. A narrowed pass reads
+a change that has only been fixed; it is not for one that has grown.
+
 ## Submit
 
 Submit your findings as the node's `review-findings` asset before you declare done: run
