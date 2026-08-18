@@ -39,6 +39,7 @@ sessions:
   code:
     model: ["blizzard:basic", "gpt-5.3-codex"]
     effort: medium
+    compaction_window: "100000"
     rotate:
       max_context_tokens: 120000
       max_invocations: 30
@@ -101,6 +102,7 @@ def test_the_declaration_reaches_the_envelope_read(tmp_path: Path) -> None:
     assert node["session_name"] == "code"
     assert node["session_model"] == ["blizzard:basic", "gpt-5.3-codex"]
     assert node["session_effort"] == "medium"
+    assert node["session_compaction_window"] == "100000"
     assert node["session_rotate"] == {
         "max_context_tokens": 120000,
         "max_transcript_bytes": None,
@@ -123,6 +125,7 @@ def test_the_declaration_outranks_the_chunk_default_field_by_field(tmp_path: Pat
 
     assert node["session_model"] == ["blizzard:basic", "gpt-5.3-codex"]  # the declaration
     assert node["session_effort"] == "medium"  # also the declaration
+    assert node["session_compaction_window"] == "100000"  # declaration-only, no chunk fallback exists
 
 
 def test_a_chunk_default_reaches_a_graph_that_declares_no_sessions(tmp_path: Path) -> None:
@@ -141,6 +144,7 @@ def test_a_chunk_default_reaches_a_graph_that_declares_no_sessions(tmp_path: Pat
     assert node["session_name"] is None
     assert node["session_model"] == ["blizzard:advanced"]
     assert node["session_effort"] == "high"
+    assert node["session_compaction_window"] is None  # no chunk-level default exists to fall back to
     assert node["session_rotate"] is None
 
 
@@ -154,6 +158,7 @@ def test_a_chunk_expressing_no_preference_on_a_pre_144_graph_carries_nothing(tmp
     assert node["session_name"] is None
     assert node["session_model"] == []
     assert node["session_effort"] is None
+    assert node["session_compaction_window"] is None
     assert node["session_rotate"] is None
 
 

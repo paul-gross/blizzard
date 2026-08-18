@@ -2912,7 +2912,7 @@
   "runner_fakes.py": {
    "comments": 55,
    "docstrings": 52,
-   "total": 819
+   "total": 821
   },
   "service/__init__.py": {
    "comments": 0,
@@ -3385,9 +3385,9 @@
    "total": 318
   },
   "test_envelope_sessions_api.py": {
-   "comments": 8,
+   "comments": 10,
    "docstrings": 8,
-   "total": 173
+   "total": 178
   },
   "test_escalation.py": {
    "comments": 4,
@@ -4202,7 +4202,7 @@
   "test_runner_session_pools.py": {
    "comments": 60,
    "docstrings": 53,
-   "total": 640
+   "total": 668
   },
   "test_runner_spawn_cwd.py": {
    "comments": 2,

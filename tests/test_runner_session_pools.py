@@ -43,7 +43,14 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
 
 
 def _pooled(
-    node_name: str, node_id: str, *, mode: SessionMode, model: list[str] | None = None, effort=None, pool: str = "code"
+    node_name: str,
+    node_id: str,
+    *,
+    mode: SessionMode,
+    model: list[str] | None = None,
+    effort=None,
+    compaction_window=None,
+    pool: str = "code",
 ):  # type: ignore[no-untyped-def]
     """An envelope for a node referencing a named pool (`code` by default), in either mode."""
     return make_envelope(
@@ -56,6 +63,7 @@ def _pooled(
         session_name=pool,
         session_model=model if model is not None else ["blizzard:basic"],
         session_effort=effort,
+        session_compaction_window=compaction_window,
     )
 
 
@@ -287,7 +295,14 @@ def test_a_mint_stamps_what_it_resolved(tmp_path):  # type: ignore[no-untyped-de
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
-    env = _pooled("build", "nd_build", mode=SessionMode.FRESH, model=["blizzard:basic"], effort="medium")
+    env = _pooled(
+        "build",
+        "nd_build",
+        mode=SessionMode.FRESH,
+        model=["blizzard:basic"],
+        effort="medium",
+        compaction_window="150000",
+    )
 
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
@@ -299,8 +314,10 @@ def test_a_mint_stamps_what_it_resolved(tmp_path):  # type: ignore[no-untyped-de
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
     assert (lease.resolved_model, lease.resolved_effort) == ("sonnet", "medium")
+    assert lease.resolved_compaction_window == "150000"
     # And the mint carried them to the harness.
     assert harness.spawn_model_effort == [("sonnet", "medium")]
+    assert harness.spawn_compaction_windows == ["150000"]
 
 
 @pytest.mark.component
@@ -311,7 +328,14 @@ def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tm
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
-    build_env = _pooled("build", "nd_build", mode=SessionMode.FRESH, model=["blizzard:basic"], effort="medium")
+    build_env = _pooled(
+        "build",
+        "nd_build",
+        mode=SessionMode.FRESH,
+        model=["blizzard:basic"],
+        effort="medium",
+        compaction_window="150000",
+    )
     # Bare `resume` — belongs to no pool and declares nothing.
     retro_env = make_envelope("ch_1", "retrospective", node_id="nd_retro", choices=_CHOICES, session=SessionMode.RESUME)
 
@@ -335,8 +359,10 @@ def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tm
     assert lease.session_id == "sess-code-1"  # it resumed the pool's session
     # …but the stamp is the SESSION's, inherited — not the fresh preference.
     assert (lease.resolved_model, lease.resolved_effort) == ("sonnet", "medium")
+    assert lease.resolved_compaction_window == "150000"
     # And no model reached the harness on the resume, so the process really is on sonnet.
     assert h2.spawn_model_effort == [("sonnet", "medium")]
+    assert h2.spawn_compaction_windows == ["150000"]
 
 
 @pytest.mark.component
@@ -367,7 +393,9 @@ def test_a_lease_predating_the_stamps_inherits_unknown_rather_than_a_guess(tmp_p
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
     assert (lease.resolved_model, lease.resolved_effort) == (None, None)
+    assert lease.resolved_compaction_window is None
     assert h2.spawn_model_effort == [(None, None)]
+    assert h2.spawn_compaction_windows == [None]
 
 
 def _blank_stamps(store, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
@@ -379,7 +407,7 @@ def _blank_stamps(store, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
         conn.execute(
             update(s.lease_context)
             .where(s.lease_context.c.chunk_id == chunk_id)
-            .values(session_name=None, resolved_model=None, resolved_effort=None)
+            .values(session_name=None, resolved_model=None, resolved_effort=None, resolved_compaction_window=None)
         )
 
 
