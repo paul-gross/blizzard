@@ -42,13 +42,6 @@ def _render(
     ).text
 
 
-def _unwrapped(text: str) -> str:
-    """Every run of whitespace collapsed to one space, so a phrase assertion reads through the
-    authored markdown's hard wrap: the formatter splits inline code spans across lines, and a
-    literal match would go quietly false on the next reflow."""
-    return " ".join(text.split())
-
-
 def _fingerprint(
     workspace_prompt: str,
     envs: list[AcquiredEnvironment],
@@ -138,19 +131,10 @@ def test_baked_default_used_when_runner_prompt_unset() -> None:
     assert "blizzard runner chunk history" in out
     assert "blizzard runner heartbeat" in out
     assert "blizzard runner session-end" in out
-    # Names verbs explicitly rather than `--help`, which also lists mutating ones.
-    assert "blizzard runner --help" not in out
-    # Names the graph-scoped *read*, not just the flag: `--scope graph` also occurs in the
-    # write verbs' refusal sentence, which alone would satisfy a bare substring check.
-    flowed = _unwrapped(out)
-    assert "artifact list [--scope node|graph]" in flowed
-    assert "[--scope node|graph] [--content]" in flowed
-    assert "artifact get <name> --scope graph" in flowed
-    assert "no hub round-trip" in flowed
-    # The mechanism, taught with a placeholder: a literal artifact name here would be one
-    # graph's content shipped as an instruction to the workers of every other graph.
-    assert "artifact list --scope graph" in flowed
-    assert "docket --scope graph" not in flowed
+    # The worker surface is discovered from the CLI's own audience labels plus per-command
+    # `--help`, not restated here — the preamble names the rule, the CLI owns the detail.
+    assert "labeled **Worker:**" in out
+    assert "--help" in out
 
 
 @pytest.mark.unit

@@ -1,3 +1,2 @@
-**This deployment's workspace policy has been withdrawn since your previous turn.** The operator's standing prose you
-were given earlier in this session is no longer in effect, and there is no replacement — stop working under it. What
-remains standing is the blizzard fleet-worker preamble alone.
+**This deployment's workspace policy has been withdrawn since your previous turn.** It is no longer in effect and has no
+replacement — stop working under it. What remains standing is the blizzard fleet-worker preamble alone.
