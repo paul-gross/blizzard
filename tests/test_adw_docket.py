@@ -23,16 +23,21 @@ _GRAPH_DIR = (
 _PROMPTS_DIR = _GRAPH_DIR / "prompts"
 _RETRIEVAL_COMMAND = "blizzard runner artifact get docket --scope graph"
 
-# The terms a prompt uses only when restating part of the docket format. Matched against
-# prompt text, so the census below collects itself rather than tracking filenames by hand.
+# Phrases a prompt uses only when restating the docket's format mechanics — the entry
+# fields or the refutation record's rules — as opposed to merely naming a docket concept
+# in passing. Matched against normalized prompt text, so the census below collects itself
+# rather than tracking filenames by hand.
 _DOCKET_VOCAB = re.compile(
-    r"refut|should-fix|blocking|disposition|anchor|plan-findings|review-findings|accepted-wont-fix|filed-as-issue",
+    r"copied verbatim|entire record|restarts? at `F1`",
     re.IGNORECASE,
 )
 
 
 def _docket_vocabulary_prompts() -> list[Path]:
-    return sorted((p for p in _PROMPTS_DIR.glob("*.md") if _DOCKET_VOCAB.search(p.read_text())), key=lambda p: p.name)
+    return sorted(
+        (p for p in _PROMPTS_DIR.glob("*.md") if _DOCKET_VOCAB.search(_normalized(p.read_text()))),
+        key=lambda p: p.name,
+    )
 
 
 def _normalized(text: str) -> str:
@@ -42,21 +47,17 @@ def _normalized(text: str) -> str:
     return " ".join(text.split())
 
 
-def test_the_docket_vocabulary_census_is_exactly_ten_files() -> None:
+def test_the_docket_vocabulary_census_is_exactly_six_files() -> None:
     """Guards the guard: the set is collected by matching text, so a vocabulary that stopped
     matching would shrink it to nothing and every parametrized case below would pass vacuously.
     This enumeration is the census's own home — joining or leaving it is an edit right here."""
     names = {p.name for p in _docket_vocabulary_prompts()}
     assert names == {
         "build.from-review.md",
-        "build.from-verify.md",
         "build.md",
         "plan.from-plan-review.md",
         "plan.md",
-        "plan-review.judgement.md",
         "plan-review.md",
-        "retrospective.md",
-        "review.judgement.md",
         "review.md",
     }
 

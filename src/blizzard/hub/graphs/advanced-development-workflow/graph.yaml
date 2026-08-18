@@ -89,7 +89,7 @@ sessions:
     model: ["blizzard:basic"]
 
 # `docket` is this graph's own findings-docket definition — the format every plan-review/review
-# finding, refutation, disposition and fold restates.
+# finding and refutation restates.
 #
 # MAINTAINERS: a prompt restates the slice of this format its node needs, and a worker reads that
 # restatement first — it retrieves the full docket only on request. So an edit to docket.md is not
