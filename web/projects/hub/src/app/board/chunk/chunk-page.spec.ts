@@ -116,7 +116,10 @@ describe('Mobile chunk drill-down', () => {
 
   /** Click a tab button by its `KitTabs` testid and let the resulting
    * client-side navigation settle. */
-  async function chooseTab(harness: RouterTestingHarness, testid: 'tab-general' | 'tab-artifacts'): Promise<HTMLElement> {
+  async function chooseTab(
+    harness: RouterTestingHarness,
+    testid: 'tab-general' | 'tab-node-history' | 'tab-artifacts',
+  ): Promise<HTMLElement> {
     const el = harness.fixture.nativeElement as HTMLElement;
     el.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`)?.click();
     await settle(harness.fixture);
@@ -175,6 +178,106 @@ describe('Mobile chunk drill-down', () => {
     expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=general`);
     expect(el.querySelector('[data-testid="section-work-item"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="artifacts-tab-nav"]')).toBeNull();
+  });
+
+  it('renders the strip General, Node history, Artifacts, Transcripts in that order', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+    const tabs = Array.from(el.querySelectorAll('[data-testid^="tab-"]')).map((n) => n.getAttribute('data-testid'));
+    expect(tabs).toEqual(['tab-general', 'tab-node-history', 'tab-artifacts', 'tab-transcripts']);
+  });
+
+  it('switches to the Node history tab on click, writing ?tab=node-history, and selecting a row writes ?step=', async () => {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
+    await settle(harness.fixture);
+
+    const el = await chooseTab(harness, 'tab-node-history');
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=node-history`);
+    expect(el.querySelector('[data-testid="chunk-node-history-tab"]')).not.toBeNull();
+
+    (el.querySelector('[data-testid="history-step"]') as HTMLButtonElement).click();
+    await settle(harness.fixture);
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=node-history&step=nd_build:1`);
+    expect(
+      harness.fixture.nativeElement
+        .querySelector('[data-testid="history-step"]')
+        ?.classList.contains('selected'),
+    ).toBe(true);
+  });
+
+  it("shows exactly the selected step's own artifacts on the Node history tab (D8: exact (node_id, epoch))", async () => {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments: [] };
+      return DETAIL;
+    });
+    // DETAIL's own build.branch.1 artifact is (nd_build, epoch 1); review.findings.2 is
+    // (nd_review, epoch 2) — selecting the build step must show only the former.
+    const el = await open(`/board/chunk/${CHUNK_ID}?tab=node-history&step=nd_build:1`);
+
+    expect(el.querySelectorAll('[data-testid="node-history-artifact-key"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="node-history-artifact-key"]')?.textContent).toContain('build.branch.1');
+    expect(el.textContent).not.toContain('review.findings.2');
+  });
+
+  it('states an explicit empty transcript for a step with no shipped segments', async () => {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments: [] };
+      return DETAIL;
+    });
+    const el = await open(`/board/chunk/${CHUNK_ID}?tab=node-history&step=nd_build:1`);
+
+    expect(el.querySelector('[data-testid="node-history-transcript-empty"]')?.textContent).toContain(
+      'NO TRANSCRIPT FOR THIS STEP',
+    );
+  });
+
+  it("renders the selected step's own transcript once its segment resolves", async () => {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) {
+        return {
+          chunk_id: CHUNK_ID,
+          segments: [
+            {
+              segment_id: 'sg_1',
+              node_id: 'nd_build',
+              epoch: 1,
+              spawn_generation: 0,
+              turn_range_start: 0,
+              turn_range_end: 1,
+              final: true,
+              truncated: false,
+              byte_count: 40,
+              normalizer_version: 'v1',
+              harness_version: null,
+              received_at: '2026-07-16T11:05:00.000Z',
+            },
+          ],
+        };
+      }
+      if (path === `/api/chunks/${CHUNK_ID}/transcripts/sg_1`) {
+        return {
+          segment_id: 'sg_1',
+          final: true,
+          truncated: false,
+          turns: [
+            { index: 0, kind: 'asst', text: 'built it', timestamp: null, tool: null, thinking_redacted: false, sidechain: null, truncated: false },
+          ],
+        };
+      }
+      return DETAIL;
+    });
+    const el = await open(`/board/chunk/${CHUNK_ID}?tab=node-history&step=nd_build:1`);
+
+    expect(el.querySelector('[data-testid="node-history-transcript-body"]')?.textContent).toContain('built it');
   });
 
   it('defaults to the General tab for an absent ?tab value', async () => {

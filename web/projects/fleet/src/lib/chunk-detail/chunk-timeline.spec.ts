@@ -325,4 +325,151 @@ describe('ChunkTimeline', () => {
     expect(usageRowStyle.display).toBe('flex');
     expect(usageRowStyle.flexWrap).toBe('wrap');
   });
+
+  it('carries no activation affordance and emits nothing when activatable is false (the default)', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', TWO_GRAPH_DETAIL);
+    const emitted: (string | null)[] = [];
+    fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    for (const row of el.querySelectorAll('[data-testid="history-step"], [data-testid="history-active"]')) {
+      expect(row.getAttribute('role')).toBeNull();
+      expect(row.getAttribute('tabindex')).toBeNull();
+    }
+    (el.querySelector('[data-testid="history-step"]') as HTMLElement).click();
+    expect(emitted).toEqual([]);
+  });
+
+  it('makes a transition row and the active row activatable, but never a migration row (D1)', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    // TWO_GRAPH_DETAIL's own status is 'ready' (no node in flight) — 'running' gives it
+    // an active row too, so both activatable shapes are exercised in one fixture.
+    fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: 'running' });
+    fixture.componentRef.setInput('activatable', true);
+    const emitted: (string | null)[] = [];
+    fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const transition = el.querySelector('[data-testid="history-step"]') as HTMLElement;
+    expect(transition.getAttribute('role')).toBe('button');
+    expect(transition.getAttribute('tabindex')).toBe('0');
+    transition.click();
+    expect(emitted).toEqual(['nd_s_build:1']);
+
+    const migration = el.querySelector('[data-testid="history-migration-step"]') as HTMLElement;
+    expect(migration.getAttribute('role')).toBeNull();
+    expect(migration.getAttribute('tabindex')).toBeNull();
+    migration.click();
+    expect(emitted).toEqual(['nd_s_build:1']); // unchanged — a migration row emits nothing
+
+    const active = el.querySelector('[data-testid="history-active"]') as HTMLElement;
+    expect(active.getAttribute('role')).toBe('button');
+    active.click();
+    expect(emitted).toEqual(['nd_s_build:1', 'nd_t_build:1']);
+  });
+
+  it('activates a row by Enter and by Space, not just by click', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    fixture.componentRef.setInput('activatable', true);
+    const emitted: (string | null)[] = [];
+    fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const [first, second] = el.querySelectorAll('[data-testid="history-step"]');
+
+    first.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    second.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    expect(emitted).toEqual(['nd_build:1', 'nd_review:2']);
+  });
+
+  it('applies the selected class only to the row matching selectedKey', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: 'running' });
+    fixture.componentRef.setInput('activatable', true);
+    fixture.componentRef.setInput('selectedKey', 'nd_s_build:1');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="history-step"]')?.classList.contains('selected')).toBe(true);
+    expect(el.querySelector('[data-testid="history-active"]')?.classList.contains('selected')).toBe(false);
+  });
+
+  it('clears the selection by re-activating the already-selected row (review:F6)', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    fixture.componentRef.setInput('activatable', true);
+    fixture.componentRef.setInput('selectedKey', 'nd_build:1');
+    const emitted: (string | null)[] = [];
+    fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    (el.querySelector('[data-testid="history-step"]') as HTMLElement).click();
+    expect(emitted).toEqual([null]);
+  });
+
+  it('gives the active row no activation affordance while latest_epoch is lagging behind a landed transition into it (review:F11)', async () => {
+    // REVIEW_FAIL_DETAIL's own review->build transition already lands epoch 2 at
+    // nd_build — the same (node, epoch) latest_epoch still names, the lag window
+    // between a transition landing and the next lease's epoch bump.
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    fixture.componentRef.setInput('activatable', true);
+    const emitted: (string | null)[] = [];
+    fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const active = el.querySelector('[data-testid="history-active"]') as HTMLElement;
+    expect(active.getAttribute('role')).toBeNull();
+    expect(active.getAttribute('tabindex')).toBeNull();
+    active.click();
+    expect(emitted).toEqual([]);
+  });
+
+  it('keeps the active row activatable when its epoch is not one a landed transition already claims', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    // TWO_GRAPH_DETAIL's own active row lands post-migration at a node no history
+    // transition ever routed into — epoch reuse across the migration is not the lag
+    // window (review:F11's own doc comment on `deriveActiveRow`).
+    fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: 'running' });
+    fixture.componentRef.setInput('activatable', true);
+    const emitted: (string | null)[] = [];
+    fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const active = el.querySelector('[data-testid="history-active"]') as HTMLElement;
+    expect(active.getAttribute('role')).toBe('button');
+    active.click();
+    expect(emitted).toEqual(['nd_t_build:1']);
+  });
+
+  it('keeps every row a listitem of the timeline list, even when activatable makes it a button too (review:F5)', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    fixture.componentRef.setInput('activatable', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const list = el.querySelector('[data-testid="history"]') as HTMLElement;
+    expect(list.tagName).toBe('OL');
+    expect(list.children.length).toBeGreaterThan(0);
+    for (const li of list.children) {
+      // The listitem role stays implicit on every <li> — never overridden — so a
+      // screen reader still announces `.timeline` with its real item count.
+      expect(li.tagName).toBe('LI');
+      expect(li.getAttribute('role')).toBeNull();
+    }
+    // The activation role lives one level down, on the child the button/keyboard
+    // behavior is bound to — proven on a row known to carry a real join key.
+    const transitionRow = el.querySelector('[data-testid="history-step"]') as HTMLElement;
+    expect(transitionRow.getAttribute('role')).toBe('button');
+    expect(transitionRow.parentElement?.tagName).toBe('LI');
+    expect(transitionRow.parentElement?.getAttribute('role')).toBeNull();
+  });
 });

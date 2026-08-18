@@ -1,4 +1,5 @@
 import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
+import { nodeStepKey } from '../node-step';
 
 /** The reserved terminal node id (`review:F2`) — the domain's `RESERVED_TERMINAL`
  * (`src/blizzard/hub/domain/graph.py`). Duplicated here (not a backend import) since
@@ -15,7 +16,8 @@ const DONE_TERMINAL = 'done';
  * `to_node_id`, which names where the chunk arrived next, a different step's own pair.
  */
 export interface TranscriptStep {
-  /** `${nodeId}:${epoch}` — stable across renders, used to track the open step. */
+  /** {@link nodeStepKey} of `(nodeId, epoch)` — stable across renders, used to track
+   * the open step. */
   readonly key: string;
   readonly nodeId: string | null;
   readonly nodeName: string | null;
@@ -48,7 +50,7 @@ export function deriveTranscriptSteps(
 ): TranscriptStep[] {
   const bySegmentStep = new Map<string, TranscriptSegmentIndexEntry[]>();
   for (const segment of segments) {
-    const key = `${segment.node_id}:${segment.epoch}`;
+    const key = nodeStepKey(segment.node_id, segment.epoch);
     const group = bySegmentStep.get(key);
     if (group) group.push(segment);
     else bySegmentStep.set(key, [segment]);
@@ -60,7 +62,7 @@ export function deriveTranscriptSteps(
 
   for (const transition of history) {
     if (!transition.from_node_id) continue; // the graph's own entry step has no "from" — matches chunk-timeline.ts's own guard
-    const key = `${transition.from_node_id}:${transition.epoch}`;
+    const key = nodeStepKey(transition.from_node_id, transition.epoch);
     claimedEpochs.add(transition.epoch);
     if (claimed.has(key)) continue; // a step that bounced back and forward again names one key once
     claimed.add(key);
@@ -87,7 +89,7 @@ export function deriveTranscriptSteps(
     current.epoch !== null &&
     !claimedEpochs.has(current.epoch)
   ) {
-    const key = `${current.nodeId}:${current.epoch}`;
+    const key = nodeStepKey(current.nodeId, current.epoch);
     if (!claimed.has(key)) {
       claimed.add(key);
       steps.push({

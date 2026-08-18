@@ -68,4 +68,14 @@
   --overlay-35: rgba(0, 0, 0, 0.35);
   --overlay-40: rgba(0, 0, 0, 0.4);
   --overlay-90: rgba(0, 0, 0, 0.9); /* the engraved .lbl text-shadow */
+
+  /*
+   * The activatable-row wash: a cyan `color-mix` over the panel's own resting
+   * background, in two strengths so a hovered row and a selected row read as
+   * two distinct states rather than one repainted twice. Every composition
+   * site (board cards, node-history rows, artifact rows) resolves both
+   * through these rather than re-typing the `color-mix` expression per file.
+   */
+  --tint-hover: color-mix(in srgb, var(--cyan) 5%, var(--overlay-25));
+  --tint-selected: color-mix(in srgb, var(--cyan) 8%, var(--overlay-25));
 }

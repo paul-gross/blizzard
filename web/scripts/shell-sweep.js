@@ -67,6 +67,12 @@
  *     sections with no horizontal overflow at phone widths, including the
  *     General tab's `@media (min-width: 720px)` two-column grid collapse and
  *     a long unbroken artifact key on the Artifacts tab.
+ *   - projects/fleet/src/lib/design/hover-tint.shell-sweep.spec.ts — the
+ *     shared `--tint-hover`/`--tint-selected` wash on board-card,
+ *     chunk-timeline, and chunk-artifacts rows: a computed-style claim, not a
+ *     layout one — jsdom parses a `:hover` rule without ever evaluating it,
+ *     so only a real pointer (Playwright's `userEvent.hover`) proves a
+ *     hovered row differs from both its resting and its selected state.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -81,6 +87,7 @@ const SWEEPS = [
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/session-recovery-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/nav/app-nav.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk/chunk-detail-page.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/design/hover-tint.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {
@@ -103,7 +110,7 @@ function main() {
     return;
   }
 
-  console.log('\nshell-sweep: all nine specs clean.\n');
+  console.log('\nshell-sweep: all ten specs clean.\n');
 }
 
 main();

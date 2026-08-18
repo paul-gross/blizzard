@@ -2,8 +2,9 @@ import { type Signal, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 
-/** The chunk detail page's tabs (issue #160, widened blizzard#248 Phase 2). */
-export type ChunkDetailTab = 'general' | 'artifacts' | 'transcripts';
+/** The chunk detail page's tabs (issue #160, widened blizzard#248 Phase 2, then again for
+ * Node history). */
+export type ChunkDetailTab = 'general' | 'node-history' | 'artifacts' | 'transcripts';
 
 /**
  * The chunk detail page's selection, as the URL holds it (issue #160, widened
@@ -33,6 +34,12 @@ export interface ChunkDetailSelection {
    * Artifacts tab's own dead-link state to resolve. */
   readonly artifactKey: Signal<string | null>;
 
+  /** The raw `step` param — the node-step key ({@link nodeStepKey}) selected in the
+   * Node history tab, or `null`. Unvalidated, the same stance as `artifactKey`; not
+   * cleared by {@link select} or the transcript selectors, so switching tabs and back
+   * never silently discards it. */
+  readonly stepKey: Signal<string | null>;
+
   /** The raw `segment` param — the transcript segment id opened in the
    * Transcripts tab, or `null`. Unvalidated, the same stance as `artifactKey`. */
   readonly transcriptSegment: Signal<string | null>;
@@ -56,9 +63,12 @@ export interface ChunkDetailSelection {
    * currently open segment, addressed by its encoded `SidechainPath`
    * (`review:F4`). */
   selectTranscriptSidechain(path: string | null): void;
+
+  /** Select a node-step (or close one with `null`) in the Node history tab. */
+  selectStep(stepKey: string | null): void;
 }
 
-const TABS: readonly ChunkDetailTab[] = ['general', 'artifacts', 'transcripts'];
+const TABS: readonly ChunkDetailTab[] = ['general', 'node-history', 'artifacts', 'transcripts'];
 
 /** Bind {@link ChunkDetailSelection} to the current route. Call from an
  * injection context (a component field initializer or constructor). */
@@ -75,6 +85,7 @@ export function injectChunkDetailSelection(): ChunkDetailSelection {
       return (TABS as readonly string[]).includes(raw ?? '') ? (raw as ChunkDetailTab) : 'general';
     }),
     artifactKey: computed(() => params().get('artifact')),
+    stepKey: computed(() => params().get('step')),
     transcriptSegment: computed(() => params().get('segment')),
     transcriptSidechain: computed(() => params().get('sidechain')),
     select(tab: ChunkDetailTab, artifactKey: string | null): void {
@@ -95,6 +106,13 @@ export function injectChunkDetailSelection(): ChunkDetailSelection {
       void router.navigate([], {
         relativeTo: route,
         queryParams: { sidechain: path },
+        queryParamsHandling: 'merge',
+      });
+    },
+    selectStep(stepKey: string | null): void {
+      void router.navigate([], {
+        relativeTo: route,
+        queryParams: { tab: 'node-history', step: stepKey },
         queryParamsHandling: 'merge',
       });
     },

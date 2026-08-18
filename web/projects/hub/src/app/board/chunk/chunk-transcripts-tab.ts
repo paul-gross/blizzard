@@ -235,7 +235,7 @@ const MAX_RENDERED_TURNS = 1000;
     }
     .seg-item.active {
       border-left-color: var(--cyan);
-      background: color-mix(in srgb, var(--cyan) 8%, var(--overlay-25));
+      background: var(--tint-selected);
     }
     .tx-view {
       position: relative;
