@@ -223,6 +223,21 @@ class LandRun:
             title = title[: _PR_TITLE_MAX - 1].rstrip() + "…"
         return title
 
+    def contains(self, bare_repo: str, ref: str) -> bool:
+        """Whether ``bare_repo``'s base branch already holds every commit on ``ref``.
+
+        Read from the forge's own comparison, never from the text of a refusal:
+        ``identical``/``behind`` both mean ``ref`` adds nothing. Any unreadable answer is
+        ``False`` — a degraded read is never "there was nothing to land"."""
+        repo = self.repo(bare_repo)
+        try:
+            status, payload = self.api("GET", f"/repos/{repo}/compare/{self.base_branch}...{ref}")
+        except Exception:
+            return False
+        if status != 200 or not isinstance(payload, dict):
+            return False
+        return payload.get("status") in {"identical", "behind"}
+
     def pending(self) -> list[dict[str, str]]:
         """The repos still to land — those with no ``merged/<repo>`` marker yet.
 
@@ -258,6 +273,13 @@ class LandRun:
 class PullRequestOpenError(Exception):
     """Raised when the forge refused to open the chunk's PR — whether that is a conflict
     or merely worth another poll is the script's call."""
+
+
+class NothingToLand(Exception):
+    """Raised when a repo's branch adds no commit its base branch lacks — a **no-op
+    landing**, not a failure: no PR can be opened and no poll changes that, so a script
+    records the repo's ``merged/<repo>`` marker and moves on, as ``land_ff`` does for an
+    already-advanced base ref (``bzh:hub-node-step-idempotence``)."""
 
 
 class MergeDidNotLand(Exception):
@@ -300,6 +322,8 @@ class PullRequest:
                 },
             )
             if status != 201:
+                if run.contains(commit["repo"], branch):
+                    raise NothingToLand(f"{repo}:{branch} adds no commit {run.base_branch} does not already have")
                 raise PullRequestOpenError(f"could not open a PR for {repo}:{branch}: {created}")
             existing = created
         return cls(run, commit["repo"], int(existing["number"]), {}).reread()

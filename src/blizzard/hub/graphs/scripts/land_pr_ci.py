@@ -16,6 +16,7 @@ from blizzard.hub.graphs.scripts.land_common import (
     LandRun,
     MarkerWriteError,
     MergeDidNotLand,
+    NothingToLand,
     PullRequest,
     PullRequestOpenError,
 )
@@ -225,6 +226,12 @@ def _land() -> int:
         for commit in pending:
             try:
                 pull = PullRequest.of(run, commit)
+            except NothingToLand as exc:
+                # A no-op landing: nothing to merge, and no poll changes that. The marker
+                # stops this repo being pending and completes the chunk's repo set.
+                print(f"{exc} — nothing to land", file=sys.stderr)
+                run.markers.record(commit["repo"], commit["commit"])
+                continue
             except PullRequestOpenError as exc:
                 # A create hiccup is worth another poll, not a bounce.
                 print(str(exc), file=sys.stderr)

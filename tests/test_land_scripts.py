@@ -883,3 +883,127 @@ def test_findings_joins_multiple_repos() -> None:
 
     assert "acme/widget" in text
     assert "acme/gadget" in text
+
+
+# A repo whose declared branch adds nothing to the base branch (the untouched-repo case):
+# no PR can be opened, and no poll could change that — it is a no-op landing, not a wait.
+
+
+def _forge_with_an_empty_repo(
+    calls: list[tuple[str, str, dict[str, Any] | None]],
+    *,
+    other_repo: str,
+    other_branch: str,
+    compare_status: str = "identical",
+    compare_http_status: int = 200,
+):
+    """A two-repo double: ``_REPO`` is clean and mergeable, ``other_repo``'s branch is the
+    base branch itself, so opening its PR 422s the way the forge refuses an empty PR."""
+    base = f"http://forge/repos/{_REPO}"
+    other_base = f"http://forge/repos/{other_repo}"
+    responses = {
+        ("GET", f"{base}/pulls?state=open"): (200, [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}]),
+        ("GET", f"{base}/pulls/1"): (
+            200,
+            {
+                "number": 1,
+                "merged": False,
+                "mergeable_state": "clean",
+                "head": {"ref": _BRANCH, "sha": "headsha"},
+                "html_url": f"http://forge/{_REPO}/pull/1",
+            },
+        ),
+        ("PUT", f"{base}/pulls/1/merge"): (200, {"sha": "merged-sha1", "merged": True}),
+        ("GET", f"{other_base}/pulls?state=open"): (200, []),
+        ("POST", f"{other_base}/pulls"): (
+            422,
+            {
+                "message": "Validation Failed",
+                "errors": [
+                    {"resource": "PullRequest", "code": "custom", "message": "No commits between main and main"}
+                ],
+            },
+        ),
+        ("GET", f"{other_base}/compare/main...{other_branch}"): (compare_http_status, {"status": compare_status}),
+    }
+
+    def fake(
+        method: str,
+        url: str,
+        *,
+        token: str | None,
+        body: dict[str, Any] | None,
+        headers: dict[str, str] | None = None,
+    ) -> tuple[int, Any]:
+        calls.append((method, url, body))
+        if url == _CALLBACK_URL:
+            return 200, {"recorded": True}
+        return responses[(method, url)]
+
+    return fake
+
+
+def _marker_posts(calls: list[tuple[str, str, dict[str, Any] | None]]) -> dict[str, str]:
+    return {
+        body["name"]: body["content"]
+        for m, url, body in calls
+        if m == "POST" and url == _CALLBACK_URL and body is not None and body["name"].startswith("merged/")
+    }
+
+
+def _two_repo_env(monkeypatch: pytest.MonkeyPatch, *, other_repo: str, other_branch: str) -> None:
+    commits = [
+        {"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT},
+        {"repo": other_repo, "branch": other_branch, "commit": "basesha"},
+    ]
+    _set_base_env(monkeypatch, feature_title="t")
+    monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps(commits))
+
+
+@pytest.mark.parametrize("script", [land_pr_ci, land_default])
+def test_a_repo_adding_no_commits_is_a_no_op_landing_and_never_blocks_its_siblings(
+    script: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    other_repo, other_branch = "acme/gadget", "main"
+    _two_repo_env(monkeypatch, other_repo=other_repo, other_branch=other_branch)
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    monkeypatch.setattr(
+        land_common, "forge_request", _forge_with_an_empty_repo(calls, other_repo=other_repo, other_branch=other_branch)
+    )
+
+    assert script.main() == 0
+    assert _last_line(capsys) == "landed", "an empty repo must not hold the chunk on `pending` forever"
+
+    markers = _marker_posts(calls)
+    assert markers[f"merged/{other_repo}"] == "basesha", "the empty repo is accounted for, so it stops being pending"
+    assert markers[f"merged/{_REPO}"] == "merged-sha1", "the sibling with real work still merges"
+
+
+@pytest.mark.parametrize("compare_status, compare_http_status", [("ahead", 200), ("diverged", 200), ("identical", 500)])
+def test_a_refusal_that_is_not_an_empty_branch_still_waits_rather_than_landing(
+    compare_status: str,
+    compare_http_status: int,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The containment read is what decides, so a real refusal — or an unreadable
+    comparison — must never be recorded as a landing."""
+    other_repo, other_branch = "acme/gadget", "other-branch"
+    _two_repo_env(monkeypatch, other_repo=other_repo, other_branch=other_branch)
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    monkeypatch.setattr(
+        land_common,
+        "forge_request",
+        _forge_with_an_empty_repo(
+            calls,
+            other_repo=other_repo,
+            other_branch=other_branch,
+            compare_status=compare_status,
+            compare_http_status=compare_http_status,
+        ),
+    )
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "pending"
+    assert f"merged/{other_repo}" not in _marker_posts(calls)
+    assert not any(url.endswith("/merge") for url in _urls(calls, "PUT")), "chunk atomicity: nothing merges"

@@ -13,6 +13,7 @@ from blizzard.hub.graphs.scripts.land_common import (
     LandRun,
     MarkerWriteError,
     MergeDidNotLand,
+    NothingToLand,
     PullRequest,
     PullRequestOpenError,
 )
@@ -44,6 +45,12 @@ def _land() -> int:
         for commit in pending:
             try:
                 pull = PullRequest.of(run, commit)
+            except NothingToLand as exc:
+                # A no-op landing, not a conflict: nothing to merge, so record the marker
+                # and carry on to the repos that do have work.
+                print(f"{exc} — nothing to land", file=sys.stderr)
+                run.markers.record(commit["repo"], commit["commit"])
+                continue
             except PullRequestOpenError as exc:
                 raise _Conflict(str(exc)) from exc
             # An already-merged PR is a prior, interrupted run's — nothing to check, since
