@@ -236,9 +236,9 @@
    "total": 55
   },
   "blizzard_mock/harness/facades/claude_code.py": {
-   "comments": 8,
+   "comments": 9,
    "docstrings": 16,
-   "total": 147
+   "total": 150
   },
   "blizzard_mock/harness/facades/codex.py": {
    "comments": 2,
@@ -4085,9 +4085,9 @@
    "total": 180
   },
   "test_runner_harness_adapter.py": {
-   "comments": 79,
+   "comments": 81,
    "docstrings": 25,
-   "total": 1361
+   "total": 1374
   },
   "test_runner_harness_claude_code_normalizer.py": {
    "comments": 20,
