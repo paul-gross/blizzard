@@ -389,8 +389,9 @@ class NormalizedFile:
             turns_by_agent_id.setdefault(agent_id, []).append(index)
 
         for agent_id, lines in sidecar_lines.items():
-            conv_turns = cls.of_lines(lines, is_sidechain_file=True).turns
-            fallback_agent_type = _first_field(Record.parse(lines), "agentType")
+            records = Record.parse(lines)
+            conv_turns = cls.of(records, is_sidechain_file=True).turns
+            fallback_agent_type = _first_field(records, "agentType")
             spawning_indices = turns_by_agent_id.get(agent_id)
             if not spawning_indices:
                 # Nothing to nest under, so the conversation surfaces unlinked rather
