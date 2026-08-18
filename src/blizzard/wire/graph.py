@@ -84,7 +84,7 @@ class GraphSessionView(BaseModel):
     """One graph-level named session declaration (issue #144).
 
     ``model`` is a prioritized preference list of opaque strings, resolved left-to-right at
-    session mint; the hub interprets neither it nor ``effort``."""
+    session mint; the hub interprets none of it, ``effort``, or ``compaction_window``."""
 
     name: str
     model: list[str] = []

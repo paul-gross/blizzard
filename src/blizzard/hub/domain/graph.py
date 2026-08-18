@@ -395,8 +395,8 @@ class RotatePolicy:
 class SessionDecl:
     """One graph-level named session declaration (issue #144).
 
-    Carries workflow *policy* only, never application knowledge
-    (``bzh:app-agnostic-graphs``); ``model`` and ``effort`` are opaque to the hub."""
+    Carries workflow *policy* only (``bzh:app-agnostic-graphs``); ``model``, ``effort``,
+    and ``compaction_window`` are all opaque to the hub."""
 
     name: str
     model: list[str] = field(default_factory=list)

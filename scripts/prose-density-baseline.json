@@ -1238,9 +1238,9 @@
    "total": 43
   },
   "blizzard/hub/domain/graph_validation.py": {
-   "comments": 13,
+   "comments": 14,
    "docstrings": 35,
-   "total": 347
+   "total": 350
   },
   "blizzard/hub/domain/ingest.py": {
    "comments": 0,
@@ -3530,9 +3530,9 @@
    "total": 213
   },
   "test_graph_sessions.py": {
-   "comments": 21,
+   "comments": 23,
    "docstrings": 8,
-   "total": 303
+   "total": 316
   },
   "test_graph_store_produces.py": {
    "comments": 0,

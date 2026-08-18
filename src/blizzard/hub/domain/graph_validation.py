@@ -103,9 +103,12 @@ class Validator:
         for entry in decl.model:
             if not entry:
                 self.errors.append(f"session `{name}`: `model` entries must be non-empty strings")
-        # Non-empty only: the `effort` vocabulary is the adapter's to recognize (``bzh:one-owner``).
+        # Non-empty only: the `effort`/`compaction_window` vocabulary is the adapter's to
+        # recognize (``bzh:one-owner``), same as `effort` (blizzard#343).
         if decl.effort is not None and not decl.effort.strip():
             self.errors.append(f"session `{name}`: `effort` must be a non-empty string")
+        if decl.compaction_window is not None and not decl.compaction_window.strip():
+            self.errors.append(f"session `{name}`: `compaction_window` must be a non-empty string")
         rotate = decl.rotate
         if rotate is None:
             return

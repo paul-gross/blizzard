@@ -2463,7 +2463,7 @@
         "type": "object"
       },
       "GraphSessionView": {
-        "description": "One graph-level named session declaration (issue #144).\n\n``model`` is a prioritized preference list of opaque strings, resolved left-to-right at\nsession mint; the hub interprets neither it nor ``effort``.",
+        "description": "One graph-level named session declaration (issue #144).\n\n``model`` is a prioritized preference list of opaque strings, resolved left-to-right at\nsession mint; the hub interprets none of it, ``effort``, or ``compaction_window``.",
         "properties": {
           "compaction_window": {
             "anyOf": [
