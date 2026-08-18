@@ -5,6 +5,7 @@ export { ChunkDetail } from './chunk-detail';
 // belong here is `bzh:frontend-disjoint-diffs`.
 export { ChunkArtifactBody } from './chunk-artifact-body';
 export { sortArtifacts } from './sort-artifacts';
+export { filterArtifactsByStep } from './filter-artifacts-by-step';
 export { ChunkArtifacts } from './chunk-artifacts';
 export { ChunkAwaitingHuman } from './chunk-awaiting-human';
 export { ChunkFacts } from './chunk-facts';

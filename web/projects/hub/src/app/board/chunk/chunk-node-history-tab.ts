@@ -1,30 +1,94 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { ChunkTimeline, type hubApi } from 'fleet';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import {
+  type ArtifactView,
+  ChunkArtifactBody,
+  ChunkTimeline,
+  type hubApi,
+  KitAsyncState,
+  type KitAsyncStateValue,
+  mergeLateLinks,
+  type TranscriptSegmentContentView,
+  TranscriptViewer,
+} from 'fleet';
 
 /**
- * The chunk detail page's Node history tab — the same {@link ChunkTimeline} the desktop
- * dock and this page's own General tab render, but here with row activation turned on:
- * a row picked writes its own join key back to the URL ({@link selectedKey} is that raw
- * `?step` param, round-tripped the same way the Artifacts tab's `?artifact` is).
+ * The chunk detail page's Node history tab (blizzard#319) — {@link ChunkTimeline} with
+ * row activation on, beside the selected row's own artifacts and transcript. Presentational
+ * (`bzh:frontend-container-presentational`): {@link ChunkNodeHistoryContainer} owns the
+ * transcript-index/segment queries this needs and forwards their resolved state down, the
+ * same split {@link ChunkTranscriptsContainer}/`ChunkTranscriptsTab` already establish.
  *
- * Presentational, no injected query — the whole render is a pure function of
- * {@link detail}, already loaded by {@link ChunkPage}. A per-step artifact/transcript
- * body is not this component's own yet; it composes only the timeline until the
- * separately-fetched transcript index gives it something else to show.
+ * D8: the join is exact `(node_id, epoch)` equality — {@link stepArtifacts} is already
+ * filtered that way by the container ({@link filterArtifactsByStep}), never latest-by-node.
+ *
+ * D7: the artifact half rides {@link detail}, already resolved, and states its own empty
+ * case directly; the transcript half is query-gated through {@link KitAsyncState} via
+ * {@link indexState}/{@link segmentState} — `[]` during the first fetch is indistinguishable
+ * from a settled empty read without that gate.
  */
 @Component({
   selector: 'app-chunk-node-history-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkTimeline],
+  imports: [ChunkArtifactBody, ChunkTimeline, KitAsyncState, TranscriptViewer],
   template: `
     <div class="nh-tab" data-testid="chunk-node-history-tab">
-      <fleet-chunk-detail-timeline
-        [detail]="detail()"
-        [heading]="false"
-        [activatable]="true"
-        [selectedKey]="selectedKey()"
-        (selectStep)="selectStep.emit($event)"
-      />
+      <div class="nh-timeline">
+        <fleet-chunk-detail-timeline
+          [detail]="detail()"
+          [heading]="false"
+          [activatable]="true"
+          [selectedKey]="selectedKey()"
+          (selectStep)="selectStep.emit($event)"
+        />
+      </div>
+      <section class="nh-step">
+        @if (selectedKey() === null) {
+          <p class="hint" data-testid="node-history-select-hint">Select a step above.</p>
+        } @else {
+          <div class="nh-artifacts">
+            <div class="s-head"><span class="tag">Artifacts</span></div>
+            @if (stepArtifacts().length === 0) {
+              <p class="none" data-testid="node-history-artifacts-empty">No artifacts for this step.</p>
+            } @else {
+              @for (art of stepArtifacts(); track art.key) {
+                <fleet-chunk-detail-artifact-body class="art" [artifact]="art" body="full" testid="node-history-artifact" />
+              }
+            }
+          </div>
+          <div class="nh-transcript">
+            <div class="s-head"><span class="tag">Transcript</span></div>
+            @if (isForbidden()) {
+              <fleet-kit-async-state
+                state="empty"
+                tone="accent"
+                emptyText="NO PERMISSION TO READ TRANSCRIPTS"
+                emptyTestid="node-history-transcript-forbidden"
+              />
+            } @else if (indexState() === 'loading') {
+              <fleet-kit-async-state state="loading" loadingText="LOADING…" loadingTestid="node-history-transcript-loading" />
+            } @else if (indexState() === 'error') {
+              <fleet-kit-async-state state="error" errorText="TRANSCRIPT UNAVAILABLE" errorTestid="node-history-transcript-error" />
+            } @else if (segmentState() === 'empty') {
+              <fleet-kit-async-state
+                state="empty"
+                emptyText="NO TRANSCRIPT FOR THIS STEP"
+                emptyTestid="node-history-transcript-empty"
+              />
+            } @else if (segmentState() === 'loading') {
+              <fleet-kit-async-state state="loading" loadingText="LOADING…" loadingTestid="node-history-transcript-loading" />
+            } @else if (segmentState() === 'error') {
+              <fleet-kit-async-state state="error" errorText="TRANSCRIPT UNAVAILABLE" errorTestid="node-history-transcript-error" />
+            } @else {
+              <fleet-transcript-viewer [turns]="cappedTurns()" data-testid="node-history-transcript-body" />
+              @if (extraSegmentCount() > 0) {
+                <p class="more" data-testid="node-history-transcript-more">
+                  +{{ extraSegmentCount() }} more segment{{ extraSegmentCount() === 1 ? '' : 's' }} — open in the Transcripts tab.
+                </p>
+              }
+            }
+          </div>
+        }
+      </section>
     </div>
   `,
   styles: `
@@ -34,19 +98,95 @@ import { ChunkTimeline, type hubApi } from 'fleet';
       min-height: 0;
     }
     .nh-tab {
+      display: flex;
+      flex-direction: column;
       height: 100%;
       min-height: 0;
       overflow-y: auto;
+    }
+    .nh-timeline {
+      flex: none;
+      border-bottom: 1px solid var(--line);
+    }
+    .nh-step {
+      flex: 1;
+      min-height: 0;
+    }
+    .hint {
+      margin: 0;
+      padding: 8px;
+      color: var(--label-dim);
+      font-size: var(--fs-xs);
+    }
+    .s-head {
+      padding: 6px 8px 0;
+    }
+    .tag {
+      font-size: var(--fs-label);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--label);
+    }
+    .none {
+      margin: 0;
+      padding: 4px 8px 8px;
+      color: var(--label-dim);
+      font-size: var(--fs-xs);
+    }
+    .art {
+      display: block;
+      padding: 4px 8px;
+    }
+    .nh-transcript {
+      border-top: 1px solid var(--line);
+    }
+    .more {
+      margin: 0;
+      padding: 4px 8px 8px;
+      color: var(--label-dim);
+      font-size: var(--fs-xs);
+    }
+    @media (min-width: 720px) {
+      .nh-tab {
+        flex-direction: row;
+        overflow: hidden;
+      }
+      .nh-timeline {
+        flex: none;
+        width: 320px;
+        max-height: none;
+        overflow-y: auto;
+        border-bottom: none;
+        border-right: 1px solid var(--line);
+      }
+      .nh-step {
+        overflow-y: auto;
+      }
     }
   `,
 })
 export class ChunkNodeHistoryTab {
   readonly detail = input.required<hubApi.ChunkDetail>();
 
-  /** The raw `?step` URL param — the requested selection, forwarded straight to
-   * {@link ChunkTimeline} with no lookup against the timeline's own rows here. */
+  /** The raw `?step` URL param — forwarded straight to {@link ChunkTimeline} with no
+   * lookup against the timeline's own rows here. */
   readonly selectedKey = input<string | null>(null);
+
+  /** The selected step's own artifacts, already filtered by the container (D8: exact
+   * `(node_id, epoch)`, never latest-by-node). */
+  readonly stepArtifacts = input<readonly ArtifactView[]>([]);
+
+  readonly indexState = input.required<KitAsyncStateValue>();
+  readonly isForbidden = input(false);
+  readonly segmentState = input.required<KitAsyncStateValue>();
+  readonly segmentData = input<TranscriptSegmentContentView | undefined>(undefined);
+
+  /** How many of the selected step's own segments the container did not fetch — 0 for
+   * the common single-segment case. */
+  readonly extraSegmentCount = input(0);
 
   /** Emitted with a row's join key when the operator activates it. */
   readonly selectStep = output<string>();
+
+  protected readonly cappedTurns = computed(() => mergeLateLinks(this.segmentData()?.turns ?? []));
 }

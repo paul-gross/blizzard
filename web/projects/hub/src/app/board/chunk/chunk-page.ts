@@ -29,7 +29,7 @@ import {
 import { ChunkArtifactsTab } from './chunk-artifacts-tab';
 import { type ChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-selection';
 import { ChunkGeneralTab } from './chunk-general-tab';
-import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
+import { ChunkNodeHistoryContainer } from './chunk-node-history-container';
 import { ChunkTranscriptsContainer } from './chunk-transcripts-container';
 
 /**
@@ -44,7 +44,7 @@ import { ChunkTranscriptsContainer } from './chunk-transcripts-container';
  * Four tabs, selected through {@link injectChunkDetailSelection} (`?tab`, so
  * the choice is a URL-held state of this one page, not a different page):
  * **General** — {@link ChunkGeneralTab}, everything this page showed before it
- * grew more tabs — **Node history** ({@link ChunkNodeHistoryTab}), **Artifacts**,
+ * grew more tabs — **Node history** ({@link ChunkNodeHistoryContainer}), **Artifacts**,
  * and **Transcripts** (blizzard#248 Phase 2), the last hidden from the strip
  * without `transcript:read` ({@link canReadTranscripts}). A route makes any of
  * the four deep-linkable and back-button-navigable for free.
@@ -52,11 +52,11 @@ import { ChunkTranscriptsContainer } from './chunk-transcripts-container';
  * This container keeps the back bar, the shared action-error/outcome
  * channels, the identity header, the tab strip, and the queries and three
  * operator mutations every tab shares; each tab's own layout is its own
- * presentational component's job. The Transcripts tab's own two queries stay
- * off this container entirely — {@link ChunkTranscriptsContainer} owns them,
- * mounted only inside the `@case ('transcripts')` branch below, which is what
- * keeps them lazy (`review:F1`; split out rather than folded in here to keep
- * this file under `web:structural-gate`'s line cap).
+ * presentational component's job. The Node history and Transcripts tabs' own
+ * queries stay off this container entirely — {@link ChunkNodeHistoryContainer} and
+ * {@link ChunkTranscriptsContainer} each own theirs, mounted only inside their own
+ * `@switch` branch below, which is what keeps them lazy (`review:F1`; split out
+ * rather than folded in here to keep this file under `web:structural-gate`'s line cap).
  *
  * Scope note, deliberate rather than an oversight: the dock's **destructive
  * and structural** operator actions — detach, pause/resume, close — are not
@@ -81,7 +81,7 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
   imports: [
     ChunkArtifactsTab,
     ChunkGeneralTab,
-    ChunkNodeHistoryTab,
+    ChunkNodeHistoryContainer,
     ChunkPageHeader,
     ChunkPageShell,
     ChunkTranscriptsContainer,
@@ -132,7 +132,8 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
             />
           }
           @case ('node-history') {
-            <app-chunk-node-history-tab
+            <app-chunk-node-history-container
+              [chunkId]="chunkId()"
               [detail]="d"
               [selectedKey]="selection.stepKey()"
               (selectStep)="onSelectStep($event)"
@@ -219,11 +220,13 @@ const TRANSCRIPTS_TAB_OPTION: KitTabOption = { value: 'transcripts', label: 'Tra
       flex: 1;
       min-height: 0;
     }
-    app-chunk-node-history-tab,
     app-chunk-artifacts-tab {
       flex: 1;
       min-height: 0;
     }
+    /* No rule targets \`app-chunk-node-history-container\` itself, for the same reason
+       none targets \`app-chunk-transcripts-container\` below — it is \`display: contents\`;
+       its presentational child carries its own \`flex: 1; min-height: 0\` host. */
     /* No rule targets \`app-chunk-transcripts-container\` itself (review:F1) — it is
        \`display: contents\`, so it generates no box of its own to size; its child
        \`app-chunk-transcripts-tab\` is a direct flex item of the shell's own
