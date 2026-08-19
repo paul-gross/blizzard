@@ -271,6 +271,7 @@ def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
         artifacts=services.chunks.load_artifacts(chunk_id),
         epoch=facts.latest_epoch() or 0,
         arrival_addendum=Arrival.of_transition(graph, facts.newest_transition()).addendum,
+        entered_by_restart=facts.entered_by_restart(),
     ).wire
 
 

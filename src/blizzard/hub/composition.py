@@ -63,6 +63,7 @@ from blizzard.hub.domain.promote import PromoteService
 from blizzard.hub.domain.questions import QuestionService
 from blizzard.hub.domain.queue import GroupService, QueueService
 from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry
+from blizzard.hub.domain.restart import RestartService
 from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.transcripts import IReadTranscriptSegments, TranscriptCaps, TranscriptIngestService
 from blizzard.hub.domain.work import IReadChunkRepository
@@ -91,6 +92,7 @@ class HubServices:
     apply: ApplyService
     decisions: DecisionService
     requeue: RequeueService
+    restart: RestartService
     detach: DetachService
     pause: PauseService
     stop: StopService
@@ -254,6 +256,7 @@ def build_services(
         apply=ApplyService(chunks=chunk_store, clock=clock, hub_node_executor=hub_node),
         decisions=DecisionService(chunks=chunk_store, clock=clock),
         requeue=RequeueService(chunks=chunk_store, clock=clock),
+        restart=RestartService(chunks=chunk_store, clock=clock, claim_lock=claim_lock),
         detach=DetachService(chunks=chunk_store, clock=clock),
         pause=PauseService(chunks=chunk_store, clock=clock),
         stop=StopService(chunks=chunk_store, clock=clock),

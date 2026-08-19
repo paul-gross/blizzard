@@ -181,6 +181,7 @@ class ClaimService:
             node=node,
             artifacts=self._chunks.load_artifacts(chunk.chunk_id),
             epoch=epoch,
+            entered_by_restart=facts is not None and facts.entered_by_restart(),
         ).wire
         return ClaimResult(route=route, envelope=envelope, route_token=route_token, route_id=route_id)
 

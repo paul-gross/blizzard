@@ -74,6 +74,7 @@ _DEDICATED_PREFIXES = (
     "nudge.",
     "declare-commit.",
     "checks.",
+    "preempt.",
 )
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
@@ -97,6 +98,9 @@ _NUDGE_POINTS = [p for p in _ALL_POINTS if p.startswith("nudge.")]
 # `checks.*` fires in the RUNNER's ADVANCE step for a node's `checks:` command (#114).
 # Swept by `test_kill9_at_checks_crash_point`.
 _CHECKS_POINTS = [p for p in _ALL_POINTS if p.startswith("checks.")]
+# `preempt.*` fires in the RUNNER's PULL step, inside the teardown an operator restart forces
+# (#370). Swept by `test_kill9_at_preempt_crash_point`.
+_PREEMPT_POINTS = [p for p in _ALL_POINTS if p.startswith("preempt.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset, one point per family, run as a bounded-runtime gate under
@@ -154,6 +158,9 @@ _NUDGE_CI_SUBSET = ("nudge.after-fired-fact.before-resume",)
 # window — is its own CI representative.
 _CHECKS_CI_SUBSET = ("checks.after-results.before-marker",)
 
+# The preempt CI subset (#370): the family's lone member is its own CI representative.
+_PREEMPT_CI_SUBSET = ("preempt.after-kill.before-closure",)
+
 
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
     """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
@@ -178,6 +185,7 @@ _ATTACH_SWEEP = _select(_ATTACH_POINTS, _ATTACH_CI_SUBSET)
 _NUDGE_SWEEP = _select(_NUDGE_POINTS, _NUDGE_CI_SUBSET)
 _CHECKS_SWEEP = _select(_CHECKS_POINTS, _CHECKS_CI_SUBSET)
 _DECLARE_COMMIT_SWEEP = _select(_DECLARE_COMMIT_POINTS, _DECLARE_COMMIT_CI_SUBSET)
+_PREEMPT_SWEEP = _select(_PREEMPT_POINTS, _PREEMPT_CI_SUBSET)
 
 
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -198,6 +206,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_NUDGE_POINTS, _NUDGE_CI_SUBSET))
         | set(_select(_CHECKS_POINTS, _CHECKS_CI_SUBSET))
         | set(_select(_DECLARE_COMMIT_POINTS, _DECLARE_COMMIT_CI_SUBSET))
+        | set(_select(_PREEMPT_POINTS, _PREEMPT_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -2315,4 +2324,139 @@ def test_kill9_between_ff_graph_repo_pushes(crash_env: CrashEnv, tmp_path: Path)
         terminate(runner_proc)
         with contextlib.suppress(ProcessLookupError, PermissionError):
             os.killpg(os.getpgid(hub_proc.pid), signal.SIGKILL)
+        terminate(hub_proc)
+
+
+# --- Operator chunk restart (#370) — the preempt kill→closure crash point ---
+
+
+def _preempt_build_script(landed_file: str, marker: Path) -> str:
+    """A build node that ``hang()``s the FIRST time it runs and does the real work the
+    second, so the preempted attempt is genuinely in-flight and the re-entry it forces
+    converges. The marker is written before the hang: a fresh session past the restart
+    finds it and falls straight through to :func:`build_script`'s commit/push/declare."""
+    return (
+        "import pathlib\n"
+        f"marker = pathlib.Path({str(marker)!r})\n"
+        "if not marker.exists():\n"
+        "    marker.write_text('hung once\\n')\n"
+        "    hang()\n"
+    ) + build_script(landed_file)
+
+
+def _preempt_graph_yaml(landed_file: str, marker: Path) -> str:
+    """The hang-first ``build -> deliver`` graph this scenario restarts mid-flight."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": _preempt_build_script(landed_file, marker),
+                "judgement": {
+                    "prompt": "verdict('pass', 'committed after the restart; checks are green')\n",
+                    "choices": {
+                        "pass": {
+                            "description": "The change is committed and the node's checks are green.",
+                            "to": "deliver",
+                        }
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": LAND_STEP}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+def _ingest_preempt_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str, marker: Path) -> str:
+    """Mint the hang-first graph and ingest a fresh issue against it to a ready chunk."""
+    minted = hub.post("/api/graphs", json={"definition_yaml": _preempt_graph_yaml(landed_file, marker)})
+    assert minted.status_code == 201, minted.text
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a preempt-crash chunk"})
+    assert issue.status_code == 201, issue.text
+    number = issue.json()["number"]
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # rests not-ready otherwise
+    return chunk_id
+
+
+@pytest.mark.parametrize("point", _PREEMPT_SWEEP)
+def test_kill9_at_preempt_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` between a restarted chunk's worker kill and its ``preempted`` closure
+    still costs the node no retry (#370): the hub's fence is durable, so recovery preempts
+    again rather than reaping or failing the attempt, and the chunk lands exactly once."""
+    landed_file = f"LANDED-{point.replace('.', '_')}.md"
+    marker = tmp_path / "hang-first.marker"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id = _ingest_preempt_chunk(hub, crash_env.forge, landed_file, marker)
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        # Armed from the start: unarmed in effect until a live PULL discovers the restart's
+        # fence and reaches `point` inside the preempt it triggers.
+        runner_proc = start_runner(runner_dir, crash_point=point)
+
+        assert wait_status(hub, chunk_id, {"running"}) == "running"
+        _await_marker(marker)  # the worker is provably inside its hang, not racing the spawn
+        before = _leases_for_chunk(runner_dir, chunk_id)
+        assert len(before) == 1, f"expected one lease before the restart, got {before}"
+        lease_id, _epoch, session_id, pid_before = before[0]
+        assert session_id and pid_before is not None
+
+        # The operator restarts the running chunk — a claim-keeping move, not a detach.
+        restarted = hub.post(f"/api/chunks/{chunk_id}/restart", json={"by": "crash-sweep"})
+        assert restarted.status_code == 202, restarted.text
+
+        # The armed runner's next PULL kills the hung worker and self-SIGKILLs before the closure.
+        code = wait_death(runner_proc)
+        assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+        assert _closure_reason(runner_dir, lease_id) is None, "the closure was durable — the point fired too late"
+        assert _session_ends(runner_dir) == set(), "a SIGKILL'd worker must record no session-end"
+
+        # Restart UNARMED: the fence still stands at the hub, so recovery must reach the same
+        # preempt — never a reap or a failure, either of which would spend the node's budget.
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        reason = _wait_for_closure(runner_dir, lease_id)
+        assert reason == "preempted", (
+            f"the restarted chunk's lease closed {reason!r}, not 'preempted' — recovery spent a "
+            "retry on an attempt the operator superseded (issue #370's budget promise regressed?)"
+        )
+        assert _open_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
+
+        # The claim was kept throughout: the same runner re-enters and finishes the work.
+        assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
+        after = _leases_for_chunk(runner_dir, chunk_id)
+        reasons = sorted(filter(None, (_closure_reason(runner_dir, row[0]) for row in after)))
+        assert reasons == ["preempted", "transitioned"], f"unexpected closure set after the restart: {reasons}"
+
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+        commits = [line for line in tree.splitlines() if line.strip()]
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
+        terminate(runner_proc)
         terminate(hub_proc)

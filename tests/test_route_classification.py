@@ -70,6 +70,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/chunks/{chunk_id}"): FLEET_VIEW,
     ("POST", "/api/chunks/{chunk_id}/hub-markers"): CHUNK_CONTROL,
     ("POST", "/api/chunks/{chunk_id}/requeues"): CHUNK_CONTROL,
+    ("POST", "/api/chunks/{chunk_id}/restart"): CHUNK_CONTROL,
     ("POST", "/api/chunks/{chunk_id}/detach"): CHUNK_CONTROL,
     ("POST", "/api/chunks/{chunk_id}/pause"): CHUNK_CONTROL,
     ("POST", "/api/chunks/{chunk_id}/resume"): CHUNK_CONTROL,

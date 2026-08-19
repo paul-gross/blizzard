@@ -1,4 +1,4 @@
-"""``blizzard hub chunk migrate`` / ``chunk set`` / ``chunk show`` (unit tier) — pure
+"""``blizzard hub chunk migrate`` / ``restart`` / ``set`` / ``show`` (unit tier) — pure
 clients of ``PATCH``/``GET /api/chunks/{id}``, driven here with ``httpx`` stubbed
 (issues #124, #144).
 """
@@ -189,6 +189,67 @@ def test_migrate_json_prints_the_raw_response_body(monkeypatch: pytest.MonkeyPat
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.output) == payload
+
+
+# `chunk restart` (issue #370) — an event, not the standing intent `migrate` records.
+# --------------------------------------------------------------------------- #
+
+
+def _summary(chunk_id: str, node_name: str) -> _FakeResponse:
+    return _FakeResponse(202, {"chunk_id": chunk_id, "status": "running", "current_node_name": node_name})
+
+
+@pytest.mark.unit
+def test_restart_without_a_node_posts_a_null_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The common case — restart this step on clean context; the hub resolves the node."""
+    calls: list[tuple[str, object]] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _summary("ch_1", "build")
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["chunk", "restart", "ch_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+
+    assert result.exit_code == 0, result.output
+    assert calls == [("http://hub.local:8421/api/chunks/ch_1/restart", {"node": None, "by": "operator"})]
+    assert "build" in result.output
+
+
+@pytest.mark.unit
+def test_restart_sends_the_named_node_and_actor(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _summary("ch_1", "plan")
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["chunk", "restart", "ch_1", "--node", "plan", "--by", "ada"])
+
+    assert result.exit_code == 0, result.output
+    assert calls[0][1] == {"node": "plan", "by": "ada"}
+
+
+@pytest.mark.unit
+def test_restart_takes_no_to_graph_option() -> None:
+    """Crossing graphs stays `migrate`'s alone — `restart` re-aims within one graph."""
+    result = CliRunner().invoke(hub_group, ["chunk", "restart", "ch_1", "--to-graph", "beta"])
+
+    assert result.exit_code != 0
+    assert "--to-graph" in result.output
+
+
+@pytest.mark.unit
+def test_restart_maps_409_to_the_server_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(409, {"detail": "node 'deploy' does not exist on graph gr_1"})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["chunk", "restart", "ch_1", "--node", "deploy"])
+
+    assert result.exit_code != 0
+    assert "does not exist on graph gr_1" in result.output
 
 
 # `chunk set --default-model/--default-effort` (issue #144) — the CLI-only surface.

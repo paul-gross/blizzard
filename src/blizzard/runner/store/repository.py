@@ -413,7 +413,10 @@ class IReadRunnerStore(Protocol):
         ...
 
     def attempt_count(self, chunk_id: str, node_id: str) -> int:
-        """How many leases have been minted for this chunk at this node (retry budget)."""
+        """How many leases have been minted for this chunk at this node (retry budget).
+
+        Excludes an attempt an operator's restart preempted (issue #370) — that attempt was
+        superseded rather than spent, so it does not carry the node toward exhaustion."""
         ...
 
     def latest_epoch(self, chunk_id: str) -> int:

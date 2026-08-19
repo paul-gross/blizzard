@@ -35,6 +35,7 @@ from blizzard.runner.store.repository import (
     IWriteRunnerStore,
     LeaseRecord,
 )
+from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.facts import (
     EVENT_RECORDED,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
@@ -268,9 +269,32 @@ class Resume(Step):
             DormantSession(ctx, lease).restart_or_release()
 
 
+@dataclass(frozen=True)
+class Fenced:
+    """Whether the hub has fenced an active lease out from under the worker still on it (#370).
+
+    The signal is the fence itself: an epoch above the lease's, or a restart AT it. The id set
+    is the one place a higher one is somebody else's business — a takeover a person is in."""
+
+    taken_over: Container[str]
+
+    def out(self, detail: ChunkDetail, lease: LeaseRecord) -> bool:
+        if lease.chunk_id in self.taken_over:
+            return False
+        if detail.latest_epoch is not None and detail.latest_epoch > lease.epoch:
+            return True
+        # A restart mints one above the newest epoch THE HUB knows, which excludes a lease whose
+        # `lease.minted` is still buffered here — so it can land LEVEL with what it displaces.
+        return any(restart.epoch >= lease.epoch for restart in detail.restarts)
+
+
 class Pull(Step):
     def run(self) -> None:
-        """Exchange facts with the hub: sync the registry, reconcile ownership, drain the buffer."""
+        """Exchange facts with the hub: sync the registry, reconcile ownership, drain the buffer.
+
+        Reconciliation runs BEFORE the drain, so a preempted lease's queued submission still
+        reaches the hub and the drain absorbs the stale-epoch rejection against a lease already
+        closed — the retry budget the move must not spend is never reached (#370)."""
         self._sync_registry()
         self._reconcile_leases()
         self._reconcile_escalations()
@@ -301,12 +325,13 @@ class Pull(Step):
 
     def _reconcile_leases(self) -> None:
         """Reconcile every active lease against the hub's view of its chunk — abandon it if the hub
-        no longer routes it here, else park it if the operator paused it (issue #46).
-
-        Both questions share **one** ``get_chunk`` per lease, and a transport failure is never read
-        as a detach or a pause. The pause branch keys on the pause *fact*, which an ask-park masks."""
+        no longer routes it here, park it if the operator paused it (issue #46), preempt it if a
+        restart moved the chunk out from under it (#370). All three share **one** ``get_chunk``
+        per lease, and a transport failure reads as none of them. The pause branch keys on the
+        pause *fact*, which an ask-park masks."""
         ctx = self.ctx
         pause_parked = ctx.store.pause_parked_lease_ids()  # hoisted: the park guard, one read per tick
+        fenced = Fenced(ctx.store.open_takeover_chunk_ids())
         for lease in ctx.store.list_active_leases():
             try:
                 detail = ctx.hub.get_chunk(lease.chunk_id)
@@ -323,8 +348,13 @@ class Pull(Step):
                 Attempt(ctx, lease).abandon(via="pull")
             elif detail.route is None or detail.route.runner_id != ctx.config.runner_id:
                 Attempt(ctx, lease).abandon(via="pull")
-            elif detail.pause is not None and lease.lease_id not in pause_parked:
-                Attempt(ctx, lease).park_paused(via="pull")
+            elif detail.pause is not None:
+                # A pause outranks a move: the paused chunk keeps its lease, route and epoch, and
+                # the re-entry happens on the tick after the pause lifts.
+                if lease.lease_id not in pause_parked:
+                    Attempt(ctx, lease).park_paused(via="pull")
+            elif fenced.out(detail, lease):
+                Attempt(ctx, lease).preempt(via="pull")
 
     def _reconcile_escalations(self) -> None:
         """Close a local escalation whose chunk the hub ended (#292, #293) — one ``get_chunk`` each.

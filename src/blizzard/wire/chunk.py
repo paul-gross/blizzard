@@ -179,6 +179,24 @@ class MigrationView(BaseModel):
     recorded_at: str
 
 
+class RestartView(BaseModel):
+    """One operator restart (issue #370): the chunk was forced from ``from_node`` onto ``to_node`` at
+    ``epoch``, on this graph, tearing down whatever attempt was running. Its own step, never a
+    transition — nothing judged it and no edge was taken. ``from_node_id`` is null when the chunk had
+    not yet moved; ``decision_id`` names the gate decision the move closed, null when there was none."""
+
+    from_node_id: str | None = None
+    from_node_name: str | None = None
+    to_node_id: str
+    to_node_name: str | None = None
+    graph_id: str
+    graph_name: str | None = None
+    epoch: int
+    restarted_by: str
+    decision_id: str | None = None
+    recorded_at: str
+
+
 class IntendedMigrationView(BaseModel):
     """A chunk's standing migration intent (issue #124) — editable at any non-terminal status and
     consulted, never applied eagerly, at the chunk's next transition. ``graph_name`` is resolved
@@ -294,6 +312,15 @@ class ChunkCompleteRequest(BaseModel):
     by: str = "operator"
 
 
+class ChunkRestartRequest(BaseModel):
+    """Force a chunk onto a node now, on a freshly minted session (issue #370). ``node`` is a node
+    name on the chunk's own graph — omitted means its current node, the common case. Records who
+    moved it."""
+
+    node: str | None = None
+    by: str = "operator"
+
+
 class ChunkPatchRequest(BaseModel):
     """The multi-field ``PATCH /chunks/{id}`` body (issue #124) — every field independently optional,
     applied all-or-nothing. ``graph_id``/``model`` mean "leave unchanged" whether omitted or explicitly
@@ -359,6 +386,9 @@ class ChunkDetail(BaseModel):
     # The chunk's cross-graph migration steps (issue #90), oldest first — woven into the timeline
     # alongside ``history`` by ``recorded_at``. Empty for a single-graph chunk.
     migrations: list[MigrationView] = []
+    # The chunk's operator restarts (issue #370), oldest first — the API's record of who moved
+    # the chunk, from where, and to what. No timeline renderer reads them today.
+    restarts: list[RestartView] = []
     artifacts: list[ArtifactView] = []
     # The chunk's questions, oldest first — open *and* answered (issue #165), an answered one still
     # carrying its return trail.

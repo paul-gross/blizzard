@@ -92,6 +92,10 @@ _log = get_logger("blizzard.runner.store")
 # (issue #51).
 _ESCALATED_REASON = "escalated"
 
+# The closure reason an attempt an operator's restart superseded carries (issue #370) —
+# read back to keep that attempt out of the node's retry budget.
+_PREEMPTED_REASON = "preempted"
+
 # A fresh segment's placeholder, before its first pump read — the harness seam's own
 # sentinel convention, restated rather than imported (the store never depends on it).
 _NO_NORMALIZER_VERSION = ""
@@ -361,10 +365,14 @@ class SqlAlchemyRunnerStore:
         return [str(r.chunk_id) for r in self._all(stmt)]
 
     def attempt_count(self, chunk_id: str, node_id: str) -> int:
+        # A preempted attempt was superseded, not spent (issue #370): counting it would carry
+        # the node toward exhaustion and escalate the very chunk the operator is rescuing.
+        preempted = select(lease_closures.c.lease_id).where(lease_closures.c.reason == _PREEMPTED_REASON)
         stmt = (
             select(func.count())
             .select_from(lease_context)
             .where(and_(lease_context.c.chunk_id == chunk_id, lease_context.c.node_id == node_id))
+            .where(lease_context.c.lease_id.not_in(preempted))
         )
         with self._connect() as conn:
             return int(conn.execute(stmt).scalar_one())

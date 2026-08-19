@@ -1,4 +1,4 @@
-"""How a minted lease ends: the four terminal moves, and the closure each records."""
+"""How a minted lease ends: the five terminal moves, and the closure each records."""
 
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ FAILED = "failed"
 ESCALATED = "escalated"
 PARKED = "parked"  # a runner-config gate: the node-step completed, the chunk parks on a decision
 RELEASED = "released"  # the chunk was found reassigned/detached/unknown — abandon, no requeue (blizzard#9)
+PREEMPTED = "preempted"  # an operator restart re-aimed the chunk (#370): envs and route kept
 
 # ABANDON — the reassigned/detached release, in two windows. Release runs BEFORE the closure so
 # the still-active lease stays the handle recovery re-derives the idempotent abandon from.
@@ -43,6 +44,12 @@ _CP_PAUSE_PARK_AFTER_KILL = crashpoint(
     "pause.after-kill.before-park", "paused worker killed; pause-park not yet durable"
 )
 
+# PREEMPT — the operator restart's teardown (#370). Between the kill and the closure the lease
+# is active behind a dead pid; the hub's fence is what makes the next PULL re-derive the move.
+_CP_PREEMPT_AFTER_KILL = crashpoint(
+    "preempt.after-kill.before-closure", "restarted chunk's worker killed; the preempted closure not yet durable"
+)
+
 #: The classification each :meth:`Attempt.fail` branch surfaces (issue #125). The
 #: locally-paused defer branch surfaces nothing — a deferral is not an outcome.
 _ATTEMPT_FAILED = ("warning", "attempt-failed")
@@ -53,10 +60,10 @@ _ATTEMPT_ABANDONED = ("info", "attempt-abandoned")
 @dataclass(frozen=True)
 class Attempt:
     """One minted lease, and the moves that end it — fail (which requeues or escalates),
-    abandon, and park on an operator pause.
+    abandon, park on an operator pause, and preempt on an operator restart.
 
-    Which move a caller takes is decided by the node's retry budget and by whether the hub
-    still routes this chunk here; each records its own closure and surfaces its own event."""
+    Which move a caller takes is decided by the node's retry budget, by whether the hub still
+    routes this chunk here, and by whether its fence rose; each records its own closure."""
 
     ctx: LoopContext
     lease: LeaseRecord
@@ -217,6 +224,59 @@ class Attempt:
             epoch=lease.epoch,
             via=via,
         )
+
+    def preempt(self, *, via: str) -> None:
+        """Tear down an attempt an operator's restart superseded, and re-enter the node (#370).
+
+        Inverse of :meth:`abandon` in what survives — route, tenure and envs stay this runner's
+        — and no retry is consumed. Deferred entirely while locally paused, as :meth:`fail`'s
+        escalation branch defers (#45): the re-entry is a spawn that brake suppresses."""
+        lease = self.lease
+        if self.ctx.store.local_paused(self.ctx.config.runner_id):
+            _log.info(
+                "preempt deferred — locally paused",
+                runner_id=self.ctx.config.runner_id,
+                via=via,
+                chunk_id=lease.chunk_id,
+                lease_id=lease.lease_id,
+            )
+            return
+        now = self.ctx.clock.now()
+        if lease.pid is not None:
+            self.ctx.process.kill(lease.pid)  # best-effort hygiene; the epoch fence is the guarantee
+        _CP_PREEMPT_AFTER_KILL.reached()  # recovery is the next tick's re-scan, off the still-higher fence
+        park = self.ctx.store.open_park(lease.lease_id)
+        if park is not None:
+            self.ctx.store.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)
+        self.close(PREEMPTED, now)
+        self.ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+        _log.info("preempted by an operator restart", chunk_id=lease.chunk_id, lease_id=lease.lease_id, via=via)
+        self.reenter()
+
+    def reenter(self) -> None:
+        """Spawn the chunk's re-aimed node into the environments this runner still holds (#370).
+
+        Whether that spawn resumes anything is the envelope's to say, not this call's. The
+        preempted attempt is already closed, so a hub failure here leaves the chunk held with no
+        lease — the shape ADVANCE's held-chunk poll re-drives next tick."""
+        lease = self.lease
+        bindings = self.ctx.store.bindings_for_chunk(lease.chunk_id)
+        if not bindings:
+            _log.warning("restart with no bound env — cannot re-enter", chunk_id=lease.chunk_id)
+            return
+        try:
+            envelope = self.ctx.hub.get_envelope(lease.chunk_id)
+        except ChunkNotFoundError:
+            _log.warning("hub reports chunk unknown at restart — releasing envs", chunk_id=lease.chunk_id)
+            self.ctx.env_release.release_chunk(lease.chunk_id)
+            return
+        except HubClientError:
+            # The closure is durable and the worker already dead, so say so: ADVANCE's held-chunk
+            # poll re-drives it next tick, but nothing else would surface the gap meanwhile.
+            _log.warning("hub unreachable at restart re-entry — chunk held with no lease", chunk_id=lease.chunk_id)
+            return
+        _log.info("re-entering node on an operator restart", chunk_id=lease.chunk_id, node=envelope.node.node_name)
+        Spawner(self.ctx).enter_node(lease.chunk_id, envelope, Environments(bindings).acquired, via="restart")
 
     def detached(self) -> bool:
         """True iff the hub no longer routes this chunk here, or it is gone outright (blizzard#9).

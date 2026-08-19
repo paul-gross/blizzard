@@ -36,6 +36,7 @@ from blizzard.hub.domain.edit import (
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.pause import ChunkNotPausable
+from blizzard.hub.domain.restart import ChunkNotRestartable, RestartCurrentNodeUnknown, RestartNodeUnknown
 from blizzard.hub.domain.stop import ChunkNotStoppable
 from blizzard.hub.domain.work import (
     ChunkFacts,
@@ -52,6 +53,7 @@ from blizzard.wire.chunk import (
     ChunkPatchRequest,
     ChunkPatchResponse,
     ChunkPauseRequest,
+    ChunkRestartRequest,
     ChunkStopRequest,
     ChunkSummary,
     HubMarkerRequest,
@@ -214,6 +216,36 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     change.publish(cause="requeued", key=f"requeues:{requeue_id}")
     services.events.publish_queue_changed()  # requeue can re-admit the chunk to the queue
+    return ChunkView.of(services, chunk).summary()
+
+
+@router.post(
+    "/chunks/{chunk_id}/restart",
+    response_model=ChunkSummary,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(CHUNK_CONTROL))],
+)
+def restart_chunk(
+    chunk_id: str, request: ChunkRestartRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> ChunkSummary:
+    """Force a chunk onto a node now, on a freshly minted session (issue #370).
+
+    Recorded at a bumped epoch, so the running attempt is fenced out and the holding runner
+    re-enters — ``node`` omitted means the chunk's current one, the graph's entry if it has never
+    moved. Open parks close with it. 409: a terminal chunk, or a node its graph does not carry."""
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    graph = services.graphs.get(chunk.graph_id)
+    if graph is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
+    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    try:
+        restart_id = services.restart.restart(chunk, graph, node_name=request.node, by=request.by)
+    except (ChunkNotRestartable, RestartCurrentNodeUnknown, RestartNodeUnknown) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    change.publish(cause="restarted", key=f"chunk_restarts:{restart_id}")
+    services.events.publish_queue_changed()  # an unrouted chunk re-enters the queue at the target node
     return ChunkView.of(services, chunk).summary()
 
 

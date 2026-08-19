@@ -12,9 +12,18 @@ from typing import ClassVar, Literal
 from blizzard.wire.sse import SseFramePayload
 
 #: What caused a ``lease-changed`` frame: ``created``/``spawned`` are not closures, ``dormant`` is
-#: an open-lease park; the other six mirror ``ClosedLeaseRecord.reason``'s closure vocabulary.
+#: an open-lease park; the other seven mirror ``ClosedLeaseRecord.reason``'s closure vocabulary.
 LeaseChangeCause = Literal[
-    "created", "spawned", "dormant", "transitioned", "reaped", "failed", "escalated", "parked", "released"
+    "created",
+    "spawned",
+    "dormant",
+    "transitioned",
+    "reaped",
+    "failed",
+    "escalated",
+    "parked",
+    "released",
+    "preempted",
 ]
 
 #: What caused an ``ask-changed`` frame — a worker's question recorded, or its answer

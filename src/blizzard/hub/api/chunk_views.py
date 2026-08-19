@@ -27,6 +27,7 @@ from blizzard.wire.chunk import (
     PauseView,
     PendingView,
     PrView,
+    RestartView,
     RouteView,
     TransitionView,
     WorkRefView,
@@ -141,6 +142,7 @@ class ChunkView:
             decision=self._decision(),
             history=history.transitions(),
             migrations=history.migrations(),
+            restarts=history.restarts(),
             artifacts=self._artifacts(artifacts),
             questions=[question_view(q) for q in self.services.chunks.load_questions(self.chunk.chunk_id)],
             awaiting_external_merge=self.facts.awaiting_external_merge(),
@@ -297,6 +299,27 @@ class ChunkHistoryView:
                 graph_name=self.names.graph_name(t.graph_id),
             )
             for t in self.facts.transition_history()
+        ]
+
+    def restarts(self) -> list[RestartView]:
+        """The chunk's operator restarts oldest-first (issue #370).
+
+        Each move's node ids resolve against *the graph it happened in*, the same
+        ``graph_id`` provenance :meth:`transitions` follows."""
+        return [
+            RestartView(
+                from_node_id=r.from_node_id,
+                from_node_name=self.names.node_name(r.graph_id, r.from_node_id),
+                to_node_id=r.to_node_id,
+                to_node_name=self.names.node_name(r.graph_id, r.to_node_id),
+                graph_id=r.graph_id,
+                graph_name=self.names.graph_name(r.graph_id),
+                epoch=r.epoch,
+                restarted_by=r.restarted_by,
+                decision_id=r.decision_id,
+                recorded_at=iso_utc(r.recorded_at),
+            )
+            for r in sorted(self.facts.restarts, key=lambda r: (r.recorded_at, r.epoch))
         ]
 
     def migrations(self) -> list[MigrationView]:

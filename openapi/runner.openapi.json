@@ -531,6 +531,14 @@
             "title": "Questions",
             "type": "array"
           },
+          "restarts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RestartView"
+            },
+            "title": "Restarts",
+            "type": "array"
+          },
           "route": {
             "anyOf": [
               {
@@ -2093,6 +2101,95 @@
           "requeued"
         ],
         "title": "RequeueResponse",
+        "type": "object"
+      },
+      "RestartView": {
+        "description": "One operator restart (issue #370): the chunk was forced from ``from_node`` onto ``to_node`` at\n``epoch``, on this graph, tearing down whatever attempt was running. Its own step, never a\ntransition \u2014 nothing judged it and no edge was taken. ``from_node_id`` is null when the chunk had\nnot yet moved; ``decision_id`` names the gate decision the move closed, null when there was none.",
+        "properties": {
+          "decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Id"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "from_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Node Id"
+          },
+          "from_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Node Name"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "restarted_by": {
+            "title": "Restarted By",
+            "type": "string"
+          },
+          "to_node_id": {
+            "title": "To Node Id",
+            "type": "string"
+          },
+          "to_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Node Name"
+          }
+        },
+        "required": [
+          "to_node_id",
+          "graph_id",
+          "epoch",
+          "restarted_by",
+          "recorded_at"
+        ],
+        "title": "RestartView",
         "type": "object"
       },
       "RouteView": {

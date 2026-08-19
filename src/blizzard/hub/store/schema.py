@@ -557,6 +557,25 @@ requeues = Table(
     Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
 )
 
+# An operator's forced move of a chunk onto a node, now (issue #370) — a movement fact of
+# its own, never a transition: nothing judged it and no edge was taken.
+chunk_restarts = Table(
+    "chunk_restarts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    # The graph this move happened in — a restart crosses none, but a later migration would
+    # otherwise strand its node ids against the new pin, exactly as for a transition.
+    Column("graph_id", String, nullable=False),
+    Column("from_node_id", String, nullable=True),  # the node left behind; null before the first move
+    Column("to_node_id", String, nullable=False),  # the node forced onto
+    Column("epoch", Integer, nullable=False),  # the fresh fence that preempts the live attempt
+    # Set when the move superseded an open gate decision, so that decision derives closed here.
+    Column("decision_id", String, nullable=True),
+    Column("restarted_by", String, nullable=False),
+    Column("recorded_at", UtcDateTime, nullable=False),
+)
+
 # --- Chunk pause facts (chunk.paused / chunk.resumed — issue #46) -----------
 # An operator-level brake over one chunk: append-only, newest-fact-wins.
 

@@ -218,10 +218,10 @@ class QuestionFact:
 
 @dataclass(frozen=True)
 class DecisionFact:
-    """A gate's ``decision.submitted`` row and whether a transition references it. An
-    **open** decision — one no transition resolves — is what ``waiting_on_human``
-    derives from. ``resolved`` is computed by the hydrating repository so the
-    derivation reads a plain boolean."""
+    """A gate's ``decision.submitted`` row and whether anything has closed it. An **open**
+    decision — carrying neither its own resolution row nor a restart that superseded it
+    (#370) — is what ``waiting_on_human`` derives from. ``resolved`` is computed by the
+    hydrating repository so the derivation reads a plain boolean."""
 
     decision_id: str
     submitted_at: datetime
@@ -296,6 +296,43 @@ class MigrationFact:
             if node is not None:
                 return node.node_id
         return target_graph.entry_node_id
+
+
+@dataclass(frozen=True)
+class RestartFact:
+    """A ``chunk.restarted`` fact — an operator forced the chunk onto a node, now (#370).
+
+    A movement fact of its own, never a transition. Its ``epoch`` fences the attempt it
+    preempts; ``to_node_executor`` is resolved at read time as a transition's target's is."""
+
+    to_node_id: str
+    from_node_id: str | None
+    graph_id: str
+    epoch: int
+    recorded_at: datetime
+    to_node_executor: Executor = Executor.RUNNER
+    restarted_by: str = ""
+    # The gate decision this move closed, or ``None`` — the restart is that decision's
+    # resolving fact, the way an escalation's own ``decision_id`` closes one.
+    decision_id: str | None = None
+
+
+class MovementKind(StrEnum):
+    """Which fact family put a chunk on the node it currently stands on."""
+
+    TRANSITION = "transition"
+    MIGRATION = "migration"
+    RESTART = "restart"
+
+
+@dataclass(frozen=True)
+class Movement:
+    """A chunk's newest movement fact, whichever family wrote it — the one owner of
+    "which node is this chunk on" (``canon:one-owner``)."""
+
+    kind: MovementKind
+    node_id: str | None
+    executor: Executor
 
 
 @dataclass(frozen=True)
@@ -544,6 +581,8 @@ class ChunkFacts:
     # The chunk's cross-graph migration facts (issue #90) — each re-pins the chunk and
     # re-queues it, superseding an earlier transition for the terminal/hub-node checks.
     migrations: list[MigrationFact] = field(default_factory=list)
+    # The chunk's operator restart facts (#370) — a third movement family beside the two above.
+    restarts: list[RestartFact] = field(default_factory=list)
     pr_opened: list[PrOpenedFact] = field(default_factory=list)
     pauses: list[PauseFact] = field(default_factory=list)
     usage: list[UsageFact] = field(default_factory=list)
@@ -578,66 +617,84 @@ class ChunkFacts:
             return None
         return max(self.migrations, key=lambda m: (m.recorded_at, m.epoch))
 
-    def latest_epoch(self) -> int | None:
-        """The chunk's latest fencing epoch — its newest lease's, else ``None``."""
-        if not self.leases:
+    def newest_restart(self) -> RestartFact | None:
+        """The chunk's newest operator restart fact, or ``None`` (#370).
+
+        Ordered by ``(recorded_at, epoch)`` — the same key ``newest_transition`` uses."""
+        if not self.restarts:
             return None
-        return max(lease.epoch for lease in self.leases)
+        return max(self.restarts, key=lambda r: (r.recorded_at, r.epoch))
+
+    def latest_epoch(self) -> int | None:
+        """The chunk's latest fencing epoch — the newest across its leases and restarts.
+
+        A restart mints an epoch with no attempt behind it (#370): the fence has to rise
+        the moment the move lands, ahead of the re-entry's own lease."""
+        epochs = [lease.epoch for lease in self.leases] + [restart.epoch for restart in self.restarts]
+        return max(epochs) if epochs else None
+
+    def latest_movement(self) -> Movement | None:
+        """The chunk's newest movement fact, or ``None`` while it has not moved at all.
+
+        Ordered by ``(recorded_at, epoch)``, the kind's own rank breaking an exact tie:
+        each family is recorded *after* the movement it supersedes."""
+        ranked: list[tuple[datetime, int, int, Movement]] = []
+        transition = self.newest_transition()
+        if transition is not None:
+            movement = Movement(MovementKind.TRANSITION, transition.to_node_id, transition.to_node_executor)
+            ranked.append((transition.recorded_at, transition.epoch, 0, movement))
+        migration = self.newest_migration()
+        if migration is not None:
+            movement = Movement(MovementKind.MIGRATION, migration.landed_node_id, migration.landed_node_executor)
+            ranked.append((migration.recorded_at, migration.epoch, 1, movement))
+        restart = self.newest_restart()
+        if restart is not None:
+            movement = Movement(MovementKind.RESTART, restart.to_node_id, restart.to_node_executor)
+            ranked.append((restart.recorded_at, restart.epoch, 2, movement))
+        if not ranked:
+            return None
+        return max(ranked, key=lambda entry: entry[:3])[3]
 
     def current_node_id(self) -> str | None:
         """The chunk's current node id — the newest movement fact's target, else ``None``.
 
-        Normally the newest transition's ``to_node_id``; when a **migration** is the latest
-        movement (issue #90), the migration's ``landed_node_id`` instead. ``None`` means the
-        chunk has not yet moved, and the caller resolves the pinned graph's entry node."""
-        if self._latest_movement_is_migration():
-            migration = self.newest_migration()
-            assert migration is not None  # _latest_movement_is_migration guarantees it
-            return migration.landed_node_id
-        transition = self.newest_transition()
-        return transition.to_node_id if transition is not None else None
+        ``None`` means the chunk has not yet moved, and the caller resolves the pinned
+        graph's entry node."""
+        movement = self.latest_movement()
+        return movement.node_id if movement is not None else None
+
+    def entered_by_restart(self) -> bool:
+        """The chunk's current node visit was forced by an operator restart (#370).
+
+        True until the chunk moves again, so every re-entry into that visit — the first
+        one and any crash-recovery repeat — runs on a freshly minted session."""
+        movement = self.latest_movement()
+        return movement is not None and movement.kind is MovementKind.RESTART
 
     def newest_transition_is_terminal(self) -> bool:
         """The newest accepted transition's target is the reserved terminal (``done``, #63).
 
-        The **sole** DONE trigger — reaching the terminal, not any landed/closed fact. A
-        later migration supersedes the transition entirely (issue #90): a re-queued chunk
-        is never DONE off a pre-migration terminal."""
-        if self._latest_movement_is_migration():
+        The **sole** DONE trigger — reaching the terminal, not any landed/closed fact. A later
+        movement of any other family supersedes the transition entirely (issues #90, #370): a
+        re-queued chunk is never DONE off a superseded terminal."""
+        movement = self.latest_movement()
+        if movement is None or movement.kind is not MovementKind.TRANSITION:
             return False
-        transition = self.newest_transition()
-        return transition is not None and transition.to_node_id == RESERVED_TERMINAL
+        return movement.node_id == RESERVED_TERMINAL
 
-    def _latest_movement_is_migration(self) -> bool:
-        """The chunk's newest movement fact is a migration, not a transition (issue #90).
+    def _latest_movement_enters_hub_node(self) -> bool:
+        """The chunk's newest movement landed it on a hub-executed node.
 
-        A migration re-queues the chunk, so once it is the latest movement the pre-migration
-        transition's terminal/hub identity is superseded. Ties go to the migration — it is
-        recorded *after* the transition that brought the chunk to the node it leaves."""
-        migration = self.newest_migration()
-        if migration is None:
-            return False
-        transition = self.newest_transition()
-        if transition is None:
-            return True
-        return (migration.recorded_at, migration.epoch) >= (transition.recorded_at, transition.epoch)
-
-    def _newest_transition_enters_hub_node(self) -> bool:
-        """The newest accepted transition's target is a hub-executed node.
-
-        A later migration supersedes it (issue #90), and that landing node can itself be
-        hub-executed (issue #111), deriving ``delivering`` rather than ``ready``."""
-        if self._latest_movement_is_migration():
-            migration = self.newest_migration()
-            return migration is not None and migration.landed_node_executor is Executor.HUB
-        transition = self.newest_transition()
-        return transition is not None and transition.to_node_executor is Executor.HUB
+        A migration's landing node can itself be hub-executed (issue #111), and so can a
+        restart's target — either derives ``delivering`` rather than ``ready``."""
+        movement = self.latest_movement()
+        return movement is not None and movement.executor is Executor.HUB
 
     def _operator_completion_outranks_stop(self) -> bool:
         """A ``chunk.completed`` fact outranks the stop it follows (issue #294) — the one way a
         stopped chunk still reaches ``done``. Ties go to the completion, the same convention
-        :meth:`_latest_movement_is_migration` states for its own tie: recorded *after* the
-        stop it supersedes, so ``>=`` against ``stopped_at``, not ``>``."""
+        :meth:`latest_movement` states for its own tie: recorded *after* the stop it
+        supersedes, so ``>=`` against ``stopped_at``, not ``>``."""
         if not self.operator_completed:
             return False
         if not self.stopped:
@@ -668,7 +725,7 @@ class ChunkFacts:
             # Below the human-gated states (a chunk both parked on a question and paused
             # is still, first, waiting on a human) and above delivering/running (issue #46).
             return ChunkStatus.PAUSED
-        if self._newest_transition_enters_hub_node():
+        if self._latest_movement_enters_hub_node():
             return ChunkStatus.DELIVERING
         if self._has_live_route():
             return ChunkStatus.RUNNING
@@ -698,15 +755,16 @@ class ChunkFacts:
     def open_escalation(self) -> EscalationFact | None:
         """The newest escalation nothing later superseded, or ``None``.
 
-        Closed by supersession, never a resolution fact: a later lease mint or
-        ``requeue.recorded`` hands the work back to the fleet, and a later **completion** —
-        stopped or done — is the chunk ending without one (#292, #293)."""
+        Closed by supersession, never a resolution fact: a later lease mint, a
+        ``requeue.recorded`` or an operator restart (#370) hands the work back to the fleet,
+        and a later **completion** — stopped or done — is the chunk ending without one (#293)."""
         if not self.escalations:
             return None
         newest = max(self.escalations, key=lambda e: e.recorded_at)
         superseding = (
             *(lease.minted_at for lease in self.leases),
             *(rq.requeued_at for rq in self.requeues),
+            *(restart.recorded_at for restart in self.restarts),
             self.completed_at(),
         )
         return None if any(at is not None and at > newest.recorded_at for at in superseding) else newest
@@ -1422,6 +1480,25 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         Returns the freshly-written ``requeues.id`` (issue #213's activity-feed key)."""
         ...
 
+    def record_restart(
+        self,
+        chunk_id: str,
+        *,
+        from_node_id: str | None,
+        to_node_id: str,
+        by: str,
+        at: datetime,
+        decision_id: str | None = None,
+        answered_question_ids: Sequence[str] = (),
+        answer: str = "",
+    ) -> int:
+        """Record a ``chunk.restarted`` fact — an operator forced the chunk onto ``to_node_id``
+        (#370), at a fence epoch this call derives one above the chunk's newest. One
+        transaction with the answers it writes for ``answered_question_ids`` and the
+        ``decision_id`` it names, so no crash leaves the chunk moved and still parked.
+        Returns the freshly-written ``chunk_restarts.id``."""
+        ...
+
     def record_migration(
         self,
         chunk_id: str,
@@ -1555,9 +1632,9 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
     ) -> bool:
         """Record a generic hub command node's exit transition, atomically and idempotently
         (#65). The hub lease and the transition land in one transaction; ``release_route``
-        is True only when ``to_node_id`` is the reserved terminal, writing the route release
-        alongside. Guarded by the transition's existence at ``(chunk_id, from_node_id,
-        epoch)``, so a redelivery replay after a ``kill -9`` re-enters harmlessly."""
+        is True only when ``to_node_id`` is the reserved terminal. Two guards, False either
+        way: the transition's existence at ``(chunk_id, from_node_id, epoch)`` absorbs a
+        redelivery replay, and the chunk's current epoch absorbs a restart landed mid-``run:``."""
         ...
 
     def record_hub_node_poll(self, chunk_id: str, *, node_id: str, epoch: int, at: datetime) -> None:

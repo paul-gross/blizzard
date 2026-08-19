@@ -22,6 +22,7 @@ from blizzard.hub.domain.work import (
     PauseFact,
     PrOpenedFact,
     QuestionFact,
+    RestartFact,
     RouteCreatedFact,
     RouteHistory,
     RouteReleasedFact,
@@ -469,6 +470,108 @@ def test_current_node_and_epoch_none_before_any_fact() -> None:
     facts = ChunkFacts(minted=True)
     assert facts.current_node_id() is None
     assert facts.latest_epoch() is None
+
+
+# --- Operator restart (issue #370) --------------------------------------------
+
+
+def _restart(node_id: str, *, executor: Executor = Executor.RUNNER, at: int, epoch: int) -> RestartFact:
+    return RestartFact(
+        to_node_id=node_id,
+        from_node_id="nd_build",
+        graph_id="gr_1",
+        epoch=epoch,
+        recorded_at=_at(at),
+        to_node_executor=executor,
+        restarted_by="operator",
+    )
+
+
+def test_a_restart_is_the_chunks_current_node_and_its_latest_epoch() -> None:
+    """The move re-aims the chunk and raises the fence, with no lease behind either."""
+    facts = ChunkFacts(
+        minted=True,
+        leases=[LeaseFact(epoch=3, minted_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_build", to_node_executor=Executor.RUNNER, epoch=3, recorded_at=_at(2))
+        ],
+        restarts=[_restart("nd_plan", at=5, epoch=4)],
+    )
+    assert facts.current_node_id() == "nd_plan"
+    assert facts.latest_epoch() == 4
+    assert facts.entered_by_restart()
+
+
+def test_a_transition_after_a_restart_supersedes_it() -> None:
+    """The forced visit ends the moment the chunk moves off it under its own steam."""
+    facts = ChunkFacts(
+        minted=True,
+        leases=[LeaseFact(epoch=5, minted_at=_at(6))],
+        transitions=[
+            TransitionFact(to_node_id="nd_review", to_node_executor=Executor.RUNNER, epoch=5, recorded_at=_at(7))
+        ],
+        restarts=[_restart("nd_plan", at=5, epoch=4)],
+    )
+    assert facts.current_node_id() == "nd_review"
+    assert not facts.entered_by_restart()
+
+
+def test_a_restart_supersedes_a_terminal_transition_it_follows() -> None:
+    """Only a transition can be terminal, and a later movement of any kind supersedes it."""
+    facts = ChunkFacts(
+        minted=True,
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.RUNNER, epoch=1, recorded_at=_at(2))
+        ],
+        restarts=[_restart("nd_build", at=3, epoch=2)],
+    )
+    assert not facts.newest_transition_is_terminal()
+    assert facts.status() is not ChunkStatus.DONE
+
+
+def test_a_restart_onto_a_hub_node_derives_delivering() -> None:
+    """The target's executor governs exactly as an arriving transition's would."""
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        restarts=[_restart("nd_deliver", executor=Executor.HUB, at=3, epoch=2)],
+    )
+    assert facts.status() is ChunkStatus.DELIVERING
+
+
+def test_a_restart_supersedes_an_open_escalation() -> None:
+    """Closed by supersession, the way a requeue closes one — no resolution fact exists."""
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(2))],
+        restarts=[_restart("nd_build", at=3, epoch=2)],
+    )
+    assert facts.open_escalation() is None
+    assert facts.status() is ChunkStatus.RUNNING
+
+
+def test_a_migration_still_wins_a_tie_against_the_transition_it_supersedes() -> None:
+    """The pre-restart tie-break is unchanged: same instant and epoch, migration wins."""
+    facts = ChunkFacts(
+        minted=True,
+        transitions=[
+            TransitionFact(to_node_id="nd_build", to_node_executor=Executor.RUNNER, epoch=2, recorded_at=_at(5))
+        ],
+        migrations=[
+            MigrationFact(
+                from_node_id="nd_build",
+                from_graph_id="gr_1",
+                to_graph_id="gr_2",
+                landed_node_id="nd_landed",
+                choice_name="pass",
+                model=None,
+                epoch=2,
+                recorded_at=_at(5),
+            )
+        ],
+    )
+    assert facts.current_node_id() == "nd_landed"
 
 
 # --- Pause (issue #46) --------------------------------------------------------

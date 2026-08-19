@@ -27,6 +27,7 @@ ChunkChangeCause = Literal[
     "question-answered",
     "escalated",
     "requeued",
+    "restarted",
     "detached",
     "paused",
     "resumed",

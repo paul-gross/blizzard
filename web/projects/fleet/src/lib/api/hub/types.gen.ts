@@ -655,6 +655,10 @@ export type ChunkDetail = {
      * Questions
      */
     questions?: Array<QuestionView>;
+    /**
+     * Restarts
+     */
+    restarts?: Array<RestartView>;
     route?: RouteView | null;
     status: ChunkStatus;
     /**
@@ -812,6 +816,24 @@ export type ChunkPauseRequest = {
      * By
      */
     by?: string;
+};
+
+/**
+ * ChunkRestartRequest
+ *
+ * Force a chunk onto a node now, on a freshly minted session (issue #370). ``node`` is a node
+ * name on the chunk's own graph — omitted means its current node, the common case. Records who
+ * moved it.
+ */
+export type ChunkRestartRequest = {
+    /**
+     * By
+     */
+    by?: string;
+    /**
+     * Node
+     */
+    node?: string | null;
 };
 
 /**
@@ -2528,6 +2550,57 @@ export type ReadinessResponse = {
      * Store Revision
      */
     store_revision: string | null;
+};
+
+/**
+ * RestartView
+ *
+ * One operator restart (issue #370): the chunk was forced from ``from_node`` onto ``to_node`` at
+ * ``epoch``, on this graph, tearing down whatever attempt was running. Its own step, never a
+ * transition — nothing judged it and no edge was taken. ``from_node_id`` is null when the chunk had
+ * not yet moved; ``decision_id`` names the gate decision the move closed, null when there was none.
+ */
+export type RestartView = {
+    /**
+     * Decision Id
+     */
+    decision_id?: string | null;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * From Node Id
+     */
+    from_node_id?: string | null;
+    /**
+     * From Node Name
+     */
+    from_node_name?: string | null;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Graph Name
+     */
+    graph_name?: string | null;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * Restarted By
+     */
+    restarted_by: string;
+    /**
+     * To Node Id
+     */
+    to_node_id: string;
+    /**
+     * To Node Name
+     */
+    to_node_name?: string | null;
 };
 
 /**
@@ -4851,6 +4924,36 @@ export type RequeueChunkApiChunksChunkIdRequeuesPostResponses = {
 };
 
 export type RequeueChunkApiChunksChunkIdRequeuesPostResponse = RequeueChunkApiChunksChunkIdRequeuesPostResponses[keyof RequeueChunkApiChunksChunkIdRequeuesPostResponses];
+
+export type RestartChunkApiChunksChunkIdRestartPostData = {
+    body: ChunkRestartRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/restart';
+};
+
+export type RestartChunkApiChunksChunkIdRestartPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RestartChunkApiChunksChunkIdRestartPostError = RestartChunkApiChunksChunkIdRestartPostErrors[keyof RestartChunkApiChunksChunkIdRestartPostErrors];
+
+export type RestartChunkApiChunksChunkIdRestartPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkSummary;
+};
+
+export type RestartChunkApiChunksChunkIdRestartPostResponse = RestartChunkApiChunksChunkIdRestartPostResponses[keyof RestartChunkApiChunksChunkIdRestartPostResponses];
 
 export type ResumeChunkApiChunksChunkIdResumePostData = {
     body: ChunkPauseRequest;

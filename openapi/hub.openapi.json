@@ -1029,6 +1029,14 @@
             "title": "Questions",
             "type": "array"
           },
+          "restarts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RestartView"
+            },
+            "title": "Restarts",
+            "type": "array"
+          },
           "route": {
             "anyOf": [
               {
@@ -1282,6 +1290,29 @@
           }
         },
         "title": "ChunkPauseRequest",
+        "type": "object"
+      },
+      "ChunkRestartRequest": {
+        "description": "Force a chunk onto a node now, on a freshly minted session (issue #370). ``node`` is a node\nname on the chunk's own graph \u2014 omitted means its current node, the common case. Records who\nmoved it.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          },
+          "node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node"
+          }
+        },
+        "title": "ChunkRestartRequest",
         "type": "object"
       },
       "ChunkStatus": {
@@ -3863,6 +3894,95 @@
           "detail"
         ],
         "title": "ReadinessResponse",
+        "type": "object"
+      },
+      "RestartView": {
+        "description": "One operator restart (issue #370): the chunk was forced from ``from_node`` onto ``to_node`` at\n``epoch``, on this graph, tearing down whatever attempt was running. Its own step, never a\ntransition \u2014 nothing judged it and no edge was taken. ``from_node_id`` is null when the chunk had\nnot yet moved; ``decision_id`` names the gate decision the move closed, null when there was none.",
+        "properties": {
+          "decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Id"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "from_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Node Id"
+          },
+          "from_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Node Name"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "restarted_by": {
+            "title": "Restarted By",
+            "type": "string"
+          },
+          "to_node_id": {
+            "title": "To Node Id",
+            "type": "string"
+          },
+          "to_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Node Name"
+          }
+        },
+        "required": [
+          "to_node_id",
+          "graph_id",
+          "epoch",
+          "restarted_by",
+          "recorded_at"
+        ],
+        "title": "RestartView",
         "type": "object"
       },
       "RoleAssignmentRequest": {
@@ -8227,6 +8347,59 @@
           }
         },
         "summary": "Requeue Chunk",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/restart": {
+      "post": {
+        "description": "Force a chunk onto a node now, on a freshly minted session (issue #370).\n\nRecorded at a bumped epoch, so the running attempt is fenced out and the holding runner\nre-enters \u2014 ``node`` omitted means the chunk's current one, the graph's entry if it has never\nmoved. Open parks close with it. 409: a terminal chunk, or a node its graph does not carry.",
+        "operationId": "restart_chunk_api_chunks__chunk_id__restart_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkRestartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restart Chunk",
         "tags": [
           "chunks"
         ]

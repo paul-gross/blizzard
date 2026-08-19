@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
-from blizzard.hub.domain.graph import Edge, Graph, Node
+from blizzard.hub.domain.graph import Edge, Graph, Node, SessionMode
 from blizzard.hub.domain.work import Chunk, TransitionFact
 from blizzard.wire.envelope import (
     EnvelopeArtifact,
@@ -129,6 +129,9 @@ class Envelope:
     artifacts: list[ArtifactRow]
     epoch: int
     arrival_addendum: str | None = None
+    # This visit was forced by an operator restart (issue #370), which overrides the node's
+    # declared session mode below — derived from the durable fact, so a re-read still says so.
+    entered_by_restart: bool = False
 
     @property
     def prompt(self) -> str | None:
@@ -182,7 +185,7 @@ class Envelope:
             node_id=node.node_id,
             node_name=node.name,
             executor=node.executor,
-            session=node.session,
+            session=SessionMode.FRESH if self.entered_by_restart else node.session,
             session_source=node.session_source,
             session_name=session.name,
             session_model=session.model,

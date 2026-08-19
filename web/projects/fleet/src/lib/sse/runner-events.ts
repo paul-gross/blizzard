@@ -38,7 +38,8 @@ export type LeaseChangeCause =
   | 'failed'
   | 'escalated'
   | 'parked'
-  | 'released';
+  | 'released'
+  | 'preempted';
 /** What caused an `ask-changed` frame. */
 export type AskChangeCause = 'asked' | 'answered';
 /** What caused an `escalation-changed` frame. */

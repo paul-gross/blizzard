@@ -536,6 +536,32 @@ def chunk_done(cli: CliContext, chunk_id: str, by: str) -> None:
     cli.finish(resp, f"completed {chunk_id} — done, its route (if any) released")
 
 
+@chunk_group.command("restart", cls=FleetCommand)
+@click.argument("chunk_id")
+@click.option(
+    "--node",
+    default=None,
+    help="Node name on CHUNK's own graph to force it onto. Omit for its current node, or its entry node "
+    "if CHUNK has never moved.",
+)
+@click.option("--by", "by", default="operator", help="Who is restarting (recorded on the fact).")
+def chunk_restart(cli: CliContext, chunk_id: str, node: str | None, by: str) -> None:
+    """Force CHUNK onto a node now, on a freshly minted session (issue #370).
+
+    A pure client of ``POST /api/chunks/{id}/restart``. Unlike ``migrate``'s standing intent, the
+    move has already happened when the call returns: the bumped epoch makes the runner tear the
+    attempt down and re-enter. 409 when CHUNK is terminal, or its target node is off its graph."""
+    resp = cli.post(
+        f"/api/chunks/{chunk_id}/restart",
+        "POST /chunks/{id}/restart",
+        json_body={"node": node, "by": by},
+        on_status={409: "chunk is not restartable", 404: f"no such chunk {chunk_id}"},
+    )
+    body = resp.json()
+    landed = body.get("current_node_name") or node or "its current node"
+    cli.show_lines(body, f"restarted {chunk_id} at `{landed}` — re-entering on a fresh session")
+
+
 @chunk_group.command("migrate", cls=FleetCommand)
 @click.argument("chunk_id")
 @click.option("--to-graph", default=None, help="Migration target — a graph id or name. Required unless --cancel.")

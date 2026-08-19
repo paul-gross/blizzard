@@ -8,6 +8,7 @@ derived. Timestamps arrive already stamped (``bzh:injected-clock``).
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -47,6 +48,7 @@ from blizzard.hub.domain.work import (
     QuestionFact,
     QuestionRow,
     RequeueFact,
+    RestartFact,
     RouteCreatedFact,
     RouteHistory,
     RouteReleasedFact,
@@ -181,10 +183,14 @@ class ChunkStore:
             migration_rows = conn.execute(
                 select(s.chunk_migrations).where(s.chunk_migrations.c.chunk_id == chunk_id)
             ).all()
-            # The executor map must span every graph the chunk's transitions and migrations
-            # touched, not only its current pin (issues #90, #111).
+            restart_rows = conn.execute(select(s.chunk_restarts).where(s.chunk_restarts.c.chunk_id == chunk_id)).all()
+            # The executor map must span every graph the chunk's movement facts touched, not
+            # only its current pin (issues #90, #111, #370).
             graph_ids = (
-                {chunk.graph_id} | {t.graph_id for t in transition_rows} | {m.to_graph_id for m in migration_rows}
+                {chunk.graph_id}
+                | {t.graph_id for t in transition_rows}
+                | {m.to_graph_id for m in migration_rows}
+                | {r.graph_id for r in restart_rows}
             )
             executors = {
                 r.node_id: Executor(r.executor)
@@ -256,6 +262,19 @@ class ChunkStore:
             requeues = [
                 RequeueFact(requeued_at=r.requeued_at)
                 for r in conn.execute(select(s.requeues).where(s.requeues.c.chunk_id == chunk_id)).all()
+            ]
+            restarts = [
+                RestartFact(
+                    to_node_id=r.to_node_id,
+                    from_node_id=r.from_node_id,
+                    graph_id=r.graph_id,
+                    epoch=r.epoch,
+                    recorded_at=r.recorded_at,
+                    to_node_executor=executors.get(r.to_node_id, Executor.RUNNER),
+                    restarted_by=r.restarted_by,
+                    decision_id=r.decision_id,
+                )
+                for r in restart_rows
             ]
             migrations = [
                 MigrationFact(
@@ -351,6 +370,7 @@ class ChunkStore:
                 decisions=decisions,
                 requeues=requeues,
                 migrations=migrations,
+                restarts=restarts,
                 pr_opened=pr_opened,
                 pauses=pauses,
                 usage=usage,
@@ -824,6 +844,27 @@ class ChunkStore:
                     chunk_id=r.chunk_id,
                     cause="migrated",
                     graph_id=r.to_graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.chunk_restarts.c.id,
+                    s.chunk_restarts.c.chunk_id,
+                    s.chunk_restarts.c.recorded_at,
+                    s.chunks.c.graph_id,
+                ).select_from(s.chunk_restarts.join(s.chunks, s.chunks.c.chunk_id == s.chunk_restarts.c.chunk_id)),
+                ts_col=s.chunk_restarts.c.recorded_at,
+                pk_col=s.chunk_restarts.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"chunk_restarts:{r.id}",
+                    at=r.recorded_at,
+                    chunk_id=r.chunk_id,
+                    cause="restarted",
+                    graph_id=r.graph_id,
                 ),
             )
             rows += self._bounded(
@@ -1553,6 +1594,50 @@ class ChunkStore:
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
 
+    def record_restart(
+        self,
+        chunk_id: str,
+        *,
+        from_node_id: str | None,
+        to_node_id: str,
+        by: str,
+        at: datetime,
+        decision_id: str | None = None,
+        answered_question_ids: Sequence[str] = (),
+        answer: str = "",
+    ) -> int:
+        """Record the forced move and every in-flight park it consumes in **one** transaction
+        (issue #370), so a ``kill -9`` cannot leave the chunk moved while an ask still parks it;
+        each answer keeps first-write-wins. The fence epoch is derived HERE rather than handed
+        down — one above every prior attempt is a read-then-write only this transaction holds
+        together (``bzh:epoch-fencing``)."""
+        with self._engine.begin() as conn:
+            epoch = self._latest_epoch(conn, chunk_id) + 1
+            for question_id in answered_question_ids:
+                already = conn.execute(
+                    select(s.question_answers.c.question_id).where(s.question_answers.c.question_id == question_id)
+                ).first()
+                if already is None:
+                    conn.execute(
+                        insert(s.question_answers).values(
+                            question_id=question_id, answer=answer, answered_by=by, answered_at=at
+                        )
+                    )
+            result = conn.execute(
+                insert(s.chunk_restarts).values(
+                    chunk_id=chunk_id,
+                    graph_id=self._graph_id_of(conn, chunk_id),
+                    from_node_id=from_node_id,
+                    to_node_id=to_node_id,
+                    epoch=epoch,
+                    decision_id=decision_id,
+                    restarted_by=by,
+                    recorded_at=at,
+                )
+            )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
+
     def accepted_migration(self, chunk_id: str, *, from_node_id: str, epoch: int) -> bool:
         """True iff a migration is already recorded for ``(chunk_id, from_node_id, epoch)``
         — the idempotency probe a re-applied cross-graph completion short-circuits on (#90).
@@ -1877,11 +1962,11 @@ class ChunkStore:
         artifacts: list[ArtifactRow],
         release_route: bool,
     ) -> bool:
-        """Record a generic hub command node's exit transition **atomically and
-        idempotently** (#65) — the ``HubNodeExecutor`` counterpart to
-        :meth:`finalize_delivery`, generalized to any authored target. Guarded by the
-        transition's existence at ``(chunk_id, from_node_id, epoch)``: a redelivery
-        replay re-enters harmlessly."""
+        """Record a generic hub command node's exit transition **atomically and idempotently**
+        (#65) — :meth:`finalize_delivery`'s counterpart, generalized to any authored target.
+        Two guards, both returning False: the transition's existence at ``(chunk_id,
+        from_node_id, epoch)`` absorbs a redelivery replay, and the chunk's CURRENT epoch
+        absorbs a restart that re-aimed it while the ``run:`` list ran (``bzh:epoch-fencing``)."""
         with self._engine.begin() as conn:
             already = conn.execute(
                 select(s.transitions.c.transition_id).where(
@@ -1891,6 +1976,8 @@ class ChunkStore:
                 )
             ).first()
             if already is not None:
+                return False
+            if self._latest_epoch(conn, chunk_id) >= epoch:
                 return False
             conn.execute(
                 insert(s.lease_facts).values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
@@ -1954,6 +2041,21 @@ class ChunkStore:
         return {r.chunk_id for r in conn.execute(select(s.chunk_grouped.c.chunk_id)).all()}
 
     @staticmethod
+    def _latest_epoch(conn: Connection, chunk_id: str) -> int:
+        """The chunk's newest fencing epoch, read INSIDE the caller's transaction — the same
+        fold ``ChunkFacts.latest_epoch`` derives, across lease facts and operator restarts.
+
+        Read here rather than handed in, so a read-then-write epoch decision cannot be
+        overtaken between the two (``bzh:epoch-fencing``)."""
+        lease_max = conn.execute(
+            select(func.max(s.lease_facts.c.epoch)).where(s.lease_facts.c.chunk_id == chunk_id)
+        ).scalar()
+        restart_max = conn.execute(
+            select(func.max(s.chunk_restarts.c.epoch)).where(s.chunk_restarts.c.chunk_id == chunk_id)
+        ).scalar()
+        return max(lease_max or 0, restart_max or 0)
+
+    @staticmethod
     def _next_route_seq(conn: Connection, chunk_id: str) -> int:
         """One past the current max ``seq`` across ``route_created``, ``route_released``
         and ``route_token_minted`` for this chunk, so the triple is totally ordered even
@@ -1993,14 +2095,22 @@ class ChunkStore:
 
     @staticmethod
     def _resolved_ids(conn, decision_ids: list[str]) -> set[str]:  # type: ignore[no-untyped-def]
+        """The decisions among ``decision_ids`` that carry a resolution row, or that an
+        operator restart superseded (#370) — the two ways one stops deriving open."""
         if not decision_ids:
             return set()
-        return {
+        resolved = {
             r.decision_id
             for r in conn.execute(
                 select(s.decision_resolutions.c.decision_id).where(
                     s.decision_resolutions.c.decision_id.in_(decision_ids)
                 )
+            ).all()
+        }
+        return resolved | {
+            r.decision_id
+            for r in conn.execute(
+                select(s.chunk_restarts.c.decision_id).where(s.chunk_restarts.c.decision_id.in_(decision_ids))
             ).all()
         }
 
@@ -2009,7 +2119,7 @@ class ChunkStore:
             select(s.decision_resolutions).where(s.decision_resolutions.c.decision_id == row.decision_id)
         ).one_or_none()
         # Closed by whichever fact carries this decision_id: the resolving transition, the
-        # cross-graph migration (#90), or the unresolvable-target escalation (#110).
+        # migration (#90), the unresolvable-target escalation (#110), or the restart (#370).
         transitioned = (
             conn.execute(
                 select(s.transitions.c.transition_id).where(s.transitions.c.decision_id == row.decision_id).limit(1)
@@ -2023,6 +2133,10 @@ class ChunkStore:
             is not None
             or conn.execute(
                 select(s.escalations.c.id).where(s.escalations.c.decision_id == row.decision_id).limit(1)
+            ).first()
+            is not None
+            or conn.execute(
+                select(s.chunk_restarts.c.id).where(s.chunk_restarts.c.decision_id == row.decision_id).limit(1)
             ).first()
             is not None
         )

@@ -325,6 +325,10 @@ export type ChunkDetail = {
      * Questions
      */
     questions?: Array<QuestionView>;
+    /**
+     * Restarts
+     */
+    restarts?: Array<RestartView>;
     route?: RouteView | null;
     status: ChunkStatus;
     /**
@@ -1310,6 +1314,57 @@ export type RequeueResponse = {
      * Requeued
      */
     requeued: boolean;
+};
+
+/**
+ * RestartView
+ *
+ * One operator restart (issue #370): the chunk was forced from ``from_node`` onto ``to_node`` at
+ * ``epoch``, on this graph, tearing down whatever attempt was running. Its own step, never a
+ * transition — nothing judged it and no edge was taken. ``from_node_id`` is null when the chunk had
+ * not yet moved; ``decision_id`` names the gate decision the move closed, null when there was none.
+ */
+export type RestartView = {
+    /**
+     * Decision Id
+     */
+    decision_id?: string | null;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * From Node Id
+     */
+    from_node_id?: string | null;
+    /**
+     * From Node Name
+     */
+    from_node_name?: string | null;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Graph Name
+     */
+    graph_name?: string | null;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * Restarted By
+     */
+    restarted_by: string;
+    /**
+     * To Node Id
+     */
+    to_node_id: string;
+    /**
+     * To Node Name
+     */
+    to_node_name?: string | null;
 };
 
 /**

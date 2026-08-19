@@ -897,9 +897,9 @@ is unreachable. They set the runner's **own** brake, which means something diffe
 runner's own brake means "start no processes on this machine" — no new claims, but also no restart-resume, no requeue
 respawn, and no judging a worker that exits while it's on, since judging one resumes its session. Nothing is lost either
 way: a live worker already running is left alone (this is not a drain), and every lease, route, and retry budget the
-brake defers is picked up exactly where it left off once the brake clears — see `blizzard-runner pause --help` for the
-full contract. Each brake is cleared only where it was set — `runner start` locally, `blizzard hub runner resume` at the
-hub.
+brake defers is picked up once it clears — exactly where it left off, unless an operator moved the chunk meanwhile — see
+`blizzard-runner pause --help` for the full contract. Each brake is cleared only where it was set — `runner start`
+locally, `blizzard hub runner resume` at the hub.
 
 The panel's leases, environments, asks, escalations, takeovers, and facts render live: new events fan out over the
 runner's own SSE spine (`/api/events/stream`, issue #317), so an open panel updates without polling — the parallel of
@@ -938,11 +938,18 @@ refusal protects binds writers only. What you see from a client verb depends on 
 Either way the next `host` start is clean: it clears a socket nothing is serving, and refuses to start beside one that
 is still live (the store is single-writer).
 
-## Chunk and runner control verbs, two axes — pause, stop, complete, or detach a chunk; pause a runner (hub or local)
+## Chunk and runner control verbs, two axes — pause, restart, stop, complete, or detach a chunk; pause a runner (hub or local)
 
-Six verbs stop or settle work, and two of them share the word "pause," which is exactly where operators mix them up. The
-four chunk-level verbs split along what they do to the claim: keep it (`chunk pause`), give it away (`detach`), or end
-it for good, as either an abandonment (`stop`) or a hand-completion (`chunk done`, issue #294).
+Seven verbs stop, re-aim, or settle work, and two of them share the word "pause," which is exactly where operators mix
+them up. The five chunk-level verbs split along what they do to the claim: keep it (`chunk pause`, `chunk restart`),
+give it away (`detach`), or end it for good, as either an abandonment (`stop`) or a hand-completion (`chunk done`, issue
+#294).
+
+"Restart" is the section's other overloaded word, and the two senses are unrelated. `chunk restart` below is this
+operator verb, aimed at one chunk. **Daemon restart** — stopping and starting the runner process itself, and the
+*restart-resume* that re-attaches its in-flight sessions afterward (issues #12, #13) — moves no chunk anywhere and is
+never issued at a chunk; it is the ordinary `systemctl restart` of a service, covered under "The runner's two doors"
+above.
 
 - **`blizzard hub chunk pause <chunk_id>` / `chunk resume <chunk_id>`** (issue #46), or the board's **Pause**/**Resume**
   control in the chunk detail dock beside Detach — targets **one chunk**. On a chunk with a live claim, the runner kills
@@ -969,24 +976,24 @@ it for good, as either an abandonment (`stop`) or a hand-completion (`chunk done
   afterward — only the route is gone. Refused (`409`) when the chunk has no live route left to release. See
   `blizzard hub chunk detach --help` for the CLI's full contract.
 - **`blizzard hub chunk stop <chunk_id>`** (issue #118) — CLI/API only, with no board control today; there is no Stop
-  button in the chunk detail dock the way Pause, Detach, and now Complete each have one, only `POST /api/chunks/{id}/stop`.
-  The `chunk.stopped` fact is **irreversible** — there is no `un-stop` — but it is no longer guaranteed the last word on
-  the chunk: an operator can still complete it afterward (see `chunk done` below), and the derived status then reads
-  `done`, not `stopped`. It does **both** of what `chunk pause` and `detach` each do half of: it writes the `chunk.stopped`
-  fact *and* releases any live route, so the holding runner frees the environments on its own next tick — no separate
-  `detach` call needed. Unlike `detach`, a live route is not required: stop is allowed on `not_ready`, `ready`, and an
-  already-detached chunk alike — the route release is conditional, not required. Stopping an escalated chunk also
-  **closes its escalation** (issue #292; reaching `done` does the same): the chunk leaves the critical `needs-human`
-  feed below and the holding runner drops it from `blizzard runner status` and its panel on the next PULL — so the
-  composed resume command for the parked session goes with it, which is worth knowing before you reach for it, since
-  there is no un-stop. Refused (`409`) only when the chunk is already `done` or `stopped` — not retroactive un-delivery,
-  and not a lever for clearing a `delivering`/`waiting_on_human`/`needs_human` chunk back to a fresh state, only for
-  ending it. See `blizzard hub chunk stop --help` for the CLI's full contract.
+  button in the chunk detail dock the way Pause, Detach, and now Complete each have one, only
+  `POST /api/chunks/{id}/stop`. The `chunk.stopped` fact is **irreversible** — there is no `un-stop` — but it is no
+  longer guaranteed the last word on the chunk: an operator can still complete it afterward (see `chunk done` below),
+  and the derived status then reads `done`, not `stopped`. It does **both** of what `chunk pause` and `detach` each do
+  half of: it writes the `chunk.stopped` fact *and* releases any live route, so the holding runner frees the
+  environments on its own next tick — no separate `detach` call needed. Unlike `detach`, a live route is not required:
+  stop is allowed on `not_ready`, `ready`, and an already-detached chunk alike — the route release is conditional, not
+  required. Stopping an escalated chunk also **closes its escalation** (issue #292; reaching `done` does the same): the
+  chunk leaves the critical `needs-human` feed below and the holding runner drops it from `blizzard runner status` and
+  its panel on the next PULL — so the composed resume command for the parked session goes with it, which is worth
+  knowing before you reach for it, since there is no un-stop. Refused (`409`) only when the chunk is already `done` or
+  `stopped` — not retroactive un-delivery, and not a lever for clearing a `delivering`/`waiting_on_human`/`needs_human`
+  chunk back to a fresh state, only for ending it. See `blizzard hub chunk stop --help` for the CLI's full contract.
 - **`blizzard hub chunk done <chunk_id>`**, or the board's **Complete** control in the chunk detail dock (issue #294) —
   a pure client of `POST /api/chunks/{id}/complete`, gated by `CHUNK_CONTROL` like every other control verb here. It
-  writes its own `chunk.completed` fact — a hand-completion, not a synthetic reading of some other fact — reachable
-  from **any** non-`done` status, including `stopped`: unlike `stop`, `chunk done` has no un-verb of its own either, but
-  it is not foreclosed by having been stopped first. Between a `chunk.stopped` and a `chunk.completed` fact on the same
+  writes its own `chunk.completed` fact — a hand-completion, not a synthetic reading of some other fact — reachable from
+  **any** non-`done` status, including `stopped`: unlike `stop`, `chunk done` has no un-verb of its own either, but it
+  is not foreclosed by having been stopped first. Between a `chunk.stopped` and a `chunk.completed` fact on the same
   chunk, the derived status favors whichever was recorded **later** (a tie going to the completion), so a chunk stopped
   and then hand-completed reads `done` afterward, not `stopped`. Releases any live route and held hub-exec slot in the
   same store transaction as the fact write, exactly as `stop` does, and its work-item refs become eligible for closure
@@ -996,15 +1003,48 @@ it for good, as either an abandonment (`stop`) or a hand-completion (`chunk done
   `blizzard hub chunk done --help` for the CLI's full contract.
 
   **`stop` is not how a chunk reaches `done` — `chunk done` and the graph both are, and now either can follow a stop.**
-  `stopped` records that an operator ended the chunk without it having delivered; `done` records that the chunk finished,
-  either because the graph reached its reserved terminal (`to: done`, in the shipped graphs the `retrospective` node's
-  `recorded` choice at the end of `deliver` → `retrospective`) or because an operator hand-completed it with `chunk done`.
-  Unlike the graph path, `chunk done` needs no graph cooperation: it is a pure operator write, exactly like `stop`, and it
-  is available *after* a stop as well as before one. So a chunk whose work you landed by hand, outside the fleet, no
-  longer has to end at `stopped` as its truthful final record — stopping it and then running `chunk done` (or the
-  board's Complete) marks it `done` instead, once you have confirmed the work actually landed. What remains foreclosed
-  is going the other way: there is no `un-stop` and no `un-complete`, so once a chunk reads `done` — by either path — it
-  stays there.
+  `stopped` records that an operator ended the chunk without it having delivered; `done` records that the chunk
+  finished, either because the graph reached its reserved terminal (`to: done`, in the shipped graphs the
+  `retrospective` node's `recorded` choice at the end of `deliver` → `retrospective`) or because an operator
+  hand-completed it with `chunk done`. Unlike the graph path, `chunk done` needs no graph cooperation: it is a pure
+  operator write, exactly like `stop`, and it is available *after* a stop as well as before one. So a chunk whose work
+  you landed by hand, outside the fleet, no longer has to end at `stopped` as its truthful final record — stopping it
+  and then running `chunk done` (or the board's Complete) marks it `done` instead, once you have confirmed the work
+  actually landed. What remains foreclosed is going the other way: there is no `un-stop` and no `un-complete`, so once a
+  chunk reads `done` — by either path — it stays there.
+- **`blizzard hub chunk restart <chunk_id> [--node <name>]`** (issue #370) — CLI/API only, a pure client of
+  `POST /api/chunks/{id}/restart`. It forces the chunk onto a node **now**, on a freshly minted session: the hub records
+  the move at a bumped epoch, so the holding runner tears the running attempt down on its next tick and re-enters the
+  named node with clean context. `--node` defaults to the chunk's current node, which is the common case — restart this
+  step, the worker is thrashing; on a chunk that has never moved, that default is its graph's entry node. The claim is
+  **kept**: route, tenure and held environments all survive, so the re-entry lands in the same worktree with the work
+  already on disk, the artifacts the superseded step produced stay readable, and — like a pause, and unlike a failure —
+  **no retry is consumed**, so restarting a thrashing step over and over never escalates the chunk you are rescuing. The
+  bumped epoch is the guarantee, not the kill: a completion the displaced worker submits afterward is rejected as stale
+  rather than advancing the chunk. Whatever parked the chunk goes with the move — an open ask is answered with a fixed
+  system answer, an open gate decision is closed, an open escalation superseded — so nothing is left to re-park it at a
+  node it is no longer on. Like `stop` and unlike `detach`, a live route is not required: an unclaimed `ready` or
+  `not_ready` chunk moves too, re-entering the queue at the target node, and the next claim's envelope is what carries
+  the move to whoever picks it up. Refused (`409`) when the chunk is `done`/`stopped`, when `--node` names no node on
+  the chunk's own graph, or when the chunk stands on a node its own graph no longer carries — the position is refused,
+  never silently rewound to the entry node. See `blizzard hub chunk restart --help` for the CLI's full contract.
+
+  **Restarting an escalated chunk clears the hub-side row, and the runner's own list lags.** The move supersedes the
+  escalation, so the chunk leaves the critical `needs-human` feed immediately — but the runner that raised it keeps
+  listing it in `blizzard runner status` and its panel until something terminal happens to the chunk, exactly the lag
+  the `stop` bullet above describes for itself.
+
+  **Which brake outranks it.** The **per-chunk** `chunk pause` above does: a paused chunk parks as usual and honors the
+  move on the tick after the pause lifts. Of the two **runner-level** brakes, the hub's does nothing to a restart at all
+  — it gates new claims only, so the move lands and the holding runner still tears down and re-enters. The runner's own
+  local brake defers the whole teardown: no worker is killed and nothing re-enters while it is on, because the re-entry
+  is a spawn and the local brake starts no processes. The move stays recorded and the first tick past the brake honors
+  it.
+
+  **`restart` is not `migrate`.** `chunk migrate` records a **standing intent** — inspectable in `chunk show`,
+  overwritable, `--cancel`able, and consulted only at the chunk's next transition; it is also the only verb that crosses
+  graphs. `chunk restart` performs an **event** that has already happened when the call returns, within the chunk's own
+  graph. Crossing graphs *and* starting clean is `migrate` then `restart`.
 - **`blizzard hub runner pause <runner_id>` / `runner resume <runner_id>`** (the hub brake) and **`runner pause` /
   `runner start`**, or the runner panel's own Pause/Resume control (the runner's own local brake, issue #45 and issue
 
@@ -1013,10 +1053,12 @@ it for good, as either an abandonment (`stop`) or a hand-completion (`chunk done
   runs on); the local brake additionally blocks every other spawn site (restart-resume, an answer-resume, a requeue
   respawn, …) but still never kills a worker that is already running — pausing locally is not a drain.
 
-The distinction worth holding onto: `chunk pause` is the **only** one of the four chunk-level verbs that kills a live
-worker while **keeping** the claim — `detach`, `stop`, and `chunk done` all give it away (or end it), they just differ
-in whether the chunk can be reclaimed afterward and whether it ends as `stopped` or `done`. The two runner-level brakes
-sit apart from all four: they never touch a live worker, and they have no notion of "this one chunk" at all.
+The distinction worth holding onto: `chunk pause` and `chunk restart` are the two chunk-level verbs that kill a live
+worker while **keeping** the claim, and they differ in what they keep of the attempt — pause keeps the lease, epoch and
+session so the resume lands in place, restart discards all three so the re-entry starts clean. `detach`, `stop`, and
+`chunk done` all give the claim away (or end it), differing in whether the chunk can be reclaimed afterward and whether
+it ends as `stopped` or `done`. The two runner-level brakes sit apart from all five: they never touch a live worker, and
+they have no notion of "this one chunk" at all.
 
 **A pause-parked chunk still occupies an agent slot.** FILL only ever claims new work into a runner's *open* slots, and
 a chunk pause deliberately leaves the lease active and its environments held warm for the resume — that is what makes
@@ -1098,8 +1140,11 @@ The **graph** carries one further condition the defaults do not (issue #271): th
 Unclaimed and never-moved are not the same test. A chunk that was claimed, ran a node, and was then detached (see
 "Detaching a chunk" above) derives `ready` again while still standing on a node of the graph it is pinned to, and
 re-pinning it in place would leave its current node absent from the new graph — so that edit is refused `409` even
-though the chunk is unclaimed. Moving a chunk that has run is a **migration**'s job, not an edit's: use `chunk migrate`
-below. The defaults name no node to be stranded on, so they stay editable for as long as the chunk is unclaimed.
+though the chunk is unclaimed. Moving a chunk that has run is not an edit's job, and which verb takes it depends on what
+is actually changing: **which graph** the chunk is on is `chunk migrate` below (`--to-graph` is required, and a target
+equal to the chunk's own current pin is refused `409`); **where on that graph** it stands is `chunk restart` above,
+which crosses no graph and needs no re-pin. The defaults name no node to be stranded on, so they stay editable for as
+long as the chunk is unclaimed.
 
 `PATCH /api/chunks/{id}` (issue #124) applies any of `graph_id`, `default_model`, `default_effort`, and
 `intended_migration` in one request, all-or-nothing: if any supplied field is outside *its own* editable window, the
@@ -1605,7 +1650,8 @@ append-only, typed and **severity-ranked** operational event log that does.
 - **`GET /api/events`** returns the log newest-and-most-severe first, filterable by `severity` / `runner_id` /
   `chunk_id` / `since`, with a bounded default page. Existing escalations appear in the *same* feed as a `needs-human`
   event kind — `needs_human` is one row in one surface, not a place to look separately. A row leaves the feed when its
-  escalation is superseded: a requeue, the next attempt's lease, or the chunk ending — stopped or done.
+  escalation is superseded, which any of four things does: a requeue, an operator `chunk restart`, the next attempt's
+  lease, or the chunk ending — stopped or done.
 - **The board's Events tab** renders the feed live: new events fan out over the existing SSE spine
   (`/api/events/stream`), so an open board updates without polling. Each row links to its chunk.
 - **`GET /api/activity`** is a second, differently-shaped operator read: the board's Event log rail backfills from it on
