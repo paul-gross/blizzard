@@ -74,6 +74,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/chunks/{chunk_id}/pause"): CHUNK_CONTROL,
     ("POST", "/api/chunks/{chunk_id}/resume"): CHUNK_CONTROL,
     ("POST", "/api/chunks/{chunk_id}/stop"): CHUNK_CONTROL,
+    ("POST", "/api/chunks/{chunk_id}/complete"): CHUNK_CONTROL,
     ("POST", "/api/chunks/{chunk_id}/promote"): CHUNK_CONTROL,
     ("PATCH", "/api/chunks/{chunk_id}"): CHUNK_CONTROL,
     ("GET", "/api/chunks/{chunk_id}/work-items"): FLEET_VIEW,

@@ -343,6 +343,61 @@ def test_stop_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# `blizzard hub chunk done` (issue #294)
+
+
+@pytest.mark.unit
+def test_done_posts_to_the_chunk_and_reports_completed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The verb POSTs to the chunk's complete sub-resource, carrying ``--by`` (issue #294)."""
+    calls: list[tuple[str, object]] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _FakeResponse(202, {"chunk_id": "ch_42"})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        hub_group, ["chunk", "done", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code == 0, result.output
+    url, body = calls[0]
+    assert url == "http://hub.local:8421/api/chunks/ch_42/complete"
+    assert body == {"by": "alice"}
+    assert "completed ch_42" in result.output
+
+
+@pytest.mark.unit
+def test_done_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 404 (no such chunk) is a named error, not a stack trace."""
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(404)
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["chunk", "done", "ch_nope"])
+
+    assert result.exit_code != 0
+    assert "ch_nope" in result.output
+
+
+@pytest.mark.unit
+def test_done_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _FakeResponse(202, {"chunk_id": "ch_42"})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["chunk", "done", "ch_42"])
+
+    assert result.exit_code == 0, result.output
+    _, body = calls[0]
+    assert body == {"by": "operator"}
+
+
+# --------------------------------------------------------------------------- #
 # `blizzard hub chunk pause` / `chunk resume` (issue #46)
 
 

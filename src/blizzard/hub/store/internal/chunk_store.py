@@ -1017,6 +1017,27 @@ class ChunkStore:
                     graph_id=r.graph_id,
                 ),
             )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.chunk_completed.c.id,
+                    s.chunk_completed.c.chunk_id,
+                    s.chunk_completed.c.completed_at,
+                    s.chunks.c.graph_id,
+                ).select_from(s.chunk_completed.join(s.chunks, s.chunks.c.chunk_id == s.chunk_completed.c.chunk_id)),
+                ts_col=s.chunk_completed.c.completed_at,
+                pk_col=s.chunk_completed.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"chunk_completed:{r.id}",
+                    at=r.completed_at,
+                    chunk_id=r.chunk_id,
+                    cause="completed",
+                    graph_id=r.graph_id,
+                ),
+            )
             return rows
 
     @staticmethod
@@ -1704,9 +1725,7 @@ class ChunkStore:
         its route still live. The caller has already checked the chunk is not already
         ``done`` — this always writes a fresh row."""
         with self._engine.begin() as conn:
-            result = conn.execute(
-                insert(s.chunk_completed).values(chunk_id=chunk_id, completed_at=at, completed_by=by)
-            )
+            result = conn.execute(insert(s.chunk_completed).values(chunk_id=chunk_id, completed_at=at, completed_by=by))
             if self._route_of_conn(conn, chunk_id) is not None:
                 conn.execute(
                     insert(s.route_released).values(

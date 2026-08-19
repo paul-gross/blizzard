@@ -518,6 +518,25 @@ def chunk_stop(cli: CliContext, chunk_id: str, by: str) -> None:
     cli.finish(resp, f"stopped {chunk_id} — terminally abandoned, its route (if any) released")
 
 
+@chunk_group.command("done", cls=FleetCommand)
+@click.argument("chunk_id")
+@click.option("--by", "by", default="operator", help="Who is completing (recorded on the fact).")
+def chunk_done(cli: CliContext, chunk_id: str, by: str) -> None:
+    """Manually complete CHUNK, from any non-``done`` status, including ``stopped`` (issue #294).
+
+    A pure client of ``POST /api/chunks/{id}/complete``. The chunk derives ``done``; any
+    live route and held hub-exec slot are released in the same operation, and its work
+    refs become eligible for closure. Idempotent — completing an already-``done`` chunk is
+    a harmless no-op, never refused."""
+    resp = cli.post(
+        f"/api/chunks/{chunk_id}/complete",
+        "POST /chunks/{id}/complete",
+        json_body={"by": by},
+        on_status={404: f"no such chunk {chunk_id}"},
+    )
+    cli.finish(resp, f"completed {chunk_id} — done, its route (if any) released")
+
+
 @chunk_group.command("migrate", cls=FleetCommand)
 @click.argument("chunk_id")
 @click.option("--to-graph", default=None, help="Migration target — a graph id or name. Required unless --cancel.")

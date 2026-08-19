@@ -287,6 +287,13 @@ class ChunkStopRequest(BaseModel):
     by: str = "operator"
 
 
+class ChunkCompleteRequest(BaseModel):
+    """Manually complete a chunk, from any non-``done`` status — records who completed it
+    (issue #294)."""
+
+    by: str = "operator"
+
+
 class ChunkPatchRequest(BaseModel):
     """The multi-field ``PATCH /chunks/{id}`` body (issue #124) — every field independently optional,
     applied all-or-nothing. ``graph_id``/``model`` mean "leave unchanged" whether omitted or explicitly
