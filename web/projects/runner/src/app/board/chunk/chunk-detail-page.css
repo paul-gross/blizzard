@@ -1,0 +1,18 @@
+:host {
+  display: block;
+  flex: 1;
+  min-height: 0;
+}
+/* The back link's own reset: `fleet-chunk-page-shell` cannot style content
+   projected into its slots (`chunk-page-shell.ts`'s own doc comment), so
+   this stays page-owned. */
+.back-row {
+  flex: none;
+  text-decoration: none;
+}
+app-chunk-general-tab,
+app-chunk-transcripts-tab,
+fleet-kit-panel.section {
+  flex: 1;
+  min-height: 0;
+}

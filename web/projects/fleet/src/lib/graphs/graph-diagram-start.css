@@ -1,0 +1,18 @@
+.edge-start {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 2.25;
+  pointer-events: none;
+}
+.start-source {
+  fill: var(--green-dim);
+  stroke: var(--green);
+  stroke-width: 1.5;
+}
+.start-label {
+  fill: var(--text);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-anchor: middle;
+}

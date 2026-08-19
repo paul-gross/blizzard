@@ -80,74 +80,8 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [AppShell, BoardHeader, AppNav, AppNavMenu, MobileTitlebar, MobileTabBar, RouterOutlet, PendingLobby],
-  template: `
-    @switch (authState()) {
-      @case ('unauthenticated') {
-        @if (onLoginRoute()) {
-          <router-outlet />
-        } @else {
-          <!-- The redirect to /login (the 401 interceptor, or this class's own
-               effect below) has not landed yet — withhold the outlet rather than
-               let it re-activate whatever route was current before the session
-               dropped (e.g. the board), which would flash ungated content. -->
-          <div class="boot" data-testid="auth-loading"></div>
-        }
-      }
-      @case ('lobby') {
-        <fleet-pending-lobby [me]="me()" (logout)="onLogout()" />
-      }
-      @case ('ready') {
-        <fleet-app-shell>
-          <!-- Each slotted node sits in its own @if/@else pair rather than
-               sharing an @else with a sibling: a control-flow branch with more
-               than one root node cannot resolve which named ng-content slot
-               each child belongs to (NG8011), so AppShell's ordering
-               guarantee only holds when every projected node is the sole
-               root of its own branch. -->
-          @if (mobile()) {
-            <app-mobile-titlebar shell-header [live]="streamLive()" />
-          } @else {
-            <fleet-board-header
-              shell-header
-              [connection]="connection()"
-              [chunks]="chunks()"
-              [spendToday]="spendToday.data() ?? null"
-              [spendYesterday]="spendYesterday.data() ?? null"
-            >
-              <app-nav-menu header-trailing (logout)="onLogout()" />
-            </fleet-board-header>
-          }
-          @if (!mobile()) {
-            <app-nav shell-nav [showAdmin]="canManageUsers()" />
-          }
-          <router-outlet />
-          @if (mobile()) {
-            <app-mobile-tab-bar shell-tab-bar />
-          }
-        </fleet-app-shell>
-      }
-      @default {
-        <!-- 'loading' — the first /api/me round trip has not resolved yet. No
-             header/nav until the session state is known, so nothing gated flashes
-             visible-then-hidden. -->
-        <div class="boot" data-testid="auth-loading"></div>
-      }
-    }
-  `,
-  styles: `
-    :host {
-      display: block;
-      height: 100%;
-    }
-    /* router-outlet is an empty anchor element the router inserts routed
-       components after — it carries no visual size of its own. */
-    router-outlet {
-      display: none;
-    }
-    .boot {
-      height: 100%;
-    }
-  `,
+  templateUrl: './app.html',
+  styleUrl: './app.css',
 })
 export class App {
   private readonly health = injectHubHealthQuery();

@@ -1,0 +1,14 @@
+<svg:path
+  [attr.d]="start().path"
+  class="edge-start"
+  marker-end="url(#graph-diagram-arrow-advance)"
+  data-testid="graph-diagram-start-path"
+/>
+<svg:circle
+  class="start-source"
+  [attr.cx]="start().x"
+  [attr.cy]="start().y"
+  [attr.r]="start().r"
+  data-testid="graph-diagram-start"
+/>
+<svg:text class="start-label" [attr.x]="start().x" [attr.y]="start().y + 4" text-anchor="middle">START</svg:text>

@@ -35,37 +35,8 @@ const OPTIONS: readonly AppearanceOption[] = [
   selector: 'fleet-viewport-menu',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitMenuItemRadio, KitMenuPanel],
-  template: `
-    <fleet-kit-menu-panel [testid]="testid()">
-      @for (option of options; track option.value) {
-        <fleet-kit-menu-item-radio
-          [checked]="viewport.override() === option.value"
-          [testid]="option.testid"
-          (triggered)="viewport.setOverride(option.value)"
-        >
-          {{ option.label }}
-        </fleet-kit-menu-item-radio>
-      }
-      <!-- role=presentation: a role=menu may own only menu items, and this footer
-           is a readout, not a choice — the attribute takes it out of the
-           accessibility tree rather than leaving an untyped child in there. -->
-      <span class="mode" role="presentation" data-testid="viewport-menu-mode">{{ viewport.mode() }}</span>
-    </fleet-kit-menu-panel>
-  `,
-  styles: `
-    :host {
-      display: contents;
-    }
-    .mode {
-      padding: 4px 12px 2px;
-      border-top: 1px solid var(--line);
-      margin-top: 4px;
-      font-size: var(--fs-xs);
-      color: var(--label);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-  `,
+  templateUrl: './viewport-menu.html',
+  styleUrl: './viewport-menu.css',
 })
 export class ViewportMenu {
   protected readonly viewport = inject(ViewportService);

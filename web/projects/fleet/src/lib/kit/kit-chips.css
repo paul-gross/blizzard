@@ -1,0 +1,8 @@
+:host {
+  display: contents;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}

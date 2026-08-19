@@ -1,0 +1,23 @@
+<div class="pace-lbl" data-testid="pace-bar-label">{{ label() }}</div>
+<div
+  class="bar util"
+  data-testid="pace-bar-utilization"
+  role="progressbar"
+  aria-valuemin="0"
+  aria-valuemax="100"
+  [attr.aria-valuenow]="clampedUtilization()"
+  [attr.aria-label]="label() + ' utilization'"
+>
+  <div class="fill" [style.width.%]="clampedUtilization()"></div>
+</div>
+<div
+  class="bar elapsed"
+  data-testid="pace-bar-elapsed"
+  role="progressbar"
+  aria-valuemin="0"
+  aria-valuemax="100"
+  [attr.aria-valuenow]="clampedElapsed()"
+  [attr.aria-label]="label() + ' window elapsed'"
+>
+  <div class="fill" [style.width.%]="clampedElapsed()"></div>
+</div>

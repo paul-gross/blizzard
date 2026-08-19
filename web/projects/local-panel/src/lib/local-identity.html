@@ -1,0 +1,11 @@
+@if (username(); as user) {
+  <div class="identity" [class.label-only]="variant() === 'label'" data-testid="local-identity">
+    <span class="who">
+      <span class="who-lbl">signed in</span>
+      <span class="user" data-testid="identity-username">{{ user }}</span>
+    </span>
+    @if (variant() === 'control') {
+      <fleet-kit-button class="logout" testid="identity-logout" (click)="logout()">Log out</fleet-kit-button>
+    }
+  </div>
+}

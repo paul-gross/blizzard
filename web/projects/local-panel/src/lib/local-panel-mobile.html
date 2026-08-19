@@ -1,0 +1,65 @@
+<div class="lpm" data-testid="local-panel-mobile">
+  @if (detailOpen()) {
+    <div class="lpm-detail" data-testid="panel-chunk-detail">
+      <button class="back-row" type="button" aria-label="Back to Machine" data-testid="mobile-detail-back" (click)="closeDetail.emit()">
+        <fleet-kit-back-bar label="Machine" />
+      </button>
+      <local-machine-detail
+        class="md"
+        [leases]="selectedChunkLeases()"
+        [status]="selectedStatus()"
+        [escalation]="selectedEscalation()"
+        (dismiss)="closeDetail.emit()"
+      />
+    </div>
+  } @else {
+    <div class="lpm-sections">
+      <fleet-kit-panel class="section" label="machine · status" data-testid="mobile-info-pane">
+        <local-info />
+      </fleet-kit-panel>
+      <fleet-kit-panel class="section" label="agents · leases" data-testid="mobile-agents-pane">
+        <span fleetKitPanelHeader class="p-note" data-testid="mobile-lease-count">{{ activeLeases().length }} live</span>
+        <div class="pane-body">
+          <fleet-kit-async-state
+            [state]="leasesTriadState()"
+            loadingText="LOADING…"
+            loadingTestid="loading-state"
+            errorText="LEASES UNAVAILABLE — RUNNER LOCAL API UNREACHABLE"
+            errorTestid="error-state"
+            emptyText="NO LIVE LEASES — LOOP IDLE OR PAUSED"
+            emptyTestid="empty-state"
+          >
+            <div class="rows">
+              @for (lease of activeLeases(); track lease.lease_id) {
+                <local-agent-row [agent]="lease" (selectLease)="selectLease.emit($event)" />
+              }
+            </div>
+          </fleet-kit-async-state>
+        </div>
+      </fleet-kit-panel>
+      <fleet-kit-panel class="section" label="chunks on this machine" data-testid="mobile-chunks-pane">
+        <div class="pane-body">
+          <fleet-kit-async-state
+            [state]="chunksTriadState()"
+            loadingText="LOADING…"
+            errorText="CHUNKS UNAVAILABLE — RUNNER LOCAL API UNREACHABLE"
+            emptyText="NO CHUNKS ON THIS MACHINE"
+            emptyTestid="chunks-empty"
+          >
+            @for (chunk of machineChunks(); track chunk.lease.chunk_id) {
+              <local-chunk-card
+                [lease]="chunk.lease"
+                [status]="chunk.status"
+                (selectChunk)="selectChunk.emit($event)"
+              />
+            }
+          </fleet-kit-async-state>
+        </div>
+      </fleet-kit-panel>
+      <fleet-kit-panel class="section" label="local asks" data-testid="mobile-asks-pane">
+        <span fleetKitPanelHeader class="p-note">{{ openAskCount() }} open</span>
+        <local-asks />
+      </fleet-kit-panel>
+    </div>
+  }
+</div>

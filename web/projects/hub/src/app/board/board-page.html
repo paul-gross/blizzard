@@ -1,0 +1,24 @@
+<main class="main">
+  <div class="col col-center">
+    <fleet-board-shell
+      class="board"
+      [chunks]="chunks()"
+      [readyOrder]="readyOrder()"
+      [state]="boardState()"
+      [selectedChunkId]="selected()"
+      [canControl]="canControl()"
+      [canReorder]="canReorder()"
+      (selectChunk)="select($event)"
+      (promote)="promoteChunk.mutate({ chunkId: $event })"
+      (reposition)="reposition($event)"
+      (moveToTop)="moveToTop($event)"
+      (group)="group($event)"
+    />
+    <fleet-chunk-detail class="dock" [chunkId]="selected()" (dismiss)="select(null)" />
+  </div>
+  <div class="col rail-right">
+    <fleet-runner-panel />
+    <fleet-questions-panel (selectChunk)="select($event)" />
+    <fleet-event-log-panel class="rail-log" />
+  </div>
+</main>

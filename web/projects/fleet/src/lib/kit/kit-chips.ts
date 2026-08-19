@@ -24,40 +24,8 @@ export interface KitChipOption {
 @Component({
   selector: 'fleet-kit-chip',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <button
-      type="button"
-      class="chip"
-      [class.selected]="selected()"
-      [attr.aria-pressed]="selected()"
-      [attr.data-testid]="testid()"
-    >
-      <ng-content />
-    </button>
-  `,
-  styles: `
-    :host {
-      display: contents;
-    }
-    .chip {
-      font-family: inherit;
-      background: transparent;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      color: var(--text);
-      cursor: pointer;
-      padding: 1px 8px;
-      font-size: var(--fs-xs);
-      letter-spacing: 0.04em;
-    }
-    .chip:hover {
-      border-color: var(--cyan);
-    }
-    .chip.selected {
-      border-color: var(--amber-hi);
-      color: var(--amber-hi);
-    }
-  `,
+  templateUrl: './kit-chip.html',
+  styleUrl: './kit-chip.css',
 })
 export class KitChip {
   readonly selected = input(false);
@@ -74,29 +42,8 @@ export class KitChip {
   selector: 'fleet-kit-chips',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitChip],
-  template: `
-    <div class="row">
-      @for (option of options(); track option.value) {
-        <fleet-kit-chip
-          [selected]="option.value === selectedValue()"
-          [testid]="option.testid ?? null"
-          (click)="choose.emit(option.value)"
-        >
-          {{ option.label }}
-        </fleet-kit-chip>
-      }
-    </div>
-  `,
-  styles: `
-    :host {
-      display: contents;
-    }
-    .row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-    }
-  `,
+  templateUrl: './kit-chips.html',
+  styleUrl: './kit-chips.css',
 })
 export class KitChips {
   readonly options = input.required<readonly KitChipOption[]>();

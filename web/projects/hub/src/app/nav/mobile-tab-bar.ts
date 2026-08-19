@@ -25,7 +25,7 @@ import { injectHubQuestionsQuery, MobileTabBar as FleetMobileTabBar, type Mobile
   selector: 'app-mobile-tab-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FleetMobileTabBar],
-  template: ` <fleet-mobile-tab-bar [items]="items()" /> `,
+  templateUrl: './mobile-tab-bar.html',
 })
 export class MobileTabBar {
   private readonly questionsQuery = injectHubQuestionsQuery();

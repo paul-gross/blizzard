@@ -45,42 +45,8 @@ import { CdkMenuItem, CdkMenuItemRadio } from '@angular/cdk/menu';
   host: {
     '[attr.data-testid]': 'testid()',
   },
-  template: `
-    <span class="label"><ng-content /></span>
-    @if (submenu()) {
-      <span class="chevron" aria-hidden="true">›</span>
-    }
-  `,
-  styles: `
-    :host {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 4px 12px;
-      color: var(--text);
-      cursor: pointer;
-      outline: none;
-      user-select: none;
-    }
-    :host(:hover),
-    :host(:focus) {
-      background: var(--overlay-25);
-      color: var(--cyan);
-    }
-    :host([aria-expanded='true']) {
-      color: var(--cyan);
-    }
-    :host([aria-disabled='true']) {
-      opacity: 0.4;
-      cursor: default;
-    }
-    .label {
-      flex: 1;
-    }
-    .chevron {
-      color: var(--label);
-    }
-  `,
+  templateUrl: './kit-menu-item.html',
+  styleUrl: './kit-menu-item.css',
 })
 export class KitMenuItem {
   /** The item's `data-testid`, or `null` for none. */
@@ -114,37 +80,8 @@ export class KitMenuItem {
   host: {
     '[attr.data-testid]': 'testid()',
   },
-  template: `
-    <span class="tick" aria-hidden="true">•</span>
-    <span class="label"><ng-content /></span>
-  `,
-  styles: `
-    :host {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 4px 12px;
-      color: var(--text);
-      cursor: pointer;
-      outline: none;
-      user-select: none;
-    }
-    :host(:hover),
-    :host(:focus) {
-      background: var(--overlay-25);
-      color: var(--cyan);
-    }
-    :host([aria-checked='true']) {
-      color: var(--amber-hi);
-    }
-    .tick {
-      width: 1ch;
-      visibility: hidden;
-    }
-    :host([aria-checked='true']) .tick {
-      visibility: visible;
-    }
-  `,
+  templateUrl: './kit-menu-item-radio.html',
+  styleUrl: './kit-menu-item-radio.css',
 })
 export class KitMenuItemRadio {
   /** The item's `data-testid`, or `null` for none. */

@@ -1,0 +1,45 @@
+:host {
+  display: block;
+  flex: none;
+}
+.mt-appbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: linear-gradient(180deg, var(--header-hi), var(--header-lo));
+  border-bottom: 1px solid var(--bezel);
+  font-family: var(--mono);
+}
+.word {
+  color: var(--snow);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.spacer {
+  flex: 1;
+}
+.livedot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--label-dim);
+}
+.livedot.active {
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .livedot.active {
+    animation: mobile-titlebar-pulse 2.2s ease-in-out infinite;
+  }
+}
+@keyframes mobile-titlebar-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.menu {
+  color: var(--label);
+}

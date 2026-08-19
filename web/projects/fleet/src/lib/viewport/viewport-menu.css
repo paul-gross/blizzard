@@ -1,0 +1,12 @@
+:host {
+  display: contents;
+}
+.mode {
+  padding: 4px 12px 2px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  font-size: var(--fs-xs);
+  color: var(--label);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}

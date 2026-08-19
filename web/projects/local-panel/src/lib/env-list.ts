@@ -17,60 +17,8 @@ import { injectRunnerDashboardQuery } from './status.query';
   selector: 'local-env-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitAsyncState, KitBeacon],
-  template: `
-    <div class="wrap" data-testid="env-list">
-      <fleet-kit-async-state
-        [state]="triadState()"
-        loadingText="LOADING…"
-        errorText="ENVIRONMENTS UNAVAILABLE"
-        emptyText="NO ENVIRONMENTS CONFIGURED"
-        emptyTestid="env-empty"
-      >
-        @for (env of envs(); track env.environment_id) {
-          <div class="row" data-testid="env-row" [attr.data-env-id]="env.environment_id" [attr.data-held]="isHeld(env)">
-            <fleet-kit-beacon data-testid="env-beacon" [active]="isHeld(env)" tone="amber" />
-            <span class="env">{{ env.environment_id }}</span>
-            <span class="chunk">{{ chunkRef(env) }}</span>
-            <span class="held" data-testid="env-held-for">{{ heldFor(env) }}</span>
-          </div>
-        }
-      </fleet-kit-async-state>
-    </div>
-  `,
-  styles: `
-    :host {
-      display: block;
-      font-family: var(--mono);
-      font-variant-numeric: tabular-nums;
-    }
-    .wrap {
-      position: relative;
-      min-height: 40px;
-    }
-    .row {
-      display: grid;
-      grid-template-columns: 12px 64px 1fr 56px;
-      align-items: baseline;
-      gap: 8px;
-      padding: 4px 8px;
-      border-bottom: 1px solid var(--line);
-      font-size: var(--fs-sm);
-    }
-    fleet-kit-beacon {
-      align-self: center;
-    }
-    .env {
-      color: var(--cyan);
-    }
-    .chunk {
-      color: var(--amber);
-    }
-    .held {
-      text-align: right;
-      color: var(--label);
-      font-size: var(--fs-xs);
-    }
-  `,
+  templateUrl: './env-list.html',
+  styleUrl: './env-list.css',
 })
 export class EnvList {
   protected readonly query = injectRunnerDashboardQuery();

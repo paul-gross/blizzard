@@ -15,31 +15,7 @@ import { KitTab, KitTabStrip } from 'fleet';
   selector: 'app-nav',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitTab, KitTabStrip, RouterLink, RouterLinkActive],
-  template: `
-    <nav fleetKitTabStrip data-testid="app-nav">
-      <a
-        fleetKitTab
-        routerLink="/board"
-        routerLinkActive="active"
-        queryParamsHandling="preserve"
-        data-testid="nav-board"
-        >Board</a
-      >
-      <a
-        fleetKitTab
-        routerLink="/events"
-        routerLinkActive="active"
-        queryParamsHandling="preserve"
-        data-testid="nav-events"
-        >Events</a
-      >
-    </nav>
-  `,
-  styles: `
-    :host {
-      display: block;
-      flex: none;
-    }
-  `,
+  templateUrl: './app-nav.html',
+  styleUrl: './app-nav.css',
 })
 export class AppNav {}

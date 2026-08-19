@@ -79,74 +79,8 @@ const TAB_OPTIONS: readonly KitTabOption[] = [
     KitTabs,
     RouterLink,
   ],
-  template: `
-    <fleet-chunk-page-shell data-testid="chunk-detail-page">
-      <a chunk-page-back class="back-row" routerLink="/board" [queryParams]="backQueryParams()" data-testid="chunk-detail-back">
-        <fleet-kit-back-bar label="Board" />
-      </a>
-      <!-- Each of the shell's named slots below gets its own single-root @if
-           rather than sharing one — an @if whose root has more than one
-           projectable node can leave slot-selector matching unresolved
-           (NG8011); a solo root per block is unambiguous. -->
-      @if (detail(); as d) {
-        <fleet-chunk-page-header chunk-page-header [chunkId]="chunkId() ?? ''" [status]="d.status" [tone]="tone()" />
-      }
-      @if (detail()) {
-        <fleet-kit-tabs chunk-page-tabs [options]="tabOptions" [activeValue]="tab()" (choose)="onChooseTab($event)" />
-      }
-      @if (detail(); as d) {
-        @switch (tab()) {
-          @case ('general') {
-            <app-chunk-general-tab [detail]="d" [workItems]="workItems()" />
-          }
-          @case ('artifacts') {
-            <fleet-kit-panel class="section" data-testid="section-artifacts" label="artifacts">
-              <!-- Heading suppressed: the enclosing panel's label already
-                   says "artifacts". The default stays true for the board
-                   dock, which wraps this in a bare <section> instead. -->
-              <fleet-chunk-detail-artifacts [detail]="d" [expandable]="true" [heading]="false" />
-            </fleet-kit-panel>
-          }
-          @case ('transcripts') {
-            <app-chunk-transcripts-tab
-              [attemptsState]="attemptsState()"
-              [attemptOptions]="attemptOptions()"
-              [activeAttemptLeaseId]="activeAttemptLeaseId()"
-              (selectAttempt)="selectAttempt($event)"
-            />
-          }
-        }
-      } @else {
-        <fleet-kit-async-state
-          [state]="detailState()"
-          loadingText="LOADING…"
-          loadingTestid="chunk-detail-page-loading"
-          errorText="FAILED TO LOAD CHUNK"
-          errorTestid="chunk-detail-page-error"
-        />
-      }
-    </fleet-chunk-page-shell>
-  `,
-  styles: `
-    :host {
-      display: block;
-      flex: 1;
-      min-height: 0;
-    }
-    /* The back link's own reset: \`fleet-chunk-page-shell\` cannot style content
-       projected into its slots (\`chunk-page-shell.ts\`'s own doc comment), so
-       this stays page-owned. */
-    .back-row {
-      flex: none;
-      text-decoration: none;
-    }
-    app-chunk-general-tab,
-    app-chunk-transcripts-tab,
-    fleet-kit-panel.section {
-      flex: 1;
-      min-height: 0;
-    }
-  `,
+  templateUrl: './chunk-detail-page.html',
+  styleUrl: './chunk-detail-page.css',
 })
 export class ChunkDetailPage {
   private readonly route = inject(ActivatedRoute);

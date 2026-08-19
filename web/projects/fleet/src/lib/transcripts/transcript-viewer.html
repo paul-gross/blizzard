@@ -1,0 +1,79 @@
+<div class="turns">
+  @for (turn of turns(); track turn.index) {
+    <div class="turn" [class]="'k-' + turn.kind" data-testid="transcript-turn">
+      <span class="t" [attr.title]="turnClockInfo(turn.timestamp) ? turnAbsolute(turn.timestamp) : null">
+        @if (turnClockInfo(turn.timestamp); as info) {
+          @if (info.day) {
+            <span class="day">{{ info.day }}</span>
+          }
+          <span class="time">{{ info.time }}</span>
+        } @else {
+          <span class="time">—</span>
+        }
+      </span>
+      <span class="g"><span class="tick"></span></span>
+      <span class="b">
+        @switch (turn.kind) {
+          @case ('tool') {
+            <details class="tool-call">
+              <summary class="tc-head">
+                <span class="tc-name">{{ turn.tool?.name }}</span>
+                <span class="tc-input">{{ inputPreview(turn.tool) }}</span>
+              </summary>
+              <div class="tc-out">{{ turn.tool?.output ?? 'running…' }}</div>
+              @if (turn.sidechain; as sidechain) {
+                <div class="sidechain" data-testid="transcript-sidechain-nested">
+                  <button
+                    type="button"
+                    class="sc-head sc-open"
+                    data-testid="transcript-sidechain-open"
+                    (click)="emitOpenStandalone(turn)"
+                  >
+                    {{ sidechainLabel(sidechain) }} · open standalone
+                  </button>
+                  <fleet-transcript-viewer [turns]="sidechain.turns" (openStandalone)="forwardOpenStandalone(turn, $event)" />
+                </div>
+              }
+            </details>
+          }
+          @case ('thinking') {
+            <details class="thinking">
+              <summary class="th-head">thinking</summary>
+              @if (turn.thinking_redacted) {
+                <div class="th-redacted">redacted</div>
+              } @else {
+                <div class="th-body">{{ turn.text }}</div>
+              }
+            </details>
+          }
+          @case ('sidechain') {
+            @if (turn.sidechain; as sidechain) {
+              <div class="sidechain" data-testid="transcript-sidechain-standalone">
+                <button
+                  type="button"
+                  class="sc-head sc-open"
+                  data-testid="transcript-sidechain-open"
+                  (click)="emitOpenStandalone(turn)"
+                >
+                  {{ sidechainLabel(sidechain) }} · open standalone
+                </button>
+                <fleet-transcript-viewer [turns]="sidechain.turns" (openStandalone)="forwardOpenStandalone(turn, $event)" />
+              </div>
+            }
+          }
+          @case ('env') {
+            <div class="who">env</div>
+            <div class="tx">{{ turn.text }}</div>
+          }
+          @default {
+            <div class="who">assistant</div>
+            <div class="tx">{{ turn.text }}</div>
+          }
+        }
+        @if (turn.truncated) {
+          <div class="trunc-note">⋯ truncated</div>
+        }
+      </span>
+    </div>
+  }
+</div>

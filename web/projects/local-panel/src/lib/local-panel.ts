@@ -49,63 +49,8 @@ export interface MachineChunkRow {
   selector: 'local-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [LocalPanelLayout, LocalPanelMobile],
-  template: `
-    <div class="lp-shell">
-      <div class="lp-content">
-        @if (mode() === 'desktop') {
-          <local-panel-layout
-            [activeLeases]="activeLeases()"
-            [leasesTriadState]="leasesTriadState()"
-            [chunksTriadState]="visibleChunksTriadState()"
-            [chunksEmptyText]="chunksEmptyText()"
-            [machineChunks]="visibleChunks()"
-            [showAllChunks]="showAllChunks()"
-            [openAskCount]="openAskCount()"
-            [selectedChunkId]="selectedChunkId()"
-            [selectedChunkLeases]="selectedChunkLeases()"
-            [selectedStatus]="selectedStatus()"
-            [selectedEscalation]="selectedEscalation()"
-            (selectLease)="selectLease($event)"
-            (selectChunk)="selectChunk($event)"
-            (toggleShowAllChunks)="showAllChunks.set($event)"
-            (dismiss)="clearSelection()"
-          />
-        } @else {
-          @defer (on immediate) {
-            <local-panel-mobile
-              [activeLeases]="activeLeases()"
-              [leasesTriadState]="leasesTriadState()"
-              [chunksTriadState]="chunksTriadState()"
-              [machineChunks]="machineChunks()"
-              [openAskCount]="openAskCount()"
-              [selectedChunkLeases]="selectedChunkLeases()"
-              [selectedStatus]="selectedStatus()"
-              [selectedEscalation]="selectedEscalation()"
-              (selectChunk)="selectChunk($event)"
-              (selectLease)="selectLease($event)"
-              (closeDetail)="clearSelection()"
-            />
-          }
-        }
-      </div>
-    </div>
-  `,
-  styles: `
-    :host {
-      display: block;
-      height: 100%;
-    }
-    .lp-shell {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-    }
-    .lp-content {
-      flex: 1;
-      min-height: 0;
-      overflow-y: auto;
-    }
-  `,
+  templateUrl: './local-panel.html',
+  styleUrl: './local-panel.css',
 })
 export class LocalPanel {
   /** The page-level shell picker (`../docs/designs/mobile/README.md`'s

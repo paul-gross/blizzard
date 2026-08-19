@@ -1,0 +1,143 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: none;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.runners {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.runner {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.r1,
+.r3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+}
+/* A square, per the mockup's status indicators — not a dot. */
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+}
+.dot.online {
+  background: var(--green);
+  box-shadow: 0 0 4px var(--green);
+}
+/* An offline runner blinks red: the fleet is missing a machine, which is the
+   one registry fact worth pulling an operator's eye across the room. */
+.dot.offline {
+  background: var(--red);
+  animation: blink 1.2s steps(2, jump-none) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0.15;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot.offline {
+    animation: none;
+  }
+}
+.name {
+  color: var(--amber);
+  font-size: var(--fs-md);
+  overflow-wrap: anywhere;
+}
+.runner.offline .name {
+  color: var(--label);
+}
+.wid {
+  color: var(--label);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+.seen {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  white-space: nowrap;
+}
+/* One stacked utilization/elapsed pair per sampled window (#218), same
+   vertical rhythm as the slot bar. */
+.pace-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 3px;
+}
+/* The runner's claims: chunk short name — node, one line each, dim so the
+   registry row's own identity stays the loudest thing in it. */
+.claims {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.claim {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--fs-xs);
+}
+.claim .c-id {
+  color: var(--amber-hi);
+}
+.claim .c-node {
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+/* The node/status divider — dim, so the two facts read as one line rather
+   than competing for the eye. */
+.claim .c-sep {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+}
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.badge.paused {
+  border: 1px solid var(--line);
+  font-size: var(--fs-label);
+  letter-spacing: 0.12em;
+  padding: 0 4px;
+}
+/* Distinct hues so "who stopped it" reads at a glance, not just from the text. */
+.badge.paused.hub {
+  color: var(--amber-hi);
+}
+.badge.paused.local {
+  color: var(--label-dim);
+}
+.act {
+  font-family: inherit;
+  background: var(--panel-deep);
+  border: 1px solid var(--cyan-dim);
+  color: var(--cyan);
+  cursor: pointer;
+  padding: 1px 6px;
+  font-size: var(--fs-xs);
+}
+.act:hover {
+  border-color: var(--cyan);
+}

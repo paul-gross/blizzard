@@ -36,74 +36,8 @@ export type KitAsyncStateValue = 'loading' | 'error' | 'empty' | 'ready';
 @Component({
   selector: 'fleet-kit-async-state',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    @switch (state()) {
-      @case ('ready') {
-        <ng-content />
-      }
-      @case ('loading') {
-        @if (loadingMode() === 'content') {
-          <ng-content select="[loading]" />
-        } @else {
-          <p class="status" [class.inline]="placement() === 'inline'" [attr.data-testid]="loadingTestid()">{{ loadingText() }}</p>
-        }
-      }
-      @case ('error') {
-        <p class="status error" [class.inline]="placement() === 'inline'" [attr.data-testid]="errorTestid()">{{ errorText() }}</p>
-      }
-      @case ('empty') {
-        <p
-          class="status"
-          [class.inline]="placement() === 'inline'"
-          [class.accent]="tone() === 'accent'"
-          [attr.data-testid]="emptyTestid()"
-        >{{ emptyText() }}</p>
-      }
-    }
-  `,
-  styles: `
-    :host {
-      display: contents;
-    }
-    /* Horizontal centering is left:0/right:0 (not left:50%/translateX(-50%)):
-       for an absolutely-positioned box with width:auto, the CSS shrink-to-fit
-       algorithm sizes against the space between left and the containing
-       block's edge — left:50% leaves only the right half to shrink-fit
-       against, so a max-width set against the full container never actually
-       binds and long text wraps at half width instead of the full width it
-       reads as centered within. left:0/right:0 makes the box exactly the
-       container's width up front, so centered text wraps at the real edge. */
-    .status {
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: 50%;
-      transform: translateY(-50%);
-      text-align: center;
-      color: var(--label-dim);
-      font-size: var(--fs-sm);
-      letter-spacing: 0.12em;
-    }
-    .status.inline {
-      position: static;
-      left: auto;
-      right: auto;
-      top: auto;
-      transform: none;
-      text-align: left;
-      display: block;
-      padding: 10px 8px;
-      margin: 0;
-      font-size: var(--fs-sm);
-      letter-spacing: 0.08em;
-    }
-    .status.error {
-      color: var(--red);
-    }
-    .status.accent {
-      color: var(--cyan);
-    }
-  `,
+  templateUrl: './kit-async-state.html',
+  styleUrl: './kit-async-state.css',
 })
 export class KitAsyncState {
   /** Which of the four states to render right now. */

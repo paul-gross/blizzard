@@ -1,0 +1,17 @@
+<div class="pause-control" data-testid="pause-control">
+  @if (hubPaused()) {
+    <fleet-kit-badge tone="waiting" variant="pill" data-testid="hub-paused-badge">Paused by hub</fleet-kit-badge>
+  }
+  <fleet-kit-button
+    [variant]="localPaused() ? 'danger' : 'default'"
+    [disabled]="pending()"
+    [ariaLabel]="(localPaused() ? 'Resume' : 'Pause') + ' this runner'"
+    testid="pause-toggle"
+    (click)="toggle()"
+  >
+    {{ localPaused() ? 'Resume' : 'Pause' }}
+  </fleet-kit-button>
+  @if (error(); as err) {
+    <p class="notice" data-testid="pause-error" role="alert">{{ err }}</p>
+  }
+</div>

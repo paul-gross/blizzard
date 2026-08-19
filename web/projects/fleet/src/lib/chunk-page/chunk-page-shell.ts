@@ -45,38 +45,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 @Component({
   selector: 'fleet-chunk-page-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <div class="cps">
-      <ng-content select="[chunk-page-back]" />
-      <ng-content select="[chunk-page-notice]" />
-      <ng-content select="[chunk-page-header]" />
-      <ng-content select="[chunk-page-tabs]" />
-      <div class="cps-body"><ng-content /></div>
-    </div>
-  `,
-  styles: `
-    :host {
-      display: block;
-      height: 100%;
-      min-height: 0;
-    }
-    .cps {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      min-height: 0;
-      overflow: hidden;
-    }
-    /* Positioned and height-bearing so a projected KitAsyncState's absolutely
-       centered status line has a box to center in, whichever page's own
-       "nothing to show yet" state it renders. */
-    .cps-body {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-height: 0;
-      position: relative;
-    }
-  `,
+  templateUrl: './chunk-page-shell.html',
+  styleUrl: './chunk-page-shell.css',
 })
 export class ChunkPageShell {}

@@ -18,37 +18,8 @@ import type { DiagramSelection } from './graph-diagram-selection';
   selector: 'fleet-graph-diagram-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [GraphDiagram, GraphDiagramDetail],
-  template: `
-    <div class="split" data-testid="graph-diagram-view">
-      <fleet-graph-diagram
-        class="pane-diagram"
-        [graph]="graph()"
-        [selection]="selection()"
-        (selectionChange)="onSelectionChange($event)"
-      />
-      <fleet-graph-diagram-detail class="pane-detail" [graph]="graph()" [selection]="selection()" />
-    </div>
-  `,
-  styles: `
-    .split {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      min-height: 0;
-    }
-    .pane-diagram,
-    .pane-detail {
-      /* Without this the grid track never shrinks below the diagram's intrinsic
-         content width, and its own \`.diagram-scroll\` overflow-x never engages —
-         the well-known CSS-grid "min-width: auto" trap. */
-      min-width: 0;
-    }
-    @media (max-width: 720px) {
-      .split {
-        grid-template-columns: 1fr;
-      }
-    }
-  `,
+  templateUrl: './graph-diagram-view.html',
+  styleUrl: './graph-diagram-view.css',
 })
 export class GraphDiagramView {
   /** The already-fetched graph — passed straight through to both children

@@ -1,0 +1,28 @@
+:host {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+.lobby {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 32px;
+  border: 1px solid var(--line);
+  background: var(--overlay-30);
+  font-family: var(--mono);
+}
+.headline {
+  font-size: var(--fs-lg);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--amber-hi);
+  margin: 0;
+}
+.detail {
+  color: var(--label);
+  font-size: var(--fs-sm);
+  margin: 0;
+}

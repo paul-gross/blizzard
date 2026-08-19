@@ -1,0 +1,64 @@
+<div
+  class="card"
+  data-testid="chunk-card"
+  [attr.data-status]="card().status"
+  [attr.data-chunk]="card().chunkId"
+  [class.selected]="selected()"
+  [attr.aria-current]="selected() ? 'true' : null"
+>
+  <button
+    type="button"
+    class="card-open"
+    [attr.aria-label]="'Open chunk ' + card().shortId"
+    (click)="selectChunk.emit(card().chunkId)"
+  >
+    <span class="tid">
+      <span class="card-id" data-testid="chunk-id">{{ card().shortId }}</span>
+      <span class="nd" data-testid="chunk-node" [attr.title]="card().nodeId || null">{{
+        nodeLabel(card())
+      }}</span>
+    </span>
+    <!-- Pointer labels are plain text here, not links: a card is a
+         target for opening the chunk, and an anchor inside it competes
+         for the same click. The detail panel owns the link out to the work source. -->
+    <span class="iss-list">
+      @for (label of card().pointerLabels; track label) {
+        <span class="iss" data-testid="work-ref-chip" [title]="label">{{ label }}</span>
+      }
+    </span>
+    <span class="st-row">
+      <!-- The DONE lane's status is already the upper-right node slot
+           ("done"/"stopped"); repeating it here would be issue #215's
+           duplicate. Every other lane still names its status, since the
+           node label there doesn't stand in for it. -->
+      @if (!isDoneLane(card().status)) {
+        <span class="st" data-testid="chunk-status" [title]="card().status">{{ card().status }}</span>
+      }
+      <!-- Pushed to the row's end via margin-left: auto rather than the row's
+           own justify-content, so it lands right-aligned whether it's carrying
+           one child or two (issue #215) instead of drifting to a centered gap
+           only space-between produces with three total row children. -->
+      <span class="meta-right">
+        @if (isDoneLane(card().status) && card().completedAt; as completedAt) {
+          <fleet-when class="done-at" data-testid="chunk-done-at" [iso]="completedAt" />
+        }
+        @if (card().costUsd > 0 || card().costPartial) {
+          <span class="cost" data-testid="card-cost">{{
+            formatCost(card().costUsd, card().costPartial)
+          }}</span>
+        }
+      </span>
+    </span>
+  </button>
+  @if (card().status === 'not_ready' && canControl()) {
+    <button
+      type="button"
+      class="card-promote"
+      data-testid="promote-chunk"
+      [attr.aria-label]="'Promote chunk ' + card().shortId + ' to ready'"
+      (click)="promote.emit(card().chunkId)"
+    >
+      PROMOTE
+    </button>
+  }
+</div>

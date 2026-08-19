@@ -1,0 +1,74 @@
+:host {
+  display: block;
+  height: 100%;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+}
+/* The titlebar used to be chrome rendered *inside* this shell, kept
+   outside the scroll region by its own flex:none. That responsibility now
+   belongs to AppShell (fleet) instead (issue #325): the titlebar mounts
+   at the app root, above this component entirely, and AppShell is what
+   keeps it fixed while the routed content — this shell included —
+   scrolls under it. */
+.lpm {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.lpm-sections {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  gap: 8px;
+  padding: 8px;
+}
+/* The drill-down screen fills the same box the sections list would have —
+   the same sizing MachineDetail gets on desktop. */
+.lpm-detail {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.lpm-detail .md {
+  flex: 1;
+  min-height: 0;
+}
+/* A bare wrapper: KitBackBar owns the row's look and height, this owns only
+   the button reset and the focus ring. */
+.back-row {
+  flex: none;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.back-row:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: -1px;
+}
+/* A positioned box with real height for KitAsyncState's absolutely
+   centered status line — these panes size to their content, so an empty
+   one would otherwise collapse and paint its message over the pane below. */
+.pane-body {
+  position: relative;
+  min-height: 56px;
+}
+fleet-kit-panel.section {
+  flex: none;
+}
+.p-note {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+}
+.rows {
+  display: flex;
+  flex-direction: column;
+}

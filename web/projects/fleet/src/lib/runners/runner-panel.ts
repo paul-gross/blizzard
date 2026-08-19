@@ -79,7 +79,7 @@ export function windowElapsedPct(nowMs: number, resetsAt: string, windowSeconds:
   selector: 'fleet-runner-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RunnerPanelView],
-  template: `<fleet-runner-view [rows]="rows()" [state]="state()" [canPause]="canPause()" (togglePause)="toggle($event)" />`,
+  templateUrl: './runner-panel.html',
 })
 export class RunnerPanel {
   private readonly runnersQuery = injectHubRunnersQuery();

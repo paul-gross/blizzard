@@ -24,62 +24,8 @@ const LAST_PROVIDER_KEY = 'fleet.auth.last-provider';
   selector: 'app-login-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [LoginButtons, KitAsyncState],
-  template: `
-    <div class="login" data-testid="login-page">
-      <h1 class="title">blizzard</h1>
-      <p class="subtitle">Sign in to continue</p>
-      <div class="body">
-        <fleet-kit-async-state
-          [state]="state()"
-          loadingText="LOADING PROVIDERS…"
-          errorText="LOGIN UNAVAILABLE"
-          emptyText="No login providers configured."
-          emptyTestid="login-no-providers"
-        >
-          <fleet-login-buttons
-            [providers]="providers()"
-            [lastUsed]="lastUsed()"
-            [returnTo]="returnTo"
-            (providerClick)="rememberLastUsed($event)"
-          />
-        </fleet-kit-async-state>
-      </div>
-    </div>
-  `,
-  styles: `
-    :host {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      font-family: var(--mono);
-    }
-    .login {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-      width: 320px;
-    }
-    .title {
-      margin: 0;
-      color: var(--amber-hi);
-      font-size: var(--fs-xl, 28px);
-      letter-spacing: 0.28em;
-      text-transform: uppercase;
-    }
-    .subtitle {
-      margin: 0 0 20px;
-      color: var(--label);
-      font-size: var(--fs-sm);
-      letter-spacing: 0.1em;
-    }
-    .body {
-      position: relative;
-      width: 100%;
-      min-height: 60px;
-    }
-  `,
+  templateUrl: './login-page.html',
+  styleUrl: './login-page.css',
 })
 export class LoginPage {
   private readonly providersQuery = injectAuthProvidersQuery();

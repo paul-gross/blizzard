@@ -55,78 +55,8 @@ import { injectBoardSelection } from './board-selection';
   selector: 'app-board-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [BoardShell, ChunkDetail, EventLogPanel, QuestionsPanel, RunnerPanel],
-  template: `
-    <main class="main">
-      <div class="col col-center">
-        <fleet-board-shell
-          class="board"
-          [chunks]="chunks()"
-          [readyOrder]="readyOrder()"
-          [state]="boardState()"
-          [selectedChunkId]="selected()"
-          [canControl]="canControl()"
-          [canReorder]="canReorder()"
-          (selectChunk)="select($event)"
-          (promote)="promoteChunk.mutate({ chunkId: $event })"
-          (reposition)="reposition($event)"
-          (moveToTop)="moveToTop($event)"
-          (group)="group($event)"
-        />
-        <fleet-chunk-detail class="dock" [chunkId]="selected()" (dismiss)="select(null)" />
-      </div>
-      <div class="col rail-right">
-        <fleet-runner-panel />
-        <fleet-questions-panel (selectChunk)="select($event)" />
-        <fleet-event-log-panel class="rail-log" />
-      </div>
-    </main>
-  `,
-  styles: `
-    :host {
-      display: block;
-      flex: 1;
-      min-height: 0;
-    }
-    .main {
-      height: 100%;
-      min-height: 0;
-      display: grid;
-      /* One 330px rail, allowed to give ground on a narrow window: held rigid it
-         starves the board, which is the column that matters — and the board now
-         carries the READY lane the left rail used to, so it needs the width more
-         than before. */
-      grid-template-columns: 1fr minmax(260px, 330px);
-      gap: 6px;
-      padding: 6px;
-    }
-    .col {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      min-height: 0;
-      min-width: 0;
-    }
-    /* The rail runs the full height of the workspace: runners and asks size to
-       their content and the event log takes the remainder, scrolling its own body. */
-    .rail-log {
-      flex: 1;
-      min-height: 0;
-    }
-    /* The centre column stacks the board over the chunk detail, so the detail sits
-       to the left of the rail rather than spanning the window beneath it. Both
-       are permanently mounted and hold their share of the column, so selecting or
-       clearing a chunk never resizes or reflows the board. */
-    .board {
-      flex: 1.15;
-      min-height: 0;
-      min-width: 0;
-    }
-    .dock {
-      flex: 1;
-      min-height: 0;
-      min-width: 0;
-    }
-  `,
+  templateUrl: './board-page.html',
+  styleUrl: './board-page.css',
 })
 export class BoardPage {
   private readonly chunksQuery = injectHubChunksQuery();

@@ -1,0 +1,111 @@
+:host {
+  display: contents;
+}
+.tag {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.d-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--overlay-25);
+  flex: none;
+}
+.d-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.d-title .id {
+  color: var(--amber);
+  font-size: var(--fs-lg);
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.d-title .id:hover,
+.d-title .id:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+.d-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.d-sub .iss {
+  color: var(--cyan);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+a.iss {
+  text-decoration: none;
+}
+a.iss:hover,
+a.iss:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+.d-sub .st {
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.d-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.d-meta .nd {
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+/* The pause marker reads amber — an operator-held state, not a fault. */
+.d-meta .pb {
+  color: var(--amber-hi);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.d-route,
+.d-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.d-route .rn {
+  color: var(--cyan);
+  font-size: var(--fs-xs);
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.close {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--label-dim);
+  cursor: pointer;
+  font-family: inherit;
+  padding: 2px 6px;
+}
+.close:hover {
+  color: var(--text);
+}

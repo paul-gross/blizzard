@@ -33,21 +33,7 @@ import { injectHubEventsQuery } from './events.query';
   selector: 'fleet-events-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [EventsView],
-  template: `
-    <fleet-events-view
-      [events]="events()"
-      [severity]="severity()"
-      [runner]="runnerId()"
-      [chunk]="chunkId()"
-      [runnerIds]="runnerIds()"
-      [chunkIds]="chunkIds()"
-      [state]="state()"
-      (selectChunk)="selectChunk.emit($event)"
-      (filterChange)="onFilterChange($event)"
-      (runnerFilterChange)="onRunnerFilterChange($event)"
-      (chunkFilterChange)="onChunkFilterChange($event)"
-    />
-  `,
+  templateUrl: './events-panel.html',
 })
 export class EventsPanel {
   /** Emitted with a chunk id when a row's chunk deep-link is activated. */

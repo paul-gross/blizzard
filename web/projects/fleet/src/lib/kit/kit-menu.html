@@ -1,0 +1,9 @@
+<button
+  type="button"
+  class="trigger"
+  [cdkMenuTriggerFor]="menu()"
+  [attr.aria-label]="ariaLabel()"
+  [attr.data-testid]="testid()"
+>
+  <ng-content select="[trigger]">⋮</ng-content>
+</button>

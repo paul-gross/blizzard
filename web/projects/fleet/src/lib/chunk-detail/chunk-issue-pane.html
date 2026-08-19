@@ -1,0 +1,52 @@
+<div class="wrap" data-testid="issue-pane">
+  <fleet-kit-async-state
+    [state]="triadState()"
+    [placement]="placement()"
+    loadingText="Loading issue…"
+    loadingTestid="issue-loading"
+    errorText="Could not reach the forge — issue content is unavailable."
+    errorTestid="issue-error"
+    emptyText="This chunk has no linked issue."
+    emptyTestid="issue-empty"
+  >
+    @for (item of workItems().items; track item.source + ':' + item.ref) {
+      <article class="issue" data-testid="issue-item">
+        <!-- The link out to the work source lives here and only here: the board cards
+             are click targets for opening a chunk, so an anchor on them
+             competes with that. This is where the operator leaves for the forge. -->
+        <div class="i-head">
+          <a
+            class="i-label"
+            data-testid="issue-label"
+            [href]="item.web_url"
+            target="_blank"
+            rel="noreferrer"
+            [attr.title]="item.web_url"
+          >{{ item.label ?? (item.source + '#' + item.ref) }}</a>
+        </div>
+        @if (item.error) {
+          <p class="notice" data-testid="issue-item-error">
+            Could not load this issue — {{ item.error }}
+          </p>
+        } @else {
+          @if (item.title) {
+            <p class="i-title" data-testid="issue-title">{{ item.title }}</p>
+          }
+          <pre class="i-body" data-testid="issue-body">{{ item.body }}</pre>
+          <div class="i-messages">
+            <div class="s-head"><span class="tag">Messages · {{ (item.comments ?? []).length }}</span></div>
+            @if ((item.comments ?? []).length === 0) {
+              <p class="none" data-testid="issue-no-messages">No messages.</p>
+            } @else {
+              <ul class="messages" data-testid="issue-messages">
+                @for (c of item.comments ?? []; track $index) {
+                  <li class="message" data-testid="issue-message"><pre class="m-body">{{ c }}</pre></li>
+                }
+              </ul>
+            }
+          </div>
+        }
+      </article>
+    }
+  </fleet-kit-async-state>
+</div>

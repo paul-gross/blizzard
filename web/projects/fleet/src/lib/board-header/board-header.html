@@ -1,0 +1,41 @@
+<header class="mc-header" data-testid="board-header">
+  <div class="brand">
+    <fleet-brand-mark [size]="30" />
+    <div class="brand-text">blizzard<small>{{ tagline() }}</small></div>
+  </div>
+  <div class="stats" data-testid="board-header-stats">
+    @for (cell of cells(); track cell.key) {
+      <div class="cell" [attr.data-stat]="cell.key">
+        <span class="stat-lbl">{{ cell.label }}</span>
+        <span class="v" [attr.data-testid]="'stat-' + cell.key"
+          >{{ cell.value }}{{ cell.capacity === undefined ? '' : '/' + cell.capacity }}</span
+        >
+      </div>
+    }
+  </div>
+  <div class="spacer"></div>
+  <!-- The fleet-wide spend-since reads (issue #60; yesterday added issue #183) —
+       each cell withholds itself until its own read resolves, independently, so
+       neither ever shows a misleading $0.00; the cost-absent lower bound is
+       marked, never presented as exact (a leading tilde, formatCost). -->
+  @for (cell of spendCells(); track cell.key) {
+    @if (cell.spend; as spend) {
+      <div class="cell spend" [class.spend-yesterday]="cell.key === 'yesterday'" [attr.data-testid]="cell.testid">
+        <span class="stat-lbl">{{ cell.label }}</span>
+        <span class="v" [attr.data-testid]="cell.valueTestid">{{ formatCost(spend.cost_usd, spend.cost_partial) }}</span>
+      </div>
+    }
+  }
+  <div class="cell conn" data-testid="conn">
+    <span class="stat-lbl">{{ connectionLabel() }}</span>
+    <span class="v">{{ connection() }}</span>
+  </div>
+  <!-- The trailing cluster is wrapped rather than projected straight into the
+       flex row so this component can size it as one unit — view encapsulation
+       puts the *consumer's* attribute on projected nodes, so a rule here
+       could never reach them, and an unmanaged trailing cell is exactly how
+       the profile menu used to get clipped (issue #163). -->
+  <div class="trailing">
+    <ng-content select="[header-trailing]" />
+  </div>
+</header>

@@ -1,0 +1,29 @@
+<fleet-board-header [connection]="connection()" connectionLabel="Runner" tagline="runner · machine panel" [stats]="headerStats()">
+  <local-pause-control header-trailing />
+  <!-- Display-only: this shell's logout is the menu item below, so it does
+       not vanish with the header cell at the narrow tier, and all three of
+       the app's profile menus carry the same two items. -->
+  <local-identity #identity header-trailing variant="label" />
+  <fleet-kit-menu
+    header-trailing
+    class="menu"
+    ariaLabel="Profile menu"
+    testid="local-panel-menu"
+    [menu]="profileMenu"
+  >
+    <fleet-kit-avatar trigger />
+  </fleet-kit-menu>
+</fleet-board-header>
+<ng-template #profileMenu>
+  <fleet-kit-menu-panel testid="local-panel-menu-panel">
+    @if (identity.username()) {
+      <fleet-kit-menu-item testid="local-panel-logout" (triggered)="identity.logout()">Log out</fleet-kit-menu-item>
+    }
+    <fleet-kit-menu-item testid="local-panel-appearance" submenu [cdkMenuTriggerFor]="appearanceMenu">
+      Appearance
+    </fleet-kit-menu-item>
+  </fleet-kit-menu-panel>
+</ng-template>
+<ng-template #appearanceMenu>
+  <fleet-viewport-menu testid="local-panel-appearance-panel" />
+</ng-template>

@@ -1,0 +1,14 @@
+<dt>Cost</dt>
+<dd data-testid="fact-cost">
+  <span data-testid="cost-total-usd">{{ formatCost(cost().cost_usd, cost().cost_partial) }}</span>
+  @if (cost().cost_partial) {
+    <span
+      class="partial-badge"
+      data-testid="cost-partial-badge"
+      title="At least one invocation's cost was absent (a crash/reap-path exit) — this total is a lower bound, not the true spend."
+      >PARTIAL</span
+    >
+  }
+</dd>
+<dt>Tokens</dt>
+<dd data-testid="fact-tokens">{{ tokensLine() }}</dd>

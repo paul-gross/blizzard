@@ -18,46 +18,8 @@ import { KitButton } from '../kit';
   selector: 'fleet-pending-lobby',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitButton],
-  template: `
-    <div class="lobby" data-testid="pending-lobby">
-      <p class="headline">Signed in, awaiting access</p>
-      @if (me(); as identity) {
-        <p class="detail" data-testid="pending-lobby-username">{{ identity.display_name }} ({{ identity.username }})</p>
-      }
-      <p class="detail">An admin has not granted you any permissions yet.</p>
-      <fleet-kit-button testid="pending-lobby-logout" (click)="logout.emit()">Log out</fleet-kit-button>
-    </div>
-  `,
-  styles: `
-    :host {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-    }
-    .lobby {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-      padding: 24px 32px;
-      border: 1px solid var(--line);
-      background: var(--overlay-30);
-      font-family: var(--mono);
-    }
-    .headline {
-      font-size: var(--fs-lg);
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--amber-hi);
-      margin: 0;
-    }
-    .detail {
-      color: var(--label);
-      font-size: var(--fs-sm);
-      margin: 0;
-    }
-  `,
+  templateUrl: './pending-lobby.html',
+  styleUrl: './pending-lobby.css',
 })
 export class PendingLobby {
   /** The resolved identity — always non-`null` while this renders (the app root only

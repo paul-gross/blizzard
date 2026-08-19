@@ -1,0 +1,21 @@
+:host {
+  display: contents;
+}
+.chip {
+  font-family: inherit;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 1px 8px;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
+}
+.chip:hover {
+  border-color: var(--cyan);
+}
+.chip.selected {
+  border-color: var(--amber-hi);
+  color: var(--amber-hi);
+}

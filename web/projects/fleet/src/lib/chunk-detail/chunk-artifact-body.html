@@ -1,0 +1,33 @@
+<div class="a-head">
+  <span class="a-key" [attr.data-testid]="keyTestid()">{{ artifact().key }}</span>
+  @if (when(); as w) {
+    <span class="a-when" [attr.data-testid]="whenTestid()" [attr.title]="whenTitle() || null">{{ w }}</span>
+  }
+  <span class="a-kind">{{ artifact().kind }}</span>
+</div>
+@if (artifact().kind === 'asset') {
+  @if (body() === 'full') {
+    <pre class="a-content" [attr.data-testid]="contentTestid()">{{ artifact().content }}</pre>
+  }
+} @else {
+  <div class="a-ref" [attr.data-testid]="refTestid()">
+    <span class="a-repo">{{ artifact().repo }}</span>
+    @if (artifact().branch_name) {
+      <span class="a-sep">·</span>
+      @if (artifact().branch_url) {
+        <a
+          class="a-branch"
+          [attr.data-testid]="branchTestid()"
+          [href]="artifact().branch_url"
+          target="_blank"
+          rel="noreferrer"
+          [attr.title]="artifact().branch_url"
+          >{{ artifact().branch_name }}</a
+        >
+      } @else {
+        <span class="a-branch" [attr.data-testid]="branchTestid()">{{ artifact().branch_name }}</span>
+      }
+    }
+    <span class="a-commit">&#64; {{ artifact().commit_hash }}</span>
+  </div>
+}

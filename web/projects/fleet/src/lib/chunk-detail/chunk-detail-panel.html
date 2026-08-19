@@ -1,0 +1,46 @@
+<aside class="dock" data-testid="chunk-detail" role="region" aria-label="Chunk detail">
+  <fleet-chunk-detail-header
+    [detail]="detail()"
+    [canControl]="canControl()"
+    (dismiss)="dismiss.emit()"
+    (detach)="detach.emit($event)"
+    (pauseChunk)="pauseChunk.emit($event)"
+    (resumeChunk)="resumeChunk.emit($event)"
+    (complete)="complete.emit($event)"
+  />
+
+  @if (actionError(); as err) {
+    <p class="notice action-notice" data-testid="action-error" role="alert">{{ err }}</p>
+  }
+
+  @if (actionOutcome(); as outcome) {
+    <p class="outcome action-notice" data-testid="action-outcome" role="status">{{ outcome }}</p>
+  }
+
+  <div class="d-body">
+    <section class="d-sec" aria-label="Work item">
+      <div class="s-head"><span class="tag">Work item · {{ pointerCount() }}</span></div>
+      <fleet-chunk-detail-facts
+        [detail]="detail()"
+        [canControl]="canControl()"
+        (editGraph)="editGraph.emit($event)"
+      >
+        <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail()" />
+      </fleet-chunk-detail-facts>
+      <fleet-chunk-detail-awaiting-human
+        [detail]="detail()"
+        [canAnswer]="canAnswer()"
+        [canResolve]="canResolve()"
+        (answerQuestion)="answerQuestion.emit($event)"
+        (resolveDecision)="resolveDecision.emit($event)"
+      />
+      <fleet-chunk-detail-issue-pane [workItems]="workItems()" />
+    </section>
+    <section class="d-sec d-sec--flush" aria-labelledby="chunk-timeline-heading">
+      <fleet-chunk-detail-timeline [detail]="detail()" />
+    </section>
+    <section class="d-sec d-sec--flush" aria-labelledby="chunk-artifacts-heading">
+      <fleet-chunk-detail-artifacts [detail]="detail()" />
+    </section>
+  </div>
+</aside>

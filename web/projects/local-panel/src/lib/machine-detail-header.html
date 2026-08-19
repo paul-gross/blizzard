@@ -1,0 +1,38 @@
+<header class="d-hdr">
+  <div class="d-title">
+    <a class="cid" data-testid="detail-chunk-ref" [routerLink]="[...linkBase(), chunkId()]">{{ chunkId() }}</a>
+    <span class="d-sub">
+      @for (ref of workRefs(); track ref.source + ':' + ref.ref) {
+        @if (ref.web_url) {
+          <a
+            class="iss"
+            data-testid="detail-pointer"
+            [href]="ref.web_url"
+            target="_blank"
+            rel="noreferrer"
+            [attr.title]="ref.web_url"
+          >{{ ref.label ?? ref.source + '#' + ref.ref }}</a>
+        } @else {
+          <span class="iss" data-testid="detail-pointer">{{ ref.label ?? ref.source + '#' + ref.ref }}</span>
+        }
+      }
+      <span class="st" [attr.data-tone]="statusTone()" data-testid="machine-detail-status">
+        {{ statusLabel() }} · node {{ nodeName() }} · a{{ epoch() }}
+      </span>
+    </span>
+  </div>
+  <div class="d-actions">
+    @if (pause()) {
+      <fleet-kit-button testid="resume-chunk" [ariaLabel]="'Resume chunk ' + chunkId()" (click)="onResume()">
+        Resume
+      </fleet-kit-button>
+    } @else if (pausable()) {
+      <fleet-kit-button testid="pause-chunk" [ariaLabel]="'Pause chunk ' + chunkId()" (click)="onPause()">
+        Pause
+      </fleet-kit-button>
+    }
+    <button type="button" class="close" data-testid="detail-close" aria-label="Close" (click)="dismiss.emit()">
+      ✕
+    </button>
+  </div>
+</header>

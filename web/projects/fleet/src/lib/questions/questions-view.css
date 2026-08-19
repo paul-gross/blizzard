@@ -1,0 +1,65 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+fleet-kit-panel.fill {
+  flex: 1;
+}
+.qq {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.qq:hover {
+  background: color-mix(in srgb, var(--amber) 6%, transparent);
+}
+.qq:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: -1px;
+}
+.h {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+}
+.cid {
+  color: var(--amber-hi);
+  font-size: var(--fs-sm);
+}
+.rid {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  white-space: nowrap;
+}
+/* Same as the detail dock's ask (chunk-awaiting-human .ask-q): the question is
+   authored prose, so its newlines are preserved rather than collapsed into one
+   run-on paragraph. The rail already rendered the ask in full — this only restores
+   the breaks the agent wrote, so a long ask reads as its paragraphs here too. */
+.qt {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.opts {
+  color: var(--cyan);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}

@@ -23,7 +23,7 @@ import { injectRunnerDashboardQuery } from 'local-panel';
   selector: 'app-mobile-tab-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FleetMobileTabBar],
-  template: ` <fleet-mobile-tab-bar [items]="items()" testid="local-panel-mobile-tab-bar" /> `,
+  templateUrl: './mobile-tab-bar.html',
 })
 export class MobileTabBar {
   private readonly dashboardQuery = injectRunnerDashboardQuery();

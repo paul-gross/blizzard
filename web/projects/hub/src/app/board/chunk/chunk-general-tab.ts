@@ -33,78 +33,8 @@ import {
   selector: 'app-chunk-general-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ChunkAwaitingHuman, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, KitPanel],
-  template: `
-    <div class="general" data-testid="chunk-general-tab">
-      <fleet-kit-panel class="section" data-testid="section-work-item" label="work item" [count]="pointerCount() || null">
-        <fleet-chunk-detail-facts [detail]="detail()" [canControl]="canControl()" (editGraph)="editGraph.emit($event)">
-          <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail()" />
-        </fleet-chunk-detail-facts>
-      </fleet-kit-panel>
-      <fleet-kit-panel class="section" data-testid="section-issues" label="issues">
-        <fleet-chunk-detail-issue-pane [workItems]="workItems()" />
-      </fleet-kit-panel>
-      <fleet-kit-panel class="section" data-testid="section-node-history" label="node history">
-        <!-- The panel above already engraves "node history"; the section's own
-             heading would repeat it word for word. The dock (chunk-detail-panel.ts)
-             wraps this in a bare <section> instead and still needs it, so the
-             component's default stays true and each panelled call site opts out. -->
-        <fleet-chunk-detail-timeline [detail]="detail()" [heading]="false" />
-      </fleet-kit-panel>
-      <fleet-kit-panel class="section" data-testid="section-asks" label="asks · decisions">
-        <fleet-chunk-detail-awaiting-human
-          [detail]="detail()"
-          [canAnswer]="canAnswer()"
-          [canResolve]="canResolve()"
-          (answerQuestion)="answerQuestion.emit($event)"
-          (resolveDecision)="resolveDecision.emit($event)"
-        />
-      </fleet-kit-panel>
-    </div>
-  `,
-  styles: `
-    :host {
-      display: block;
-      flex: 1;
-      min-height: 0;
-      overflow-y: auto;
-    }
-    .general {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding: 8px;
-    }
-    fleet-kit-panel.section {
-      flex: none;
-    }
-    /* The mockup's two-column General tab, at the same 720px breakpoint the
-       Artifacts tab's nav-beside-viewer split uses — work item and issues
-       stacked in the left column, node history beside them spanning both
-       rows, asks · decisions spanning the full width below. */
-    @media (min-width: 720px) {
-      .general {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        align-content: start;
-      }
-      fleet-kit-panel[data-testid='section-work-item'] {
-        grid-column: 1;
-        grid-row: 1;
-      }
-      fleet-kit-panel[data-testid='section-issues'] {
-        grid-column: 1;
-        grid-row: 2;
-      }
-      fleet-kit-panel[data-testid='section-node-history'] {
-        grid-column: 2;
-        grid-row: 1 / 3;
-      }
-      fleet-kit-panel[data-testid='section-asks'] {
-        grid-column: 1 / -1;
-        grid-row: 3;
-      }
-    }
-  `,
+  templateUrl: './chunk-general-tab.html',
+  styleUrl: './chunk-general-tab.css',
 })
 export class ChunkGeneralTab {
   /** The chunk aggregate to render. */

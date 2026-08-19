@@ -1,0 +1,37 @@
+:host {
+  display: block;
+  flex: 1;
+  min-height: 0;
+}
+.users-table {
+  min-height: 0;
+  overflow-y: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+th {
+  text-align: left;
+  color: var(--label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: var(--fs-label);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+}
+td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+}
+select {
+  font-family: inherit;
+  background: var(--overlay-30);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+.none {
+  color: var(--label-dim);
+  padding: 12px;
+}

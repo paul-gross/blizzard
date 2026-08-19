@@ -1,0 +1,22 @@
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+}
+.cps {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+/* Positioned and height-bearing so a projected KitAsyncState's absolutely
+   centered status line has a box to center in, whichever page's own
+   "nothing to show yet" state it renders. */
+.cps-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}

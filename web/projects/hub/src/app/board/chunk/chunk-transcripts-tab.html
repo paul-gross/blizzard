@@ -1,0 +1,111 @@
+@if (indexState() === 'loading') {
+  <fleet-kit-async-state state="loading" loadingText="LOADING TRANSCRIPTS…" loadingTestid="transcripts-loading" />
+} @else if (isForbidden()) {
+  <fleet-kit-async-state
+    state="empty"
+    tone="accent"
+    emptyText="NO PERMISSION TO READ TRANSCRIPTS"
+    emptyTestid="transcripts-forbidden"
+  />
+} @else if (indexState() === 'error') {
+  <fleet-kit-async-state state="error" errorText="TRANSCRIPTS UNAVAILABLE" errorTestid="transcripts-error" />
+} @else if (steps().length === 0) {
+  <fleet-kit-async-state state="empty" emptyText="NO TRANSCRIPT SEGMENTS YET" emptyTestid="transcripts-empty" />
+} @else {
+  <div class="tx-tab" data-testid="chunk-transcripts-tab">
+    <nav class="tx-nav" data-testid="transcripts-tab-nav">
+      @for (step of steps(); track step.key) {
+        <div class="step" data-testid="transcript-step">
+          <div class="step-head">
+            {{ stepLabel(step) }}
+            @if (step.current) {
+              <span class="tag">in progress</span>
+            }
+            @if (!step.matched) {
+              <span class="tag warn">unmatched</span>
+            }
+          </div>
+          @if (step.segments.length === 0) {
+            <p class="none">No segments.</p>
+          } @else {
+            <ul class="seg-list">
+              @for (seg of step.segments; track seg.segment_id) {
+                <li>
+                  <button
+                    type="button"
+                    class="seg-item"
+                    [class.active]="seg.segment_id === segmentId()"
+                    data-testid="transcript-segment-item"
+                    [attr.data-segment-id]="seg.segment_id"
+                    (click)="pickSegment.emit(seg.segment_id)"
+                  >
+                    <span>Segment {{ seg.spawn_generation + 1 }}</span>
+                    @if (seg.truncated) {
+                      <span class="tag warn">truncated</span>
+                    }
+                    @if (!seg.final) {
+                      <span class="tag">open</span>
+                    }
+                  </button>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      }
+    </nav>
+    <section class="tx-view">
+      @if (segmentState() === 'empty') {
+        <fleet-kit-async-state state="empty" emptyText="SELECT A SEGMENT" emptyTestid="transcript-segment-empty" />
+      } @else if (segmentState() === 'loading') {
+        <fleet-kit-async-state state="loading" loadingText="LOADING SEGMENT…" loadingTestid="transcript-segment-loading" />
+      } @else if (segmentState() === 'error') {
+        <fleet-kit-async-state state="error" errorText="SEGMENT UNAVAILABLE" errorTestid="transcript-segment-error" />
+      } @else {
+        <div class="seg-body" data-testid="transcript-segment-body">
+          @if (standaloneSidechain(); as sidechain) {
+            <button
+              type="button"
+              class="back"
+              data-testid="transcript-sidechain-back"
+              (click)="pickSidechain.emit(null)"
+            >
+              ← Back to segment
+            </button>
+            <fleet-transcript-viewer [turns]="sidechain.turns" (openStandalone)="onStandaloneOpenStandalone($event)" />
+          } @else {
+            @if (continuedFrom(); as prev) {
+              <button
+                type="button"
+                class="seam"
+                data-testid="transcript-continued-from"
+                (click)="pickSegment.emit(prev.segment_id)"
+              >
+                ← Continued from segment {{ prev.spawn_generation + 1 }}
+              </button>
+            }
+            @if (segmentData()?.truncated) {
+              <p class="banner" data-testid="transcript-segment-truncated">TRUNCATED — SOME CONTENT WAS DROPPED</p>
+            }
+            @if (turnsCapped()) {
+              <p class="banner" data-testid="transcript-segment-turns-capped">
+                SHOWING THE MOST RECENT {{ MAX_RENDERED_TURNS }} TURNS
+              </p>
+            }
+            <fleet-transcript-viewer [turns]="cappedTurns()" (openStandalone)="onTopLevelOpenStandalone($event)" />
+            @if (continuesIn(); as next) {
+              <button
+                type="button"
+                class="seam"
+                data-testid="transcript-continues-in"
+                (click)="pickSegment.emit(next.segment_id)"
+              >
+                Continues in segment {{ next.spawn_generation + 1 }} →
+              </button>
+            }
+          }
+        </div>
+      }
+    </section>
+  </div>
+}

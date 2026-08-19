@@ -1,0 +1,133 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+fleet-kit-panel.fill {
+  flex: 1;
+}
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+.rows {
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+/* Time-first columns, matching the in-rail Event log's leading dim stamp
+   (event-log-panel.ts). Every metadata track is FIXED, not content-sized:
+   each row is its own grid container, so only a fixed track aligns down the
+   feed — a content-sized one re-measures per row and the column wanders. That
+   covers the whole metadata block (time, chunk, severity, kind, runner), so
+   the message starts at one x on every row; the message takes the rest and the
+   lease trails.
+
+   Tracks are ch-based, so they scale with whatever face --mono resolves to on
+   the platform (tokens.css offers four) rather than assuming one face's advance
+   width. A ch here measures against the row's own --fs-sm, while the time and
+   runner cells render one step down at --fs-xs, so those two carry ~8% slack
+   for free. Kind and runner are open sets, so each is sized for its longest
+   known value and ellipsized past it — the full string stays in the title
+   attribute, so a truncation costs nothing. */
+.ev {
+  display: grid;
+  grid-template-columns: 15ch 8ch 10ch 18ch 12ch 1fr auto;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.kind {
+  color: var(--cyan);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.runner {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msg {
+  color: var(--text);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.time {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.chunk {
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  color: var(--amber-hi);
+  background: transparent;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  padding: 0 4px;
+  justify-self: start;
+}
+.chunk:hover {
+  border-color: var(--cyan);
+}
+/* A chunk-less (runner-scoped) row still occupies the chunk column, so the
+   columns after it stay aligned with the rows that do name a chunk. The inset
+   matches the sibling .chunk button's own border + padding, so the dash sits
+   where that button's text sits rather than 5px to its left. */
+.chunk-none {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  justify-self: start;
+  padding: 0 5px;
+}
+.sev {
+  justify-self: start;
+}
+.lease {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}
+/* Below the board's own mobile cutoff the fixed metadata tracks no longer fit:
+   they alone are wider than a handset's content box, so the message track
+   would resolve to 0 and — with overflow-wrap: anywhere — wrap one character
+   per line, turning every row into a ribbon hundreds of pixels tall.
+
+   So a narrow viewport drops back to the wrapping flex line the row used
+   before the grid, with the message on its own full-width line beneath the
+   metadata. Flex cannot collapse a track to nothing, so this degrades at any
+   width rather than only at the ones someone thought to measure. Nothing is
+   lost: cross-row alignment buys a reader a column to scan down, and a phone
+   is one column wide already.
+
+   This forks on a media query rather than on ViewportService.mode(), which is
+   how the app picks a *shell* (matches-mobile-viewport.ts). The two answer
+   different questions: mode() includes a manual override, so a user pinning
+   mobile on a wide monitor still has room for the grid and should keep it,
+   while a narrow *desktop* window has no room and still needs the fallback.
+   What breaks the layout is available width, so width is what it keys on —
+   at the same 767.98px cutoff ViewportService uses, so the two agree wherever
+   both apply. */
+@media (max-width: 767.98px) {
+  .ev {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .msg {
+    flex: 1 1 100%;
+  }
+}

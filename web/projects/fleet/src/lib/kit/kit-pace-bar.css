@@ -1,0 +1,23 @@
+:host {
+  display: block;
+}
+.pace-lbl {
+  font-size: var(--fs-label);
+  color: var(--label-dim);
+  margin-bottom: 2px;
+}
+.bar {
+  height: 6px;
+  border: 1px solid var(--bezel);
+  background: var(--panel-deep);
+  margin-top: 2px;
+}
+.bar .fill {
+  height: 100%;
+}
+.bar.util .fill {
+  background: var(--amber);
+}
+.bar.elapsed .fill {
+  background: var(--cyan);
+}

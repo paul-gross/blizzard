@@ -1,0 +1,11 @@
+<app-chunk-node-history-tab
+  [detail]="detail()"
+  [selectedKey]="selectedKey()"
+  [stepArtifacts]="stepArtifacts()"
+  [indexState]="indexState()"
+  [isForbidden]="isForbidden()"
+  [segmentState]="segmentState()"
+  [segmentData]="segmentQuery.data()"
+  [extraSegmentCount]="extraSegmentCount()"
+  (pickStep)="pickStep.emit($event)"
+/>

@@ -1,0 +1,39 @@
+<fleet-kit-panel
+  class="fill"
+  aria-label="Open questions"
+  data-testid="questions-panel"
+  label="Open questions · agent asks"
+  [count]="questions().length || null"
+  countTestid="questions-count"
+>
+    <fleet-kit-async-state
+      [state]="state()"
+      placement="inline"
+      loadingText="LOADING…"
+      loadingTestid="questions-loading"
+      errorText="FAILED TO LOAD QUESTIONS"
+      errorTestid="questions-error"
+      emptyText="NO OPEN QUESTIONS"
+      emptyTestid="questions-empty"
+    >
+      @for (q of questions(); track q.question_id) {
+        <button
+          type="button"
+          class="qq"
+          data-testid="rail-question"
+          [attr.data-chunk]="q.chunk_id"
+          [attr.aria-label]="'Open chunk ' + shortId(q.chunk_id) + ' to answer its question'"
+          (click)="selectChunk.emit(q.chunk_id)"
+        >
+          <span class="h">
+            <span class="cid" data-testid="rail-question-chunk">{{ shortId(q.chunk_id) }}</span>
+            <span class="rid">{{ q.runner_id }}</span>
+          </span>
+          <span class="qt" data-testid="rail-question-text">{{ q.question }}</span>
+          @if (q.options && q.options.length > 0) {
+            <span class="opts" data-testid="rail-question-options">{{ q.options.join(' · ') }}</span>
+          }
+        </button>
+      }
+    </fleet-kit-async-state>
+</fleet-kit-panel>

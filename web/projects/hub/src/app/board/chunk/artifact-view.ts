@@ -20,70 +20,8 @@ import {
   selector: 'app-artifact-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ChunkArtifactBody, KitAsyncState, KitBackBar, RouterLink],
-  template: `
-    <div class="ap">
-      <a class="back-row" [routerLink]="['/board', 'chunk', chunkId()]" data-testid="mobile-artifact-back">
-        <fleet-kit-back-bar [label]="backLabel()" />
-      </a>
-      <div class="ap-body">
-        <fleet-kit-async-state
-          [state]="state()"
-          loadingText="LOADING…"
-          loadingTestid="mobile-artifact-loading"
-          errorText="CHUNK UNAVAILABLE"
-          errorTestid="mobile-artifact-error"
-          emptyText="NO SUCH ARTIFACT"
-          emptyTestid="mobile-artifact-missing"
-        >
-          @if (artifact(); as art) {
-            <fleet-chunk-detail-artifact-body
-              class="body"
-              [artifact]="art"
-              testid="mobile-artifact"
-              data-testid="mobile-artifact"
-            />
-          }
-        </fleet-kit-async-state>
-      </div>
-    </div>
-  `,
-  styles: `
-    :host {
-      display: block;
-      flex: 1;
-      min-height: 0;
-      font-family: var(--mono);
-      font-size: var(--fs-base);
-      font-variant-numeric: tabular-nums;
-      color: var(--text);
-    }
-    .ap {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      min-height: 0;
-      overflow: hidden;
-    }
-    .back-row {
-      flex: none;
-      text-decoration: none;
-    }
-    /* Positioned and height-bearing so KitAsyncState's absolutely centered status
-       line has a box to center in, and so the artifact body inherits the scroll
-       region a long findings text needs — the reason this screen exists. */
-    .ap-body {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-height: 0;
-      padding: 8px;
-    }
-    .body {
-      flex: 1;
-      min-height: 0;
-    }
-  `,
+  templateUrl: './artifact-view.html',
+  styleUrl: './artifact-view.css',
 })
 export class ArtifactView {
   /** The chunk this artifact belongs to — the back link's target. */

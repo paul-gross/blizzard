@@ -1,0 +1,73 @@
+:host {
+  display: block;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+}
+.lp {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.cols {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 340px 1fr 330px;
+  gap: 6px;
+  padding: 6px;
+}
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  min-width: 0;
+}
+.p-note {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+}
+/* The chunks list's slim show-all filter bar (issue #134) — a plain
+   checkbox row above the list, not a kit component: this is the one
+   input the panel needs, not a chip/pill choice set. */
+.chunk-filter-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+/* Sizing only — local-machine-detail paints its own panel chrome via
+   KitPanel now (issue #307), so this no longer hand-copies a
+   background/border of its own. */
+.detail-frame {
+  min-height: 0;
+  flex: 1.15;
+}
+/* The mock's split weights: leases over envs 60/40; chunks under detail 1:1.15. */
+fleet-kit-panel.leases-panel {
+  flex: 1.5;
+}
+fleet-kit-panel.envs-panel,
+fleet-kit-panel.chunks-panel,
+fleet-kit-panel.asks-panel {
+  flex: 1;
+}
+fleet-kit-panel.hub-panel {
+  flex: none;
+}
+.rows {
+  display: flex;
+  flex-direction: column;
+}

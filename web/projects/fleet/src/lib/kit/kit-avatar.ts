@@ -14,31 +14,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 @Component({
   selector: 'fleet-kit-avatar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-      <circle class="ring" cx="12" cy="12" r="11" />
-      <circle class="head" cx="12" cy="9.5" r="3.6" />
-      <path class="shoulders" d="M4.8 19.4c1.3-3.4 4-5.1 7.2-5.1s5.9 1.7 7.2 5.1" />
-    </svg>
-  `,
-  styles: `
-    :host {
-      display: inline-flex;
-    }
-    .ring {
-      fill: var(--overlay-30);
-      stroke: var(--line);
-      stroke-width: 1;
-    }
-    .head {
-      fill: var(--label);
-    }
-    .shoulders {
-      fill: none;
-      stroke: var(--label);
-      stroke-width: 1.6;
-      stroke-linecap: round;
-    }
-  `,
+  templateUrl: './kit-avatar.html',
+  styleUrl: './kit-avatar.css',
 })
 export class KitAvatar {}

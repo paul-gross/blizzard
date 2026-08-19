@@ -15,41 +15,8 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 @Component({
   selector: '[fleetKitTabStrip]',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<ng-content />`,
-  styles: `
-    :host {
-      display: flex;
-      align-items: stretch;
-      height: 32px;
-      border-bottom: 1px solid var(--bezel);
-      background: var(--header-lo);
-      font-family: var(--mono);
-      font-size: var(--fs-label);
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      /* The strip is the one that gives, never the page. Three uppercase
-         letter-spaced labels (GENERAL/ARTIFACTS/TRANSCRIPTS) measure ~315px —
-         wider than a 320px phone's content box — and a plain non-wrapping flex
-         row pushed that overflow all the way up to the page, which is what
-         chunk-detail-page.shell-sweep.spec.ts caught at width 320. Scrolling
-         here absorbs it instead: both current mounts (AppShell's .shell,
-         chunk-detail-page's .body) are column flex containers, so the
-         strip's width is the *cross* axis, where a flex item's default
-         min-width: auto is not clamped to its min-content size the way the
-         main axis is — overflow-x: auto alone is what lets the strip stay
-         narrower than its content. overflow-y: hidden keeps the implicit
-         auto that overflow-x would otherwise force from clipping the 32px
-         row. */
-      overflow-x: auto;
-      overflow-y: hidden;
-      /* A scrollbar inside a 32px row would eat the tabs it is scrolling. */
-      scrollbar-width: none;
-    }
-    :host::-webkit-scrollbar {
-      width: 0;
-      height: 0;
-    }
-  `,
+  templateUrl: './kit-tab-strip.html',
+  styleUrl: './kit-tab-strip.css',
 })
 export class KitTabStrip {}
 
@@ -63,45 +30,7 @@ export class KitTabStrip {}
 @Component({
   selector: '[fleetKitTab]',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<ng-content />`,
-  styles: `
-    :host {
-      display: flex;
-      align-items: center;
-      padding: 0 16px;
-      background: transparent;
-      border: none;
-      border-right: 1px solid var(--line);
-      color: var(--label);
-      font-family: inherit;
-      text-decoration: none;
-      cursor: pointer;
-      /* A tab is its label; it neither squeezes nor breaks. Explicit because
-         the strip scrolls now (see KitTabStrip) — flex's default shrink would
-         otherwise compress the labels toward illegibility before the strip
-         ever reached the scroll it gained for exactly this case. */
-      flex: none;
-      white-space: nowrap;
-    }
-    /* Phone widths: the tracking that makes these labels legible on a monitor is
-       what pushes them past the viewport here, so the gutters give first — the
-       strip can still scroll if a fourth tab arrives, but three fit outright. */
-    @media (max-width: 420px) {
-      :host {
-        padding: 0 10px;
-      }
-    }
-    :host(.active) {
-      color: var(--amber-hi);
-      background: var(--header-hi);
-    }
-    /* Inset, like local-panel-mobile.ts's .back-row: the strip's own
-       overflow-y: hidden (see KitTabStrip) clips an outline drawn outside
-       the border box, so the ring has to live inside it instead. */
-    :host(:focus-visible) {
-      outline: 1px solid var(--cyan);
-      outline-offset: -1px;
-    }
-  `,
+  templateUrl: './kit-tab.html',
+  styleUrl: './kit-tab.css',
 })
 export class KitTab {}

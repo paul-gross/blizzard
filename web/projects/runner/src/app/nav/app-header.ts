@@ -36,65 +36,8 @@ import { injectRunnerDashboardQuery, LocalIdentity, LocalPauseControl } from 'lo
   selector: 'app-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [BoardHeader, CdkMenuTrigger, KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, LocalIdentity, LocalPauseControl, ViewportMenu],
-  template: `
-    <fleet-board-header [connection]="connection()" connectionLabel="Runner" tagline="runner · machine panel" [stats]="headerStats()">
-      <local-pause-control header-trailing />
-      <!-- Display-only: this shell's logout is the menu item below, so it does
-           not vanish with the header cell at the narrow tier, and all three of
-           the app's profile menus carry the same two items. -->
-      <local-identity #identity header-trailing variant="label" />
-      <fleet-kit-menu
-        header-trailing
-        class="menu"
-        ariaLabel="Profile menu"
-        testid="local-panel-menu"
-        [menu]="profileMenu"
-      >
-        <fleet-kit-avatar trigger />
-      </fleet-kit-menu>
-    </fleet-board-header>
-    <ng-template #profileMenu>
-      <fleet-kit-menu-panel testid="local-panel-menu-panel">
-        @if (identity.username()) {
-          <fleet-kit-menu-item testid="local-panel-logout" (triggered)="identity.logout()">Log out</fleet-kit-menu-item>
-        }
-        <fleet-kit-menu-item testid="local-panel-appearance" submenu [cdkMenuTriggerFor]="appearanceMenu">
-          Appearance
-        </fleet-kit-menu-item>
-      </fleet-kit-menu-panel>
-    </ng-template>
-    <ng-template #appearanceMenu>
-      <fleet-viewport-menu testid="local-panel-appearance-panel" />
-    </ng-template>
-  `,
-  styles: `
-    /* The menu never gives way; the identity does — this is where BoardHeader's
-       shrinkable trailing cluster lands, so the username truncates and the only
-       route back to mobile keeps its size at every width. */
-    .menu {
-      display: flex;
-      flex: none;
-      align-items: center;
-      padding: 0 10px;
-    }
-    local-pause-control {
-      flex: none;
-    }
-    local-identity {
-      min-width: 0;
-    }
-    /* This header's own half of the tiered collapse: BoardHeader can only collapse
-       the cells it renders, and left standing these two push the profile menu off
-       a phone-width header — where, in desktop mode, that menu is this shell's
-       ONLY appearance switcher. The container it declares is named, so the rule
-       rides the same breakpoint from out here, on nodes this template owns. */
-    @container board-header (max-width: 699px) {
-      local-pause-control,
-      local-identity {
-        display: none;
-      }
-    }
-  `,
+  templateUrl: './app-header.html',
+  styleUrl: './app-header.css',
 })
 export class AppHeader {
   private readonly dashboardQuery = injectRunnerDashboardQuery();

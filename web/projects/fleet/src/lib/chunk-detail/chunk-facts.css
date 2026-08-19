@@ -1,0 +1,45 @@
+:host {
+  display: block;
+}
+/* The chunk's own facts, above the work item it serves — the fixed-height glance
+   before the arbitrarily long issue body. */
+.kv {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  gap: 2px 8px;
+  margin: 0 0 8px;
+  font-size: var(--fs-sm);
+}
+.kv dt {
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  align-self: center;
+}
+.kv dd {
+  margin: 0;
+  color: var(--amber);
+  overflow-wrap: anywhere;
+}
+/* The graph edit row (issue #27) — the same input-plus-act shape as the
+   awaiting-human answer row, scaled down to sit inside a .kv fact cell. */
+.edit-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 3px;
+}
+.edit-input {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  background: var(--overlay-35);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 2px 4px;
+}
+.edit-input:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 0;
+}

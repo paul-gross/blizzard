@@ -1,0 +1,86 @@
+@if (openQuestions().length > 0 || openDecision()) {
+  <div class="awaiting" data-testid="awaiting-human">
+    <div class="s-head"><span class="tag">Awaiting human</span></div>
+    @for (q of openQuestions(); track q.question_id) {
+      <div class="ask" data-testid="open-question">
+        <p class="ask-q" data-testid="question-text">{{ q.question }}</p>
+        @if (canAnswer()) {
+          @if (q.options && q.options.length > 0) {
+            <div class="chips">
+              @for (opt of q.options; track opt) {
+                <button
+                  type="button"
+                  class="chip"
+                  data-testid="question-option"
+                  (click)="submitAnswer(q.question_id, opt)"
+                >
+                  {{ opt }}
+                </button>
+              }
+            </div>
+          }
+          <div class="answer-row">
+            <input
+              #answerInput
+              class="answer-input"
+              type="text"
+              data-testid="answer-input"
+              placeholder="Type an answer…"
+              [attr.aria-label]="'Answer question ' + q.question_id"
+            />
+            <fleet-kit-button
+              variant="primary"
+              testid="answer-submit"
+              (click)="submitAnswer(q.question_id, answerInput.value); answerInput.value = ''"
+            >
+              Answer
+            </fleet-kit-button>
+          </div>
+        }
+      </div>
+    }
+    @if (openDecision(); as d) {
+      <div class="gate" data-testid="open-decision">
+        <div class="gate-head">
+          <span class="tag">Gate</span>
+          <span class="gate-node" data-testid="decision-node">{{ d.node_name }}</span>
+        </div>
+        @if (canResolve()) {
+          <div class="chips">
+            @for (c of d.choices ?? []; track c.name) {
+              <button
+                type="button"
+                class="chip primary"
+                data-testid="decision-choice"
+                [title]="c.description"
+                (click)="resolve(d.decision_id, c.name)"
+              >
+                {{ c.name }}
+              </button>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+}
+
+@if (answeredQuestions().length > 0) {
+  <div class="answered" data-testid="answered-questions">
+    <div class="s-head"><span class="tag">Answered</span></div>
+    @for (q of answeredQuestions(); track q.question_id) {
+      <div class="trail" data-testid="answered-question">
+        <p class="ask-q" data-testid="answered-question-text">{{ q.question }}</p>
+        <p class="trail-line" data-testid="answered-by">
+          Answered by {{ q.answered_by || 'operator' }}
+          <span class="trail-answer" data-testid="answered-answer">{{ q.answer }}</span>
+        </p>
+        <p class="trail-line" [class.delivered]="q.delivered" data-testid="answer-delivery">
+          {{ deliveryLine(q) }}
+        </p>
+      </div>
+    }
+  </div>
+}
+
+<fleet-chunk-detail-escalation [detail]="detail()" />

@@ -1,0 +1,71 @@
+<fleet-kit-panel
+  class="fill"
+  aria-label="Events"
+  data-testid="events-panel"
+  label="Events · operational log"
+  [count]="events().length || null"
+  countTestid="events-count"
+>
+  <div class="filters" data-testid="events-filters">
+    <fleet-kit-chips [options]="severityOptions" [selectedValue]="severity() ?? ''" (choose)="onChoose($event)" />
+    @if (runnerFilterOptions().length) {
+      <fleet-kit-chips
+        data-testid="events-runner-filter"
+        [options]="runnerFilterOptions()"
+        [selectedValue]="runner() ?? ''"
+        (choose)="onRunnerChoose($event)"
+      />
+    }
+    @if (chunkFilterOptions().length) {
+      <fleet-kit-chips
+        data-testid="events-chunk-filter"
+        [options]="chunkFilterOptions()"
+        [selectedValue]="chunk() ?? ''"
+        (choose)="onChunkChoose($event)"
+      />
+    }
+  </div>
+  <fleet-kit-async-state
+    [state]="state()"
+    loadingText="LOADING…"
+    loadingTestid="events-loading"
+    errorText="FAILED TO LOAD EVENTS"
+    errorTestid="events-error"
+    emptyText="NO EVENTS"
+    emptyTestid="events-empty"
+  >
+    <div class="rows" data-testid="events-rows">
+      @for (ev of events(); track ev.id) {
+        <div class="ev" data-testid="events-row" [attr.data-severity]="ev.severity">
+          <fleet-when class="time" data-testid="events-time" [iso]="ev.recorded_at" />
+          @if (ev.chunk_id; as chunkId) {
+            <button
+              type="button"
+              class="chunk"
+              data-testid="events-chunk"
+              [attr.aria-label]="'Open chunk ' + shortId(chunkId)"
+              (click)="selectChunk.emit(chunkId)"
+            >
+              {{ shortId(chunkId) }}
+            </button>
+          } @else {
+            <span class="chunk-none" aria-hidden="true">—</span>
+          }
+          <fleet-kit-badge class="sev" [tone]="toneFor(ev.severity)" variant="soft" data-testid="events-severity">{{
+            ev.severity
+          }}</fleet-kit-badge>
+          <span class="kind" data-testid="events-kind" [title]="ev.kind">{{ ev.kind }}</span>
+          @if (ev.runner_id; as runnerId) {
+            <span class="runner" data-testid="events-runner" [title]="runnerId">{{ shortId(runnerId) }}</span>
+          } @else {
+            <span class="runner" data-testid="events-runner" aria-hidden="true">—</span>
+          }
+          <span class="msg" data-testid="events-message">{{ ev.message }}</span>
+          @if (ev.lease_id; as leaseId) {
+            <span class="lease" data-testid="events-lease">{{ shortId(leaseId) }}</span>
+          }
+        </div>
+      }
+    </div>
+  </fleet-kit-async-state>
+</fleet-kit-panel>

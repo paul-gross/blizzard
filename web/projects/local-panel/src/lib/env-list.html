@@ -1,0 +1,18 @@
+<div class="wrap" data-testid="env-list">
+  <fleet-kit-async-state
+    [state]="triadState()"
+    loadingText="LOADING…"
+    errorText="ENVIRONMENTS UNAVAILABLE"
+    emptyText="NO ENVIRONMENTS CONFIGURED"
+    emptyTestid="env-empty"
+  >
+    @for (env of envs(); track env.environment_id) {
+      <div class="row" data-testid="env-row" [attr.data-env-id]="env.environment_id" [attr.data-held]="isHeld(env)">
+        <fleet-kit-beacon data-testid="env-beacon" [active]="isHeld(env)" tone="amber" />
+        <span class="env">{{ env.environment_id }}</span>
+        <span class="chunk">{{ chunkRef(env) }}</span>
+        <span class="held" data-testid="env-held-for">{{ heldFor(env) }}</span>
+      </div>
+    }
+  </fleet-kit-async-state>
+</div>

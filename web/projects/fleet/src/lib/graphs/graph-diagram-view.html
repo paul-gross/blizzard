@@ -1,0 +1,9 @@
+<div class="split" data-testid="graph-diagram-view">
+  <fleet-graph-diagram
+    class="pane-diagram"
+    [graph]="graph()"
+    [selection]="selection()"
+    (selectionChange)="onSelectionChange($event)"
+  />
+  <fleet-graph-diagram-detail class="pane-detail" [graph]="graph()" [selection]="selection()" />
+</div>

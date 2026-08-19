@@ -1,0 +1,33 @@
+:host {
+  display: block;
+  height: 100%;
+  position: relative;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+}
+.banner {
+  color: var(--amber-hi);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.1em;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--overlay-25);
+}
+/* Informational, not a warning — the turns are real, just sourced from the
+   hub's archive instead of the live local file (blizzard#249 D1). */
+.banner.archived {
+  color: var(--cyan);
+}
+/* The hub-unreachable state (blizzard#249 D1) — local-info.ts's visible-degrade
+   banner precedent (.fleet-strip.stale::after): a filled red-background wash, not
+   KitAsyncState's error variant, which is plain red text with no background —
+   too subtle for a state this deliberately prominent (closer in spirit to "we
+   don't know" than to a routine status line). */
+.degrade-banner {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--red-dim);
+  color: var(--red-wash-text);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.08em;
+}

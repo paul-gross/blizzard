@@ -38,40 +38,8 @@ import {
   selector: 'app-admin-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [UsersTable, KitAsyncState],
-  template: `
-    <fleet-kit-async-state
-      [state]="triadState()"
-      loadingText="Loading users…"
-      loadingTestid="admin-page-loading"
-      errorText="Failed to load users."
-      errorTestid="admin-page-error"
-    >
-      @if (assignRoleError(); as message) {
-        <p class="assign-role-error" data-testid="admin-page-assign-role-error">{{ message }}</p>
-      }
-      <fleet-users-table
-        [users]="usersQuery.data() ?? []"
-        [currentUserId]="currentUserId()"
-        [isSuperuser]="isSuperuser()"
-        (assignRole)="onAssignRole($event)"
-      />
-    </fleet-kit-async-state>
-  `,
-  styles: `
-    :host {
-      display: block;
-      flex: 1;
-      min-height: 0;
-      padding: 6px;
-      position: relative;
-    }
-    .assign-role-error {
-      margin: 0 0 8px;
-      padding: 6px 8px;
-      color: var(--red);
-      font-size: var(--fs-sm);
-    }
-  `,
+  templateUrl: './admin-page.html',
+  styleUrl: './admin-page.css',
 })
 export class AdminPage {
   protected readonly usersQuery = injectUsersQuery();

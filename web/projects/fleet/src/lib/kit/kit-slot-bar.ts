@@ -12,45 +12,8 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 @Component({
   selector: 'fleet-kit-slot-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <div class="gauge" data-testid="slot-bar-gauge">
-      @for (filled of cells(); track $index) {
-        <span class="cell" [class.on]="filled"></span>
-      }
-    </div>
-    <div class="gauge-lbl">
-      <span class="lbl" data-testid="slot-bar-label">{{ used() }}/{{ total() }} slots</span>
-    </div>
-  `,
-  styles: `
-    :host {
-      display: block;
-    }
-    .gauge {
-      display: flex;
-      gap: 3px;
-      margin-top: 5px;
-    }
-    .cell {
-      flex: 1;
-      height: 10px;
-      border: 1px solid var(--bezel);
-      background: var(--panel-deep);
-    }
-    .cell.on {
-      background: var(--amber);
-      border-color: var(--amber-dim);
-    }
-    .gauge-lbl {
-      display: flex;
-      justify-content: flex-end;
-      margin-top: 3px;
-    }
-    .lbl {
-      font-size: var(--fs-label);
-      color: var(--label-dim);
-    }
-  `,
+  templateUrl: './kit-slot-bar.html',
+  styleUrl: './kit-slot-bar.css',
 })
 export class KitSlotBar {
   /** Environments currently held — the count of filled cells (the slot bar's numerator). */

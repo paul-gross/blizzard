@@ -1,0 +1,162 @@
+.card {
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--amber);
+  background: var(--overlay-25);
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+}
+.card:hover {
+  border-color: var(--cyan);
+  background: var(--tint-hover);
+}
+/* The chunk whose detail fills the dock — an outline ring (not border-color, which
+   would repaint the status-colored left bar) plus a stronger cyan wash than a
+   merely hovered card carries, so the board answers "which one am I looking at"
+   at a glance even while hovering a different card. */
+.card.selected {
+  outline: 1px solid var(--cyan);
+  outline-offset: -1px;
+  background: var(--tint-selected);
+}
+/* The DONE column's cards (issue #137: done and stopped, the two
+   statuses STATUS_LANE folds onto it) keep their green accent, and an
+   escalated card (needs_human) reads in the alarm color — both were
+   column-scoped rules reaching down from BoardShell's own styles before
+   this component owned its own status coloring. */
+.card[data-status='done'],
+.card[data-status='stopped'] {
+  border-left-color: var(--green);
+}
+.card[data-status='needs_human'] {
+  border-left-color: var(--red);
+}
+.card[data-status='needs_human'] .card-id {
+  color: var(--red);
+}
+/* The BACKLOG card reads as held/inert: a dim accent, distinct from the
+   READY lane beside it and from any live lane. Colors come from tokens,
+   never hard-coded hex. */
+.card[data-status='not_ready'] {
+  border-left-color: var(--label-dim);
+}
+.card-open {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.card-open:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 1px;
+}
+/* The card's identity line: the chunk's short name, with the node it currently
+   sits at pushed to the far right.
+
+   Every line here holds to one line and ellipsises instead of wrapping. A board
+   column is narrow, and a wrapped card is worse than a clipped one twice over: it
+   breaks a value mid-token (a chunk name split across two lines is unreadable and
+   unsearchable) and it makes cards in the same column different heights, so the
+   column stops scanning as a list. The full value stays reachable in the detail. */
+.tid {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.card-id {
+  color: var(--amber);
+  font-size: var(--fs-md);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.tid .nd {
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* One label per line: a column, not the wrapping single line every other
+   card row uses. Each line still clips on its own rather than wrapping
+   (the file's standing rule, restated here since the container is new). */
+.iss-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.iss,
+.st {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.iss {
+  color: var(--cyan);
+  font-size: var(--fs-xs);
+}
+.st-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.st {
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.meta-right {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-left: auto;
+  min-width: 0;
+}
+/* The chunk's derived spend total (issue #60) — the leading-tilde lower-bound
+   prefix (formatCost) is the card's whole PARTIAL marker; no separate badge on a
+   card this small. */
+.cost {
+  color: var(--amber-hi);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+/* The done-lane completion stamp (issue #173) — dim like the status label it
+   sits beside, not a separate accent; it is a timestamp, not a state. */
+.done-at {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.card-promote {
+  align-self: flex-start;
+  border: 1px solid var(--amber-dim);
+  background: transparent;
+  color: var(--amber-hi);
+  padding: 1px 6px;
+  font: inherit;
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+.card-promote:hover,
+.card-promote:focus-visible {
+  border-color: var(--amber);
+  outline: none;
+}

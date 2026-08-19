@@ -11,13 +11,7 @@ import { LocalPanel } from 'local-panel';
   selector: 'app-board-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [LocalPanel],
-  template: `<local-panel />`,
-  styles: `
-    :host {
-      display: block;
-      flex: 1;
-      min-height: 0;
-    }
-  `,
+  templateUrl: './board-page.html',
+  styleUrl: './board-page.css',
 })
 export class BoardPage {}

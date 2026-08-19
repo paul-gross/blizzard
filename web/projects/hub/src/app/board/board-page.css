@@ -1,0 +1,44 @@
+:host {
+  display: block;
+  flex: 1;
+  min-height: 0;
+}
+.main {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  /* One 330px rail, allowed to give ground on a narrow window: held rigid it
+     starves the board, which is the column that matters — and the board now
+     carries the READY lane the left rail used to, so it needs the width more
+     than before. */
+  grid-template-columns: 1fr minmax(260px, 330px);
+  gap: 6px;
+  padding: 6px;
+}
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  min-width: 0;
+}
+/* The rail runs the full height of the workspace: runners and asks size to
+   their content and the event log takes the remainder, scrolling its own body. */
+.rail-log {
+  flex: 1;
+  min-height: 0;
+}
+/* The centre column stacks the board over the chunk detail, so the detail sits
+   to the left of the rail rather than spanning the window beneath it. Both
+   are permanently mounted and hold their share of the column, so selecting or
+   clearing a chunk never resizes or reflows the board. */
+.board {
+  flex: 1.15;
+  min-height: 0;
+  min-width: 0;
+}
+.dock {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}

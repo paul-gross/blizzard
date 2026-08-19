@@ -1,0 +1,13 @@
+:host {
+  display: flex;
+  align-items: center;
+}
+/* Quiet chrome, not content: normal-cased so it never competes with the
+   nav's own uppercase route tabs, same reasoning the old tab-row menu
+   carried before it moved here. */
+.menu {
+  align-items: center;
+  padding: 0 10px;
+  letter-spacing: normal;
+  text-transform: none;
+}

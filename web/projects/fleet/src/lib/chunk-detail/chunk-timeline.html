@@ -1,0 +1,81 @@
+@if (heading()) {
+  <div class="s-head"><span class="tag" id="chunk-timeline-heading">Node history</span></div>
+}
+@if (historyRows().length === 0 && !activeRow()) {
+  <p class="none" data-testid="history-empty">No transitions yet — waiting on the first node-step.</p>
+} @else {
+  <ol class="timeline" data-testid="history">
+    @for (row of historyRows(); track $index) {
+      <li class="step-item">
+        <div
+          class="step"
+          [class.selected]="row.key !== null && row.key === selectedKey()"
+          [attr.data-testid]="row.kind === 'migration' ? 'history-migration-step' : 'history-step'"
+          [attr.data-choice]="row.kind === 'migration' ? 'migrated' : row.verdict"
+          [attr.role]="activatable() && row.key !== null ? 'button' : null"
+          [attr.tabindex]="activatable() && row.key !== null ? 0 : null"
+          (click)="onActivate(row.key)"
+          (keydown.enter)="onActivate(row.key, $event)"
+          (keydown.space)="onActivate(row.key, $event)"
+        >
+          <span class="att">{{ row.kind === 'migration' ? '⤳' : row.epoch }}</span>
+          <span class="nd" [attr.title]="row.nodeId">
+            @if (multiGraph() && row.graphName) {
+              <span class="gr" data-testid="history-graph">{{ row.graphName }}/</span>
+            }{{ row.nodeName }}</span
+          >
+          <!-- The judgement that closed the node, in a column of its own so the
+               verdicts read down the timeline aligned, then where it routed the
+               chunk — the fail loop's "→ build" consequence, dimmed. A migration
+               (issue #90) reads its verdict as the choice that hopped graphs and
+               routes to the target graph's landing node. -->
+          <span class="jg">
+            <span class="verdict" data-testid="history-choice">{{ row.verdict ?? '·' }}</span>
+            <span class="jg-to" [attr.title]="row.toId">→ {{ row.toName }}</span>
+          </span>
+          <span class="ts" data-testid="history-when" [attr.title]="row.whenTitle || null">{{ row.when }}</span>
+          <!-- That node-step's own usage (issue #60) — every invocation recorded at
+               this step's (node, epoch) summed inline, so a review-fail cycle visibly
+               shows what each lap cost. Absent when no usage fact landed for it yet. -->
+          @if (usageForStep(row); as u) {
+            <span class="step-usage" data-testid="history-step-usage">
+              <span class="tok" data-testid="history-step-tokens">{{ formatTokens(u.tokens) }} tok</span>
+              <span class="cost" data-testid="history-step-cost">{{ formatCost(u.costUsd, u.costPartial) }}</span>
+              @if (u.costPartial) {
+                <span
+                  class="partial-badge"
+                  data-testid="history-step-cost-partial"
+                  title="At least one invocation's cost was absent (a crash/reap-path exit) — this step's cost is a lower bound."
+                  >PARTIAL</span
+                >
+              }
+            </span>
+          }
+        </div>
+      </li>
+    }
+    <!-- The node currently in flight — synthetic, not a recorded transition:
+         RUN while a worker drives it, or the parked state's own verb. -->
+    @if (activeRow(); as a) {
+      <li class="step-item">
+        <div
+          class="step"
+          data-testid="history-active"
+          [class.selected]="a.key !== null && a.key === selectedKey()"
+          [attr.data-choice]="a.choice"
+          [attr.role]="activatable() && a.key !== null ? 'button' : null"
+          [attr.tabindex]="activatable() && a.key !== null ? 0 : null"
+          (click)="onActivate(a.key)"
+          (keydown.enter)="onActivate(a.key, $event)"
+          (keydown.space)="onActivate(a.key, $event)"
+        >
+          <span class="att">{{ a.epoch ?? '·' }}</span>
+          <span class="nd" [attr.title]="a.nodeId">{{ a.nodeName }}</span>
+          <span class="jg">
+            <span class="verdict" data-testid="history-active-verb">{{ a.label }}</span>
+          </span>
+        </div>
+      </li>
+    }
+  </ol>
+}

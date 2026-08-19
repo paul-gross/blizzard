@@ -21,7 +21,7 @@ import { injectHubQuestionsQuery } from './questions.query';
   selector: 'fleet-questions-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [QuestionsPanelView],
-  template: `<fleet-questions-view [questions]="questions()" [state]="state()" (selectChunk)="selectChunk.emit($event)" />`,
+  templateUrl: './questions-panel.html',
 })
 export class QuestionsPanel {
   private readonly query = injectHubQuestionsQuery();

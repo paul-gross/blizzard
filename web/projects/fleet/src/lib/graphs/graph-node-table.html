@@ -1,0 +1,33 @@
+<table class="nodes" data-testid="graph-detail-nodes">
+  <thead>
+    <tr>
+      <th>Node</th>
+      <th>Executor</th>
+      <th>Session</th>
+      <th>Judged by</th>
+      <th>Retries</th>
+      <th>Mode</th>
+      <th>Checks</th>
+      <th>Produces</th>
+    </tr>
+  </thead>
+  <tbody>
+    @for (node of nodes(); track node.node_id) {
+      <tr data-testid="graph-detail-node-row" [attr.data-node-id]="node.node_id">
+        <td class="nid">
+          {{ node.name }}
+          @if (node.node_id === entryNodeId()) {
+            <span class="entry-badge" data-testid="graph-detail-entry-badge">entry</span>
+          }
+        </td>
+        <td>{{ node.executor }}</td>
+        <td>{{ sessionLabel(node) }}</td>
+        <td>{{ node.judged_by }}</td>
+        <td>{{ retriesLabel(node) }}</td>
+        <td>{{ node.mode ?? '—' }}</td>
+        <td>{{ listOrDash(node.checks) }}</td>
+        <td>{{ listOrDash(producesNames(node)) }}</td>
+      </tr>
+    }
+  </tbody>
+</table>

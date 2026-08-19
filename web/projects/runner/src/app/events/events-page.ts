@@ -14,30 +14,7 @@ import { FactLog } from 'local-panel';
   selector: 'app-events-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FactLog, KitPanel],
-  template: `
-    <div class="layout">
-      <fleet-kit-panel class="feed" label="local fact log">
-        <local-fact-log />
-      </fleet-kit-panel>
-    </div>
-  `,
-  styles: `
-    :host {
-      display: block;
-      flex: 1;
-      min-height: 0;
-    }
-    .layout {
-      height: 100%;
-      min-height: 0;
-      padding: 6px;
-      display: flex;
-    }
-    .feed {
-      flex: 1;
-      min-height: 0;
-      min-width: 0;
-    }
-  `,
+  templateUrl: './events-page.html',
+  styleUrl: './events-page.css',
 })
 export class EventsPage {}

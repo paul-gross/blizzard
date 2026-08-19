@@ -1,0 +1,23 @@
+@switch (state()) {
+  @case ('ready') {
+    <ng-content />
+  }
+  @case ('loading') {
+    @if (loadingMode() === 'content') {
+      <ng-content select="[loading]" />
+    } @else {
+      <p class="status" [class.inline]="placement() === 'inline'" [attr.data-testid]="loadingTestid()">{{ loadingText() }}</p>
+    }
+  }
+  @case ('error') {
+    <p class="status error" [class.inline]="placement() === 'inline'" [attr.data-testid]="errorTestid()">{{ errorText() }}</p>
+  }
+  @case ('empty') {
+    <p
+      class="status"
+      [class.inline]="placement() === 'inline'"
+      [class.accent]="tone() === 'accent'"
+      [attr.data-testid]="emptyTestid()"
+    >{{ emptyText() }}</p>
+  }
+}

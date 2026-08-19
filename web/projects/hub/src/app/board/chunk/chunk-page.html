@@ -1,0 +1,79 @@
+<fleet-chunk-page-shell>
+  <a chunk-page-back class="back-row" routerLink="/board" [queryParams]="{ chunk: chunkId() }" data-testid="mobile-chunk-back">
+    <fleet-kit-back-bar label="Board" />
+  </a>
+  @if (actionError(); as err) {
+    <p chunk-page-notice class="notice" data-testid="mobile-chunk-action-error" role="alert">{{ err }}</p>
+  }
+  @if (actionOutcome(); as outcome) {
+    <p chunk-page-notice class="outcome" data-testid="mobile-chunk-action-outcome" role="status">{{ outcome }}</p>
+  }
+  <!-- Each of the shell's named slots below gets its own single-root @if
+       rather than sharing one — an @if whose root has more than one
+       projectable node can leave slot-selector matching unresolved
+       (NG8011); a solo root per block is unambiguous. -->
+  @if (detail(); as d) {
+    <fleet-chunk-page-header
+      chunk-page-header
+      data-testid="board-chunk-detail"
+      [chunkId]="chunkId() ?? ''"
+      [status]="d.status"
+      [tone]="tone()"
+    />
+  }
+  @if (detail()) {
+    <fleet-kit-tabs chunk-page-tabs [options]="tabOptions()" [activeValue]="tab()" (choose)="onChooseTab($event)" />
+  }
+  @if (detail(); as d) {
+    @switch (tab()) {
+      @case ('general') {
+        <app-chunk-general-tab
+          [detail]="d"
+          [workItems]="workItems()"
+          [canControl]="canControl()"
+          [canAnswer]="canAnswer()"
+          [canResolve]="canResolve()"
+          (answerQuestion)="onAnswer($event)"
+          (resolveDecision)="onResolve($event)"
+          (editGraph)="onEditGraph($event)"
+        />
+      }
+      @case ('node-history') {
+        <app-chunk-node-history-container
+          [chunkId]="chunkId()"
+          [detail]="d"
+          [selectedKey]="selection.stepKey()"
+          (pickStep)="onSelectStep($event)"
+        />
+      }
+      @case ('artifacts') {
+        <app-chunk-artifacts-tab
+          [artifacts]="d.artifacts ?? []"
+          [selectedKey]="selection.artifactKey()"
+          (pickArtifact)="onSelectArtifact($event)"
+        />
+      }
+      @case ('transcripts') {
+        <app-chunk-transcripts-container
+          [chunkId]="chunkId()"
+          [history]="d.history ?? []"
+          [currentNodeId]="d.current_node_id"
+          [currentNodeName]="d.current_node_name ?? null"
+          [latestEpoch]="d.latest_epoch"
+          [segmentId]="selection.transcriptSegment()"
+          [sidechainPath]="selection.transcriptSidechain()"
+          (pickSegment)="onSelectTranscriptSegment($event)"
+          (pickSidechain)="onSelectTranscriptSidechain($event)"
+        />
+      }
+    }
+  } @else {
+    <fleet-kit-async-state
+      [state]="state()"
+      loadingText="LOADING…"
+      loadingTestid="mobile-chunk-loading"
+      errorText="CHUNK UNAVAILABLE"
+      errorTestid="mobile-chunk-error"
+    />
+  }
+</fleet-chunk-page-shell>

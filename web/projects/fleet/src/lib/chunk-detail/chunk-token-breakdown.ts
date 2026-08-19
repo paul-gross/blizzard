@@ -34,52 +34,8 @@ const ZERO_USAGE_TOTAL: ChunkUsageTotalView = {
 @Component({
   selector: 'fleet-chunk-detail-token-breakdown',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <dt>Cost</dt>
-    <dd data-testid="fact-cost">
-      <span data-testid="cost-total-usd">{{ formatCost(cost().cost_usd, cost().cost_partial) }}</span>
-      @if (cost().cost_partial) {
-        <span
-          class="partial-badge"
-          data-testid="cost-partial-badge"
-          title="At least one invocation's cost was absent (a crash/reap-path exit) — this total is a lower bound, not the true spend."
-          >PARTIAL</span
-        >
-      }
-    </dd>
-    <dt>Tokens</dt>
-    <dd data-testid="fact-tokens">{{ tokensLine() }}</dd>
-  `,
-  styles: `
-    :host {
-      display: contents;
-    }
-    /* This component's own copy of ChunkFacts's .kv dt/.kv dd rules (chunk-facts.ts)
-       — see the class doc comment for why the parent's rules can't reach these rows. */
-    dt {
-      color: var(--label);
-      font-size: var(--fs-label);
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      align-self: center;
-    }
-    dd {
-      margin: 0;
-      color: var(--amber);
-      overflow-wrap: anywhere;
-    }
-    /* The PARTIAL badge marks a cost total whose sum is a lower bound (issue #60) —
-       never silently understated. */
-    .partial-badge {
-      margin-left: 4px;
-      padding: 0 4px;
-      border: 1px solid var(--red-dim);
-      color: var(--red);
-      font-size: var(--fs-label);
-      letter-spacing: 0.1em;
-      cursor: help;
-    }
-  `,
+  templateUrl: './chunk-token-breakdown.html',
+  styleUrl: './chunk-token-breakdown.css',
 })
 export class ChunkTokenBreakdown {
   /** The chunk aggregate to render (the derived cost/usage total, issue #60). */

@@ -1,0 +1,50 @@
+<fleet-kit-panel class="users-table" aria-label="Users" data-testid="users-table" label="Users">
+  @if (users().length === 0) {
+    <p class="none" data-testid="users-table-empty">No users yet.</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Display name</th>
+          <th>Email</th>
+          <th>Identities</th>
+          <th>Role</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (user of users(); track user.user_id) {
+          <tr data-testid="users-table-row" [attr.data-user-id]="user.user_id">
+            <td data-testid="users-table-username">{{ user.username }}</td>
+            <td data-testid="users-table-display-name">{{ user.display_name }}</td>
+            <td data-testid="users-table-email">{{ user.email ?? '—' }}</td>
+            <td data-testid="users-table-identities">
+              {{ user.identities?.length ? user.identities!.map((i) => i.provider_name).join(', ') : '—' }}
+            </td>
+            <td>
+              @if (isSelf(user) || user.role === 'superuser') {
+                <span data-testid="users-table-role-static">{{ user.role }}{{ isSelf(user) ? ' (you)' : '' }}</span>
+              } @else {
+                <select
+                  data-testid="users-table-role-select"
+                  [disabled]="user.role === 'admin' && !isSuperuser()"
+                  (change)="onRoleChange(user.user_id, $event)"
+                >
+                  @for (role of assignableRoles; track role) {
+                    <option [value]="role" [selected]="role === user.role" [disabled]="role === 'admin' && !isSuperuser()">
+                      {{ role }}
+                    </option>
+                  }
+                </select>
+              }
+            </td>
+            <td>
+              <fleet-when data-testid="users-table-created-at" [iso]="user.created_at" />
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</fleet-kit-panel>

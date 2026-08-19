@@ -1,0 +1,65 @@
+<div class="nh-tab" data-testid="chunk-node-history-tab">
+  <div class="nh-timeline" role="region" aria-labelledby="nh-timeline-heading">
+    <div class="s-head"><span class="tag" id="nh-timeline-heading">Timeline</span></div>
+    <fleet-chunk-detail-timeline
+      [detail]="detail()"
+      [heading]="false"
+      [activatable]="true"
+      [selectedKey]="selectedKey()"
+      (pickStep)="pickStep.emit($event)"
+    />
+  </div>
+  <section class="nh-step">
+    @if (selectedKey() === null) {
+      <p class="hint" data-testid="node-history-select-hint">Select a step above.</p>
+    } @else {
+      <div class="nh-artifacts">
+        <div class="s-head"><span class="tag">Artifacts</span></div>
+        @if (stepArtifacts().length === 0) {
+          <p class="none" data-testid="node-history-artifacts-empty">No artifacts for this step.</p>
+        } @else {
+          @for (art of stepArtifacts(); track art.key) {
+            <fleet-chunk-detail-artifact-body class="art" [artifact]="art" body="full" testid="node-history-artifact" />
+          }
+        }
+      </div>
+      <div class="nh-transcript">
+        <div class="s-head"><span class="tag">Transcript</span></div>
+        @if (isForbidden()) {
+          <fleet-kit-async-state
+            state="empty"
+            tone="accent"
+            emptyText="NO PERMISSION TO READ TRANSCRIPTS"
+            emptyTestid="node-history-transcript-forbidden"
+          />
+        } @else if (indexState() === 'loading') {
+          <fleet-kit-async-state state="loading" loadingText="LOADING…" loadingTestid="node-history-transcript-loading" />
+        } @else if (indexState() === 'error') {
+          <fleet-kit-async-state state="error" errorText="TRANSCRIPT UNAVAILABLE" errorTestid="node-history-transcript-error" />
+        } @else if (segmentState() === 'empty') {
+          <fleet-kit-async-state
+            state="empty"
+            emptyText="NO TRANSCRIPT FOR THIS STEP"
+            emptyTestid="node-history-transcript-empty"
+          />
+        } @else if (segmentState() === 'loading') {
+          <fleet-kit-async-state state="loading" loadingText="LOADING…" loadingTestid="node-history-transcript-loading" />
+        } @else if (segmentState() === 'error') {
+          <fleet-kit-async-state state="error" errorText="TRANSCRIPT UNAVAILABLE" errorTestid="node-history-transcript-error" />
+        } @else {
+          @if (turnsCapped()) {
+            <p class="banner" data-testid="node-history-transcript-turns-capped">
+              SHOWING THE MOST RECENT {{ MAX_RENDERED_TURNS }} TURNS
+            </p>
+          }
+          <fleet-transcript-viewer [turns]="cappedTurns()" data-testid="node-history-transcript-body" />
+          @if (extraSegmentCount() > 0) {
+            <p class="more" data-testid="node-history-transcript-more">
+              +{{ extraSegmentCount() }} more segment{{ extraSegmentCount() === 1 ? '' : 's' }} — open in the Transcripts tab.
+            </p>
+          }
+        }
+      </div>
+    }
+  </section>
+</div>

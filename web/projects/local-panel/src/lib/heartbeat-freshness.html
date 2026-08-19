@@ -1,0 +1,13 @@
+<span class="hb" data-testid="hb-freshness">
+  <span class="lbl">hb</span>
+  <span class="track">
+    <span
+      class="fill"
+      [class.stale]="stale()"
+      [style.width.%]="percent()"
+      data-testid="hb-fill"
+      [attr.data-hb-percent]="percent()"
+    ></span>
+  </span>
+  <span class="age" [class.stale]="stale()" data-testid="hb-age">{{ ageLabel() }}</span>
+</span>

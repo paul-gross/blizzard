@@ -1,0 +1,72 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* Key left; the recency stamp and kind cluster right (.a-when's auto margin). */
+.a-head {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.a-head .a-kind {
+  margin-left: auto;
+}
+.a-head .a-when + .a-kind {
+  margin-left: 0;
+}
+.a-key {
+  color: var(--cyan);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+.a-kind {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+/* When the artifact was attached (ULID-decoded) — recency, dim like the kind. */
+.a-when {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  white-space: nowrap;
+  margin-left: auto;
+}
+.a-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 4px 0 0;
+  padding: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--overlay-30);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+.a-ref {
+  flex: none;
+  margin-top: 4px;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+}
+.a-branch {
+  color: var(--amber-hi);
+}
+a.a-branch {
+  text-decoration: none;
+}
+a.a-branch:hover,
+a.a-branch:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+.a-sep {
+  color: var(--label-dim);
+}

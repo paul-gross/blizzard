@@ -1,0 +1,51 @@
+@if (leaseId() === null) {
+  <fleet-kit-async-state state="empty" emptyText="SELECT AN AGENT" emptyTestid="transcript-empty" />
+} @else if (transcriptQuery.isPending()) {
+  <fleet-kit-async-state state="loading" loadingText="LOADING TRANSCRIPT…" loadingTestid="transcript-loading" />
+} @else if (transcriptQuery.isError()) {
+  <fleet-kit-async-state
+    state="error"
+    errorText="TRANSCRIPT UNAVAILABLE — RUNNER LOCAL API UNREACHABLE"
+    errorTestid="transcript-error"
+  />
+} @else if (!transcript()?.available) {
+  @if (transcript()?.hub_unreachable) {
+    <p class="degrade-banner" data-testid="transcript-hub-unreachable">
+      HUB UNREACHABLE — CANNOT READ ARCHIVED TRANSCRIPT
+    </p>
+  } @else {
+    @switch (transcript()?.reason) {
+      @case ('spawning') {
+        <fleet-kit-async-state
+          state="empty"
+          tone="accent"
+          emptyText="NO TRANSCRIPT YET — AGENT STARTING"
+          emptyTestid="transcript-spawning"
+        />
+      }
+      @case ('unreadable') {
+        <fleet-kit-async-state state="error" errorText="TRANSCRIPT UNREADABLE" errorTestid="transcript-unreadable" />
+      }
+      @case ('not_found') {
+        <fleet-kit-async-state
+          state="empty"
+          [emptyText]="'NO TRANSCRIPT ON DISK · SESSION ' + (transcript()?.session_id ?? '—')"
+          emptyTestid="transcript-not-found"
+        />
+      }
+      @default {
+        <fleet-kit-async-state state="empty" emptyText="TRANSCRIPT STATE UNKNOWN" emptyTestid="transcript-unknown" />
+      }
+    }
+  }
+} @else {
+  <div data-testid="transcript-turns">
+    @if (transcript()?.provenance === 'archived') {
+      <p class="banner archived" data-testid="transcript-archived-badge">ARCHIVED — SERVED FROM HUB</p>
+    }
+    @if (transcript()?.truncated) {
+      <p class="banner" data-testid="transcript-truncated">TRUNCATED — SOME CONTENT WAS DROPPED</p>
+    }
+    <fleet-transcript-viewer [turns]="mergedTurns()" />
+  </div>
+}

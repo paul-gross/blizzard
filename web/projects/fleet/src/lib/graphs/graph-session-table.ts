@@ -20,69 +20,8 @@ import type { GraphSessionView } from '../api/hub';
 @Component({
   selector: 'fleet-graph-session-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    @if (sessions().length > 0) {
-      <div class="section" data-testid="graph-detail-sessions">
-        <span class="gd-lbl">Sessions</span>
-        <table class="sessions">
-          <thead>
-            <tr>
-              <th>Session</th>
-              <th>Model</th>
-              <th>Effort</th>
-              <th>Compact window</th>
-              <th>Rotate</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (session of sessions(); track session.name) {
-              <tr data-testid="graph-detail-session-row" [attr.data-session-name]="session.name">
-                <td class="sid">{{ session.name }}</td>
-                <td>{{ listOrDash(session.model) }}</td>
-                <td>{{ session.effort ?? '—' }}</td>
-                <td>{{ session.compaction_window ?? '—' }}</td>
-                <td>{{ rotateLabel(session) }}</td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    }
-  `,
-  styles: `
-    .section {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .gd-lbl {
-      font-size: var(--fs-label);
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--label);
-    }
-    table.sessions {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: var(--fs-xs);
-    }
-    table.sessions th,
-    table.sessions td {
-      border: 1px solid var(--line);
-      padding: 3px 6px;
-      text-align: left;
-      vertical-align: top;
-    }
-    table.sessions th {
-      color: var(--label);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      background: var(--overlay-25);
-    }
-    .sid {
-      color: var(--cyan);
-    }
-  `,
+  templateUrl: './graph-session-table.html',
+  styleUrl: './graph-session-table.css',
 })
 export class GraphSessionTable {
   readonly sessions = input.required<readonly GraphSessionView[]>();

@@ -34,65 +34,8 @@ export const STALE_AFTER_MS = 60 * 60_000;
 @Component({
   selector: 'local-heartbeat-freshness',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <span class="hb" data-testid="hb-freshness">
-      <span class="lbl">hb</span>
-      <span class="track">
-        <span
-          class="fill"
-          [class.stale]="stale()"
-          [style.width.%]="percent()"
-          data-testid="hb-fill"
-          [attr.data-hb-percent]="percent()"
-        ></span>
-      </span>
-      <span class="age" [class.stale]="stale()" data-testid="hb-age">{{ ageLabel() }}</span>
-    </span>
-  `,
-  styles: `
-    :host {
-      display: block;
-      font-family: var(--mono);
-      font-variant-numeric: tabular-nums;
-    }
-    .hb {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .lbl {
-      font-size: var(--fs-label);
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--label-dim);
-    }
-    .track {
-      flex: 1;
-      height: 4px;
-      background: var(--line);
-      border-radius: 2px;
-      overflow: hidden;
-    }
-    .fill {
-      display: block;
-      height: 100%;
-      background: var(--green);
-      border-radius: 2px;
-      transition: width 600ms linear;
-    }
-    .fill.stale {
-      background: var(--red);
-    }
-    .age {
-      width: 52px;
-      text-align: right;
-      font-size: var(--fs-xs);
-      color: var(--label);
-    }
-    .age.stale {
-      color: var(--red);
-    }
-  `,
+  templateUrl: './heartbeat-freshness.html',
+  styleUrl: './heartbeat-freshness.css',
 })
 export class HeartbeatFreshness {
   /** The lease's `last_heartbeat_at` ISO instant, or null before the first beat. */

@@ -1,0 +1,32 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.wrap {
+  position: relative;
+  min-height: 40px;
+}
+.row {
+  display: grid;
+  grid-template-columns: 12px 64px 1fr 56px;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+fleet-kit-beacon {
+  align-self: center;
+}
+.env {
+  color: var(--cyan);
+}
+.chunk {
+  color: var(--amber);
+}
+.held {
+  text-align: right;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}

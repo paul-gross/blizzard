@@ -26,56 +26,8 @@ function clampPct(pct: number): number {
 @Component({
   selector: 'fleet-kit-pace-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <div class="pace-lbl" data-testid="pace-bar-label">{{ label() }}</div>
-    <div
-      class="bar util"
-      data-testid="pace-bar-utilization"
-      role="progressbar"
-      aria-valuemin="0"
-      aria-valuemax="100"
-      [attr.aria-valuenow]="clampedUtilization()"
-      [attr.aria-label]="label() + ' utilization'"
-    >
-      <div class="fill" [style.width.%]="clampedUtilization()"></div>
-    </div>
-    <div
-      class="bar elapsed"
-      data-testid="pace-bar-elapsed"
-      role="progressbar"
-      aria-valuemin="0"
-      aria-valuemax="100"
-      [attr.aria-valuenow]="clampedElapsed()"
-      [attr.aria-label]="label() + ' window elapsed'"
-    >
-      <div class="fill" [style.width.%]="clampedElapsed()"></div>
-    </div>
-  `,
-  styles: `
-    :host {
-      display: block;
-    }
-    .pace-lbl {
-      font-size: var(--fs-label);
-      color: var(--label-dim);
-      margin-bottom: 2px;
-    }
-    .bar {
-      height: 6px;
-      border: 1px solid var(--bezel);
-      background: var(--panel-deep);
-      margin-top: 2px;
-    }
-    .bar .fill {
-      height: 100%;
-    }
-    .bar.util .fill {
-      background: var(--amber);
-    }
-    .bar.elapsed .fill {
-      background: var(--cyan);
-    }
-  `,
+  templateUrl: './kit-pace-bar.html',
+  styleUrl: './kit-pace-bar.css',
 })
 export class KitPaceBar {
   /** The window's harness-native label — `"5h"` or `"7d"` for Claude Code. */

@@ -1,0 +1,11 @@
+<button
+  type="button"
+  class="act"
+  [class.primary]="variant() === 'primary'"
+  [class.danger]="variant() === 'danger'"
+  [disabled]="disabled()"
+  [attr.aria-label]="ariaLabel()"
+  [attr.data-testid]="testid()"
+>
+  <ng-content />
+</button>

@@ -16,54 +16,8 @@ import { map } from 'rxjs';
   selector: 'app-graphs-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [GraphExplorer, GraphDetail],
-  template: `
-    <div class="layout">
-      <fleet-graph-explorer class="explorer" [selectedGraphId]="graphId()" (selectGraph)="select($event)" />
-      @if (graphId(); as id) {
-        <fleet-graph-detail class="detail" [graphId]="id" />
-      } @else {
-        <div class="placeholder" data-testid="graphs-page-placeholder">
-          <p>Select a graph to view its structure.</p>
-        </div>
-      }
-    </div>
-  `,
-  styles: `
-    :host {
-      display: block;
-      flex: 1;
-      min-height: 0;
-    }
-    .layout {
-      height: 100%;
-      min-height: 0;
-      display: grid;
-      grid-template-columns: minmax(260px, 380px) 1fr;
-      gap: 6px;
-      padding: 6px;
-    }
-    .explorer {
-      min-height: 0;
-      overflow-y: auto;
-    }
-    .detail {
-      min-height: 0;
-      min-width: 0;
-    }
-    .placeholder {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      color: var(--label);
-      font-family: var(--mono);
-      font-size: var(--fs-lg);
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      border: 1px solid var(--bezel);
-      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
-    }
-  `,
+  templateUrl: './graphs-page.html',
+  styleUrl: './graphs-page.css',
 })
 export class GraphsPage {
   private readonly route = inject(ActivatedRoute);

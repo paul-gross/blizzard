@@ -19,42 +19,8 @@ import type { LaidOutStart } from './graph-layout';
   host: {
     'data-testid': 'graph-diagram-start-group',
   },
-  template: `
-    <svg:path
-      [attr.d]="start().path"
-      class="edge-start"
-      marker-end="url(#graph-diagram-arrow-advance)"
-      data-testid="graph-diagram-start-path"
-    />
-    <svg:circle
-      class="start-source"
-      [attr.cx]="start().x"
-      [attr.cy]="start().y"
-      [attr.r]="start().r"
-      data-testid="graph-diagram-start"
-    />
-    <svg:text class="start-label" [attr.x]="start().x" [attr.y]="start().y + 4" text-anchor="middle">START</svg:text>
-  `,
-  styles: `
-    .edge-start {
-      fill: none;
-      stroke: var(--green);
-      stroke-width: 2.25;
-      pointer-events: none;
-    }
-    .start-source {
-      fill: var(--green-dim);
-      stroke: var(--green);
-      stroke-width: 1.5;
-    }
-    .start-label {
-      fill: var(--text);
-      font-family: var(--mono);
-      font-size: 10px;
-      font-weight: 700;
-      text-anchor: middle;
-    }
-  `,
+  templateUrl: './graph-diagram-start.html',
+  styleUrl: './graph-diagram-start.css',
 })
 export class GraphDiagramStart {
   readonly start = input.required<LaidOutStart>();

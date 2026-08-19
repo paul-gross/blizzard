@@ -1,0 +1,18 @@
+:host {
+  display: inline-flex;
+}
+.flake {
+  stroke: var(--snow);
+  stroke-linecap: round;
+}
+.tip {
+  fill: var(--cyan);
+}
+.hub {
+  fill: var(--amber);
+}
+.halo {
+  fill: none;
+  stroke: var(--amber);
+  opacity: 0.45;
+}

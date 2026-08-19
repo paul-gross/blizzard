@@ -25,22 +25,8 @@ import { KitTab, KitTabStrip } from 'fleet';
   selector: 'app-nav',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitTab, KitTabStrip, RouterLink, RouterLinkActive],
-  template: `
-    <nav fleetKitTabStrip data-testid="app-nav">
-      <a fleetKitTab routerLink="/board" routerLinkActive="active" data-testid="nav-board">Board</a>
-      <a fleetKitTab routerLink="/graphs" routerLinkActive="active" data-testid="nav-graphs">Graphs</a>
-      <a fleetKitTab routerLink="/events" routerLinkActive="active" data-testid="nav-events">Events</a>
-      @if (showAdmin()) {
-        <a fleetKitTab routerLink="/admin" routerLinkActive="active" data-testid="nav-admin">Admin</a>
-      }
-    </nav>
-  `,
-  styles: `
-    :host {
-      display: block;
-      flex: none;
-    }
-  `,
+  templateUrl: './app-nav.html',
+  styleUrl: './app-nav.css',
 })
 export class AppNav {
   /** Whether the `Admin` tab renders — `user:manage`, gated by the app root. */

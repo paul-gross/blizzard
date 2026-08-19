@@ -25,26 +25,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 @Component({
   selector: 'fleet-app-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <div class="shell">
-      <ng-content select="[shell-header]" />
-      <ng-content select="[shell-nav]" />
-      <ng-content />
-      <ng-content select="[shell-tab-bar]" />
-    </div>
-  `,
-  styles: `
-    :host {
-      display: block;
-      height: 100%;
-    }
-    .shell {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      min-height: 0;
-      overflow: hidden;
-    }
-  `,
+  templateUrl: './app-shell.html',
+  styleUrl: './app-shell.css',
 })
 export class AppShell {}

@@ -34,28 +34,8 @@ import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
   selector: 'app-chunk-transcripts-container',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ChunkTranscriptsTab],
-  template: `
-    <app-chunk-transcripts-tab
-      [history]="history()"
-      [currentNodeId]="currentNodeId()"
-      [currentNodeName]="currentNodeName()"
-      [latestEpoch]="latestEpoch()"
-      [segments]="indexQuery.data()?.segments ?? []"
-      [indexState]="indexState()"
-      [isForbidden]="isForbidden()"
-      [segmentId]="segmentId()"
-      [sidechainPath]="sidechainPath()"
-      [segmentState]="segmentState()"
-      [segmentData]="segmentQuery.data()"
-      (pickSegment)="pickSegment.emit($event)"
-      (pickSidechain)="pickSidechain.emit($event)"
-    />
-  `,
-  styles: `
-    :host {
-      display: contents;
-    }
-  `,
+  templateUrl: './chunk-transcripts-container.html',
+  styleUrl: './chunk-transcripts-container.css',
 })
 export class ChunkTranscriptsContainer {
   /** `ChunkPage.chunkId()`'s own type — nullable everywhere else that field is threaded

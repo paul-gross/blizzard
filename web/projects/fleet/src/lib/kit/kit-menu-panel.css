@@ -1,0 +1,14 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  margin-top: 4px;
+  background: var(--panel);
+  border: 1px solid var(--bezel);
+  box-shadow: 0 8px 20px var(--overlay-40);
+  padding: 4px 0;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  white-space: nowrap;
+  outline: none;
+}

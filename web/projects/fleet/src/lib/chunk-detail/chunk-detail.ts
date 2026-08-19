@@ -48,59 +48,8 @@ import {
   selector: 'fleet-chunk-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ChunkDetailPanel, KitAsyncState],
-  template: `
-    @if (chunkId() === null) {
-      <p class="rest" data-testid="chunk-detail-empty">SELECT A CHUNK TO SEE ITS HISTORY &amp; ARTIFACTS</p>
-    } @else {
-      <fleet-kit-async-state
-        [state]="state()"
-        loadingText="LOADING…"
-        loadingTestid="chunk-detail-loading"
-        errorText="FAILED TO LOAD CHUNK"
-        errorTestid="chunk-detail-error"
-      >
-        @if (detail(); as d) {
-          <fleet-chunk-detail-panel
-            [detail]="d"
-            [workItems]="workItems()"
-            [actionError]="actionError()"
-            [actionOutcome]="actionOutcome()"
-            [canControl]="canControl()"
-            [canAnswer]="canAnswer()"
-            [canResolve]="canResolve()"
-            (dismiss)="dismiss.emit()"
-            (answerQuestion)="onAnswer($event)"
-            (resolveDecision)="onResolve($event)"
-            (detach)="onDetach($event)"
-            (pauseChunk)="onPause($event)"
-            (resumeChunk)="onResume($event)"
-            (complete)="onComplete($event)"
-            (editGraph)="onEditGraph($event)"
-          />
-        }
-      </fleet-kit-async-state>
-    }
-  `,
-  styles: `
-    :host {
-      display: block;
-      height: 100%;
-    }
-    /* The dock is always mounted; when no chunk is open it holds this rest state
-       so the bottom dock keeps its shape (top edge, height) whether empty or filled. */
-    .rest {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      margin: 0;
-      border-top: 1px solid var(--bezel);
-      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
-      color: var(--label-dim);
-      font-size: var(--fs-sm);
-      letter-spacing: 0.12em;
-    }
-  `,
+  templateUrl: './chunk-detail.html',
+  styleUrl: './chunk-detail.css',
 })
 export class ChunkDetail {
   /** The selected chunk id, or `null` when the dock is closed. */

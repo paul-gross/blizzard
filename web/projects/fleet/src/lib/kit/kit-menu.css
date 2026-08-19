@@ -1,0 +1,21 @@
+:host {
+  display: inline-flex;
+}
+.trigger {
+  font-family: inherit;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--label);
+  cursor: pointer;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+.trigger:hover {
+  color: var(--cyan);
+  border-color: var(--line);
+}
+.trigger[aria-expanded='true'] {
+  color: var(--cyan);
+  background: var(--overlay-25);
+}

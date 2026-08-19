@@ -1,0 +1,15 @@
+<app-chunk-transcripts-tab
+  [history]="history()"
+  [currentNodeId]="currentNodeId()"
+  [currentNodeName]="currentNodeName()"
+  [latestEpoch]="latestEpoch()"
+  [segments]="indexQuery.data()?.segments ?? []"
+  [indexState]="indexState()"
+  [isForbidden]="isForbidden()"
+  [segmentId]="segmentId()"
+  [sidechainPath]="sidechainPath()"
+  [segmentState]="segmentState()"
+  [segmentData]="segmentQuery.data()"
+  (pickSegment)="pickSegment.emit($event)"
+  (pickSidechain)="pickSidechain.emit($event)"
+/>

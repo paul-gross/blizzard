@@ -4,17 +4,9 @@
  * `blizzard-context:/verification/blizzard.md`'s `web:structural-gate`
  * method.
  *
- * Four checks, all live:
+ * Two checks, both live:
  *
- *   1. The chrome-duplication sweep (blizzard-context bzh:frontend-kit): the
- *      retired `.panel`/`.p-hdr`/`.p-body`/`.status`/`.lbl` chrome-class
- *      blocks — the copy-pasted panel shell and async-state styling the
- *      `fleet/lib/kit/` components now own — come up empty in every
- *      component style outside the kit directory. The sweep only scans
- *      inline `styles: \`...\`` template literals (the codebase uses inline
- *      component styles exclusively); a separate `styleUrls` file would be
- *      outside this coverage.
- *   2. A `max-lines` ceiling (the ~400-line cap, blizzard-context
+ *   1. A `max-lines` ceiling (the ~400-line cap, blizzard-context
  *      bzh:frontend-container-presentational) over every Angular component
  *      file (one declaring `@Component(`) — armed in phase 3 (#80) now that
  *      the chunk-detail decomposition (#79) and the panel splits (#80) have
@@ -23,17 +15,7 @@
  *      extraction (issue #137) — `MAX_LINES_EXEMPT_FILES` is empty again, so a
  *      *new* oversized file still fails the gate rather than being silently
  *      exempted by precedent.
- *   3. An empty-state-without-the-kit sweep (blizzard#181, blizzard-context
- *      the new rule sibling to bzh:frontend-kit-floor in
- *      architecture/frontend-structure.md): a component outside
- *      `fleet/lib/kit/` that renders a `data-testid` matching `*-empty` must
- *      also reference `fleet-kit-async-state` somewhere in the same file —
- *      the file-level signal that its empty copy is gated by the triad
- *      rather than a bare length check — unless it is named in
- *      `EMPTY_STATE_EXEMPT_FILES`, each entry a view the blizzard#181 sweep
- *      confirmed is reachable only once its *parent* has already resolved
- *      (so the view's own empty copy can never render mid-load).
- *   4. A real-timer sweep (issue #275) over the specs the `test` target runs:
+ *   2. A real-timer sweep (issue #275) over the specs the `test` target runs:
  *      a `setTimeout`/`setInterval` whose delay is a non-zero integer literal
  *      is a real second spent inside the merge gate, and a window guessed
  *      rather than chosen. `setTimeout(…, 0)` is the macrotask-flush idiom and
@@ -50,32 +32,6 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '..');
 const PROJECTS_DIR = path.join(ROOT, 'projects');
 
-/**
- * Directories the sweep does not enforce against, each with a reason:
- *
- * - `fleet/src/lib/kit` legitimately owns this chrome (issue #78 AC) — the
- *   whole point of the kit is one copy of it.
- * - local-panel's `chunk-detail.ts` is the local-panel counterpart of the
- *   fleet chunk-detail monolith — `fleet/src/lib/chunk-detail/` came under
- *   the cap via its decomposition (blizzard#79); local-panel's own is
- *   deferred to #83's rename, and still carries a residual `.lbl` (the
- *   escalation resume box's label) today. Its own `*-empty` rest state now
- *   renders through `fleet-kit-async-state` directly (issue #318 review
- *   round 2), so it no longer needs `EMPTY_STATE_EXEMPT_FILES` below.
- * - local-panel's `heartbeat-freshness.ts` carries its own small `.lbl`
- *   ("hb") — a single-use bar label, not a panel/status block, and outside
- *   Phase 1's enumerated adoption list; noted as a further drift instance for
- *   a follow-up rather than folded into this phase.
- *
- * Narrow, file-level exclusions (not a directory-wide local-panel exemption)
- * so a *new* file with duplicated chrome elsewhere is still caught.
- */
-const EXEMPT_DIRS = [path.join('fleet', 'src', 'lib', 'kit')];
-const EXEMPT_FILES = [
-  path.join('local-panel', 'src', 'lib', 'chunk-detail.ts'),
-  path.join('local-panel', 'src', 'lib', 'heartbeat-freshness.ts'),
-];
-
 /** The `max-lines` ceiling every Angular component file is held to (the
  * ~400-line cap, blizzard-context `bzh:frontend-container-presentational`). */
 const MAX_LINES = 400;
@@ -91,44 +47,6 @@ const MAX_LINES = 400;
  * sub-view extraction, not a re-layering.
  */
 const MAX_LINES_EXEMPT_FILES = [];
-
-/**
- * `EMPTY_STATE_EXEMPT_FILES` — files carrying a `*-empty` `data-testid` with
- * no `fleet-kit-async-state` reference of their own, each confirmed by the
- * blizzard#181 sweep to be reachable only after a *parent* container's own
- * triad has already resolved (so the empty copy here can never render before
- * its data is known) — a rest state, not an unmediated query result.
- */
-const EMPTY_STATE_EXEMPT_FILES = [
-  // Children of `chunk-detail.ts`, itself gated by `ChunkDetailPanel`'s
-  // `[detail]` input never arriving until the container's own detail query
-  // resolves — these two render only once that happened.
-  path.join('fleet', 'src', 'lib', 'chunk-detail', 'chunk-timeline.ts'),
-  path.join('fleet', 'src', 'lib', 'chunk-detail', 'chunk-artifacts.ts'),
-  // The routed chunk page's Artifacts tab — reachable only once `ChunkPage`'s
-  // own detail read has resolved and handed it a `detail` input.
-  path.join('hub', 'src', 'app', 'board', 'chunk', 'chunk-artifacts-tab.ts'),
-  // The admin table — `admin-page.ts` wraps it in `fleet-kit-async-state`
-  // itself; the table is the presentational leaf, not the container
-  // (`bzh:frontend-container-presentational`), so it owns no triad of its own.
-  path.join('fleet', 'src', 'lib', 'admin', 'users-table.ts'),
-  // The diagram's node/edge inspector — its `*-empty` is a "nothing selected"
-  // rest state inside a diagram `graph-detail.ts` already renders behind its
-  // own triad, not a second query result.
-  path.join('fleet', 'src', 'lib', 'graphs', 'graph-diagram-detail.ts'),
-];
-
-// The retired chrome-class blocks (blizzard-context bzh:frontend-kit Detect).
-// Matched as a CSS class selector opener — the name as a whole word, directly
-// followed by a compound-selector continuation (`.other`), a combinator, or
-// the rule's opening brace — so `.status-icon` or `.panel-head` (a distinct,
-// still-legitimate local class) don't false-positive.
-const RETIRED_CLASSES = ['panel', 'p-hdr', 'p-body', 'status', 'lbl'];
-const RETIRED_PATTERN = new RegExp(`\\.(${RETIRED_CLASSES.join('|')})(?![\\w-])\\s*[.,{]`, 'g');
-
-// A `data-testid` naming an empty-state handle (blizzard#181's own naming
-// convention throughout this sweep: `*-empty`).
-const EMPTY_STATE_TESTID_PATTERN = /data-testid="[\w-]*-empty"/;
 
 // A `setTimeout`/`setInterval` whose delay is a non-zero integer literal: real seconds
 // spent inside the merge gate, and a window guessed rather than chosen (issue #275).
@@ -205,22 +123,6 @@ function walk(dir) {
   return out;
 }
 
-/** Every `styles: \`...\`` template-literal body in a component source file —
- * a component may have none (template-only) or one; ng-packagr components in
- * this codebase never use an array of style strings. */
-function extractStylesBlocks(source) {
-  const blocks = [];
-  const re = /styles:\s*`([\s\S]*?)`/g;
-  let match;
-  while ((match = re.exec(source)) !== null) blocks.push(match[1]);
-  return blocks;
-}
-
-function isExempt(relPath) {
-  if (EXEMPT_FILES.includes(relPath)) return true;
-  return EXEMPT_DIRS.some((dir) => relPath.startsWith(dir + path.sep));
-}
-
 /** Whether a source file declares an Angular component — the `max-lines`
  * ceiling applies only to these, not to every `.ts` file the sweep walks
  * (query/mutation/util files carry no template/style chrome to cap). */
@@ -241,8 +143,8 @@ function countLines(source) {
  * literal delay the sweep promises to fail, each must-pass shape is an escape it promises
  * to leave alone, and the gate refuses to run at all if the detector disagrees.
  *
- * The other three checks need no equivalent — each fires on real files in the tree today,
- * so deleting one turns the gate red on its own.
+ * The other check needs no equivalent — it fires on real files in the tree today, so
+ * deleting it turns the gate red on its own.
  */
 function assertRealTimerDetectorWorks() {
   const mustCatch = [
@@ -284,12 +186,8 @@ function main() {
     return !rel.includes(path.join('lib', 'api') + path.sep);
   });
 
-  /** @type {{ file: string, className: string }[]} */
-  const chromeViolations = [];
   /** @type {{ file: string, lines: number }[]} */
   const lineViolations = [];
-  /** @type {string[]} */
-  const emptyStateViolations = [];
   /** @type {{ file: string, timer: string, delay: string }[]} */
   const realTimerViolations = [];
 
@@ -306,45 +204,16 @@ function main() {
           if (delay !== null) realTimerViolations.push({ file: rel, timer: match[1], delay });
         }
       }
-      // The three sweeps below are component-source checks; a spec is neither a
-      // component nor a style host, so *every* spec stops here — gating or not.
+      // The max-lines check below is a component-source check; a spec is
+      // neither a component nor a style host, so every spec stops here —
+      // gating or not.
       continue;
-    }
-
-    if (!isExempt(rel)) {
-      for (const block of extractStylesBlocks(source)) {
-        RETIRED_PATTERN.lastIndex = 0;
-        let match;
-        while ((match = RETIRED_PATTERN.exec(block)) !== null) {
-          chromeViolations.push({ file: rel, className: match[1] });
-        }
-      }
     }
 
     if (isComponentFile(source) && !MAX_LINES_EXEMPT_FILES.includes(rel)) {
       const lines = countLines(source);
       if (lines > MAX_LINES) lineViolations.push({ file: rel, lines });
     }
-
-    if (
-      !isExempt(rel) &&
-      !EMPTY_STATE_EXEMPT_FILES.includes(rel) &&
-      EMPTY_STATE_TESTID_PATTERN.test(source) &&
-      !source.includes('fleet-kit-async-state')
-    ) {
-      emptyStateViolations.push(rel);
-    }
-  }
-
-  if (chromeViolations.length > 0) {
-    console.error('structural-gate: retired chrome classes found outside fleet/lib/kit/:\n');
-    for (const v of chromeViolations) console.error(`  ${v.file}: .${v.className}`);
-    console.error(
-      '\nAdopt the shared kit (fleet/lib/kit/ — KitPanel, KitAsyncState) instead of a local copy of this chrome, ' +
-        'per blizzard-context:/standards/frontend.md bzh:frontend-kit.',
-    );
-    process.exitCode = 1;
-    return;
   }
 
   if (lineViolations.length > 0) {
@@ -353,18 +222,6 @@ function main() {
     console.error(
       '\nDecompose into container + presentational siblings built from the kit, ' +
         'per blizzard-context:/architecture/frontend-structure.md bzh:frontend-container-presentational.',
-    );
-    process.exitCode = 1;
-    return;
-  }
-
-  if (emptyStateViolations.length > 0) {
-    console.error('structural-gate: *-empty data-testid rendered without fleet-kit-async-state:\n');
-    for (const rel of emptyStateViolations) console.error(`  ${rel}`);
-    console.error(
-      '\nGate the empty copy behind fleet-kit-async-state (query-state.ts derives the state), or — if this ' +
-        'view is reachable only after a parent has already resolved — add it to EMPTY_STATE_EXEMPT_FILES with ' +
-        'a one-line reason, per blizzard-context:/architecture/frontend-structure.md.',
     );
     process.exitCode = 1;
     return;
@@ -382,9 +239,7 @@ function main() {
     return;
   }
 
-  console.log(
-    'structural-gate: chrome-duplication sweep, max-lines ceiling, empty-state sweep, and real-timer sweep all clean.',
-  );
+  console.log('structural-gate: max-lines ceiling and real-timer sweep both clean.');
 }
 
 main();

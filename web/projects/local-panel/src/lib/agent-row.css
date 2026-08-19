@@ -1,0 +1,67 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.lease {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.lease:hover {
+  background: var(--panel-deep);
+}
+.lease.selected {
+  background: var(--bezel-hi);
+}
+.lease:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: -1px;
+}
+.l1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.lid {
+  color: var(--amber);
+  font-size: var(--fs-base);
+}
+.lid small {
+  color: var(--label);
+  font-size: var(--fs-label);
+}
+.st {
+  flex: none;
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.st-running {
+  color: var(--green);
+}
+.st-stale {
+  color: var(--red);
+}
+.st-parked {
+  color: var(--amber-hi);
+}
+.st-spawning {
+  color: var(--cyan);
+}
+.st-exited {
+  color: var(--label-dim);
+}
+.st-closed {
+  color: var(--label-dim);
+}
+.l2 {
+  color: var(--label);
+  font-size: var(--fs-xs);
+  margin: 2px 0 4px;
+}
+.l2 b {
+  color: var(--cyan);
+  font-weight: normal;
+}

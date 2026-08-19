@@ -1,0 +1,13 @@
+:host {
+  display: block;
+  flex: 1;
+  min-height: 0;
+  padding: 6px;
+  position: relative;
+}
+.assign-role-error {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  color: var(--red);
+  font-size: var(--fs-sm);
+}

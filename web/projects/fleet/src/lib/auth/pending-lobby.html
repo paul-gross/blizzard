@@ -1,0 +1,8 @@
+<div class="lobby" data-testid="pending-lobby">
+  <p class="headline">Signed in, awaiting access</p>
+  @if (me(); as identity) {
+    <p class="detail" data-testid="pending-lobby-username">{{ identity.display_name }} ({{ identity.username }})</p>
+  }
+  <p class="detail">An admin has not granted you any permissions yet.</p>
+  <fleet-kit-button testid="pending-lobby-logout" (click)="logout.emit()">Log out</fleet-kit-button>
+</div>

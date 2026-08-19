@@ -1,0 +1,25 @@
+:host {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 1px solid var(--bezel);
+  background: var(--panel-deep);
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+:host(:active) {
+  background: var(--bezel-hi);
+}
+.chev {
+  font-size: var(--fs-md);
+  line-height: 1;
+}
+.bb-label {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

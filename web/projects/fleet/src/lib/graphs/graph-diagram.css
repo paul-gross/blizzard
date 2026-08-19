@@ -1,0 +1,90 @@
+:host {
+  display: block;
+}
+.diagram-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--bezel);
+  background: var(--overlay-20);
+}
+svg {
+  display: block;
+}
+.fallback-notice {
+  margin: 0;
+  padding: 6px 8px;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  border: 1px dashed var(--bezel);
+}
+.edge-group {
+  cursor: pointer;
+}
+.edge {
+  fill: none;
+  stroke-width: 2.25;
+  /* Hit-testing goes through the companion .edge-hit path below — the visible
+     stroke never intercepts a click, so a thin curve doesn't force pixel-exact
+     clicks. */
+  pointer-events: none;
+}
+.edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14px;
+  pointer-events: stroke;
+}
+.edge-group:hover .edge {
+  stroke-width: 3;
+}
+.edge-group.selected .edge {
+  stroke-width: 3.5;
+}
+.edge-group.incident .edge {
+  stroke-width: 3;
+}
+.edge-advance {
+  stroke: var(--green);
+}
+.edge-retry {
+  stroke: var(--amber);
+  stroke-dasharray: 6 4;
+}
+.arrow-advance {
+  fill: var(--green);
+}
+.arrow-retry {
+  fill: var(--amber);
+}
+.edge-label-bg {
+  fill: var(--panel-deep);
+}
+.edge-group:hover .edge-label-bg {
+  fill: var(--panel-hover);
+}
+.edge-group.selected .edge-label-bg {
+  fill: var(--panel-hi);
+}
+.edge-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-anchor: middle;
+}
+.edge-label-advance {
+  fill: var(--green);
+}
+.edge-label-retry {
+  fill: var(--amber);
+}
+.done-sink {
+  fill: var(--green-dim);
+  stroke: var(--green);
+  stroke-width: 1.5;
+}
+.done-label {
+  fill: var(--text);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-anchor: middle;
+}

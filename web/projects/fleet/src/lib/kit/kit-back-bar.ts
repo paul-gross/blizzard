@@ -19,37 +19,8 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 @Component({
   selector: 'fleet-kit-back-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <span class="chev" aria-hidden="true">‹</span>
-    <span class="bb-label">{{ label() }}</span>
-  `,
-  styles: `
-    :host {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      min-height: 44px;
-      padding: 0 12px;
-      border: 0;
-      border-bottom: 1px solid var(--bezel);
-      background: var(--panel-deep);
-      color: var(--cyan);
-      font-family: var(--mono);
-      font-size: var(--fs-sm);
-      cursor: pointer;
-    }
-    :host(:active) {
-      background: var(--bezel-hi);
-    }
-    .chev {
-      font-size: var(--fs-md);
-      line-height: 1;
-    }
-    .bb-label {
-      text-decoration: underline;
-      text-underline-offset: 3px;
-    }
-  `,
+  templateUrl: './kit-back-bar.html',
+  styleUrl: './kit-back-bar.css',
 })
 export class KitBackBar {
   /** What the row goes back to, in sentence case (`Board`, `Machine`, `ch_01H…`). */

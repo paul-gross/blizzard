@@ -25,30 +25,8 @@ const BEACON_COLOR: Record<BeaconTone, string> = {
 @Component({
   selector: 'fleet-kit-beacon',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<span class="beacon" [class.active]="active()" [style.background]="color()"></span>`,
-  styles: `
-    :host {
-      display: inline-block;
-    }
-    .beacon {
-      display: block;
-      width: 7px;
-      height: 7px;
-    }
-    .beacon.active {
-      animation: beacon-blink 2s ease-in-out infinite;
-    }
-    @keyframes beacon-blink {
-      50% {
-        opacity: 0;
-      }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .beacon.active {
-        animation: none;
-      }
-    }
-  `,
+  templateUrl: './kit-beacon.html',
+  styleUrl: './kit-beacon.css',
 })
 export class KitBeacon {
   /** Whether the beacon throbs (an occupied lane, a held environment) or sits

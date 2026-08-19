@@ -1,0 +1,10 @@
+<span
+  class="badge"
+  [class.pill]="variant() === 'pill'"
+  [class.soft]="variant() === 'soft'"
+  [style.color]="color()"
+  [style.border-color]="variant() === 'soft' ? dim() : null"
+  [style.background]="variant() === 'soft' ? softBg() : null"
+>
+  <ng-content />
+</span>

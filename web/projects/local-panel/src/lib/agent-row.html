@@ -1,0 +1,23 @@
+<div
+  class="lease"
+  data-testid="agent-row"
+  [attr.data-lease-id]="agent().lease_id"
+  [class.selected]="selected()"
+  role="button"
+  tabindex="0"
+  (click)="onSelect()"
+  (keydown.enter)="onSelect($event)"
+  (keydown.space)="onSelect($event)"
+>
+  <div class="l1">
+    <span class="lid">
+      {{ leaseRef() }} <small>· {{ chunkRef() }} · epoch {{ agent().epoch }}</small>
+    </span>
+    <span class="st" [class]="stateClass()" [attr.data-testid]="'agent-state'">{{ stateLabel() }}</span>
+  </div>
+  <div class="l2">
+    node <b>{{ agent().node_name }}</b> · env <b>{{ agent().environment_id ?? '—' }}</b> · pid
+    <b>{{ agent().pid ?? '—' }}</b>
+  </div>
+  <local-heartbeat-freshness [lastHeartbeatAt]="agent().last_heartbeat_at" [stale]="isStale()" />
+</div>

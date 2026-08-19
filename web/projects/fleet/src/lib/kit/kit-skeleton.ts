@@ -14,40 +14,8 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 @Component({
   selector: 'fleet-kit-skeleton',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    @for (i of rowIndexes(); track i) {
-      <div class="bar" [class.card]="variant() === 'card'"></div>
-    }
-  `,
-  styles: `
-    :host {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .bar {
-      height: 14px;
-      background: linear-gradient(90deg, var(--panel-deep) 25%, var(--overlay-25) 37%, var(--panel-deep) 63%);
-      background-size: 400% 100%;
-      animation: fleet-kit-skeleton-shimmer 1.4s ease infinite;
-    }
-    .bar.card {
-      height: 56px;
-    }
-    @keyframes fleet-kit-skeleton-shimmer {
-      0% {
-        background-position: 100% 50%;
-      }
-      100% {
-        background-position: 0 50%;
-      }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .bar {
-        animation: none;
-      }
-    }
-  `,
+  templateUrl: './kit-skeleton.html',
+  styleUrl: './kit-skeleton.css',
 })
 export class KitSkeleton {
   /** How many placeholder bars to render. */

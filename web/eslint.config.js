@@ -31,6 +31,21 @@ module.exports = defineConfig([
           style: "kebab-case",
         },
       ],
+      // Application components must keep their template and styles in sibling
+      // .html/.css files, not inline in the decorator. 0 means no inline
+      // declaration of any length is allowed.
+      "@angular-eslint/component-max-inline-declarations": [
+        "error",
+        { template: 0, styles: 0, animations: 0 },
+      ],
+    },
+  },
+  // Spec files declare inline @Component test-host fixtures — test scaffolding,
+  // not application components — so they're exempt from the inline-declarations ban.
+  {
+    files: ["**/*.spec.ts"],
+    rules: {
+      "@angular-eslint/component-max-inline-declarations": "off",
     },
   },
   {

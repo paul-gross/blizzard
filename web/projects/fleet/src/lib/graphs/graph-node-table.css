@@ -1,0 +1,29 @@
+table.nodes {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-xs);
+}
+table.nodes th,
+table.nodes td {
+  border: 1px solid var(--line);
+  padding: 3px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+table.nodes th {
+  color: var(--label);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: var(--overlay-25);
+}
+.nid {
+  color: var(--cyan);
+}
+.entry-badge {
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--amber-hi);
+  color: var(--amber-hi);
+  font-size: 0.85em;
+  text-transform: uppercase;
+}

@@ -44,48 +44,8 @@ import { injectLocalPauseMutation, injectRunnerDashboardQuery } from './status.q
   selector: 'local-pause-control',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitBadge, KitButton],
-  template: `
-    <div class="pause-control" data-testid="pause-control">
-      @if (hubPaused()) {
-        <fleet-kit-badge tone="waiting" variant="pill" data-testid="hub-paused-badge">Paused by hub</fleet-kit-badge>
-      }
-      <fleet-kit-button
-        [variant]="localPaused() ? 'danger' : 'default'"
-        [disabled]="pending()"
-        [ariaLabel]="(localPaused() ? 'Resume' : 'Pause') + ' this runner'"
-        testid="pause-toggle"
-        (click)="toggle()"
-      >
-        {{ localPaused() ? 'Resume' : 'Pause' }}
-      </fleet-kit-button>
-      @if (error(); as err) {
-        <p class="notice" data-testid="pause-error" role="alert">{{ err }}</p>
-      }
-    </div>
-  `,
-  styles: `
-    :host {
-      display: flex;
-      align-items: center;
-    }
-    .pause-control {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 0 12px;
-      border-left: 1px solid var(--line);
-      white-space: nowrap;
-    }
-    .notice {
-      margin: 0;
-      padding: 4px 6px;
-      border: 1px solid var(--red-dim);
-      border-left-width: 2px;
-      background: var(--overlay-20);
-      color: var(--red);
-      font-size: var(--fs-xs);
-    }
-  `,
+  templateUrl: './local-pause-control.html',
+  styleUrl: './local-pause-control.css',
 })
 export class LocalPauseControl {
   private readonly dashboardQuery = injectRunnerDashboardQuery();

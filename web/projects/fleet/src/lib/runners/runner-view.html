@@ -1,0 +1,136 @@
+<fleet-kit-panel
+  aria-label="Runner registry"
+  data-testid="runner-panel"
+  label="Runners · fleet registry"
+  [count]="rows().length || null"
+  countTestid="runners-count"
+>
+  <fleet-kit-async-state
+    [state]="state()"
+    placement="inline"
+    loadingText="LOADING…"
+    loadingTestid="runners-loading"
+    errorText="FAILED TO LOAD RUNNERS"
+    errorTestid="runners-error"
+    emptyText="NO RUNNERS REGISTERED"
+    emptyTestid="runners-empty"
+  >
+    <ul class="runners" data-testid="runner-list">
+        @for (row of rows(); track row.runner_id) {
+          <li
+            class="runner"
+            data-testid="runner"
+            [class.offline]="!row.online"
+            [attr.data-runner]="row.runner_id"
+            [attr.data-online]="row.online"
+            [attr.data-hub-paused]="row.hub_paused"
+            [attr.data-locally-paused]="row.locally_paused"
+          >
+            <div class="r1">
+              <span class="name" data-testid="runner-id">
+                <span
+                  class="dot"
+                  [class.online]="row.online"
+                  [class.offline]="!row.online"
+                  aria-hidden="true"
+                ></span>
+                {{ row.runner_id }}
+              </span>
+              <span class="seen" data-testid="runner-seen">{{ seenLabel(row) }}</span>
+            </div>
+            <div class="r2">
+              <span class="wid">{{ row.workspace_id }}</span>
+            </div>
+            <!-- The chunks this runner currently holds a route on, the node each
+                 sits at, and how it is doing there — folded in by the container from
+                 the board's own chunk list, so the registry and the board can never
+                 disagree about who is working what. The status badge colors off the
+                 same STATUS_TONE ladder the board card uses (issue #156), so a
+                 claim and its card always read the same tone. -->
+            @if (row.claims.length > 0) {
+              <ul class="claims" data-testid="runner-claims">
+                @for (claim of row.claims; track claim.chunkId) {
+                  <li class="claim" data-testid="runner-claim">
+                    <span class="c-id" [attr.title]="claim.chunkId">{{ claim.shortId }}</span>
+                    <span class="c-node">{{ claim.node }}</span>
+                    <span class="c-sep" aria-hidden="true">·</span>
+                    <fleet-kit-badge
+                      data-testid="runner-claim-status"
+                      [attr.data-status]="claim.status"
+                      [tone]="toneFor(claim.status)"
+                      >{{ claim.status }}</fleet-kit-badge
+                    >
+                  </li>
+                }
+              </ul>
+            }
+            <!-- The env-slot occupancy bar (issue #69): used = environments this
+                 runner's live routes hold; total = its reported env_capacity. Omitted
+                 (not a zero-slot bar) for a runner registered by a client that predates
+                 the field, whose capacity is null. -->
+            @if (hasCapacity(row)) {
+              <fleet-kit-slot-bar
+                data-testid="runner-slot-bar"
+                [attr.data-runner-slot-bar]="row.runner_id"
+                [used]="row.used"
+                [total]="row.env_capacity ?? 0"
+              />
+            }
+            <!-- The rate-limit pacing bars (issue #218): one stacked utilization/elapsed
+                 pair per external-subscription window the runner last sampled. Rendered
+                 straight off the folded paceBars array — empty (no bars, not zeroed
+                 ones) for a runner that has never sampled, or whose sample the hub has
+                 already nulled as stale. -->
+            @if (row.paceBars.length > 0) {
+              <div class="pace-bars" data-testid="runner-pace-bars">
+                @for (bar of row.paceBars; track bar.window) {
+                  <fleet-kit-pace-bar
+                    data-testid="runner-pace-bar"
+                    [attr.data-runner-pace-bar]="row.runner_id"
+                    [attr.data-pace-window]="bar.window"
+                    [label]="bar.window"
+                    [utilizationPct]="bar.utilizationPct"
+                    [elapsedPct]="bar.elapsedPct"
+                  />
+                }
+              </div>
+            }
+            <div class="r3">
+              <span class="badges">
+                <!-- Two brakes, two badges: a runner stopped by both shows both, because
+                     they are cleared by different people in different places. -->
+                @if (row.locally_paused) {
+                  <span
+                    class="badge paused local"
+                    data-testid="runner-locally-paused"
+                    [title]="localPauseHint(row)"
+                    >LOCALLY PAUSED</span
+                  >
+                }
+                @if (row.hub_paused) {
+                  <span class="badge paused hub" data-testid="runner-hub-paused">HUB PAUSED</span>
+                }
+              </span>
+              <!-- The button is the hub's brake only: the board cannot clear a brake the
+                   runner set on itself, so it never offers to. Gated on runner:pause
+                   (issue #93): that permission is admin-tier, so a contributor sees the
+                   registry and its live paused state but not the brake it cannot operate —
+                   a control that would only 403. -->
+              @if (canPause()) {
+                <button
+                  type="button"
+                  class="act"
+                  data-testid="runner-toggle"
+                  [attr.aria-label]="(row.hub_paused ? 'Resume ' : 'Pause ') + row.runner_id + ' at the hub'"
+                  [title]="toggleHint(row)"
+                  (click)="togglePause.emit(row)"
+                >
+                  {{ row.hub_paused ? 'Resume' : 'Pause' }}
+                </button>
+              }
+            </div>
+          </li>
+        }
+      </ul>
+  </fleet-kit-async-state>
+</fleet-kit-panel>

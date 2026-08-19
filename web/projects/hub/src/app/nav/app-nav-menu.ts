@@ -26,37 +26,8 @@ import { KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, ViewportMenu } from 'fle
   selector: 'app-nav-menu',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CdkMenuTrigger, KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, ViewportMenu],
-  template: `
-    <fleet-kit-menu class="menu" ariaLabel="Profile menu" testid="app-nav-menu" [menu]="profileMenu">
-      <fleet-kit-avatar trigger />
-    </fleet-kit-menu>
-    <ng-template #profileMenu>
-      <fleet-kit-menu-panel testid="app-nav-menu-panel">
-        <fleet-kit-menu-item testid="nav-logout" (triggered)="logout.emit()">Log out</fleet-kit-menu-item>
-        <fleet-kit-menu-item testid="nav-appearance" submenu [cdkMenuTriggerFor]="appearanceMenu">
-          Appearance
-        </fleet-kit-menu-item>
-      </fleet-kit-menu-panel>
-    </ng-template>
-    <ng-template #appearanceMenu>
-      <fleet-viewport-menu testid="nav-appearance-panel" />
-    </ng-template>
-  `,
-  styles: `
-    :host {
-      display: flex;
-      align-items: center;
-    }
-    /* Quiet chrome, not content: normal-cased so it never competes with the
-       nav's own uppercase route tabs, same reasoning the old tab-row menu
-       carried before it moved here. */
-    .menu {
-      align-items: center;
-      padding: 0 10px;
-      letter-spacing: normal;
-      text-transform: none;
-    }
-  `,
+  templateUrl: './app-nav-menu.html',
+  styleUrl: './app-nav-menu.css',
 })
 export class AppNavMenu {
   /** Fired when `Log out` is triggered; the app root owns the mutation. */

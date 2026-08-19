@@ -13,76 +13,8 @@ import { injectRunnerDashboardQuery } from './status.query';
   selector: 'local-asks',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitAsyncState],
-  template: `
-    <div class="wrap" data-testid="local-asks">
-      <fleet-kit-async-state
-        [state]="triadState()"
-        loadingText="LOADING…"
-        errorText="ASKS UNAVAILABLE"
-        emptyText="NO OPEN ASKS ON THIS MACHINE"
-        emptyTestid="asks-empty"
-      >
-        @for (ask of asks(); track ask.question_id) {
-          <div class="ask" data-testid="ask-row" [attr.data-question-id]="ask.question_id">
-            <div class="a-hdr">
-              <span class="chunk">{{ chunkRef(ask) }}</span>
-              <span class="asked">asked {{ askedFor(ask) }} ago</span>
-            </div>
-            <div class="q">{{ ask.question }}</div>
-            <div class="route">answer is a hub write → <code>blizzard hub answer</code> or the fleet board</div>
-          </div>
-        }
-      </fleet-kit-async-state>
-    </div>
-  `,
-  styles: `
-    :host {
-      display: block;
-      font-family: var(--mono);
-      font-variant-numeric: tabular-nums;
-    }
-    .wrap {
-      position: relative;
-      min-height: 40px;
-    }
-    .ask {
-      padding: 6px 8px;
-      border-bottom: 1px solid var(--line);
-    }
-    .a-hdr {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 8px;
-    }
-    .chunk {
-      color: var(--amber-hi);
-      font-size: var(--fs-sm);
-    }
-    .asked {
-      color: var(--label);
-      font-size: var(--fs-label);
-    }
-    /* The ask renders as the agent wrote it — see fleet's .ask-q. This panel is
-       read-only, but it is still where an operator reads the question before going to
-       the hub to answer it, so it collapses the prose no more than the board does. */
-    .q {
-      color: var(--text);
-      font-size: var(--fs-sm);
-      line-height: 1.5;
-      margin-top: 2px;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-    .route {
-      color: var(--label-dim);
-      font-size: var(--fs-label);
-      margin-top: 3px;
-    }
-    .route code {
-      color: var(--label);
-    }
-  `,
+  templateUrl: './local-asks.html',
+  styleUrl: './local-asks.css',
 })
 export class LocalAsks {
   protected readonly query = injectRunnerDashboardQuery();

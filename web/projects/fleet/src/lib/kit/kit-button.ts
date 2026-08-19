@@ -12,49 +12,8 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 @Component({
   selector: 'fleet-kit-button',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <button
-      type="button"
-      class="act"
-      [class.primary]="variant() === 'primary'"
-      [class.danger]="variant() === 'danger'"
-      [disabled]="disabled()"
-      [attr.aria-label]="ariaLabel()"
-      [attr.data-testid]="testid()"
-    >
-      <ng-content />
-    </button>
-  `,
-  styles: `
-    :host {
-      display: contents;
-    }
-    .act {
-      font-family: inherit;
-      background: var(--overlay-30);
-      border: 1px solid var(--line);
-      color: var(--text);
-      cursor: pointer;
-      padding: 2px 7px;
-      font-size: var(--fs-xs);
-    }
-    .act.primary {
-      color: var(--cyan);
-    }
-    .act.danger {
-      color: var(--red);
-    }
-    .act:hover:not(:disabled) {
-      border-color: var(--cyan);
-    }
-    .act.danger:hover:not(:disabled) {
-      border-color: var(--red);
-    }
-    .act:disabled {
-      opacity: 0.4;
-      cursor: default;
-    }
-  `,
+  templateUrl: './kit-button.html',
+  styleUrl: './kit-button.css',
 })
 export class KitButton {
   readonly variant = input<'default' | 'primary' | 'danger'>('default');

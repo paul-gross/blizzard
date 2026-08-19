@@ -24,21 +24,8 @@ import { ArtifactView } from './artifact-view';
   selector: 'app-artifact-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ArtifactView],
-  template: `
-    <app-artifact-view
-      [chunkId]="chunkId()"
-      [backLabel]="shortId()"
-      [artifact]="artifact() ?? null"
-      [state]="state()"
-    />
-  `,
-  styles: `
-    :host {
-      display: block;
-      flex: 1;
-      min-height: 0;
-    }
-  `,
+  templateUrl: './artifact-page.html',
+  styleUrl: './artifact-page.css',
 })
 export class ArtifactPage {
   private readonly route = inject(ActivatedRoute);

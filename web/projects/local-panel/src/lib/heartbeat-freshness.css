@@ -1,0 +1,42 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.hb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lbl {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label-dim);
+}
+.track {
+  flex: 1;
+  height: 4px;
+  background: var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.fill {
+  display: block;
+  height: 100%;
+  background: var(--green);
+  border-radius: 2px;
+  transition: width 600ms linear;
+}
+.fill.stale {
+  background: var(--red);
+}
+.age {
+  width: 52px;
+  text-align: right;
+  font-size: var(--fs-xs);
+  color: var(--label);
+}
+.age.stale {
+  color: var(--red);
+}

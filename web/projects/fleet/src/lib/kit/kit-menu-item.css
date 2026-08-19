@@ -1,0 +1,28 @@
+:host {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+:host(:hover),
+:host(:focus) {
+  background: var(--overlay-25);
+  color: var(--cyan);
+}
+:host([aria-expanded='true']) {
+  color: var(--cyan);
+}
+:host([aria-disabled='true']) {
+  opacity: 0.4;
+  cursor: default;
+}
+.label {
+  flex: 1;
+}
+.chevron {
+  color: var(--label);
+}

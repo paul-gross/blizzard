@@ -25,7 +25,7 @@ import { formatAbsolute, formatWhen } from '../when';
 @Component({
   selector: 'fleet-when',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `{{ text() }}`,
+  templateUrl: './fleet-when.html',
   host: {
     '[attr.title]': 'title()',
   },

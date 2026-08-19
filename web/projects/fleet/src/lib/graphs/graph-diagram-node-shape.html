@@ -1,0 +1,17 @@
+<svg:path class="node-box" [attr.d]="boxPath()" />
+<svg:rect class="node-stripe" [attr.x]="node().x" [attr.y]="node().y" width="4" [attr.height]="node().height" />
+<svg:text class="node-name" [attr.x]="node().x + 14" [attr.y]="node().y + 24" data-testid="graph-diagram-node-name">
+  {{ node().name }}
+</svg:text>
+<svg:text
+  class="node-badge"
+  [attr.x]="node().x + node().width - 8"
+  [attr.y]="node().y + 20"
+  text-anchor="end"
+  data-testid="graph-diagram-node-badge"
+>
+  {{ node().executor.toUpperCase() }}
+</svg:text>
+@for (line of node().metaLines; track $index) {
+  <svg:text class="node-meta" [attr.x]="node().x + 14" [attr.y]="metaLineY($index)">{{ line }}</svg:text>
+}

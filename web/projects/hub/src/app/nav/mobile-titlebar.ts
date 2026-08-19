@@ -27,19 +27,7 @@ import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, Viewp
   selector: 'app-mobile-titlebar',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CdkMenuTrigger, FleetMobileTitlebar, KitMenuItem, KitMenuPanel, ViewportMenu],
-  template: `
-    <fleet-mobile-titlebar [live]="live()" [menu]="shellMenu" />
-    <ng-template #shellMenu>
-      <fleet-kit-menu-panel testid="mobile-titlebar-menu-panel">
-        <fleet-kit-menu-item testid="mobile-titlebar-appearance" submenu [cdkMenuTriggerFor]="appearanceMenu">
-          Appearance
-        </fleet-kit-menu-item>
-      </fleet-kit-menu-panel>
-    </ng-template>
-    <ng-template #appearanceMenu>
-      <fleet-viewport-menu testid="mobile-titlebar-appearance-panel" />
-    </ng-template>
-  `,
+  templateUrl: './mobile-titlebar.html',
 })
 export class MobileTitlebar {
   /** Whether the SSE spine is currently connected — the same `FleetLiveUpdates`

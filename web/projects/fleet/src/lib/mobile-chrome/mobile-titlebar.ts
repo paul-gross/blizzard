@@ -31,67 +31,8 @@ import { KitMenu } from '../kit';
   selector: 'fleet-mobile-titlebar',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [BrandMark, KitMenu],
-  template: `
-    <header class="mt-appbar" [attr.data-testid]="testid()">
-      <fleet-brand-mark [size]="22" />
-      <span class="word">blizzard</span>
-      <span class="spacer"></span>
-      <span
-        class="livedot"
-        [class.active]="live()"
-        [attr.title]="live() ? 'live' : 'offline'"
-        [attr.data-testid]="livedotTestid()"
-      ></span>
-      <fleet-kit-menu class="menu" ariaLabel="Shell options" [testid]="menuTestid()" [menu]="menu()" />
-    </header>
-  `,
-  styles: `
-    :host {
-      display: block;
-      flex: none;
-    }
-    .mt-appbar {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 16px;
-      background: linear-gradient(180deg, var(--header-hi), var(--header-lo));
-      border-bottom: 1px solid var(--bezel);
-      font-family: var(--mono);
-    }
-    .word {
-      color: var(--snow);
-      font-size: var(--fs-md);
-      font-weight: 700;
-      letter-spacing: 0.06em;
-    }
-    .spacer {
-      flex: 1;
-    }
-    .livedot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--label-dim);
-    }
-    .livedot.active {
-      background: var(--cyan);
-      box-shadow: 0 0 8px var(--cyan);
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      .livedot.active {
-        animation: mobile-titlebar-pulse 2.2s ease-in-out infinite;
-      }
-    }
-    @keyframes mobile-titlebar-pulse {
-      50% {
-        opacity: 0.35;
-      }
-    }
-    .menu {
-      color: var(--label);
-    }
-  `,
+  templateUrl: './mobile-titlebar.html',
+  styleUrl: './mobile-titlebar.css',
 })
 export class MobileTitlebar {
   /** Whether the consumer's own live signal is currently connected — the hub's

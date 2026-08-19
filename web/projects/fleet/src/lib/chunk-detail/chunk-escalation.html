@@ -1,0 +1,39 @@
+@if (escalation(); as esc) {
+  <div class="escalation" data-testid="escalation">
+    <div class="s-head"><span class="tag">Needs human · takeover</span></div>
+    @if (hasWrapped()) {
+      <p class="esc-hint">
+        The worker escalated (epoch {{ esc.epoch }}). Run as the runner's service account (the socket is
+        owner-only): this command runs from any directory on the runner's host and records the takeover first,
+        so the fleet will not respawn or judge the session while it is open:
+      </p>
+      <div class="takeover">
+        <code class="cmd" data-testid="takeover-command">{{ primaryCommand() }}</code>
+        <fleet-kit-button testid="copy-takeover" (click)="copyTakeover(primaryCommand())">
+          {{ copied() ? 'Copied' : 'Copy' }}
+        </fleet-kit-button>
+      </div>
+      <details class="raw-fallback" data-testid="takeover-command-raw-fallback">
+        <summary>Unwrapped fallback — cds directly into the &lt;workdir&gt;</summary>
+        <code class="cmd">{{ esc.takeover_command }}</code>
+      </details>
+    } @else if (hasCommand()) {
+      <p class="esc-hint" data-testid="unwrapped-hint">
+        The worker escalated (epoch {{ esc.epoch }}). Its unwrapped takeover field carries either a resume
+        command to run, or guidance for clearing the chunk — the escalation does not say which:
+      </p>
+      <div class="takeover">
+        <code class="cmd" data-testid="takeover-command">{{ primaryCommand() }}</code>
+        <fleet-kit-button testid="copy-takeover" (click)="copyTakeover(primaryCommand())">
+          {{ copied() ? 'Copied' : 'Copy' }}
+        </fleet-kit-button>
+      </div>
+    } @else {
+      <p class="esc-hint" data-testid="no-command-hint">
+        The worker escalated (epoch {{ esc.epoch }}). There is no composed command for this escalation.
+        <code>blizzard runner takeover</code> may still reach the parked session directly; if it refuses,
+        resolve it on the chunk (see its bounce history) and requeue.
+      </p>
+    }
+  </div>
+}

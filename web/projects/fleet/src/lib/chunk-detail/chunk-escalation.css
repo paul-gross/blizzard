@@ -1,0 +1,62 @@
+:host {
+  display: contents;
+}
+.tag {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.s-head {
+  margin-bottom: 6px;
+}
+.escalation {
+  border: 1px solid var(--red-dim);
+  background: color-mix(in srgb, var(--red) 6%, transparent);
+  padding: 6px;
+  margin-bottom: 8px;
+}
+.esc-hint {
+  margin: 0 0 6px;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}
+.takeover {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+}
+.takeover .cmd {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: pre;
+  background: var(--overlay-40);
+  border: 1px solid var(--line);
+  color: var(--amber-hi);
+  padding: 4px 6px;
+  font-size: var(--fs-sm);
+}
+.raw-fallback {
+  margin-top: 6px;
+}
+.raw-fallback summary {
+  cursor: pointer;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  list-style: none;
+}
+.raw-fallback summary::-webkit-details-marker {
+  display: none;
+}
+.raw-fallback .cmd {
+  display: block;
+  margin-top: 4px;
+  overflow-x: auto;
+  white-space: pre;
+  background: var(--overlay-40);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 4px 6px;
+  font-size: var(--fs-sm);
+}

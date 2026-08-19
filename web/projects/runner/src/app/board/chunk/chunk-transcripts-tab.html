@@ -1,0 +1,18 @@
+<fleet-kit-panel class="section transcript-section" data-testid="section-transcript" label="transcript">
+  <fleet-kit-async-state
+    [state]="attemptsState()"
+    loadingText="LOADING…"
+    loadingTestid="attempts-loading"
+    emptyText="NO RECENT ATTEMPTS ON THIS MACHINE"
+    emptyTestid="attempts-empty"
+  >
+    @if (attemptOptions().length > 1) {
+      <div class="attempts" data-testid="attempt-tabs">
+        <fleet-kit-chips [options]="attemptOptions()" [selectedValue]="activeAttemptLeaseId()" (choose)="selectAttempt.emit($event)" />
+      </div>
+    }
+    @if (activeAttemptLeaseId(); as leaseId) {
+      <local-transcript-panel [leaseId]="leaseId" />
+    }
+  </fleet-kit-async-state>
+</fleet-kit-panel>

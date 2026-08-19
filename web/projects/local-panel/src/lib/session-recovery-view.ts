@@ -14,44 +14,8 @@ import { KitButton } from 'fleet';
   selector: 'local-session-recovery',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitButton],
-  template: `
-    <div class="recovery" data-testid="session-recovery">
-      <p class="headline">Session expired</p>
-      <p class="detail">The runner could not silently renew its session.</p>
-      <fleet-kit-button testid="session-recovery-retry" (click)="retry.emit()">Try again</fleet-kit-button>
-    </div>
-  `,
-  styles: `
-    :host {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-    }
-    .recovery {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-      padding: 24px 32px;
-      border: 1px solid var(--line);
-      background: var(--overlay-30);
-      font-family: var(--mono);
-    }
-    .headline {
-      font-size: var(--fs-lg);
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--amber-hi);
-      margin: 0;
-    }
-    .detail {
-      color: var(--label);
-      font-size: var(--fs-sm);
-      margin: 0;
-      text-align: center;
-    }
-  `,
+  templateUrl: './session-recovery-view.html',
+  styleUrl: './session-recovery-view.css',
 })
 export class SessionRecoveryView {
   /** The operator asked to retry — the container clears the mark and re-drives

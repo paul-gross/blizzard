@@ -1,0 +1,16 @@
+@if (label() || hasCount() || headerContent()) {
+  <div class="p-hdr">
+    @if (label()) {
+      <span class="lbl" [style.color]="accent()">{{ label() }}</span>
+    }
+    @if (hasCount()) {
+      <span class="lbl" [class.cnt-accent]="!!accent()" [attr.data-testid]="countTestid()">{{ count() }}</span>
+    }
+    <div class="hdr-slot" [class.hdr-slot--owned]="ownsBar()">
+      <ng-content select="[fleetKitPanelHeader]" />
+    </div>
+  </div>
+}
+<div class="p-body" [class.p-body--noscroll]="!bodyScroll()">
+  <ng-content />
+</div>

@@ -143,7 +143,7 @@ function fromActivity(row: ActivityView, seq: number): LoggedEvent {
   selector: 'fleet-event-log-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [EventLogView],
-  template: `<fleet-event-log-view [rows]="rows()" [state]="state()" />`,
+  templateUrl: './event-log-panel.html',
 })
 export class EventLogPanel {
   private readonly live = inject(FleetLiveUpdates);

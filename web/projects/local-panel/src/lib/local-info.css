@@ -1,0 +1,119 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.wrap {
+  position: relative;
+  min-height: 60px;
+  padding: 6px 8px;
+}
+.kv {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 2px 10px;
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.kv dt {
+  color: var(--label);
+  text-transform: uppercase;
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+}
+.kv dd {
+  margin: 0;
+  color: var(--text);
+  min-width: 0;
+}
+.kv dd.path {
+  color: var(--cyan);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.link.up {
+  color: var(--green);
+}
+.link.down {
+  color: var(--red);
+}
+.paused {
+  color: var(--amber-hi);
+}
+.tick {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  margin-left: 6px;
+}
+.board-link {
+  display: block;
+  margin-top: 8px;
+  color: var(--cyan);
+  font-size: var(--fs-xs);
+  text-decoration: none;
+  letter-spacing: 0.08em;
+}
+.board-link:hover {
+  text-decoration: underline;
+}
+.fleet-strip {
+  position: relative;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--bezel);
+  background: rgba(0, 0, 0, 0.25);
+}
+.fleet-strip .fs-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+.fs-lbl,
+.fs-age {
+  color: var(--label);
+  text-transform: uppercase;
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+}
+.fleet-nums {
+  display: flex;
+  gap: 14px;
+}
+.fleet-nums .fn {
+  font-size: var(--fs-sm);
+}
+.fleet-nums .fn small {
+  display: block;
+  color: var(--label);
+  text-transform: uppercase;
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+}
+.fleet-nums .fn.ready {
+  color: var(--cyan);
+}
+.fleet-nums .fn.running {
+  color: var(--amber);
+}
+.fleet-nums .fn.waiting {
+  color: var(--amber-hi);
+}
+.fleet-nums .fn.needs {
+  color: var(--red);
+}
+/* Hub unreachable: dim the strip and banner it as last-known — the mock's
+   degraded state. The rest of the panel is hub-free, so it stays lit. */
+.fleet-strip.stale {
+  opacity: 0.45;
+}
+.fleet-strip.stale::after {
+  content: 'HUB UNREACHABLE — LAST KNOWN · LOCAL CONTROLS UNAFFECTED';
+  position: absolute;
+  inset: auto 0 -1px 0;
+  padding: 2px 6px;
+  background: var(--red-dim);
+  color: var(--red-wash-text);
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+}

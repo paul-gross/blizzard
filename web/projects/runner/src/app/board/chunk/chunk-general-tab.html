@@ -1,0 +1,19 @@
+<div class="general">
+  <fleet-kit-panel class="section" data-testid="section-work-item" label="work item" [count]="pointerCount() || null">
+    <fleet-chunk-detail-facts [detail]="detail()">
+      <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail()" />
+    </fleet-chunk-detail-facts>
+  </fleet-kit-panel>
+  <fleet-kit-panel class="section" data-testid="section-issues" label="issues">
+    <fleet-chunk-detail-issue-pane [workItems]="workItems()" placement="inline" />
+  </fleet-kit-panel>
+  <fleet-kit-panel class="section" data-testid="section-node-history" label="node history">
+    <!-- Heading suppressed: the enclosing panel's label already says it. See
+         the hub's own general tab for the same opt-out and why the default
+         is true (the board dock relies on the internal heading). -->
+    <fleet-chunk-detail-timeline [detail]="detail()" [heading]="false" />
+  </fleet-kit-panel>
+  <fleet-kit-panel class="section" data-testid="section-asks" label="asks · decisions">
+    <fleet-chunk-detail-awaiting-human [detail]="detail()" />
+  </fleet-kit-panel>
+</div>

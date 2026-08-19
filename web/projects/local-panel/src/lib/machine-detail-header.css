@@ -1,0 +1,102 @@
+:host {
+  display: contents;
+}
+/* Two clusters, space-between — the hub board's own header shape: identity
+   on the left, actions on the right. Wraps rather than overflows once the
+   dock is only as wide as a phone. Paints no chrome of its own (issue
+   #307) — projected into KitPanel's own fleetKitPanelHeader slot in owns-the-bar
+   mode (kit-panel.ts's own declared contract for that mode, which the kit
+   observes through its KitPanelHeader query), which already sizes this root to the bar's
+   full width and supplies the bar's background and border; a second copy
+   here would stack two header bars. */
+.d-hdr {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-family: var(--mono);
+}
+.d-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.cid {
+  display: block;
+  color: var(--amber-hi);
+  font-size: var(--fs-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.cid:hover,
+.cid:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+.d-sub {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.d-sub .iss {
+  color: var(--cyan);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+a.iss {
+  text-decoration: none;
+}
+a.iss:hover,
+a.iss:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+.st {
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.st[data-tone='running'] {
+  color: var(--amber);
+}
+.st[data-tone='stale'],
+.st[data-tone='needs'] {
+  color: var(--red);
+}
+.st[data-tone='waiting'],
+.st[data-tone='takeover'] {
+  color: var(--amber-hi);
+}
+.st[data-tone='spawning'] {
+  color: var(--cyan);
+}
+.st[data-tone='done'] {
+  color: var(--green);
+}
+.d-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.close {
+  background: transparent;
+  border: 1px solid var(--bezel);
+  color: var(--label-dim);
+  cursor: pointer;
+  font-family: inherit;
+  padding: 2px 6px;
+}
+.close:hover {
+  color: var(--text);
+}

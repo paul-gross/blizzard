@@ -1,0 +1,25 @@
+:host {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+:host(:hover),
+:host(:focus) {
+  background: var(--overlay-25);
+  color: var(--cyan);
+}
+:host([aria-checked='true']) {
+  color: var(--amber-hi);
+}
+.tick {
+  width: 1ch;
+  visibility: hidden;
+}
+:host([aria-checked='true']) .tick {
+  visibility: visible;
+}

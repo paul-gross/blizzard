@@ -1,0 +1,39 @@
+<div class="lp-shell">
+  <div class="lp-content">
+    @if (mode() === 'desktop') {
+      <local-panel-layout
+        [activeLeases]="activeLeases()"
+        [leasesTriadState]="leasesTriadState()"
+        [chunksTriadState]="visibleChunksTriadState()"
+        [chunksEmptyText]="chunksEmptyText()"
+        [machineChunks]="visibleChunks()"
+        [showAllChunks]="showAllChunks()"
+        [openAskCount]="openAskCount()"
+        [selectedChunkId]="selectedChunkId()"
+        [selectedChunkLeases]="selectedChunkLeases()"
+        [selectedStatus]="selectedStatus()"
+        [selectedEscalation]="selectedEscalation()"
+        (selectLease)="selectLease($event)"
+        (selectChunk)="selectChunk($event)"
+        (toggleShowAllChunks)="showAllChunks.set($event)"
+        (dismiss)="clearSelection()"
+      />
+    } @else {
+      @defer (on immediate) {
+        <local-panel-mobile
+          [activeLeases]="activeLeases()"
+          [leasesTriadState]="leasesTriadState()"
+          [chunksTriadState]="chunksTriadState()"
+          [machineChunks]="machineChunks()"
+          [openAskCount]="openAskCount()"
+          [selectedChunkLeases]="selectedChunkLeases()"
+          [selectedStatus]="selectedStatus()"
+          [selectedEscalation]="selectedEscalation()"
+          (selectChunk)="selectChunk($event)"
+          (selectLease)="selectLease($event)"
+          (closeDetail)="clearSelection()"
+        />
+      }
+    }
+  </div>
+</div>

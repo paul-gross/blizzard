@@ -1,0 +1,32 @@
+:host {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-family: var(--mono);
+}
+.login {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 320px;
+}
+.title {
+  margin: 0;
+  color: var(--amber-hi);
+  font-size: var(--fs-xl, 28px);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+.subtitle {
+  margin: 0 0 20px;
+  color: var(--label);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.1em;
+}
+.body {
+  position: relative;
+  width: 100%;
+  min-height: 60px;
+}

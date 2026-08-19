@@ -1,0 +1,20 @@
+<div class="login" data-testid="login-page">
+  <h1 class="title">blizzard</h1>
+  <p class="subtitle">Sign in to continue</p>
+  <div class="body">
+    <fleet-kit-async-state
+      [state]="state()"
+      loadingText="LOADING PROVIDERS…"
+      errorText="LOGIN UNAVAILABLE"
+      emptyText="No login providers configured."
+      emptyTestid="login-no-providers"
+    >
+      <fleet-login-buttons
+        [providers]="providers()"
+        [lastUsed]="lastUsed()"
+        [returnTo]="returnTo"
+        (providerClick)="rememberLastUsed($event)"
+      />
+    </fleet-kit-async-state>
+  </div>
+</div>

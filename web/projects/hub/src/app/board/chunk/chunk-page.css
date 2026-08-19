@@ -1,0 +1,60 @@
+:host {
+  display: block;
+  flex: 1;
+  min-height: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+/* The back link's own reset: `fleet-chunk-page-shell` cannot style content
+   projected into its slots (`chunk-page-shell.ts`'s own doc comment), so
+   this stays page-owned — flex:none so the row keeps its content height
+   as a direct flex item of the shell's own column, text-decoration:none
+   to clear the anchor's UA-default underline. */
+.back-row {
+  flex: none;
+  text-decoration: none;
+}
+/* An operator action's failure reads directly under the back row — the
+   action's own result, above the panels that fired it, never swallowed —
+   the same stance fleet's desktop container takes. */
+.notice {
+  flex: none;
+  margin: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--red-dim);
+  border-left-width: 2px;
+  background: var(--overlay-20);
+  color: var(--red);
+  font-size: var(--fs-xs);
+}
+/* An outcome sits in the same slot but reads cyan, not red: losing an answer race
+   is news — the question *is* answered — not something to retry. The desktop dock
+   renders the same distinction the same way. */
+.outcome {
+  flex: none;
+  margin: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--cyan);
+  background: var(--overlay-20);
+  color: var(--text);
+  font-size: var(--fs-xs);
+}
+app-chunk-general-tab {
+  flex: 1;
+  min-height: 0;
+}
+app-chunk-artifacts-tab {
+  flex: 1;
+  min-height: 0;
+}
+/* No rule targets `app-chunk-node-history-container` itself, for the same reason
+   none targets `app-chunk-transcripts-container` below — it is `display: contents`;
+   its presentational child carries its own `flex: 1; min-height: 0` host. */
+/* No rule targets `app-chunk-transcripts-container` itself (review:F1) — it is
+   `display: contents`, so it generates no box of its own to size; its child
+   `app-chunk-transcripts-tab` is a direct flex item of the shell's own
+   `.cps-body` instead, and carries `flex: 1; min-height: 0` on its own
+   `:host` (`chunk-transcripts-tab.ts`). */

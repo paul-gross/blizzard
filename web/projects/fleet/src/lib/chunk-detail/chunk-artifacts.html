@@ -1,0 +1,46 @@
+<div class="arts">
+  @if (heading()) {
+    <div class="s-head"><span class="tag" id="chunk-artifacts-heading">Artifacts</span></div>
+  }
+  @if (artifacts().length === 0) {
+    <p class="none" data-testid="artifacts-empty">No artifacts yet.</p>
+  } @else {
+    <ul class="artifacts" data-testid="artifacts">
+      @for (art of artifacts(); track art.key) {
+        <li class="artifact" data-testid="artifact" [attr.data-kind]="art.kind">
+          @if (expandable()) {
+            @if (hasBodyToExpand(art)) {
+              <button
+                type="button"
+                class="artifact-link"
+                data-testid="artifact-link"
+                [attr.data-artifact-key]="art.key"
+                [attr.aria-expanded]="expandedKey() === art.key"
+                (click)="toggle(art.key)"
+              >
+                <fleet-chunk-detail-artifact-body
+                  [artifact]="art"
+                  [body]="expandedKey() === art.key ? 'full' : 'summary'"
+                />
+              </button>
+            } @else {
+              <div class="artifact-plain" data-testid="artifact-plain" [attr.data-artifact-key]="art.key">
+                <fleet-chunk-detail-artifact-body [artifact]="art" body="full" />
+              </div>
+            }
+          } @else {
+            <a
+              class="artifact-link"
+              data-testid="artifact-link"
+              [attr.data-artifact-key]="art.key"
+              [routerLink]="[...linkBase(), chunkId()]"
+              [queryParams]="{ tab: 'artifacts', artifact: art.key }"
+            >
+              <fleet-chunk-detail-artifact-body [artifact]="art" body="summary" />
+            </a>
+          }
+        </li>
+      }
+    </ul>
+  }
+</div>

@@ -1,0 +1,17 @@
+:host {
+  display: inline-flex;
+}
+.ring {
+  fill: var(--overlay-30);
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.head {
+  fill: var(--label);
+}
+.shoulders {
+  fill: none;
+  stroke: var(--label);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}

@@ -1,0 +1,69 @@
+/* Same flush-to-border problem as chunk-timeline.ts's node history, and the
+   same fix: this host pads itself so the dock (chunk-detail-panel.ts,
+   whose own `.d-sec` drops its padding for this section) and any
+   `fleet-kit-panel`-wrapped consumer (whose `.p-body` is deliberately
+   zero-padded) both get breathing room around the artifact list. */
+:host {
+  display: block;
+  padding: 6px 8px;
+}
+.tag {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.arts {
+  margin-bottom: 8px;
+}
+.s-head {
+  margin-bottom: 6px;
+}
+.none {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}
+.artifacts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.artifact {
+  border: 1px solid var(--line);
+  background: var(--overlay-20);
+  padding: 4px 5px;
+}
+.artifact-link,
+.artifact-plain {
+  display: block;
+  width: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+button.artifact-link {
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.artifact-link:hover,
+.artifact-link:focus-visible {
+  color: var(--cyan);
+  outline: none;
+}
+/* The activatable-row hover wash, shared with board-card and node-history —
+   on the row's own bordered box, not the plain-text color change above.
+   Scoped to a row that carries `.artifact-link`: a `.artifact-plain` row
+   (a git_commit ref, or a content-less asset — see hasBodyToExpand) has no
+   control to hover, so it takes neither this nor a pointer cursor. */
+.artifact:has(.artifact-link:hover),
+.artifact:has(.artifact-link:focus-visible) {
+  border-color: var(--cyan);
+  background: var(--tint-hover);
+}

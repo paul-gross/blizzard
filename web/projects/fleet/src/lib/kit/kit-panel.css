@@ -1,0 +1,59 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--kit-panel-bg, linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%));
+  border: 1px solid var(--bezel);
+}
+.p-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--kit-panel-header-bg, var(--overlay-25));
+  flex: none;
+}
+/* Transparent by default (the supplement mode's small trailing spans size
+   to their own content, unaffected) — .hdr-slot--owned is the only mode
+   that turns this into a real, positioned flex item, so a consumer never
+   opts into stretching by accident. */
+.hdr-slot {
+  display: contents;
+}
+.hdr-slot--owned {
+  display: block;
+  flex: 1;
+  min-width: 0;
+}
+.lbl {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+  text-shadow: 0 1px 0 var(--overlay-90);
+}
+/* Only set when accent is present — the mock's count reads bright
+   against a colored label, never the muted engraved-label grey. */
+.lbl.cnt-accent {
+  color: var(--snow);
+}
+/* Positioned so {@link KitAsyncState}'s absolutely-centered status line
+   resolves against *this* panel's body when the consumer provides no
+   nearer positioned ancestor of its own — without it the line escapes to
+   whatever ancestor happens to be positioned (the initial containing
+   block, when none is) and paints over unrelated content. */
+.p-body {
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
+}
+/* bodyScroll(false): this panel's content owns its own scrolling, so
+   .p-body only clips — a second auto scrollbar here is exactly the bug
+   (issue #309): it grabs the drag instead of the content's own scroller. */
+.p-body--noscroll {
+  overflow: hidden;
+}

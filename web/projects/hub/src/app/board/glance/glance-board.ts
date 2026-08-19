@@ -49,30 +49,12 @@ import { GlanceView, type AttentionRow, type DoneRow, type MotionRow, type Vital
   selector: 'app-glance-board',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [GlanceView],
-  template: `
-    <app-glance-view
-      [vitals]="vitals()"
-      [needsYou]="needsYou()"
-      [needsYouState]="needsYouState()"
-      [inMotion]="inMotion()"
-      [inMotionState]="inMotionState()"
-      [doneToday]="doneToday()"
-      [doneTodayState]="doneTodayState()"
-      [spend]="spendToday.data() ?? null"
-      [spendState]="spendState()"
-    />
-  `,
+  templateUrl: './glance-board.html',
   // A routed page fills the router outlet area, same as `BoardPage`'s own
   // `:host` — `GlanceView`'s `:host { height: 100% }` needs this to resolve
   // against, and `App`'s flex-column layout needs `flex: 1` to give this
   // page the remaining space rather than its content's intrinsic size.
-  styles: `
-    :host {
-      display: block;
-      flex: 1;
-      min-height: 0;
-    }
-  `,
+  styleUrl: './glance-board.css',
 })
 export class GlanceBoard {
   private readonly chunksQuery = injectHubChunksQuery();

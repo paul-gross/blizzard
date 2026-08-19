@@ -25,29 +25,8 @@ export interface KitTabOption {
   selector: 'fleet-kit-tabs',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitTab, KitTabStrip],
-  template: `
-    <div class="tabs" fleetKitTabStrip role="tablist">
-      @for (option of options(); track option.value) {
-        <button
-          type="button"
-          class="tab"
-          fleetKitTab
-          role="tab"
-          [class.active]="option.value === activeValue()"
-          [attr.aria-selected]="option.value === activeValue()"
-          [attr.data-testid]="option.testid ?? null"
-          (click)="choose.emit(option.value)"
-        >
-          {{ option.label }}
-        </button>
-      }
-    </div>
-  `,
-  styles: `
-    :host {
-      display: contents;
-    }
-  `,
+  templateUrl: './kit-tabs.html',
+  styleUrl: './kit-tabs.css',
 })
 export class KitTabs {
   readonly options = input.required<readonly KitTabOption[]>();

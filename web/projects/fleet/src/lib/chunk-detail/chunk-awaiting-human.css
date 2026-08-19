@@ -1,0 +1,121 @@
+:host {
+  display: contents;
+}
+.tag {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.awaiting,
+.answered {
+  margin-bottom: 8px;
+}
+.s-head {
+  margin-bottom: 6px;
+}
+/* The same amber accent bar the board cards carry, with breathing room so the
+   heading never touches it. */
+.awaiting {
+  border-left: 2px solid var(--amber);
+  padding: 4px 0 4px 8px;
+}
+/* The settled counterpart of the amber awaiting bar: the ask is over, so it reads
+   cyan (the board's "this resolved" accent) and asks nothing of the operator. */
+.answered {
+  border-left: 2px solid var(--cyan);
+  padding: 4px 0 4px 8px;
+}
+.ask,
+.gate,
+.trail {
+  border: 1px solid var(--line);
+  background: var(--overlay-20);
+  padding: 4px 6px;
+}
+.trail + .trail {
+  margin-top: 4px;
+}
+.trail-line {
+  margin: 0;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}
+.trail-answer {
+  color: var(--text);
+  white-space: pre-wrap;
+}
+.trail-answer::before {
+  content: '· ';
+  color: var(--label-dim);
+}
+.delivered {
+  color: var(--cyan);
+}
+.gate {
+  margin-top: 4px;
+}
+.ask-q {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.gate-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.gate-node {
+  color: var(--cyan);
+  font-size: var(--fs-sm);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+/* The ask/gate chips carry a distinct engraved look (uppercase, letter-spaced)
+   the shared kit's plain chip/button do not — a local, deliberate variant. */
+.chip {
+  font-family: inherit;
+  background: var(--overlay-30);
+  border: 1px solid var(--line);
+  color: var(--text);
+  cursor: pointer;
+  padding: 3px 8px;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.chip:hover {
+  border-color: var(--cyan);
+}
+.chip:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 1px;
+}
+.chip.primary {
+  color: var(--cyan);
+}
+.answer-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+.answer-input {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  background: var(--overlay-35);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 3px 6px;
+}
+.answer-input:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 0;
+}

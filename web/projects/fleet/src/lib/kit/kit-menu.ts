@@ -29,40 +29,8 @@ import { CdkMenu, CdkMenuTrigger } from '@angular/cdk/menu';
   selector: 'fleet-kit-menu',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CdkMenuTrigger],
-  template: `
-    <button
-      type="button"
-      class="trigger"
-      [cdkMenuTriggerFor]="menu()"
-      [attr.aria-label]="ariaLabel()"
-      [attr.data-testid]="testid()"
-    >
-      <ng-content select="[trigger]">⋮</ng-content>
-    </button>
-  `,
-  styles: `
-    :host {
-      display: inline-flex;
-    }
-    .trigger {
-      font-family: inherit;
-      background: none;
-      border: 1px solid transparent;
-      color: var(--label);
-      cursor: pointer;
-      line-height: 1;
-      padding: 3px 8px;
-      border-radius: 3px;
-    }
-    .trigger:hover {
-      color: var(--cyan);
-      border-color: var(--line);
-    }
-    .trigger[aria-expanded='true'] {
-      color: var(--cyan);
-      background: var(--overlay-25);
-    }
-  `,
+  templateUrl: './kit-menu.html',
+  styleUrl: './kit-menu.css',
 })
 export class KitMenu {
   /** The panel this trigger opens — the `<ng-template>` holding a
@@ -94,23 +62,8 @@ export class KitMenu {
   host: {
     '[attr.data-testid]': 'testid()',
   },
-  template: `<ng-content />`,
-  styles: `
-    :host {
-      display: flex;
-      flex-direction: column;
-      min-width: 150px;
-      margin-top: 4px;
-      background: var(--panel);
-      border: 1px solid var(--bezel);
-      box-shadow: 0 8px 20px var(--overlay-40);
-      padding: 4px 0;
-      font-family: var(--mono);
-      font-size: var(--fs-base);
-      white-space: nowrap;
-      outline: none;
-    }
-  `,
+  templateUrl: './kit-menu-panel.html',
+  styleUrl: './kit-menu-panel.css',
 })
 export class KitMenuPanel {
   /** The panel's `data-testid`, or `null` for none. */

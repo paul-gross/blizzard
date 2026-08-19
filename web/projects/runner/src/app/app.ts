@@ -56,43 +56,8 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [AppHeader, AppNav, AppShell, MobileTabBar, MobileTitlebar, RouterOutlet, SessionRecoveryView],
-  template: `
-    @if (recovering()) {
-      <local-session-recovery (retry)="onRetry()" />
-    } @else {
-      <fleet-app-shell>
-        <!-- Each slotted node sits in its own @if/@else pair rather than
-             sharing an @else with a sibling: a control-flow branch with more
-             than one root node cannot resolve which named ng-content slot
-             each child belongs to (NG8011), so AppShell's ordering
-             guarantee only holds when every projected node is the sole root
-             of its own branch. -->
-        @if (mobile()) {
-          <app-mobile-titlebar shell-header />
-        } @else {
-          <app-header shell-header />
-        }
-        @if (!mobile()) {
-          <app-nav shell-nav />
-        }
-        <router-outlet />
-        @if (mobile()) {
-          <app-mobile-tab-bar shell-tab-bar />
-        }
-      </fleet-app-shell>
-    }
-  `,
-  styles: `
-    :host {
-      display: block;
-      height: 100%;
-    }
-    /* router-outlet is an empty anchor element the router inserts routed
-       components after — it carries no visual size of its own. */
-    router-outlet {
-      display: none;
-    }
-  `,
+  templateUrl: './app.html',
+  styleUrl: './app.css',
 })
 export class App {
   private readonly sessionRecovery = inject(SessionRecovery);

@@ -1,0 +1,164 @@
+:host {
+  display: block;
+  flex: none;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+}
+.mc-header {
+  display: flex;
+  align-items: stretch;
+  height: 48px;
+  border-bottom: 1px solid var(--bezel);
+  background: linear-gradient(180deg, var(--header-hi), var(--header-lo));
+  /* The header is its own query container, not a viewport-media consumer:
+     the hub board and the runner's local panel mount it at different
+     widths, so each must collapse by the width *it* actually has (issue
+     #163). Named so the container rules below can't be captured by some
+     future nested container. */
+  container-name: board-header;
+  container-type: inline-size;
+}
+.stat-lbl {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+  text-shadow: 0 1px 0 var(--overlay-90);
+}
+.brand {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border-right: 1px solid var(--line);
+  white-space: nowrap;
+}
+/* The primary shrinkable region. The brand and the connection cell are
+   pinned flex: none, so an overfull header eats into the stat strip —
+   which then clips via overflow: hidden — instead of pushing them past
+   the clipped right edge of a viewport-locked, scrollbar-less shell.
+   .trailing (below) is also shrinkable, for the consumer whose projected
+   content is itself content-sized (a long username), but its flex-shrink
+   is nowhere near this one: at equal shrink factors the two would split
+   a deficit in proportion to their own widths, and a shell whose
+   trailing content can't itself give way (the hub's menu-only cluster)
+   would then take a real, if small, share of it — with no overflow:
+   hidden of its own, that share spills past the header's own right edge
+   into genuine page-level horizontal scroll (issue #171's shell sweep
+   caught this a few px wide, right above this strip's own 1150px
+   breakpoint). The lopsided factor makes the strip absorb a shrinking
+   header almost entirely by itself while it still has any width left to
+   give. */
+.stats {
+  display: flex;
+  align-items: stretch;
+  flex: 0 999 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  color: var(--amber-hi);
+  font-size: var(--fs-lg);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+.brand small {
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+}
+.cell {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 14px;
+  border-right: 1px solid var(--line);
+  white-space: nowrap;
+}
+.cell .v {
+  color: var(--amber);
+  font-size: var(--fs-lg);
+  line-height: 1.1;
+}
+/* The counts that carry an operator signal wear their status color, so a
+   non-zero "needs human" reads as an alarm from across the room. */
+.cell[data-stat='needs'] .v {
+  color: var(--red);
+}
+.cell[data-stat='waiting'] .v {
+  color: var(--amber-hi);
+}
+.cell[data-stat='done'] .v {
+  color: var(--green);
+}
+.spacer {
+  flex: 1;
+  border-right: 1px solid var(--line);
+}
+.conn {
+  border-right: none;
+}
+.conn .v {
+  color: var(--cyan);
+}
+.spend .v {
+  color: var(--amber-hi);
+}
+/*
+ * The trailing cluster shrinks rather than overflowing, but only into
+ * whatever its consumer marked shrinkable — a consumer projecting content of
+ * *content-dependent* width (the runner's local panel projects a signed-in
+ * username) has to be able to truncate it, and a flex: none wrapper is sized
+ * to its max-content, so a long username would push the whole cluster, menu
+ * included, past the clipped right edge. A zero min-width removes that floor;
+ * each projected control then decides for itself whether it gives way (see
+ * local-panel-layout.ts, where the identity truncates and the menu is pinned
+ * flex: none).
+ */
+.trailing {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: stretch;
+}
+
+/*
+ * Tiered collapse (issue #163). Below the wide breakpoint the per-lane
+ * count cells go — the board's own lane columns still carry those headings,
+ * so nothing is lost — and below the narrow one the spend cell and the whole
+ * brand *text* block follow, leaving the brand mark, the connection cell,
+ * and the projected menu. Those three survive every tier: on a phone forced
+ * into desktop mode that menu is the only way back to mobile, so it must
+ * never be the thing that gets pushed off.
+ *
+ * The wordmark goes with the tagline rather than after it. Together they are
+ * ~190px of a 390px phone, which is the difference between the trailing
+ * cluster fitting and running off the edge on the runner's local panel,
+ * whose trailing slot carries more than the hub's — and the mark alone still
+ * identifies the app.
+ */
+@container board-header (max-width: 1149px) {
+  .stats {
+    display: none;
+  }
+  /* Yesterday's cell — a comparison figure — drops one tier earlier than
+     today's own, the same tier the per-lane stat strip yields at (issue
+     #183; a judgment call, flagged here so review can overrule it cheaply). */
+  .spend-yesterday {
+    display: none;
+  }
+}
+@container board-header (max-width: 699px) {
+  .spend {
+    display: none;
+  }
+  .brand-text {
+    display: none;
+  }
+}

@@ -1,0 +1,13 @@
+<fleet-events-view
+  [events]="events()"
+  [severity]="severity()"
+  [runner]="runnerId()"
+  [chunk]="chunkId()"
+  [runnerIds]="runnerIds()"
+  [chunkIds]="chunkIds()"
+  [state]="state()"
+  (selectChunk)="selectChunk.emit($event)"
+  (filterChange)="onFilterChange($event)"
+  (runnerFilterChange)="onRunnerFilterChange($event)"
+  (chunkFilterChange)="onChunkFilterChange($event)"
+/>

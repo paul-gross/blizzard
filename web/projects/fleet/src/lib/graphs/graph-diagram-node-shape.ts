@@ -30,80 +30,8 @@ const CORNER_RADIUS = 9;
     '[class.selected]': 'selected()',
     '[class.incident]': 'incident()',
   },
-  template: `
-    <svg:path class="node-box" [attr.d]="boxPath()" />
-    <svg:rect class="node-stripe" [attr.x]="node().x" [attr.y]="node().y" width="4" [attr.height]="node().height" />
-    <svg:text class="node-name" [attr.x]="node().x + 14" [attr.y]="node().y + 24" data-testid="graph-diagram-node-name">
-      {{ node().name }}
-    </svg:text>
-    <svg:text
-      class="node-badge"
-      [attr.x]="node().x + node().width - 8"
-      [attr.y]="node().y + 20"
-      text-anchor="end"
-      data-testid="graph-diagram-node-badge"
-    >
-      {{ node().executor.toUpperCase() }}
-    </svg:text>
-    @for (line of node().metaLines; track $index) {
-      <svg:text class="node-meta" [attr.x]="node().x + 14" [attr.y]="metaLineY($index)">{{ line }}</svg:text>
-    }
-  `,
-  styles: `
-    :host {
-      cursor: pointer;
-    }
-    .node-box {
-      fill: var(--panel);
-      stroke: var(--bezel-hi);
-      stroke-width: 1.25;
-    }
-    .node-stripe {
-      fill: var(--label-dim);
-    }
-    :host(.exec-runner) .node-stripe {
-      fill: var(--cyan);
-    }
-    :host(.exec-hub) .node-stripe {
-      fill: var(--amber);
-    }
-    :host(:hover) .node-box {
-      fill: var(--panel-hover);
-    }
-    :host(.selected) .node-box {
-      fill: var(--panel-hi);
-      stroke: var(--amber-hi);
-      stroke-width: 2.5;
-    }
-    :host(.incident) .node-box {
-      stroke: var(--cyan);
-      stroke-width: 2;
-    }
-    .node-name {
-      fill: var(--text);
-      font-family: var(--mono);
-      font-size: 13px;
-      font-weight: 600;
-    }
-    .node-badge {
-      fill: var(--label-dim);
-      font-family: var(--mono);
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-    }
-    :host(.exec-runner) .node-badge {
-      fill: var(--cyan);
-    }
-    :host(.exec-hub) .node-badge {
-      fill: var(--amber);
-    }
-    .node-meta {
-      fill: var(--label);
-      font-family: var(--mono);
-      font-size: 11px;
-    }
-  `,
+  templateUrl: './graph-diagram-node-shape.html',
+  styleUrl: './graph-diagram-node-shape.css',
 })
 export class GraphDiagramNodeShape {
   readonly node = input.required<LaidOutNode>();

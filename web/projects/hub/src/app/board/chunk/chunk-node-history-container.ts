@@ -38,24 +38,8 @@ import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
   selector: 'app-chunk-node-history-container',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ChunkNodeHistoryTab],
-  template: `
-    <app-chunk-node-history-tab
-      [detail]="detail()"
-      [selectedKey]="selectedKey()"
-      [stepArtifacts]="stepArtifacts()"
-      [indexState]="indexState()"
-      [isForbidden]="isForbidden()"
-      [segmentState]="segmentState()"
-      [segmentData]="segmentQuery.data()"
-      [extraSegmentCount]="extraSegmentCount()"
-      (pickStep)="pickStep.emit($event)"
-    />
-  `,
-  styles: `
-    :host {
-      display: contents;
-    }
-  `,
+  templateUrl: './chunk-node-history-container.html',
+  styleUrl: './chunk-node-history-container.css',
 })
 export class ChunkNodeHistoryContainer {
   /** See {@link ChunkTranscriptsContainer.chunkId} — nullable for the same reason. */

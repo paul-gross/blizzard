@@ -1,0 +1,12 @@
+<header class="mt-appbar" [attr.data-testid]="testid()">
+  <fleet-brand-mark [size]="22" />
+  <span class="word">blizzard</span>
+  <span class="spacer"></span>
+  <span
+    class="livedot"
+    [class.active]="live()"
+    [attr.title]="live() ? 'live' : 'offline'"
+    [attr.data-testid]="livedotTestid()"
+  ></span>
+  <fleet-kit-menu class="menu" ariaLabel="Shell options" [testid]="menuTestid()" [menu]="menu()" />
+</header>

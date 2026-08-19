@@ -1,0 +1,53 @@
+:host {
+  display: block;
+  flex: none;
+}
+.tabbar {
+  display: flex;
+  border-top: 1px solid var(--bezel);
+  background: linear-gradient(180deg, var(--header-hi), var(--header-lo));
+}
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 10px 0 8px;
+  color: var(--label-dim);
+  font-family: var(--mono);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  border: 0;
+  background: none;
+  position: relative;
+  text-decoration: none;
+}
+.tab.on {
+  color: var(--amber);
+}
+.tab.on::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 25%;
+  right: 25%;
+  height: 2px;
+  background: var(--amber);
+}
+/* Present but not yet functional — dimmed further than an inactive tab so
+   neither reads as a live, broken link. */
+.tab.inert {
+  opacity: 0.55;
+  cursor: default;
+}
+.badge {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  margin-left: 5px;
+  background: var(--red);
+  color: var(--snow);
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 0;
+}

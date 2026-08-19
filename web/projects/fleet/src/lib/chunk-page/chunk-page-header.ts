@@ -26,42 +26,8 @@ import type { Tone } from '../kit/tone';
   selector: 'fleet-chunk-page-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitBadge],
-  template: `
-    <header class="cp-hdr">
-      <span class="cid" data-testid="mobile-chunk-ref">{{ chunkId() }}</span>
-      <fleet-kit-badge [tone]="tone()" variant="soft" data-testid="mobile-chunk-status">{{ status() }}</fleet-kit-badge>
-    </header>
-  `,
-  styles: `
-    :host {
-      display: block;
-      flex: none;
-      /* Pinned rather than inherited: the hub's and the runner's own page
-         roots don't agree on an ambient font-size (the hub's own \`:host\`
-         sets \`--fs-base\`; the runner's never did), and \`.badge.soft\`'s
-         \`font-size: 0.78em\` (kit-badge.ts) resolves off whatever's
-         inherited — so composing this header on the two pages rendered its
-         badge at two different sizes until this was pinned here. */
-      font-family: var(--mono);
-      font-size: var(--fs-base);
-      font-variant-numeric: tabular-nums;
-      color: var(--text);
-    }
-    .cp-hdr {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 8px;
-      margin: 8px;
-      padding: 0 8px;
-    }
-    .cid {
-      color: var(--amber);
-      font-size: var(--fs-md);
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
-  `,
+  templateUrl: './chunk-page-header.html',
+  styleUrl: './chunk-page-header.css',
 })
 export class ChunkPageHeader {
   /** The chunk's full `ch_…` id — never `compactRef`'d here. */

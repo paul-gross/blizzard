@@ -49,66 +49,8 @@ import { injectRunnerLogoutMutation, injectRunnerSessionQuery, signedInUsername 
   host: {
     '[attr.role]': "variant() === 'label' ? 'presentation' : null",
   },
-  template: `
-    @if (username(); as user) {
-      <div class="identity" [class.label-only]="variant() === 'label'" data-testid="local-identity">
-        <span class="who">
-          <span class="who-lbl">signed in</span>
-          <span class="user" data-testid="identity-username">{{ user }}</span>
-        </span>
-        @if (variant() === 'control') {
-          <fleet-kit-button class="logout" testid="identity-logout" (click)="logout()">Log out</fleet-kit-button>
-        }
-      </div>
-    }
-  `,
-  styles: `
-    /* The username is the one content-dependent width in the header, so it is
-       the one thing that must be able to give way: without a zero floor and an
-       ellipsis it sets a max-content that pushes everything after it — the
-       profile menu included — off a viewport-locked shell (issue #163). */
-    :host {
-      display: flex;
-      align-items: center;
-      min-width: 0;
-    }
-    .identity {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 0 12px;
-      border-left: 1px solid var(--line);
-      white-space: nowrap;
-      min-width: 0;
-    }
-    .who {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      min-width: 0;
-    }
-    .who-lbl {
-      font-size: var(--fs-label);
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--label);
-    }
-    .user {
-      color: var(--cyan);
-      font-size: var(--fs-sm);
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .logout {
-      align-items: center;
-    }
-    /* Inside a menu panel the block is a row, not a header cell — the header's
-       divider and side padding would read as chrome the menu doesn't have. */
-    .identity.label-only {
-      border-left: none;
-      padding: 4px 12px;
-    }
-  `,
+  templateUrl: './local-identity.html',
+  styleUrl: './local-identity.css',
 })
 export class LocalIdentity {
   protected readonly query = injectRunnerSessionQuery();

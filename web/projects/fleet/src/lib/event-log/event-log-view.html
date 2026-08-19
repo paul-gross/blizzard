@@ -1,0 +1,31 @@
+<fleet-kit-panel
+  class="fill"
+  aria-label="Event log"
+  data-testid="event-log-panel"
+  label="Event log"
+>
+  <fleet-kit-async-state
+    [state]="state()"
+    placement="inline"
+    loadingText="CONNECTING…"
+    loadingTestid="event-log-loading"
+    errorText="EVENT STREAM UNAVAILABLE"
+    errorTestid="event-log-error"
+    emptyText="No events yet."
+    emptyTestid="event-log-empty"
+  >
+    <div class="rows" data-testid="event-log-rows">
+      @for (row of rows(); track row.seq) {
+        <div class="ev" data-testid="event-log-row" [attr.data-kind]="row.type">
+          <span class="t" data-testid="event-log-time">{{ row.time }}</span>
+          <div class="m-block">
+            <span class="m" data-testid="event-log-message">{{ row.message }}</span>
+            @if (row.detail) {
+              <span class="d" data-testid="event-log-detail">{{ row.detail }}</span>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </fleet-kit-async-state>
+</fleet-kit-panel>

@@ -1,0 +1,8 @@
+<div class="gauge" data-testid="slot-bar-gauge">
+  @for (filled of cells(); track $index) {
+    <span class="cell" [class.on]="filled"></span>
+  }
+</div>
+<div class="gauge-lbl">
+  <span class="lbl" data-testid="slot-bar-label">{{ used() }}/{{ total() }} slots</span>
+</div>

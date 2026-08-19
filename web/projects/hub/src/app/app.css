@@ -1,0 +1,12 @@
+:host {
+  display: block;
+  height: 100%;
+}
+/* router-outlet is an empty anchor element the router inserts routed
+   components after — it carries no visual size of its own. */
+router-outlet {
+  display: none;
+}
+.boot {
+  height: 100%;
+}

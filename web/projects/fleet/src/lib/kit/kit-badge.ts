@@ -54,45 +54,8 @@ const TONE_DIM: Record<Tone, string> = {
 @Component({
   selector: 'fleet-kit-badge',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <span
-      class="badge"
-      [class.pill]="variant() === 'pill'"
-      [class.soft]="variant() === 'soft'"
-      [style.color]="color()"
-      [style.border-color]="variant() === 'soft' ? dim() : null"
-      [style.background]="variant() === 'soft' ? softBg() : null"
-    >
-      <ng-content />
-    </span>
-  `,
-  styles: `
-    :host {
-      display: inline;
-    }
-    .badge {
-      font-size: var(--fs-label);
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-    }
-    .badge.pill {
-      border: 1px solid currentcolor;
-      padding: 0 4px;
-      font-size: 0.85em;
-      letter-spacing: 0.08em;
-    }
-    /* The mock's thin, fully-rounded pill (screen C) — border-color/background
-       come from the tone-derived style bindings above, not from here. */
-    .badge.soft {
-      display: inline-block;
-      border: 1px solid transparent;
-      border-radius: 999px;
-      padding: 1px 8px;
-      font-size: 0.78em;
-      font-weight: 400;
-      letter-spacing: 0.08em;
-    }
-  `,
+  templateUrl: './kit-badge.html',
+  styleUrl: './kit-badge.css',
 })
 export class KitBadge {
   /** The status this badge colors for. */

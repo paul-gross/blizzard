@@ -1,0 +1,98 @@
+:host {
+  display: block;
+  flex: 1;
+  min-height: 0;
+}
+.art-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.art-nav {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 35%;
+  border-bottom: 1px solid var(--line);
+}
+.none {
+  margin: 0;
+  padding: 0 8px 8px;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}
+.art-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.art-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 6px 8px;
+}
+.art-item:hover {
+  background: var(--overlay-20);
+}
+/* The board dock's own "which one am I looking at" idiom (board-card.ts) —
+   an accent border plus the shared selection tint. */
+.art-item.active {
+  border-left-color: var(--cyan);
+  background: var(--tint-selected);
+}
+.art-item .key {
+  display: block;
+  color: var(--cyan);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+.art-item .sub {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--label-dim);
+}
+.art-item .sub .kind {
+  margin-left: auto;
+}
+.art-view {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--overlay-25);
+}
+.art-view .body {
+  flex: 1;
+  min-height: 0;
+  padding: 8px;
+}
+@media (min-width: 720px) {
+  .art-tab {
+    flex-direction: row;
+  }
+  .art-nav {
+    width: 300px;
+    max-height: none;
+    border-bottom: none;
+    border-right: 1px solid var(--line);
+  }
+}

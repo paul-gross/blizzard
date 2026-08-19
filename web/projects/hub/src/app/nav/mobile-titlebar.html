@@ -1,0 +1,11 @@
+<fleet-mobile-titlebar [live]="live()" [menu]="shellMenu" />
+<ng-template #shellMenu>
+  <fleet-kit-menu-panel testid="mobile-titlebar-menu-panel">
+    <fleet-kit-menu-item testid="mobile-titlebar-appearance" submenu [cdkMenuTriggerFor]="appearanceMenu">
+      Appearance
+    </fleet-kit-menu-item>
+  </fleet-kit-menu-panel>
+</ng-template>
+<ng-template #appearanceMenu>
+  <fleet-viewport-menu testid="mobile-titlebar-appearance-panel" />
+</ng-template>

@@ -1,0 +1,34 @@
+<div class="mc" data-testid="board-shell">
+  <fleet-kit-panel class="board-panel" aria-label="Chunk board" label="Chunk board" [bodyScroll]="false">
+    <span fleetKitPanelHeader class="col-lbl">all workflows</span>
+    <div class="board" data-testid="board">
+      @for (col of columns; track col.key) {
+        <fleet-board-column
+          [column]="col"
+          [cards]="cardsFor(col.key)"
+          [selectedChunkId]="selectedChunkId()"
+          [queueControls]="col.key === 'ready'"
+          [canControl]="canControl()"
+          [canReorder]="canReorder()"
+          (selectChunk)="selectChunk.emit($event)"
+          (promote)="promote.emit($event)"
+          (reposition)="reposition.emit($event)"
+          (moveToTop)="moveToTop.emit($event)"
+          (group)="group.emit($event)"
+        />
+      }
+    </div>
+    <fleet-kit-async-state
+      [state]="state()"
+      loadingMode="content"
+      errorText="FAILED TO LOAD FLEET"
+      errorTestid="board-error"
+      emptyText="NO CHUNKS — FLEET IDLE"
+      emptyTestid="empty-state"
+    >
+      <div loading class="board-skeleton" data-testid="board-loading">
+        <fleet-kit-skeleton variant="card" [rows]="4" />
+      </div>
+    </fleet-kit-async-state>
+  </fleet-kit-panel>
+</div>

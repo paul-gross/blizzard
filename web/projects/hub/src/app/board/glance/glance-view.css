@@ -1,0 +1,143 @@
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+}
+.glance {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+}
+/* The vitals strip: three counts plus the live indicator, answering "am I
+   needed?" before the rest of the column ever has to scroll into view. */
+.vitals {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--bezel);
+  background: var(--panel-deep);
+}
+.vital {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 6px;
+  border-right: 1px solid var(--line);
+}
+.vital:last-child {
+  border-right: 0;
+}
+.v-n {
+  font-size: var(--fs-lg);
+  color: var(--snow);
+}
+.v-n.hot {
+  color: var(--red);
+}
+.v-n.live {
+  color: var(--cyan);
+}
+.v-cap {
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--label-dim);
+}
+.live-dot.active {
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .live-dot.active {
+    animation: glance-live-pulse 2.2s ease-in-out infinite;
+  }
+}
+@keyframes glance-live-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.empty {
+  color: var(--label-dim);
+  padding: 10px 8px;
+  margin: 0;
+  font-size: var(--fs-sm);
+  letter-spacing: 0.08em;
+}
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.row:last-child {
+  border-bottom: 0;
+}
+/* A whole-row hit target for the chunk drill-down, laid over the row rather
+   than wrapped around it — the row's cells stay a flex layout of spans and
+   badges. pointer-events:none inherits, so any control added inside a cell
+   later needs pointer-events:auto of its own to stay clickable; none of
+   these rows carries one today. Scoped to :has(.hit) so the spend row —
+   same .row class, no drill-down — keeps normal behavior and never flashes
+   a pressed state for a tap that goes nowhere. */
+.hit {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.row:has(.hit) > *:not(.hit) {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+.row:has(.hit):active {
+  background: var(--bezel-hi);
+}
+.grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+.cid {
+  color: var(--amber-hi);
+  font-size: var(--fs-sm);
+}
+.rid {
+  color: var(--label);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.sub {
+  flex-basis: 100%;
+  color: var(--text);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+.num {
+  color: var(--amber-hi);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  text-align: right;
+}

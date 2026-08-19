@@ -1,0 +1,31 @@
+@if (chunkId() === null) {
+  <p class="rest" data-testid="chunk-detail-empty">SELECT A CHUNK TO SEE ITS HISTORY &amp; ARTIFACTS</p>
+} @else {
+  <fleet-kit-async-state
+    [state]="state()"
+    loadingText="LOADING…"
+    loadingTestid="chunk-detail-loading"
+    errorText="FAILED TO LOAD CHUNK"
+    errorTestid="chunk-detail-error"
+  >
+    @if (detail(); as d) {
+      <fleet-chunk-detail-panel
+        [detail]="d"
+        [workItems]="workItems()"
+        [actionError]="actionError()"
+        [actionOutcome]="actionOutcome()"
+        [canControl]="canControl()"
+        [canAnswer]="canAnswer()"
+        [canResolve]="canResolve()"
+        (dismiss)="dismiss.emit()"
+        (answerQuestion)="onAnswer($event)"
+        (resolveDecision)="onResolve($event)"
+        (detach)="onDetach($event)"
+        (pauseChunk)="onPause($event)"
+        (resumeChunk)="onResume($event)"
+        (complete)="onComplete($event)"
+        (editGraph)="onEditGraph($event)"
+      />
+    }
+  </fleet-kit-async-state>
+}

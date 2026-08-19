@@ -20,29 +20,8 @@ import { EventsPanel } from 'fleet';
   selector: 'app-events-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [EventsPanel],
-  template: `
-    <div class="layout">
-      <fleet-events-panel class="feed" (selectChunk)="openChunk($event)" />
-    </div>
-  `,
-  styles: `
-    :host {
-      display: block;
-      flex: 1;
-      min-height: 0;
-    }
-    .layout {
-      height: 100%;
-      min-height: 0;
-      padding: 6px;
-      display: flex;
-    }
-    .feed {
-      flex: 1;
-      min-height: 0;
-      min-width: 0;
-    }
-  `,
+  templateUrl: './events-page.html',
+  styleUrl: './events-page.css',
 })
 export class EventsPage {
   private readonly router = inject(Router);
