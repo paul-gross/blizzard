@@ -675,12 +675,11 @@ class ChunkStore:
             return newest_by_chunk
 
     def _escalation_candidates(self, newest_by_chunk) -> list[str]:  # type: ignore[no-untyped-def]
-        """Chunks whose newest escalation *might* still be open — a **drop-only** narrowing
-        that keeps :meth:`load_facts` off the obviously-closed ones.
-
-        Sound because every arm below is one the authoritative rule also has, so a chunk
-        dropped here is one ``open_escalation`` would drop too; arms it lacks (completion)
-        only leave extra work for the fold, never a wrong answer."""
+        """Chunks whose newest escalation *might* still be open — a **drop-only** narrowing that
+        keeps :meth:`load_facts` off the obviously-closed ones. Sound because every arm below is
+        one the authoritative rule also has, so a chunk dropped here is one ``open_escalation``
+        would drop too; arms it lacks (completion) only leave extra work for the fold, never a
+        wrong answer."""
         if not newest_by_chunk:
             return []
         chunk_ids = list(newest_by_chunk)

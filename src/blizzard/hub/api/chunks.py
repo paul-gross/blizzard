@@ -318,11 +318,10 @@ def complete_chunk(
     chunk_id: str, request: ChunkCompleteRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkSummary:
     """Manually complete CHUNK, from any non-``done`` status, including ``stopped`` (issue #294).
-
-    Records the ``chunk_completed`` fact so the chunk derives ``done``, releases any live
-    route and held hub-exec slot, and makes the chunk's work refs eligible for closure.
-    Idempotent: completing an already-``done`` chunk is a harmless no-op. 404 only when
-    the chunk is unknown."""
+    Records the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route
+    and held hub-exec slot, and makes the chunk's work refs eligible for closure. Idempotent:
+    completing an already-``done`` chunk is a harmless no-op. 404 only when the chunk is
+    unknown."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")

@@ -523,11 +523,10 @@ def chunk_stop(cli: CliContext, chunk_id: str, by: str) -> None:
 @click.option("--by", "by", default="operator", help="Who is completing (recorded on the fact).")
 def chunk_done(cli: CliContext, chunk_id: str, by: str) -> None:
     """Manually complete CHUNK, from any non-``done`` status, including ``stopped`` (issue #294).
-
-    A pure client of ``POST /api/chunks/{id}/complete``. The chunk derives ``done``; any
-    live route and held hub-exec slot are released in the same operation, and its work
-    refs become eligible for closure. Idempotent — completing an already-``done`` chunk is
-    a harmless no-op, never refused."""
+    A pure client of ``POST /api/chunks/{id}/complete``. The chunk derives ``done``; any live
+    route and held hub-exec slot are released in the same operation, and its work refs become
+    eligible for closure. Idempotent — an already-``done`` chunk is a harmless no-op, never
+    refused."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/complete",
         "POST /chunks/{id}/complete",

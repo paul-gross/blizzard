@@ -3,8 +3,7 @@
 A fake stands in for the store — only ``load_facts``/``record_completion`` are meaningfully
 implemented; every other seam raises loudly if called. The route/hub-exec-slot release lives
 in ``ChunkStore.record_completion``'s own transaction, not in :class:`CompleteService`, mirroring
-``StopService`` (see ``tests/test_stop_service.py``'s identical split).
-"""
+``StopService`` (see ``tests/test_stop_service.py``'s identical split)."""
 
 from __future__ import annotations
 
