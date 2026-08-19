@@ -518,6 +518,11 @@ class ChunkFacts:
     stopped: bool = False
     # ``chunk.stopped``'s own instant (issue #173); ``None`` exactly when not stopped.
     stopped_at: datetime | None = None
+    # ``chunk.completed`` — an operator's manual completion (issue #294), named for the
+    # operator rather than ``completed``/``completed_at`` since :meth:`completed_at`
+    # already names the render-only derived instant.
+    operator_completed: bool = False
+    operator_completed_at: datetime | None = None
     # ``delivery.landed`` — the whole-chunk terminal fact, informational only
     # (``bzh:facts-not-status``): DONE derives from the terminal transition, not this.
     delivery_landed: bool = False
@@ -629,15 +634,31 @@ class ChunkFacts:
         transition = self.newest_transition()
         return transition is not None and transition.to_node_executor is Executor.HUB
 
+    def _operator_completion_outranks_stop(self) -> bool:
+        """A ``chunk.completed`` fact outranks the stop it follows (issue #294) — the one
+        way a stopped chunk still reaches ``done``.
+
+        Ties go to the completion, the same convention :meth:`_latest_movement_is_migration`
+        states for its own tie: the completion is recorded *after* the stop it supersedes,
+        so ``>=`` against ``stopped_at``, not ``>``."""
+        if not self.operator_completed:
+            return False
+        if not self.stopped:
+            return True
+        assert self.operator_completed_at is not None  # invariant: set iff operator_completed
+        assert self.stopped_at is not None  # invariant: set iff stopped
+        return self.operator_completed_at >= self.stopped_at
+
     def status(self) -> ChunkStatus:
         """Derive a chunk's single status from its facts, first match wins.
 
         ``done`` is the **only** terminal (#63) and derives from *reaching* the terminal
-        transition, not from the landed fact — an authored ``merged -> <node>`` edge can
-        land every repo and keep the chunk running in a post-merge node."""
-        if self.stopped:
+        transition, from an operator's manual completion (issue #294), or from the open-pr
+        mode's own terminal fact — not from the landed fact — an authored ``merged -> <node>``
+        edge can land every repo and keep the chunk running in a post-merge node."""
+        if self.stopped and not self._operator_completion_outranks_stop():
             return ChunkStatus.STOPPED
-        if self.newest_transition_is_terminal() or self.pr_closed:
+        if self.operator_completed or self.newest_transition_is_terminal() or self.pr_closed:
             # ``pr.closed`` is the open-pr mode's terminal fact (merged or closed unmerged); its
             # finalize lands the terminal transition too, but the check keeps this legible.
             return ChunkStatus.DONE
@@ -663,11 +684,14 @@ class ChunkFacts:
 
     def completed_at(self) -> datetime | None:
         """The instant a terminal chunk finished, or ``None`` (issue #173) — render-only,
-        never a status. Mirrors ``status``'s branch order so the two never disagree, taking
-        the **later** of the terminal transition and ``pr_closed_at`` in open-PR mode, where
-        closing every repo's PR can lag the terminal transition."""
-        if self.stopped:
+        never a status. Mirrors ``status``'s branch order (issue #294's operator completion
+        included) so the two never disagree, taking the **later** of the terminal transition
+        and ``pr_closed_at`` in open-PR mode, where closing every repo's PR can lag the
+        terminal transition."""
+        if self.stopped and not self._operator_completion_outranks_stop():
             return self.stopped_at
+        if self.operator_completed:
+            return self.operator_completed_at
         terminal_transition = self.newest_transition() if self.newest_transition_is_terminal() else None
         if terminal_transition is None:
             return self.pr_closed_at if self.pr_closed else None
@@ -1454,6 +1478,15 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         and, atomically in the same store transaction, release any live route and any held
         fleet-wide hub-exec slot. Returns the freshly-written ``chunk_stopped.id``, not the
         ``route_released.id`` this same transaction may also write."""
+        ...
+
+    def record_completion(self, chunk_id: str, *, by: str, at: datetime) -> int:
+        """Append the ``chunk.completed`` fact — an operator's manual completion, including
+        from ``stopped`` (issue #294) — and, atomically in the same store transaction,
+        release any live route and any held fleet-wide hub-exec slot, mirroring
+        :meth:`record_stop`. The caller (:class:`~blizzard.hub.domain.complete.CompleteService`)
+        has already checked the chunk is not already ``done`` — this always writes a fresh
+        row. Returns the freshly-written ``chunk_completed.id``."""
         ...
 
     def set_graph(self, chunk_id: str, *, graph_id: str) -> None:

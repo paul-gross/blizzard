@@ -544,6 +544,40 @@ def test_stopped_wins_over_paused() -> None:
     assert facts.status() is ChunkStatus.STOPPED
 
 
+def test_operator_completion_after_a_stop_derives_done() -> None:
+    # The motivating case (issue #294): a later hand-completion outranks the stop it follows.
+    facts = ChunkFacts(minted=True, stopped=True, stopped_at=_at(4), operator_completed=True, operator_completed_at=_at(6))
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.completed_at() == _at(6)
+
+
+def test_stop_with_no_completion_fact_still_derives_stopped() -> None:
+    facts = ChunkFacts(minted=True, stopped=True, stopped_at=_at(4))
+    assert facts.status() is ChunkStatus.STOPPED
+    assert facts.completed_at() == _at(4)
+
+
+def test_operator_completion_before_a_stop_does_not_outrank_it() -> None:
+    # Ordered, like every other arm: an earlier completion is not a resolution of a later stop.
+    facts = ChunkFacts(minted=True, stopped=True, stopped_at=_at(6), operator_completed=True, operator_completed_at=_at(4))
+    assert facts.status() is ChunkStatus.STOPPED
+    assert facts.completed_at() == _at(6)
+
+
+def test_operator_completion_at_the_same_instant_as_the_stop_outranks_it() -> None:
+    # Ties go to the completion (the FixedClock-default case) — >=, not >, against stopped_at.
+    at = _at(5)
+    facts = ChunkFacts(minted=True, stopped=True, stopped_at=at, operator_completed=True, operator_completed_at=at)
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.completed_at() == at
+
+
+def test_operator_completion_with_no_stop_derives_done() -> None:
+    facts = ChunkFacts(minted=True, operator_completed=True, operator_completed_at=_at(3))
+    assert facts.status() is ChunkStatus.DONE
+    assert facts.completed_at() == _at(3)
+
+
 def test_resumed_chunk_no_longer_paused() -> None:
     # Newest-fact-wins: a resume appended after the pause flips it back.
     facts = ChunkFacts(

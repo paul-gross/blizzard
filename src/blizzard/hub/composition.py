@@ -48,6 +48,7 @@ from blizzard.hub.domain.analytics.operational import IReadOperationalAnalytics
 from blizzard.hub.domain.analytics.queries import IReadAnalyticsEventQueries
 from blizzard.hub.domain.apply import ApplyService
 from blizzard.hub.domain.claim import ClaimService
+from blizzard.hub.domain.complete import CompleteService
 from blizzard.hub.domain.decisions import DecisionService, RequeueService
 from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.edit import EditService
@@ -93,6 +94,7 @@ class HubServices:
     detach: DetachService
     pause: PauseService
     stop: StopService
+    complete: CompleteService
     edit: EditService
     facts: FactIngestService
     #: The transcript lane's ingest policy (blizzard#247) — the write side; ``transcripts``
@@ -255,6 +257,7 @@ def build_services(
         detach=DetachService(chunks=chunk_store, clock=clock),
         pause=PauseService(chunks=chunk_store, clock=clock),
         stop=StopService(chunks=chunk_store, clock=clock),
+        complete=CompleteService(chunks=chunk_store, clock=clock),
         edit=EditService(chunks=chunk_store, graphs=graph_store, claim_lock=claim_lock),
         facts=FactIngestService(chunks=chunk_store, fleet=fleet, clock=clock),
         transcript_ingest=TranscriptIngestService(store=transcript_store, clock=clock, caps=transcript_caps),
