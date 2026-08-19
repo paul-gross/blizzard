@@ -7831,7 +7831,7 @@
     },
     "/api/chunks/{chunk_id}/complete": {
       "post": {
-        "description": "Manually complete CHUNK, from any non-``done`` status, including ``stopped`` (issue #294).\n\nRecords the ``chunk_completed`` fact so the chunk derives ``done``, releases any live\nroute and held hub-exec slot, and makes the chunk's work refs eligible for closure.\nIdempotent: completing an already-``done`` chunk is a harmless no-op. 404 only when\nthe chunk is unknown.",
+        "description": "Manually complete CHUNK, from any non-``done`` status, including ``stopped`` (issue #294).\nRecords the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route\nand held hub-exec slot, and makes the chunk's work refs eligible for closure. Idempotent:\ncompleting an already-``done`` chunk is a harmless no-op. 404 only when the chunk is\nunknown.",
         "operationId": "complete_chunk_api_chunks__chunk_id__complete_post",
         "parameters": [
           {
