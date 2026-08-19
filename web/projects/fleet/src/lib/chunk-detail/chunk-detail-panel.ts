@@ -59,6 +59,7 @@ export type { EditGraphEvent } from './chunk-facts';
         (detach)="detach.emit($event)"
         (pauseChunk)="pauseChunk.emit($event)"
         (resumeChunk)="resumeChunk.emit($event)"
+        (complete)="complete.emit($event)"
       />
 
       @if (actionError(); as err) {
@@ -193,7 +194,7 @@ export class ChunkDetailPanel {
 
   /** The container's last **operator-action** failure for this chunk (the 409/404
    * surfaced, not swallowed — issue #42), or `null` when there is nothing to report.
-   * One notice for every action in this dock (detach, pause, resume). */
+   * One notice for every action in this dock (detach, pause, resume, complete). */
   readonly actionError = input<string | null>(null);
 
   /** The container's last operator-action **outcome** for this chunk — a non-failure
@@ -233,6 +234,9 @@ export class ChunkDetailPanel {
 
   /** Emitted with the chunk id when the operator confirms Resume (issue #46). */
   readonly resumeChunk = output<string>();
+
+  /** Emitted with the chunk id when the operator confirms Complete (issue #294). */
+  readonly complete = output<string>();
 
   /** Emitted when the operator sets a not-ready chunk's graph from the facts column
    * (issue #27). */

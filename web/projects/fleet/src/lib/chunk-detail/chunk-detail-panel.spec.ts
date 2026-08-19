@@ -176,6 +176,22 @@ describe('ChunkDetailPanel', () => {
     confirmSpy.mockRestore();
   });
 
+  it('emits complete with the chunk id once the operator confirms, through the header', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
+    let emitted: string | undefined;
+    fixture.componentInstance.complete.subscribe((chunkId) => (emitted = chunkId));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
+
+    expect(emitted).toBe(ROUTED_DETAIL.chunk_id);
+    confirmSpy.mockRestore();
+  });
+
   it('emits editGraph from the facts column', async () => {
     // `current_node_id: null` is what makes the fixture coherent: a chunk only moves
     // once claimed, so a `not_ready` one stands on no node — and the edit row is gated
@@ -215,8 +231,8 @@ describe('ChunkDetailPanel', () => {
   // --- The shared action-error notice (issue #42) -----------------------------
   //
   // One notice serves every operator action in the dock (detach, pause, resume,
-  // graph/model edit) — it renders directly off `actionError`, between the header
-  // and the columns, regardless of which action produced it.
+  // complete, graph/model edit) — it renders directly off `actionError`, between the
+  // header and the columns, regardless of which action produced it.
 
   it('surfaces a detach error passed down from the container instead of swallowing it', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
@@ -236,6 +252,16 @@ describe('ChunkDetailPanel', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('not pausable');
+  });
+
+  it('surfaces a complete error passed down from the container in the shared notice', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('actionError', 'unknown chunk ch_01routed000000000000000000');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('unknown chunk');
   });
 
   it('surfaces a graph/model edit error passed down from the container in the shared notice', async () => {

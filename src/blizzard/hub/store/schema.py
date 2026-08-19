@@ -433,6 +433,17 @@ chunk_stopped = Table(
     Column("stopped_by", String, nullable=True),
 )
 
+# An operator's manual completion (issue #294) — outranks a ``chunk_stopped`` row recorded
+# at or before it (``ChunkFacts._operator_completion_outranks_stop``), the motivating case.
+chunk_completed = Table(
+    "chunk_completed",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("completed_at", UtcDateTime, nullable=False),
+    Column("completed_by", String, nullable=False),
+)
+
 escalations = Table(
     "escalations",
     metadata,

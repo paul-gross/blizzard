@@ -44,6 +44,7 @@ from blizzard.hub.domain.work import (
 )
 from blizzard.hub.work_sources.source import WorkSourceError
 from blizzard.wire.chunk import (
+    ChunkCompleteRequest,
     ChunkDetail,
     ChunkIngestConflict,
     ChunkIngestRequest,
@@ -304,6 +305,31 @@ def stop_chunk(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     change.publish(cause="stopped", key=f"chunk_stopped:{stopped_id}")
     services.events.publish_queue_changed()  # a stopped chunk is never offered for claim again
+    return ChunkView.of(services, chunk).summary()
+
+
+@router.post(
+    "/chunks/{chunk_id}/complete",
+    response_model=ChunkSummary,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(CHUNK_CONTROL))],
+)
+def complete_chunk(
+    chunk_id: str, request: ChunkCompleteRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> ChunkSummary:
+    """Manually complete CHUNK, from any non-``done`` status, including ``stopped`` (issue #294).
+    Records the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route
+    and held hub-exec slot, and makes the chunk's work refs eligible for closure. Idempotent:
+    completing an already-``done`` chunk is a harmless no-op. 404 only when the chunk is
+    unknown."""
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    completed_id = services.complete.complete(chunk, by=request.by)
+    key = f"chunk_completed:{completed_id}" if completed_id is not None else None
+    change.publish(cause="completed", key=key)
+    services.events.publish_queue_changed()  # a completed chunk is never offered for claim again
     return ChunkView.of(services, chunk).summary()
 
 

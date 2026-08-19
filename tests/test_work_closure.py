@@ -95,6 +95,21 @@ def test_closable_work_refs_includes_a_landed_chunk_later_stopped(tmp_path: Path
 
 
 @pytest.mark.component
+def test_closable_work_refs_includes_an_operator_completed_chunk_with_no_landed_repos(tmp_path: Path) -> None:
+    """D4: an operator completion joins landing as a closure trigger — a hand-completed
+    chunk owes a closure attempt even though ``has_landed_repos`` is false."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    chunk = hub.services.chunks.get(chunk_id)
+    assert chunk is not None
+    hub.services.complete.complete(chunk, by="test")
+
+    refs = hub.services.chunks.closable_work_refs()
+
+    assert ClosableWorkRef(chunk_id=chunk_id, ref=WorkRef(source="default", ref="1")) in refs
+
+
+@pytest.mark.component
 def test_closable_work_refs_excludes_a_grouped_chunk(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     survivor_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=False)
@@ -105,6 +120,22 @@ def test_closable_work_refs_excludes_a_grouped_chunk(tmp_path: Path) -> None:
 
     refs = hub.services.chunks.closable_work_refs()
     assert WorkRef(source="default", ref="2") not in {r.ref for r in refs}
+
+
+@pytest.mark.component
+def test_completing_an_already_done_chunk_writes_no_second_fact(tmp_path: Path) -> None:
+    """D5: idempotent by no-op. Completing twice records the closure once — the second
+    ``complete()`` call is a no-op, not a second ``chunk_completed`` row."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    chunk = hub.services.chunks.get(chunk_id)
+    assert chunk is not None
+
+    first = hub.services.complete.complete(chunk, by="test")
+    second = hub.services.complete.complete(chunk, by="test")
+
+    assert first is not None
+    assert second is None
 
 
 @pytest.mark.component

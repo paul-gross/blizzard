@@ -31,6 +31,7 @@ ChunkChangeCause = Literal[
     "paused",
     "resumed",
     "stopped",
+    "completed",
     "hub-advanced",
 ]
 

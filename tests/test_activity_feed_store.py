@@ -294,6 +294,15 @@ def test_stopped_reads_off_chunk_stopped(tmp_path: Path) -> None:
     assert row.key.startswith("chunk_stopped:")
 
 
+def test_completed_reads_off_chunk_completed(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    store.record_completion("ch_1", by="alice", at=_at(1))
+    row = _row_for(store, "completed")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key.startswith("chunk_completed:")
+
+
 def test_edited_produces_no_activity_row(tmp_path: Path) -> None:
     """No fact table backs ``edited`` — a deliberate exclusion, not a gap."""
     store, _ = _store(tmp_path)

@@ -322,6 +322,9 @@ class ChunkStore:
             stopped_rows = conn.execute(
                 select(s.chunk_stopped.c.stopped_at).where(s.chunk_stopped.c.chunk_id == chunk_id)
             ).all()
+            completed_rows = conn.execute(
+                select(s.chunk_completed.c.completed_at).where(s.chunk_completed.c.chunk_id == chunk_id)
+            ).all()
             pr_closed_rows = conn.execute(
                 select(s.delivery_pr_closed.c.closed_at).where(s.delivery_pr_closed.c.chunk_id == chunk_id)
             ).all()
@@ -330,6 +333,8 @@ class ChunkStore:
                 promoted=self._exists(conn, s.chunk_promoted, chunk_id),
                 stopped=bool(stopped_rows),
                 stopped_at=max((r.stopped_at for r in stopped_rows), default=None),
+                operator_completed=bool(completed_rows),
+                operator_completed_at=max((r.completed_at for r in completed_rows), default=None),
                 delivery_landed=self._exists(conn, s.delivery_landed, chunk_id),
                 landed_repos=landed_repos,
                 pr_closed=bool(pr_closed_rows),
@@ -502,8 +507,10 @@ class ChunkStore:
             if (row.chunk_id, row.source, row.ref) in terminal:
                 continue
             facts = self.load_facts(row.chunk_id)
-            if facts is None or not facts.has_landed_repos(self.load_artifacts(row.chunk_id)):
-                continue  # never landed — has_landed_repos is the sole gate, not chunk status
+            if facts is None or not (
+                facts.has_landed_repos(self.load_artifacts(row.chunk_id)) or facts.operator_completed
+            ):
+                continue  # landed, or hand-completed by an operator (issue #294) — never chunk status
             result.append(ClosableWorkRef(chunk_id=row.chunk_id, ref=WorkRef(source=row.source, ref=row.ref)))
         return result
 
@@ -668,12 +675,11 @@ class ChunkStore:
             return newest_by_chunk
 
     def _escalation_candidates(self, newest_by_chunk) -> list[str]:  # type: ignore[no-untyped-def]
-        """Chunks whose newest escalation *might* still be open — a **drop-only** narrowing
-        that keeps :meth:`load_facts` off the obviously-closed ones.
-
-        Sound because every arm below is one the authoritative rule also has, so a chunk
-        dropped here is one ``open_escalation`` would drop too; arms it lacks (completion)
-        only leave extra work for the fold, never a wrong answer."""
+        """Chunks whose newest escalation *might* still be open — a **drop-only** narrowing that
+        keeps :meth:`load_facts` off the obviously-closed ones. Sound because every arm below is
+        one the authoritative rule also has, so a chunk dropped here is one ``open_escalation``
+        would drop too; arms it lacks (completion) only leave extra work for the fold, never a
+        wrong answer."""
         if not newest_by_chunk:
             return []
         chunk_ids = list(newest_by_chunk)
@@ -1007,6 +1013,27 @@ class ChunkStore:
                     at=r.stopped_at,
                     chunk_id=r.chunk_id,
                     cause="stopped",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.chunk_completed.c.id,
+                    s.chunk_completed.c.chunk_id,
+                    s.chunk_completed.c.completed_at,
+                    s.chunks.c.graph_id,
+                ).select_from(s.chunk_completed.join(s.chunks, s.chunks.c.chunk_id == s.chunk_completed.c.chunk_id)),
+                ts_col=s.chunk_completed.c.completed_at,
+                pk_col=s.chunk_completed.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"chunk_completed:{r.id}",
+                    at=r.completed_at,
+                    chunk_id=r.chunk_id,
+                    cause="completed",
                     graph_id=r.graph_id,
                 ),
             )
@@ -1676,6 +1703,28 @@ class ChunkStore:
         there is no read-then-write race. The slot release is unconditional."""
         with self._engine.begin() as conn:
             result = conn.execute(insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at, stopped_by=by))
+            if self._route_of_conn(conn, chunk_id) is not None:
+                conn.execute(
+                    insert(s.route_released).values(
+                        chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
+                    )
+                )
+            conn.execute(
+                update(s.hub_exec_slot)
+                .where((s.hub_exec_slot.c.holder_chunk_id == chunk_id) & (s.hub_exec_slot.c.released_at.is_(None)))
+                .values(released_at=at)
+            )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
+
+    def record_completion(self, chunk_id: str, *, by: str, at: datetime) -> int:
+        """Append the ``chunk.completed`` fact, release any live route, and release any
+        held fleet-wide hub-exec slot — all in **one** transaction (issue #294), mirroring
+        :meth:`record_stop`, so a ``kill -9`` cannot leave the chunk durably ``done`` with
+        its route still live. The caller has already checked the chunk is not already
+        ``done`` — this always writes a fresh row."""
+        with self._engine.begin() as conn:
+            result = conn.execute(insert(s.chunk_completed).values(chunk_id=chunk_id, completed_at=at, completed_by=by))
             if self._route_of_conn(conn, chunk_id) is not None:
                 conn.execute(
                     insert(s.route_released).values(

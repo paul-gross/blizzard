@@ -561,6 +561,19 @@ export type CheckResult = {
 };
 
 /**
+ * ChunkCompleteRequest
+ *
+ * Manually complete a chunk, from any non-``done`` status — records who completed it
+ * (issue #294).
+ */
+export type ChunkCompleteRequest = {
+    /**
+     * By
+     */
+    by?: string;
+};
+
+/**
  * ChunkDetail
  *
  * The whole chunk aggregate — one response model behind both the hub's own detail read and the
@@ -4589,6 +4602,36 @@ export type PatchChunkApiChunksChunkIdPatchResponses = {
 };
 
 export type PatchChunkApiChunksChunkIdPatchResponse = PatchChunkApiChunksChunkIdPatchResponses[keyof PatchChunkApiChunksChunkIdPatchResponses];
+
+export type CompleteChunkApiChunksChunkIdCompletePostData = {
+    body: ChunkCompleteRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/complete';
+};
+
+export type CompleteChunkApiChunksChunkIdCompletePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CompleteChunkApiChunksChunkIdCompletePostError = CompleteChunkApiChunksChunkIdCompletePostErrors[keyof CompleteChunkApiChunksChunkIdCompletePostErrors];
+
+export type CompleteChunkApiChunksChunkIdCompletePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkSummary;
+};
+
+export type CompleteChunkApiChunksChunkIdCompletePostResponse = CompleteChunkApiChunksChunkIdCompletePostResponses[keyof CompleteChunkApiChunksChunkIdCompletePostResponses];
 
 export type DetachChunkApiChunksChunkIdDetachPostData = {
     body?: never;
