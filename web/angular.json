@@ -253,6 +253,7 @@
           "builder": "@angular-eslint/builder:lint",
           "options": {
             "lintFilePatterns": [
+              "projects/local-panel.entry.ts",
               "projects/local-panel/**/*.ts",
               "projects/local-panel/**/*.html"
             ],
