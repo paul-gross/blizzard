@@ -51,19 +51,22 @@ sessions:
   planning:
     model: ["blizzard:advanced"]
     effort: high
+    # `planning` carries no `rotate:` block, so the window is the only bound on its context:
+    # the plan node's long-running lineage shrinks at the ceiling rather than climbing
+    # unchecked toward the model maximum.
+    compaction_window: "450000"
   code:
     model: ["blizzard:basic"]
     # A compaction window (blizzard#343), NOT fit from a measured distribution the way the
-    # three numbers below are — no compaction-firing data exists yet to fit one from, which
-    # is exactly the gap `blizzard:manual-autocompact-window` closes. 150000 only argues two
-    # things: above the CLI's 100k floor, so an ordinary turn is never compacted away, and
-    # below `rotate.max_context_tokens` (300000) — a window at or above that bound could
-    # never fire at all, since rotation would end the lineage first. It does NOT claim to
-    # fire before `max_invocations` rotates `code` first, which the comment below already
-    # establishes as this pool's actual rotation trigger — only that WHEN a session's
-    # context does grow large within however many invocations occur, it shrinks in step
-    # rather than climbing unchecked toward the model maximum.
-    compaction_window: "150000"
+    # three numbers below are. 150000 sat below `rotate.max_context_tokens` so that
+    # compaction would fire before rotation ended the lineage — but that is precisely what
+    # made it fire over and over inside a single long build, and each firing costs the
+    # worker its working context mid-task. 450000 inverts that relationship deliberately:
+    # sitting above the rotation bound, it is a ceiling rather than a routine event, and
+    # rotation becomes the mechanism that actually bounds an ordinary lineage. The window
+    # still catches the one case rotation cannot preempt — a single invocation that grows
+    # past the ceiling before the next resume is ever checked.
+    compaction_window: "450000"
     # All three numbers are set from the same measured distribution — 757 fleet sessions,
     # every figure below observed rather than assumed.
     rotate:
@@ -86,6 +89,7 @@ sessions:
       max_transcript_bytes: 10000000
   verification:
     model: ["blizzard:basic"]
+    compaction_window: "450000"
     # `code`'s three numbers, inherited as backstops rather than derived for this
     # lineage: they were fit to combined build+verify sessions, and a one-member pool
     # will rarely reach them. Re-fit them off a verify-only slice when one exists.
@@ -96,10 +100,12 @@ sessions:
   gate:
     # The plan gate's fold stays basic-tier deliberately: it transcribes the gate's own
     # already-rendered findings into the plan text — editing, not authoring. The
-    # judgement-heavy authoring stays in `planning`. No `compaction_window` either, for the
-    # same reason as no `rotate:`: `fresh:gate` mints its head on every entry, so there is
-    # never a long-lived context for a window to shrink.
+    # judgement-heavy authoring stays in `planning`. It still carries no `rotate:` block:
+    # `fresh:gate` mints its head on every entry, so rotation never applies. The window is
+    # declared anyway — uniform across all four pools, and inert here for the same reason,
+    # since a freshly minted head has no long-lived context to reach it.
     model: ["blizzard:basic"]
+    compaction_window: "450000"
 
 # `docket` is this graph's own findings-docket definition — the format every plan-review/review
 # finding and refutation restates.
