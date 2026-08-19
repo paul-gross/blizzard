@@ -28,8 +28,8 @@ Record the result in the asset's **Landing Verification** section whatever the o
 repo, submit the asset now naming the specific discrepancy; your judgement then takes `delivery-incomplete`.
 
 Separately, check whether the landing turned the base branch's own gate red — query by the PR's merge commit, per repo
-(on GitHub, `gh pr view --json mergeCommit`). Never a reason to route backward: record a red run as a finding and file a
-follow-up issue for it.
+(on GitHub, `gh pr view --json mergeCommit`). Never a reason to route backward: raise a red run as a finding in this
+asset and leave it there — the routine analysis pass that reads retrospectives across chunks gathers it from there.
 
 ## Fold the findings docket
 
@@ -38,12 +38,10 @@ superseded and out of the fold entirely; when a chunk had one, the fold table na
 
 - A `folded` id is closed by construction — the gate already fixed it.
 - A `should-fix` id anchored at a real repo file: check the change as it stands. Fixed, or its refutation accepted —
-  closed; say which. Still present — open: file an issue on that repo's forge — the workspace's own issue-filing
-  convention if it declares one, otherwise the forge's own tooling from inside that repo's worktree (on GitHub,
-  `gh issue create`) — and record the URL.
-- A `should-fix` id whose target is an immutable artifact — the plan-apparatus case — is closed with a stated reason,
-  not filed.
-- A `blocking` id was resolved by the bounce that cleared it; one found still open is filed like the open should-fix
+  closed; say which. Still present — open: raise it in the fold table, with its anchor and what is left to do.
+- A `should-fix` id whose target is an immutable artifact — the plan-apparatus case — is closed with a stated reason
+  rather than raised forward.
+- A `blocking` id was resolved by the bounce that cleared it; one found still open is raised like the open should-fix
   case, with the fold table saying it was found still blocking.
 
 ## Submit
@@ -58,8 +56,7 @@ discrepancy is repaired — write the full asset:
 - **Harness / Context Improvements** — concrete changes that would make the next run faster, more accurate, or more
   autonomous. This section is the point of the retrospective.
 - **What We Skipped** — untested paths, deferred work, known gaps.
-- **Findings Docket** — the fold table (id, source, severity, anchor, outcome, reference), or a note that nothing needed
-  folding.
+- **Findings Docket** — the fold table (id, source, severity, anchor, outcome), or a note that nothing needed folding.
 
 On a discrepancy visit the asset needs only **Landing Verification**. Keep it honest and specific: name files and
 findings, not vibes. Do not change the delivered code from this node.

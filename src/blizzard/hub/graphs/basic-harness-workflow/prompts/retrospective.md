@@ -40,9 +40,8 @@ report it plainly; a human resolves it from there.
 
 Separately, check whether the landing turned the base branch's own gate red. Query the gate **by the fast-forwarded
 commit itself**, per repo — not by branch — since there is no separate merge commit in this lane. A completed red run is
-a real finding: record it and file a follow-up issue for it as its disposition, following this workspace's own
-issue-filing convention if it declares one, otherwise filing from inside that repo's own worktree so it lands on the
-right forge.
+a real finding: raise it in this asset as its disposition and leave it there — the routine analysis pass that reads
+retrospectives across chunks gathers what they raise and routes each one onward.
 
 ## Submit
 
