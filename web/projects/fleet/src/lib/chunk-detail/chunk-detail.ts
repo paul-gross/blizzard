@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, input, output, si
 import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { injectHubChunkDetailQuery } from '../chunks/chunk-detail.query';
 import { injectHubChunkWorkItemsQuery } from '../chunks/chunk-work-items.query';
+import { injectCompleteChunkMutation } from '../chunks/complete.mutations';
 import { injectDetachChunkMutation } from '../chunks/detach.mutations';
 import { injectSetChunkGraphMutation } from '../chunks/edit.mutations';
 import {
@@ -32,13 +33,13 @@ import {
  *
  * Reactive over the selected `chunkId`: the query re-keys and disables itself while
  * nothing is open, so no request fires for the empty board. Answering, resolving,
- * detaching, pausing/resuming, or editing the graph/model invalidates the chunk and the
- * fleet list, and the SSE stream corroborates. Every operator action's 404/409 (422 for
- * a blank model) is read off its mutation's `onError` and held in the shared
- * `actionError` for the panel to show — issue #42's "report, don't swallow"
- * requirement, which issue #46's pause/resume and issue #27's graph/model edits both
- * follow rather than reinvent — and clears on the next attempt or the moment a
- * different chunk opens. Answering has a **second** channel alongside it,
+ * detaching, pausing/resuming, completing, or editing the graph/model invalidates the
+ * chunk and the fleet list, and the SSE stream corroborates. Every operator action's
+ * 404/409 (422 for a blank model) is read off its mutation's `onError` and held in the
+ * shared `actionError` for the panel to show — issue #42's "report, don't swallow"
+ * requirement, which issue #46's pause/resume, issue #27's graph/model edits, and issue
+ * #294's complete all follow rather than reinvent — and clears on the next attempt or the
+ * moment a different chunk opens. Answering has a **second** channel alongside it,
  * `actionOutcome` (issue #165): a lost first-write-wins race is not a failure to retry
  * but news — someone else's answer landed — so it reads as an outcome naming the winner.
  * Both clear together in `beginAction`.
@@ -73,6 +74,7 @@ import {
             (detach)="onDetach($event)"
             (pauseChunk)="onPause($event)"
             (resumeChunk)="onResume($event)"
+            (complete)="onComplete($event)"
             (editGraph)="onEditGraph($event)"
           />
         }
@@ -113,6 +115,7 @@ export class ChunkDetail {
   private readonly resolveMutation = injectResolveDecisionMutation();
   private readonly detachMutation = injectDetachChunkMutation();
   private readonly pauseMutation = injectChunkPauseMutation();
+  private readonly completeMutation = injectCompleteChunkMutation();
   private readonly editGraphMutation = injectSetChunkGraphMutation();
   private readonly meQuery = injectMeQuery();
 
@@ -130,7 +133,7 @@ export class ChunkDetail {
 
   /** The open chunk's last operator-action failure, or `null`. Reset on every new
    * attempt and whenever a different chunk opens (issue #42). Shared by every action
-   * in the dock — detach, pause, resume (issue #46). */
+   * in the dock — detach, pause, resume (issue #46), complete (issue #294). */
   protected readonly actionError = signal<string | null>(null);
 
   /** The open chunk's last operator-action **outcome** — a non-failure result that still
@@ -226,6 +229,14 @@ export class ChunkDetail {
     this.pauseMutation.mutate(
       { chunkId, paused: false },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Resume failed.')) },
+    );
+  }
+
+  protected onComplete(chunkId: string): void {
+    this.beginAction();
+    this.completeMutation.mutate(
+      { chunkId },
+      { onError: (error) => this.actionError.set(errorMessage(error, 'Complete failed.')) },
     );
   }
 

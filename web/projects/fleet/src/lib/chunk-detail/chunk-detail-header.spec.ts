@@ -347,4 +347,94 @@ describe('ChunkDetailHeader', () => {
     expect(message).toContain('claim');
     confirmSpy.mockRestore();
   });
+
+  // --- Complete (issue #294) -------------------------------------------
+
+  it('shows a Complete action for a running chunk with chunk:control', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')).not.toBeNull();
+  });
+
+  it('shows Complete for a stopped chunk — unlike Stop, Complete has no un-complete verb', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'stopped' });
+    fixture.componentRef.setInput('canControl', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')).not.toBeNull();
+  });
+
+  it('shows no Complete action for an already-done chunk', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status: 'done' });
+    fixture.componentRef.setInput('canControl', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="complete-chunk"]')).toBeNull();
+  });
+
+  it('withholds Complete without chunk:control', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="complete-chunk"]')).toBeNull();
+  });
+
+  it('emits complete with the chunk id once the operator confirms', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
+    let emitted: string | undefined;
+    fixture.componentInstance.complete.subscribe((chunkId) => (emitted = chunkId));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(emitted).toBe(ROUTED_DETAIL.chunk_id);
+    confirmSpy.mockRestore();
+  });
+
+  it('emits nothing when the operator declines the complete confirm', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
+    let emitted = false;
+    fixture.componentInstance.complete.subscribe(() => (emitted = true));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(emitted).toBe(false);
+    confirmSpy.mockRestore();
+  });
+
+  it('warns there is no un-complete verb in the complete confirm copy', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
+
+    const message = confirmSpy.mock.calls[0][0];
+    expect(message).toContain('no un-complete verb');
+    confirmSpy.mockRestore();
+  });
 });

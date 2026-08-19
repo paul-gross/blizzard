@@ -5,6 +5,8 @@ export { injectAnswerQuestionMutation, injectResolveDecisionMutation, readAnswer
 export type { AnswerFailure, AnswerVars, ResolveVars } from './human.mutations';
 export { injectDetachChunkMutation } from './detach.mutations';
 export type { DetachVars } from './detach.mutations';
+export { injectCompleteChunkMutation } from './complete.mutations';
+export type { CompleteVars } from './complete.mutations';
 export { injectPromoteChunkMutation } from './promote.mutations';
 export type { PromoteVars } from './promote.mutations';
 export { injectChunkPauseMutation } from './pause.mutations';

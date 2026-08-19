@@ -108,6 +108,8 @@ describe('ChunkDetail container', () => {
   let detachResponse: unknown = {};
   // The same, for the pause/resume verbs (issue #46).
   let pauseResponse: unknown = {};
+  // The same, for the complete verb (issue #294).
+  let completeResponse: unknown = {};
   // The same, for the graph edit (issue #27) — it collapses onto the one
   // `PATCH /api/chunks/{id}` call (issue #104), so one variable drives it.
   let editPatchResponse: unknown = {};
@@ -120,6 +122,7 @@ describe('ChunkDetail container', () => {
   beforeEach(async () => {
     detachResponse = {};
     pauseResponse = {};
+    completeResponse = {};
     editPatchResponse = {};
     answerResponse = {};
     askAnswered = false;
@@ -157,6 +160,7 @@ describe('ChunkDetail container', () => {
         return { decision_id: 'de_42', choice: 'approve', resolved_at: 'x', resolved_by: 'operator' };
       }
       if (method === 'POST' && path === '/api/chunks/ch_routed/detach') return detachResponse;
+      if (method === 'POST' && path === '/api/chunks/ch_routed/complete') return completeResponse;
       return {};
     });
     await TestBed.configureTestingModule({
@@ -270,6 +274,38 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
     el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="action-error"]')).toBeNull();
+    confirmSpy.mockRestore();
+  });
+
+  // --- Complete (issue #294) -------------------------------------------
+
+  it('fires the complete client call for a chunk once the operator confirms', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_routed/complete', 'POST')).toHaveLength(1);
+    confirmSpy.mockRestore();
+  });
+
+  it('surfaces a complete failure rather than swallowing it', async () => {
+    completeResponse = stubError(404, { detail: 'unknown chunk ch_routed' });
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="complete-chunk"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_routed/complete', 'POST')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('unknown chunk');
     confirmSpy.mockRestore();
   });
 

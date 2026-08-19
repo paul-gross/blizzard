@@ -14,6 +14,13 @@ import { KitButton } from '../kit/kit-button';
  * reading the fact. */
 const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
 
+/** Statuses the hub's `CompleteService` treats as a no-op rather than a transition
+ * (issue #294): a `done` chunk is already done, so the dock withholds the control
+ * rather than offer a click that writes nothing. Every other status is completable,
+ * including `stopped` — unlike Pause/Detach, Complete does not hang off a live route,
+ * and unlike Stop there is no un-complete verb, so this set has exactly one member. */
+const NOT_COMPLETABLE = new Set<ChunkStatus>(['done']);
+
 /**
  * The chunk detail dock's header (issue #79) — the chunk's identity in the
  * board's own vocabulary (the short name, its work item, its state, and the
@@ -26,13 +33,16 @@ const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
  * never claims otherwise. Pause/Resume switches on the pause **fact**
  * (`ChunkDetail.pause`), never on `status` — a chunk both paused and parked
  * on a question derives `waiting_on_human`, so a status-keyed switch would
- * never offer Resume.
+ * never offer Resume. **Complete** (issue #294) is the operator's manual
+ * counterpart to landing: reachable from any non-`done` status, including
+ * `stopped` — unlike Stop, there is no un-complete verb, so the dock offers
+ * no way back once clicked.
  *
  * Presentational only: it holds the detail input and emits `dismiss`,
- * `detach`, `pauseChunk`, and `resumeChunk` (each guarded by a `confirm()` —
- * the route-releasing and worker-killing verbs, the one browser affordance
- * this dock reaches for); the mutations those events drive live in the
- * container.
+ * `detach`, `pauseChunk`, `resumeChunk`, and `complete` (each guarded by a
+ * `confirm()` — the route-releasing, worker-killing, and terminal-marking
+ * verbs, the one browser affordance this dock reaches for); the mutations
+ * those events drive live in the container.
  */
 @Component({
   selector: 'fleet-chunk-detail-header',
@@ -99,6 +109,16 @@ const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
                 (click)="onPause()"
               >
                 Pause
+              </fleet-kit-button>
+            }
+            @if (completable()) {
+              <fleet-kit-button
+                variant="danger"
+                testid="complete-chunk"
+                [ariaLabel]="'Complete chunk ' + detail().chunk_id"
+                (click)="onComplete()"
+              >
+                Complete
               </fleet-kit-button>
             }
           }
@@ -273,6 +293,9 @@ export class ChunkDetailHeader {
   /** Emitted with the chunk id when the operator confirms Resume (issue #46). */
   readonly resumeChunk = output<string>();
 
+  /** Emitted with the chunk id when the operator confirms Complete (issue #294). */
+  readonly complete = output<string>();
+
   /** The chunk's work refs, for the header — each linked out to its source's web
    * address when the configured binding rendered one (a null `web_url` degrades to
    * plain text, no broken link). */
@@ -295,6 +318,12 @@ export class ChunkDetailHeader {
   /** The chunk's live route, if any — Detach shows only while this is non-null
    * (issue #42): a chunk with no live route has nothing to release. */
   protected readonly route = computed<RouteView | null>(() => this.detail().route ?? null);
+
+  /** Whether Complete has anything left to do (issue #294) — mirrors the hub
+   * `CompleteService`'s no-op on an already-`done` chunk (D5), so the dock withholds a
+   * click that would write nothing. Every other status is completable, independent of
+   * `pausable`/`route`: Complete does not hang off a live route the way Detach does. */
+  protected readonly completable = computed<boolean>(() => !NOT_COMPLETABLE.has(this.detail().status));
 
   /** Confirm, then emit `detach` for the container's mutation to fire. */
   protected onDetach(): void {
@@ -328,5 +357,18 @@ export class ChunkDetailHeader {
     );
     if (!confirmed) return;
     this.resumeChunk.emit(this.detail().chunk_id);
+  }
+
+  /** Confirm, then emit `complete` for the container's mutation to fire (issue #294).
+   * Unlike Detach/Pause/Resume, this is a one-way door: there is no un-complete verb,
+   * and the confirmation says so. */
+  protected onComplete(): void {
+    if (!this.completable()) return;
+    const confirmed = globalThis.confirm(
+      `Complete chunk ${this.detail().chunk_id}? This marks it done by hand; there is no ` +
+        `un-complete verb.`,
+    );
+    if (!confirmed) return;
+    this.complete.emit(this.detail().chunk_id);
   }
 }
