@@ -7,6 +7,8 @@ rendering, and the ``parse``/registry ``resolve`` that give it its production ca
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from blizzard.hub.config import WorkSourceConfig
@@ -16,9 +18,15 @@ from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
-from tests.support import OMIT_TITLE, forge_state, github_double
+from tests.support import OMIT_TITLE, forge_state, github_double, migrate_to
 
 pytestmark = pytest.mark.component
+
+
+def _engine(tmp_path: Path):  # type: ignore[no-untyped-def]
+    """A migrated store engine — every ``WorkSourceEntry.registry`` call needs one
+    to seat the built-in ``hub`` source (issue #357)."""
+    return migrate_to(tmp_path, "head")[1]
 
 
 def test_fetch_reads_issue_body_and_comments() -> None:
@@ -124,11 +132,14 @@ def test_parse_rejects_an_unshaped_token() -> None:
 # The factory — one credentialed client per configured source.
 
 
-def test_factory_derives_web_base_by_stripping_the_api_host_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_derives_web_base_by_stripping_the_api_host_prefix(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Public GitHub: ``api.github.com`` -> ``github.com`` (strip the ``api.`` host)."""
     monkeypatch.setenv("_TEST_TOKEN_A", "token-a")
     registry = WorkSourceEntry.registry(
-        [WorkSourceConfig(name="blizzard", provider="github", repo="paul-gross/blizzard", token_env="_TEST_TOKEN_A")]
+        [WorkSourceConfig(name="blizzard", provider="github", repo="paul-gross/blizzard", token_env="_TEST_TOKEN_A")],
+        _engine(tmp_path),
     )
     source = registry.get("blizzard")
     assert source is not None
@@ -136,7 +147,9 @@ def test_factory_derives_web_base_by_stripping_the_api_host_prefix(monkeypatch: 
     assert source.web_url(pointer) == "https://github.com/paul-gross/blizzard/issues/9"
 
 
-def test_factory_derives_web_base_by_stripping_the_api_v3_path_suffix(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_derives_web_base_by_stripping_the_api_v3_path_suffix(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """A GHE install: ``git.corp.internal/api/v3`` -> ``git.corp.internal`` (strip ``/api/v3``)."""
     monkeypatch.setenv("_TEST_TOKEN_GHE", "ghe-token")
     registry = WorkSourceEntry.registry(
@@ -148,7 +161,8 @@ def test_factory_derives_web_base_by_stripping_the_api_v3_path_suffix(monkeypatc
                 token_env="_TEST_TOKEN_GHE",
                 api_base="https://git.corp.internal/api/v3",
             )
-        ]
+        ],
+        _engine(tmp_path),
     )
     source = registry.get("internal")
     assert source is not None
@@ -156,7 +170,7 @@ def test_factory_derives_web_base_by_stripping_the_api_v3_path_suffix(monkeypatc
     assert source.web_url(pointer) == "https://git.corp.internal/acme/internal-tool/issues/2"
 
 
-def test_factory_gives_each_source_its_own_credentialed_client(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_gives_each_source_its_own_credentialed_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Two sources, two tokens: each built client carries only its own credential — the
     work-source seam never shares one client (or token) across sources."""
     monkeypatch.setenv("_TEST_TOKEN_ONE", "token-one")
@@ -165,8 +179,8 @@ def test_factory_gives_each_source_its_own_credentialed_client(monkeypatch: pyte
         WorkSourceConfig(name="one", provider="github", repo="acme/one", token_env="_TEST_TOKEN_ONE"),
         WorkSourceConfig(name="two", provider="github", repo="acme/two", token_env="_TEST_TOKEN_TWO"),
     ]
-    registry = WorkSourceEntry.registry(sources)
-    assert sorted(registry.names()) == ["one", "two"]
+    registry = WorkSourceEntry.registry(sources, _engine(tmp_path))
+    assert sorted(registry.names()) == ["hub", "one", "two"]
     source_one = registry.get("one")
     source_two = registry.get("two")
     assert isinstance(source_one, GitHubWorkSource)
@@ -176,18 +190,21 @@ def test_factory_gives_each_source_its_own_credentialed_client(monkeypatch: pyte
     assert source_one._client is not source_two._client
 
 
-def test_factory_fails_at_boot_naming_the_unset_token_variable() -> None:
+def test_factory_fails_at_boot_naming_the_unset_token_variable(tmp_path: Path) -> None:
     from blizzard.hub.config import ConfigError
 
     sources = [WorkSourceConfig(name="one", provider="github", repo="acme/one", token_env="_DEFINITELY_UNSET_TOKEN")]
     with pytest.raises(ConfigError, match="_DEFINITELY_UNSET_TOKEN"):
-        WorkSourceEntry.registry(sources)
+        WorkSourceEntry.registry(sources, _engine(tmp_path))
 
 
-def test_factory_over_an_empty_source_list_is_a_legal_empty_registry() -> None:
-    registry = WorkSourceEntry.registry([])
-    assert registry.names() == []
+def test_factory_over_an_empty_source_list_still_seats_the_built_in_hub_source(tmp_path: Path) -> None:
+    """Zero ``[[work_source]]`` entries is a legal, non-empty registry (issue #357):
+    the built-in ``hub`` source is always seated, with no config and no credential."""
+    registry = WorkSourceEntry.registry([], _engine(tmp_path))
+    assert registry.names() == ["hub"]
     assert registry.get("anything") is None
+    assert registry.resolve("hub:42") == WorkRef(source="hub", ref="42")
 
 
 def test_registry_get_picks_the_named_binding_over_real_adapters() -> None:
@@ -431,26 +448,28 @@ def test_registry_annotator_returns_the_bound_annotator() -> None:
 # source configured with annotate=True.
 
 
-def test_factory_builds_no_annotator_for_a_non_opted_in_source(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_builds_no_annotator_for_a_non_opted_in_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """The structural "never written to" property: a configured-but-not-opted
     source has no entry in the annotator map at all."""
     monkeypatch.setenv("_TEST_TOKEN_NOT_OPTED", "token")
     registry = WorkSourceEntry.registry(
-        [WorkSourceConfig(name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_NOT_OPTED")]
+        [WorkSourceConfig(name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_NOT_OPTED")],
+        _engine(tmp_path),
     )
     assert registry.get("widget") is not None
     assert registry.annotator("widget") is None
     assert registry.annotating_names() == []
 
 
-def test_factory_builds_an_annotator_for_an_opted_in_source(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_builds_an_annotator_for_an_opted_in_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("_TEST_TOKEN_OPTED", "token")
     registry = WorkSourceEntry.registry(
         [
             WorkSourceConfig(
                 name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_OPTED", annotate=True
             )
-        ]
+        ],
+        _engine(tmp_path),
     )
     annotator = registry.annotator("widget")
     assert annotator is not None
@@ -527,7 +546,7 @@ def test_registry_closer_returns_the_bound_closer() -> None:
 # configured with close=True.
 
 
-def test_factory_builds_no_closer_for_a_non_opted_in_source(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_builds_no_closer_for_a_non_opted_in_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """The structural "never closed" property: a configured-but-not-opted source
     has no entry in the closer map at all."""
     monkeypatch.setenv("_TEST_TOKEN_NOT_CLOSE_OPTED", "token")
@@ -536,21 +555,23 @@ def test_factory_builds_no_closer_for_a_non_opted_in_source(monkeypatch: pytest.
             WorkSourceConfig(
                 name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_NOT_CLOSE_OPTED"
             )
-        ]
+        ],
+        _engine(tmp_path),
     )
     assert registry.get("widget") is not None
     assert registry.closer("widget") is None
     assert registry.closing_names() == []
 
 
-def test_factory_builds_a_closer_for_an_opted_in_source(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_builds_a_closer_for_an_opted_in_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("_TEST_TOKEN_CLOSE_OPTED", "token")
     registry = WorkSourceEntry.registry(
         [
             WorkSourceConfig(
                 name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_CLOSE_OPTED", close=True
             )
-        ]
+        ],
+        _engine(tmp_path),
     )
     closer = registry.closer("widget")
     assert closer is not None

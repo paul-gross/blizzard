@@ -8608,7 +8608,7 @@
     },
     "/api/chunks/{chunk_id}/work-items": {
       "get": {
-        "description": "Pass-through work items read \u2014 one entry per pointer, contents never stored.\n\nA per-pointer resolution or forge failure degrades to an ``error`` on that entry\nrather than failing the whole read. A chunk with no pointers is an empty list, not\na 404; no configured work source at all is a 503 up front.",
+        "description": "Pass-through work items read \u2014 one entry per pointer, contents never stored.\n\nA per-pointer resolution or forge failure degrades to an ``error`` on that entry\nrather than failing the whole read. A chunk with no pointers is an empty list, not\na 404; the built-in ``hub`` source is always seated, so a bare hub carries no\nconfiguration under which this ever 503s.",
         "operationId": "get_work_items_api_chunks__chunk_id__work_items_get",
         "parameters": [
           {

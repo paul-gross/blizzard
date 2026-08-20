@@ -212,23 +212,14 @@ def test_resolver_picks_the_matching_source_when_two_are_configured(tmp_path: Pa
     assert alpha.fetched == []
 
 
-def test_work_items_503s_when_no_work_source_is_configured_at_all(tmp_path: Path) -> None:
-    """An explicitly empty registry is a legal, work-source-free hub — work-items 503s
-    up front rather than 422ing at ingest, since an empty registry names no source at all."""
+def test_ingest_422s_when_no_configured_source_claims_the_token(tmp_path: Path) -> None:
+    """An explicitly empty registry is a legal, external-work-source-free hub (issue
+    #357): the built-in ``hub`` source is always seated, but it claims only ``hub:<n>``
+    tokens, so an unrelated pointer still 422s at ingest rather than resolving."""
     hub = build_hub(tmp_path, work_sources={})
 
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]})
-    assert resp.status_code == 422, resp.text  # no source at all also can't claim it
-
-    # Mint the degenerate chunk straight through the domain service (bypassing the
-    # route's 422) to exercise the work-items 503 directly.
-    graph = hub.services.graph_mint.ensure_default(
-        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
-    )
-    chunk_id = hub.services.ingest.ingest([WorkRef(source=_P1["source"], ref=_P1["ref"])], graph=graph)
-    items = hub.client.get(f"/api/chunks/{chunk_id}/work-items")
-    assert items.status_code == 503
-    assert items.json()["detail"] == "no work source is configured"
+    assert resp.status_code == 422, resp.text  # no configured source claims it
 
 
 def _pass(hub, chunk_id: str, node_id: str, epoch: int, *, artifacts: list[dict]) -> dict:  # type: ignore[no-untyped-def]

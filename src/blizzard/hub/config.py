@@ -54,6 +54,10 @@ _KNOWN_PRODUCES_MODES = {PRODUCES_WARN, PRODUCES_ENFORCE}
 _KNOWN_WORK_SOURCE_PROVIDERS = {"github"}
 _REQUIRED_WORK_SOURCE_KEYS = ("name", "provider", "repo", "token_env")
 
+# The built-in, always-seated hub work source's reserved name (issue #357) — no
+# `[[work_source]]` entry may claim it.
+RESERVED_HUB_SOURCE_NAME = "hub"
+
 # `[[work_source]]`'s pre-rename name (issue #55) — deliberately *not* aliased; pinned by
 # `test_config.py::test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key`.
 RENAMED_WORK_SOURCE_KEY = "pm_source"
@@ -68,11 +72,12 @@ _KNOWN_AUTH_MODES = {AUTH_MODE_NONE, AUTH_MODE_OAUTH}
 # secret resolution and `type`/`issuer` validation happen where a provider is consumed.
 _REQUIRED_OAUTH_PROVIDER_KEYS = ("name", "type", "display_name", "client_id", "client_secret_env")
 
-# A fresh scaffold has no configured source, and without one `work-items` 503s — so
-# `to_toml()` emits this as a comment rather than leaving the block undiscoverable.
+# A fresh scaffold has no configured external source, so `to_toml()` emits this as a
+# comment rather than leaving the block undiscoverable.
 _WORK_SOURCE_EXAMPLE_COMMENT = """
-# Uncomment and edit to configure a work source — without at least one
-# [[work_source]], `work-items` 503s and board pointer labels render null.
+# Uncomment and edit to configure an external work source — the built-in `hub` source
+# is always seated, so `work-items` never 503s, but a chunk pointing at an external
+# forge issue needs its own [[work_source]] before that pointer's label resolves.
 #
 # [[work_source]]
 # name = "blizzard"          # names this source; ingest tokens and board labels key on it
@@ -213,6 +218,10 @@ class WorkSourceConfig:
             if ":" in name:
                 # A colon in a source name breaks the ingest-token grammar's first-colon split.
                 raise ConfigError(f"[[work_source]] name {name!r} must not contain ':'")
+            if name == RESERVED_HUB_SOURCE_NAME:
+                # The built-in, always-seated source (issue #357) — a configured entry
+                # of the same name would collide with it.
+                raise ConfigError(f"[[work_source]] name {name!r} is reserved for the built-in hub source")
             if name in seen_names:
                 raise ConfigError(f"duplicate [[work_source]] name {name!r}")
             seen_names.add(name)
@@ -538,8 +547,8 @@ class HubConfig:
         if RENAMED_WORK_SOURCE_KEY in raw:
             raise ConfigError(
                 f"[[{RENAMED_WORK_SOURCE_KEY}]] is now [[work_source]] — rename the block(s) in "
-                f"{path}. Leaving the old key would configure zero work sources: "
-                "`work-items` would 503 and every board label would render null."
+                f"{path}. Leaving the old key would configure zero external work sources: "
+                "every board label for a pointer outside the built-in `hub` source would render null."
             )
         toml_port = int(raw.get("port", DEFAULT_PORT))
         env = Env()

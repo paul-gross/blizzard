@@ -535,6 +535,18 @@ def test_work_source_duplicate_name_raises(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_work_source_named_hub_raises(tmp_path: Path) -> None:
+    """``hub`` is reserved for the built-in, always-seated source (issue #357)."""
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(
+        'db_url = "sqlite:///x"\n\n[[work_source]]\nname = "hub"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T1"\n'
+    )
+    with pytest.raises(HubConfigError, match="hub"):
+        HubConfig.load(root)
+
+
+@pytest.mark.unit
 def test_work_source_duplicate_provider_and_repo_raises(tmp_path: Path) -> None:
     # Two names for one (provider, repo) would let the same item be ingested twice
     # under two identities — this is what holds pointer identity uniqueness up.
