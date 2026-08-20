@@ -36,6 +36,7 @@ HUB_EXEC_SLOT_PREFIX = "hes"
 MIGRATION_PREFIX = "mg"  # a chunk_migrations fact (issue #90)
 USER_PREFIX = "usr"  # a hub-local user (issue #91)
 SEGMENT_PREFIX = "seg"  # a transcript segment, the hub's idempotence key (issue #246)
+WORK_ITEM_PREFIX = "wi"  # a hub-owned work item (issue #357)
 
 
 @dataclass(frozen=True)

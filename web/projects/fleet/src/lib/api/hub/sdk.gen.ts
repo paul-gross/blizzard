@@ -434,7 +434,8 @@ export const getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet = <Thro
  *
  * A per-pointer resolution or forge failure degrades to an ``error`` on that entry
  * rather than failing the whole read. A chunk with no pointers is an empty list, not
- * a 404; no configured work source at all is a 503 up front.
+ * a 404; the built-in ``hub`` source is always seated, so a bare hub carries no
+ * configuration under which this ever 503s.
  */
 export const getWorkItemsApiChunksChunkIdWorkItemsGet = <ThrowOnError extends boolean = false>(options: Options<GetWorkItemsApiChunksChunkIdWorkItemsGetData, ThrowOnError>): RequestResult<GetWorkItemsApiChunksChunkIdWorkItemsGetResponses, GetWorkItemsApiChunksChunkIdWorkItemsGetErrors, ThrowOnError> => (options.client ?? client).get<GetWorkItemsApiChunksChunkIdWorkItemsGetResponses, GetWorkItemsApiChunksChunkIdWorkItemsGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/work-items', ...options });
 

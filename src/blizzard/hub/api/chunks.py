@@ -433,9 +433,8 @@ def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_s
 
     A per-pointer resolution or forge failure degrades to an ``error`` on that entry
     rather than failing the whole read. A chunk with no pointers is an empty list, not
-    a 404; no configured work source at all is a 503 up front."""
-    if not services.work_sources.names():
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="no work source is configured")
+    a 404; the built-in ``hub`` source is always seated, so a bare hub carries no
+    configuration under which this ever 503s."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")

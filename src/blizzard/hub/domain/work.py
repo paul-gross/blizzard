@@ -57,6 +57,63 @@ class WorkRef:
     ref: str
 
 
+class WorkItemAuthorKind(StrEnum):
+    """Who filed a hub-owned work item (issue #357) — a hub user by id, or the fleet
+    itself. Persisted as ``work_items.author_kind`` plus a JSON payload
+    (``bzh:sql-portable``), never a DB enum."""
+
+    USER = "user"
+    FLEET = "fleet"
+
+
+@dataclass(frozen=True)
+class WorkItemAuthor:
+    """One hub-owned work item's author — the variant :class:`WorkItemAuthorKind`
+    discriminates. ``user_id`` is set only for :attr:`WorkItemAuthorKind.USER`."""
+
+    kind: WorkItemAuthorKind
+    user_id: str | None = None
+
+    @classmethod
+    def user(cls, user_id: str) -> WorkItemAuthor:
+        return cls(kind=WorkItemAuthorKind.USER, user_id=user_id)
+
+    @classmethod
+    def fleet(cls) -> WorkItemAuthor:
+        return cls(kind=WorkItemAuthorKind.FLEET)
+
+
+class WorkItemClosure(StrEnum):
+    """How a hub-owned work item closed (issue #357) — recorded on the row itself
+    (``bzh:facts-not-status``, Recorded position), never derived."""
+
+    DELIVERED = "delivered"
+    WITHDRAWN = "withdrawn"
+
+
+@dataclass(frozen=True)
+class WorkItemRecord:
+    """One hub-owned work item — the ``work_items`` row (issue #357). A mutable
+    entity, not a fact: title/body/edited_at change in place, and
+    ``closed_at``/``closure`` are unset while open, set together once when it closes."""
+
+    work_item_id: str
+    source: str
+    ref: str
+    title: str
+    body: str
+    author: WorkItemAuthor
+    stated_priority: str | None
+    created_at: datetime
+    edited_at: datetime
+    closed_at: datetime | None = None
+    closure: WorkItemClosure | None = None
+
+    @property
+    def pointer(self) -> WorkRef:
+        return WorkRef(source=self.source, ref=self.ref)
+
+
 class WorkItemCloseOutcome(StrEnum):
     """The result of one close attempt against a work item's source (issue #216).
 
@@ -1642,4 +1699,41 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
         Append-only: an at-least-once poll attempt is harmless to record twice — it only
         widens the interval/timeout gating's read — so this carries no idempotency guard."""
+        ...
+
+
+# --- Work item repository seam (issue #357, bzh:repository-split) -----------
+
+
+class IReadWorkItemRepository(Protocol):
+    """Read-only hub-owned work item access. :class:`HubWorkSource
+    <blizzard.hub.work_sources.internal.hub_work_source.HubWorkSource>` depends on this
+    variant only."""
+
+    def get(self, source: str, ref: str) -> WorkItemRecord | None:
+        """The item at ``(source, ref)``, open or closed, or ``None`` when no such
+        item was ever allocated."""
+        ...
+
+
+class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
+    """Read-write variant — ``create`` and ``close``, the only two write verbs this
+    issue adds; edit verbs belong to the routes issue."""
+
+    def create(
+        self,
+        *,
+        source: str,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        stated_priority: str | None,
+        at: datetime,
+    ) -> WorkItemRecord:
+        """Allocate a fresh, monotonic, never-reused ``ref`` for ``source`` and insert
+        the item open."""
+        ...
+
+    def close(self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> WorkItemRecord:
+        """Record ``closed_at``/``closure`` on an open item, once."""
         ...

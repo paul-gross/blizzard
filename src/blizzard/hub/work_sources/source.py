@@ -1,9 +1,13 @@
-"""The work-source seam — a vendor-native pass-through read.
+"""The work-source seam — one binding per named source, one shape for every kind.
 
-A work item's contents are **never stored**: the pointer is the durable referent, the
-item is fetched fresh. A binding also owns parsing its own ingest-token form, its label,
-and its browser addresses (``bzh:domain-core``). ``parse`` returns ``None`` for "not my
-token" rather than raising, so a registry can loop over every binding."""
+For a configured, credentialed binding a work item's contents are **never stored**: the
+pointer is the durable referent, the item is fetched fresh from the forge. The built-in
+``hub`` source (issue #357) is the one exception — its own store *is* the item's system
+of record, so its "fetch" is a read of durable state, not a forge round-trip; every other
+binding still keeps the pass-through contract this docstring describes. A binding also
+owns parsing its own ingest-token form, its label, and its browser addresses
+(``bzh:domain-core``). ``parse`` returns ``None`` for "not my token" rather than raising,
+so a registry can loop over every binding."""
 
 from __future__ import annotations
 
@@ -38,7 +42,9 @@ class IWorkSource(Protocol):
         ...
 
     def fetch(self, pointer: WorkRef) -> WorkItem:
-        """Fetch a pointer's body + comments from the forge, never storing them."""
+        """A pointer's body + comments, read fresh — from the forge for a configured
+        binding (never stored here), or from this hub's own store for the built-in
+        ``hub`` source, whose row *is* the durable content."""
         ...
 
     def label(self, pointer: WorkRef) -> str | None:

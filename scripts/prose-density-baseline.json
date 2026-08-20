@@ -683,9 +683,9 @@
    "total": 17
   },
   "blizzard/foundation/ids.py": {
-   "comments": 7,
+   "comments": 8,
    "docstrings": 15,
-   "total": 94
+   "total": 95
   },
   "blizzard/foundation/logging.py": {
    "comments": 2,
@@ -814,8 +814,8 @@
   },
   "blizzard/hub/api/chunks.py": {
    "comments": 14,
-   "docstrings": 55,
-   "total": 504
+   "docstrings": 56,
+   "total": 503
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
@@ -1060,7 +1060,7 @@
   "blizzard/hub/cli.py": {
    "comments": 27,
    "docstrings": 179,
-   "total": 1344
+   "total": 1345
   },
   "blizzard/hub/cli_context.py": {
    "comments": 3,
@@ -1083,9 +1083,9 @@
    "total": 298
   },
   "blizzard/hub/config.py": {
-   "comments": 38,
+   "comments": 42,
    "docstrings": 46,
-   "total": 563
+   "total": 572
   },
   "blizzard/hub/delivery/__init__.py": {
    "comments": 0,
@@ -1303,9 +1303,9 @@
    "total": 283
   },
   "blizzard/hub/domain/work.py": {
-   "comments": 50,
-   "docstrings": 465,
-   "total": 1645
+   "comments": 51,
+   "docstrings": 485,
+   "total": 1739
   },
   "blizzard/hub/domain/work_closure.py": {
    "comments": 4,
@@ -1411,6 +1411,11 @@
    "comments": 15,
    "docstrings": 17,
    "total": 365
+  },
+  "blizzard/hub/store/internal/work_item_store.py": {
+   "comments": 1,
+   "docstrings": 17,
+   "total": 145
   },
   "blizzard/hub/store/migrations/__init__.py": {
    "comments": 0,
@@ -1717,15 +1722,20 @@
    "docstrings": 6,
    "total": 33
   },
+  "blizzard/hub/store/migrations/versions/20260819_1100_work_items.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "total": 34
+  },
   "blizzard/hub/store/migrations/versions/__init__.py": {
    "comments": 0,
    "docstrings": 0,
    "total": 0
   },
   "blizzard/hub/store/schema.py": {
-   "comments": 282,
+   "comments": 302,
    "docstrings": 6,
-   "total": 922
+   "total": 965
   },
   "blizzard/hub/work_sources/__init__.py": {
    "comments": 0,
@@ -1749,13 +1759,18 @@
   },
   "blizzard/hub/work_sources/internal/factory.py": {
    "comments": 0,
-   "docstrings": 16,
-   "total": 101
+   "docstrings": 17,
+   "total": 105
   },
   "blizzard/hub/work_sources/internal/github_work_source.py": {
    "comments": 6,
    "docstrings": 37,
    "total": 225
+  },
+  "blizzard/hub/work_sources/internal/hub_work_source.py": {
+   "comments": 0,
+   "docstrings": 19,
+   "total": 67
   },
   "blizzard/hub/work_sources/registry.py": {
    "comments": 0,
@@ -1764,8 +1779,8 @@
   },
   "blizzard/hub/work_sources/source.py": {
    "comments": 0,
-   "docstrings": 36,
-   "total": 98
+   "docstrings": 42,
+   "total": 104
   },
   "blizzard/runner/__init__.py": {
    "comments": 0,
@@ -3032,7 +3047,7 @@
   "support.py": {
    "comments": 35,
    "docstrings": 117,
-   "total": 817
+   "total": 820
   },
   "test_activity_api.py": {
    "comments": 2,
@@ -3336,8 +3351,8 @@
   },
   "test_config.py": {
    "comments": 58,
-   "docstrings": 38,
-   "total": 1410
+   "docstrings": 39,
+   "total": 1422
   },
   "test_config_keys_reach_a_gating_tier.py": {
    "comments": 3,
@@ -3679,6 +3694,16 @@
    "docstrings": 6,
    "total": 54
   },
+  "test_hub_work_source.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "total": 123
+  },
+  "test_hub_work_source_api.py": {
+   "comments": 0,
+   "docstrings": 4,
+   "total": 44
+  },
   "test_idp_authorize.py": {
    "comments": 6,
    "docstrings": 3,
@@ -3705,9 +3730,9 @@
    "total": 666
   },
   "test_ingest_and_queue.py": {
-   "comments": 27,
-   "docstrings": 11,
-   "total": 290
+   "comments": 25,
+   "docstrings": 12,
+   "total": 281
   },
   "test_init_refusals.py": {
    "comments": 0,
@@ -3792,7 +3817,7 @@
   "test_packaged_graph_sessions.py": {
    "comments": 18,
    "docstrings": 18,
-   "total": 155
+   "total": 157
   },
   "test_packaged_prompt_session_claims.py": {
    "comments": 0,
@@ -4360,9 +4385,9 @@
    "total": 201
   },
   "test_store_migrations.py": {
-   "comments": 16,
-   "docstrings": 23,
-   "total": 285
+   "comments": 17,
+   "docstrings": 26,
+   "total": 309
   },
   "test_subprocess_check_runner.py": {
    "comments": 3,
@@ -4494,6 +4519,21 @@
    "docstrings": 4,
    "total": 100
   },
+  "test_work_item_seq_concurrency.py": {
+   "comments": 5,
+   "docstrings": 9,
+   "total": 103
+  },
+  "test_work_item_store.py": {
+   "comments": 1,
+   "docstrings": 5,
+   "total": 88
+  },
+  "test_work_item_store_utc.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "total": 56
+  },
   "test_work_items_proxy.py": {
    "comments": 3,
    "docstrings": 21,
@@ -4510,9 +4550,9 @@
    "total": 178
   },
   "test_work_source.py": {
-   "comments": 33,
-   "docstrings": 39,
-   "total": 558
+   "comments": 34,
+   "docstrings": 43,
+   "total": 579
   },
   "test_worker_preamble.py": {
    "comments": 25,

@@ -196,7 +196,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
     owner = os.environ.get(ENV_FORGE_OWNER, DEFAULT_FORGE_OWNER)
-    work_source_registry = WorkSourceEntry.registry(config.work_sources)
+    work_source_registry = WorkSourceEntry.registry(config.work_sources, engine)
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
 
     # The provider-login seam (issue #92) is built only under `oauth`: under `none`

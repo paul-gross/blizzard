@@ -13,11 +13,13 @@ from dataclasses import dataclass
 from typing import cast
 
 import httpx
+from sqlalchemy import Engine
 
 from blizzard.hub.config import ConfigError, WorkSourceConfig
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.closer import IWorkCloser
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
+from blizzard.hub.work_sources.internal.hub_work_source import seat_hub_work_source
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSource
 
@@ -37,8 +39,9 @@ class WorkSourceEntry:
         return kind(config)
 
     @classmethod
-    def registry(cls, sources: Sequence[WorkSourceConfig]) -> WorkSourceRegistry:
-        """One credentialed client + binding per configured source.
+    def registry(cls, sources: Sequence[WorkSourceConfig], engine: Engine) -> WorkSourceRegistry:
+        """One credentialed client + binding per configured source, plus the built-in
+        ``hub`` source seated outside this walk (issue #357).
 
         A source whose ``token_env`` names an unset variable fails here, at boot, not at first
         fetch. Only an opted-in source gets an annotator/closer entry, so a non-opted one is
@@ -53,6 +56,7 @@ class WorkSourceEntry:
                 annotators[config.name] = cast(IWorkAnnotator, adapter)
             if config.close:
                 closers[config.name] = cast(IWorkCloser, adapter)
+        seat_hub_work_source(built, engine=engine)
         return WorkSourceRegistry(built, annotators, closers)
 
     @property

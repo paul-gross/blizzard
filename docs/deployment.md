@@ -107,8 +107,9 @@ that edit *before* the restart.
 ```
 
 The failure is deliberate rather than a silent alias: a `[[pm_source]]` block on a wheel that no longer knows the key
-would parse as *zero* configured work sources — a hub that boots clean while every `work-items` read 503s and every
-board label renders null. So `HubConfig.load` raises instead, naming the new key.
+would parse as *zero* configured external work sources — a hub that boots clean while every board label for an external
+pointer renders null (the built-in `hub` source, issue #357, is unaffected either way — it needs no `[[work_source]]`
+entry at all). So `HubConfig.load` raises instead, naming the new key.
 
 Two consequences worth planning around:
 
@@ -191,6 +192,11 @@ separate seam from the delivery forge above: `BZ_FORGE_URL`/`BZ_FORGE_TOKEN` in 
 chunk's PR is opened and landed; `[[work_source]]` controls where its work item is *read from*, and each source carries
 its own credential rather than sharing the delivery forge's.
 
+A bare hub with zero `[[work_source]]` blocks is a legal, fully-operable deployment: the built-in `hub` source is always
+seated, needs no configuration and no credential, and is what a hub-authored work item (`hub:<n>`) resolves through.
+`[[work_source]]` blocks are for **external** forge repos only — configure one per repo you want the hub to ingest work
+items from.
+
 `blizzard hub init` scaffolds a commented-out example block — uncomment it and fill in your own repo to configure a
 source:
 
@@ -210,7 +216,7 @@ Every field:
 
 | Field       | Required            | Meaning                                                                                                                                                                                                                                           |
 | ----------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`      | yes                 | The source's identity. Ingest tokens (`name:ref`, `name#ref`) and board pointer labels (`{source}#{ref}`) key on it. Must not contain `:` (the ingest token grammar splits on the first one). Must be unique across all `[[work_source]]` blocks. |
+| `name`      | yes                 | The source's identity. Ingest tokens (`name:ref`, `name#ref`) and board pointer labels (`{source}#{ref}`) key on it. Must not contain `:` (the ingest token grammar splits on the first one). Must be unique across all `[[work_source]]` blocks. `hub` is reserved for the built-in, always-seated hub work source (see below) — no block may claim it. |
 | `provider`  | yes                 | The adapter grammar this source speaks. Only `"github"` exists today; an unknown provider fails at config load, not at first use.                                                                                                                 |
 | `repo`      | yes                 | The `owner/name` coordinate this source is pinned to. Each `(provider, repo)` pair may appear under only one `name` — two names for the same repo would let one item be ingested twice under two identities.                                      |
 | `token_env` | yes                 | Names an environment variable — **not the secret itself**. See "Credential indirection" below.                                                                                                                                                    |
@@ -289,16 +295,17 @@ on.
 
 ### The upgrade note
 
-**An existing hub must add at least one `[[work_source]]` block, or two things break on the next deploy:**
+**An existing hub with chunks pointing at external forge issues must add a matching `[[work_source]]` block, or their
+board pointer labels go null on the next deploy:** rendering `{source}#{ref}` needs a configured source by that name,
+and there is none to render against until one exists. The built-in `hub` source (issue #357) covers only hub-authored
+work items (`hub:<n>`) — it does not stand in for an external repo's binding, so `GET /chunks/{id}/work-items` never
+503s outright regardless, but an external chunk's entry still degrades to a null label and an `error` until its source
+is configured.
 
-- `GET /chunks/{id}/work-items` 503s outright — "no work source is configured" — until at least one source exists.
-- Every chunk's board pointer label goes null: rendering `{source}#{ref}` needs a source name, and there is none to
-  render until a source is configured.
-
-This is not optional for a hub that already ingests work items; there is no backward-compatible default, because the
-work source list also bounds which repos the hub is willing to ingest from (see below). Add the `[[work_source]]` block
-to `blizzard-hub.toml` as part of the same maintenance window as the wheel upgrade, before running `migrate`/restarting
-the daemon (see the install/upgrade steps above).
+This is not optional for a hub that already ingests external work items; there is no backward-compatible default,
+because the work source list also bounds which repos the hub is willing to ingest from (see below). Add the
+`[[work_source]]` block to `blizzard-hub.toml` as part of the same maintenance window as the wheel upgrade, before
+running `migrate`/restarting the daemon (see the install/upgrade steps above).
 
 **For a repo that already has chunks in this hub, `name` is not a free choice — it must be the repo's own tail** (the
 part after the last `/`; e.g. `blizzard` for `paul-gross/blizzard`). An earlier release's migration

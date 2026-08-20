@@ -920,3 +920,46 @@ transcript_event_derivations = Table(
     # declared, never silently indistinguishable from a session that read nothing (D6).
     Column("complete", Boolean, nullable=False),
 )
+
+# --- Work items (hub-owned work items — issue #357) ---------------------------
+# A mutable entity row, not a fact table: title/body/edited_at change in place, and
+# closure is recorded on the row itself (nullable ``closed_at`` + ``closure``) rather
+# than a separate append-only table, because there is exactly one current state to read
+# back — never a history of edits (``bzh:facts-not-status``, Recorded position).
+
+work_items = Table(
+    "work_items",
+    metadata,
+    Column("work_item_id", String, primary_key=True),  # wi_<ulid>
+    Column("source", String, nullable=False),  # the WorkRef.source that owns this item ("hub")
+    Column("ref", String, nullable=False),  # the WorkRef.ref, allocated from work_item_sequence
+    Column("title", String, nullable=False),
+    Column("body", Text, nullable=False),
+    # Discriminator + one JSON payload read whole, matching artifacts.kind/data and
+    # transcript_events.kind/payload (`bzh:sql-portable`) — a hub user by id, or the
+    # fleet itself.
+    Column("author_kind", String, nullable=False),  # user | fleet
+    Column("author_payload", Text, nullable=False),  # JSON object, author_kind-shaped
+    # A plain, comment-documented value set rather than a DB enum (`bzh:sql-portable`):
+    # low | normal | high. Null — the author stated none.
+    Column("stated_priority", String, nullable=True),
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("edited_at", UtcDateTime, nullable=False),
+    # Unset while open. Set together, once, when the item closes.
+    Column("closed_at", UtcDateTime, nullable=True),
+    Column("closure", String, nullable=True),  # delivered | withdrawn
+    UniqueConstraint("source", "ref", name="uq_work_items_source_ref"),
+)
+
+Index("ix_work_items_source", work_items.c.source)
+
+# A per-source allocation counter, one row per source, so ``ref`` allocation never
+# reads ``MAX(ref)+1`` (two concurrent first allocations on an empty source would both
+# compute 1) — every source gets a pre-existing row instead (`bzh:sql-portable`).
+
+work_item_sequence = Table(
+    "work_item_sequence",
+    metadata,
+    Column("source", String, primary_key=True),
+    Column("next_ref", Integer, nullable=False),
+)
