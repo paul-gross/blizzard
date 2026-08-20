@@ -1721,10 +1721,13 @@ class IReadWorkItemRepository(Protocol):
         item was ever allocated."""
         ...
 
+    def list(self, source: str) -> list[WorkItemRecord]:
+        """Every item at ``source``, newest first, open and closed alike."""
+        ...
+
 
 class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
-    """Read-write variant — ``create`` and ``close``, the only two write verbs this
-    issue adds; edit verbs belong to the routes issue."""
+    """Read-write variant — ``create``, ``edit`` and ``close`` (blizzard#358)."""
 
     def create(
         self,
@@ -1738,6 +1741,13 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
     ) -> WorkItemRecord:
         """Allocate a fresh, monotonic, never-reused ``ref`` for ``source`` and insert
         the item open."""
+        ...
+
+    def edit(
+        self, source: str, ref: str, *, title: str, body: str, stated_priority: str | None, at: datetime
+    ) -> WorkItemRecord:
+        """Replace an open item's title/body/stated priority in place and stamp
+        ``edited_at``; ``created_at`` and ``ref`` are untouched."""
         ...
 
     def close(self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> WorkItemRecord:

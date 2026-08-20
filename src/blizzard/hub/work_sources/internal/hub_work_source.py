@@ -8,21 +8,38 @@ from __future__ import annotations
 
 from sqlalchemy import Engine
 
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import IClock
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
-from blizzard.hub.domain.work import IReadChunkRepository, IReadWorkItemRepository, WorkItemClosure, WorkRef
+from blizzard.hub.domain.work import (
+    IReadChunkRepository,
+    IReadWorkItemRepository,
+    WorkItemAuthor,
+    WorkItemClosure,
+    WorkItemRecord,
+    WorkRef,
+)
+from blizzard.hub.domain.work_items import WorkItemEditService
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError
 
 
 class HubWorkSource:
     """Vendor-native reader over the hub's own ``work_items`` table — the built-in
-    binding seated outside the configured-entry walk (``bzh:dependency-injection``)."""
+    binding seated outside the configured-entry walk (``bzh:dependency-injection``).
 
-    def __init__(self, items: IReadWorkItemRepository, chunks: IReadChunkRepository) -> None:
+    Implements :class:`IWorkEditor` too (blizzard#358): ``list``/``get`` answer from the
+    read repository directly, and ``create``/``edit``/``withdraw`` resolve a pointer to a
+    loaded record before delegating to ``edits``, the domain-layer write half
+    (``bzh:controller-read-only``)."""
+
+    def __init__(
+        self, items: IReadWorkItemRepository, chunks: IReadChunkRepository, edits: WorkItemEditService
+    ) -> None:
         self._items = items
         self._chunks = chunks
+        self._edits = edits
 
     def parse(self, token: str) -> WorkRef | None:
         """``hub:<n>`` only — the reserved name admits no ``#`` form and no URL form,
@@ -54,14 +71,50 @@ class HubWorkSource:
         """The built-in source names no forge to link a branch through."""
         return None
 
+    def list(self) -> list[WorkItemRecord]:
+        return self._items.list(RESERVED_HUB_SOURCE_NAME)
 
-def seat_hub_work_source(sources: dict[str, IWorkSource], *, engine: Engine) -> None:
-    """Seats the built-in ``hub`` binding into ``sources`` in place — reached from both
+    def get(self, pointer: WorkRef) -> WorkItemRecord:
+        return self._resolve(pointer)
+
+    def create(self, *, title: str, body: str, author: WorkItemAuthor, stated_priority: str | None) -> WorkItemRecord:
+        return self._edits.create(
+            source=RESERVED_HUB_SOURCE_NAME, title=title, body=body, author=author, stated_priority=stated_priority
+        )
+
+    def edit(self, pointer: WorkRef, *, title: str, body: str, stated_priority: str | None) -> WorkItemRecord:
+        item = self._resolve(pointer)
+        return self._edits.edit(item, title=title, body=body, stated_priority=stated_priority)
+
+    def withdraw(self, pointer: WorkRef) -> WorkItemRecord:
+        item = self._resolve(pointer)
+        return self._edits.withdraw(item)
+
+    def _resolve(self, pointer: WorkRef) -> WorkItemRecord:
+        item = self._items.get(pointer.source, pointer.ref)
+        if item is None:
+            raise WorkItemRefUnknownError(pointer)
+        return item
+
+
+def seat_hub_work_source(
+    sources: dict[str, IWorkSource], editors: dict[str, IWorkEditor], *, engine: Engine, clock: IClock
+) -> None:
+    """Seats the built-in ``hub`` binding into ``sources``/``editors`` in place —
+    reached from both
     :meth:`~blizzard.hub.work_sources.internal.factory.WorkSourceEntry.registry` and
     ``tests/support.py::build_hub`` so the built-in is present in production and under
     test alike: never absent, never configured."""
-    sources[RESERVED_HUB_SOURCE_NAME] = HubWorkSource(WorkItemStore(engine), ChunkStore(engine, SystemClock()))
+    items = WorkItemStore(engine)
+    chunks = ChunkStore(engine, clock)
+    hub_source = HubWorkSource(items, chunks, WorkItemEditService(items=items, chunks=chunks, clock=clock))
+    sources[RESERVED_HUB_SOURCE_NAME] = hub_source
+    editors[RESERVED_HUB_SOURCE_NAME] = hub_source
 
 
 def _conforms_work_source(x: HubWorkSource) -> IWorkSource:
+    return x
+
+
+def _conforms_work_editor(x: HubWorkSource) -> IWorkEditor:
     return x

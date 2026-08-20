@@ -17,6 +17,7 @@ from typing import Protocol
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.closer import IWorkCloser
+from blizzard.hub.work_sources.editor import IWorkEditor
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,17 @@ class IWorkSourceRegistry(Protocol):
     def closing_names(self) -> list[str]:
         """Every source name with a closer built — the opted-in subset of
         :meth:`names`."""
+        ...
+
+    def editor(self, name: str) -> IWorkEditor | None:
+        """The binding declared under ``name``'s editor half, or ``None`` when that
+        source has no browsable item surface — the structural "never edited" a
+        non-editing source gets."""
+        ...
+
+    def editing_names(self) -> list[str]:
+        """Every source name with an editor built — currently just the built-in
+        ``hub`` source, since no configurable provider seats one."""
         ...
 
     def resolve(self, token: str) -> WorkRef | None:

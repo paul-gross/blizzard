@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import Engine, insert, select, update
+from sqlalchemy import Engine, desc, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.ids import WORK_ITEM_PREFIX, Id
@@ -36,6 +36,13 @@ class WorkItemStore:
                 select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
             ).one_or_none()
         return self._record(row) if row is not None else None
+
+    def list(self, source: str) -> list[WorkItemRecord]:
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                select(s.work_items).where(s.work_items.c.source == source).order_by(desc(s.work_items.c.created_at))
+            ).all()
+        return [self._record(row) for row in rows]
 
     def create(
         self,
@@ -78,6 +85,20 @@ class WorkItemStore:
             created_at=at,
             edited_at=at,
         )
+
+    def edit(
+        self, source: str, ref: str, *, title: str, body: str, stated_priority: str | None, at: datetime
+    ) -> WorkItemRecord:
+        with self._engine.begin() as conn:
+            conn.execute(
+                update(s.work_items)
+                .where(s.work_items.c.source == source, s.work_items.c.ref == ref)
+                .values(title=title, body=body, stated_priority=stated_priority, edited_at=at)
+            )
+            row = conn.execute(
+                select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
+            ).one()
+        return self._record(row)
 
     def close(self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> WorkItemRecord:
         with self._engine.begin() as conn:

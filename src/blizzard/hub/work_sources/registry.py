@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.closer import IWorkCloser
+from blizzard.hub.work_sources.editor import IWorkEditor
 from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry
 
 
@@ -26,10 +27,12 @@ class WorkSourceRegistry:
         sources: Mapping[str, IWorkSource] | None = None,
         annotators: Mapping[str, IWorkAnnotator] | None = None,
         closers: Mapping[str, IWorkCloser] | None = None,
+        editors: Mapping[str, IWorkEditor] | None = None,
     ) -> None:
         self._sources = dict(sources or {})
         self._annotators = dict(annotators or {})
         self._closers = dict(closers or {})
+        self._editors = dict(editors or {})
 
     def get(self, name: str) -> IWorkSource | None:
         return self._sources.get(name)
@@ -48,6 +51,12 @@ class WorkSourceRegistry:
 
     def closing_names(self) -> list[str]:
         return list(self._closers.keys())
+
+    def editor(self, name: str) -> IWorkEditor | None:
+        return self._editors.get(name)
+
+    def editing_names(self) -> list[str]:
+        return list(self._editors.keys())
 
     def resolve(self, token: str) -> WorkRef | None:
         """The first configured binding's ``parse`` of ``token`` that claims it, or

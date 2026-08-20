@@ -17,6 +17,7 @@ from typing import Protocol
 from fastapi import FastAPI
 
 from blizzard import __version__
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -196,7 +197,11 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
     owner = os.environ.get(ENV_FORGE_OWNER, DEFAULT_FORGE_OWNER)
-    work_source_registry = WorkSourceEntry.registry(config.work_sources, engine)
+    # Constructed once here, ahead of both the work-source registry (whose built-in
+    # ``hub`` editor stamps `edited_at`/`closed_at`, blizzard#358) and `build_services`
+    # below — one clock instance shared by every write path.
+    clock = SystemClock()
+    work_source_registry = WorkSourceEntry.registry(config.work_sources, engine, clock)
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
 
     # The provider-login seam (issue #92) is built only under `oauth`: under `none`
@@ -210,6 +215,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         engine,
         events=EventBroker(),
         work_sources=work_source_registry,
+        clock=clock,
         base_branch=base_branch,
         hub_workdir_root=config.data_dir / "hub_workdirs",
         hub_marker_callback_base_url=f"http://{config.host}:{config.port}",
