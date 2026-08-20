@@ -13,12 +13,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.edit import UNSET
+from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.work import WorkItemAuthor, WorkItemPriority, WorkItemRecord, WorkRef
 from blizzard.hub.domain.work_items import WorkItemEdit, WorkItemHeldByLiveChunk, WorkItemNotEditable
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
@@ -26,6 +28,7 @@ from blizzard.hub.work_sources.source import IWorkSource
 from blizzard.wire.work_source import (
     WorkItemAuthorView,
     WorkItemCreateRequest,
+    WorkItemCreateResponse,
     WorkItemPatchRequest,
     WorkItemsListView,
     WorkItemView,
@@ -108,7 +111,7 @@ def list_work_items(
 
 @router.post(
     "/work-sources/{source}/items",
-    response_model=WorkItemView,
+    response_model=WorkItemCreateResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def create_work_item(
@@ -116,17 +119,30 @@ def create_work_item(
     request: WorkItemCreateRequest,
     services: Annotated[HubServices, Depends(get_services)],
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
-) -> WorkItemView:
-    """Allocate a fresh item at SOURCE, open, authored by the caller. 404/409 per D4,
-    422 for a blank title or body."""
+) -> WorkItemCreateResponse:
+    """Allocate a fresh item at SOURCE, open, authored by the caller, and mint its
+    resting ``not_ready`` chunk in the same transaction (blizzard#359). 404/409 per D4,
+    422 for a blank title or body, 503 if every graph named after the packaged default
+    has been retired (the operator's brake, mirroring ``POST /chunks``)."""
     source_obj, editor = _require_editor(source, services)
+    try:
+        graph = services.graph_mint.ensure_default(
+            services.default_graph_doc, definition_yaml=services.default_graph_yaml
+        )
+    except DefaultGraphRetired as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     created = editor.create(
         title=_stripped(request.title, "title"),
         body=_stripped(request.body, "body"),
         author=WorkItemAuthor.user(identity.user_id),
         stated_priority=request.stated_priority,
+        graph=graph,
     )
-    return _view(created, source_obj)
+    # A freshly minted chunk rests `not_ready`, exactly as a `POST /chunks` ingest does.
+    chunk_events.ChunkChanged.of(services, created.chunk_id, prev_status=None).publish(
+        cause="minted", key=f"chunks:{created.chunk_id}"
+    )
+    return WorkItemCreateResponse(**_view(created.item, source_obj).model_dump(), chunk_id=created.chunk_id)
 
 
 @router.get(

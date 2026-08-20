@@ -10,12 +10,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from sqlalchemy import Engine
+from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.work import IReadWorkItemRepository, WorkItemAuthor, WorkItemClosure
+from blizzard.hub.domain.work import Chunk, IReadWorkItemRepository, WorkItemAuthor, WorkItemClosure, WorkRef
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from tests.support import seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -26,6 +29,13 @@ def _store(tmp_path: Path) -> WorkItemStore:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
     return WorkItemStore(create_engine_from_url(db_url))
+
+
+def _store_and_engine(tmp_path: Path) -> tuple[WorkItemStore, Engine]:
+    db_url = f"sqlite:///{tmp_path / 'hub.db'}"
+    migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
+    engine = create_engine_from_url(db_url)
+    return WorkItemStore(engine), engine
 
 
 def test_get_of_an_unknown_ref_is_none(tmp_path: Path) -> None:
@@ -128,3 +138,56 @@ def test_edit_of_a_closed_item_is_a_no_op_and_returns_none(tmp_path: Path) -> No
     fetched = store.get("hub", created.ref)
     assert fetched is not None
     assert fetched.title == "a"  # untouched
+
+
+# --------------------------------------------------------------------------- #
+# ``create_with_chunk`` — the composite write (blizzard#359)
+
+
+def test_create_with_chunk_inserts_the_item_and_the_chunk_rows_together(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    with engine.begin() as conn:
+        seed_graph(conn, "gr_1", at=_NOW)
+    chunk = Chunk(chunk_id="ch_1", graph_id="gr_1", work_refs=[WorkRef(source="hub", ref="1")], minted_at=_NOW)
+
+    created = store.create_with_chunk(
+        title="widget is broken",
+        body="steps to repro",
+        author=WorkItemAuthor.fleet(),
+        stated_priority=None,
+        at=_NOW,
+        chunk=chunk,
+    )
+
+    assert created.source == "hub"
+    assert created.ref == "1"
+    fetched = store.get("hub", "1")
+    assert fetched is not None
+    assert fetched.title == "widget is broken"
+
+
+def test_create_with_chunk_rolls_back_the_item_row_on_a_failing_chunk_write(tmp_path: Path) -> None:
+    """A store failure inside the composite write leaves neither row durable — proven
+    against the real engine, since a rollback is not observable through a seam double."""
+    store, engine = _store_and_engine(tmp_path)
+    with engine.begin() as conn:
+        seed_graph(conn, "gr_1", at=_NOW)
+        seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)  # pre-existing row collides below
+    chunk = Chunk(chunk_id="ch_1", graph_id="gr_1", work_refs=[WorkRef(source="hub", ref="1")], minted_at=_NOW)
+
+    with pytest.raises(IntegrityError):
+        store.create_with_chunk(
+            title="t", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW, chunk=chunk
+        )
+
+    assert store.get("hub", "1") is None
+
+
+def test_allocate_ref_is_monotonic_and_never_reused(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+
+    first = store.allocate_ref("hub")
+    second = store.allocate_ref("hub")
+
+    assert first != second
+    assert int(second) > int(first)

@@ -227,8 +227,12 @@ Every field:
 
 Unlike `annotate`/`close`, item mutation (`GET`/`POST`/`PATCH`/`DELETE` under `/api/work-sources/{source}/items`) has no
 `[[work_source]]` knob to opt a configured source into: it is served only by the built-in `hub` source, whose own store
-is a hub-owned item's system of record. An operator request against a configured forge source refuses with a 409
-naming it, on all four verbs — by design, not by a missing flag a future block could set.
+is a hub-owned item's system of record. An operator request against a configured forge source refuses with a 409 naming
+it, on all four verbs — by design, not by a missing flag a future block could set. Creating a hub item mints its resting
+chunk in the same write: `POST .../hub/items` pins a fresh `not_ready` chunk to the default graph, holding the new
+item's pointer, and returns the chunk's id alongside the item — the fleet already has something to promote the moment
+the item exists, with no separate ingest call. Withdrawing that item (`DELETE`) refuses with a 409 while the chunk is
+still live, the same guard a forge-sourced item's live holder already imposes; stop the chunk first.
 
 **A self-hosted GitHub Enterprise example** — an internal repo behind a company GHE instance, alongside the public
 `blizzard` source:

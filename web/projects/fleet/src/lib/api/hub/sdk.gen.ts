@@ -998,8 +998,10 @@ export const listWorkItemsApiWorkSourcesSourceItemsGet = <ThrowOnError extends b
 /**
  * Create Work Item
  *
- * Allocate a fresh item at SOURCE, open, authored by the caller. 404/409 per D4,
- * 422 for a blank title or body.
+ * Allocate a fresh item at SOURCE, open, authored by the caller, and mint its
+ * resting ``not_ready`` chunk in the same transaction (blizzard#359). 404/409 per D4,
+ * 422 for a blank title or body, 503 if every graph named after the packaged default
+ * has been retired (the operator's brake, mirroring ``POST /chunks``).
  */
 export const createWorkItemApiWorkSourcesSourceItemsPost = <ThrowOnError extends boolean = false>(options: Options<CreateWorkItemApiWorkSourcesSourceItemsPostData, ThrowOnError>): RequestResult<CreateWorkItemApiWorkSourcesSourceItemsPostResponses, CreateWorkItemApiWorkSourcesSourceItemsPostErrors, ThrowOnError> => (options.client ?? client).post<CreateWorkItemApiWorkSourcesSourceItemsPostResponses, CreateWorkItemApiWorkSourcesSourceItemsPostErrors, ThrowOnError>({
     url: '/api/work-sources/{source}/items',

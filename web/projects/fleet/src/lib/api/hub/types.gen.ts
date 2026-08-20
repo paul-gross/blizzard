@@ -3545,6 +3545,60 @@ export type WorkItemCreateRequest = {
 };
 
 /**
+ * WorkItemCreateResponse
+ *
+ * ``POST /api/work-sources/{source}/items`` (blizzard#359) — carries every
+ * ``WorkItemView`` field plus the id of the ``not_ready`` chunk creation mints in the
+ * same transaction. Widens only this route's own response; the other four keep
+ * rendering the unchanged ``WorkItemView``.
+ */
+export type WorkItemCreateResponse = {
+    author: WorkItemAuthorView;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Closed At
+     */
+    closed_at: string | null;
+    closure: WorkItemClosure | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Edited At
+     */
+    edited_at: string;
+    /**
+     * Label
+     */
+    label: string | null;
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Source
+     */
+    source: string;
+    stated_priority: WorkItemPriority | null;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Web Url
+     */
+    web_url: string | null;
+};
+
+/**
  * WorkItemEntry
  *
  * One pointer's pass-through work item — title, body, and comment thread, vendor-native.
@@ -6679,7 +6733,7 @@ export type CreateWorkItemApiWorkSourcesSourceItemsPostResponses = {
     /**
      * Successful Response
      */
-    201: WorkItemView;
+    201: WorkItemCreateResponse;
 };
 
 export type CreateWorkItemApiWorkSourcesSourceItemsPostResponse = CreateWorkItemApiWorkSourcesSourceItemsPostResponses[keyof CreateWorkItemApiWorkSourcesSourceItemsPostResponses];

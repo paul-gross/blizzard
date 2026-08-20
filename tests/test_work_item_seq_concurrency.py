@@ -1,6 +1,6 @@
 """Concurrent allocation of the ``work_item_sequence`` counter (issue #357).
 
-``WorkItemStore._next_ref`` is optimistic-insert-then-increment, not one locking
+``WorkItemStore.allocate_ref`` is optimistic-insert-then-increment, not one locking
 statement like ``ChunkStore._next_route_seq`` — a brand-new source has no row to lock.
 Proves the increment statement locks the row under any dialect, and that concurrent
 sqlite writers — including a race over a source's first allocation — never duplicate."""
@@ -57,7 +57,7 @@ def test_concurrent_first_allocation_on_sqlite_never_duplicates(tmp_path: Path) 
     def allocate() -> None:
         try:
             barrier.wait(timeout=5)
-            ref = store._next_ref("hub")
+            ref = store.allocate_ref("hub")
             with lock:
                 refs.append(ref)
         except BaseException as exc:  # either outcome is acceptable, see below
@@ -81,7 +81,7 @@ def test_concurrent_allocation_against_an_existing_row_never_duplicates(tmp_path
     migration_runner(HubConfig(root=tmp_path, db_url=db_url)).upgrade("head")
     engine = create_engine_from_url(db_url)
     store = WorkItemStore(engine)
-    store._next_ref("hub")  # seed the counter row so both threads race the existing-row path
+    store.allocate_ref("hub")  # seed the counter row so both threads race the existing-row path
 
     barrier = threading.Barrier(2)
     lock = threading.Lock()
@@ -89,7 +89,7 @@ def test_concurrent_allocation_against_an_existing_row_never_duplicates(tmp_path
 
     def allocate() -> None:
         barrier.wait(timeout=5)
-        ref = store._next_ref("hub")
+        ref = store.allocate_ref("hub")
         with lock:
             refs.append(ref)
 

@@ -8,11 +8,12 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import Engine, desc, insert, select, update
+from sqlalchemy import Connection, Engine, desc, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.ids import WORK_ITEM_PREFIX, Id
 from blizzard.hub.domain.work import (
+    Chunk,
     IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkItemAuthorKind,
@@ -20,6 +21,7 @@ from blizzard.hub.domain.work import (
     WorkItemRecord,
 )
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_store import insert_chunk_rows
 
 
 class WorkItemStore:
@@ -59,25 +61,17 @@ class WorkItemStore:
         stated_priority: str | None,
         at: datetime,
     ) -> WorkItemRecord:
-        ref = self._next_ref(source)
-        work_item_id = Id.mint_at(WORK_ITEM_PREFIX, at).value
-        author_payload = {"user_id": author.user_id} if author.kind is WorkItemAuthorKind.USER else {}
+        ref = self.allocate_ref(source)
         with self._engine.begin() as conn:
-            conn.execute(
-                insert(s.work_items).values(
-                    work_item_id=work_item_id,
-                    source=source,
-                    ref=ref,
-                    title=title,
-                    body=body,
-                    author_kind=author.kind.value,
-                    author_payload=json.dumps(author_payload),
-                    stated_priority=stated_priority,
-                    created_at=at,
-                    edited_at=at,
-                    closed_at=None,
-                    closure=None,
-                )
+            work_item_id = self._insert_item(
+                conn,
+                source=source,
+                ref=ref,
+                title=title,
+                body=body,
+                author=author,
+                stated_priority=stated_priority,
+                at=at,
             )
         return WorkItemRecord(
             work_item_id=work_item_id,
@@ -90,6 +84,75 @@ class WorkItemStore:
             created_at=at,
             edited_at=at,
         )
+
+    def create_with_chunk(
+        self,
+        *,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        stated_priority: str | None,
+        at: datetime,
+        chunk: Chunk,
+    ) -> WorkItemRecord:
+        pointer = chunk.work_refs[0]
+        with self._engine.begin() as conn:
+            work_item_id = self._insert_item(
+                conn,
+                source=pointer.source,
+                ref=pointer.ref,
+                title=title,
+                body=body,
+                author=author,
+                stated_priority=stated_priority,
+                at=at,
+            )
+            insert_chunk_rows(conn, chunk)
+        return WorkItemRecord(
+            work_item_id=work_item_id,
+            source=pointer.source,
+            ref=pointer.ref,
+            title=title,
+            body=body,
+            author=author,
+            stated_priority=stated_priority,
+            created_at=at,
+            edited_at=at,
+        )
+
+    @staticmethod
+    def _insert_item(
+        conn: Connection,
+        *,
+        source: str,
+        ref: str,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        stated_priority: str | None,
+        at: datetime,
+    ) -> str:
+        """Insert one ``work_items`` row on ``conn``, open, and return its minted id — the
+        row shape :meth:`create` and :meth:`create_with_chunk` share."""
+        work_item_id = Id.mint_at(WORK_ITEM_PREFIX, at).value
+        author_payload = {"user_id": author.user_id} if author.kind is WorkItemAuthorKind.USER else {}
+        conn.execute(
+            insert(s.work_items).values(
+                work_item_id=work_item_id,
+                source=source,
+                ref=ref,
+                title=title,
+                body=body,
+                author_kind=author.kind.value,
+                author_payload=json.dumps(author_payload),
+                stated_priority=stated_priority,
+                created_at=at,
+                edited_at=at,
+                closed_at=None,
+                closure=None,
+            )
+        )
+        return work_item_id
 
     def edit(
         self, source: str, ref: str, *, title: str, body: str, stated_priority: str | None, at: datetime
@@ -119,7 +182,7 @@ class WorkItemStore:
             ).one()
         return self._record(row)
 
-    def _next_ref(self, source: str) -> str:
+    def allocate_ref(self, source: str) -> str:
         """The next ``ref`` for ``source``, from its ``work_item_sequence`` counter row.
 
         A source's first-ever allocation has no counter row yet: optimistically insert

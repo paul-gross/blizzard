@@ -1754,6 +1754,29 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         the item open."""
         ...
 
+    def allocate_ref(self, source: str) -> str:
+        """Allocate a fresh, monotonic, never-reused ``ref`` for ``source``, in its own
+        transaction (blizzard#359) — the same allocator :meth:`create` uses, exposed so a
+        caller can hold the ``ref`` before the row it feeds exists. May skip one on a
+        crash between this call and the item insert it feeds — a gap-tolerant contract,
+        the same one a DB sequence carries."""
+        ...
+
+    def create_with_chunk(
+        self,
+        *,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        stated_priority: str | None,
+        at: datetime,
+        chunk: Chunk,
+    ) -> WorkItemRecord:
+        """Insert the item row — keyed by ``chunk.work_refs[0]``, the ref
+        :meth:`allocate_ref` already minted for it — and ``chunk``'s own rows, atomically
+        in one transaction (blizzard#359): a store failure leaves neither durable."""
+        ...
+
     def edit(
         self, source: str, ref: str, *, title: str, body: str, stated_priority: str | None, at: datetime
     ) -> WorkItemRecord | None:
