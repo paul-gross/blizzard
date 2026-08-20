@@ -8,42 +8,33 @@ and its ``{source}/items``/``{source}/items/{ref}`` children."""
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.hub.events.broker import CHUNK_CHANGED
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import FakeWorkSource, build_hub, emitted_events, seed_session, seed_user
 
 pytestmark = pytest.mark.component
 
-_T0 = datetime(2026, 1, 1, tzinfo=UTC)
-
 
 def test_a_hub_owned_pointer_ingests_and_renders_its_title_and_body(tmp_path: Path) -> None:
+    """Creation itself mints the item's chunk (blizzard#359) — no separate ingest call
+    needed to give ``GET /chunks/{id}/work-items`` a pointer to render."""
     hub = build_hub(tmp_path)
-    item = WorkItemStore(hub.engine).create(
-        source="hub",
-        title="widget is broken",
-        body="steps to repro",
-        author=WorkItemAuthor.fleet(),
-        stated_priority=None,
-        at=_T0,
-    )
-
-    chunk_id = hub.client.post("/api/chunks", json={"tokens": [f"hub:{item.ref}"]}).json()["chunk_id"]
+    created = hub.client.post(
+        "/api/work-sources/hub/items", json={"title": "widget is broken", "body": "steps to repro"}
+    ).json()
+    chunk_id = created["chunk_id"]
 
     entries = hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]
     assert len(entries) == 1
     entry = entries[0]
     assert entry["source"] == "hub"
-    assert entry["ref"] == item.ref
-    assert entry["label"] == f"hub:{item.ref}"
+    assert entry["ref"] == created["ref"]
+    assert entry["label"] == f"hub:{created['ref']}"
     assert entry["title"] == "widget is broken"
     assert entry["body"] == "steps to repro"
     assert entry["web_url"] == f"/board/chunk/{chunk_id}"
@@ -83,6 +74,7 @@ def test_create_get_list_patch_and_withdraw_round_trip(tmp_path: Path) -> None:
     assert body["stated_priority"] == "normal"
     assert body["closure"] is None
     chunk_id = body["chunk_id"]
+    assert body["web_url"] == f"/board/chunk/{chunk_id}"  # live from the moment create mints the holder
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "not_ready"
 
     listed = hub.client.get("/api/work-sources/hub/items").json()["items"]
@@ -91,6 +83,7 @@ def test_create_get_list_patch_and_withdraw_round_trip(tmp_path: Path) -> None:
     fetched = hub.client.get(f"/api/work-sources/hub/items/{ref}")
     assert fetched.status_code == 200
     assert fetched.json()["title"] == "widget is broken"
+    assert fetched.json()["web_url"] == f"/board/chunk/{chunk_id}"
 
     patched = hub.client.patch(f"/api/work-sources/hub/items/{ref}", json={"title": "widget is fixed"})
     assert patched.status_code == 200, patched.text
@@ -105,6 +98,7 @@ def test_create_get_list_patch_and_withdraw_round_trip(tmp_path: Path) -> None:
     assert withdrawn.status_code == 200, withdrawn.text
     assert withdrawn.json()["closure"] == "withdrawn"
     assert withdrawn.json()["closed_at"] is not None
+    assert withdrawn.json()["web_url"] is None  # the chunk reached a terminal status (stopped)
 
 
 # --------------------------------------------------------------------------- #
@@ -145,6 +139,23 @@ def test_a_second_post_chunks_against_the_minted_pointer_is_409(tmp_path: Path) 
 
     assert conflict.status_code == 409
     assert conflict.json()["existing_chunk_id"] == created["chunk_id"]
+
+
+def test_create_is_409_when_an_out_of_band_ingest_already_holds_the_allocated_ref(tmp_path: Path) -> None:
+    """``HubWorkSource.parse``/``fetch`` admit any digit-string ref, allocated or not, so
+    an out-of-band ``POST /chunks`` against a ref this source has never filed an item
+    for can pre-empt the very ref allocation mints next. Without the guard, create would
+    mint a second live chunk holding the same pointer the ingest above already holds."""
+    hub = build_hub(tmp_path)
+    pre_ingested = hub.client.post("/api/chunks", json={"tokens": ["hub:1"]})
+    assert pre_ingested.status_code == 201, pre_ingested.text
+    existing_chunk_id = pre_ingested.json()["chunk_id"]
+
+    conflict = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"})
+
+    assert conflict.status_code == 409, conflict.text
+    assert conflict.json()["existing_chunk_id"] == existing_chunk_id
+    assert hub.client.get("/api/work-sources/hub/items").json()["items"] == []
 
 
 def test_create_does_not_promote_and_priority_never_writes_a_queue_position(tmp_path: Path) -> None:
@@ -242,14 +253,18 @@ def test_the_listing_route_threads_its_limit_and_refuses_one_out_of_range(tmp_pa
     assert hub.client.get("/api/work-sources/hub/items", params={"limit": 1001}).status_code == 422
 
 
-def test_delete_is_409_while_a_live_chunk_holds_the_item(tmp_path: Path) -> None:
-    """Creation itself mints the live holder (blizzard#359) — no separate ingest needed."""
+def test_delete_is_409_while_a_live_chunk_holds_the_item_and_200_once_it_is_stopped(tmp_path: Path) -> None:
+    """Its own post-stop complement, not 409 alone — an unconditional-409 `DELETE`
+    would also satisfy that. Creation itself mints the live holder (blizzard#359)."""
     hub = build_hub(tmp_path)
-    ref = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["ref"]
+    created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
+    ref, chunk_id = created["ref"], created["chunk_id"]
 
-    resp = hub.client.delete(f"/api/work-sources/hub/items/{ref}")
+    assert hub.client.delete(f"/api/work-sources/hub/items/{ref}").status_code == 409
 
-    assert resp.status_code == 409
+    assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={}).status_code == 202
+
+    assert hub.client.delete(f"/api/work-sources/hub/items/{ref}").status_code == 200
 
 
 # --------------------------------------------------------------------------- #

@@ -19,6 +19,7 @@ from blizzard.hub.domain.work import (
     WorkItemAuthorKind,
     WorkItemClosure,
     WorkItemRecord,
+    WorkRef,
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store import insert_chunk_rows
@@ -51,43 +52,10 @@ class WorkItemStore:
             ).all()
         return [self._record(row) for row in rows]
 
-    def create(
-        self,
-        *,
-        source: str,
-        title: str,
-        body: str,
-        author: WorkItemAuthor,
-        stated_priority: str | None,
-        at: datetime,
-    ) -> WorkItemRecord:
-        ref = self.allocate_ref(source)
-        with self._engine.begin() as conn:
-            work_item_id = self._insert_item(
-                conn,
-                source=source,
-                ref=ref,
-                title=title,
-                body=body,
-                author=author,
-                stated_priority=stated_priority,
-                at=at,
-            )
-        return WorkItemRecord(
-            work_item_id=work_item_id,
-            source=source,
-            ref=ref,
-            title=title,
-            body=body,
-            author=author,
-            stated_priority=stated_priority,
-            created_at=at,
-            edited_at=at,
-        )
-
     def create_with_chunk(
         self,
         *,
+        pointer: WorkRef,
         title: str,
         body: str,
         author: WorkItemAuthor,
@@ -95,7 +63,10 @@ class WorkItemStore:
         at: datetime,
         chunk: Chunk,
     ) -> WorkItemRecord:
-        pointer = chunk.work_refs[0]
+        """Insert the item row keyed by ``pointer`` — the caller's own, taken as an
+        explicit parameter rather than positionally off ``chunk.work_refs`` — and
+        ``chunk``'s own rows (which may hold ``pointer`` plus others), atomically in one
+        transaction (blizzard#359): a store failure leaves neither durable."""
         with self._engine.begin() as conn:
             work_item_id = self._insert_item(
                 conn,

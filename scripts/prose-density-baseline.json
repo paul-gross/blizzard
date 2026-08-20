@@ -908,9 +908,9 @@
    "total": 69
   },
   "blizzard/hub/api/work_sources.py": {
-   "comments": 3,
-   "docstrings": 26,
-   "total": 217
+   "comments": 6,
+   "docstrings": 27,
+   "total": 232
   },
   "blizzard/hub/app.py": {
    "comments": 18,
@@ -1255,7 +1255,7 @@
   "blizzard/hub/domain/ingest.py": {
    "comments": 0,
    "docstrings": 8,
-   "total": 44
+   "total": 38
   },
   "blizzard/hub/domain/pause.py": {
    "comments": 0,
@@ -1309,8 +1309,8 @@
   },
   "blizzard/hub/domain/work.py": {
    "comments": 54,
-   "docstrings": 501,
-   "total": 1791
+   "docstrings": 506,
+   "total": 1795
   },
   "blizzard/hub/domain/work_closure.py": {
    "comments": 4,
@@ -1319,8 +1319,8 @@
   },
   "blizzard/hub/domain/work_items.py": {
    "comments": 0,
-   "docstrings": 33,
-   "total": 150
+   "docstrings": 34,
+   "total": 151
   },
   "blizzard/hub/events/__init__.py": {
    "comments": 0,
@@ -1424,8 +1424,8 @@
   },
   "blizzard/hub/store/internal/work_item_store.py": {
    "comments": 3,
-   "docstrings": 19,
-   "total": 236
+   "docstrings": 23,
+   "total": 207
   },
   "blizzard/hub/store/migrations/__init__.py": {
    "comments": 0,
@@ -1789,8 +1789,8 @@
   },
   "blizzard/hub/work_sources/internal/hub_work_source.py": {
    "comments": 2,
-   "docstrings": 26,
-   "total": 151
+   "docstrings": 28,
+   "total": 153
   },
   "blizzard/hub/work_sources/registry.py": {
    "comments": 0,
@@ -2789,8 +2789,8 @@
   },
   "blizzard/wire/work_source.py": {
    "comments": 0,
-   "docstrings": 25,
-   "total": 94
+   "docstrings": 24,
+   "total": 93
   }
  },
  "tests": {
@@ -3236,8 +3236,8 @@
   },
   "test_chunk_changed_frame_enrichment.py": {
    "comments": 22,
-   "docstrings": 24,
-   "total": 533
+   "docstrings": 27,
+   "total": 552
   },
   "test_chunk_complete.py": {
    "comments": 4,
@@ -3721,13 +3721,13 @@
   },
   "test_hub_work_source.py": {
    "comments": 6,
-   "docstrings": 12,
-   "total": 334
+   "docstrings": 16,
+   "total": 400
   },
   "test_hub_work_source_api.py": {
-   "comments": 24,
-   "docstrings": 11,
-   "total": 355
+   "comments": 26,
+   "docstrings": 17,
+   "total": 383
   },
   "test_idp_authorize.py": {
    "comments": 6,
@@ -4536,8 +4536,8 @@
   },
   "test_work_closure.py": {
    "comments": 10,
-   "docstrings": 36,
-   "total": 473
+   "docstrings": 38,
+   "total": 470
   },
   "test_work_item.py": {
    "comments": 4,
@@ -4550,14 +4550,14 @@
    "total": 103
   },
   "test_work_item_store.py": {
-   "comments": 6,
-   "docstrings": 12,
-   "total": 193
+   "comments": 7,
+   "docstrings": 13,
+   "total": 221
   },
   "test_work_item_store_utc.py": {
    "comments": 0,
-   "docstrings": 6,
-   "total": 56
+   "docstrings": 8,
+   "total": 71
   },
   "test_work_items_proxy.py": {
    "comments": 3,

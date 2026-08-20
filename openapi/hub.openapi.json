@@ -5423,7 +5423,7 @@
         "type": "object"
       },
       "WorkItemCreateResponse": {
-        "description": "``POST /api/work-sources/{source}/items`` (blizzard#359) \u2014 carries every\n``WorkItemView`` field plus the id of the ``not_ready`` chunk creation mints in the\nsame transaction. Widens only this route's own response; the other four keep\nrendering the unchanged ``WorkItemView``.",
+        "description": "``POST /api/work-sources/{source}/items`` (blizzard#359) \u2014 carries every\n``WorkItemView`` field plus ``chunk_id``, the id of the ``not_ready`` chunk\ncreation mints in the same transaction.",
         "properties": {
           "author": {
             "$ref": "#/components/schemas/WorkItemAuthorView"
@@ -11216,7 +11216,7 @@
         ]
       },
       "post": {
-        "description": "Allocate a fresh item at SOURCE, open, authored by the caller, and mint its\nresting ``not_ready`` chunk in the same transaction (blizzard#359). 404/409 per D4,\n422 for a blank title or body, 503 if every graph named after the packaged default\nhas been retired (the operator's brake, mirroring ``POST /chunks``).",
+        "description": "Allocate a fresh item at SOURCE, open, authored by the caller, and mint its\nresting ``not_ready`` chunk in the same transaction (blizzard#359). 404/409 per D4,\n422 for a blank title or body, 409 if an out-of-band ingest already holds the\nallocated ref's pointer, 503 if every graph named after the packaged default has\nbeen retired (the operator's brake, mirroring ``POST /chunks``).",
         "operationId": "create_work_item_api_work_sources__source__items_post",
         "parameters": [
           {

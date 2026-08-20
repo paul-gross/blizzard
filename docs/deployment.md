@@ -232,7 +232,7 @@ it, on all four verbs — by design, not by a missing flag a future block could 
 chunk in the same write: `POST .../hub/items` pins a fresh `not_ready` chunk to the default graph, holding the new
 item's pointer, and returns the chunk's id alongside the item — the fleet already has something to promote the moment
 the item exists, with no separate ingest call. Withdrawing that item (`DELETE`) refuses with a 409 while the chunk is
-still live, the same guard a forge-sourced item's live holder already imposes; stop the chunk first.
+still live — the same guard that refuses a re-ingest of a pointer a live chunk already holds; stop the chunk first.
 
 **A self-hosted GitHub Enterprise example** — an internal repo behind a company GHE instance, alongside the public
 `blizzard` source:

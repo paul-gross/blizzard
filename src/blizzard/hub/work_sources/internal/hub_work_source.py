@@ -62,8 +62,10 @@ class HubWorkSource:
 
     def web_url(self, pointer: WorkRef) -> str | None:
         """The board's own chunk deep link — relative, since the hub declares no public
-        origin. Non-``None`` from the moment create mints the item's resting chunk
-        (blizzard#359) until that chunk stops; ``None`` only past that point."""
+        origin. Non-``None`` exactly while a live (non-terminal) chunk holds the pointer
+        — from the moment create mints the item's resting chunk (blizzard#359) until
+        that chunk reaches a terminal status (``stopped`` or ``done``); ``None`` before,
+        after, and for every item that predates this change and never had one minted."""
         chunk_id = self._chunks.find_live_holder(pointer)
         return f"/board/chunk/{chunk_id}" if chunk_id is not None else None
 

@@ -10,11 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.hub.domain.edit import UNSET, UnsetType
 from blizzard.hub.domain.graph import Graph
+from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.work import (
-    Chunk,
     IReadChunkRepository,
     IWriteWorkItemRepository,
     WorkItemAuthor,
@@ -22,6 +21,7 @@ from blizzard.hub.domain.work import (
     WorkItemPriority,
     WorkItemRecord,
     WorkRef,
+    mint_chunk,
 )
 
 
@@ -86,19 +86,20 @@ class WorkItemEditService:
         stated_priority: WorkItemPriority | None,
         graph: Graph,
     ) -> CreatedWorkItem:
-        """File the item and mint its resting chunk in one transaction (blizzard#359) —
-        pinned to ``graph``, holding the pointer this call itself allocates, minting
-        neither model nor effort default, the same empty-preference policy
-        :class:`~blizzard.hub.domain.ingest.IngestService` mints with."""
+        """File the item and mint its resting chunk in one transaction (blizzard#359),
+        pinned to ``graph``, holding the pointer this call itself allocates. Guarded by
+        :class:`~blizzard.hub.domain.ingest.IngestService`'s own live-holder check: an
+        out-of-band ingest of the allocated ref can pre-empt it, raising
+        :class:`~blizzard.hub.domain.ingest.IngestConflict` and burning the ref."""
         ref = self._items.allocate_ref(source)
+        pointer = WorkRef(source=source, ref=ref)
+        holder = self._chunks.find_live_holder(pointer)
+        if holder is not None:
+            raise IngestConflict(existing_chunk_id=holder, pointer=pointer)
         at = self._clock.now()
-        chunk = Chunk(
-            chunk_id=Id.mint(CHUNK_PREFIX, self._clock).value,
-            graph_id=graph.graph_id,
-            work_refs=[WorkRef(source=source, ref=ref)],
-            minted_at=at,
-        )
+        chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=at)
         item = self._items.create_with_chunk(
+            pointer=pointer,
             title=title,
             body=body,
             author=author,

@@ -64,9 +64,8 @@ class WorkItemsListView(BaseModel):
 
 class WorkItemCreateResponse(WorkItemView):
     """``POST /api/work-sources/{source}/items`` (blizzard#359) — carries every
-    ``WorkItemView`` field plus the id of the ``not_ready`` chunk creation mints in the
-    same transaction. Widens only this route's own response; the other four keep
-    rendering the unchanged ``WorkItemView``."""
+    ``WorkItemView`` field plus ``chunk_id``, the id of the ``not_ready`` chunk
+    creation mints in the same transaction."""
 
     chunk_id: str
 
