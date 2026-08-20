@@ -223,8 +223,8 @@ chunk_migrations = Table(
     Column("model_after", String, nullable=True),  # the re-pinned model, or null (kept current)
     Column("epoch", Integer, nullable=False),  # the submitting fence; the natural-key third part
     Column("recorded_at", UtcDateTime, nullable=False),
-    # What moved the chunk (issue #164): authored-edge | intent | follow-latest. Nullable —
-    # a row predating the discriminator stays honestly unattributed.
+    # What moved the chunk (issues #164, #371): authored-edge | intent | follow-latest | restart.
+    # Nullable — a row predating the discriminator stays honestly unattributed.
     Column("source", String, nullable=True),
 )
 
@@ -564,10 +564,13 @@ chunk_restarts = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    # The graph this move happened in — a restart crosses none, but a later migration would
-    # otherwise strand its node ids against the new pin, exactly as for a transition.
+    # The graph ``to_node_id`` belongs to — the target's for a cross-graph move (#371), so a
+    # later re-pin cannot strand it, exactly as for a transition.
     Column("graph_id", String, nullable=False),
     Column("from_node_id", String, nullable=True),  # the node left behind; null before the first move
+    # ``from_node_id``'s own graph, set only when the move crossed one (#371) — null otherwise,
+    # and on every row predating the column, where ``graph_id`` names both ends.
+    Column("from_graph_id", String, nullable=True),
     Column("to_node_id", String, nullable=False),  # the node forced onto
     Column("epoch", Integer, nullable=False),  # the fresh fence that preempts the live attempt
     # Set when the move superseded an open gate decision, so that decision derives closed here.

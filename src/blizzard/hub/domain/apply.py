@@ -200,6 +200,10 @@ class ApplyService:
                 ),
                 None,
             )
+            # A restart's own re-pin (#371) retained the route, so a displaced attempt landing
+            # LEVEL on its key is fenced like any stale one — never `MIGRATED`, which releases.
+            if replayed is not None and replayed.source is MigrationSource.RESTART:
+                return ApplyResult.failure(f"superseded by a restart at epoch {submission.epoch}")
             if replayed is not None and replayed.landed_node_executor is Executor.HUB:
                 return ApplyResult.hub_node_taken_replay()
             return ApplyResult.migrated_replay()

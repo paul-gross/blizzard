@@ -539,27 +539,34 @@ def chunk_done(cli: CliContext, chunk_id: str, by: str) -> None:
 @chunk_group.command("restart", cls=FleetCommand)
 @click.argument("chunk_id")
 @click.option(
+    "--to-graph",
+    default=None,
+    help="Move CHUNK onto this graph as part of the same move — a graph id, or a name resolved to the "
+    "newest enabled mint of it. Omit to restart CHUNK where it stands; naming its own pin is refused.",
+)
+@click.option(
     "--node",
     default=None,
-    help="Node name on CHUNK's own graph to force it onto. Omit for its current node, or its entry node "
-    "if CHUNK has never moved.",
+    help="Node name to force CHUNK onto, on --to-graph's graph when one is given and CHUNK's own "
+    "otherwise. Omit for its current node's name, or that graph's entry node if CHUNK has never moved.",
 )
 @click.option("--by", "by", default="operator", help="Who is restarting (recorded on the fact).")
-def chunk_restart(cli: CliContext, chunk_id: str, node: str | None, by: str) -> None:
-    """Force CHUNK onto a node now, on a freshly minted session (issue #370).
+def chunk_restart(cli: CliContext, chunk_id: str, to_graph: str | None, node: str | None, by: str) -> None:
+    """Force CHUNK onto a node now, on a freshly minted session (issues #370, #371).
 
-    A pure client of ``POST /api/chunks/{id}/restart``. Unlike ``migrate``'s standing intent, the
-    move has already happened when the call returns: the bumped epoch makes the runner tear the
-    attempt down and re-enter. 409 when CHUNK is terminal, or its target node is off its graph."""
+    A pure client of ``POST /api/chunks/{id}/restart``. The move has already happened when the call
+    returns: the bumped epoch tears the running attempt down and re-enters, where ``migrate`` only
+    records an intent for the next transition. 409 when CHUNK is terminal or the target refuses it."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/restart",
         "POST /chunks/{id}/restart",
-        json_body={"node": node, "by": by},
-        on_status={409: "chunk is not restartable", 404: f"no such chunk {chunk_id}"},
+        json_body={"node": node, "to_graph": to_graph, "by": by},
+        on_status={409: "chunk is not restartable there", 404: f"no such chunk {chunk_id}"},
     )
     body = resp.json()
     landed = body.get("current_node_name") or node or "its current node"
-    cli.show_lines(body, f"restarted {chunk_id} at `{landed}` — re-entering on a fresh session")
+    onto = f" on graph `{to_graph}`" if to_graph is not None else ""
+    cli.show_lines(body, f"restarted {chunk_id} at `{landed}`{onto} — re-entering on a fresh session")
 
 
 @chunk_group.command("migrate", cls=FleetCommand)
@@ -575,8 +582,8 @@ def chunk_migrate(cli: CliContext, chunk_id: str, to_graph: str | None, node: st
     """Set, overwrite, or clear CHUNK's standing migration intent (issue #124).
 
     ``--node`` present selects ``forced``, absent selects ``auto``; ``--cancel`` clears
-    a standing intent and conflicts with ``--to-graph``/``--node``. The intent is
-    consulted at the chunk's next transition, never applied eagerly."""
+    a standing intent and conflicts with ``--to-graph``/``--node``. The intent is consulted at
+    the chunk's next transition, never applied eagerly — ``restart --to-graph`` moves it now."""
     if cancel and (to_graph is not None or node is not None):
         raise click.UsageError("--cancel cannot be combined with --to-graph/--node")
     if not cancel and to_graph is None:

@@ -365,11 +365,11 @@ export const requeueChunkApiChunksChunkIdRequeuesPost = <ThrowOnError extends bo
 /**
  * Restart Chunk
  *
- * Force a chunk onto a node now, on a freshly minted session (issue #370).
+ * Force a chunk onto a node now, on a freshly minted session (#370, #371).
  *
- * Recorded at a bumped epoch, so the running attempt is fenced out and the holding runner
- * re-enters — ``node`` omitted means the chunk's current one, the graph's entry if it has never
- * moved. Open parks close with it. 409: a terminal chunk, or a node its graph does not carry.
+ * At a bumped epoch, so the running attempt is fenced out and the holding runner re-enters;
+ * ``node`` omitted means its current node, or the entry of the graph it lands on when it never
+ * moved. 409 refuses a terminal chunk, an unmatched name, or its own pin; 404 an unknown target.
  */
 export const restartChunkApiChunksChunkIdRestartPost = <ThrowOnError extends boolean = false>(options: Options<RestartChunkApiChunksChunkIdRestartPostData, ThrowOnError>): RequestResult<RestartChunkApiChunksChunkIdRestartPostResponses, RestartChunkApiChunksChunkIdRestartPostErrors, ThrowOnError> => (options.client ?? client).post<RestartChunkApiChunksChunkIdRestartPostResponses, RestartChunkApiChunksChunkIdRestartPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/restart',

@@ -160,10 +160,10 @@ class TransitionView(BaseModel):
 
 
 class MigrationView(BaseModel):
-    """One cross-graph migration step (issue #90): the chunk's attempt ended in ``from_graph`` and it
-    re-queued at ``landed_node`` in ``to_graph`` — its own step, never a transition
-    (``bzh:migration-not-transition``). ``model`` is the re-pinned model, null when the chunk kept its
-    own. ``source`` says what moved it: ``authored-edge``, ``intent``, or ``follow-latest`` (#164)."""
+    """One cross-graph migration step (issue #90): the chunk was re-pinned from ``from_graph`` onto
+    ``landed_node`` in ``to_graph`` — its own step, never a transition (``bzh:migration-not-transition``).
+    A transition-borne source ends the attempt and re-queues; ``restart`` preempts it and keeps the route
+    (#371). ``model`` is the re-pinned model, null when the chunk kept its own. ``source`` attributes it."""
 
     from_node_id: str | None
     from_node_name: str | None = None
@@ -180,13 +180,15 @@ class MigrationView(BaseModel):
 
 
 class RestartView(BaseModel):
-    """One operator restart (issue #370): the chunk was forced from ``from_node`` onto ``to_node`` at
-    ``epoch``, on this graph, tearing down whatever attempt was running. Its own step, never a
-    transition — nothing judged it and no edge was taken. ``from_node_id`` is null when the chunk had
-    not yet moved; ``decision_id`` names the gate decision the move closed, null when there was none."""
+    """One operator restart (#370, #371): the chunk was forced from ``from_node`` onto ``to_node`` at
+    ``epoch``, tearing down whatever attempt was running. Its own step, never a transition — nothing
+    judged it. ``graph_id`` is where it landed, a cross-graph move's target, and ``from_graph`` the graph
+    it departed, null when it crossed none; ``decision_id`` names the gate decision it closed, or null."""
 
     from_node_id: str | None = None
     from_node_name: str | None = None
+    from_graph_id: str | None = None
+    from_graph_name: str | None = None
     to_node_id: str
     to_node_name: str | None = None
     graph_id: str
@@ -313,11 +315,13 @@ class ChunkCompleteRequest(BaseModel):
 
 
 class ChunkRestartRequest(BaseModel):
-    """Force a chunk onto a node now, on a freshly minted session (issue #370). ``node`` is a node
-    name on the chunk's own graph — omitted means its current node, the common case. Records who
-    moved it."""
+    """Force a chunk onto a node now, on a freshly minted session (#370, #371). ``to_graph`` — a graph
+    id or name — moves the chunk onto another graph in the same write; ``node`` names a node on that
+    graph, or on the chunk's own when there is none, and omitted means its current node's own name.
+    Records who moved it."""
 
     node: str | None = None
+    to_graph: str | None = None
     by: str = "operator"
 
 

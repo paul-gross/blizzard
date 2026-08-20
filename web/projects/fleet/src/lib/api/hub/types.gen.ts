@@ -821,9 +821,10 @@ export type ChunkPauseRequest = {
 /**
  * ChunkRestartRequest
  *
- * Force a chunk onto a node now, on a freshly minted session (issue #370). ``node`` is a node
- * name on the chunk's own graph — omitted means its current node, the common case. Records who
- * moved it.
+ * Force a chunk onto a node now, on a freshly minted session (#370, #371). ``to_graph`` — a graph
+ * id or name — moves the chunk onto another graph in the same write; ``node`` names a node on that
+ * graph, or on the chunk's own when there is none, and omitted means its current node's own name.
+ * Records who moved it.
  */
 export type ChunkRestartRequest = {
     /**
@@ -834,6 +835,10 @@ export type ChunkRestartRequest = {
      * Node
      */
     node?: string | null;
+    /**
+     * To Graph
+     */
+    to_graph?: string | null;
 };
 
 /**
@@ -2028,10 +2033,10 @@ export type MigrationMode = 'auto' | 'forced';
 /**
  * MigrationView
  *
- * One cross-graph migration step (issue #90): the chunk's attempt ended in ``from_graph`` and it
- * re-queued at ``landed_node`` in ``to_graph`` — its own step, never a transition
- * (``bzh:migration-not-transition``). ``model`` is the re-pinned model, null when the chunk kept its
- * own. ``source`` says what moved it: ``authored-edge``, ``intent``, or ``follow-latest`` (#164).
+ * One cross-graph migration step (issue #90): the chunk was re-pinned from ``from_graph`` onto
+ * ``landed_node`` in ``to_graph`` — its own step, never a transition (``bzh:migration-not-transition``).
+ * A transition-borne source ends the attempt and re-queues; ``restart`` preempts it and keeps the route
+ * (#371). ``model`` is the re-pinned model, null when the chunk kept its own. ``source`` attributes it.
  */
 export type MigrationView = {
     /**
@@ -2555,10 +2560,10 @@ export type ReadinessResponse = {
 /**
  * RestartView
  *
- * One operator restart (issue #370): the chunk was forced from ``from_node`` onto ``to_node`` at
- * ``epoch``, on this graph, tearing down whatever attempt was running. Its own step, never a
- * transition — nothing judged it and no edge was taken. ``from_node_id`` is null when the chunk had
- * not yet moved; ``decision_id`` names the gate decision the move closed, null when there was none.
+ * One operator restart (#370, #371): the chunk was forced from ``from_node`` onto ``to_node`` at
+ * ``epoch``, tearing down whatever attempt was running. Its own step, never a transition — nothing
+ * judged it. ``graph_id`` is where it landed, a cross-graph move's target, and ``from_graph`` the graph
+ * it departed, null when it crossed none; ``decision_id`` names the gate decision it closed, or null.
  */
 export type RestartView = {
     /**
@@ -2569,6 +2574,14 @@ export type RestartView = {
      * Epoch
      */
     epoch: number;
+    /**
+     * From Graph Id
+     */
+    from_graph_id?: string | null;
+    /**
+     * From Graph Name
+     */
+    from_graph_name?: string | null;
     /**
      * From Node Id
      */

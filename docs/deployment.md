@@ -214,16 +214,16 @@ close = false                                      # opt into the delivery closu
 
 Every field:
 
-| Field       | Required            | Meaning                                                                                                                                                                                                                                           |
-| ----------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Field       | Required            | Meaning                                                                                                                                                                                                                                                                                                                                                  |
+| ----------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`      | yes                 | The source's identity. Ingest tokens (`name:ref`, `name#ref`) and board pointer labels (`{source}#{ref}`) key on it. Must not contain `:` (the ingest token grammar splits on the first one). Must be unique across all `[[work_source]]` blocks. `hub` is reserved for the built-in, always-seated hub work source (see below) — no block may claim it. |
-| `provider`  | yes                 | The adapter grammar this source speaks. Only `"github"` exists today; an unknown provider fails at config load, not at first use.                                                                                                                 |
-| `repo`      | yes                 | The `owner/name` coordinate this source is pinned to. Each `(provider, repo)` pair may appear under only one `name` — two names for the same repo would let one item be ingested twice under two identities.                                      |
-| `token_env` | yes                 | Names an environment variable — **not the secret itself**. See "Credential indirection" below.                                                                                                                                                    |
-| `annotate`  | no, default `false` | Opts this source into the forge-status label sweep. See "The forge-status label projection" below — **do not set this on more than one hub against the same forge repo.**                                                                         |
-| `close`     | no, default `false` | Opts this source into the delivery closure sweep. See "Closing delivered work items" below — **do not set this on more than one hub against the same forge repo.**                                                                                |
-| `api_base`  | no                  | Overrides the provider's default API origin. Required to reach a self-hosted forge (e.g. GitHub Enterprise).                                                                                                                                      |
-| `web_base`  | no                  | Overrides the provider's default web origin, used for the item's browsable URL. Derived from `api_base` when omitted, so a self-hosted GHE source only needs to set `api_base`.                                                                   |
+| `provider`  | yes                 | The adapter grammar this source speaks. Only `"github"` exists today; an unknown provider fails at config load, not at first use.                                                                                                                                                                                                                        |
+| `repo`      | yes                 | The `owner/name` coordinate this source is pinned to. Each `(provider, repo)` pair may appear under only one `name` — two names for the same repo would let one item be ingested twice under two identities.                                                                                                                                             |
+| `token_env` | yes                 | Names an environment variable — **not the secret itself**. See "Credential indirection" below.                                                                                                                                                                                                                                                           |
+| `annotate`  | no, default `false` | Opts this source into the forge-status label sweep. See "The forge-status label projection" below — **do not set this on more than one hub against the same forge repo.**                                                                                                                                                                                |
+| `close`     | no, default `false` | Opts this source into the delivery closure sweep. See "Closing delivered work items" below — **do not set this on more than one hub against the same forge repo.**                                                                                                                                                                                       |
+| `api_base`  | no                  | Overrides the provider's default API origin. Required to reach a self-hosted forge (e.g. GitHub Enterprise).                                                                                                                                                                                                                                             |
+| `web_base`  | no                  | Overrides the provider's default web origin, used for the item's browsable URL. Derived from `api_base` when omitted, so a self-hosted GHE source only needs to set `api_base`.                                                                                                                                                                          |
 
 **A self-hosted GitHub Enterprise example** — an internal repo behind a company GHE instance, alongside the public
 `blizzard` source:
@@ -1019,22 +1019,36 @@ above.
   and then running `chunk done` (or the board's Complete) marks it `done` instead, once you have confirmed the work
   actually landed. What remains foreclosed is going the other way: there is no `un-stop` and no `un-complete`, so once a
   chunk reads `done` — by either path — it stays there.
-- **`blizzard hub chunk restart <chunk_id> [--node <name>]`** (issue #370) — CLI/API only, a pure client of
-  `POST /api/chunks/{id}/restart`. It forces the chunk onto a node **now**, on a freshly minted session: the hub records
-  the move at a bumped epoch, so the holding runner tears the running attempt down on its next tick and re-enters the
-  named node with clean context. `--node` defaults to the chunk's current node, which is the common case — restart this
-  step, the worker is thrashing; on a chunk that has never moved, that default is its graph's entry node. The claim is
-  **kept**: route, tenure and held environments all survive, so the re-entry lands in the same worktree with the work
-  already on disk, the artifacts the superseded step produced stay readable, and — like a pause, and unlike a failure —
-  **no retry is consumed**, so restarting a thrashing step over and over never escalates the chunk you are rescuing. The
-  bumped epoch is the guarantee, not the kill: a completion the displaced worker submits afterward is rejected as stale
-  rather than advancing the chunk. Whatever parked the chunk goes with the move — an open ask is answered with a fixed
-  system answer, an open gate decision is closed, an open escalation superseded — so nothing is left to re-park it at a
-  node it is no longer on. Like `stop` and unlike `detach`, a live route is not required: an unclaimed `ready` or
-  `not_ready` chunk moves too, re-entering the queue at the target node, and the next claim's envelope is what carries
-  the move to whoever picks it up. Refused (`409`) when the chunk is `done`/`stopped`, when `--node` names no node on
-  the chunk's own graph, or when the chunk stands on a node its own graph no longer carries — the position is refused,
-  never silently rewound to the entry node. See `blizzard hub chunk restart --help` for the CLI's full contract.
+- **`blizzard hub chunk restart <chunk_id> [--to-graph <graph>] [--node <name>]`** (issues #370, #371) — CLI/API only, a
+  pure client of `POST /api/chunks/{id}/restart`. It forces the chunk onto a node **now**, on a freshly minted session:
+  the hub records the move at a bumped epoch, so the holding runner tears the running attempt down on its next tick and
+  re-enters the named node with clean context. `--node` defaults to the chunk's current node, which is the common case —
+  restart this step, the worker is thrashing; on a chunk that has never moved, that default is the entry node of
+  whichever graph it lands on. The claim is **kept**: route, tenure and held environments all survive, so the re-entry
+  lands in the same worktree with the work already on disk, the artifacts the superseded step produced stay readable,
+  and — like a pause, and unlike a failure — **no retry is consumed**, so restarting a thrashing step over and over
+  never escalates the chunk you are rescuing. The bumped epoch is the guarantee, not the kill: a completion the
+  displaced worker submits afterward is rejected as stale rather than advancing the chunk. Whatever parked the chunk
+  goes with the move — an open ask is answered with a fixed system answer, an open gate decision is closed, an open
+  escalation superseded — so nothing is left to re-park it at a node it is no longer on. Like `stop` and unlike
+  `detach`, a live route is not required: an unclaimed `ready` or `not_ready` chunk moves too, re-entering the queue at
+  the target node, and the next claim's envelope is what carries the move to whoever picks it up. Refused (`409`) when
+  the chunk is `done`/`stopped`, when `--node` names no node on the graph the move lands on, or when — with no node
+  named — the chunk stands on a node that graph no longer carries: the position is refused, never silently rewound to
+  the entry node. See `blizzard hub chunk restart --help` for the CLI's full contract.
+
+  **`--to-graph` moves the chunk onto another graph in the same breath** (issue #371). The move then records **two**
+  facts in one store write — a migration for the cross-graph re-pin, so re-pinning stays migration's job, and the
+  restart for the forced clean re-entry — plus, in that same write, any standing `intended_migration` the chunk was
+  carrying, which an eager move supersedes rather than leaving parked to fire later. `--node` then names a node on the
+  **target** graph; omitted, the chunk's current node name is matched onto the target the way an `auto` migration's
+  landing is, and a failed match is refused (`409`) rather than rewound to the target's entry node. The one chunk that
+  does land on the target's entry is one that has never moved at all — it stands on nowhere, so the entry is where it
+  would have started. The re-entry is stamped by the **target** graph's declarations — its `sessions:` model, effort and
+  compaction window — which is the whole point: a chunk thrashing under a stale window is moved onto the fixed mint and
+  re-enters under it immediately, with no node-step run to manufacture a transition. A target graph that is unknown
+  (`404`) — a name whose every mint is retired reads as unknown here — retired and named by id (`409`), or equal to the
+  chunk's own current pin (`409`, use plain `restart`) is refused, and every refusal writes nothing.
 
   **Restarting an escalated chunk clears the hub-side row, and the runner's own list lags.** The move supersedes the
   escalation, so the chunk leaves the critical `needs-human` feed immediately — but the runner that raised it keeps
@@ -1049,9 +1063,10 @@ above.
   it.
 
   **`restart` is not `migrate`.** `chunk migrate` records a **standing intent** — inspectable in `chunk show`,
-  overwritable, `--cancel`able, and consulted only at the chunk's next transition; it is also the only verb that crosses
-  graphs. `chunk restart` performs an **event** that has already happened when the call returns, within the chunk's own
-  graph. Crossing graphs *and* starting clean is `migrate` then `restart`.
+  overwritable, `--cancel`able, and consulted only at the chunk's next transition, so nothing in flight is interrupted
+  and the chunk moves whenever it next completes a node-step. `chunk restart` performs an **event** that has already
+  happened when the call returns. Both can cross graphs; they differ in *when*, and `restart --to-graph` is the one that
+  does not wait for a transition the operator would otherwise have to manufacture.
 - **`blizzard hub runner pause <runner_id>` / `runner resume <runner_id>`** (the hub brake) and **`runner pause` /
   `runner start`**, or the runner panel's own Pause/Resume control (the runner's own local brake, issue #45 and issue
 
@@ -1148,10 +1163,10 @@ Unclaimed and never-moved are not the same test. A chunk that was claimed, ran a
 "Detaching a chunk" above) derives `ready` again while still standing on a node of the graph it is pinned to, and
 re-pinning it in place would leave its current node absent from the new graph — so that edit is refused `409` even
 though the chunk is unclaimed. Moving a chunk that has run is not an edit's job, and which verb takes it depends on what
-is actually changing: **which graph** the chunk is on is `chunk migrate` below (`--to-graph` is required, and a target
-equal to the chunk's own current pin is refused `409`); **where on that graph** it stands is `chunk restart` above,
-which crosses no graph and needs no re-pin. The defaults name no node to be stranded on, so they stay editable for as
-long as the chunk is unclaimed.
+is actually changing: **which graph** the chunk is on, at its next transition, is `chunk migrate` below (`--to-graph` is
+required, and a target equal to the chunk's own current pin is refused `409`); **where on that graph** it stands, or
+which graph it is on right now, is `chunk restart` above. The defaults name no node to be stranded on, so they stay
+editable for as long as the chunk is unclaimed.
 
 `PATCH /api/chunks/{id}` (issue #124) applies any of `graph_id`, `default_model`, `default_effort`, and
 `intended_migration` in one request, all-or-nothing: if any supplied field is outside *its own* editable window, the
@@ -1192,15 +1207,16 @@ check runs **first**, so a moved-but-unclaimed chunk aimed at a retired graph re
 `intended_migration` (issue #124) — sets a **standing intent** to move a chunk onto another graph, consulted (never
 applied eagerly) at the chunk's *next* transition. Unlike the stop-work verbs above, it does not stop or interrupt any
 in-flight work: the current attempt runs to its normal verdict, and only that transition either fires the intent or, for
-`auto` mode with no name match, leaves it set for the transition after. `--to-graph` names a graph id or a graph name
-resolved to the newest enabled graph of that name; a blank name, a retired target, or a target equal to the chunk's own
-current pin is refused (`409`). With no `--node`, the intent is `auto`: it fires only when the transition's own
-destination node name also exists on the target graph, landing there; with no name match the transition applies
-unchanged and the intent stays set for next time. `--node <name>` makes it `forced`: it fires unconditionally at the
-next transition, landing on the named node regardless of the transition's own destination — refused (`409`) up front if
-that node does not exist on the target graph. `--cancel` (or `PATCH` with `intended_migration:
-null`) clears a standing
-intent without firing it.
+`auto` mode with no name match, leaves it set for the transition after — `chunk restart --to-graph` above is the eager
+counterpart, for when there is no next transition worth waiting for. `--to-graph` names a graph id or a graph name
+resolved to the newest enabled graph of that name; a blank name is refused (`422`), and a retired target or a target
+equal to the chunk's own current pin is refused (`409`). With no `--node`, the intent is `auto`: it fires only when the
+transition's own destination node name also exists on the target graph, landing there; with no name match the transition
+applies unchanged and the intent stays set for next time. `--node <name>` makes it `forced`: it fires unconditionally at
+the next transition, landing on the named node regardless of the transition's own destination — refused (`409`) up front
+if that node does not exist on the target graph. `--cancel` (or `PATCH` with `intended_migration:
+null`) clears a
+standing intent without firing it.
 
 Editable at **any non-terminal status** — `not_ready` and `ready` too, not just once claimed — since the intent is a
 plain mutable chunk property, not a transition itself; it is only ever *consulted* at a transition, which is why in
@@ -1616,8 +1632,8 @@ Seven callouts worth an operator's attention rather than a field's own doc comme
   (`openapi/hub.openapi.json`) for the parked-gate vs. delayed-flush directions this doesn't restate here.
 - Durations and the judged-choice distribution cover a step completed by an ordinary transition only — a hub-executed
   node's own exit transition has no measurable wall-clock interval of its own, so durations excludes it, and a step
-  completed via a cross-graph migration (an authored edge, an intent, or follow-latest) is invisible to both, since
-  neither reads `chunk_migrations`. A documented gap, not a silent one.
+  completed via a cross-graph migration (an authored edge, an intent, or follow-latest — the transition-borne sources)
+  is invisible to both, since neither reads `chunk_migrations`. A documented gap, not a silent one.
 - Outcomes reports a judged-choice distribution and a retry-consuming attempt-failure count as two separate numbers,
   never one blended failure rate — a delivery kick-back counts as neither, including the kick-back's own routing
   transition, which shares the bounce's epoch and is excluded from the judged count for exactly that reason.

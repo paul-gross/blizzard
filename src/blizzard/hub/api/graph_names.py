@@ -1,11 +1,24 @@
-"""Resolving the graph and node names a chunk read renders."""
+"""Resolving the graphs a chunk request names and the names a chunk read renders."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from blizzard.hub.domain.graph import Graph
+from fastapi import HTTPException, status
+
+from blizzard.hub.domain.graph import Graph, IReadGraphRepository
+
+
+def graph_by_ref(graphs: IReadGraphRepository, ref: str) -> Graph:
+    """The graph a request names, by id or by name — a name resolving to its newest enabled mint.
+
+    404 when neither does: a name whose every mint is retired reads as unknown here (issue #101),
+    while a retired graph named by id resolves and is refused by the domain instead."""
+    graph = graphs.get(ref) or graphs.get_enabled_by_name(ref)
+    if graph is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {ref}")
+    return graph
 
 
 @dataclass

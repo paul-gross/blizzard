@@ -21,7 +21,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
 from blizzard.hub.api.chunk_views import ChunkView
 from blizzard.hub.api.deps import get_services
-from blizzard.hub.api.graph_names import GraphNames
+from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.decisions import NotEscalated
@@ -228,25 +228,33 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
 def restart_chunk(
     chunk_id: str, request: ChunkRestartRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkSummary:
-    """Force a chunk onto a node now, on a freshly minted session (issue #370).
+    """Force a chunk onto a node now, on a freshly minted session (#370, #371).
 
-    Recorded at a bumped epoch, so the running attempt is fenced out and the holding runner
-    re-enters — ``node`` omitted means the chunk's current one, the graph's entry if it has never
-    moved. Open parks close with it. 409: a terminal chunk, or a node its graph does not carry."""
+    At a bumped epoch, so the running attempt is fenced out and the holding runner re-enters;
+    ``node`` omitted means its current node, or the entry of the graph it lands on when it never
+    moved. 409 refuses a terminal chunk, an unmatched name, or its own pin; 404 an unknown target."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
+    to_graph = graph_by_ref(services.graphs, request.to_graph) if request.to_graph is not None else None
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
-        restart_id = services.restart.restart(chunk, graph, node_name=request.node, by=request.by)
-    except (ChunkNotRestartable, RestartCurrentNodeUnknown, RestartNodeUnknown) as exc:
+        restart_id = services.restart.restart(chunk, graph, node_name=request.node, by=request.by, to_graph=to_graph)
+    except (
+        ChunkNotRestartable,
+        RestartCurrentNodeUnknown,
+        RestartNodeUnknown,
+        TargetGraphRetired,
+        MigrationTargetIsCurrentPin,
+    ) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     change.publish(cause="restarted", key=f"chunk_restarts:{restart_id}")
     services.events.publish_queue_changed()  # an unrouted chunk re-enters the queue at the target node
-    return ChunkView.of(services, chunk).summary()
+    # Re-read: a cross-graph move re-pinned the chunk, and the row's node name resolves off that pin.
+    return ChunkView.of(services, services.chunks.get(chunk_id) or chunk).summary()
 
 
 @router.post(

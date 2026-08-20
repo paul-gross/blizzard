@@ -313,8 +313,8 @@ class HubNodePollFact:
 class MigrationSource(StrEnum):
     """What moved a chunk onto another graph — a migration's attribution (issue #164).
 
-    Three paths reach the same :meth:`IWriteChunkRepository.record_migration`, and without
-    a discriminator their facts are byte-identical in history."""
+    Four paths write one, and without a discriminator their facts are byte-identical
+    in history."""
 
     #: A judgement choice whose ``to:`` named ``graph:<name>`` (issue #90).
     AUTHORED_EDGE = "authored-edge"
@@ -322,6 +322,8 @@ class MigrationSource(StrEnum):
     INTENT = "intent"
     #: The standing follow-latest policy (issue #164) — nobody asked for this move.
     FOLLOW_LATEST = "follow-latest"
+    #: An operator's eager cross-graph restart (#371) — the one path that mints its own epoch.
+    RESTART = "restart"
 
 
 @dataclass(frozen=True)
@@ -364,9 +366,12 @@ class RestartFact:
 
     to_node_id: str
     from_node_id: str | None
+    #: The graph ``to_node_id`` belongs to — the *target* graph for a cross-graph move (#371).
     graph_id: str
     epoch: int
     recorded_at: datetime
+    #: ``from_node_id``'s own graph, set only when the move crossed one; else ``graph_id`` is both.
+    from_graph_id: str | None = None
     to_node_executor: Executor = Executor.RUNNER
     restarted_by: str = ""
     # The gate decision this move closed, or ``None`` — the restart is that decision's
@@ -1548,12 +1553,13 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         decision_id: str | None = None,
         answered_question_ids: Sequence[str] = (),
         answer: str = "",
+        to_graph_id: str | None = None,
     ) -> int:
         """Record a ``chunk.restarted`` fact — an operator forced the chunk onto ``to_node_id``
-        (#370), at a fence epoch this call derives one above the chunk's newest. One
-        transaction with the answers it writes for ``answered_question_ids`` and the
-        ``decision_id`` it names, so no crash leaves the chunk moved and still parked.
-        Returns the freshly-written ``chunk_restarts.id``."""
+        (#370), at a fence epoch this call derives one above the chunk's newest. One transaction
+        with the answers it writes, the ``decision_id`` it names and — when ``to_graph_id`` is set
+        (#371) — the migration fact re-pinning the chunk there and the standing intent that clears
+        with it, so no crash leaves the move half-applied. Returns the ``chunk_restarts.id``."""
         ...
 
     def record_migration(

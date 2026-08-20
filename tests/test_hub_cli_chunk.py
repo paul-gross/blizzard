@@ -191,7 +191,7 @@ def test_migrate_json_prints_the_raw_response_body(monkeypatch: pytest.MonkeyPat
     assert json.loads(result.output) == payload
 
 
-# `chunk restart` (issue #370) — an event, not the standing intent `migrate` records.
+# `chunk restart` (#370, #371) — an event, not the standing intent `migrate` records.
 # --------------------------------------------------------------------------- #
 
 
@@ -212,7 +212,8 @@ def test_restart_without_a_node_posts_a_null_target(monkeypatch: pytest.MonkeyPa
     result = CliRunner().invoke(hub_group, ["chunk", "restart", "ch_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
-    assert calls == [("http://hub.local:8421/api/chunks/ch_1/restart", {"node": None, "by": "operator"})]
+    posted = ("http://hub.local:8421/api/chunks/ch_1/restart", {"node": None, "to_graph": None, "by": "operator"})
+    assert calls == [posted]
     assert "build" in result.output
 
 
@@ -228,16 +229,24 @@ def test_restart_sends_the_named_node_and_actor(monkeypatch: pytest.MonkeyPatch)
     result = CliRunner().invoke(hub_group, ["chunk", "restart", "ch_1", "--node", "plan", "--by", "ada"])
 
     assert result.exit_code == 0, result.output
-    assert calls[0][1] == {"node": "plan", "by": "ada"}
+    assert calls[0][1] == {"node": "plan", "to_graph": None, "by": "ada"}
 
 
 @pytest.mark.unit
-def test_restart_takes_no_to_graph_option() -> None:
-    """Crossing graphs stays `migrate`'s alone — `restart` re-aims within one graph."""
+def test_restart_sends_the_cross_graph_target_and_names_it_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--to-graph` is the eager move `migrate` only ever schedules (#371)."""
+    calls: list[tuple[str, object]] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _summary("ch_1", "build")
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["chunk", "restart", "ch_1", "--to-graph", "beta"])
 
-    assert result.exit_code != 0
-    assert "--to-graph" in result.output
+    assert result.exit_code == 0, result.output
+    assert calls[0][1] == {"node": None, "to_graph": "beta", "by": "operator"}
+    assert "beta" in result.output
 
 
 @pytest.mark.unit

@@ -191,6 +191,7 @@ class ChunkStore:
                 | {t.graph_id for t in transition_rows}
                 | {m.to_graph_id for m in migration_rows}
                 | {r.graph_id for r in restart_rows}
+                | {r.from_graph_id for r in restart_rows if r.from_graph_id is not None}
             )
             executors = {
                 r.node_id: Executor(r.executor)
@@ -270,6 +271,7 @@ class ChunkStore:
                     graph_id=r.graph_id,
                     epoch=r.epoch,
                     recorded_at=r.recorded_at,
+                    from_graph_id=r.from_graph_id,
                     to_node_executor=executors.get(r.to_node_id, Executor.RUNNER),
                     restarted_by=r.restarted_by,
                     decision_id=r.decision_id,
@@ -1605,12 +1607,13 @@ class ChunkStore:
         decision_id: str | None = None,
         answered_question_ids: Sequence[str] = (),
         answer: str = "",
+        to_graph_id: str | None = None,
     ) -> int:
-        """Record the forced move and every in-flight park it consumes in **one** transaction
-        (issue #370), so a ``kill -9`` cannot leave the chunk moved while an ask still parks it;
-        each answer keeps first-write-wins. The fence epoch is derived HERE rather than handed
-        down — one above every prior attempt is a read-then-write only this transaction holds
-        together (``bzh:epoch-fencing``)."""
+        """Record the forced move and everything it consumes in **one** transaction (#370, #371),
+        so a ``kill -9`` cannot leave the chunk moved while an ask still parks it or a graph it no
+        longer runs still pins it; each answer keeps first-write-wins. The fence epoch is derived
+        HERE rather than handed down — one above every prior attempt is a read-then-write only this
+        transaction holds together (``bzh:epoch-fencing``)."""
         with self._engine.begin() as conn:
             epoch = self._latest_epoch(conn, chunk_id) + 1
             for question_id in answered_question_ids:
@@ -1623,11 +1626,24 @@ class ChunkStore:
                             question_id=question_id, answer=answer, answered_by=by, answered_at=at
                         )
                     )
+            from_graph_id = self._graph_id_of(conn, chunk_id)
+            if to_graph_id is not None:
+                self._repin_by_restart(
+                    conn,
+                    chunk_id,
+                    from_node_id=from_node_id,
+                    from_graph_id=from_graph_id,
+                    to_graph_id=to_graph_id,
+                    landed_node_id=to_node_id,
+                    epoch=epoch,
+                    at=at,
+                )
             result = conn.execute(
                 insert(s.chunk_restarts).values(
                     chunk_id=chunk_id,
-                    graph_id=self._graph_id_of(conn, chunk_id),
+                    graph_id=to_graph_id if to_graph_id is not None else from_graph_id,
                     from_node_id=from_node_id,
+                    from_graph_id=from_graph_id if to_graph_id is not None else None,
                     to_node_id=to_node_id,
                     epoch=epoch,
                     decision_id=decision_id,
@@ -1637,6 +1653,45 @@ class ChunkStore:
             )
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
+
+    def _repin_by_restart(
+        self,
+        conn: Connection,
+        chunk_id: str,
+        *,
+        from_node_id: str | None,
+        from_graph_id: str,
+        to_graph_id: str,
+        landed_node_id: str,
+        epoch: int,
+        at: datetime,
+    ) -> None:
+        """A cross-graph restart's migration half (#371), inside the restart's own transaction: the
+        fact that owns the re-pin, the pin, and the standing intent this eager move supersedes.
+        Stamped at the restart's own ``(recorded_at, epoch)``, so ``latest_movement``'s kind rank
+        settles which of the two the chunk stands on. No route release — the holding runner keeps
+        it and re-enters — and no ``decision_id``, which is the restart fact's alone."""
+        conn.execute(
+            insert(s.chunk_migrations).values(
+                migration_id=Id.mint(MIGRATION_PREFIX, self._clock).value,
+                chunk_id=chunk_id,
+                from_node_id=from_node_id,
+                from_graph_id=from_graph_id,
+                to_graph_id=to_graph_id,
+                landed_node_id=landed_node_id,
+                choice_name=None,
+                decision_id=None,
+                model_after=None,
+                epoch=epoch,
+                recorded_at=at,
+                source=MigrationSource.RESTART.value,
+            )
+        )
+        conn.execute(
+            update(s.chunks)
+            .where(s.chunks.c.chunk_id == chunk_id)
+            .values(graph_id=to_graph_id, intended_migration=None)
+        )
 
     def accepted_migration(self, chunk_id: str, *, from_node_id: str, epoch: int) -> bool:
         """True iff a migration is already recorded for ``(chunk_id, from_node_id, epoch)``

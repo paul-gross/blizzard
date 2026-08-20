@@ -521,12 +521,13 @@ def _seed_migration(
     pin_default_model: list[str],
     release_route: bool = True,
     landed_executor: str | None = None,
+    source: str | None = None,
 ) -> None:
     """A chunk pinned to (pin_graph, pin_default_model) with one migration targeting
     to_graph (#90). ``release_route=False`` seeds a torn write where the migration fact
     landed but the route release did not. ``landed_executor`` seeds a ``graph_nodes``
-    row for the landing node; a ``"hub"`` landing (issue #111) is exempt from the
-    route-released check — left None, the assertion applies."""
+    row for the landing node; a ``"hub"`` landing (issue #111) and a ``"restart"``
+    ``source`` (#371) are exempt from the route-released check."""
     # `chunks.model` is retained-and-unread since #144; the re-pin the invariant checks
     # lands in `default_model`, so that is what a seeded pin has to carry.
     conn.execute(
@@ -561,6 +562,7 @@ def _seed_migration(
             model_after=model_after,
             epoch=1,
             recorded_at=_NOW,
+            source=source,
         )
     )
     if release_route:
@@ -646,6 +648,24 @@ def test_a_hub_landing_migration_retains_its_route_and_is_not_a_violation(tmp_pa
             pin_default_model=["m"],
             release_route=False,
             landed_executor="hub",
+        )
+    assert HubInvariants(engine).run() == []
+
+
+def test_an_operator_restarts_repin_retains_its_route_and_is_not_a_violation(tmp_path: Path) -> None:
+    """``hub:migration-route-released`` exempts the migration half of an eager cross-graph
+    restart (#371): the holding runner keeps the route and re-enters on the target graph,
+    so there is no release to owe."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _seed_migration(
+            conn,
+            to_graph="gr_triage",
+            model_after=None,
+            pin_graph="gr_triage",
+            pin_default_model=["m"],
+            release_route=False,
+            source="restart",
         )
     assert HubInvariants(engine).run() == []
 

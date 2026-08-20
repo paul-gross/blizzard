@@ -302,14 +302,16 @@ class ChunkHistoryView:
         ]
 
     def restarts(self) -> list[RestartView]:
-        """The chunk's operator restarts oldest-first (issue #370).
+        """The chunk's operator restarts oldest-first (#370, #371).
 
-        Each move's node ids resolve against *the graph it happened in*, the same
-        ``graph_id`` provenance :meth:`transitions` follows."""
+        Each end resolves against its own graph the way :meth:`migrations` does, so a move that
+        crossed one degrades neither side to a raw id; unset, ``from_graph`` is ``graph_id``."""
         return [
             RestartView(
                 from_node_id=r.from_node_id,
-                from_node_name=self.names.node_name(r.graph_id, r.from_node_id),
+                from_node_name=self.names.node_name(r.from_graph_id or r.graph_id, r.from_node_id),
+                from_graph_id=r.from_graph_id,
+                from_graph_name=self.names.graph_name(r.from_graph_id),
                 to_node_id=r.to_node_id,
                 to_node_name=self.names.node_name(r.graph_id, r.to_node_id),
                 graph_id=r.graph_id,

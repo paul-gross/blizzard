@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 
+from blizzard.hub.api.graph_names import graph_by_ref
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.edit import UNSET, ChunkEdit, UnsetType
 from blizzard.hub.domain.graph import Graph
@@ -69,16 +70,10 @@ class ChunkPatchBody:
         patch = self.request.intended_migration
         if patch is None:
             return (None, None)
-        target = self._resolve_graph(self._stripped(patch.to_graph, "to_graph"))
+        target = graph_by_ref(self.services.graphs, self._stripped(patch.to_graph, "to_graph"))
         node_name = self._stripped(patch.node, "node") if patch.node is not None else None
         mode = MigrationMode.FORCED if node_name is not None else MigrationMode.AUTO
         return (target, IntendedMigration(mode=mode, graph_id=target.graph_id, node_name=node_name))
-
-    def _resolve_graph(self, ref: str) -> Graph:
-        graph = self.services.graphs.get(ref) or self.services.graphs.get_enabled_by_name(ref)
-        if graph is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {ref}")
-        return graph
 
     def _stripped(self, value: str, field_name: str) -> str:
         text = value.strip()

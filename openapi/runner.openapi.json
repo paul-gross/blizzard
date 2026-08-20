@@ -1665,7 +1665,7 @@
         "type": "string"
       },
       "MigrationView": {
-        "description": "One cross-graph migration step (issue #90): the chunk's attempt ended in ``from_graph`` and it\nre-queued at ``landed_node`` in ``to_graph`` \u2014 its own step, never a transition\n(``bzh:migration-not-transition``). ``model`` is the re-pinned model, null when the chunk kept its\nown. ``source`` says what moved it: ``authored-edge``, ``intent``, or ``follow-latest`` (#164).",
+        "description": "One cross-graph migration step (issue #90): the chunk was re-pinned from ``from_graph`` onto\n``landed_node`` in ``to_graph`` \u2014 its own step, never a transition (``bzh:migration-not-transition``).\nA transition-borne source ends the attempt and re-queues; ``restart`` preempts it and keeps the route\n(#371). ``model`` is the re-pinned model, null when the chunk kept its own. ``source`` attributes it.",
         "properties": {
           "choice_name": {
             "anyOf": [
@@ -2104,7 +2104,7 @@
         "type": "object"
       },
       "RestartView": {
-        "description": "One operator restart (issue #370): the chunk was forced from ``from_node`` onto ``to_node`` at\n``epoch``, on this graph, tearing down whatever attempt was running. Its own step, never a\ntransition \u2014 nothing judged it and no edge was taken. ``from_node_id`` is null when the chunk had\nnot yet moved; ``decision_id`` names the gate decision the move closed, null when there was none.",
+        "description": "One operator restart (#370, #371): the chunk was forced from ``from_node`` onto ``to_node`` at\n``epoch``, tearing down whatever attempt was running. Its own step, never a transition \u2014 nothing\njudged it. ``graph_id`` is where it landed, a cross-graph move's target, and ``from_graph`` the graph\nit departed, null when it crossed none; ``decision_id`` names the gate decision it closed, or null.",
         "properties": {
           "decision_id": {
             "anyOf": [
@@ -2120,6 +2120,28 @@
           "epoch": {
             "title": "Epoch",
             "type": "integer"
+          },
+          "from_graph_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Graph Id"
+          },
+          "from_graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Graph Name"
           },
           "from_node_id": {
             "anyOf": [

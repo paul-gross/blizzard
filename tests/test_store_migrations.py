@@ -249,6 +249,7 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20260809_1800_hub_transcript_segment_record_truncated", "transcript_segments", ("supersedes",)),
     ("hub", "20260812_1200_hub_transcript_events", "transcript_events", ("subject", "tool")),
     ("hub", "20260817_0900_hub_graph_artifacts", "graph_sessions", ("compaction_window",)),
+    ("hub", "20260819_0900_chunk_restarts", "chunk_restarts", ("from_graph_id",)),
     # runner tree — instance 6
     (
         "runner",

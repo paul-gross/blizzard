@@ -1293,7 +1293,7 @@
         "type": "object"
       },
       "ChunkRestartRequest": {
-        "description": "Force a chunk onto a node now, on a freshly minted session (issue #370). ``node`` is a node\nname on the chunk's own graph \u2014 omitted means its current node, the common case. Records who\nmoved it.",
+        "description": "Force a chunk onto a node now, on a freshly minted session (#370, #371). ``to_graph`` \u2014 a graph\nid or name \u2014 moves the chunk onto another graph in the same write; ``node`` names a node on that\ngraph, or on the chunk's own when there is none, and omitted means its current node's own name.\nRecords who moved it.",
         "properties": {
           "by": {
             "default": "operator",
@@ -1310,6 +1310,17 @@
               }
             ],
             "title": "Node"
+          },
+          "to_graph": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Graph"
           }
         },
         "title": "ChunkRestartRequest",
@@ -3029,7 +3040,7 @@
         "type": "string"
       },
       "MigrationView": {
-        "description": "One cross-graph migration step (issue #90): the chunk's attempt ended in ``from_graph`` and it\nre-queued at ``landed_node`` in ``to_graph`` \u2014 its own step, never a transition\n(``bzh:migration-not-transition``). ``model`` is the re-pinned model, null when the chunk kept its\nown. ``source`` says what moved it: ``authored-edge``, ``intent``, or ``follow-latest`` (#164).",
+        "description": "One cross-graph migration step (issue #90): the chunk was re-pinned from ``from_graph`` onto\n``landed_node`` in ``to_graph`` \u2014 its own step, never a transition (``bzh:migration-not-transition``).\nA transition-borne source ends the attempt and re-queues; ``restart`` preempts it and keeps the route\n(#371). ``model`` is the re-pinned model, null when the chunk kept its own. ``source`` attributes it.",
         "properties": {
           "choice_name": {
             "anyOf": [
@@ -3897,7 +3908,7 @@
         "type": "object"
       },
       "RestartView": {
-        "description": "One operator restart (issue #370): the chunk was forced from ``from_node`` onto ``to_node`` at\n``epoch``, on this graph, tearing down whatever attempt was running. Its own step, never a\ntransition \u2014 nothing judged it and no edge was taken. ``from_node_id`` is null when the chunk had\nnot yet moved; ``decision_id`` names the gate decision the move closed, null when there was none.",
+        "description": "One operator restart (#370, #371): the chunk was forced from ``from_node`` onto ``to_node`` at\n``epoch``, tearing down whatever attempt was running. Its own step, never a transition \u2014 nothing\njudged it. ``graph_id`` is where it landed, a cross-graph move's target, and ``from_graph`` the graph\nit departed, null when it crossed none; ``decision_id`` names the gate decision it closed, or null.",
         "properties": {
           "decision_id": {
             "anyOf": [
@@ -3913,6 +3924,28 @@
           "epoch": {
             "title": "Epoch",
             "type": "integer"
+          },
+          "from_graph_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Graph Id"
+          },
+          "from_graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Graph Name"
           },
           "from_node_id": {
             "anyOf": [
@@ -8354,7 +8387,7 @@
     },
     "/api/chunks/{chunk_id}/restart": {
       "post": {
-        "description": "Force a chunk onto a node now, on a freshly minted session (issue #370).\n\nRecorded at a bumped epoch, so the running attempt is fenced out and the holding runner\nre-enters \u2014 ``node`` omitted means the chunk's current one, the graph's entry if it has never\nmoved. Open parks close with it. 409: a terminal chunk, or a node its graph does not carry.",
+        "description": "Force a chunk onto a node now, on a freshly minted session (#370, #371).\n\nAt a bumped epoch, so the running attempt is fenced out and the holding runner re-enters;\n``node`` omitted means its current node, or the entry of the graph it lands on when it never\nmoved. 409 refuses a terminal chunk, an unmatched name, or its own pin; 404 an unknown target.",
         "operationId": "restart_chunk_api_chunks__chunk_id__restart_post",
         "parameters": [
           {

@@ -16,7 +16,7 @@ from sqlalchemy import Connection, Engine, func, select
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor
-from blizzard.hub.domain.work import ChunkFacts, RouteHistory
+from blizzard.hub.domain.work import ChunkFacts, MigrationSource, RouteHistory
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.internal.chunk_store import DEFAULT_MODEL, ChunkStore
 from blizzard.runner.store import schema as runner
@@ -439,7 +439,8 @@ class OneLiveExecSlot(QueryCheck):
 class MigrationsAtomic(QueryCheck):
     """``hub:one-migration-per-node-epoch`` — one row per ``(chunk, from_node, epoch)``;
     ``hub:migration-pin-consistent`` — the chunk carries the newest migration's target pin;
-    ``hub:migration-route-released`` — a runner landing released the route (a hub landing, issue #111, is exempt)."""
+    ``hub:migration-route-released`` — a runner landing released the route (a hub landing, issue #111,
+    and an operator restart's own re-pin, #371, both keep it by design)."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
@@ -502,11 +503,14 @@ class MigrationsAtomic(QueryCheck):
                         f"{m.model_after}, which its newest migration re-pinned",  # type: ignore[attr-defined]
                     )
                 )
-            # A hub-landing migration (issue #111) retains the route by design — it is not a
-            # torn write, so it is exempt from the route-released assertion.
-            lands_on_hub = landed_executor.get(m.landed_node_id) == Executor.HUB  # type: ignore[attr-defined]
+            # A hub landing (issue #111) and an operator restart's own re-pin (#371) both retain the
+            # route by design — neither is a torn write, so neither owes a release.
+            keeps_route = (
+                landed_executor.get(m.landed_node_id) == Executor.HUB  # type: ignore[attr-defined]
+                or m.source == MigrationSource.RESTART.value  # type: ignore[attr-defined]
+            )
             released = latest_release.get(chunk_id)
-            if not lands_on_hub and (released is None or released < m.recorded_at):  # type: ignore[attr-defined]
+            if not keeps_route and (released is None or released < m.recorded_at):  # type: ignore[attr-defined]
                 violations.append(
                     Violation(
                         "hub:migration-route-released",

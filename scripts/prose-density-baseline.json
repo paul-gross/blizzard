@@ -733,9 +733,9 @@
    "total": 35
   },
   "blizzard/foundation/store/invariants.py": {
-   "comments": 22,
-   "docstrings": 53,
-   "total": 634
+   "comments": 23,
+   "docstrings": 54,
+   "total": 638
   },
   "blizzard/foundation/store/migrations.py": {
    "comments": 2,
@@ -800,7 +800,7 @@
   "blizzard/hub/api/chunk_edit.py": {
    "comments": 0,
    "docstrings": 8,
-   "total": 89
+   "total": 84
   },
   "blizzard/hub/api/chunk_events.py": {
    "comments": 2,
@@ -810,12 +810,12 @@
   "blizzard/hub/api/chunk_views.py": {
    "comments": 1,
    "docstrings": 42,
-   "total": 347
+   "total": 349
   },
   "blizzard/hub/api/chunks.py": {
-   "comments": 14,
+   "comments": 15,
    "docstrings": 56,
-   "total": 503
+   "total": 511
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
@@ -839,8 +839,8 @@
   },
   "blizzard/hub/api/graph_names.py": {
    "comments": 0,
-   "docstrings": 7,
-   "total": 37
+   "docstrings": 11,
+   "total": 50
   },
   "blizzard/hub/api/graphs.py": {
    "comments": 1,
@@ -1060,7 +1060,7 @@
   "blizzard/hub/cli.py": {
    "comments": 27,
    "docstrings": 179,
-   "total": 1345
+   "total": 1352
   },
   "blizzard/hub/cli_context.py": {
    "comments": 3,
@@ -1168,9 +1168,9 @@
    "total": 109
   },
   "blizzard/hub/domain/apply.py": {
-   "comments": 34,
+   "comments": 36,
    "docstrings": 57,
-   "total": 630
+   "total": 634
   },
   "blizzard/hub/domain/artifacts.py": {
    "comments": 2,
@@ -1283,9 +1283,9 @@
    "total": 277
   },
   "blizzard/hub/domain/restart.py": {
-   "comments": 6,
-   "docstrings": 26,
-   "total": 113
+   "comments": 8,
+   "docstrings": 28,
+   "total": 145
   },
   "blizzard/hub/domain/route_auth.py": {
    "comments": 0,
@@ -1303,9 +1303,9 @@
    "total": 283
   },
   "blizzard/hub/domain/work.py": {
-   "comments": 51,
+   "comments": 54,
    "docstrings": 485,
-   "total": 1739
+   "total": 1745
   },
   "blizzard/hub/domain/work_closure.py": {
    "comments": 4,
@@ -1389,8 +1389,8 @@
   },
   "blizzard/hub/store/internal/chunk_store.py": {
    "comments": 56,
-   "docstrings": 132,
-   "total": 2164
+   "docstrings": 137,
+   "total": 2219
   },
   "blizzard/hub/store/internal/graph_store.py": {
    "comments": 9,
@@ -1718,14 +1718,19 @@
    "total": 33
   },
   "blizzard/hub/store/migrations/versions/20260819_0900_chunk_restarts.py": {
-   "comments": 0,
+   "comments": 2,
    "docstrings": 6,
-   "total": 33
+   "total": 54
   },
   "blizzard/hub/store/migrations/versions/20260819_1100_work_items.py": {
    "comments": 0,
    "docstrings": 7,
    "total": 34
+  },
+  "blizzard/hub/store/migrations/versions/20260819_2200_chunk_restart_from_graph.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "total": 38
   },
   "blizzard/hub/store/migrations/versions/__init__.py": {
    "comments": 0,
@@ -1733,9 +1738,9 @@
    "total": 0
   },
   "blizzard/hub/store/schema.py": {
-   "comments": 302,
+   "comments": 304,
    "docstrings": 6,
-   "total": 965
+   "total": 968
   },
   "blizzard/hub/work_sources/__init__.py": {
    "comments": 0,
@@ -2654,8 +2659,8 @@
   },
   "blizzard/wire/chunk.py": {
    "comments": 31,
-   "docstrings": 94,
-   "total": 439
+   "docstrings": 95,
+   "total": 443
   },
   "blizzard/wire/completion.py": {
    "comments": 13,
@@ -3245,9 +3250,9 @@
    "total": 50
   },
   "test_chunk_restart.py": {
-   "comments": 37,
-   "docstrings": 30,
-   "total": 469
+   "comments": 62,
+   "docstrings": 50,
+   "total": 755
   },
   "test_chunk_status_derivation.py": {
    "comments": 76,
@@ -3622,7 +3627,7 @@
   "test_hub_cli_chunk.py": {
    "comments": 5,
    "docstrings": 13,
-   "total": 389
+   "total": 398
   },
   "test_hub_cli_enroll.py": {
    "comments": 1,
@@ -3746,8 +3751,8 @@
   },
   "test_invariant_checker.py": {
    "comments": 20,
-   "docstrings": 65,
-   "total": 675
+   "docstrings": 68,
+   "total": 695
   },
   "test_land_common.py": {
    "comments": 18,
@@ -4387,7 +4392,7 @@
   "test_store_migrations.py": {
    "comments": 17,
    "docstrings": 26,
-   "total": 309
+   "total": 310
   },
   "test_subprocess_check_runner.py": {
    "comments": 3,

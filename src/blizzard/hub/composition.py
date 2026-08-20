@@ -256,7 +256,7 @@ def build_services(
         apply=ApplyService(chunks=chunk_store, clock=clock, hub_node_executor=hub_node),
         decisions=DecisionService(chunks=chunk_store, clock=clock),
         requeue=RequeueService(chunks=chunk_store, clock=clock),
-        restart=RestartService(chunks=chunk_store, clock=clock, claim_lock=claim_lock),
+        restart=RestartService(chunks=chunk_store, graphs=graph_store, clock=clock, claim_lock=claim_lock),
         detach=DetachService(chunks=chunk_store, clock=clock),
         pause=PauseService(chunks=chunk_store, clock=clock),
         stop=StopService(chunks=chunk_store, clock=clock),
