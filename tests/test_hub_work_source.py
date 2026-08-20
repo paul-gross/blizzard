@@ -21,6 +21,7 @@ from blizzard.hub.domain.work_items import (
 )
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.work_sources.closer import WorkItemGoneError
 from blizzard.hub.work_sources.editor import WorkItemRefUnknownError
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import WorkSourceError
@@ -239,3 +240,61 @@ def test_withdraw_succeeds_once_the_holding_chunk_is_no_longer_live(tmp_path: Pa
     withdrawn = source.withdraw(pointer)
 
     assert withdrawn.closure == WorkItemClosure.WITHDRAWN
+
+
+# --------------------------------------------------------------------------- #
+# IWorkCloser — the built-in hub source needs no `close = true` opt-in (issue #360)
+
+
+def test_close_marks_an_open_item_delivered(tmp_path: Path) -> None:
+    source, items, _, _, _ = _source(tmp_path)
+    created = items.create(
+        source="hub", title="t", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=_T0
+    )
+    pointer = WorkRef(source="hub", ref=created.ref)
+
+    source.close(pointer)
+
+    row = items.get("hub", created.ref)
+    assert row is not None
+    assert row.closure is WorkItemClosure.DELIVERED
+    assert row.closed_at is not None
+
+
+def test_close_is_idempotent_on_an_already_delivered_item(tmp_path: Path) -> None:
+    source, items, _, _, _ = _source(tmp_path)
+    created = items.create(
+        source="hub", title="t", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=_T0
+    )
+    pointer = WorkRef(source="hub", ref=created.ref)
+
+    source.close(pointer)
+    source.close(pointer)  # must not raise — a clean no-op re-close
+
+    row = items.get("hub", created.ref)
+    assert row is not None
+    assert row.closure is WorkItemClosure.DELIVERED
+
+
+def test_close_a_missing_ref_raises_work_item_gone(tmp_path: Path) -> None:
+    source, _, _, _, _ = _source(tmp_path)
+
+    with pytest.raises(WorkItemGoneError):
+        source.close(WorkRef(source="hub", ref="999"))
+
+
+def test_close_leaves_a_withdrawn_item_withdrawn(tmp_path: Path) -> None:
+    """A withdrawn item is never overwritten to ``delivered`` — the store's own
+    ``closed_at IS NULL`` guard, not a branch in :meth:`HubWorkSource.close`."""
+    source, items, _, _, _ = _source(tmp_path)
+    created = items.create(
+        source="hub", title="t", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=_T0
+    )
+    items.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
+    pointer = WorkRef(source="hub", ref=created.ref)
+
+    source.close(pointer)  # must not raise, must not flip the closure
+
+    row = items.get("hub", created.ref)
+    assert row is not None
+    assert row.closure is WorkItemClosure.WITHDRAWN

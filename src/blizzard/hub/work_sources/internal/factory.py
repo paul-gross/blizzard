@@ -43,10 +43,10 @@ class WorkSourceEntry:
     @classmethod
     def registry(cls, sources: Sequence[WorkSourceConfig], engine: Engine, clock: IClock) -> WorkSourceRegistry:
         """One credentialed client + binding per configured source, plus the built-in
-        ``hub`` source seated outside this walk (issue #357) — its editor with no opt-in
-        flag at all (blizzard#358), unlike an annotator/closer's ``annotate``/``close``.
-        A source whose ``token_env`` names an unset variable fails here, at boot; ``clock``
-        is threaded through from the composition root."""
+        ``hub`` source (issue #357) — always seated, and always both an editor
+        (blizzard#358) and a closer (issue #360), neither needing an opt-in flag. A
+        source's ``token_env`` naming an unset variable fails here, at boot; only an
+        opted-in *configured* source otherwise gets an annotator/closer entry."""
         built: dict[str, IWorkSource] = {}
         annotators: dict[str, IWorkAnnotator] = {}
         closers: dict[str, IWorkCloser] = {}
@@ -58,7 +58,7 @@ class WorkSourceEntry:
                 annotators[config.name] = cast(IWorkAnnotator, adapter)
             if config.close:
                 closers[config.name] = cast(IWorkCloser, adapter)
-        seat_hub_work_source(built, editors, engine=engine, clock=clock)
+        seat_hub_work_source(built, editors, closers, engine=engine, clock=clock)
         return WorkSourceRegistry(built, annotators, closers, editors)
 
     @property

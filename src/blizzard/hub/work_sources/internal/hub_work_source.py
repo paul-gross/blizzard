@@ -22,6 +22,7 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.domain.work_items import WorkItemEdit, WorkItemEditService
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.work_sources.closer import IWorkCloser, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError
 
@@ -29,8 +30,8 @@ from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceEr
 class HubWorkSource:
     """Vendor-native reader over the hub's own ``work_items`` table — the built-in
     binding seated outside the configured-entry walk (``bzh:dependency-injection``).
-    Implements ``IWorkEditor`` too (blizzard#358): ``create``/``edit``/``withdraw``
-    resolve a pointer before delegating to ``edits``, the domain-layer write half."""
+    Implements ``IWorkEditor`` (blizzard#358) and ``IWorkCloser`` (issue #360) too,
+    both delegating their writes to ``edits``, the domain-layer write half."""
 
     def __init__(
         self, items: IReadWorkItemRepository, chunks: IReadChunkRepository, edits: WorkItemEditService
@@ -69,6 +70,20 @@ class HubWorkSource:
         """The built-in source names no forge to link a branch through."""
         return None
 
+    # -- IWorkCloser -----------------------------------------------------------
+
+    def close(self, pointer: WorkRef) -> None:
+        """Mark the item ``delivered`` via ``edits.deliver`` — the only failure this
+        raises is :class:`WorkItemGoneError`, for a ref with no item row. Idempotency
+        and the withdrawn-item guard both live in the store's own ``closed_at IS NULL``
+        update, reached through :meth:`WorkItemEditService.deliver`."""
+        item = self._items.get(pointer.source, pointer.ref)
+        if item is None:
+            raise WorkItemGoneError(f"no {RESERVED_HUB_SOURCE_NAME}:{pointer.ref} work item exists")
+        self._edits.deliver(item)
+
+    # -- IWorkEditor -------------------------------------------------------------
+
     def list(self, *, limit: int = 200) -> list[WorkItemRecord]:
         return self._items.list(RESERVED_HUB_SOURCE_NAME, limit=limit)
 
@@ -98,10 +113,15 @@ class HubWorkSource:
 
 
 def seat_hub_work_source(
-    sources: dict[str, IWorkSource], editors: dict[str, IWorkEditor], *, engine: Engine, clock: IClock
+    sources: dict[str, IWorkSource],
+    editors: dict[str, IWorkEditor],
+    closers: dict[str, IWorkCloser],
+    *,
+    engine: Engine,
+    clock: IClock,
 ) -> None:
-    """Seats the built-in ``hub`` binding into ``sources``/``editors`` in place —
-    reached from both
+    """Seats the built-in ``hub`` binding into ``sources``/``editors``/``closers`` in
+    place — reached from both
     :meth:`~blizzard.hub.work_sources.internal.factory.WorkSourceEntry.registry` and
     ``tests/support.py::build_hub`` so the built-in is present in production and under
     test alike: never absent, never configured."""
@@ -110,6 +130,7 @@ def seat_hub_work_source(
     hub_source = HubWorkSource(items, chunks, WorkItemEditService(items=items, chunks=chunks, clock=clock))
     sources[RESERVED_HUB_SOURCE_NAME] = hub_source
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source
+    closers[RESERVED_HUB_SOURCE_NAME] = hub_source
 
 
 def _conforms_work_source(x: HubWorkSource) -> IWorkSource:
@@ -117,4 +138,8 @@ def _conforms_work_source(x: HubWorkSource) -> IWorkSource:
 
 
 def _conforms_work_editor(x: HubWorkSource) -> IWorkEditor:
+    return x
+
+
+def _conforms_work_closer(x: HubWorkSource) -> IWorkCloser:
     return x

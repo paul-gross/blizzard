@@ -519,8 +519,11 @@ def build_hub(
     )
     clock = FixedClock(datetime(2026, 7, 13, tzinfo=UTC))
     editors: dict[str, IWorkEditor] = {}
-    seat_hub_work_source(built_sources, editors, engine=engine, clock=clock)
-    work_source_registry = WorkSourceRegistry(built_sources, editors=editors)
+    # The built-in `hub` source is seated as a closer unconditionally (issue #360),
+    # mirroring `WorkSourceEntry.registry`'s production wiring.
+    closers: dict[str, IWorkCloser] = {}
+    seat_hub_work_source(built_sources, editors, closers, engine=engine, clock=clock)
+    work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)
     events = EventBroker()
     services = build_services(
         engine,

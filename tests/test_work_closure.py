@@ -14,8 +14,16 @@ from typing import cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.work import ClosableWorkRef, IWriteChunkRepository, WorkItemCloseOutcome, WorkRef
+from blizzard.hub.domain.work import (
+    ClosableWorkRef,
+    IWriteChunkRepository,
+    WorkItemAuthor,
+    WorkItemCloseOutcome,
+    WorkItemClosure,
+    WorkRef,
+)
 from blizzard.hub.domain.work_closure import DeliveryClosureReconciler
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from tests.support import FakeCloser, HubHarness, build_hub, ingest
 
@@ -423,3 +431,43 @@ def test_sweep_retries_a_failed_ref_on_the_next_pass_until_it_converges(tmp_path
 
     assert ClosableWorkRef(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.closable_work_refs()
     assert closer.closed == [pointer]
+
+
+# DeliveryClosureReconciler.sweep() against the built-in `hub` source (issue #360) — no
+# `close = true` opt-in exists for it, so `build_hub`'s own registry already seats it.
+
+
+@pytest.mark.component
+def test_sweep_closes_a_landed_hub_born_chunks_item(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    created = WorkItemStore(hub.engine).create(
+        source="hub", title="t", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=hub.clock.now()
+    )
+    pointer = WorkRef(source="hub", ref=created.ref)
+    chunk_id = ingest(hub, [{"source": "hub", "ref": created.ref}], promote=True)
+    _land(hub, chunk_id)
+
+    hub.services.delivery_closure.sweep()
+
+    row = WorkItemStore(hub.engine).get("hub", created.ref)
+    assert row is not None
+    assert row.closure is WorkItemClosure.DELIVERED
+    assert ClosableWorkRef(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.closable_work_refs()
+
+
+@pytest.mark.component
+def test_sweep_replayed_over_an_already_delivered_hub_item_is_a_clean_no_op(tmp_path: Path) -> None:
+    """The mutation-review re-read (``bzh:mutation-review-selection``): a second pass
+    issues no second close and writes no second outcome fact."""
+    hub = build_hub(tmp_path)
+    created = WorkItemStore(hub.engine).create(
+        source="hub", title="t", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=hub.clock.now()
+    )
+    chunk_id = ingest(hub, [{"source": "hub", "ref": created.ref}], promote=True)
+    _land(hub, chunk_id)
+
+    hub.services.delivery_closure.sweep()
+    hub.services.delivery_closure.sweep()
+
+    pointer = WorkRef(source="hub", ref=created.ref)
+    assert ClosableWorkRef(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.closable_work_refs()

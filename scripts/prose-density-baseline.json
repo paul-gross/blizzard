@@ -1319,8 +1319,8 @@
   },
   "blizzard/hub/domain/work_items.py": {
    "comments": 0,
-   "docstrings": 23,
-   "total": 111
+   "docstrings": 27,
+   "total": 118
   },
   "blizzard/hub/events/__init__.py": {
    "comments": 0,
@@ -1788,9 +1788,9 @@
    "total": 225
   },
   "blizzard/hub/work_sources/internal/hub_work_source.py": {
-   "comments": 0,
-   "docstrings": 22,
-   "total": 120
+   "comments": 2,
+   "docstrings": 26,
+   "total": 145
   },
   "blizzard/hub/work_sources/registry.py": {
    "comments": 0,
@@ -3070,9 +3070,9 @@
    "total": 248
   },
   "support.py": {
-   "comments": 35,
+   "comments": 37,
    "docstrings": 117,
-   "total": 822
+   "total": 825
   },
   "test_activity_api.py": {
    "comments": 2,
@@ -3720,9 +3720,9 @@
    "total": 54
   },
   "test_hub_work_source.py": {
-   "comments": 2,
-   "docstrings": 5,
-   "total": 241
+   "comments": 6,
+   "docstrings": 7,
+   "total": 300
   },
   "test_hub_work_source_api.py": {
    "comments": 20,
@@ -4535,9 +4535,9 @@
    "total": 58
   },
   "test_work_closure.py": {
-   "comments": 8,
-   "docstrings": 34,
-   "total": 425
+   "comments": 10,
+   "docstrings": 36,
+   "total": 473
   },
   "test_work_item.py": {
    "comments": 4,
@@ -4576,8 +4576,8 @@
   },
   "test_work_source.py": {
    "comments": 34,
-   "docstrings": 45,
-   "total": 593
+   "docstrings": 48,
+   "total": 606
   },
   "test_worker_preamble.py": {
    "comments": 25,

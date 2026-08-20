@@ -1,9 +1,9 @@
-"""Hub-owned work item editing (blizzard#358) — create, in-place edit, and withdrawal.
+"""Hub-owned work item editing (blizzard#358) plus delivery closure (issue #360) —
+create, in-place edit, withdraw, deliver.
 
-Holds the *write* repository (``bzh:controller-read-only``); reached only through a
-work-source binding's ``IWorkEditor``. ``WorkItemClosure`` has exactly two members and
-no third open state, so an edit and a withdrawal share one closure guard: "already
-withdrawn" and "already delivered" are the same condition."""
+Holds the *write* repository (``bzh:controller-read-only``), reached only through a
+work-source binding's ``IWorkEditor``/``IWorkCloser``. ``WorkItemClosure`` has exactly
+two members, so every closing write — withdraw or deliver — shares one guard."""
 
 from __future__ import annotations
 
@@ -55,8 +55,9 @@ class WorkItemHeldByLiveChunk(Exception):
 
 
 class WorkItemEditService:
-    """Create, edit, and withdraw a hub-owned work item — the write half a work-source
-    binding's editor delegates to once it has resolved a pointer to a loaded record."""
+    """Create, edit, withdraw, or deliver a hub-owned work item — the write half a
+    work-source binding's editor/closer delegates to once it has resolved a pointer
+    to a loaded record."""
 
     def __init__(self, *, items: IWriteWorkItemRepository, chunks: IReadChunkRepository, clock: IClock) -> None:
         self._items = items
@@ -105,6 +106,12 @@ class WorkItemEditService:
         if holder is not None:
             raise WorkItemHeldByLiveChunk(item.pointer, holder)
         return self._items.close(item.source, item.ref, closure=WorkItemClosure.WITHDRAWN, at=self._clock.now())
+
+    def deliver(self, item: WorkItemRecord) -> WorkItemRecord:
+        """Close ``item`` as delivered (issue #360) — the delivery-closure sweep's own
+        write path. No business rule beyond the store's own idempotency guard: a live
+        chunk holding the pointer is the expected caller, not a conflict to block."""
+        return self._items.close(item.source, item.ref, closure=WorkItemClosure.DELIVERED, at=self._clock.now())
 
     def _require_open(self, item: WorkItemRecord) -> None:
         if item.closure is not None:

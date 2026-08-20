@@ -560,7 +560,8 @@ def test_registry_closer_returns_the_bound_closer() -> None:
 
 def test_factory_builds_no_closer_for_a_non_opted_in_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """The structural "never closed" property: a configured-but-not-opted source
-    has no entry in the closer map at all."""
+    has no entry in the closer map at all. The built-in ``hub`` source is the one
+    exception — it is always seated as a closer (issue #360)."""
     monkeypatch.setenv("_TEST_TOKEN_NOT_CLOSE_OPTED", "token")
     registry = WorkSourceEntry.registry(
         [
@@ -573,7 +574,7 @@ def test_factory_builds_no_closer_for_a_non_opted_in_source(monkeypatch: pytest.
     )
     assert registry.get("widget") is not None
     assert registry.closer("widget") is None
-    assert registry.closing_names() == []
+    assert registry.closing_names() == ["hub"]
 
 
 def test_factory_builds_a_closer_for_an_opted_in_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -590,4 +591,16 @@ def test_factory_builds_a_closer_for_an_opted_in_source(monkeypatch: pytest.Monk
     closer = registry.closer("widget")
     assert closer is not None
     assert closer is registry.get("widget")  # one instance, every opted-in Protocol
-    assert registry.closing_names() == ["widget"]
+    assert set(registry.closing_names()) == {"widget", "hub"}
+
+
+def test_factory_seats_the_hub_closer_with_zero_configured_sources(tmp_path: Path) -> None:
+    """The built-in ``hub`` source needs no ``[[work_source]]`` stanza at all — let
+    alone a ``close = true`` one — to be seated as a closer (issue #360)."""
+    registry = WorkSourceEntry.registry([], _engine(tmp_path), _clock())
+
+    closer = registry.closer("hub")
+
+    assert closer is not None
+    assert closer is registry.get("hub")
+    assert "hub" in registry.closing_names()
