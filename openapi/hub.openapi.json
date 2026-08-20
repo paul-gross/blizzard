@@ -5364,6 +5364,61 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "WorkItemAuthorView": {
+        "description": "Who filed a hub-owned work item \u2014 ``user_id`` set only for ``kind == \"user\"``.",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "WorkItemAuthorView",
+        "type": "object"
+      },
+      "WorkItemCreateRequest": {
+        "additionalProperties": false,
+        "description": "``POST /api/work-sources/{source}/items`` \u2014 ``author`` is stamped from the\ncaller's resolved identity, never accepted here.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "stated_priority": {
+            "default": "normal",
+            "enum": [
+              "low",
+              "normal",
+              "high"
+            ],
+            "title": "Stated Priority",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ],
+        "title": "WorkItemCreateRequest",
+        "type": "object"
+      },
       "WorkItemEntry": {
         "description": "One pointer's pass-through work item \u2014 title, body, and comment thread, vendor-native.\n``label``/``web_url`` are the legible pointer label and its browser address, both null when no\nconfigured source names ``source``. A per-pointer failure degrades here rather than failing the\nwhole read: ``error`` carries the reason and ``title``/``body`` are null.",
         "properties": {
@@ -5451,6 +5506,170 @@
         "title": "WorkItemEntry",
         "type": "object"
       },
+      "WorkItemPatchRequest": {
+        "additionalProperties": false,
+        "description": "``PATCH /api/work-sources/{source}/items/{ref}`` \u2014 every field independently\noptional and applied all-or-nothing. ``title``/``body`` mean \"leave unchanged\"\nwhether omitted or explicitly ``null`` (neither is nullable in the domain);\n``stated_priority`` *is* nullable, so omitted stays distinguishable from explicit\n``null`` by the key's presence in the body, checked via ``model_fields_set``.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "stated_priority": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "normal",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stated Priority"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "WorkItemPatchRequest",
+        "type": "object"
+      },
+      "WorkItemView": {
+        "description": "One hub-owned work item in full \u2014 author, stated priority, closure, and the\nlast-edit instant, the vocabulary a pass-through ``WorkItemEntry`` cannot answer.",
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/WorkItemAuthorView"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "closure": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closure"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "edited_at": {
+            "title": "Edited At",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "stated_priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stated Priority"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "web_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Url"
+          }
+        },
+        "required": [
+          "source",
+          "ref",
+          "label",
+          "web_url",
+          "title",
+          "body",
+          "author",
+          "stated_priority",
+          "created_at",
+          "edited_at",
+          "closed_at",
+          "closure"
+        ],
+        "title": "WorkItemView",
+        "type": "object"
+      },
+      "WorkItemsListView": {
+        "description": "A source's items, newest first \u2014 ``GET /api/work-sources/{source}/items``.",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkItemView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "WorkItemsListView",
+        "type": "object"
+      },
       "WorkItemsView": {
         "description": "A chunk's pass-through work items \u2014 one entry per pointer, order preserved.\n\nEmpty when the chunk holds no pointers; a grouped chunk carrying many pointers\nyields one entry per pointer, each fetched fresh and never stored.",
         "properties": {
@@ -5524,6 +5743,35 @@
           "ref"
         ],
         "title": "WorkRefView",
+        "type": "object"
+      },
+      "WorkSourceSummary": {
+        "description": "One work source's capability booleans \u2014 the ``GET /api/work-sources`` listing\nrow. ``readable`` is not a field: every source answers ``fetch``, so it carries no\ninformation; ``edit`` is the \"has browsable items\" signal the item routes gate on.",
+        "properties": {
+          "annotate": {
+            "title": "Annotate",
+            "type": "boolean"
+          },
+          "close": {
+            "title": "Close",
+            "type": "boolean"
+          },
+          "edit": {
+            "title": "Edit",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "annotate",
+          "close",
+          "edit"
+        ],
+        "title": "WorkSourceSummary",
         "type": "object"
       },
       "blizzard__wire__envelope__RotatePolicyView": {
@@ -10762,6 +11010,288 @@
         "summary": "Assign Role",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/work-sources": {
+      "get": {
+        "description": "Every configured (plus the built-in ``hub``) source's capability booleans \u2014 no\ngate of its own, since a client needs this to know which sources gate their items.",
+        "operationId": "list_work_sources_api_work_sources_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkSourceSummary"
+                  },
+                  "title": "Response List Work Sources Api Work Sources Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Work Sources",
+        "tags": [
+          "work-sources"
+        ]
+      }
+    },
+    "/api/work-sources/{source}/items": {
+      "get": {
+        "description": "Every item at SOURCE, newest first, open and closed alike. 404/409 per D4.",
+        "operationId": "list_work_items_api_work_sources__source__items_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "title": "Source",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkItemsListView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Work Items",
+        "tags": [
+          "work-sources"
+        ]
+      },
+      "post": {
+        "description": "Allocate a fresh item at SOURCE, open, authored by the caller. 404/409 per D4.",
+        "operationId": "create_work_item_api_work_sources__source__items_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "title": "Source",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkItemCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkItemView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Work Item",
+        "tags": [
+          "work-sources"
+        ]
+      }
+    },
+    "/api/work-sources/{source}/items/{ref}": {
+      "delete": {
+        "description": "Withdraw the item at SOURCE/REF. 404 for an unknown source or an unallocated ref\n(D9); 409 for a known source with no editor (D4), an item that already carries a\nclosure, or one a live chunk still holds (D5, D10).",
+        "operationId": "withdraw_work_item_api_work_sources__source__items__ref__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "title": "Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkItemView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Withdraw Work Item",
+        "tags": [
+          "work-sources"
+        ]
+      },
+      "get": {
+        "description": "One item at SOURCE by REF, open or closed. 404 for an unknown source, an\nunallocated ref (D9), or a known source with no editor answered as 409 (D4).",
+        "operationId": "get_work_item_api_work_sources__source__items__ref__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "title": "Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkItemView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Work Item",
+        "tags": [
+          "work-sources"
+        ]
+      },
+      "patch": {
+        "description": "Replace the given fields in place, all-or-nothing. 404 for an unknown source or\nan unallocated ref (D9); 409 for a known source with no editor (D4) or an item that\nalready carries a closure (D5).",
+        "operationId": "patch_work_item_api_work_sources__source__items__ref__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "title": "Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkItemPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkItemView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Work Item",
+        "tags": [
+          "work-sources"
         ]
       }
     }

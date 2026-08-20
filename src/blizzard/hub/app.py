@@ -41,6 +41,7 @@ from blizzard.hub.api.runners import router as runners_router
 from blizzard.hub.api.spend import router as spend_router
 from blizzard.hub.api.transcripts import router as transcripts_router
 from blizzard.hub.api.users import router as users_router
+from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
@@ -166,6 +167,7 @@ def create_app(
     app.include_router(users_router)
     app.include_router(transcripts_router)
     app.include_router(analytics_router)
+    app.include_router(work_sources_router)
     # The runner-authenticated fleet router (issue #87) — a fleet verb is authenticated
     # *because of where it is mounted*; see `blizzard.hub.api.fleet`.
     app.include_router(fleet_router)
