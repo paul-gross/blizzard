@@ -52,6 +52,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
+from blizzard.hub.work_sources.editor import IWorkEditor
 from blizzard.hub.work_sources.internal.hub_work_source import seat_hub_work_source
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError
@@ -516,9 +517,10 @@ def build_hub(
     built_sources: dict[str, IWorkSource] = dict(
         work_sources if work_sources is not None else {"default": FakeWorkSource()}
     )
-    seat_hub_work_source(built_sources, engine=engine)
-    work_source_registry = WorkSourceRegistry(built_sources)
     clock = FixedClock(datetime(2026, 7, 13, tzinfo=UTC))
+    editors: dict[str, IWorkEditor] = {}
+    seat_hub_work_source(built_sources, editors, engine=engine, clock=clock)
+    work_source_registry = WorkSourceRegistry(built_sources, editors=editors)
     events = EventBroker()
     services = build_services(
         engine,

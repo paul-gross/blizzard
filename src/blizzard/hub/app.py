@@ -17,6 +17,7 @@ from typing import Protocol
 from fastapi import FastAPI
 
 from blizzard import __version__
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -40,6 +41,7 @@ from blizzard.hub.api.runners import router as runners_router
 from blizzard.hub.api.spend import router as spend_router
 from blizzard.hub.api.transcripts import router as transcripts_router
 from blizzard.hub.api.users import router as users_router
+from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
@@ -165,6 +167,7 @@ def create_app(
     app.include_router(users_router)
     app.include_router(transcripts_router)
     app.include_router(analytics_router)
+    app.include_router(work_sources_router)
     # The runner-authenticated fleet router (issue #87) — a fleet verb is authenticated
     # *because of where it is mounted*; see `blizzard.hub.api.fleet`.
     app.include_router(fleet_router)
@@ -196,7 +199,10 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
     owner = os.environ.get(ENV_FORGE_OWNER, DEFAULT_FORGE_OWNER)
-    work_source_registry = WorkSourceEntry.registry(config.work_sources, engine)
+    # Constructed once here, ahead of the work-source registry and `build_services`
+    # below — one clock instance shared by every write path (blizzard#358).
+    clock = SystemClock()
+    work_source_registry = WorkSourceEntry.registry(config.work_sources, engine, clock)
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
 
     # The provider-login seam (issue #92) is built only under `oauth`: under `none`
@@ -210,6 +216,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         engine,
         events=EventBroker(),
         work_sources=work_source_registry,
+        clock=clock,
         base_branch=base_branch,
         hub_workdir_root=config.data_dir / "hub_workdirs",
         hub_marker_callback_base_url=f"http://{config.host}:{config.port}",

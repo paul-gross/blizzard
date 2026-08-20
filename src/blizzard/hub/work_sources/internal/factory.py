@@ -15,9 +15,11 @@ from typing import cast
 import httpx
 from sqlalchemy import Engine
 
+from blizzard.foundation.clock import IClock
 from blizzard.hub.config import ConfigError, WorkSourceConfig
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.closer import IWorkCloser
+from blizzard.hub.work_sources.editor import IWorkEditor
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.internal.hub_work_source import seat_hub_work_source
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
@@ -39,16 +41,16 @@ class WorkSourceEntry:
         return kind(config)
 
     @classmethod
-    def registry(cls, sources: Sequence[WorkSourceConfig], engine: Engine) -> WorkSourceRegistry:
+    def registry(cls, sources: Sequence[WorkSourceConfig], engine: Engine, clock: IClock) -> WorkSourceRegistry:
         """One credentialed client + binding per configured source, plus the built-in
-        ``hub`` source seated outside this walk (issue #357).
-
-        A source whose ``token_env`` names an unset variable fails here, at boot, not at first
-        fetch. Only an opted-in source gets an annotator/closer entry, so a non-opted one is
-        structurally never written to rather than guarded by a runtime branch."""
+        ``hub`` source seated outside this walk (issue #357) — its editor with no opt-in
+        flag at all (blizzard#358), unlike an annotator/closer's ``annotate``/``close``.
+        A source whose ``token_env`` names an unset variable fails here, at boot; ``clock``
+        is threaded through from the composition root."""
         built: dict[str, IWorkSource] = {}
         annotators: dict[str, IWorkAnnotator] = {}
         closers: dict[str, IWorkCloser] = {}
+        editors: dict[str, IWorkEditor] = {}
         for config in sources:
             adapter = cls.of(config).source()
             built[config.name] = adapter
@@ -56,8 +58,8 @@ class WorkSourceEntry:
                 annotators[config.name] = cast(IWorkAnnotator, adapter)
             if config.close:
                 closers[config.name] = cast(IWorkCloser, adapter)
-        seat_hub_work_source(built, engine=engine)
-        return WorkSourceRegistry(built, annotators, closers)
+        seat_hub_work_source(built, editors, engine=engine, clock=clock)
+        return WorkSourceRegistry(built, annotators, closers, editors)
 
     @property
     def token(self) -> str:

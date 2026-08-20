@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import Engine, insert, select, update
+from sqlalchemy import Engine, desc, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.ids import WORK_ITEM_PREFIX, Id
@@ -36,6 +36,18 @@ class WorkItemStore:
                 select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
             ).one_or_none()
         return self._record(row) if row is not None else None
+
+    def list(self, source: str, *, limit: int = 200) -> list[WorkItemRecord]:
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                select(s.work_items)
+                .where(s.work_items.c.source == source)
+                # created_at is not unique; the ULID work_item_id breaks the tie lexically by
+                # creation, as graph_store.py's get_enabled_by_name does (bzh:sql-portable).
+                .order_by(desc(s.work_items.c.created_at), desc(s.work_items.c.work_item_id))
+                .limit(limit)
+            ).all()
+        return [self._record(row) for row in rows]
 
     def create(
         self,
@@ -78,6 +90,22 @@ class WorkItemStore:
             created_at=at,
             edited_at=at,
         )
+
+    def edit(
+        self, source: str, ref: str, *, title: str, body: str, stated_priority: str | None, at: datetime
+    ) -> WorkItemRecord | None:
+        with self._engine.begin() as conn:
+            result = conn.execute(
+                update(s.work_items)
+                .where(s.work_items.c.source == source, s.work_items.c.ref == ref, s.work_items.c.closed_at.is_(None))
+                .values(title=title, body=body, stated_priority=stated_priority, edited_at=at)
+            )
+            if result.rowcount == 0:
+                return None
+            row = conn.execute(
+                select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
+            ).one()
+        return self._record(row)
 
     def close(self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> WorkItemRecord:
         with self._engine.begin() as conn:

@@ -126,6 +126,14 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/analytics/spend/chunks"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/spend/chunks/ndjson"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/outcomes/nodes"): TRANSCRIPT_READ,
+    # The work-source item routes (blizzard#358) — the same two permissions the chunk
+    # work-item read and its mutations already sit behind.
+    ("GET", "/api/work-sources"): FLEET_VIEW,
+    ("GET", "/api/work-sources/{source}/items"): FLEET_VIEW,
+    ("POST", "/api/work-sources/{source}/items"): CHUNK_CONTROL,
+    ("GET", "/api/work-sources/{source}/items/{ref}"): FLEET_VIEW,
+    ("PATCH", "/api/work-sources/{source}/items/{ref}"): CHUNK_CONTROL,
+    ("DELETE", "/api/work-sources/{source}/items/{ref}"): CHUNK_CONTROL,
 }
 
 #: Fleet plane — every route mounted under ``/api/fleet/*`` (issue #87's own

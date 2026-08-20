@@ -70,6 +70,31 @@ def test_ref_allocation_is_monotonic_and_never_reused(tmp_path: Path) -> None:
     assert int(second.ref) > int(first.ref)
 
 
+def test_list_breaks_a_same_instant_created_at_tie_on_work_item_id(tmp_path: Path) -> None:
+    """Two items created at the identical instant still sort deterministically — not an
+    artifact of sqlite's rowid-order fallback, which a real (postgres) engine wouldn't
+    give a bare ``created_at`` ordering."""
+    store = _store(tmp_path)
+    first = store.create(
+        source="hub", title="a", body="a", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
+    )
+    second = store.create(
+        source="hub", title="b", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
+    )
+
+    expected_order = sorted([first.work_item_id, second.work_item_id], reverse=True)
+    assert [item.work_item_id for item in store.list("hub")] == expected_order
+    assert [item.work_item_id for item in store.list("hub")] == expected_order  # stable across repeated reads
+
+
+def test_list_respects_the_limit(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    for i in range(3):
+        store.create(source="hub", title=str(i), body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW)
+
+    assert len(store.list("hub", limit=2)) == 2
+
+
 def test_close_is_unset_until_recorded(tmp_path: Path) -> None:
     store = _store(tmp_path)
     created = store.create(
@@ -86,3 +111,20 @@ def test_close_is_unset_until_recorded(tmp_path: Path) -> None:
     assert fetched is not None
     assert fetched.closed_at == closed_at
     assert fetched.closure == WorkItemClosure.WITHDRAWN
+
+
+def test_edit_of_a_closed_item_is_a_no_op_and_returns_none(tmp_path: Path) -> None:
+    """The ``closed_at IS NULL`` guard mirrors ``close``'s own (:107) — a title/body
+    write racing a closure matches zero rows rather than landing on a closed item."""
+    store = _store(tmp_path)
+    created = store.create(
+        source="hub", title="a", body="a", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
+    )
+    store.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_NOW)
+
+    result = store.edit("hub", created.ref, title="changed", body="changed", stated_priority=None, at=_NOW)
+
+    assert result is None
+    fetched = store.get("hub", created.ref)
+    assert fetched is not None
+    assert fetched.title == "a"  # untouched

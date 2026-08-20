@@ -91,6 +91,14 @@ class WorkItemClosure(StrEnum):
     WITHDRAWN = "withdrawn"
 
 
+class WorkItemPriority(StrEnum):
+    """The three stated-priority values a create or edit may set (blizzard#358)."""
+
+    LOW = "low"
+    NORMAL = "normal"
+    HIGH = "high"
+
+
 @dataclass(frozen=True)
 class WorkItemRecord:
     """One hub-owned work item — the ``work_items`` row (issue #357). A mutable
@@ -1721,10 +1729,16 @@ class IReadWorkItemRepository(Protocol):
         item was ever allocated."""
         ...
 
+    def list(self, source: str, *, limit: int = 200) -> list[WorkItemRecord]:
+        """Up to ``limit`` items at ``source``, newest first (a total order —
+        ``work_item_id`` breaks a same-instant ``created_at`` tie, ULIDs sorting lexically
+        by creation), open and closed alike — bounded the same way every other operator
+        feed in this hub is (the activity feed, ``/api/events``)."""
+        ...
+
 
 class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
-    """Read-write variant — ``create`` and ``close``, the only two write verbs this
-    issue adds; edit verbs belong to the routes issue."""
+    """Read-write variant — ``create``, ``edit`` and ``close`` (blizzard#358)."""
 
     def create(
         self,
@@ -1738,6 +1752,15 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
     ) -> WorkItemRecord:
         """Allocate a fresh, monotonic, never-reused ``ref`` for ``source`` and insert
         the item open."""
+        ...
+
+    def edit(
+        self, source: str, ref: str, *, title: str, body: str, stated_priority: str | None, at: datetime
+    ) -> WorkItemRecord | None:
+        """Replace an open item's title/body/stated priority in place and stamp
+        ``edited_at``; ``created_at`` and ``ref`` are untouched. ``None`` when the item
+        already carries a closure — the write matches zero rows, a closure race is not
+        silently overwritten."""
         ...
 
     def close(self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> WorkItemRecord:

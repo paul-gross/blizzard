@@ -225,6 +225,11 @@ Every field:
 | `api_base`  | no                  | Overrides the provider's default API origin. Required to reach a self-hosted forge (e.g. GitHub Enterprise).                                                                                                                                                                                                                                             |
 | `web_base`  | no                  | Overrides the provider's default web origin, used for the item's browsable URL. Derived from `api_base` when omitted, so a self-hosted GHE source only needs to set `api_base`.                                                                                                                                                                          |
 
+Unlike `annotate`/`close`, item mutation (`GET`/`POST`/`PATCH`/`DELETE` under `/api/work-sources/{source}/items`) has no
+`[[work_source]]` knob to opt a configured source into: it is served only by the built-in `hub` source, whose own store
+is a hub-owned item's system of record. An operator request against a configured forge source refuses with a 409
+naming it, on all four verbs — by design, not by a missing flag a future block could set.
+
 **A self-hosted GitHub Enterprise example** — an internal repo behind a company GHE instance, alongside the public
 `blizzard` source:
 

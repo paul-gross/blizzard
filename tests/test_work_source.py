@@ -7,10 +7,12 @@ rendering, and the ``parse``/registry ``resolve`` that give it its production ca
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.hub.config import WorkSourceConfig
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.work_sources.annotator import WorkAnnotateError, WorkStatusMarker
@@ -27,6 +29,12 @@ def _engine(tmp_path: Path):  # type: ignore[no-untyped-def]
     """A migrated store engine — every ``WorkSourceEntry.registry`` call needs one
     to seat the built-in ``hub`` source (issue #357)."""
     return migrate_to(tmp_path, "head")[1]
+
+
+def _clock() -> FixedClock:
+    """A fixed clock — every ``WorkSourceEntry.registry`` call needs one to seat the
+    built-in ``hub`` source's editor (blizzard#358)."""
+    return FixedClock(datetime(2026, 1, 1, tzinfo=UTC))
 
 
 def test_fetch_reads_issue_body_and_comments() -> None:
@@ -140,6 +148,7 @@ def test_factory_derives_web_base_by_stripping_the_api_host_prefix(
     registry = WorkSourceEntry.registry(
         [WorkSourceConfig(name="blizzard", provider="github", repo="paul-gross/blizzard", token_env="_TEST_TOKEN_A")],
         _engine(tmp_path),
+        _clock(),
     )
     source = registry.get("blizzard")
     assert source is not None
@@ -163,6 +172,7 @@ def test_factory_derives_web_base_by_stripping_the_api_v3_path_suffix(
             )
         ],
         _engine(tmp_path),
+        _clock(),
     )
     source = registry.get("internal")
     assert source is not None
@@ -179,7 +189,7 @@ def test_factory_gives_each_source_its_own_credentialed_client(monkeypatch: pyte
         WorkSourceConfig(name="one", provider="github", repo="acme/one", token_env="_TEST_TOKEN_ONE"),
         WorkSourceConfig(name="two", provider="github", repo="acme/two", token_env="_TEST_TOKEN_TWO"),
     ]
-    registry = WorkSourceEntry.registry(sources, _engine(tmp_path))
+    registry = WorkSourceEntry.registry(sources, _engine(tmp_path), _clock())
     assert sorted(registry.names()) == ["hub", "one", "two"]
     source_one = registry.get("one")
     source_two = registry.get("two")
@@ -195,13 +205,13 @@ def test_factory_fails_at_boot_naming_the_unset_token_variable(tmp_path: Path) -
 
     sources = [WorkSourceConfig(name="one", provider="github", repo="acme/one", token_env="_DEFINITELY_UNSET_TOKEN")]
     with pytest.raises(ConfigError, match="_DEFINITELY_UNSET_TOKEN"):
-        WorkSourceEntry.registry(sources, _engine(tmp_path))
+        WorkSourceEntry.registry(sources, _engine(tmp_path), _clock())
 
 
 def test_factory_over_an_empty_source_list_still_seats_the_built_in_hub_source(tmp_path: Path) -> None:
     """Zero ``[[work_source]]`` entries is a legal, non-empty registry (issue #357):
     the built-in ``hub`` source is always seated, with no config and no credential."""
-    registry = WorkSourceEntry.registry([], _engine(tmp_path))
+    registry = WorkSourceEntry.registry([], _engine(tmp_path), _clock())
     assert registry.names() == ["hub"]
     assert registry.get("anything") is None
     assert registry.resolve("hub:42") == WorkRef(source="hub", ref="42")
@@ -455,6 +465,7 @@ def test_factory_builds_no_annotator_for_a_non_opted_in_source(monkeypatch: pyte
     registry = WorkSourceEntry.registry(
         [WorkSourceConfig(name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_NOT_OPTED")],
         _engine(tmp_path),
+        _clock(),
     )
     assert registry.get("widget") is not None
     assert registry.annotator("widget") is None
@@ -470,6 +481,7 @@ def test_factory_builds_an_annotator_for_an_opted_in_source(monkeypatch: pytest.
             )
         ],
         _engine(tmp_path),
+        _clock(),
     )
     annotator = registry.annotator("widget")
     assert annotator is not None
@@ -557,6 +569,7 @@ def test_factory_builds_no_closer_for_a_non_opted_in_source(monkeypatch: pytest.
             )
         ],
         _engine(tmp_path),
+        _clock(),
     )
     assert registry.get("widget") is not None
     assert registry.closer("widget") is None
@@ -572,6 +585,7 @@ def test_factory_builds_a_closer_for_an_opted_in_source(monkeypatch: pytest.Monk
             )
         ],
         _engine(tmp_path),
+        _clock(),
     )
     closer = registry.closer("widget")
     assert closer is not None
