@@ -129,9 +129,8 @@ def create_work_item(
     allocated ref's pointer, 503 if every graph named after the packaged default has
     been retired (the operator's brake, mirroring ``POST /chunks``)."""
     source_obj, editor = _require_editor(source, services)
-    # Validation before graph resolution: a blank title/body should not consult the
-    # store, and the request rejects as a whole (the same ordering POST /chunks holds
-    # between token resolution and its own live-holder check).
+    # Validated before graph resolution, so a blank title/body rejects the whole request
+    # without the store consulted — the ordering POST /chunks holds for its own guard too.
     title = _stripped(request.title, "title")
     body = _stripped(request.body, "body")
     try:

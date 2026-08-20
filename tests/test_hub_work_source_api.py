@@ -142,10 +142,9 @@ def test_a_second_post_chunks_against_the_minted_pointer_is_409(tmp_path: Path) 
 
 
 def test_create_is_409_when_an_out_of_band_ingest_already_holds_the_allocated_ref(tmp_path: Path) -> None:
-    """``HubWorkSource.parse``/``fetch`` admit any digit-string ref, allocated or not, so
-    an out-of-band ``POST /chunks`` against a ref this source has never filed an item
-    for can pre-empt the very ref allocation mints next. Without the guard, create would
-    mint a second live chunk holding the same pointer the ingest above already holds."""
+    """``HubWorkSource.parse``/``fetch`` admit any digit-string ref, allocated or not, so an
+    out-of-band ``POST /chunks`` can pre-empt the very ref allocation mints next — without
+    the guard, create mints a second live chunk holding the pointer the ingest already holds."""
     hub = build_hub(tmp_path)
     pre_ingested = hub.client.post("/api/chunks", json={"tokens": ["hub:1"]})
     assert pre_ingested.status_code == 201, pre_ingested.text
@@ -186,6 +185,27 @@ def test_create_against_a_retired_default_graph_is_503_and_writes_no_item(tmp_pa
     assert resp.status_code == 503, resp.text
     assert doc.name in resp.json()["detail"]
     assert hub.client.get("/api/work-sources/hub/items").json()["items"] == []
+
+
+def test_a_blank_title_rejects_before_the_default_graph_is_resolved(tmp_path: Path) -> None:
+    """Resolving the graph is a durable write, so a rejected request must not perform it:
+    the blank title is 422 with no graph minted, and stays 422 rather than becoming the
+    retired graph's 503 once one has been minted and retired."""
+    hub = build_hub(tmp_path)
+
+    blank = hub.client.post("/api/work-sources/hub/items", json={"title": "  ", "body": "b"})
+
+    assert blank.status_code == 422, blank.text
+    assert hub.client.get("/api/graphs").json() == []
+
+    graph = hub.services.graph_mint.ensure_default(
+        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+    )
+    hub.services.graph_lifecycle.retire(graph, by="operator")
+
+    retired = hub.client.post("/api/work-sources/hub/items", json={"title": "  ", "body": "b"})
+
+    assert retired.status_code == 422, retired.text
 
 
 # --------------------------------------------------------------------------- #

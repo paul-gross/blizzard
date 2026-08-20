@@ -1758,10 +1758,10 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
 
     def allocate_ref(self, source: str) -> str:
         """Allocate a fresh, monotonic, never-reused ``ref`` for ``source``, in its own
-        transaction (blizzard#359) — the same allocator :meth:`create` uses, exposed so a
-        caller can hold the ``ref`` before the row it feeds exists. May skip one on a
-        crash between this call and the item insert it feeds — a gap-tolerant contract,
-        the same one a DB sequence carries."""
+        transaction (blizzard#359) — split out from the insert so a caller can hold the
+        ``ref`` before the row it feeds exists, and mint a chunk against that pointer.
+        May skip one on a crash between this call and the insert it feeds — a
+        gap-tolerant contract, the same one a DB sequence carries."""
         ...
 
     def create_with_chunk(

@@ -908,9 +908,9 @@
    "total": 69
   },
   "blizzard/hub/api/work_sources.py": {
-   "comments": 6,
+   "comments": 5,
    "docstrings": 27,
-   "total": 232
+   "total": 231
   },
   "blizzard/hub/app.py": {
    "comments": 18,
@@ -1424,8 +1424,8 @@
   },
   "blizzard/hub/store/internal/work_item_store.py": {
    "comments": 3,
-   "docstrings": 23,
-   "total": 207
+   "docstrings": 22,
+   "total": 206
   },
   "blizzard/hub/store/migrations/__init__.py": {
    "comments": 0,
@@ -3726,8 +3726,8 @@
   },
   "test_hub_work_source_api.py": {
    "comments": 26,
-   "docstrings": 17,
-   "total": 383
+   "docstrings": 19,
+   "total": 403
   },
   "test_idp_authorize.py": {
    "comments": 6,

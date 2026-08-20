@@ -103,8 +103,7 @@ class WorkItemStore:
         stated_priority: str | None,
         at: datetime,
     ) -> str:
-        """Insert one ``work_items`` row on ``conn``, open, and return its minted id — the
-        row shape :meth:`create` and :meth:`create_with_chunk` share."""
+        """Insert one ``work_items`` row on ``conn``, open, and return its minted id."""
         work_item_id = Id.mint_at(WORK_ITEM_PREFIX, at).value
         author_payload = {"user_id": author.user_id} if author.kind is WorkItemAuthorKind.USER else {}
         conn.execute(
