@@ -8,17 +8,19 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Engine, select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.work import Chunk, IReadWorkItemRepository, WorkItemAuthor, WorkItemClosure, WorkRef
 from blizzard.hub.runtime import migration_runner
+from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import seed_chunk, seed_graph
+from tests.support import seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -166,14 +168,16 @@ def test_create_with_chunk_inserts_the_item_and_the_chunk_rows_together(tmp_path
     assert fetched.title == "widget is broken"
 
 
-def test_create_with_chunk_rolls_back_the_item_row_on_a_failing_chunk_write(tmp_path: Path) -> None:
-    """A store failure inside the composite write leaves neither row durable — proven
-    against the real engine, since a rollback is not observable through a seam double."""
+def test_create_with_chunk_rolls_back_the_item_and_the_chunk_rows_on_a_failing_chunk_write(tmp_path: Path) -> None:
+    """A store failure inside the composite write leaves no row durable — proven against
+    the real engine, since a rollback is not observable through a seam double."""
     store, engine = _store_and_engine(tmp_path)
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_NOW)
-        seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)  # pre-existing row collides below
-    chunk = Chunk(chunk_id="ch_1", graph_id="gr_1", work_refs=[WorkRef(source="hub", ref="1")], minted_at=_NOW)
+    # The second pointer's NOT NULL `ref` fails the write only once the `chunks` row has
+    # landed, so the rollback under test covers all three tables, not the item row alone.
+    bad = WorkRef(source="hub", ref=cast(str, None))
+    chunk = Chunk(chunk_id="ch_1", graph_id="gr_1", work_refs=[WorkRef(source="hub", ref="1"), bad], minted_at=_NOW)
 
     with pytest.raises(IntegrityError):
         store.create_with_chunk(
@@ -181,6 +185,9 @@ def test_create_with_chunk_rolls_back_the_item_row_on_a_failing_chunk_write(tmp_
         )
 
     assert store.get("hub", "1") is None
+    with engine.begin() as conn:
+        assert conn.execute(select(s.chunks)).all() == []
+        assert conn.execute(select(s.chunk_work_refs)).all() == []
 
 
 def test_allocate_ref_is_monotonic_and_never_reused(tmp_path: Path) -> None:

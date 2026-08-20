@@ -3,8 +3,7 @@ handler (issue #357, component tier) — the built-in ``hub`` source needs no
 ``[[work_source]]`` to resolve at ingest or render at read.
 
 Also exercises the source-addressed editor routes (blizzard#358): ``/api/work-sources``
-and its ``{source}/items``/``{source}/items/{ref}`` children. Creation minting its own
-resting chunk (blizzard#359) is exercised below the round-trip test."""
+and its ``{source}/items``/``{source}/items/{ref}`` children."""
 
 from __future__ import annotations
 
@@ -110,6 +109,20 @@ def test_create_get_list_patch_and_withdraw_round_trip(tmp_path: Path) -> None:
 
 # --------------------------------------------------------------------------- #
 # blizzard#359 — create mints its resting chunk, one transaction, no promotion
+
+
+def test_create_mints_exactly_one_chunk_on_the_default_graph_holding_the_new_pointer(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    default = hub.services.graph_mint.ensure_default(
+        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+    )
+
+    created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
+
+    chunks = hub.client.get("/api/chunks").json()
+    assert [chunk["chunk_id"] for chunk in chunks] == [created["chunk_id"]]
+    assert chunks[0]["graph_id"] == default.graph_id
+    assert [(ref["source"], ref["ref"]) for ref in chunks[0]["work_refs"]] == [("hub", created["ref"])]
 
 
 def test_create_publishes_a_minted_chunk_changed_frame(tmp_path: Path) -> None:
