@@ -5508,7 +5508,7 @@
       },
       "WorkItemPatchRequest": {
         "additionalProperties": false,
-        "description": "``PATCH /api/work-sources/{source}/items/{ref}`` \u2014 every field independently\noptional and applied all-or-nothing. ``title``/``body`` mean \"leave unchanged\"\nwhether omitted or explicitly ``null`` (neither is nullable in the domain);\n``stated_priority`` *is* nullable, so omitted stays distinguishable from explicit\n``null`` by the key's presence in the body, checked via ``model_fields_set``.",
+        "description": "``PATCH /api/work-sources/{source}/items/{ref}`` \u2014 every field optional, applied\nall-or-nothing. ``stated_priority`` is nullable, so omitted (unchanged) must stay\ndistinguishable from explicit ``null`` (cleared) via ``model_fields_set``.",
         "properties": {
           "body": {
             "anyOf": [

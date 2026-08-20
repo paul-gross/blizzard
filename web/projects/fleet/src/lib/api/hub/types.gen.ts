@@ -3589,11 +3589,9 @@ export type WorkItemEntry = {
 /**
  * WorkItemPatchRequest
  *
- * ``PATCH /api/work-sources/{source}/items/{ref}`` — every field independently
- * optional and applied all-or-nothing. ``title``/``body`` mean "leave unchanged"
- * whether omitted or explicitly ``null`` (neither is nullable in the domain);
- * ``stated_priority`` *is* nullable, so omitted stays distinguishable from explicit
- * ``null`` by the key's presence in the body, checked via ``model_fields_set``.
+ * ``PATCH /api/work-sources/{source}/items/{ref}`` — every field optional, applied
+ * all-or-nothing. ``stated_priority`` is nullable, so omitted (unchanged) must stay
+ * distinguishable from explicit ``null`` (cleared) via ``model_fields_set``.
  */
 export type WorkItemPatchRequest = {
     /**
