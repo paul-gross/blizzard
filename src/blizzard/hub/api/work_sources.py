@@ -1,11 +1,9 @@
 """Work-source item routes (blizzard#358) — the operator-plane editor surface over a
 work source's browsable items, human-plane throughout (``reject_runner_principal``).
 
-Every source-addressed route is gated on the source's editor (D4): an unknown source is
-a 404 naming it, a known source with no editor is a 409 — reads included, since a hub-
-owned item's full vocabulary (author, stated priority, closure) is not something a
-pass-through ``IWorkSource.fetch`` can answer for a forge source. The sources listing
-itself carries no gate; it renders each source's capability booleans instead."""
+Every source-addressed route is gated on the source's editor (D4, reads included): an
+unknown source is 404, a known one with no editor is 409. The sources listing itself
+carries no gate; it renders each source's capability booleans instead."""
 
 from __future__ import annotations
 

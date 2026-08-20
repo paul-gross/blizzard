@@ -1,10 +1,9 @@
 """The write-half work-source seam's editor capability — full item CRUD (blizzard#358).
 
 A sibling Protocol to ``IWorkAnnotator``/``IWorkCloser``: "this source serves browsable
-items" is a *presence* question the registry answers rather than a ``hasattr`` probe. Only
-the built-in ``hub`` source seats one (issue #357's own store is the item's system of
-record); a configured forge source's registry entry has no editor at all, so a write
-against one is a structural refusal, not a permission check."""
+items" is a *presence* question the registry answers. Only the built-in ``hub`` source
+seats one; a configured forge source's registry entry has none, so a write against one
+is a structural refusal, not a permission check."""
 
 from __future__ import annotations
 

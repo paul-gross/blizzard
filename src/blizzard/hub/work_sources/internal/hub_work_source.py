@@ -28,11 +28,8 @@ from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceEr
 class HubWorkSource:
     """Vendor-native reader over the hub's own ``work_items`` table — the built-in
     binding seated outside the configured-entry walk (``bzh:dependency-injection``).
-
-    Implements :class:`IWorkEditor` too (blizzard#358): ``list``/``get`` answer from the
-    read repository directly, and ``create``/``edit``/``withdraw`` resolve a pointer to a
-    loaded record before delegating to ``edits``, the domain-layer write half
-    (``bzh:controller-read-only``)."""
+    Implements ``IWorkEditor`` too (blizzard#358): ``create``/``edit``/``withdraw``
+    resolve a pointer before delegating to ``edits``, the domain-layer write half."""
 
     def __init__(
         self, items: IReadWorkItemRepository, chunks: IReadChunkRepository, edits: WorkItemEditService

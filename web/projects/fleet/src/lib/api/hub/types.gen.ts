@@ -3503,6 +3503,43 @@ export type ValidationError = {
 };
 
 /**
+ * WorkItemAuthorView
+ *
+ * Who filed a hub-owned work item — ``user_id`` set only for ``kind == "user"``.
+ */
+export type WorkItemAuthorView = {
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * User Id
+     */
+    user_id?: string | null;
+};
+
+/**
+ * WorkItemCreateRequest
+ *
+ * ``POST /api/work-sources/{source}/items`` — ``author`` is stamped from the
+ * caller's resolved identity, never accepted here.
+ */
+export type WorkItemCreateRequest = {
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Stated Priority
+     */
+    stated_priority?: 'low' | 'normal' | 'high';
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
  * WorkItemEntry
  *
  * One pointer's pass-through work item — title, body, and comment thread, vendor-native.
@@ -3547,6 +3584,96 @@ export type WorkItemEntry = {
      * Web Url
      */
     web_url?: string | null;
+};
+
+/**
+ * WorkItemPatchRequest
+ *
+ * ``PATCH /api/work-sources/{source}/items/{ref}`` — every field independently
+ * optional and applied all-or-nothing. ``title``/``body`` mean "leave unchanged"
+ * whether omitted or explicitly ``null`` (neither is nullable in the domain);
+ * ``stated_priority`` *is* nullable, so omitted stays distinguishable from explicit
+ * ``null`` by the key's presence in the body, checked via ``model_fields_set``.
+ */
+export type WorkItemPatchRequest = {
+    /**
+     * Body
+     */
+    body?: string | null;
+    /**
+     * Stated Priority
+     */
+    stated_priority?: 'low' | 'normal' | 'high' | null;
+    /**
+     * Title
+     */
+    title?: string | null;
+};
+
+/**
+ * WorkItemView
+ *
+ * One hub-owned work item in full — author, stated priority, closure, and the
+ * last-edit instant, the vocabulary a pass-through ``WorkItemEntry`` cannot answer.
+ */
+export type WorkItemView = {
+    author: WorkItemAuthorView;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Closed At
+     */
+    closed_at: string | null;
+    /**
+     * Closure
+     */
+    closure: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Edited At
+     */
+    edited_at: string;
+    /**
+     * Label
+     */
+    label: string | null;
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Stated Priority
+     */
+    stated_priority: string | null;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Web Url
+     */
+    web_url: string | null;
+};
+
+/**
+ * WorkItemsListView
+ *
+ * A source's items, newest first — ``GET /api/work-sources/{source}/items``.
+ */
+export type WorkItemsListView = {
+    /**
+     * Items
+     */
+    items?: Array<WorkItemView>;
 };
 
 /**
@@ -3605,6 +3732,32 @@ export type WorkRefView = {
      * Web Url
      */
     web_url?: string | null;
+};
+
+/**
+ * WorkSourceSummary
+ *
+ * One work source's capability booleans — the ``GET /api/work-sources`` listing
+ * row. ``readable`` is not a field: every source answers ``fetch``, so it carries no
+ * information; ``edit`` is the "has browsable items" signal the item routes gate on.
+ */
+export type WorkSourceSummary = {
+    /**
+     * Annotate
+     */
+    annotate: boolean;
+    /**
+     * Close
+     */
+    close: boolean;
+    /**
+     * Edit
+     */
+    edit: boolean;
+    /**
+     * Name
+     */
+    name: string;
 };
 
 /**
@@ -6434,3 +6587,183 @@ export type AssignRoleApiUsersUserIdRolePostResponses = {
 };
 
 export type AssignRoleApiUsersUserIdRolePostResponse = AssignRoleApiUsersUserIdRolePostResponses[keyof AssignRoleApiUsersUserIdRolePostResponses];
+
+export type ListWorkSourcesApiWorkSourcesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/work-sources';
+};
+
+export type ListWorkSourcesApiWorkSourcesGetResponses = {
+    /**
+     * Response List Work Sources Api Work Sources Get
+     *
+     * Successful Response
+     */
+    200: Array<WorkSourceSummary>;
+};
+
+export type ListWorkSourcesApiWorkSourcesGetResponse = ListWorkSourcesApiWorkSourcesGetResponses[keyof ListWorkSourcesApiWorkSourcesGetResponses];
+
+export type ListWorkItemsApiWorkSourcesSourceItemsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Source
+         */
+        source: string;
+    };
+    query?: never;
+    url: '/api/work-sources/{source}/items';
+};
+
+export type ListWorkItemsApiWorkSourcesSourceItemsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListWorkItemsApiWorkSourcesSourceItemsGetError = ListWorkItemsApiWorkSourcesSourceItemsGetErrors[keyof ListWorkItemsApiWorkSourcesSourceItemsGetErrors];
+
+export type ListWorkItemsApiWorkSourcesSourceItemsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkItemsListView;
+};
+
+export type ListWorkItemsApiWorkSourcesSourceItemsGetResponse = ListWorkItemsApiWorkSourcesSourceItemsGetResponses[keyof ListWorkItemsApiWorkSourcesSourceItemsGetResponses];
+
+export type CreateWorkItemApiWorkSourcesSourceItemsPostData = {
+    body: WorkItemCreateRequest;
+    path: {
+        /**
+         * Source
+         */
+        source: string;
+    };
+    query?: never;
+    url: '/api/work-sources/{source}/items';
+};
+
+export type CreateWorkItemApiWorkSourcesSourceItemsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateWorkItemApiWorkSourcesSourceItemsPostError = CreateWorkItemApiWorkSourcesSourceItemsPostErrors[keyof CreateWorkItemApiWorkSourcesSourceItemsPostErrors];
+
+export type CreateWorkItemApiWorkSourcesSourceItemsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: WorkItemView;
+};
+
+export type CreateWorkItemApiWorkSourcesSourceItemsPostResponse = CreateWorkItemApiWorkSourcesSourceItemsPostResponses[keyof CreateWorkItemApiWorkSourcesSourceItemsPostResponses];
+
+export type WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Source
+         */
+        source: string;
+        /**
+         * Ref
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/work-sources/{source}/items/{ref}';
+};
+
+export type WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteError = WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteErrors[keyof WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteErrors];
+
+export type WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkItemView;
+};
+
+export type WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteResponse = WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteResponses[keyof WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteResponses];
+
+export type GetWorkItemApiWorkSourcesSourceItemsRefGetData = {
+    body?: never;
+    path: {
+        /**
+         * Source
+         */
+        source: string;
+        /**
+         * Ref
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/work-sources/{source}/items/{ref}';
+};
+
+export type GetWorkItemApiWorkSourcesSourceItemsRefGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetWorkItemApiWorkSourcesSourceItemsRefGetError = GetWorkItemApiWorkSourcesSourceItemsRefGetErrors[keyof GetWorkItemApiWorkSourcesSourceItemsRefGetErrors];
+
+export type GetWorkItemApiWorkSourcesSourceItemsRefGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkItemView;
+};
+
+export type GetWorkItemApiWorkSourcesSourceItemsRefGetResponse = GetWorkItemApiWorkSourcesSourceItemsRefGetResponses[keyof GetWorkItemApiWorkSourcesSourceItemsRefGetResponses];
+
+export type PatchWorkItemApiWorkSourcesSourceItemsRefPatchData = {
+    body: WorkItemPatchRequest;
+    path: {
+        /**
+         * Source
+         */
+        source: string;
+        /**
+         * Ref
+         */
+        ref: string;
+    };
+    query?: never;
+    url: '/api/work-sources/{source}/items/{ref}';
+};
+
+export type PatchWorkItemApiWorkSourcesSourceItemsRefPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PatchWorkItemApiWorkSourcesSourceItemsRefPatchError = PatchWorkItemApiWorkSourcesSourceItemsRefPatchErrors[keyof PatchWorkItemApiWorkSourcesSourceItemsRefPatchErrors];
+
+export type PatchWorkItemApiWorkSourcesSourceItemsRefPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkItemView;
+};
+
+export type PatchWorkItemApiWorkSourcesSourceItemsRefPatchResponse = PatchWorkItemApiWorkSourcesSourceItemsRefPatchResponses[keyof PatchWorkItemApiWorkSourcesSourceItemsRefPatchResponses];

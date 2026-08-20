@@ -1,11 +1,9 @@
 """Hub-owned work item editing (blizzard#358) — create, in-place edit, and withdrawal.
 
 Holds the *write* repository (``bzh:controller-read-only``); reached only through a
-work-source binding's :class:`~blizzard.hub.work_sources.editor.IWorkEditor`, never
-directly by a controller. ``WorkItemClosure`` has exactly two members and no third open
-state, so an edit and a withdrawal share one closure guard: "already withdrawn" and
-"already delivered" are the same condition, refusing one while silently rewriting the
-other would be arbitrary."""
+work-source binding's ``IWorkEditor``. ``WorkItemClosure`` has exactly two members and
+no third open state, so an edit and a withdrawal share one closure guard: "already
+withdrawn" and "already delivered" are the same condition."""
 
 from __future__ import annotations
 

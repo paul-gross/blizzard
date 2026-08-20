@@ -126,9 +126,8 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/analytics/spend/chunks"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/spend/chunks/ndjson"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/outcomes/nodes"): TRANSCRIPT_READ,
-    # The work-source item routes (blizzard#358) — reads gated FLEET_VIEW, writes
-    # CHUNK_CONTROL, the same two permissions the chunk work-item read and its
-    # mutations already sit behind.
+    # The work-source item routes (blizzard#358) — the same two permissions the chunk
+    # work-item read and its mutations already sit behind.
     ("GET", "/api/work-sources"): FLEET_VIEW,
     ("GET", "/api/work-sources/{source}/items"): FLEET_VIEW,
     ("POST", "/api/work-sources/{source}/items"): CHUNK_CONTROL,

@@ -1,12 +1,8 @@
 """Work-source item routes (blizzard#358) — the operator-plane editor surface over a
 work source's browsable items, distinct from the pass-through ``WorkItemEntry``
-(``wire/chunk.py``) every source answers for a chunk's held pointers.
-
-Every request model is ``extra="forbid"`` (mirrors ``wire/sse.py``): a client-supplied
-``author`` on create is rejected by validation, never silently ignored. The patch model
-follows ``ChunkPatchRequest``'s omitted-versus-explicit-null convention for
-``stated_priority`` — a nullable field, so "leave unchanged" (omitted) must stay
-distinguishable from "clear it" (explicit ``null``) by the key's presence in the body."""
+(``wire/chunk.py``). Every request model is ``extra="forbid"`` (mirrors ``wire/sse.py``);
+the patch model follows ``ChunkPatchRequest``'s omitted-versus-explicit-null convention
+for the nullable ``stated_priority``."""
 
 from __future__ import annotations
 
@@ -73,11 +69,9 @@ class WorkItemCreateRequest(BaseModel):
 
 
 class WorkItemPatchRequest(BaseModel):
-    """``PATCH /api/work-sources/{source}/items/{ref}`` — every field independently
-    optional and applied all-or-nothing. ``title``/``body`` mean "leave unchanged"
-    whether omitted or explicitly ``null`` (neither is nullable in the domain);
-    ``stated_priority`` *is* nullable, so omitted stays distinguishable from explicit
-    ``null`` by the key's presence in the body, checked via ``model_fields_set``."""
+    """``PATCH /api/work-sources/{source}/items/{ref}`` — every field optional, applied
+    all-or-nothing. ``stated_priority`` is nullable, so omitted (unchanged) must stay
+    distinguishable from explicit ``null`` (cleared) via ``model_fields_set``."""
 
     model_config = ConfigDict(extra="forbid")
 

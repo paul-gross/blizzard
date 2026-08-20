@@ -19,8 +19,8 @@ from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry
 class WorkSourceRegistry:
     """The hub's configured work sources, keyed by their declared ``name``.
 
-    ``annotators``/``closers`` are each a strict subset of ``sources``: an absent name
-    has no write half at all, making "never written to" a property of the object graph."""
+    ``annotators``/``closers``/``editors`` are each a subset of ``sources``: an absent
+    name has no write half, making "never written to" a property of the object graph."""
 
     def __init__(
         self,

@@ -43,13 +43,10 @@ class WorkSourceEntry:
     @classmethod
     def registry(cls, sources: Sequence[WorkSourceConfig], engine: Engine, clock: IClock) -> WorkSourceRegistry:
         """One credentialed client + binding per configured source, plus the built-in
-        ``hub`` source seated outside this walk (issue #357).
-
-        A source whose ``token_env`` names an unset variable fails here, at boot, not at first
-        fetch. Only an opted-in source gets an annotator/closer entry, so a non-opted one is
-        structurally never written to rather than guarded by a runtime branch. ``clock`` is
-        threaded through to the built-in source's editor (blizzard#358), constructed once at
-        the composition root."""
+        ``hub`` source seated outside this walk (issue #357) — its editor with no opt-in
+        flag at all (blizzard#358), unlike an annotator/closer's ``annotate``/``close``.
+        A source whose ``token_env`` names an unset variable fails here, at boot; ``clock``
+        is threaded through from the composition root."""
         built: dict[str, IWorkSource] = {}
         annotators: dict[str, IWorkAnnotator] = {}
         closers: dict[str, IWorkCloser] = {}

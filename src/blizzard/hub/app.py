@@ -199,9 +199,8 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
     owner = os.environ.get(ENV_FORGE_OWNER, DEFAULT_FORGE_OWNER)
-    # Constructed once here, ahead of both the work-source registry (whose built-in
-    # ``hub`` editor stamps `edited_at`/`closed_at`, blizzard#358) and `build_services`
-    # below — one clock instance shared by every write path.
+    # Constructed once here, ahead of the work-source registry and `build_services`
+    # below — one clock instance shared by every write path (blizzard#358).
     clock = SystemClock()
     work_source_registry = WorkSourceEntry.registry(config.work_sources, engine, clock)
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
