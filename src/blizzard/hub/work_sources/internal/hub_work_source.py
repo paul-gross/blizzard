@@ -15,10 +15,11 @@ from blizzard.hub.domain.work import (
     IReadWorkItemRepository,
     WorkItemAuthor,
     WorkItemClosure,
+    WorkItemPriority,
     WorkItemRecord,
     WorkRef,
 )
-from blizzard.hub.domain.work_items import WorkItemEditService
+from blizzard.hub.domain.work_items import WorkItemEdit, WorkItemEditService
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
@@ -68,20 +69,22 @@ class HubWorkSource:
         """The built-in source names no forge to link a branch through."""
         return None
 
-    def list(self) -> list[WorkItemRecord]:
-        return self._items.list(RESERVED_HUB_SOURCE_NAME)
+    def list(self, *, limit: int = 200) -> list[WorkItemRecord]:
+        return self._items.list(RESERVED_HUB_SOURCE_NAME, limit=limit)
 
     def get(self, pointer: WorkRef) -> WorkItemRecord:
         return self._resolve(pointer)
 
-    def create(self, *, title: str, body: str, author: WorkItemAuthor, stated_priority: str | None) -> WorkItemRecord:
+    def create(
+        self, *, title: str, body: str, author: WorkItemAuthor, stated_priority: WorkItemPriority | None
+    ) -> WorkItemRecord:
         return self._edits.create(
             source=RESERVED_HUB_SOURCE_NAME, title=title, body=body, author=author, stated_priority=stated_priority
         )
 
-    def edit(self, pointer: WorkRef, *, title: str, body: str, stated_priority: str | None) -> WorkItemRecord:
+    def edit(self, pointer: WorkRef, edit: WorkItemEdit) -> WorkItemRecord:
         item = self._resolve(pointer)
-        return self._edits.edit(item, title=title, body=body, stated_priority=stated_priority)
+        return self._edits.edit(item, edit)
 
     def withdraw(self, pointer: WorkRef) -> WorkItemRecord:
         item = self._resolve(pointer)

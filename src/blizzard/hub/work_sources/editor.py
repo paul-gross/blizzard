@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from blizzard.hub.domain.work import WorkItemAuthor, WorkItemRecord, WorkRef
+from blizzard.hub.domain.work import WorkItemAuthor, WorkItemPriority, WorkItemRecord, WorkRef
+from blizzard.hub.domain.work_items import WorkItemEdit
 
 
 class WorkItemRefUnknownError(Exception):
@@ -23,8 +24,8 @@ class WorkItemRefUnknownError(Exception):
 class IWorkEditor(Protocol):
     """One work-source binding's full item surface — browsing plus the three write verbs."""
 
-    def list(self) -> list[WorkItemRecord]:
-        """Every item at this source, newest first, open and closed alike."""
+    def list(self, *, limit: int = 200) -> list[WorkItemRecord]:
+        """Up to ``limit`` items at this source, newest first, open and closed alike."""
         ...
 
     def get(self, pointer: WorkRef) -> WorkItemRecord:
@@ -33,12 +34,15 @@ class IWorkEditor(Protocol):
         Raises :class:`WorkItemRefUnknownError` for an unallocated ``ref``."""
         ...
 
-    def create(self, *, title: str, body: str, author: WorkItemAuthor, stated_priority: str | None) -> WorkItemRecord:
+    def create(
+        self, *, title: str, body: str, author: WorkItemAuthor, stated_priority: WorkItemPriority | None
+    ) -> WorkItemRecord:
         """Allocate a fresh item at this source, open."""
         ...
 
-    def edit(self, pointer: WorkRef, *, title: str, body: str, stated_priority: str | None) -> WorkItemRecord:
-        """Replace ``pointer``'s title/body/stated priority in place and stamp ``edited_at``.
+    def edit(self, pointer: WorkRef, edit: WorkItemEdit) -> WorkItemRecord:
+        """Resolve ``edit``'s sentinel-tagged fields against the record ``pointer`` names
+        and replace them in place, stamping ``edited_at``.
 
         Raises :class:`WorkItemRefUnknownError` for an unallocated ``ref``, and the
         service's closure-guard error for an item that already carries a closure."""

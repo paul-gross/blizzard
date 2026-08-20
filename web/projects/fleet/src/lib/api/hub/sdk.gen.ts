@@ -991,14 +991,15 @@ export const listWorkSourcesApiWorkSourcesGet = <ThrowOnError extends boolean = 
 /**
  * List Work Items
  *
- * Every item at SOURCE, newest first, open and closed alike. 404/409 per D4.
+ * Up to LIMIT items at SOURCE, newest first, open and closed alike. 404/409 per D4.
  */
 export const listWorkItemsApiWorkSourcesSourceItemsGet = <ThrowOnError extends boolean = false>(options: Options<ListWorkItemsApiWorkSourcesSourceItemsGetData, ThrowOnError>): RequestResult<ListWorkItemsApiWorkSourcesSourceItemsGetResponses, ListWorkItemsApiWorkSourcesSourceItemsGetErrors, ThrowOnError> => (options.client ?? client).get<ListWorkItemsApiWorkSourcesSourceItemsGetResponses, ListWorkItemsApiWorkSourcesSourceItemsGetErrors, ThrowOnError>({ url: '/api/work-sources/{source}/items', ...options });
 
 /**
  * Create Work Item
  *
- * Allocate a fresh item at SOURCE, open, authored by the caller. 404/409 per D4.
+ * Allocate a fresh item at SOURCE, open, authored by the caller. 404/409 per D4,
+ * 422 for a blank title or body.
  */
 export const createWorkItemApiWorkSourcesSourceItemsPost = <ThrowOnError extends boolean = false>(options: Options<CreateWorkItemApiWorkSourcesSourceItemsPostData, ThrowOnError>): RequestResult<CreateWorkItemApiWorkSourcesSourceItemsPostResponses, CreateWorkItemApiWorkSourcesSourceItemsPostErrors, ThrowOnError> => (options.client ?? client).post<CreateWorkItemApiWorkSourcesSourceItemsPostResponses, CreateWorkItemApiWorkSourcesSourceItemsPostErrors, ThrowOnError>({
     url: '/api/work-sources/{source}/items',
@@ -1031,7 +1032,12 @@ export const getWorkItemApiWorkSourcesSourceItemsRefGet = <ThrowOnError extends 
  *
  * Replace the given fields in place, all-or-nothing. 404 for an unknown source or
  * an unallocated ref (D9); 409 for a known source with no editor (D4) or an item that
- * already carries a closure (D5).
+ * already carries a closure (D5); 422 for a blank title or body.
+ *
+ * Reads the pointer exactly once — inside the domain service the sentinel-tagged
+ * ``WorkItemEdit`` below resolves against, mirroring ``ChunkEdit``/``UNSET``
+ * (``hub/domain/edit.py``) rather than merging omitted-versus-explicit fields here at
+ * the edge.
  */
 export const patchWorkItemApiWorkSourcesSourceItemsRefPatch = <ThrowOnError extends boolean = false>(options: Options<PatchWorkItemApiWorkSourcesSourceItemsRefPatchData, ThrowOnError>): RequestResult<PatchWorkItemApiWorkSourcesSourceItemsRefPatchResponses, PatchWorkItemApiWorkSourcesSourceItemsRefPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchWorkItemApiWorkSourcesSourceItemsRefPatchResponses, PatchWorkItemApiWorkSourcesSourceItemsRefPatchErrors, ThrowOnError>({
     url: '/api/work-sources/{source}/items/{ref}',

@@ -102,11 +102,6 @@ class IWorkSourceRegistry(Protocol):
         non-editing source gets."""
         ...
 
-    def editing_names(self) -> list[str]:
-        """Every source name with an editor built — currently just the built-in
-        ``hub`` source, since no configurable provider seats one."""
-        ...
-
     def resolve(self, token: str) -> WorkRef | None:
         """The first configured binding's :meth:`IWorkSource.parse` of ``token`` that
         claims it, or ``None`` when none do. Exactly one binding can ever

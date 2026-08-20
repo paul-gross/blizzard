@@ -12,8 +12,13 @@ import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.work import WorkItemAuthor, WorkItemClosure, WorkRef
-from blizzard.hub.domain.work_items import WorkItemEditService, WorkItemHeldByLiveChunk, WorkItemNotEditable
+from blizzard.hub.domain.work import WorkItemAuthor, WorkItemClosure, WorkItemPriority, WorkRef
+from blizzard.hub.domain.work_items import (
+    WorkItemEdit,
+    WorkItemEditService,
+    WorkItemHeldByLiveChunk,
+    WorkItemNotEditable,
+)
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.editor import WorkItemRefUnknownError
@@ -155,7 +160,7 @@ def test_get_edit_and_withdraw_of_an_unallocated_ref_raise_not_found(tmp_path: P
     with pytest.raises(WorkItemRefUnknownError):
         source.get(pointer)
     with pytest.raises(WorkItemRefUnknownError):
-        source.edit(pointer, title="t", body="b", stated_priority=None)
+        source.edit(pointer, WorkItemEdit(title="t", body="b", stated_priority=None))
     with pytest.raises(WorkItemRefUnknownError):
         source.withdraw(pointer)
 
@@ -163,7 +168,7 @@ def test_get_edit_and_withdraw_of_an_unallocated_ref_raise_not_found(tmp_path: P
 def test_create_allocates_an_open_item(tmp_path: Path) -> None:
     source, _, _, _, _ = _source(tmp_path)
 
-    created = source.create(title="t", body="b", author=WorkItemAuthor.fleet(), stated_priority="high")
+    created = source.create(title="t", body="b", author=WorkItemAuthor.fleet(), stated_priority=WorkItemPriority.HIGH)
 
     assert created.title == "t"
     assert created.closure is None
@@ -176,7 +181,7 @@ def test_edit_replaces_fields_and_stamps_edited_at_leaving_created_at_and_ref(tm
     pointer = WorkRef(source="hub", ref=created.ref)
     clock.advance(timedelta(days=1))
 
-    edited = source.edit(pointer, title="after", body="after", stated_priority="high")
+    edited = source.edit(pointer, WorkItemEdit(title="after", body="after", stated_priority=WorkItemPriority.HIGH))
 
     assert edited.title == "after"
     assert edited.body == "after"
@@ -203,7 +208,7 @@ def test_edit_and_withdraw_of_a_closed_item_are_refused(tmp_path: Path) -> None:
     source.withdraw(pointer)
 
     with pytest.raises(WorkItemNotEditable):
-        source.edit(pointer, title="t2", body="b2", stated_priority=None)
+        source.edit(pointer, WorkItemEdit(title="t2", body="b2", stated_priority=None))
     with pytest.raises(WorkItemNotEditable):
         source.withdraw(pointer)
 

@@ -55,9 +55,6 @@ class WorkSourceRegistry:
     def editor(self, name: str) -> IWorkEditor | None:
         return self._editors.get(name)
 
-    def editing_names(self) -> list[str]:
-        return list(self._editors.keys())
-
     def resolve(self, token: str) -> WorkRef | None:
         """The first configured binding's ``parse`` of ``token`` that claims it, or
         ``None`` when none do."""

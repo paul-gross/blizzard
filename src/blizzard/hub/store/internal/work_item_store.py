@@ -37,10 +37,16 @@ class WorkItemStore:
             ).one_or_none()
         return self._record(row) if row is not None else None
 
-    def list(self, source: str) -> list[WorkItemRecord]:
+    def list(self, source: str, *, limit: int = 200) -> list[WorkItemRecord]:
         with self._engine.connect() as conn:
             rows = conn.execute(
-                select(s.work_items).where(s.work_items.c.source == source).order_by(desc(s.work_items.c.created_at))
+                select(s.work_items)
+                .where(s.work_items.c.source == source)
+                # (created_at, work_item_id) desc — created_at alone is not unique, and a
+                # ULID work_item_id sorts lexically by creation, the same tiebreaker
+                # graph_store.py's get_enabled_by_name uses (bzh:sql-portable).
+                .order_by(desc(s.work_items.c.created_at), desc(s.work_items.c.work_item_id))
+                .limit(limit)
             ).all()
         return [self._record(row) for row in rows]
 
@@ -88,13 +94,15 @@ class WorkItemStore:
 
     def edit(
         self, source: str, ref: str, *, title: str, body: str, stated_priority: str | None, at: datetime
-    ) -> WorkItemRecord:
+    ) -> WorkItemRecord | None:
         with self._engine.begin() as conn:
-            conn.execute(
+            result = conn.execute(
                 update(s.work_items)
-                .where(s.work_items.c.source == source, s.work_items.c.ref == ref)
+                .where(s.work_items.c.source == source, s.work_items.c.ref == ref, s.work_items.c.closed_at.is_(None))
                 .values(title=title, body=body, stated_priority=stated_priority, edited_at=at)
             )
+            if result.rowcount == 0:
+                return None
             row = conn.execute(
                 select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
             ).one()

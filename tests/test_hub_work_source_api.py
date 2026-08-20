@@ -55,7 +55,7 @@ def test_a_hub_owned_pointer_ingests_and_renders_its_title_and_body(tmp_path: Pa
 def test_sources_listing_renders_capability_booleans(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, work_sources={"forge": FakeWorkSource(name="forge")})
 
-    sources = {row["name"]: row for row in hub.client.get("/api/work-sources").json()}
+    sources = {row["name"]: row for row in hub.client.get("/api/work-sources").json()["sources"]}
 
     assert sources["hub"]["edit"] is True
     assert sources["forge"]["edit"] is False
@@ -148,6 +148,16 @@ def test_patch_and_delete_of_an_already_withdrawn_item_are_409(tmp_path: Path) -
     assert hub.client.delete(f"/api/work-sources/hub/items/{ref}").status_code == 409
 
 
+def test_delete_is_409_while_a_live_chunk_holds_the_item(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    ref = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["ref"]
+    hub.client.post("/api/chunks", json={"tokens": [f"hub:{ref}"]})
+
+    resp = hub.client.delete(f"/api/work-sources/hub/items/{ref}")
+
+    assert resp.status_code == 409
+
+
 # --------------------------------------------------------------------------- #
 # D6 — authorship is stamped from the session, never accepted from the body
 
@@ -205,6 +215,37 @@ def test_patch_omitting_stated_priority_leaves_it_unchanged(tmp_path: Path) -> N
     patched = hub.client.patch(f"/api/work-sources/hub/items/{ref}", json={"title": "t2"})
 
     assert patched.json()["stated_priority"] == "high"
+
+
+def test_patch_carrying_an_explicit_null_stated_priority_clears_it(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    ref = hub.client.post(
+        "/api/work-sources/hub/items", json={"title": "t", "body": "b", "stated_priority": "high"}
+    ).json()["ref"]
+
+    patched = hub.client.patch(f"/api/work-sources/hub/items/{ref}", json={"stated_priority": None})
+
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["stated_priority"] is None
+
+
+# --------------------------------------------------------------------------- #
+# A blank title or body is 422 — the same shape ``api/chunks.py``'s edit refuses
+
+
+def test_create_with_a_blank_title_or_body_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+
+    assert hub.client.post("/api/work-sources/hub/items", json={"title": "  ", "body": "b"}).status_code == 422
+    assert hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "  "}).status_code == 422
+
+
+def test_patch_with_a_blank_title_or_body_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    ref = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["ref"]
+
+    assert hub.client.patch(f"/api/work-sources/hub/items/{ref}", json={"title": "  "}).status_code == 422
+    assert hub.client.patch(f"/api/work-sources/hub/items/{ref}", json={"body": "  "}).status_code == 422
 
 
 # --------------------------------------------------------------------------- #

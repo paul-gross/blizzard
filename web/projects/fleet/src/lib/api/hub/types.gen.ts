@@ -3519,6 +3519,14 @@ export type WorkItemAuthorView = {
 };
 
 /**
+ * WorkItemClosure
+ *
+ * How a hub-owned work item closed (issue #357) — recorded on the row itself
+ * (``bzh:facts-not-status``, Recorded position), never derived.
+ */
+export type WorkItemClosure = 'delivered' | 'withdrawn';
+
+/**
  * WorkItemCreateRequest
  *
  * ``POST /api/work-sources/{source}/items`` — ``author`` is stamped from the
@@ -3529,10 +3537,7 @@ export type WorkItemCreateRequest = {
      * Body
      */
     body: string;
-    /**
-     * Stated Priority
-     */
-    stated_priority?: 'low' | 'normal' | 'high';
+    stated_priority?: WorkItemPriority;
     /**
      * Title
      */
@@ -3598,15 +3603,23 @@ export type WorkItemPatchRequest = {
      * Body
      */
     body?: string | null;
-    /**
-     * Stated Priority
-     */
-    stated_priority?: 'low' | 'normal' | 'high' | null;
+    stated_priority?: WorkItemPriority | null;
     /**
      * Title
      */
     title?: string | null;
 };
+
+/**
+ * WorkItemPriority
+ *
+ * The three stated-priority values a create/edit may set (blizzard#358) — the
+ * domain's own validated vocabulary, not merely the wire model's ``Literal``: a
+ * non-HTTP caller of :class:`~blizzard.hub.domain.work_items.WorkItemEditService`
+ * must pass a member of this enum, not an unconstrained string. The column itself
+ * stays an unconstrained ``str | None`` (``hub/store/schema.py``, ``bzh:sql-portable``).
+ */
+export type WorkItemPriority = 'low' | 'normal' | 'high';
 
 /**
  * WorkItemView
@@ -3624,10 +3637,7 @@ export type WorkItemView = {
      * Closed At
      */
     closed_at: string | null;
-    /**
-     * Closure
-     */
-    closure: string | null;
+    closure: WorkItemClosure | null;
     /**
      * Created At
      */
@@ -3648,10 +3658,7 @@ export type WorkItemView = {
      * Source
      */
     source: string;
-    /**
-     * Stated Priority
-     */
-    stated_priority: string | null;
+    stated_priority: WorkItemPriority | null;
     /**
      * Title
      */
@@ -3756,6 +3763,20 @@ export type WorkSourceSummary = {
      * Name
      */
     name: string;
+};
+
+/**
+ * WorkSourcesListView
+ *
+ * Every configured (plus the built-in ``hub``) source — ``GET /api/work-sources``.
+ * Wrapped, not a bare array, so a future field can join it non-breakingly
+ * (``docs/versioning.md``), matching ``WorkItemsListView`` beside it.
+ */
+export type WorkSourcesListView = {
+    /**
+     * Sources
+     */
+    sources?: Array<WorkSourceSummary>;
 };
 
 /**
@@ -6595,11 +6616,9 @@ export type ListWorkSourcesApiWorkSourcesGetData = {
 
 export type ListWorkSourcesApiWorkSourcesGetResponses = {
     /**
-     * Response List Work Sources Api Work Sources Get
-     *
      * Successful Response
      */
-    200: Array<WorkSourceSummary>;
+    200: WorkSourcesListView;
 };
 
 export type ListWorkSourcesApiWorkSourcesGetResponse = ListWorkSourcesApiWorkSourcesGetResponses[keyof ListWorkSourcesApiWorkSourcesGetResponses];
@@ -6612,7 +6631,12 @@ export type ListWorkItemsApiWorkSourcesSourceItemsGetData = {
          */
         source: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
     url: '/api/work-sources/{source}/items';
 };
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from blizzard.auth_core import CHUNK_CONTROL, FLEET_VIEW
 from blizzard.foundation.store.utc import iso_utc
@@ -18,8 +18,9 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.work import WorkItemAuthor, WorkItemRecord, WorkRef
-from blizzard.hub.domain.work_items import WorkItemHeldByLiveChunk, WorkItemNotEditable
+from blizzard.hub.domain.edit import UNSET
+from blizzard.hub.domain.work import WorkItemAuthor, WorkItemPriority, WorkItemRecord, WorkRef
+from blizzard.hub.domain.work_items import WorkItemEdit, WorkItemHeldByLiveChunk, WorkItemNotEditable
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.source import IWorkSource
 from blizzard.wire.work_source import (
@@ -28,6 +29,7 @@ from blizzard.wire.work_source import (
     WorkItemPatchRequest,
     WorkItemsListView,
     WorkItemView,
+    WorkSourcesListView,
     WorkSourceSummary,
 )
 
@@ -36,7 +38,10 @@ router = APIRouter(prefix="/api", tags=["work-sources"], dependencies=[Depends(r
 
 def _require_editor(source: str, services: HubServices) -> tuple[IWorkSource, IWorkEditor]:
     """The named source and its editor, or the D4 refusal: 404 for an unknown source,
-    409 for a known one with no editor (a configured forge source, never opted in)."""
+    409 for a known one with no editor — a structural refusal for every source but
+    ``hub``, since no ``[[work_source]]`` field could ever opt a configured source into
+    editing (``blizzard-context:/architecture/system-shape.md``), not merely "not opted
+    in" the way ``annotate``/``close`` are."""
     source_obj = services.work_sources.get(source)
     if source_obj is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown work source {source!r}")
@@ -44,6 +49,13 @@ def _require_editor(source: str, services: HubServices) -> tuple[IWorkSource, IW
     if editor is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"work source {source!r} has no editor")
     return source_obj, editor
+
+
+def _stripped(value: str, field_name: str) -> str:
+    text = value.strip()
+    if not text:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} must not be blank")
+    return text
 
 
 def _view(item: WorkItemRecord, source_obj: IWorkSource) -> WorkItemView:
@@ -56,36 +68,42 @@ def _view(item: WorkItemRecord, source_obj: IWorkSource) -> WorkItemView:
         title=item.title,
         body=item.body,
         author=WorkItemAuthorView(kind=item.author.kind.value, user_id=item.author.user_id),
-        stated_priority=item.stated_priority,
+        stated_priority=WorkItemPriority(item.stated_priority) if item.stated_priority is not None else None,
         created_at=iso_utc(item.created_at),
         edited_at=iso_utc(item.edited_at),
         closed_at=iso_utc(item.closed_at) if item.closed_at is not None else None,
-        closure=item.closure.value if item.closure is not None else None,
+        closure=item.closure,
     )
 
 
-@router.get("/work-sources", response_model=list[WorkSourceSummary], dependencies=[Depends(require(FLEET_VIEW))])
-def list_work_sources(services: Annotated[HubServices, Depends(get_services)]) -> list[WorkSourceSummary]:
+@router.get("/work-sources", response_model=WorkSourcesListView, dependencies=[Depends(require(FLEET_VIEW))])
+def list_work_sources(services: Annotated[HubServices, Depends(get_services)]) -> WorkSourcesListView:
     """Every configured (plus the built-in ``hub``) source's capability booleans — no
     gate of its own, since a client needs this to know which sources gate their items."""
-    return [
-        WorkSourceSummary(
-            name=name,
-            annotate=services.work_sources.annotator(name) is not None,
-            close=services.work_sources.closer(name) is not None,
-            edit=services.work_sources.editor(name) is not None,
-        )
-        for name in services.work_sources.names()
-    ]
+    return WorkSourcesListView(
+        sources=[
+            WorkSourceSummary(
+                name=name,
+                annotate=services.work_sources.annotator(name) is not None,
+                close=services.work_sources.closer(name) is not None,
+                edit=services.work_sources.editor(name) is not None,
+            )
+            for name in services.work_sources.names()
+        ]
+    )
 
 
 @router.get(
     "/work-sources/{source}/items", response_model=WorkItemsListView, dependencies=[Depends(require(FLEET_VIEW))]
 )
-def list_work_items(source: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkItemsListView:
-    """Every item at SOURCE, newest first, open and closed alike. 404/409 per D4."""
+def list_work_items(
+    source: str,
+    services: Annotated[HubServices, Depends(get_services)],
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+) -> WorkItemsListView:
+    """Up to LIMIT items at SOURCE, newest first, open and closed alike. 404/409 per D4."""
     source_obj, editor = _require_editor(source, services)
-    return WorkItemsListView(items=[_view(item, source_obj) for item in editor.list()])
+    return WorkItemsListView(items=[_view(item, source_obj) for item in editor.list(limit=limit)])
 
 
 @router.post(
@@ -99,11 +117,12 @@ def create_work_item(
     services: Annotated[HubServices, Depends(get_services)],
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> WorkItemView:
-    """Allocate a fresh item at SOURCE, open, authored by the caller. 404/409 per D4."""
+    """Allocate a fresh item at SOURCE, open, authored by the caller. 404/409 per D4,
+    422 for a blank title or body."""
     source_obj, editor = _require_editor(source, services)
     created = editor.create(
-        title=request.title,
-        body=request.body,
+        title=_stripped(request.title, "title"),
+        body=_stripped(request.body, "body"),
         author=WorkItemAuthor.user(identity.user_id),
         stated_priority=request.stated_priority,
     )
@@ -139,23 +158,23 @@ def patch_work_item(
 ) -> WorkItemView:
     """Replace the given fields in place, all-or-nothing. 404 for an unknown source or
     an unallocated ref (D9); 409 for a known source with no editor (D4) or an item that
-    already carries a closure (D5)."""
+    already carries a closure (D5); 422 for a blank title or body.
+
+    Reads the pointer exactly once — inside the domain service the sentinel-tagged
+    ``WorkItemEdit`` below resolves against, mirroring ``ChunkEdit``/``UNSET``
+    (``hub/domain/edit.py``) rather than merging omitted-versus-explicit fields here at
+    the edge."""
     source_obj, editor = _require_editor(source, services)
     pointer = WorkRef(source=source, ref=ref)
-    try:
-        current = editor.get(pointer)
-    except WorkItemRefUnknownError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    stated_priority = (
-        request.stated_priority if "stated_priority" in request.model_fields_set else current.stated_priority
+    edit = WorkItemEdit(
+        title=_stripped(request.title, "title") if request.title is not None else UNSET,
+        body=_stripped(request.body, "body") if request.body is not None else UNSET,
+        stated_priority=request.stated_priority if "stated_priority" in request.model_fields_set else UNSET,
     )
     try:
-        updated = editor.edit(
-            pointer,
-            title=request.title if request.title is not None else current.title,
-            body=request.body if request.body is not None else current.body,
-            stated_priority=stated_priority,
-        )
+        updated = editor.edit(pointer, edit)
+    except WorkItemRefUnknownError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except WorkItemNotEditable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return _view(updated, source_obj)

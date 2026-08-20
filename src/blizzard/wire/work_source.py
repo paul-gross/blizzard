@@ -2,17 +2,15 @@
 work source's browsable items, distinct from the pass-through ``WorkItemEntry``
 (``wire/chunk.py``). Every request model is ``extra="forbid"`` (mirrors ``wire/sse.py``);
 the patch model follows ``ChunkPatchRequest``'s omitted-versus-explicit-null convention
-for the nullable ``stated_priority``."""
+for the nullable ``stated_priority``. ``stated_priority``/``closure`` type directly on
+the domain's own enums (``wire/chunk.py``'s ``status: ChunkStatus`` precedent), request
+and response alike, rather than a wire-local duplicate of the same vocabulary."""
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict
 
-#: The three stated-priority values a create/edit may set — validated here, on the way
-#: in; the column itself is an unconstrained ``str | None`` (``hub/store/schema.py``).
-WorkItemPriority = Literal["low", "normal", "high"]
+from blizzard.hub.domain.work import WorkItemClosure, WorkItemPriority
 
 
 class WorkSourceSummary(BaseModel):
@@ -24,6 +22,14 @@ class WorkSourceSummary(BaseModel):
     annotate: bool
     close: bool
     edit: bool
+
+
+class WorkSourcesListView(BaseModel):
+    """Every configured (plus the built-in ``hub``) source — ``GET /api/work-sources``.
+    Wrapped, not a bare array, so a future field can join it non-breakingly
+    (``docs/versioning.md``), matching ``WorkItemsListView`` beside it."""
+
+    sources: list[WorkSourceSummary] = []
 
 
 class WorkItemAuthorView(BaseModel):
@@ -44,11 +50,11 @@ class WorkItemView(BaseModel):
     title: str
     body: str
     author: WorkItemAuthorView
-    stated_priority: str | None
+    stated_priority: WorkItemPriority | None
     created_at: str
     edited_at: str
     closed_at: str | None
-    closure: str | None
+    closure: WorkItemClosure | None
 
 
 class WorkItemsListView(BaseModel):
@@ -65,7 +71,7 @@ class WorkItemCreateRequest(BaseModel):
 
     title: str
     body: str
-    stated_priority: WorkItemPriority = "normal"
+    stated_priority: WorkItemPriority = WorkItemPriority.NORMAL
 
 
 class WorkItemPatchRequest(BaseModel):
