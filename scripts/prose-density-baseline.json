@@ -908,9 +908,9 @@
    "total": 69
   },
   "blizzard/hub/api/work_sources.py": {
-   "comments": 0,
-   "docstrings": 20,
-   "total": 185
+   "comments": 2,
+   "docstrings": 24,
+   "total": 201
   },
   "blizzard/hub/app.py": {
    "comments": 18,
@@ -1309,8 +1309,8 @@
   },
   "blizzard/hub/domain/work.py": {
    "comments": 54,
-   "docstrings": 487,
-   "total": 1755
+   "docstrings": 493,
+   "total": 1768
   },
   "blizzard/hub/domain/work_closure.py": {
    "comments": 4,
@@ -1319,8 +1319,8 @@
   },
   "blizzard/hub/domain/work_items.py": {
    "comments": 0,
-   "docstrings": 18,
-   "total": 83
+   "docstrings": 23,
+   "total": 111
   },
   "blizzard/hub/events/__init__.py": {
    "comments": 0,
@@ -1423,9 +1423,9 @@
    "total": 365
   },
   "blizzard/hub/store/internal/work_item_store.py": {
-   "comments": 1,
+   "comments": 3,
    "docstrings": 17,
-   "total": 166
+   "total": 173
   },
   "blizzard/hub/store/migrations/__init__.py": {
    "comments": 0,
@@ -1769,8 +1769,8 @@
   },
   "blizzard/hub/work_sources/editor.py": {
    "comments": 0,
-   "docstrings": 22,
-   "total": 53
+   "docstrings": 23,
+   "total": 57
   },
   "blizzard/hub/work_sources/internal/__init__.py": {
    "comments": 0,
@@ -1790,17 +1790,17 @@
   "blizzard/hub/work_sources/internal/hub_work_source.py": {
    "comments": 0,
    "docstrings": 22,
-   "total": 117
+   "total": 120
   },
   "blizzard/hub/work_sources/registry.py": {
    "comments": 0,
    "docstrings": 12,
-   "total": 72
+   "total": 69
   },
   "blizzard/hub/work_sources/source.py": {
    "comments": 0,
-   "docstrings": 47,
-   "total": 116
+   "docstrings": 45,
+   "total": 111
   },
   "blizzard/runner/__init__.py": {
    "comments": 0,
@@ -2788,9 +2788,9 @@
    "total": 36
   },
   "blizzard/wire/work_source.py": {
-   "comments": 2,
-   "docstrings": 17,
-   "total": 80
+   "comments": 0,
+   "docstrings": 21,
+   "total": 85
   }
  },
  "tests": {
@@ -3722,12 +3722,12 @@
   "test_hub_work_source.py": {
    "comments": 2,
    "docstrings": 5,
-   "total": 236
+   "total": 241
   },
   "test_hub_work_source_api.py": {
-   "comments": 17,
-   "docstrings": 6,
-   "total": 233
+   "comments": 20,
+   "docstrings": 9,
+   "total": 288
   },
   "test_idp_authorize.py": {
    "comments": 6,
@@ -4550,9 +4550,9 @@
    "total": 103
   },
   "test_work_item_store.py": {
-   "comments": 1,
-   "docstrings": 5,
-   "total": 88
+   "comments": 3,
+   "docstrings": 10,
+   "total": 130
   },
   "test_work_item_store_utc.py": {
    "comments": 0,

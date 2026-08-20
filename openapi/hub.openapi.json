@@ -5550,7 +5550,7 @@
         "type": "object"
       },
       "WorkItemPriority": {
-        "description": "The three stated-priority values a create/edit may set (blizzard#358) \u2014 the\ndomain's own validated vocabulary, not merely the wire model's ``Literal``: a\nnon-HTTP caller of :class:`~blizzard.hub.domain.work_items.WorkItemEditService`\nmust pass a member of this enum, not an unconstrained string. The column itself\nstays an unconstrained ``str | None`` (``hub/store/schema.py``, ``bzh:sql-portable``).",
+        "description": "The three stated-priority values a create or edit may set (blizzard#358).",
         "enum": [
           "low",
           "normal",
@@ -11263,7 +11263,7 @@
         ]
       },
       "patch": {
-        "description": "Replace the given fields in place, all-or-nothing. 404 for an unknown source or\nan unallocated ref (D9); 409 for a known source with no editor (D4) or an item that\nalready carries a closure (D5); 422 for a blank title or body.\n\nReads the pointer exactly once \u2014 inside the domain service the sentinel-tagged\n``WorkItemEdit`` below resolves against, mirroring ``ChunkEdit``/``UNSET``\n(``hub/domain/edit.py``) rather than merging omitted-versus-explicit fields here at\nthe edge.",
+        "description": "Replace the given fields in place, all-or-nothing. 404 for an unknown source or\nan unallocated ref (D9); 409 for a known source with no editor (D4) or an item that\nalready carries a closure (D5); 422 for a blank title or body.",
         "operationId": "patch_work_item_api_work_sources__source__items__ref__patch",
         "parameters": [
           {

@@ -2,9 +2,8 @@
 work source's browsable items, distinct from the pass-through ``WorkItemEntry``
 (``wire/chunk.py``). Every request model is ``extra="forbid"`` (mirrors ``wire/sse.py``);
 the patch model follows ``ChunkPatchRequest``'s omitted-versus-explicit-null convention
-for the nullable ``stated_priority``. ``stated_priority``/``closure`` type directly on
-the domain's own enums (``wire/chunk.py``'s ``status: ChunkStatus`` precedent), request
-and response alike, rather than a wire-local duplicate of the same vocabulary."""
+for the nullable ``stated_priority``, and ``stated_priority``/``closure`` type on the
+domain's own enums, request and response alike (``status: ChunkStatus`` precedent)."""
 
 from __future__ import annotations
 

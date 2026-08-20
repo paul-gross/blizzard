@@ -158,14 +158,11 @@ def patch_work_item(
 ) -> WorkItemView:
     """Replace the given fields in place, all-or-nothing. 404 for an unknown source or
     an unallocated ref (D9); 409 for a known source with no editor (D4) or an item that
-    already carries a closure (D5); 422 for a blank title or body.
-
-    Reads the pointer exactly once — inside the domain service the sentinel-tagged
-    ``WorkItemEdit`` below resolves against, mirroring ``ChunkEdit``/``UNSET``
-    (``hub/domain/edit.py``) rather than merging omitted-versus-explicit fields here at
-    the edge."""
+    already carries a closure (D5); 422 for a blank title or body."""
     source_obj, editor = _require_editor(source, services)
     pointer = WorkRef(source=source, ref=ref)
+    # Sentinel-tagged rather than merged here: filling an omitted field at the edge needs a
+    # second, unguarded read of the pointer, which races a concurrent withdrawal.
     edit = WorkItemEdit(
         title=_stripped(request.title, "title") if request.title is not None else UNSET,
         body=_stripped(request.body, "body") if request.body is not None else UNSET,

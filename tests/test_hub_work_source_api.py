@@ -148,6 +148,20 @@ def test_patch_and_delete_of_an_already_withdrawn_item_are_409(tmp_path: Path) -
     assert hub.client.delete(f"/api/work-sources/hub/items/{ref}").status_code == 409
 
 
+def test_the_listing_route_threads_its_limit_and_refuses_one_out_of_range(tmp_path: Path) -> None:
+    """The bound is the route's, not just the store's: a `limit` the handler declares but
+    never passes on would leave `GET .../items` the unbounded full-table scan it was, with
+    the store-tier limit test still green."""
+    hub = build_hub(tmp_path)
+    for i in range(3):
+        hub.client.post("/api/work-sources/hub/items", json={"title": f"t{i}", "body": "b"})
+
+    assert len(hub.client.get("/api/work-sources/hub/items", params={"limit": 2}).json()["items"]) == 2
+    assert len(hub.client.get("/api/work-sources/hub/items").json()["items"]) == 3  # under the default cap
+    assert hub.client.get("/api/work-sources/hub/items", params={"limit": 0}).status_code == 422
+    assert hub.client.get("/api/work-sources/hub/items", params={"limit": 1001}).status_code == 422
+
+
 def test_delete_is_409_while_a_live_chunk_holds_the_item(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     ref = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["ref"]

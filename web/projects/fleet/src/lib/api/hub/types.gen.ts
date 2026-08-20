@@ -3613,11 +3613,7 @@ export type WorkItemPatchRequest = {
 /**
  * WorkItemPriority
  *
- * The three stated-priority values a create/edit may set (blizzard#358) — the
- * domain's own validated vocabulary, not merely the wire model's ``Literal``: a
- * non-HTTP caller of :class:`~blizzard.hub.domain.work_items.WorkItemEditService`
- * must pass a member of this enum, not an unconstrained string. The column itself
- * stays an unconstrained ``str | None`` (``hub/store/schema.py``, ``bzh:sql-portable``).
+ * The three stated-priority values a create or edit may set (blizzard#358).
  */
 export type WorkItemPriority = 'low' | 'normal' | 'high';
 

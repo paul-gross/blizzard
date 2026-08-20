@@ -42,9 +42,8 @@ class WorkItemStore:
             rows = conn.execute(
                 select(s.work_items)
                 .where(s.work_items.c.source == source)
-                # (created_at, work_item_id) desc — created_at alone is not unique, and a
-                # ULID work_item_id sorts lexically by creation, the same tiebreaker
-                # graph_store.py's get_enabled_by_name uses (bzh:sql-portable).
+                # created_at is not unique; the ULID work_item_id breaks the tie lexically by
+                # creation, as graph_store.py's get_enabled_by_name does (bzh:sql-portable).
                 .order_by(desc(s.work_items.c.created_at), desc(s.work_items.c.work_item_id))
                 .limit(limit)
             ).all()
