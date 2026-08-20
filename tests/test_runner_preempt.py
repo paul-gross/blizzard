@@ -331,7 +331,7 @@ def test_a_restart_does_not_spend_the_nodes_retry_budget(tmp_path):  # type: ign
         pid = 100 + round_
         handle = WorkerHandle(session_id=f"sess-{round_}", pid=pid, process_start_time=f"start-{pid}")
         live = store.active_lease_for_chunk("ch_1")
-        assert live is not None
+        assert live is not None and live.pid is not None and live.process_start_time is not None
         ctx = _ctx(
             store,
             hub,

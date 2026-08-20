@@ -74,8 +74,10 @@ def test_adv_dwf_declares_the_four_tiers_and_bounds_only_the_accumulating_ones()
     # rotation cannot preempt, not a routine event that fires repeatedly inside one build.
     assert {s.compaction_window for s in doc.sessions.values()} == {"450000"}
     window = doc.sessions["code"].rotate
+    declared = doc.sessions["code"].compaction_window
     assert window is not None and window.max_context_tokens is not None
-    assert int(doc.sessions["code"].compaction_window) > window.max_context_tokens
+    assert declared is not None
+    assert int(declared) > window.max_context_tokens
 
 
 def test_adv_dwf_keeps_verify_off_the_pool_build_resumes() -> None:
