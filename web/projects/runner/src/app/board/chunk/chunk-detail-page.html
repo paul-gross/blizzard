@@ -15,15 +15,22 @@
   @if (detail(); as d) {
     @switch (tab()) {
       @case ('general') {
-        <app-chunk-general-tab [detail]="d" [workItems]="workItems()" />
+        <app-chunk-general-tab [detail]="d" [workItems]="workItems()" (pickStep)="onSelectStep($event)" />
+      }
+      @case ('node-history') {
+        <app-chunk-node-history-tab
+          [detail]="d"
+          [selectedKey]="stepKey()"
+          [stepArtifacts]="selectedStepArtifacts()"
+          (pickStep)="onSelectStep($event)"
+        />
       }
       @case ('artifacts') {
-        <fleet-kit-panel class="section" data-testid="section-artifacts" label="artifacts">
-          <!-- Heading suppressed: the enclosing panel's label already
-               says "artifacts". The default stays true for the board
-               dock, which wraps this in a bare <section> instead. -->
-          <fleet-chunk-detail-artifacts [detail]="d" [expandable]="true" [heading]="false" />
-        </fleet-kit-panel>
+        <fleet-chunk-artifacts-panel
+          [artifacts]="d.artifacts ?? []"
+          [selectedKey]="artifactKey()"
+          (pickArtifact)="onSelectArtifact($event)"
+        />
       }
       @case ('transcripts') {
         <app-chunk-transcripts-tab

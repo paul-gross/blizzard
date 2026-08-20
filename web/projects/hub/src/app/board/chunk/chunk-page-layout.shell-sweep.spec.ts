@@ -99,7 +99,7 @@ const NEEDS_HUMAN_DETAIL: hubApi.ChunkDetail = {
 async function render(detail: hubApi.ChunkDetail = DETAIL) {
   await TestBed.configureTestingModule({
     imports: [ChunkGeneralTab],
-    providers: [provideZonelessChangeDetection()],
+    providers: [provideZonelessChangeDetection(), provideRouter([])],
   }).compileComponents();
   const fixture = TestBed.createComponent(ChunkGeneralTab);
   fixture.componentRef.setInput('detail', detail);

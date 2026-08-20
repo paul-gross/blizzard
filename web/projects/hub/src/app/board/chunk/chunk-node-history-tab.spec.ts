@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import type { ArtifactView, hubApi } from 'fleet';
 
 import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
@@ -45,13 +46,15 @@ interface RenderOptions {
   isForbidden?: boolean;
   segmentState?: 'loading' | 'error' | 'empty' | 'ready';
   segmentData?: { final: boolean; segment_id: string; truncated: boolean; turns?: unknown[] };
+  continuedFrom?: { segment_id: string; spawn_generation: number } | null;
+  continuesIn?: { segment_id: string; spawn_generation: number } | null;
 }
 
 async function render(options: RenderOptions = {}) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [ChunkNodeHistoryTab],
-    providers: [provideZonelessChangeDetection()],
+    providers: [provideZonelessChangeDetection(), provideRouter([])],
   }).compileComponents();
   const fixture = TestBed.createComponent(ChunkNodeHistoryTab);
   fixture.componentRef.setInput('detail', DETAIL);
@@ -61,17 +64,18 @@ async function render(options: RenderOptions = {}) {
   fixture.componentRef.setInput('isForbidden', options.isForbidden ?? false);
   fixture.componentRef.setInput('segmentState', options.segmentState ?? 'empty');
   fixture.componentRef.setInput('segmentData', options.segmentData);
+  fixture.componentRef.setInput('continuedFrom', options.continuedFrom ?? null);
+  fixture.componentRef.setInput('continuesIn', options.continuesIn ?? null);
   await fixture.whenStable();
   return fixture;
 }
 
 describe('ChunkNodeHistoryTab', () => {
-  it('renders the timeline with no heading of its own, row activation on, and its own visible/labelled region (review:F10)', async () => {
+  it('renders the selection timeline with its own visible/labelled region', async () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('#chunk-timeline-heading')).toBeNull();
-    const row = el.querySelector('[data-testid="history-step"]');
+    const row = el.querySelector('[data-testid="selection-step"]');
     expect(row?.getAttribute('role')).toBe('button');
 
     const region = el.querySelector('[role="region"]');
@@ -85,7 +89,7 @@ describe('ChunkNodeHistoryTab', () => {
     const fixture = await render({ selectedKey: 'nd_build:1' });
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="history-step"]')?.classList.contains('selected')).toBe(true);
+    expect(el.querySelector('[data-testid="selection-step"]')?.classList.contains('selected')).toBe(true);
   });
 
   it("forwards the timeline's own pickStep straight through, unchanged", async () => {
@@ -94,7 +98,7 @@ describe('ChunkNodeHistoryTab', () => {
     fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
     const el = fixture.nativeElement as HTMLElement;
 
-    (el.querySelector('[data-testid="history-step"]') as HTMLElement).click();
+    (el.querySelector('[data-testid="selection-step"]') as HTMLElement).click();
     expect(emitted).toEqual(['nd_build:1']);
   });
 
@@ -104,6 +108,36 @@ describe('ChunkNodeHistoryTab', () => {
 
     expect(el.querySelector('[data-testid="node-history-select-hint"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="node-history-artifacts-empty"]')).toBeNull();
+  });
+
+  it('renders both accordion sections open by default once a step is selected', async () => {
+    const fixture = await render({ selectedKey: 'nd_build:1' });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const heads = el.querySelectorAll('[data-testid="accordion-section-head"]');
+    expect(heads).toHaveLength(2);
+    for (const head of heads) {
+      expect(head.getAttribute('aria-expanded')).toBe('true');
+    }
+    // Transcripts before artifacts.
+    expect(heads[0].textContent).toContain('Transcript');
+    expect(heads[1].textContent).toContain('Artifacts');
+    expect(el.querySelectorAll('[data-testid="accordion-section-body"]')).toHaveLength(2);
+  });
+
+  it('collapses and re-expands a section independently of the other', async () => {
+    const fixture = await render({ selectedKey: 'nd_build:1', stepArtifacts: [STEP_ARTIFACT] });
+    const el = fixture.nativeElement as HTMLElement;
+    const [transcriptHead, artifactsHead] = Array.from(
+      el.querySelectorAll<HTMLButtonElement>('[data-testid="accordion-section-head"]'),
+    );
+
+    transcriptHead.click();
+    await fixture.whenStable();
+
+    expect(transcriptHead.getAttribute('aria-expanded')).toBe('false');
+    expect(artifactsHead.getAttribute('aria-expanded')).toBe('true');
+    expect(el.querySelector('[data-testid="node-history-artifact-key"]')).not.toBeNull();
   });
 
   it('states the artifact empty case directly, not gated on any query state (D7)', async () => {
@@ -143,7 +177,7 @@ describe('ChunkNodeHistoryTab', () => {
     );
   });
 
-  it("renders the selected step's own transcript once the segment resolves, and flags any segments it did not fetch", async () => {
+  it("renders the selected step's own transcript once the segment resolves", async () => {
     const fixture = await render({
       selectedKey: 'nd_build:1',
       segmentState: 'ready',
@@ -159,6 +193,30 @@ describe('ChunkNodeHistoryTab', () => {
     expect(el.querySelector('[data-testid="node-history-transcript-body"]')?.textContent).toContain(
       'hello from build',
     );
+  });
+
+  it('renders continued-from/continues-in seams and re-emits a followed seam as pickSegment (no dead-end pointer)', async () => {
+    const fixture = await render({
+      selectedKey: 'nd_build:1',
+      segmentState: 'ready',
+      segmentData: { final: true, segment_id: 'sg_2', truncated: false, turns: [] },
+      continuedFrom: { segment_id: 'sg_1', spawn_generation: 0 },
+      continuesIn: { segment_id: 'sg_3', spawn_generation: 2 },
+    });
+    const el = fixture.nativeElement as HTMLElement;
+    const emitted: string[] = [];
+    fixture.componentInstance.pickSegment.subscribe((id) => emitted.push(id));
+
     expect(el.querySelector('[data-testid="node-history-transcript-more"]')).toBeNull();
+
+    const back = el.querySelector<HTMLButtonElement>('[data-testid="transcript-continued-from"]');
+    expect(back?.textContent).toContain('segment 1');
+    back?.click();
+
+    const forward = el.querySelector<HTMLButtonElement>('[data-testid="transcript-continues-in"]');
+    expect(forward?.textContent).toContain('segment 3');
+    forward?.click();
+
+    expect(emitted).toEqual(['sg_1', 'sg_3']);
   });
 });

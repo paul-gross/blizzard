@@ -1,0 +1,56 @@
+<div class="list" data-testid="chunk-issue-list">
+  @for (item of items(); track keyFor(item)) {
+    <fleet-kit-accordion-section
+      [sectionId]="'issue-' + keyFor(item)"
+      [expanded]="isExpanded(item)"
+      (expandedChange)="setExpanded(item, $event)"
+      data-testid="issue-item"
+    >
+      <div accordionHeader class="i-head" data-testid="issue-row">
+        <span class="i-name" data-testid="issue-name" [attr.title]="nameText(item)">{{ nameText(item) }}</span>
+      </div>
+      <!-- Projected beside the accordion trigger, not inside it
+           (`kit-accordion-section.ts`'s own doc comment): a real anchor inside the
+           section's real `<button>` header would be invalid content model and give a
+           click two conflicting targets. This is a real, independently navigable
+           link, so it stays outside the toggle entirely, unlike
+           `chunk-timeline.html`'s nested graph link — that row's toggle is a
+           `role="button"` `<div>`, not a real `<button>`, a different case. -->
+      <a
+        accordionAside
+        class="i-ref"
+        data-testid="issue-ref"
+        [href]="item.web_url"
+        target="_blank"
+        rel="noreferrer"
+        [attr.title]="item.web_url"
+        >- {{ refText(item) }}</a
+      >
+      <!-- `.acc-body` is zero-padded (`kit-accordion-section.css`) for a
+           full-bleed row list projected into it — this detail is prose, not
+           rows, so it pads itself the way that component's own doc comment
+           says plain projected content should. -->
+      <div class="i-detail">
+        @if (item.error) {
+          <p class="notice" data-testid="issue-item-error">
+            Could not load this issue — {{ item.error }}
+          </p>
+        } @else {
+          <pre class="i-body" data-testid="issue-body">{{ item.body }}</pre>
+          <div class="i-messages">
+            <div class="s-head"><span class="tag">Messages · {{ (item.comments ?? []).length }}</span></div>
+            @if ((item.comments ?? []).length === 0) {
+              <p class="none" data-testid="issue-no-messages">No messages.</p>
+            } @else {
+              <ul class="messages" data-testid="issue-messages">
+                @for (c of item.comments ?? []; track $index) {
+                  <li class="message" data-testid="issue-message"><pre class="m-body">{{ c }}</pre></li>
+                }
+              </ul>
+            }
+          </div>
+        }
+      </div>
+    </fleet-kit-accordion-section>
+  }
+</div>

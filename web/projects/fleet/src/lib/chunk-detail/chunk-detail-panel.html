@@ -23,6 +23,7 @@
       <fleet-chunk-detail-facts
         [detail]="detail()"
         [canControl]="canControl()"
+        [graphLinkBase]="graphLinkBase()"
         (editGraph)="editGraph.emit($event)"
       >
         <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail()" />
@@ -37,7 +38,7 @@
       <fleet-chunk-detail-issue-pane [workItems]="workItems()" />
     </section>
     <section class="d-sec d-sec--flush" aria-labelledby="chunk-timeline-heading">
-      <fleet-chunk-detail-timeline [detail]="detail()" />
+      <fleet-chunk-detail-timeline [detail]="detail()" [graphLinkBase]="graphLinkBase()" />
     </section>
     <section class="d-sec d-sec--flush" aria-labelledby="chunk-artifacts-heading">
       <fleet-chunk-detail-artifacts [detail]="detail()" />

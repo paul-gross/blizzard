@@ -7,13 +7,22 @@
   <dd data-testid="fact-runner">{{ runner() }}</dd>
   <dt>Attempts</dt>
   <dd data-testid="fact-attempts">{{ attempts() }}</dd>
-  <ng-content select="[token-breakdown]" />
   <!-- Graph is always shown; the edit row only while the chunk is still
        not_ready (issue #27) — the same shape as the open-question answer
        control, gated on the fact rather than confirmed. -->
   <dt>Graph</dt>
   <dd data-testid="fact-graph">
-    <span data-testid="graph-value" [title]="detail().graph_id">{{ graphLabel() }}</span>
+    @if (graphLinkBase(); as linkBase) {
+      <a
+        class="graph-link"
+        data-testid="graph-value"
+        [routerLink]="[...linkBase, detail().graph_id]"
+        [title]="detail().graph_id"
+        >{{ graphLabel() }}</a
+      >
+    } @else {
+      <span data-testid="graph-value" [title]="detail().graph_id">{{ graphLabel() }}</span>
+    }
     @if (editable() && canControl()) {
       <span class="edit-row">
         <input
@@ -31,3 +40,8 @@
     }
   </dd>
 </dl>
+<!-- The usage/cost breakdown — its own labelled section below the chunk
+     facts, not a sixth-and-seventh row folded into the identity table above: cost and
+     token counts are a different kind of information (derived usage, not chunk
+     identity) and now read as one. -->
+<ng-content select="[token-breakdown]" />

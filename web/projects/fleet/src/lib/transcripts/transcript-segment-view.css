@@ -1,0 +1,26 @@
+:host {
+  display: block;
+}
+.banner {
+  color: var(--amber-hi);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.1em;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--overlay-25);
+  margin: 0 0 6px;
+}
+.seam {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  color: var(--cyan);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  padding: 4px 0;
+  margin-bottom: 4px;
+}

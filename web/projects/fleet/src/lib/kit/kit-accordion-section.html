@@ -1,0 +1,28 @@
+<div class="acc-section" data-testid="accordion-section">
+  <div class="acc-head-row">
+    <button
+      type="button"
+      class="acc-head"
+      [id]="sectionId() + '-head'"
+      [attr.aria-expanded]="expanded()"
+      [attr.aria-controls]="sectionId() + '-body'"
+      data-testid="accordion-section-head"
+      (click)="toggle()"
+    >
+      <span class="acc-head-content"><ng-content select="[accordionHeader]" /></span>
+      <span class="acc-chevron" aria-hidden="true">{{ expanded() ? '▾' : '▸' }}</span>
+    </button>
+    <span class="acc-aside"><ng-content select="[accordionAside]" /></span>
+  </div>
+  @if (expanded()) {
+    <div
+      class="acc-body"
+      [id]="sectionId() + '-body'"
+      role="region"
+      [attr.aria-labelledby]="sectionId() + '-head'"
+      data-testid="accordion-section-body"
+    >
+      <ng-content />
+    </div>
+  }
+</div>

@@ -78,4 +78,38 @@
    */
   --tint-hover: color-mix(in srgb, var(--cyan) 5%, var(--overlay-25));
   --tint-selected: color-mix(in srgb, var(--cyan) 8%, var(--overlay-25));
+
+  /*
+   * The interaction-state surface scale — resting, hovered, and selected as
+   * three deliberately distinct, ascending backgrounds, so a
+   * glance tells "under the cursor" from "actually selected" apart, unlike
+   * `--tint-hover`/`--tint-selected` above (close enough together to read as
+   * one shade repainted twice). Aliases onto the existing
+   * `--panel`/`--panel-hover`/`--panel-hi` ladder rather than minting new
+   * color-mix percentages — `graph-diagram-node-shape.css` already draws a
+   * node's own resting/hovered/selected fill from that exact ladder, so this
+   * reuses it under names that read as a state, not a panel depth.
+   *
+   * The selected state's own left-edge accent is the other half of this
+   * scale: `border-left: 2px solid transparent` reserved at rest so
+   * recoloring it to `--cyan` on selection never shifts the row/card's own
+   * box (`chunk-artifacts-tab.css`'s `.art-item`/`.art-item.active` is the
+   * pattern this follows — reused directly, not redefined as a token, since
+   * every consumer already resolves selection accents through `--cyan`
+   * itself). Hover carries no border of its own — the background step above
+   * is hover's whole signal.
+   *
+   * A consumer of this scale owns no horizontal padding on its *container* —
+   * the padding belongs to the row (or the card, or the accordion section)
+   * that actually carries the background, so that background reaches the
+   * container's full width rather than floating inset from it with a gap on
+   * both sides. `chunk-timeline.ts`'s own `:host` comment is the worked
+   * example: vertical padding stays on the host, horizontal padding moved to
+   * `.step`, the same "consumer decides its own inset" contract
+   * `kit-panel.ts`'s zero-padded `.p-body` already established before this
+   * scale existed.
+   */
+  --surface-resting: var(--panel);
+  --surface-hover: var(--panel-hover);
+  --surface-selected: var(--panel-hi);
 }

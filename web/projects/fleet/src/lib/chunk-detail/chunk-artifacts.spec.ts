@@ -144,68 +144,6 @@ describe('ChunkArtifacts', () => {
     expect(orphan.querySelector('[data-testid="artifact-branch"]')?.textContent?.trim()).toBe('feature/orphan');
   });
 
-  it('in expandable mode, renders rows as buttons that toggle full content in place rather than linking away', async () => {
-    const fixture = TestBed.createComponent(ChunkArtifacts);
-    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
-    fixture.componentRef.setInput('expandable', true);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelectorAll('a.artifact-link')).toHaveLength(0);
-    // Only the asset gets a toggle: the git_commit row has nothing an expand
-    // would reveal (see the `hasBodyToExpand` case below).
-    const buttons = [...el.querySelectorAll<HTMLButtonElement>('button.artifact-link')];
-    expect(buttons).toHaveLength(1);
-
-    const assetRow = el.querySelector('[data-kind="asset"]') as HTMLElement;
-    expect(assetRow.querySelector('[data-testid="artifact-content"]')).toBeNull();
-
-    assetRow.querySelector<HTMLButtonElement>('button.artifact-link')?.click();
-    await fixture.whenStable();
-    expect(assetRow.querySelector('[data-testid="artifact-content"]')?.textContent).toContain(
-      'BLOCKING: the widget endpoint returns 500 on empty input',
-    );
-
-    // Toggling again collapses it back to summary.
-    assetRow.querySelector<HTMLButtonElement>('button.artifact-link')?.click();
-    await fixture.whenStable();
-    expect(assetRow.querySelector('[data-testid="artifact-content"]')).toBeNull();
-  });
-
-  it('in expandable mode, leaves a git_commit row un-toggled so its branch link is not nested in a button', async () => {
-    // The ordinary case for the runner's page: every build node's own commit is a
-    // `git_commit` with a `branch_url`. `ChunkArtifactBody` renders that ref line the
-    // same in `summary` and `full`, so a toggle over it would announce an expansion
-    // that changes nothing — and would put a real `<a>` inside a `<button>`.
-    const fixture = TestBed.createComponent(ChunkArtifacts);
-    fixture.componentRef.setInput('detail', NAMED_DETAIL);
-    fixture.componentRef.setInput('expandable', true);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelectorAll('button.artifact-link')).toHaveLength(0);
-    expect(el.querySelectorAll('[data-testid="artifact-plain"]')).toHaveLength(2);
-    const branch = el.querySelector<HTMLAnchorElement>('a[data-testid="artifact-branch"]');
-    expect(branch?.getAttribute('href')).toBe('https://forge.example/acme/widget/tree/feature/widget');
-    expect(branch?.closest('button')).toBeNull();
-  });
-
-  it('in expandable mode, leaves a contentless asset un-toggled too', async () => {
-    const fixture = TestBed.createComponent(ChunkArtifacts);
-    fixture.componentRef.setInput('detail', {
-      ...REVIEW_FAIL_DETAIL,
-      artifacts: [{ ...REVIEW_FAIL_DETAIL.artifacts![1], content: '' }],
-    });
-    fixture.componentRef.setInput('expandable', true);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelectorAll('button.artifact-link')).toHaveLength(0);
-    expect(el.querySelector('[data-testid="artifact-plain"] [data-testid="artifact-key"]')?.textContent).toContain(
-      'review.review-findings.2',
-    );
-  });
-
   it('renders its own "Artifacts" heading by default (issue #205)', async () => {
     const fixture = TestBed.createComponent(ChunkArtifacts);
     fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);

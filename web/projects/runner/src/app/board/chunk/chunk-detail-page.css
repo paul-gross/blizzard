@@ -11,8 +11,9 @@
   text-decoration: none;
 }
 app-chunk-general-tab,
+app-chunk-node-history-tab,
 app-chunk-transcripts-tab,
-fleet-kit-panel.section {
+fleet-chunk-artifacts-panel {
   flex: 1;
   min-height: 0;
 }

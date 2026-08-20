@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail } from '../api/hub';
 import { formatCost, formatTokens } from '../cost-format';
@@ -33,6 +34,7 @@ import {
 @Component({
   selector: 'fleet-chunk-detail-timeline',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink],
   templateUrl: './chunk-timeline.html',
   styleUrl: './chunk-timeline.css',
 })
@@ -57,6 +59,14 @@ export class ChunkTimeline {
   /** The currently selected row's own key, or `null` — visual only, drawn from the
    * URL by the consumer that owns selection; this component injects no router. */
   readonly selectedKey = input<string | null>(null);
+
+  /** The graphs view's own path segments, before the graph id — when set, a
+   * multi-graph row's own graph badge links there (`/graphs/:graphId`), the same
+   * `graphLinkBase` contract {@link ChunkFacts} already establishes for the Graph fact
+   * row. `null` (the default) is every existing consumer's current behavior — plain
+   * text, since the runner app (this component is shared with it) has no `/graphs`
+   * route to point at. */
+  readonly graphLinkBase = input<readonly string[] | null>(null);
 
   /** Emitted with an activated row's join key, or `null` when the already-selected
    * row is re-activated — the only way to clear a step selection from this component,

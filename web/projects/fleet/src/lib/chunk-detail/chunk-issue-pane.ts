@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
+import { ChunkIssueList } from '../chunk-issue-list';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { type WorkItemsState } from './work-items-state';
 
@@ -7,7 +8,9 @@ import { type WorkItemsState } from './work-items-state';
  * The work item's issue pass-through (issue #24, issue #79) — the chunk's
  * linked forge issue(s): title, body, and messages. Owns its own
  * loading/error/empty triad through the shared kit's async-state component
- * (issue #78) rather than a re-typed `<p class="status">`. Presentational
+ * rather than a re-typed `<p class="status">`, and delegates the
+ * resolved items to {@link ChunkIssueList} — this pane's own concern stays the
+ * fetch triad, the list's is the per-issue accordion row. Presentational
  * only; the forge read itself lives in the container.
  *
  * `placement` (issue #318) forwards to the inner `fleet-kit-async-state`,
@@ -21,7 +24,7 @@ import { type WorkItemsState } from './work-items-state';
 @Component({
   selector: 'fleet-chunk-detail-issue-pane',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState],
+  imports: [ChunkIssueList, KitAsyncState],
   templateUrl: './chunk-issue-pane.html',
   styleUrl: './chunk-issue-pane.css',
 })

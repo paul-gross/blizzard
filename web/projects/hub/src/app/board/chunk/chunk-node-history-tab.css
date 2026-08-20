@@ -17,6 +17,7 @@
 .nh-step {
   flex: 1;
   min-height: 0;
+  padding: 8px;
 }
 .hint {
   margin: 0;
@@ -43,20 +44,13 @@
   display: block;
   padding: 4px 8px;
 }
-.nh-transcript {
-  border-top: 1px solid var(--line);
-}
-.more {
-  margin: 0;
-  padding: 4px 8px 8px;
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-}
-.banner {
-  margin: 0;
-  padding: 4px 8px;
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
+/* Matches the Transcripts tab's own `.seg-body` inset (`chunk-transcripts-tab.css`) —
+   this body wraps the same card-style turn rows and seam buttons, not a full-bleed
+   hover-state list, so the container owning its own padding is the right contract here
+   (`design/tokens.css`'s `--surface-*` note is about the *other* row style). */
+.nh-transcript-body {
+  position: relative;
+  padding: 6px 8px;
 }
 @media (min-width: 720px) {
   .nh-tab {

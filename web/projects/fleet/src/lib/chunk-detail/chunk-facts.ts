@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail, RouteView } from '../api/hub';
 import { compactRef } from '../compact-ref';
@@ -33,7 +34,7 @@ export interface EditGraphEvent {
 @Component({
   selector: 'fleet-chunk-detail-facts',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton],
+  imports: [KitButton, RouterLink],
   templateUrl: './chunk-facts.html',
   styleUrl: './chunk-facts.css',
 })
@@ -45,6 +46,17 @@ export class ChunkFacts {
    * issue #210). Withholds the edit row when `false`, alongside {@link editable};
    * `null`/pending resolves to `false` (hidden until confirmed). */
   readonly canControl = input(false);
+
+  /** The graphs view's own path segments, before the graph id — when set, the Graph
+   * row's value links there (`/graphs/:graphId`, `graphs-page.ts`) so the operator can
+   * jump straight from a chunk to its pinned graph's structure. `null` (the default)
+   * withholds the link and falls back to today's plain-text value, since this
+   * component is shared with the runner app, which has no `/graphs` route at all to
+   * point at (unlike the hub's own `board/chunk` path both apps share) — a consumer
+   * that does have somewhere to send the operator opts in explicitly
+   * (`ChunkDetailHeader.linkBase` follows the same route-address-from-outside
+   * convention, for the same cross-app reason). */
+  readonly graphLinkBase = input<readonly string[] | null>(null);
 
   /** Emitted when the operator sets a not-ready chunk's graph (issue #27). No
    * confirm — repinning either before the chunk has run costs nothing to undo. */

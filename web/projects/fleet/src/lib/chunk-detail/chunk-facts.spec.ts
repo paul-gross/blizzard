@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail } from '../api/hub';
 import { ChunkFacts } from './chunk-facts';
@@ -32,7 +33,7 @@ describe('ChunkFacts', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ChunkFacts],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
   });
 
@@ -68,6 +69,29 @@ describe('ChunkFacts', () => {
     const graphValue = el.querySelector('[data-testid="graph-value"]');
     expect(graphValue?.textContent?.trim()).toBe('G-1');
     expect(graphValue?.getAttribute('title')).toBe('gr_1');
+  });
+
+  it('links the graph value to the graphs view for that graph id when a consumer opts in with graphLinkBase', async () => {
+    const fixture = TestBed.createComponent(ChunkFacts);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('graphLinkBase', ['/graphs']);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const graphValue = el.querySelector('[data-testid="graph-value"]');
+    expect(graphValue?.tagName).toBe('A');
+    expect(graphValue?.getAttribute('href')).toBe('/graphs/gr_1');
+  });
+
+  it('defaults to a plain, unlinked value — graphLinkBase is null until a consumer opts in (this component is shared with the runner app, which has no /graphs route)', async () => {
+    const fixture = TestBed.createComponent(ChunkFacts);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const graphValue = el.querySelector('[data-testid="graph-value"]');
+    expect(graphValue?.tagName).toBe('SPAN');
+    expect(graphValue?.textContent?.trim()).toBe('G-1');
   });
 
   it('renders the graph as compactRef#name-YYYYMMDD when the graph name and creation date are present (issue #102)', async () => {

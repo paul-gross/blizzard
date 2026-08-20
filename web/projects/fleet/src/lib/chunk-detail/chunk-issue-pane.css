@@ -6,86 +6,10 @@
    whole body (kit-panel.ts's own .p-body positioning comment); harmless
    for placement=inline, which never positions absolutely. min-height
    keeps the centered status from looking stranded before any issue
-   content lands; an inline consumer flows normally and grows past it. */
+   content lands; an inline consumer flows normally and grows past it.
+   No horizontal padding here either — `fleet-chunk-issue-list`'s own rows
+   are full-bleed and need this pane's whole width to reach. */
 .wrap {
   position: relative;
   min-height: 40px;
-}
-.tag {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-}
-.s-head {
-  margin-bottom: 6px;
-}
-.none {
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-}
-.notice {
-  margin: 0;
-  padding: 4px 6px;
-  border: 1px solid var(--red-dim);
-  border-left-width: 2px;
-  background: var(--overlay-20);
-  color: var(--red);
-  font-size: var(--fs-xs);
-}
-.issue {
-  border: 1px solid var(--line);
-  background: var(--overlay-20);
-  padding: 5px 6px;
-}
-.issue + .issue {
-  margin-top: 6px;
-}
-.i-head {
-  margin-bottom: 4px;
-}
-.i-label {
-  color: var(--cyan);
-  font-size: var(--fs-sm);
-  text-decoration: none;
-  overflow-wrap: anywhere;
-}
-.i-label:hover {
-  text-decoration: underline;
-}
-.i-title {
-  margin: 2px 0 6px;
-  color: var(--text);
-  font-size: var(--fs-sm);
-  line-height: 1.45;
-}
-.i-body {
-  margin: 0;
-  padding: 4px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: var(--overlay-30);
-  color: var(--text);
-  font-size: var(--fs-sm);
-}
-.i-messages {
-  margin-top: 6px;
-}
-.messages {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.m-body {
-  margin: 0;
-  padding: 4px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  border: 1px solid var(--line);
-  background: var(--overlay-25);
-  color: var(--text);
-  font-size: var(--fs-sm);
 }

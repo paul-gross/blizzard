@@ -55,6 +55,12 @@ export class ChunkDetail {
   /** The selected chunk id, or `null` when the dock is closed. */
   readonly chunkId = input<string | null>(null);
 
+  /** The graphs view's own path segments, forwarded straight to
+   * {@link ChunkDetailPanel.graphLinkBase} — `null` (the default) withholds the
+   * dock's graph links, since this container is mountable from any host and must
+   * not hardcode a hub-only route itself. */
+  readonly graphLinkBase = input<readonly string[] | null>(null);
+
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
 

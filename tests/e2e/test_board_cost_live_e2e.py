@@ -168,8 +168,11 @@ def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_a
                 expect(page.get_by_test_id("cost-total-usd")).to_contain_text("$0.42")
                 expect(page.get_by_test_id("cost-partial-badge")).to_have_count(0)
 
-                # All four token classes inline, no expand toggle (issue #182); the line is pinned whole.
-                expect(page.get_by_test_id("fact-tokens")).to_have_text("1.2k I, 800 O, 300 CR, 100 CC")
+                # All four token classes render inline, one labelled row apiece, no expand toggle.
+                expect(page.get_by_test_id("fact-tokens-input")).to_have_text("1.2k")
+                expect(page.get_by_test_id("fact-tokens-output")).to_have_text("800")
+                expect(page.get_by_test_id("fact-tokens-cache-read")).to_have_text("300")
+                expect(page.get_by_test_id("fact-tokens-cache-creation")).to_have_text("100")
 
                 # A cost-absent (crash/reap-path) fact makes the total a lower bound; the
                 # partial marker must appear live everywhere it renders.

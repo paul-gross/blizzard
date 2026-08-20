@@ -26,8 +26,8 @@ import {
  * (blizzard#203) — work item and issues stacked in the left column, node
  * history beside them spanning both rows, asks · decisions spanning the full
  * width below — collapsing to one stacked column, DOM order, below it.
- * Presentational only: inputs in, the three operator-action outputs back
- * out, no injection.
+ * Presentational only: inputs in, the three operator-action outputs plus
+ * {@link pickStep} back out, no injection.
  */
 @Component({
   selector: 'app-chunk-general-tab',
@@ -63,6 +63,12 @@ export class ChunkGeneralTab {
 
   /** Emitted when the operator sets a not-ready chunk's graph. */
   readonly editGraph = output<EditGraphEvent>();
+
+  /** Emitted with a node's join key when the operator activates it in this tab's own
+   * node-history summary — {@link ChunkTimeline.pickStep} forwarded straight through, a
+   * pure activation signal this tab holds no selection state of its own for (the
+   * container routes it to the Node history tab, where the row it names is selected). */
+  readonly pickStep = output<string | null>();
 
   protected readonly pointerCount = computed(() => this.detail().work_refs?.length ?? 0);
 }

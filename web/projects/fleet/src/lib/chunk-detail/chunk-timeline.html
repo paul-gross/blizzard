@@ -21,7 +21,21 @@
           <span class="att">{{ row.kind === 'migration' ? '⤳' : row.epoch }}</span>
           <span class="nd" [attr.title]="row.nodeId">
             @if (multiGraph() && row.graphName) {
-              <span class="gr" data-testid="history-graph">{{ row.graphName }}/</span>
+              @if (graphLinkBase(); as linkBase) {
+                @if (row.graphId; as graphId) {
+                  <a
+                    class="gr"
+                    data-testid="history-graph"
+                    [routerLink]="[...linkBase, graphId]"
+                    (click)="$event.stopPropagation()"
+                    >{{ row.graphName }}/</a
+                  >
+                } @else {
+                  <span class="gr" data-testid="history-graph">{{ row.graphName }}/</span>
+                }
+              } @else {
+                <span class="gr" data-testid="history-graph">{{ row.graphName }}/</span>
+              }
             }{{ row.nodeName }}</span
           >
           <!-- The judgement that closed the node, in a column of its own so the

@@ -1,0 +1,71 @@
+:host {
+  display: block;
+  border: 1px solid var(--line);
+}
+:host + :host {
+  border-top: none;
+}
+/* The trigger and any content projected beside it (`[accordionAside]`) sit in one
+   row so a consumer's own interactive content — a ref link `chunk-issue-list.html`
+   projects, for instance — reaches the header without nesting inside the `<button>`
+   below it: a real anchor inside a real button is invalid content model, and gives a
+   click two conflicting targets. */
+.acc-head-row {
+  display: flex;
+  align-items: stretch;
+}
+.acc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--overlay-25);
+  border: none;
+  padding: 6px 8px;
+  font: inherit;
+  color: var(--label);
+  text-align: left;
+  cursor: pointer;
+}
+.acc-head:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.acc-head:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: -2px;
+}
+.acc-head-content {
+  flex: 1;
+  min-width: 0;
+}
+.acc-chevron {
+  flex: none;
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+}
+/* Empty for every consumer that projects nothing into `[accordionAside]` — `:empty`
+   drops it from the row rather than leaving a bare strip of background beside the
+   trigger. */
+.acc-aside {
+  display: flex;
+  flex: none;
+  align-items: center;
+  background: var(--overlay-25);
+  padding: 6px 8px;
+}
+.acc-aside:empty {
+  display: none;
+}
+/* Zero-padded, the same "consumer decides" contract `kit-panel.ts`'s own
+   `.p-body` establishes — projected content that is itself a list of full-bleed
+   interactive rows needs this edge unpadded, or its own rows would float
+   inset from it exactly the way this section's rows once did before that fix
+   (`design/tokens.css`'s own note on the interaction-state scale). Plain
+   projected content (a paragraph, a single control) pads itself instead. */
+.acc-body {
+  padding: 0;
+}

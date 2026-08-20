@@ -1,11 +1,10 @@
 <div class="nh-tab" data-testid="chunk-node-history-tab">
   <div class="nh-timeline" role="region" aria-labelledby="nh-timeline-heading">
     <div class="s-head"><span class="tag" id="nh-timeline-heading">Timeline</span></div>
-    <fleet-chunk-detail-timeline
+    <fleet-chunk-detail-timeline-selection
       [detail]="detail()"
-      [heading]="false"
-      [activatable]="true"
       [selectedKey]="selectedKey()"
+      [graphLinkBase]="graphLinkBase"
       (pickStep)="pickStep.emit($event)"
     />
   </div>
@@ -13,53 +12,84 @@
     @if (selectedKey() === null) {
       <p class="hint" data-testid="node-history-select-hint">Select a step above.</p>
     } @else {
-      <div class="nh-artifacts">
-        <div class="s-head"><span class="tag">Artifacts</span></div>
-        @if (stepArtifacts().length === 0) {
-          <p class="none" data-testid="node-history-artifacts-empty">No artifacts for this step.</p>
-        } @else {
-          @for (art of stepArtifacts(); track art.key) {
-            <fleet-chunk-detail-artifact-body class="art" [artifact]="art" body="full" testid="node-history-artifact" />
+      <fleet-kit-accordion-section
+        sectionId="node-history-transcript"
+        [expanded]="transcriptsExpanded()"
+        (expandedChange)="transcriptsExpanded.set($event)"
+      >
+        <span accordionHeader>Transcript</span>
+        <div class="nh-transcript-body">
+          @if (isForbidden()) {
+            <fleet-kit-async-state
+              state="empty"
+              placement="inline"
+              tone="accent"
+              emptyText="NO PERMISSION TO READ TRANSCRIPTS"
+              emptyTestid="node-history-transcript-forbidden"
+            />
+          } @else if (indexState() === 'loading') {
+            <fleet-kit-async-state
+              state="loading"
+              placement="inline"
+              loadingText="LOADING…"
+              loadingTestid="node-history-transcript-loading"
+            />
+          } @else if (indexState() === 'error') {
+            <fleet-kit-async-state
+              state="error"
+              placement="inline"
+              errorText="TRANSCRIPT UNAVAILABLE"
+              errorTestid="node-history-transcript-error"
+            />
+          } @else if (segmentState() === 'empty') {
+            <fleet-kit-async-state
+              state="empty"
+              placement="inline"
+              emptyText="NO TRANSCRIPT FOR THIS STEP"
+              emptyTestid="node-history-transcript-empty"
+            />
+          } @else if (segmentState() === 'loading') {
+            <fleet-kit-async-state
+              state="loading"
+              placement="inline"
+              loadingText="LOADING…"
+              loadingTestid="node-history-transcript-loading"
+            />
+          } @else if (segmentState() === 'error') {
+            <fleet-kit-async-state
+              state="error"
+              placement="inline"
+              errorText="TRANSCRIPT UNAVAILABLE"
+              errorTestid="node-history-transcript-error"
+            />
+          } @else {
+            <fleet-transcript-segment-view
+              [turns]="mergedTurns()"
+              [truncated]="segmentData()?.truncated ?? false"
+              [continuedFrom]="continuedFrom()"
+              [continuesIn]="continuesIn()"
+              (pickSegment)="pickSegment.emit($event)"
+              data-testid="node-history-transcript-body"
+            />
           }
-        }
-      </div>
-      <div class="nh-transcript">
-        <div class="s-head"><span class="tag">Transcript</span></div>
-        @if (isForbidden()) {
-          <fleet-kit-async-state
-            state="empty"
-            tone="accent"
-            emptyText="NO PERMISSION TO READ TRANSCRIPTS"
-            emptyTestid="node-history-transcript-forbidden"
-          />
-        } @else if (indexState() === 'loading') {
-          <fleet-kit-async-state state="loading" loadingText="LOADING…" loadingTestid="node-history-transcript-loading" />
-        } @else if (indexState() === 'error') {
-          <fleet-kit-async-state state="error" errorText="TRANSCRIPT UNAVAILABLE" errorTestid="node-history-transcript-error" />
-        } @else if (segmentState() === 'empty') {
-          <fleet-kit-async-state
-            state="empty"
-            emptyText="NO TRANSCRIPT FOR THIS STEP"
-            emptyTestid="node-history-transcript-empty"
-          />
-        } @else if (segmentState() === 'loading') {
-          <fleet-kit-async-state state="loading" loadingText="LOADING…" loadingTestid="node-history-transcript-loading" />
-        } @else if (segmentState() === 'error') {
-          <fleet-kit-async-state state="error" errorText="TRANSCRIPT UNAVAILABLE" errorTestid="node-history-transcript-error" />
-        } @else {
-          @if (turnsCapped()) {
-            <p class="banner" data-testid="node-history-transcript-turns-capped">
-              SHOWING THE MOST RECENT {{ MAX_RENDERED_TURNS }} TURNS
-            </p>
+        </div>
+      </fleet-kit-accordion-section>
+      <fleet-kit-accordion-section
+        sectionId="node-history-artifacts"
+        [expanded]="artifactsExpanded()"
+        (expandedChange)="artifactsExpanded.set($event)"
+      >
+        <span accordionHeader>Artifacts</span>
+        <div class="nh-artifacts-body">
+          @if (stepArtifacts().length === 0) {
+            <p class="none" data-testid="node-history-artifacts-empty">No artifacts for this step.</p>
+          } @else {
+            @for (art of stepArtifacts(); track art.key) {
+              <fleet-chunk-detail-artifact-body class="art" [artifact]="art" body="full" testid="node-history-artifact" />
+            }
           }
-          <fleet-transcript-viewer [turns]="cappedTurns()" data-testid="node-history-transcript-body" />
-          @if (extraSegmentCount() > 0) {
-            <p class="more" data-testid="node-history-transcript-more">
-              +{{ extraSegmentCount() }} more segment{{ extraSegmentCount() === 1 ? '' : 's' }} — open in the Transcripts tab.
-            </p>
-          }
-        }
-      </div>
+        </div>
+      </fleet-kit-accordion-section>
     }
   </section>
 </div>

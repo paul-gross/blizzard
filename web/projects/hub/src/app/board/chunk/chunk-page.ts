@@ -113,9 +113,10 @@ export class ChunkPage {
     this.selection.select(tab as ChunkDetailTab, this.selection.artifactKey());
   }
 
-  /** A row activated in the Node history tab writes its join key back to the URL —
-   * {@link ChunkNodeHistoryTab} forwards it straight from {@link ChunkTimeline}, a pure
-   * function of that param, never its own selection state. */
+  /** A node activated in the Node history tab, or in {@link ChunkGeneralTab}'s own
+   * node-history summary, writes its join key back to the URL and switches to the Node
+   * history tab — both forward the same `pickStep`, a pure function of that param,
+   * never their own selection state. */
   protected onSelectStep(stepKey: string | null): void {
     this.selection.selectStep(stepKey);
   }

@@ -1,47 +1,6 @@
-<div class="art-tab" data-testid="chunk-artifacts-tab">
-  <nav class="art-nav">
-    @if (sortedArtifacts().length === 0) {
-      <p class="none" data-testid="artifacts-tab-nav-empty">No artifacts yet.</p>
-    } @else {
-      <ul class="art-list" data-testid="artifacts-tab-nav">
-        @for (art of sortedArtifacts(); track art.key) {
-          <li>
-            <button
-              type="button"
-              class="art-item"
-              [class.active]="art.key === effectiveKey()"
-              data-testid="artifacts-tab-nav-item"
-              [attr.data-artifact-key]="art.key"
-              (click)="pickArtifact.emit(art.key)"
-            >
-              <span class="key">{{ art.key }}</span>
-              <span class="sub">
-                @if (art.recorded_at) {
-                  <fleet-when [iso]="art.recorded_at" />
-                }
-                <span class="kind">{{ art.kind }}</span>
-              </span>
-            </button>
-          </li>
-        }
-      </ul>
-    }
-  </nav>
-  <section class="art-view">
-    <fleet-kit-async-state
-      [state]="viewState()"
-      [emptyText]="emptyMessage()"
-      emptyTestid="artifacts-tab-empty"
-    >
-      @if (selectedArtifact(); as art) {
-        <fleet-chunk-detail-artifact-body
-          class="body"
-          [artifact]="art"
-          body="full"
-          testid="artifacts-tab-artifact"
-          data-testid="artifacts-tab-artifact"
-        />
-      }
-    </fleet-kit-async-state>
-  </section>
-</div>
+<fleet-chunk-artifacts-panel
+  [artifacts]="artifacts()"
+  [selectedKey]="selectedKey()"
+  testidPrefix="artifacts-tab"
+  (pickArtifact)="pickArtifact.emit($event)"
+/>

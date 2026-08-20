@@ -1,22 +1,60 @@
 :host {
-  display: contents;
+  display: block;
 }
-/* This component's own copy of ChunkFacts's .kv dt/.kv dd rules (chunk-facts.ts)
-   — see the class doc comment for why the parent's rules can't reach these rows. */
-dt {
+/* This table's own copy of `chunk-facts.css`'s `.kv` shape (grid, dt/dd colors) —
+   Angular's emulated style encapsulation does not reach across the component
+   boundary between this table and `ChunkFacts`'s own, even though both are
+   content-projected into the same panel and sit one after the other. Same
+   `--kv-label-col`/`--chunk-facts-pad` custom properties as `chunk-facts.css`
+   (set on `ChunkFacts`'s `:host`, inherited here since this component's rendered
+   DOM still lands inside that host's subtree) so the two tables' label and value
+   columns land at the same horizontal position regardless of either table's own
+   content — a fixed shared column width rather than each table sizing to its own
+   longest label, which is what would let them drift apart. */
+.kv {
+  display: grid;
+  grid-template-columns: var(--kv-label-col, 74px) 1fr;
+  gap: 2px 8px;
+  padding: var(--chunk-facts-pad, 8px);
+  font-size: var(--fs-sm);
+}
+.kv dt {
   color: var(--label);
   font-size: var(--fs-label);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   align-self: center;
 }
-dd {
+.kv dd {
   margin: 0;
   color: var(--amber);
   overflow-wrap: anywhere;
 }
-/* The PARTIAL badge marks a cost total whose sum is a lower bound (issue #60) —
-   never silently understated. */
+/* A zero count reads as noise next to a real figure at the same full-strength
+   value color — muted rather than dropped, since "no tokens of this class" is
+   still a fact worth keeping visible. Keyed on the value being zero, not on
+   which row it is: a non-zero Cache Read/Creation count is exactly as
+   significant as a non-zero Input/Output one and stays at full strength, same
+   as a genuinely zero Input or Output would mute the same way. */
+.kv dd.zero {
+  color: var(--label-dim);
+}
+/* The "Usage" section header — the same small uppercase tag every other panel in
+   this dock uses to label a subsection (`chunk-issue-pane.css`'s "Messages · N",
+   `chunk-awaiting-human.css`'s "Awaiting human"), not a new header style: a label
+   plus spacing, no border or fill, so the grouping cue reads without adding
+   visual weight the rest of the panel doesn't carry. */
+.tag {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.s-head {
+  margin-bottom: 6px;
+}
+/* The PARTIAL badge marks a cost total whose sum is a lower bound — never
+   silently understated. */
 .partial-badge {
   margin-left: 4px;
   padding: 0 4px;

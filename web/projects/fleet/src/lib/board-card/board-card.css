@@ -2,7 +2,7 @@
   box-sizing: border-box;
   border: 1px solid var(--line);
   border-left: 3px solid var(--amber);
-  background: var(--overlay-25);
+  background: var(--surface-resting);
   padding: 4px 6px;
   display: flex;
   flex-direction: column;
@@ -10,18 +10,33 @@
   width: 100%;
   min-width: 0;
 }
+/* Hover reads as the background step plus a dim-cyan edge on three sides
+   (never the left, which stays status-colored) — the background step alone
+   measured too subtle against this card's own borders/text/chrome to read
+   at a glance; the edge tint reuses the same dim cyan `runner-view.css`
+   already draws a hover-tier accent with, one step below `.selected`'s
+   full-brightness cyan. */
 .card:hover {
-  border-color: var(--cyan);
-  background: var(--tint-hover);
+  border-top-color: var(--cyan-dim);
+  border-right-color: var(--cyan-dim);
+  border-bottom-color: var(--cyan-dim);
+  background: var(--surface-hover);
 }
-/* The chunk whose detail fills the dock — an outline ring (not border-color, which
-   would repaint the status-colored left bar) plus a stronger cyan wash than a
-   merely hovered card carries, so the board answers "which one am I looking at"
-   at a glance even while hovering a different card. */
-.card.selected {
-  outline: 1px solid var(--cyan);
-  outline-offset: -1px;
-  background: var(--tint-selected);
+/* Selected reads as the lightest background plus the left-edge accent, the
+   same pattern node history and the artifacts tab use: the status color
+   below yields to it while selected — a transient override, not a loss of
+   the status signal, since the status rules below re-take the edge the
+   instant `.selected` no longer matches. `[data-status]` (always present,
+   see `board-card.html`) bumps this selector's own specificity a notch over
+   theirs, so it wins regardless of which rule a future edit places last. */
+.card.selected[data-status] {
+  border-left-color: var(--cyan);
+  background: var(--surface-selected);
+}
+/* Selection is the "stickier" state: hovering an already-selected card keeps
+   the selected background rather than dimming to the hover tone. */
+.card.selected:hover {
+  background: var(--surface-selected);
 }
 /* The DONE column's cards (issue #137: done and stopped, the two
    statuses STATUS_LANE folds onto it) keep their green accent, and an

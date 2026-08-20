@@ -1,10 +1,14 @@
 /* The dock has no chrome of its own around this component, so this host
-   pads itself — `fleet-kit-panel`'s zero-padded `.p-body` (kit-panel.ts)
-   means a panel-wrapped consumer isn't double-padded; the dock's own
-   `.d-sec` (chunk-detail-panel.ts) drops its padding here to match. */
+   pads itself vertically — `fleet-kit-panel`'s zero-padded `.p-body`
+   (kit-panel.ts) means a panel-wrapped consumer isn't double-padded; the
+   dock's own `.d-sec` (chunk-detail-panel.ts) drops its padding here to
+   match. Horizontal padding lives on `.step`/`.s-head`/`.none` instead of
+   here (below) — a row's own hover/selected background has to reach this
+   host's full width to read as a band rather than a floating inset
+   rectangle, which a horizontally-padded host would clip short of. */
 :host {
   display: block;
-  padding: 6px 8px;
+  padding: 6px 0;
 }
 .tag {
   font-size: var(--fs-label);
@@ -13,9 +17,11 @@
   color: var(--label);
 }
 .s-head {
+  padding: 0 8px;
   margin-bottom: 6px;
 }
 .none {
+  padding: 0 8px;
   color: var(--label-dim);
   font-size: var(--fs-xs);
 }
@@ -45,26 +51,44 @@
   grid-template-columns: subgrid;
   gap: 6px;
   align-items: baseline;
-  padding: 3px 0;
+  box-sizing: border-box;
+  padding: 3px 8px;
   border-bottom: 1px solid var(--line);
+  /* Reserved transparent, same as `.art-item` (`chunk-artifacts-tab.css`) —
+     `.selected` below only ever recolors this edge, never adds it, so
+     selecting a row never shifts the row's own width. The row's own
+     horizontal padding (not `:host`'s, see above) is what lets this edge
+     — and the hover/selected background — sit flush against the panel's
+     left edge instead of floating inset from it. */
+  border-left: 2px solid transparent;
   font-size: var(--fs-sm);
   line-height: 1.5;
 }
+/* Hover is a background step alone — no border of its own. The left-edge
+   accent is reserved for `.selected` (below), the same split
+   `chunk-artifacts-tab.css`'s `.art-item`/`.art-item.active` already draws. */
 .step:hover {
-  border-bottom-color: var(--cyan);
-  background: var(--tint-hover);
+  background: var(--surface-hover);
 }
 .step[role='button'] {
   cursor: pointer;
 }
+/* Keyboard focus is its own signal, not a hover stand-in — a mouse user
+   never sees it, so it keeps the ring hover deliberately no longer draws. */
 .step[role='button']:focus-visible {
   outline: 1px solid var(--cyan);
   outline-offset: -2px;
 }
 .step.selected {
-  outline: 1px solid var(--cyan);
-  outline-offset: -2px;
-  background: var(--tint-selected);
+  border-left-color: var(--cyan);
+  background: var(--surface-selected);
+}
+/* Selection is the "stickier" state: hovering an already-selected row keeps
+   the selected background rather than dimming to the hover tone. Two classes
+   outrank one class + a pseudo-class regardless of declaration order, so this
+   holds even if the rules above get reordered. */
+.step.selected:hover {
+  background: var(--surface-selected);
 }
 .step .att {
   color: var(--label-dim);
@@ -111,6 +135,18 @@
 /* The graph a step happened in, shown only on a two-graph (migrated) timeline. */
 .step .nd .gr {
   color: var(--label-dim);
+}
+/* Only an `<a>` when `graphLinkBase` is set (a `<span>` otherwise) — the shared rule
+   above already colors either; this just adds the link affordance the `<span>` case
+   never matches. */
+a.gr {
+  text-decoration: none;
+}
+a.gr:hover,
+a.gr:focus-visible {
+  color: var(--cyan);
+  text-decoration: underline;
+  outline: none;
 }
 .step[data-choice='waiting'] .verdict,
 .step[data-choice='paused'] .verdict {

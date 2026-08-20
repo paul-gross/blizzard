@@ -6,6 +6,8 @@
   [isForbidden]="isForbidden()"
   [segmentState]="segmentState()"
   [segmentData]="segmentQuery.data()"
-  [extraSegmentCount]="extraSegmentCount()"
+  [continuedFrom]="continuedFrom()"
+  [continuesIn]="continuesIn()"
   (pickStep)="pickStep.emit($event)"
+  (pickSegment)="onPickSegment($event)"
 />

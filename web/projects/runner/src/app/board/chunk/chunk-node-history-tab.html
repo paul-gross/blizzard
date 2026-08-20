@@ -1,0 +1,26 @@
+<div class="nh-tab" data-testid="chunk-node-history-tab">
+  <div class="nh-timeline" role="region" aria-labelledby="nh-timeline-heading">
+    <div class="s-head"><span class="tag" id="nh-timeline-heading">Timeline</span></div>
+    <fleet-chunk-detail-timeline-selection
+      [detail]="detail()"
+      [selectedKey]="selectedKey()"
+      (pickStep)="pickStep.emit($event)"
+    />
+  </div>
+  <section class="nh-step">
+    @if (selectedKey() === null) {
+      <p class="hint" data-testid="node-history-select-hint">Select a step above.</p>
+    } @else {
+      <div class="nh-artifacts">
+        <div class="s-head"><span class="tag">Artifacts</span></div>
+        @if (stepArtifacts().length === 0) {
+          <p class="none" data-testid="node-history-artifacts-empty">No artifacts for this step.</p>
+        } @else {
+          @for (art of stepArtifacts(); track art.key) {
+            <fleet-chunk-detail-artifact-body class="art" [artifact]="art" body="full" testid="node-history-artifact" />
+          }
+        }
+      </div>
+    }
+  </section>
+</div>

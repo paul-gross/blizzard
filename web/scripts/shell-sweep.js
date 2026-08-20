@@ -18,7 +18,7 @@
  *
  *   npm run shell-sweep   (from web/)
  *
- * The nine specs:
+ * The twelve specs:
  *   - projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts — the hub
  *     board shell (BoardHeader + AppNavMenu), swept over width only (no
  *     username is ever shown there): never lets the profile menu drift
@@ -31,6 +31,11 @@
  *     evaluate — plus the same page's takeover panel (blizzard#251) and its
  *     Transcripts tab (blizzard#248), the latter both standalone and through
  *     its real ChunkPage → container → tab chain.
+ *   - projects/hub/src/app/board/chunk/chunk-artifacts-tab-layout.shell-sweep.spec.ts —
+ *     the Artifacts tab's real `ChunkPage` → `ChunkArtifactsTab` →
+ *     `ChunkArtifactsPanel` chain (review M1): a 40-artifact nav list genuinely
+ *     scrolls inside a bounded box rather than clipping with no scroll
+ *     container — the `height: 100%` percentage chain jsdom cannot resolve.
  *   - projects/runner/src/app/nav/app-header.shell-sweep.spec.ts — the
  *     runner app root's own desktop header (`AppHeader`, moved out of
  *     `LocalPanelLayout` by issue #325), swept over width × signed-in
@@ -73,6 +78,11 @@
  *     layout one — jsdom parses a `:hover` rule without ever evaluating it,
  *     so only a real pointer (Playwright's `userEvent.hover`) proves a
  *     hovered row differs from both its resting and its selected state.
+ *   - projects/fleet/src/lib/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts —
+ *     the work item panel's two fact tables (`ChunkFacts` + `ChunkTokenBreakdown`,
+ *     `--kv-label-col`/`--chunk-facts-pad`): their value columns genuinely land
+ *     at the same horizontal position under a long runner identity that wraps
+ *     — a real CSS grid layout claim jsdom cannot make.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -80,6 +90,7 @@ const { spawnSync } = require('node:child_process');
 const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk/chunk-page-layout.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/chunk/chunk-artifacts-tab-layout.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/nav/app-header.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-panel-mobile.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/runners/runner-view.shell-sweep.spec.ts' },
@@ -88,6 +99,7 @@ const SWEEPS = [
   { project: 'runner', spec: 'projects/runner/src/app/nav/app-nav.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk/chunk-detail-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/design/hover-tint.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {
@@ -110,7 +122,7 @@ function main() {
     return;
   }
 
-  console.log('\nshell-sweep: all ten specs clean.\n');
+  console.log('\nshell-sweep: all twelve specs clean.\n');
 }
 
 main();

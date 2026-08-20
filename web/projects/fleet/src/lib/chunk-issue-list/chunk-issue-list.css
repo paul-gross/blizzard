@@ -1,0 +1,103 @@
+/* Full-bleed, edge to edge (`design/tokens.css`'s interaction-state-scale
+   note): this host carries no horizontal padding of its own so each
+   accordion section's own bordered/padded header reaches this list's full
+   width instead of floating inset from it. Vertical rhythm and the
+   hover/selected wash both live on `fleet-kit-accordion-section` itself. */
+:host {
+  display: block;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+}
+.i-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+/* The ticket name carries the visual weight (`--fs-base`, a size up from the
+   list-row default `--fs-sm` the ref keeps) — it is the thing worth reading. `min-width: 0`
+   is what lets it shrink below its own content size once the trigger button is too narrow
+   for it (`kit-accordion-section.css`'s own `.acc-head-content` sets the same on the
+   wrapper this projects into) — the default `flex-shrink: 1` is what actually gives way,
+   so the name truncates rather than pushing the row wider. */
+.i-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: var(--fs-base);
+}
+/* Projected into `[accordionAside]` (`chunk-issue-list.html`), not `.i-head` — a real,
+   independently navigable identifier, reading at the row's far edge rather than
+   adjacent to the name it can no longer sit beside without nesting an anchor inside
+   the accordion's own `<button>`. */
+.i-ref {
+  flex: none;
+  white-space: nowrap;
+  color: var(--cyan);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+}
+.i-ref:hover {
+  text-decoration: underline;
+}
+/* Plain prose, not a row list — pads itself against the section's own
+   zero-padded `.acc-body`. */
+.i-detail {
+  padding: 8px;
+}
+.tag {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.s-head {
+  margin-bottom: 6px;
+}
+.none {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}
+.notice {
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--red-dim);
+  border-left-width: 2px;
+  background: var(--overlay-20);
+  color: var(--red);
+  font-size: var(--fs-xs);
+}
+.i-body {
+  margin: 0 0 8px;
+  padding: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--overlay-30);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+.i-messages {
+  margin-top: 0;
+}
+.messages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.m-body {
+  margin: 0;
+  padding: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--line);
+  background: var(--overlay-25);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}

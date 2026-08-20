@@ -137,7 +137,7 @@ describe('ChunkDetailPage', () => {
     expect(el.querySelector('fleet-chunk-detail-issue-pane')).not.toBeNull();
     expect(el.querySelector('fleet-chunk-detail-timeline')).not.toBeNull();
     expect(el.querySelector('fleet-chunk-detail-awaiting-human')).not.toBeNull();
-    expect(el.querySelector('fleet-chunk-detail-artifacts')).toBeNull();
+    expect(el.querySelector('fleet-chunk-artifacts-panel')).toBeNull();
   });
 
   it('gains the identity header the hub’s own chunk page carries, naming the chunk by its full id', async () => {
@@ -155,9 +155,49 @@ describe('ChunkDetailPage', () => {
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
 
     expect(el.querySelector('[data-testid="tab-artifacts"]')?.getAttribute('aria-selected')).toBe('true');
-    expect(el.querySelector('[data-testid="section-artifacts"]')).not.toBeNull();
-    expect(el.querySelector('fleet-chunk-detail-artifacts')).not.toBeNull();
+    expect(el.querySelector('fleet-chunk-artifacts-panel')).not.toBeNull();
+    expect(el.querySelector('[data-testid="artifacts-panel-nav-item"]')?.getAttribute('data-artifact-key')).toBe(
+      'build.retrospective.1',
+    );
     expect(el.querySelector('[data-testid="section-work-item"]')).toBeNull();
+  });
+
+  it('picking an artifact nav row writes ?artifact= and switches to the Artifacts tab', async () => {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
+    await settle(harness.fixture);
+    let el = harness.fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="artifacts-panel-nav-item"]')?.click();
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=artifacts&artifact=build.retrospective.1`);
+    expect(el.querySelector('[data-testid="artifacts-panel-nav-item"]')?.classList.contains('active')).toBe(true);
+  });
+
+  it('renders the Node history tab with the shared timeline, row activation on, and no transcript pane', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}?tab=node-history`);
+
+    expect(el.querySelector('[data-testid="tab-node-history"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(el.querySelector('[data-testid="chunk-node-history-tab"]')).not.toBeNull();
+    const row = el.querySelector('[data-testid="selection-step"]');
+    expect(row?.getAttribute('role')).toBe('button');
+    expect(el.querySelector('[data-testid^="node-history-transcript"]')).toBeNull();
+  });
+
+  it('activating a node-history row writes ?step= and shows that step’s own artifacts', async () => {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=node-history`);
+    await settle(harness.fixture);
+    let el = harness.fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLElement>('[data-testid="selection-step"]')?.click();
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=node-history&step=nd_build:1`);
+    expect(el.querySelector('[data-testid="node-history-artifact-key"]')?.textContent).toContain('build.retrospective.1');
   });
 
   it('switches tabs on click, writing ?tab= with no full reload, and keeps ?attempt= across the switch', async () => {

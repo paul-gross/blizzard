@@ -73,10 +73,16 @@
 }
 /* The node-history and artifacts sections now pad their own host
    (chunk-timeline.ts, chunk-artifacts.ts) — a plain `.d-sec` here would
-   double that padding. The work-item section keeps `.d-sec`'s padding: its
-   children (ChunkFacts and siblings) supply none of their own. */
+   double that padding. The work-item section keeps `.d-sec`'s padding for its
+   siblings (ChunkAwaitingHuman, ChunkIssuePane), which supply none of their
+   own; ChunkFacts now pads itself too (`chunk-facts.css`'s `--chunk-facts-pad`)
+   for its other consumer (the general tab's unpadded panel body), so it is
+   zeroed out here to keep this column's existing rhythm rather than double it. */
 .d-sec--flush {
   padding: 0;
+}
+fleet-chunk-detail-facts {
+  --chunk-facts-pad: 0;
 }
 .s-head {
   margin-bottom: 6px;

@@ -1,0 +1,50 @@
+<div class="art-tab" data-testid="chunk-artifacts-panel">
+  <nav class="art-nav">
+    <fleet-kit-async-state
+      [state]="navState()"
+      placement="inline"
+      emptyText="No artifacts yet."
+      [emptyTestid]="testidPrefix() + '-nav-empty'"
+    >
+      <ul class="art-list" [attr.data-testid]="testidPrefix() + '-nav'">
+        @for (art of sortedArtifacts(); track art.key) {
+          <li>
+            <button
+              type="button"
+              class="art-item"
+              [class.active]="art.key === effectiveKey()"
+              [attr.data-testid]="testidPrefix() + '-nav-item'"
+              [attr.data-artifact-key]="art.key"
+              (click)="pickArtifact.emit(art.key)"
+            >
+              <span class="key">{{ art.key }}</span>
+              <span class="sub">
+                @if (art.recorded_at) {
+                  <fleet-when [iso]="art.recorded_at" />
+                }
+                <span class="kind">{{ art.kind }}</span>
+              </span>
+            </button>
+          </li>
+        }
+      </ul>
+    </fleet-kit-async-state>
+  </nav>
+  <section class="art-view">
+    <fleet-kit-async-state
+      [state]="viewState()"
+      [emptyText]="emptyMessage()"
+      [emptyTestid]="testidPrefix() + '-empty'"
+    >
+      @if (selectedArtifact(); as art) {
+        <fleet-chunk-detail-artifact-body
+          class="body"
+          [artifact]="art"
+          body="full"
+          [testid]="testidPrefix() + '-artifact'"
+          [attr.data-testid]="testidPrefix() + '-artifact'"
+        />
+      }
+    </fleet-kit-async-state>
+  </section>
+</div>

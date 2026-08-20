@@ -46,10 +46,10 @@ app-chunk-general-tab {
   flex: 1;
   min-height: 0;
 }
-app-chunk-artifacts-tab {
-  flex: 1;
-  min-height: 0;
-}
+/* No rule targets `app-chunk-artifacts-tab` itself, for the same reason none targets
+   `app-chunk-node-history-container` or `app-chunk-transcripts-container` below — it is
+   `display: contents`; its presentational child (`fleet-chunk-artifacts-panel`) carries
+   its own `flex: 1; min-height: 0` host. */
 /* No rule targets `app-chunk-node-history-container` itself, for the same reason
    none targets `app-chunk-transcripts-container` below — it is `display: contents`;
    its presentational child carries its own `flex: 1; min-height: 0` host. */

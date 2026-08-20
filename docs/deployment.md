@@ -635,9 +635,19 @@ node and epoch) links them end to end so that attempt's whole conversation reads
 node (a build that failed review and ran again) is a **later epoch** — its own step, never stitched to the attempt
 before it.
 
-The runner's own machine panel serves the same route on its own host, with its own three-tab strip — General, Artifacts,
-Transcripts; it carries no Node history tab of its own — a separate, runner-local surface under its own authorization,
-not this hub-scoped gating; see "Runner authentication" and "The runner's two doors" above.
+`transcript:read` governs a second board surface too: the Node history tab's own per-step Transcript accordion, which
+opens that step's segments inline rather than through the dedicated tab. The gate presents differently there — the
+Node history tab option itself is never hidden (a step's own artifacts still show without the permission), but its
+Transcript accordion renders an in-place "NO PERMISSION TO READ TRANSCRIPTS" notice off the same backend 403 instead of
+a segment, rather than the hidden tab option the dedicated Transcripts tab uses.
+
+The runner's own machine panel serves the same route on its own host, with its own four-tab strip — General, Node
+history, Artifacts, Transcripts. Its Node history tab mirrors the hub's own timeline and per-step artifacts, but stops
+there: it wires no per-step transcript of its own, because the hub's transcript routes are declared
+`dependencies=[Depends(reject_runner_principal)]`, structurally refusing a runner-authenticated bearer. The runner's own
+Transcripts tab reads that chunk's segments a different way — a runner reading back its own shipped segments, gated on
+its own bearer token rather than this hub-scoped `transcript:read` gating; see "Runner authentication" and "The
+runner's two doors" above.
 
 ### Operator verbs
 

@@ -1,14 +1,27 @@
-<dt>Cost</dt>
-<dd data-testid="fact-cost">
-  <span data-testid="cost-total-usd">{{ formatCost(cost().cost_usd, cost().cost_partial) }}</span>
-  @if (cost().cost_partial) {
-    <span
-      class="partial-badge"
-      data-testid="cost-partial-badge"
-      title="At least one invocation's cost was absent (a crash/reap-path exit) — this total is a lower bound, not the true spend."
-      >PARTIAL</span
-    >
-  }
-</dd>
-<dt>Tokens</dt>
-<dd data-testid="fact-tokens">{{ tokensLine() }}</dd>
+<div class="s-head"><span class="tag">Usage</span></div>
+<dl class="kv" data-testid="chunk-usage">
+  <dt>Cost</dt>
+  <dd data-testid="fact-cost">
+    <span data-testid="cost-total-usd">{{ formatCost(cost().cost_usd, cost().cost_partial) }}</span>
+    @if (cost().cost_partial) {
+      <span
+        class="partial-badge"
+        data-testid="cost-partial-badge"
+        title="At least one invocation's cost was absent (a crash/reap-path exit) — this total is a lower bound, not the true spend."
+        >PARTIAL</span
+      >
+    }
+  </dd>
+  <dt>Input</dt>
+  <dd data-testid="fact-tokens-input" [class.zero]="cost().input_tokens === 0">{{ formatTokens(cost().input_tokens) }}</dd>
+  <dt>Output</dt>
+  <dd data-testid="fact-tokens-output" [class.zero]="cost().output_tokens === 0">{{ formatTokens(cost().output_tokens) }}</dd>
+  <dt>Cache Read</dt>
+  <dd data-testid="fact-tokens-cache-read" [class.zero]="cost().cache_read_tokens === 0">{{
+    formatTokens(cost().cache_read_tokens)
+  }}</dd>
+  <dt>Cache Creation</dt>
+  <dd data-testid="fact-tokens-cache-creation" [class.zero]="cost().cache_create_tokens === 0">{{
+    formatTokens(cost().cache_create_tokens)
+  }}</dd>
+</dl>

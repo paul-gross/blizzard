@@ -23,14 +23,20 @@
   overflow-y: auto;
   border-bottom: 1px solid var(--line);
 }
+/* Owns no horizontal padding (`design/tokens.css`'s `--surface-*` doc comment) — it
+   wraps `.seg-item`, a full-bleed interactive row that carries its own, so that row's
+   hover/active background reaches this container's full width rather than floating
+   inset from it. Only `.step-head`/`.none` — plain, non-interactive text — pad
+   themselves back in. */
 .step {
-  padding: 6px 8px;
+  padding: 6px 0;
   border-bottom: 1px solid var(--line);
 }
 .step-head {
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 0 8px;
   color: var(--label);
   font-size: var(--fs-xs);
   letter-spacing: 0.08em;
@@ -51,6 +57,7 @@
 }
 .none {
   margin: 0;
+  padding: 0 8px;
   color: var(--label-dim);
   font-size: var(--fs-xs);
 }
@@ -71,15 +78,25 @@
   border-left: 2px solid transparent;
   color: var(--text);
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 4px 8px;
   font-size: var(--fs-sm);
 }
+/* The interaction-state scale (`design/tokens.css`'s `--surface-*` note) — reserved
+   transparent left edge recolored on selection, background alone on hover, the same
+   split every other row list this migration touched moved to (the board card, both
+   timelines, the artifacts panel, the accordion header). */
 .seg-item:hover {
-  background: var(--overlay-20);
+  background: var(--surface-hover);
 }
 .seg-item.active {
   border-left-color: var(--cyan);
-  background: var(--tint-selected);
+  background: var(--surface-selected);
+}
+/* Selection is the "stickier" state: hovering an already-active row keeps the
+   selected background rather than dimming to the hover tone, the same stance
+   every other row list on this scale takes. */
+.seg-item.active:hover {
+  background: var(--surface-selected);
 }
 .tx-view {
   position: relative;
@@ -91,17 +108,7 @@
 .seg-body {
   padding: 6px 8px;
 }
-.banner {
-  color: var(--amber-hi);
-  font-size: var(--fs-sm);
-  letter-spacing: 0.1em;
-  padding: 5px 8px;
-  border-bottom: 1px solid var(--line);
-  background: var(--overlay-25);
-  margin: 0 0 6px;
-}
-.back,
-.seam {
+.back {
   display: block;
   width: 100%;
   text-align: left;

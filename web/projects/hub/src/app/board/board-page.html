@@ -14,7 +14,7 @@
       (moveToTop)="moveToTop($event)"
       (group)="group($event)"
     />
-    <fleet-chunk-detail class="dock" [chunkId]="selected()" (dismiss)="select(null)" />
+    <fleet-chunk-detail class="dock" [chunkId]="selected()" [graphLinkBase]="['/graphs']" (dismiss)="select(null)" />
   </div>
   <div class="col rail-right">
     <fleet-runner-panel />

@@ -11,7 +11,12 @@
     <!-- Heading suppressed: the enclosing panel's label already says it. See
          the hub's own general tab for the same opt-out and why the default
          is true (the board dock relies on the internal heading). -->
-    <fleet-chunk-detail-timeline [detail]="detail()" [heading]="false" />
+    <fleet-chunk-detail-timeline
+      [detail]="detail()"
+      [heading]="false"
+      [activatable]="true"
+      (pickStep)="pickStep.emit($event)"
+    />
   </fleet-kit-panel>
   <fleet-kit-panel class="section" data-testid="section-asks" label="asks · decisions">
     <fleet-chunk-detail-awaiting-human [detail]="detail()" />

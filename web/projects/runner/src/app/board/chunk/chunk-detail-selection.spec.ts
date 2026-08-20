@@ -62,4 +62,41 @@ describe('injectChunkDetailSelection', () => {
 
     expect(TestBed.inject(Router).url).toBe('/board/chunk/ch_1?attempt=lease_1&tab=transcripts');
   });
+
+  it('resolves a recognized ?tab=node-history verbatim', async () => {
+    const host = await open('/board/chunk/ch_1?tab=node-history');
+    expect(host.selection.tab()).toBe('node-history');
+  });
+
+  it('resolves absent ?artifact/?step params to null', async () => {
+    const host = await open('/board/chunk/ch_1');
+    expect(host.selection.artifactKey()).toBeNull();
+    expect(host.selection.stepKey()).toBeNull();
+  });
+
+  it('selectArtifact() switches to the artifacts tab and writes ?artifact=', async () => {
+    const harness = await RouterTestingHarness.create();
+    const host = (await harness.navigateByUrl('/board/chunk/ch_1?tab=general', SelectionHost)) as SelectionHost;
+
+    host.selection.selectArtifact('build.plan.1');
+    await harness.fixture.whenStable();
+
+    expect(TestBed.inject(Router).url).toBe('/board/chunk/ch_1?tab=artifacts&artifact=build.plan.1');
+    expect(host.selection.artifactKey()).toBe('build.plan.1');
+  });
+
+  it('selectStep() switches to the node-history tab and writes ?step=, clearable with null', async () => {
+    const harness = await RouterTestingHarness.create();
+    const host = (await harness.navigateByUrl('/board/chunk/ch_1?tab=general', SelectionHost)) as SelectionHost;
+
+    host.selection.selectStep('nd_build:1');
+    await harness.fixture.whenStable();
+    expect(TestBed.inject(Router).url).toBe('/board/chunk/ch_1?tab=node-history&step=nd_build:1');
+    expect(host.selection.stepKey()).toBe('nd_build:1');
+
+    host.selection.selectStep(null);
+    await harness.fixture.whenStable();
+    expect(TestBed.inject(Router).url).toBe('/board/chunk/ch_1?tab=node-history');
+    expect(host.selection.stepKey()).toBeNull();
+  });
 });

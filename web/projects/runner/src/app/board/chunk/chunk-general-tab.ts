@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import {
   ChunkAwaitingHuman,
   ChunkFacts,
@@ -21,8 +21,9 @@ import {
  * item and issues stacked in the left column, node history beside them
  * spanning both rows, asks · decisions spanning the full width below —
  * collapsing to one stacked column, DOM order, below it. Presentational
- * only: a `detail`/`workItems` input in, no operator-action outputs — this
- * route mounts the shared `fleet` sections read-only, same as before.
+ * only: a `detail`/`workItems` input in, {@link pickStep} the one output back
+ * out — this route mounts the shared `fleet` sections read-only otherwise,
+ * same as before.
  */
 @Component({
   selector: 'app-chunk-general-tab',
@@ -37,6 +38,14 @@ export class ChunkGeneralTab {
 
   /** The chunk's related work-source items + fetch state. */
   readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });
+
+  /** Emitted with a node's join key when the operator activates it in this tab's own
+   * node-history summary — {@link ChunkTimeline.pickStep} forwarded straight through, a
+   * pure activation signal this tab holds no selection state of its own for (the page
+   * routes it to the Node history tab, where the row it names is selected via
+   * {@link ChunkDetailSelection.selectStep}), the same contract the hub's own
+   * `ChunkGeneralTab.pickStep` establishes. */
+  readonly pickStep = output<string | null>();
 
   protected readonly pointerCount = computed(() => this.detail().work_refs?.length ?? 0);
 }

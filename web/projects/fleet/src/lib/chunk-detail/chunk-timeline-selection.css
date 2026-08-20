@@ -1,0 +1,152 @@
+:host {
+  display: block;
+}
+.none {
+  margin: 0;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* Three stacked lines, not the grid-subgrid single line `ChunkTimeline` uses — this
+   list is read at a width that has room to break identity, result, and usage onto
+   their own lines instead of fighting for one row's worth of columns. */
+.step {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  /* Reserved transparent, same as `.art-item` (`chunk-artifacts-tab.css`) — `.selected`
+     below only ever recolors this edge, never adds it, so selecting a row never shifts
+     the list's own width. */
+  border-left: 2px solid transparent;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+.step:hover {
+  background: var(--surface-hover);
+}
+.step[role='button'] {
+  cursor: pointer;
+}
+.step[role='button']:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: -2px;
+}
+.step.selected {
+  border-left-color: var(--cyan);
+  background: var(--surface-selected);
+}
+.step.selected:hover {
+  background: var(--surface-selected);
+}
+/* Line 1 — identity: the attempt and the node, the row's own primary text. Ellipsized
+   rather than wrapped (the app's standing rule — see `board-card.css`'s own comment):
+   the seeded stress fixture's ~150-char custom node name clips instead of blowing out
+   the row's height or the column's width. */
+.line1 {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text);
+}
+.line1 .att {
+  flex: none;
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+}
+.line1 .nd {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+}
+.line1 .nd .gr {
+  color: var(--label-dim);
+}
+a.gr {
+  text-decoration: none;
+}
+a.gr:hover,
+a.gr:focus-visible {
+  color: var(--cyan);
+  text-decoration: underline;
+  outline: none;
+}
+/* Line 2 — supporting metadata: the verdict that closed the node, where it routed the
+   chunk, and when. Dimmer and smaller than line 1 so the hierarchy reads at a glance. */
+.line2 {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.line2 .verdict {
+  color: var(--amber);
+  white-space: nowrap;
+}
+.step[data-choice='fail'] .verdict,
+.step[data-choice='conflict'] .verdict,
+.step[data-choice='needs-human'] .verdict {
+  color: var(--red);
+}
+.step[data-choice='run'] .verdict,
+.step[data-choice='migrated'] .verdict {
+  color: var(--cyan);
+}
+.step[data-choice='waiting'] .verdict,
+.step[data-choice='paused'] .verdict {
+  color: var(--amber-hi);
+}
+.line2 .jg-to {
+  color: var(--label-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.line2 .ts {
+  margin-left: auto;
+  color: var(--label-dim);
+  white-space: nowrap;
+}
+/* Line 3 — the step's own summed usage (absent when no usage fact has landed for it
+   yet), the same supporting weight as line 2. */
+.line3 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  margin-top: 2px;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.line3 .tok {
+  white-space: nowrap;
+}
+.line3 .cost {
+  white-space: nowrap;
+}
+.partial-badge {
+  margin-left: 4px;
+  padding: 0 4px;
+  border: 1px solid var(--red-dim);
+  color: var(--red);
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+  cursor: help;
+}

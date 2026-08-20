@@ -28,6 +28,8 @@ export * from './lib/board-card';
 export * from './lib/board-header';
 export * from './lib/board-shell';
 export * from './lib/chunk-detail';
+export * from './lib/chunk-artifacts-panel';
+export * from './lib/chunk-issue-list';
 export * from './lib/event-log';
 export * from './lib/events';
 export * from './lib/queue';

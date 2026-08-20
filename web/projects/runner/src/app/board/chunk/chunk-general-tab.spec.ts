@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import type { hubApi, WorkItemsState } from 'fleet';
 
 import { ChunkGeneralTab } from './chunk-general-tab';
@@ -27,7 +28,10 @@ describe('ChunkGeneralTab', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ChunkGeneralTab],
-      providers: [provideZonelessChangeDetection()],
+      // `ChunkTimeline`'s row-activation now renders a `RouterLink` for a multi-graph
+      // row's own graph badge — NG0201 without a router provided, even though this
+      // suite's own single-graph history never reaches it.
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
   });
 
@@ -52,5 +56,32 @@ describe('ChunkGeneralTab', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('fleet-chunk-detail-issue-pane')).not.toBeNull();
+  });
+
+  it('emits pickStep when a row in the node-history summary is activated', async () => {
+    const withHistory: hubApi.ChunkDetail = {
+      ...DETAIL,
+      history: [
+        {
+          choice_name: 'pass',
+          epoch: 1,
+          from_node_id: 'nd_build',
+          from_node_name: 'build',
+          to_node_id: 'nd_review',
+          to_node_name: 'review',
+          recorded_at: '2026-08-09T00:00:00.000Z',
+        },
+      ],
+    };
+    const fixture = TestBed.createComponent(ChunkGeneralTab);
+    fixture.componentRef.setInput('detail', withHistory);
+    let emitted: string | null | undefined;
+    fixture.componentInstance.pickStep.subscribe((key) => (emitted = key));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLElement>('[data-testid="history-step"]')?.click();
+
+    expect(emitted).toBe('nd_build:1');
   });
 });

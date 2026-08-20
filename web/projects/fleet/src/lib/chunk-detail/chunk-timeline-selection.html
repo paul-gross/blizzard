@@ -1,0 +1,86 @@
+@if (historyRows().length === 0 && !activeRow()) {
+  <p class="none" data-testid="selection-empty">No transitions yet — waiting on the first node-step.</p>
+} @else {
+  <ol class="timeline" data-testid="selection">
+    @for (row of historyRows(); track $index) {
+      <li>
+        <div
+          class="step"
+          [class.selected]="row.key !== null && row.key === selectedKey()"
+          [attr.data-testid]="row.kind === 'migration' ? 'selection-migration-step' : 'selection-step'"
+          [attr.data-choice]="row.kind === 'migration' ? 'migrated' : row.verdict"
+          [attr.role]="row.key !== null ? 'button' : null"
+          [attr.tabindex]="row.key !== null ? 0 : null"
+          (click)="onActivate(row.key)"
+          (keydown.enter)="onActivate(row.key, $event)"
+          (keydown.space)="onActivate(row.key, $event)"
+        >
+          <div class="line1">
+            <span class="att">{{ row.kind === 'migration' ? '⤳' : row.epoch }}</span>
+            <span class="nd" [attr.title]="row.nodeName">
+              @if (multiGraph() && row.graphName) {
+                @if (graphLinkBase(); as linkBase) {
+                  @if (row.graphId; as graphId) {
+                    <a
+                      class="gr"
+                      data-testid="selection-graph"
+                      [routerLink]="[...linkBase, graphId]"
+                      (click)="$event.stopPropagation()"
+                      >{{ row.graphName }}/</a
+                    >
+                  } @else {
+                    <span class="gr" data-testid="selection-graph">{{ row.graphName }}/</span>
+                  }
+                } @else {
+                  <span class="gr" data-testid="selection-graph">{{ row.graphName }}/</span>
+                }
+              }{{ row.nodeName }}</span
+            >
+          </div>
+          <div class="line2">
+            <span class="verdict" data-testid="selection-choice">{{ row.verdict ?? '·' }}</span>
+            <span class="jg-to" [attr.title]="row.toId">→ {{ row.toName }}</span>
+            <span class="ts" data-testid="selection-when" [attr.title]="row.whenTitle || null">{{ row.when }}</span>
+          </div>
+          @if (usageForStep(row); as u) {
+            <div class="line3" data-testid="selection-step-usage">
+              <span class="tok" data-testid="selection-step-tokens">{{ formatTokens(u.tokens) }} tok</span>
+              <span class="cost" data-testid="selection-step-cost">{{ formatCost(u.costUsd, u.costPartial) }}</span>
+              @if (u.costPartial) {
+                <span
+                  class="partial-badge"
+                  data-testid="selection-step-cost-partial"
+                  title="At least one invocation's cost was absent (a crash/reap-path exit) — this step's cost is a lower bound."
+                  >PARTIAL</span
+                >
+              }
+            </div>
+          }
+        </div>
+      </li>
+    }
+    @if (activeRow(); as a) {
+      <li>
+        <div
+          class="step"
+          data-testid="selection-active"
+          [class.selected]="a.key !== null && a.key === selectedKey()"
+          [attr.data-choice]="a.choice"
+          [attr.role]="a.key !== null ? 'button' : null"
+          [attr.tabindex]="a.key !== null ? 0 : null"
+          (click)="onActivate(a.key)"
+          (keydown.enter)="onActivate(a.key, $event)"
+          (keydown.space)="onActivate(a.key, $event)"
+        >
+          <div class="line1">
+            <span class="att">{{ a.epoch ?? '·' }}</span>
+            <span class="nd" [attr.title]="a.nodeName">{{ a.nodeName }}</span>
+          </div>
+          <div class="line2">
+            <span class="verdict" data-testid="selection-active-verb">{{ a.label }}</span>
+          </div>
+        </div>
+      </li>
+    }
+  </ol>
+}

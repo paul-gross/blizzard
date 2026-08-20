@@ -27,6 +27,26 @@ async function nextFrame(): Promise<void> {
   await new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
+/** Parses a `getComputedStyle` color (always `rgb()`/`rgba()`, regardless of how the
+ * source CSS specified it) into its channel values. */
+function rgbChannels(color: string): readonly [number, number, number] {
+  const match = /rgba?\(([^)]+)\)/.exec(color);
+  if (!match) throw new Error(`not an rgb() color: ${color}`);
+  const [r, g, b] = match[1].split(',').map((c) => Number(c.trim()));
+  return [r, g, b];
+}
+
+/** The summed per-channel delta between two computed colors — a cheap stand-in for "does
+ * this read as a genuinely different shade," not just "is the string different." A bare
+ * `.not.toBe()` on two colors passes on a one-unit rounding difference that a human eye
+ * never sees, which is exactly how a board card's resting→hover step measured
+ * imperceptible on the live board despite this suite being green throughout. */
+function channelDelta(a: string, b: string): number {
+  const [ar, ag, ab] = rgbChannels(a);
+  const [br, bg, bb] = rgbChannels(b);
+  return Math.abs(ar - br) + Math.abs(ag - bg) + Math.abs(ab - bb);
+}
+
 /**
  * The design tokens are a global stylesheet (`design/tokens.css`'s own doc comment),
  * loaded via each app's build `styles` — never by a standalone component test, and a
@@ -82,7 +102,7 @@ describe('board-card hover/selection tint shell sweep (web:shell-sweep)', () => 
   // previously module-level state set by a sibling `it` and read by this one — isolate
   // either case (`-t`, `.only`, reordering) and the second silently compared a real color
   // against `''`, passing vacuously (`review:F9`). Self-contained here instead.
-  it('washes a hovered card, and reads a selected-but-unhovered card as distinct from both a resting and a hovered one', async () => {
+  it('washes a hovered card with a genuinely perceptible step, and reads a selected-but-unhovered card as distinct from both a resting and a hovered one', async () => {
     await loadDesignTokens();
 
     const restingRoot = await renderCard(CARD, false);
@@ -91,12 +111,21 @@ describe('board-card hover/selection tint shell sweep (web:shell-sweep)', () => 
     try {
       const card = restingRoot.querySelector<HTMLElement>('[data-testid="chunk-card"]')!;
       boardCardResting = getComputedStyle(card).backgroundColor;
+      const restingBorder = getComputedStyle(card).borderTopColor;
       await userEvent.hover(card);
       await nextFrame();
       boardCardHovered = getComputedStyle(card).backgroundColor;
+      const hoveredBorder = getComputedStyle(card).borderTopColor;
       expect(boardCardHovered, `hover produced no background change from resting (${boardCardResting})`).not.toBe(
         boardCardResting,
       );
+      // The background step alone measured too subtle to read at a glance on the live
+      // board — the top/right/bottom border's own dim-cyan edge is the step that must
+      // actually carry "obvious," so it is pinned to a real minimum delta, not just "differs."
+      expect(
+        channelDelta(hoveredBorder, restingBorder),
+        `hover's border (${hoveredBorder}) is too close to resting (${restingBorder}) to read as a distinct edge`,
+      ).toBeGreaterThan(80);
     } finally {
       restingRoot.remove();
     }
@@ -114,6 +143,42 @@ describe('board-card hover/selection tint shell sweep (web:shell-sweep)', () => 
       );
     } finally {
       selectedRoot.remove();
+    }
+  });
+
+  it('yields the left-edge status color to cyan while selected, and returns it once deselected', async () => {
+    await loadDesignTokens();
+
+    const restingRoot = await renderCard(CARD, false);
+    let restingLeft: string;
+    try {
+      const card = restingRoot.querySelector<HTMLElement>('[data-testid="chunk-card"]')!;
+      restingLeft = getComputedStyle(card).borderLeftColor;
+    } finally {
+      restingRoot.remove();
+    }
+
+    const selectedRoot = await renderCard(CARD, true);
+    try {
+      const card = selectedRoot.querySelector<HTMLElement>('[data-testid="chunk-card"]')!;
+      const selectedLeft = getComputedStyle(card).borderLeftColor;
+      expect(
+        selectedLeft,
+        `a selected card's left edge (${selectedLeft}) still reads as the status color (${restingLeft}) instead of yielding to the selection accent`,
+      ).not.toBe(restingLeft);
+    } finally {
+      selectedRoot.remove();
+    }
+
+    const restingAgainRoot = await renderCard(CARD, false);
+    try {
+      const card = restingAgainRoot.querySelector<HTMLElement>('[data-testid="chunk-card"]')!;
+      expect(
+        getComputedStyle(card).borderLeftColor,
+        'a deselected card does not return to its own status color',
+      ).toBe(restingLeft);
+    } finally {
+      restingAgainRoot.remove();
     }
   });
 });
@@ -211,6 +276,47 @@ describe('chunk-timeline row hover tint shell sweep (web:shell-sweep)', () => {
   });
 });
 
+describe('chunk-timeline (Quick Reference) full-bleed row shell sweep (web:shell-sweep)', () => {
+  it("reaches its zero-padded ancestor's full width instead of floating inset from it", async () => {
+    await loadDesignTokens();
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [ChunkTimeline],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', TIMELINE_DETAIL);
+    fixture.componentRef.setInput('activatable', true);
+    await fixture.whenStable();
+    // A zero-padded wrapper, standing in for `kit-panel.ts`'s own zero-padded
+    // `.p-body` — this is the ancestor the General tab's real composition site
+    // (`chunk-general-tab.html`) actually wraps this component in.
+    const wrapper = document.createElement('div');
+    wrapper.style.width = '360px';
+    wrapper.style.padding = '0';
+    wrapper.appendChild(fixture.nativeElement);
+    document.body.appendChild(wrapper);
+    await page.viewport(390, 400);
+    await nextFrame();
+
+    try {
+      const row = wrapper.querySelector<HTMLElement>('[data-testid="history-step"]')!;
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const rowRect = row.getBoundingClientRect();
+      expect(
+        rowRect.left,
+        `row's left edge (${rowRect.left}) sits inset from its zero-padded ancestor's own left edge (${wrapperRect.left})`,
+      ).toBeCloseTo(wrapperRect.left, 0);
+      expect(
+        rowRect.right,
+        `row's right edge (${rowRect.right}) sits inset from its zero-padded ancestor's own right edge (${wrapperRect.right})`,
+      ).toBeCloseTo(wrapperRect.right, 0);
+    } finally {
+      wrapper.remove();
+    }
+  });
+});
+
 const ARTIFACTS_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01hover0000000000000000000',
   graph_id: 'gr_1',
@@ -246,7 +352,7 @@ const ARTIFACTS_DETAIL: ChunkDetail = {
 };
 
 describe('chunk-artifacts row hover tint shell sweep (web:shell-sweep)', () => {
-  it('washes the bordered row of a hovered artifact link, but not a contentless .artifact-plain row', async () => {
+  it('washes the bordered row of a hovered artifact link', async () => {
     await loadDesignTokens();
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
@@ -255,10 +361,6 @@ describe('chunk-artifacts row hover tint shell sweep (web:shell-sweep)', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(ChunkArtifacts);
     fixture.componentRef.setInput('detail', ARTIFACTS_DETAIL);
-    // `.artifact-plain` (a row with nothing an expand would reveal) only renders in
-    // `expandable` mode — the default `link` mode renders every row, plain or not, as an
-    // `<a class="artifact-link">` (`chunk-artifacts.ts`'s own template).
-    fixture.componentRef.setInput('expandable', true);
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
@@ -268,36 +370,14 @@ describe('chunk-artifacts row hover tint shell sweep (web:shell-sweep)', () => {
     await nextFrame();
 
     try {
-      const rows = root.querySelectorAll<HTMLElement>('[data-testid="artifact"]');
-      const linkRow = rows[0];
-      const plainRow = rows[1];
-      const link = linkRow.querySelector<HTMLElement>('[data-testid="artifact-link"]')!;
-      const plain = plainRow.querySelector<HTMLElement>('[data-testid="artifact-plain"]')!;
-      expect(linkRow.dataset['kind'], 'fixture defect: first row is not the asset-with-content artifact').toBe(
-        'asset',
-      );
-      expect(plainRow.dataset['kind'], 'fixture defect: second row is not the git_commit artifact').toBe(
-        'git_commit',
-      );
+      const row = root.querySelector<HTMLElement>('[data-testid="artifact"]')!;
+      const link = row.querySelector<HTMLElement>('[data-testid="artifact-link"]')!;
 
-      const linkResting = getComputedStyle(linkRow).backgroundColor;
+      const resting = getComputedStyle(row).backgroundColor;
       await userEvent.hover(link);
       await nextFrame();
-      const linkHovered = getComputedStyle(linkRow).backgroundColor;
-      expect(linkHovered, `hovering the artifact link produced no wash on its row (${linkResting})`).not.toBe(
-        linkResting,
-      );
-      await userEvent.unhover(link);
-      await nextFrame();
-
-      const plainResting = getComputedStyle(plainRow).backgroundColor;
-      await userEvent.hover(plain);
-      await nextFrame();
-      const plainHovered = getComputedStyle(plainRow).backgroundColor;
-      expect(
-        plainHovered,
-        `a contentless .artifact-plain row washed on hover (${plainResting} -> ${plainHovered}) — it carries no control and must not`,
-      ).toBe(plainResting);
+      const hovered = getComputedStyle(row).backgroundColor;
+      expect(hovered, `hovering the artifact link produced no wash on its row (${resting})`).not.toBe(resting);
     } finally {
       root.remove();
     }

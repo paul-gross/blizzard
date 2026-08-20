@@ -21,6 +21,10 @@ export interface HistoryRow {
   readonly nodeId: string | null;
   readonly nodeName: string;
   readonly graphName: string | null;
+  /** The graph {@link graphName} names, for a consumer that links the badge to it
+   * (`graphLinkBase` on the rendering components) — `null` when the row's own source
+   * carries none. */
+  readonly graphId: string | null;
   readonly verdict: string | null;
   readonly toId: string;
   readonly toName: string;
@@ -81,6 +85,7 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
       nodeId: t.from_node_id,
       nodeName: t.from_node_name ?? t.from_node_id ?? '·',
       graphName: t.graph_name ?? null,
+      graphId: t.graph_id ?? null,
       verdict: t.choice_name,
       toId: t.to_node_id,
       toName: t.to_node_name ?? t.to_node_id,
@@ -97,6 +102,7 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
     nodeId: m.from_node_id,
     nodeName: m.from_node_name ?? m.from_node_id ?? '·',
     graphName: m.from_graph_name ?? m.from_graph_id,
+    graphId: m.from_graph_id,
     verdict: m.choice_name ?? null,
     toId: m.landed_node_id ?? m.to_graph_id,
     toName: `${m.to_graph_name ?? m.to_graph_id}/${m.landed_node_name ?? m.landed_node_id ?? 'entry'}`,

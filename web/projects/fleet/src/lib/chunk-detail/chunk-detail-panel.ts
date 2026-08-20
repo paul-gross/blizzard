@@ -76,6 +76,14 @@ export class ChunkDetailPanel {
    * {@link ChunkFacts}. `null`/pending resolves to `false`. */
   readonly canControl = input(false);
 
+  /** The graphs view's own path segments, forwarded to {@link ChunkFacts} and
+   * {@link ChunkTimeline} — `null` (the default) withholds the Graph fact's and every
+   * timeline row's link the same way {@link ChunkFacts.graphLinkBase} already defaults,
+   * since this panel is exported from `fleet` too (`ChunkDetail`'s own public API) and
+   * must not hardcode the hub-only `/graphs` route a runner-mounted instance has
+   * nowhere to send. */
+  readonly graphLinkBase = input<readonly string[] | null>(null);
+
   /** Whether the current identity may answer an open question (`question:answer` —
    * issue #210), forwarded to {@link ChunkAwaitingHuman}. */
   readonly canAnswer = input(false);

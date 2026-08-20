@@ -12,15 +12,10 @@ import {
   type TranscriptSegmentContentView,
   type TranscriptSegmentIndexEntry,
   type TranscriptStep,
+  TranscriptSegmentView,
   TranscriptViewer,
   type TransitionView,
 } from 'fleet';
-
-/** Keep only the most recent this-many turns rendered for one segment — mirrors the
- * runner panel's own `MAX_TURNS` cap (`projected_transcript_repository.py`), so neither
- * surface renders an unbounded DOM for one large segment (`review:F7`). A sidechain's
- * own turns are uncapped, same as the runner side. */
-const MAX_RENDERED_TURNS = 1000;
 
 /**
  * The chunk detail page's Transcripts tab (blizzard#248 Phase 2) — a nav of node-history
@@ -35,11 +30,15 @@ const MAX_RENDERED_TURNS = 1000;
  * {@link indexState}/{@link segmentState} are that container's own `asyncState()` folds over
  * its two queries (`bzh:frontend-empty-state-gated`); {@link isForbidden} is carried
  * separately since a 403 on the index read is its own honest state (D9), not a generic error.
+ *
+ * The open segment's seam buttons, truncated/turn-cap banners, and turn list all render
+ * through {@link TranscriptSegmentView} — the same shared body the node history tab's
+ * per-step detail pane mounts, so neither carries its own copy of that markup.
  */
 @Component({
   selector: 'app-chunk-transcripts-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, TranscriptViewer],
+  imports: [KitAsyncState, TranscriptSegmentView, TranscriptViewer],
   templateUrl: './chunk-transcripts-tab.html',
   styleUrl: './chunk-transcripts-tab.css',
 })
@@ -79,8 +78,6 @@ export class ChunkTranscriptsTab {
   /** Emitted with an encoded `SidechainPath` (`review:F3`) when the operator opens a sidechain standalone, or `null` to return. */
   readonly pickSidechain = output<string | null>();
 
-  protected readonly MAX_RENDERED_TURNS = MAX_RENDERED_TURNS;
-
   protected readonly steps = computed<readonly TranscriptStep[]>(() =>
     deriveTranscriptSteps(this.segments(), this.history(), {
       nodeId: this.currentNodeId(),
@@ -99,19 +96,10 @@ export class ChunkTranscriptsTab {
   protected readonly continuesIn = computed<TranscriptSegmentIndexEntry | null>(() => this.seams().continuesIn);
 
   /** {@link segmentData}'s turns with every late link folded onto its call (blizzard#338).
-   * Derived ONCE, ahead of both the cap and the standalone path resolver: merging fewer turns
-   * than the path is resolved against would open the wrong sidechain. */
-  private readonly mergedTurns = computed(() => mergeLateLinks(this.segmentData()?.turns ?? []));
-
-  /** {@link mergedTurns}, tail-capped at {@link MAX_RENDERED_TURNS} the same way
-   * the runner panel caps its own list (`review:F7`). A sidechain's own turns pass
-   * through {@link TranscriptViewer} uncapped, same as the runner side. */
-  protected readonly cappedTurns = computed(() => {
-    const turns = this.mergedTurns();
-    return turns.length > MAX_RENDERED_TURNS ? turns.slice(-MAX_RENDERED_TURNS) : turns;
-  });
-
-  protected readonly turnsCapped = computed(() => this.mergedTurns().length > MAX_RENDERED_TURNS);
+   * Derived ONCE, shared between {@link TranscriptSegmentView} (which caps and renders
+   * it) and the standalone path resolver below: merging fewer turns than the path is
+   * resolved against would open the wrong sidechain. */
+  protected readonly mergedTurns = computed(() => mergeLateLinks(this.segmentData()?.turns ?? []));
 
   /** {@link sidechainPath}, parsed — `[]` when none is open. */
   private readonly parsedSidechainPath = computed(() => parseSidechainPath(this.sidechainPath()));
