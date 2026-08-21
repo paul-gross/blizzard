@@ -1,0 +1,16 @@
+name = "blizzard"
+prefix = "bz"
+
+# blizzard is the product this workspace builds. Its agent-facing markdown is
+# held to blizzard-context's conventions and, beneath that, winter-canon's —
+# both declared so a reference from this repo resolves wherever it is read.
+requires = ["blizzard-context", "winter-canon"]
+
+# The README opens with a centered identity block — a `<picture>` pair for
+# light/dark logo variants and the release/python/store badges — none of which
+# CommonMark can express. It is a rendered-on-GitHub surface, not agent-facing
+# prose, so the inline-HTML rule does not apply to it. Scoped to the one file
+# and the one check: every other markdown rule stays live in the README, and
+# markdown-lint stays live everywhere else.
+[lint.ignore.checks]
+markdown-lint = ["README.md"]

@@ -20,7 +20,7 @@ F1 — should-fix — payments-api/src/payments/worker.py:142
   worker still escalates on its next transient failure.
 ```
 
-# Refutation record
+## Refutation record
 
 A finding is answered one of two ways: **fixed**, or **refuted**. A refutation says the finding should not be acted on
 at all — factually wrong, resting on a false premise, or demanding work the change's scale does not warrant; never "I
