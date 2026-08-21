@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.edit import UNSET, UnsetType
 from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.ingest import IngestConflict
+from blizzard.hub.domain.ingest import require_no_live_holder
 from blizzard.hub.domain.work import (
     IReadChunkRepository,
     IWriteWorkItemRepository,
@@ -87,15 +87,13 @@ class WorkItemEditService:
         graph: Graph,
     ) -> CreatedWorkItem:
         """File the item and mint its resting chunk in one transaction (blizzard#359),
-        pinned to ``graph``, holding the pointer this call itself allocates. Guarded by
-        :class:`~blizzard.hub.domain.ingest.IngestService`'s own live-holder check: an
-        out-of-band ingest of the allocated ref can pre-empt it, raising
-        :class:`~blizzard.hub.domain.ingest.IngestConflict` and burning the ref."""
+        pinned to ``graph``, holding the pointer this call itself allocates. Checks the
+        allocated pointer for a live holder before minting: an out-of-band ingest of the
+        same ref can pre-empt it, raising :class:`~blizzard.hub.domain.ingest.IngestConflict`
+        and burning the ref."""
         ref = self._items.allocate_ref(source)
         pointer = WorkRef(source=source, ref=ref)
-        holder = self._chunks.find_live_holder(pointer)
-        if holder is not None:
-            raise IngestConflict(existing_chunk_id=holder, pointer=pointer)
+        require_no_live_holder(self._chunks, pointer)
         at = self._clock.now()
         chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=at)
         item = self._items.create_with_chunk(

@@ -21,7 +21,7 @@ from blizzard.hub.domain.work import Chunk, IReadWorkItemRepository, WorkItemAut
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import seed_graph
+from tests.support import seed_graph, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -42,25 +42,6 @@ def _store(tmp_path: Path) -> WorkItemStore:
     return store
 
 
-def _create(
-    store: WorkItemStore,
-    *,
-    source: str = "hub",
-    title: str,
-    body: str,
-    author: WorkItemAuthor,
-    stated_priority: str | None,
-    at: datetime,
-    graph_id: str = "gr_1",
-):
-    ref = store.allocate_ref(source)
-    pointer = WorkRef(source=source, ref=ref)
-    chunk = Chunk(chunk_id=f"ch_{ref}", graph_id=graph_id, work_refs=[pointer], minted_at=at)
-    return store.create_with_chunk(
-        pointer=pointer, title=title, body=body, author=author, stated_priority=stated_priority, at=at, chunk=chunk
-    )
-
-
 def test_get_of_an_unknown_ref_is_none(tmp_path: Path) -> None:
     reader: IReadWorkItemRepository = _store(tmp_path)
     assert reader.get("hub", "1") is None
@@ -69,8 +50,9 @@ def test_get_of_an_unknown_ref_is_none(tmp_path: Path) -> None:
 def test_create_reads_back_open_with_no_closure(tmp_path: Path) -> None:
     store = _store(tmp_path)
 
-    created = _create(
+    created = seed_work_item(
         store,
+        graph_id="gr_1",
         title="widget is broken",
         body="steps to repro",
         author=WorkItemAuthor.user("usr_1"),
@@ -92,8 +74,12 @@ def test_create_reads_back_open_with_no_closure(tmp_path: Path) -> None:
 def test_ref_allocation_is_monotonic_and_never_reused(tmp_path: Path) -> None:
     store = _store(tmp_path)
 
-    first = _create(store, title="a", body="a", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW)
-    second = _create(store, title="b", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW)
+    first = seed_work_item(
+        store, graph_id="gr_1", title="a", body="a", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
+    )
+    second = seed_work_item(
+        store, graph_id="gr_1", title="b", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
+    )
 
     assert first.ref != second.ref
     assert int(second.ref) > int(first.ref)
@@ -104,8 +90,12 @@ def test_list_breaks_a_same_instant_created_at_tie_on_work_item_id(tmp_path: Pat
     artifact of sqlite's rowid-order fallback, which a real (postgres) engine wouldn't
     give a bare ``created_at`` ordering."""
     store = _store(tmp_path)
-    first = _create(store, title="a", body="a", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW)
-    second = _create(store, title="b", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW)
+    first = seed_work_item(
+        store, graph_id="gr_1", title="a", body="a", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
+    )
+    second = seed_work_item(
+        store, graph_id="gr_1", title="b", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
+    )
 
     expected_order = sorted([first.work_item_id, second.work_item_id], reverse=True)
     assert [item.work_item_id for item in store.list("hub")] == expected_order
@@ -115,14 +105,18 @@ def test_list_breaks_a_same_instant_created_at_tie_on_work_item_id(tmp_path: Pat
 def test_list_respects_the_limit(tmp_path: Path) -> None:
     store = _store(tmp_path)
     for i in range(3):
-        _create(store, title=str(i), body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW)
+        seed_work_item(
+            store, graph_id="gr_1", title=str(i), body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
+        )
 
     assert len(store.list("hub", limit=2)) == 2
 
 
 def test_close_is_unset_until_recorded(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    created = _create(store, title="a", body="a", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW)
+    created = seed_work_item(
+        store, graph_id="gr_1", title="a", body="a", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
+    )
     assert store.get("hub", created.ref).closed_at is None  # type: ignore[union-attr]
 
     closed_at = datetime(2026, 7, 16, 12, 5, 0, tzinfo=UTC)
@@ -140,7 +134,9 @@ def test_edit_of_a_closed_item_is_a_no_op_and_returns_none(tmp_path: Path) -> No
     """The ``closed_at IS NULL`` guard mirrors ``close``'s own (:107) — a title/body
     write racing a closure matches zero rows rather than landing on a closed item."""
     store = _store(tmp_path)
-    created = _create(store, title="a", body="a", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW)
+    created = seed_work_item(
+        store, graph_id="gr_1", title="a", body="a", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
+    )
     store.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_NOW)
 
     result = store.edit("hub", created.ref, title="changed", body="changed", stated_priority=None, at=_NOW)

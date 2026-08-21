@@ -14,10 +14,10 @@ import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.work import Chunk, WorkItemAuthor, WorkItemClosure, WorkRef
+from blizzard.hub.domain.work import WorkItemAuthor, WorkItemClosure
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import seed_graph
+from tests.support import seed_graph, seed_work_item
 
 pytestmark = pytest.mark.unit
 
@@ -33,21 +33,10 @@ def _store(tmp_path: Path) -> WorkItemStore:
     return WorkItemStore(engine)
 
 
-def _create(store: WorkItemStore, *, at: datetime):
-    """Every hub item's creation mints its resting chunk (blizzard#359) — there is no
-    chunkless filing path, so the fixture takes production's own two-step mint."""
-    ref = store.allocate_ref("hub")
-    pointer = WorkRef(source="hub", ref=ref)
-    chunk = Chunk(chunk_id=f"ch_{ref}", graph_id="gr_1", work_refs=[pointer], minted_at=at)
-    return store.create_with_chunk(
-        pointer=pointer, title="t", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=at, chunk=chunk
-    )
-
-
 def test_create_round_trips_its_own_written_instant(tmp_path: Path) -> None:
     store = _store(tmp_path)
 
-    item = _create(store, at=_NOW)
+    item = seed_work_item(store, graph_id="gr_1", author=WorkItemAuthor.fleet(), at=_NOW)
 
     fetched = store.get("hub", item.ref)
     assert fetched is not None
@@ -59,7 +48,7 @@ def test_create_round_trips_its_own_written_instant(tmp_path: Path) -> None:
 
 def test_close_round_trips_a_later_instant(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    item = _create(store, at=_NOW)
+    item = seed_work_item(store, graph_id="gr_1", author=WorkItemAuthor.fleet(), at=_NOW)
     later = datetime(2026, 7, 16, 12, 5, 0, tzinfo=UTC)
 
     store.close("hub", item.ref, closure=WorkItemClosure.DELIVERED, at=later)

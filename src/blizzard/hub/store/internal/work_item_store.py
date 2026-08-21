@@ -63,10 +63,10 @@ class WorkItemStore:
         at: datetime,
         chunk: Chunk,
     ) -> WorkItemRecord:
-        """Insert the item row keyed by ``pointer`` — the caller's own, taken as an
-        explicit parameter rather than positionally off ``chunk.work_refs`` — and
-        ``chunk``'s own rows (which may hold ``pointer`` plus others), atomically in one
-        transaction (blizzard#359): a store failure leaves neither durable."""
+        """Insert the item row and ``chunk``'s own rows on one ``engine.begin()``
+        connection — the mechanism behind
+        :meth:`~blizzard.hub.domain.work.IWriteWorkItemRepository.create_with_chunk`'s
+        atomicity contract."""
         with self._engine.begin() as conn:
             work_item_id = self._insert_item(
                 conn,
@@ -160,9 +160,7 @@ class WorkItemStore:
         gets ``IntegrityError`` on the shared primary key and falls through to the
         already-exists path below, which increments the now-present row and returns the
         new value via ``RETURNING`` — a single portable statement (``bzh:sql-portable``)
-        that lets postgres's row lock serialize concurrent winners on an existing row.
-        Allocation never reuses a ref; it may skip one on a crash between this call and
-        the item insert it feeds, the same gap-tolerant contract a DB sequence carries."""
+        that lets postgres's row lock serialize concurrent winners on an existing row."""
         try:
             with self._engine.begin() as conn:
                 conn.execute(insert(s.work_item_sequence).values(source=source, next_ref=2))

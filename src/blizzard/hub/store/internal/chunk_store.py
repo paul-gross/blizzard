@@ -159,10 +159,10 @@ QUESTIONS = QuestionQuery()
 
 
 def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:
-    """Insert one chunk's ``chunks`` row and its ``chunk_work_refs`` rows on ``conn`` —
-    the row shape's one home, shared by :meth:`ChunkStore.mint` and
-    ``WorkItemStore.create_with_chunk`` (blizzard#359) so a composite write can fold it
-    into a caller's own transaction rather than a copy of this insert sequence."""
+    """Insert one chunk's ``chunks`` row and its ``chunk_work_refs`` rows on a
+    caller-supplied ``conn`` — the caller owns the transaction boundary, so a composite
+    write can fold this into its own transaction rather than copying the insert
+    sequence."""
     conn.execute(
         insert(s.chunks).values(
             chunk_id=chunk.chunk_id,

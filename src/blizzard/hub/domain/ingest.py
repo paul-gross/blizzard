@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.work import IWriteChunkRepository, WorkRef, mint_chunk
+from blizzard.hub.domain.work import IReadChunkRepository, IWriteChunkRepository, WorkRef, mint_chunk
 
 
 class IngestConflict(Exception):
@@ -21,6 +21,14 @@ class IngestConflict(Exception):
         self.pointer = pointer
 
 
+def require_no_live_holder(chunks: IReadChunkRepository, pointer: WorkRef) -> None:
+    """Raise :class:`IngestConflict` when ``pointer`` is already held by a live chunk —
+    the at-most-one-live-holder guard every pointer-minting call site shares."""
+    holder = chunks.find_live_holder(pointer)
+    if holder is not None:
+        raise IngestConflict(existing_chunk_id=holder, pointer=pointer)
+
+
 class IngestService:
     """Mint a chunk from work refs, pinned to the default graph."""
 
@@ -30,9 +38,7 @@ class IngestService:
 
     def ingest(self, pointers: list[WorkRef], *, graph: Graph) -> str:
         for pointer in pointers:
-            holder = self._chunks.find_live_holder(pointer)
-            if holder is not None:
-                raise IngestConflict(existing_chunk_id=holder, pointer=pointer)
+            require_no_live_holder(self._chunks, pointer)
         chunk = mint_chunk(pointers, graph_id=graph.graph_id, at=self._clock.now())
         self._chunks.mint(chunk)
         return chunk.chunk_id

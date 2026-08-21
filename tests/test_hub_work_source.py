@@ -13,7 +13,7 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.work import Chunk, WorkItemAuthor, WorkItemClosure, WorkItemPriority, WorkRef
+from blizzard.hub.domain.work import WorkItemAuthor, WorkItemClosure, WorkItemPriority, WorkRef
 from blizzard.hub.domain.work_items import (
     WorkItemEdit,
     WorkItemEditService,
@@ -26,7 +26,7 @@ from blizzard.hub.work_sources.closer import WorkItemGoneError
 from blizzard.hub.work_sources.editor import WorkItemRefUnknownError
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import WorkSourceError
-from tests.support import migrate_to, seed_chunk, seed_graph
+from tests.support import migrate_to, seed_chunk, seed_graph, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -48,27 +48,6 @@ def _graph(engine: Engine) -> Graph:
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
     return Graph(graph_id="gr_1", name="g", entry_node_id="nd_1", nodes=[], edges=[], created_at=_T0)
-
-
-def _seed_item(
-    items: WorkItemStore,
-    *,
-    graph_id: str,
-    title: str,
-    body: str,
-    author: WorkItemAuthor,
-    stated_priority: str | None,
-    at: datetime,
-):
-    """A chunk-bearing item fixture, shaped like production's own two-step mint
-    (``WorkItemEditService.create``) — every hub item's creation mints its resting
-    chunk (blizzard#359), so there is no chunkless filing path left to seed instead."""
-    ref = items.allocate_ref("hub")
-    pointer = WorkRef(source="hub", ref=ref)
-    chunk = Chunk(chunk_id=f"ch_{ref}", graph_id=graph_id, work_refs=[pointer], minted_at=at)
-    return items.create_with_chunk(
-        pointer=pointer, title=title, body=body, author=author, stated_priority=stated_priority, at=at, chunk=chunk
-    )
 
 
 def test_parse_claims_the_reserved_colon_token_form(tmp_path: Path) -> None:
@@ -97,13 +76,12 @@ def test_branch_url_is_always_none(tmp_path: Path) -> None:
 def test_fetch_reads_an_open_item_s_title_and_body(tmp_path: Path) -> None:
     source, items, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
-    created = _seed_item(
+    created = seed_work_item(
         items,
         graph_id=graph.graph_id,
         title="widget is broken",
         body="steps to repro",
         author=WorkItemAuthor.fleet(),
-        stated_priority=None,
         at=_T0,
     )
 
@@ -123,13 +101,10 @@ def test_fetch_an_unknown_ref_raises(tmp_path: Path) -> None:
 def test_fetch_a_withdrawn_ref_raises(tmp_path: Path) -> None:
     source, items, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
-    created = _seed_item(
+    created = seed_work_item(
         items,
         graph_id=graph.graph_id,
-        title="t",
-        body="b",
         author=WorkItemAuthor.fleet(),
-        stated_priority=None,
         at=_T0,
     )
     items.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
@@ -142,13 +117,10 @@ def test_fetch_a_delivered_ref_still_resolves(tmp_path: Path) -> None:
     """A closed-by-delivery item stays fetchable — only ``withdrawn`` is unresolvable."""
     source, items, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
-    created = _seed_item(
+    created = seed_work_item(
         items,
         graph_id=graph.graph_id,
-        title="t",
-        body="b",
         author=WorkItemAuthor.fleet(),
-        stated_priority=None,
         at=_T0,
     )
     items.close("hub", created.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
@@ -181,22 +153,18 @@ def test_web_url_is_none_when_no_live_chunk_holds_the_pointer(tmp_path: Path) ->
 def test_list_and_get_answer_the_full_record_for_open_and_withdrawn_items(tmp_path: Path) -> None:
     source, items, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
-    open_item = _seed_item(
+    open_item = seed_work_item(
         items,
         graph_id=graph.graph_id,
         title="open",
-        body="b",
         author=WorkItemAuthor.fleet(),
-        stated_priority=None,
         at=_T0,
     )
-    withdrawn = _seed_item(
+    withdrawn = seed_work_item(
         items,
         graph_id=graph.graph_id,
         title="withdrawn",
-        body="b",
         author=WorkItemAuthor.fleet(),
-        stated_priority=None,
         at=_T0,
     )
     items.close("hub", withdrawn.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
@@ -328,13 +296,10 @@ def test_withdraw_succeeds_once_the_holding_chunk_is_no_longer_live(tmp_path: Pa
 def test_close_marks_an_open_item_delivered(tmp_path: Path) -> None:
     source, items, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
-    created = _seed_item(
+    created = seed_work_item(
         items,
         graph_id=graph.graph_id,
-        title="t",
-        body="b",
         author=WorkItemAuthor.fleet(),
-        stated_priority=None,
         at=_T0,
     )
     pointer = WorkRef(source="hub", ref=created.ref)
@@ -350,13 +315,10 @@ def test_close_marks_an_open_item_delivered(tmp_path: Path) -> None:
 def test_close_is_idempotent_on_an_already_delivered_item(tmp_path: Path) -> None:
     source, items, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
-    created = _seed_item(
+    created = seed_work_item(
         items,
         graph_id=graph.graph_id,
-        title="t",
-        body="b",
         author=WorkItemAuthor.fleet(),
-        stated_priority=None,
         at=_T0,
     )
     pointer = WorkRef(source="hub", ref=created.ref)
@@ -381,13 +343,10 @@ def test_close_leaves_a_withdrawn_item_withdrawn(tmp_path: Path) -> None:
     ``closed_at IS NULL`` guard, not a branch in :meth:`HubWorkSource.close`."""
     source, items, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
-    created = _seed_item(
+    created = seed_work_item(
         items,
         graph_id=graph.graph_id,
-        title="t",
-        body="b",
         author=WorkItemAuthor.fleet(),
-        stated_priority=None,
         at=_T0,
     )
     items.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
