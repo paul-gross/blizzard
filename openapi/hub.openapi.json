@@ -5422,6 +5422,112 @@
         "title": "WorkItemCreateRequest",
         "type": "object"
       },
+      "WorkItemCreateResponse": {
+        "description": "``POST /api/work-sources/{source}/items`` (blizzard#359) \u2014 carries every\n``WorkItemView`` field plus ``chunk_id``, the id of the ``not_ready`` chunk\ncreation mints in the same transaction.",
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/WorkItemAuthorView"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "closure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkItemClosure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "edited_at": {
+            "title": "Edited At",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "stated_priority": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkItemPriority"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "web_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Url"
+          }
+        },
+        "required": [
+          "source",
+          "ref",
+          "label",
+          "web_url",
+          "title",
+          "body",
+          "author",
+          "stated_priority",
+          "created_at",
+          "edited_at",
+          "closed_at",
+          "closure",
+          "chunk_id"
+        ],
+        "title": "WorkItemCreateResponse",
+        "type": "object"
+      },
       "WorkItemEntry": {
         "description": "One pointer's pass-through work item \u2014 title, body, and comment thread, vendor-native.\n``label``/``web_url`` are the legible pointer label and its browser address, both null when no\nconfigured source names ``source``. A per-pointer failure degrades here rather than failing the\nwhole read: ``error`` carries the reason and ``title``/``body`` are null.",
         "properties": {
@@ -11110,7 +11216,7 @@
         ]
       },
       "post": {
-        "description": "Allocate a fresh item at SOURCE, open, authored by the caller. 404/409 per D4,\n422 for a blank title or body.",
+        "description": "Allocate a fresh item at SOURCE, open, authored by the caller, and mint its\nresting ``not_ready`` chunk in the same transaction (blizzard#359). 404/409 per D4,\n422 for a blank title or body, 409 if an out-of-band ingest already holds the\nallocated ref's pointer, 503 if every graph named after the packaged default has\nbeen retired (the operator's brake, mirroring ``POST /chunks``).",
         "operationId": "create_work_item_api_work_sources__source__items_post",
         "parameters": [
           {
@@ -11138,7 +11244,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WorkItemView"
+                  "$ref": "#/components/schemas/WorkItemCreateResponse"
                 }
               }
             },

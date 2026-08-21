@@ -62,6 +62,14 @@ class WorkItemsListView(BaseModel):
     items: list[WorkItemView] = []
 
 
+class WorkItemCreateResponse(WorkItemView):
+    """``POST /api/work-sources/{source}/items`` (blizzard#359) — carries every
+    ``WorkItemView`` field plus ``chunk_id``, the id of the ``not_ready`` chunk
+    creation mints in the same transaction."""
+
+    chunk_id: str
+
+
 class WorkItemCreateRequest(BaseModel):
     """``POST /api/work-sources/{source}/items`` — ``author`` is stamped from the
     caller's resolved identity, never accepted here."""

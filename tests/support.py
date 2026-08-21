@@ -46,7 +46,13 @@ from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunne
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.graph import Edge, Graph, Node
 from blizzard.hub.domain.transcripts import TranscriptCaps
-from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.domain.work import (
+    Chunk,
+    IWriteWorkItemRepository,
+    WorkItemAuthor,
+    WorkItemRecord,
+    WorkRef,
+)
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
@@ -823,3 +829,26 @@ def seed_graph(conn: sa.Connection, graph_id: str, *, at: datetime) -> None:
 def seed_chunk(conn: sa.Connection, chunk_id: str, *, graph_id: str, at: datetime) -> None:
     """Seed one ``chunks`` parent row — the FK a seeded route/pointer/etc. needs."""
     conn.execute(sa.insert(_CHUNKS).values(chunk_id=chunk_id, graph_id=graph_id, minted_at=at))
+
+
+def seed_work_item(
+    store: IWriteWorkItemRepository,
+    *,
+    source: str = "hub",
+    graph_id: str,
+    title: str = "t",
+    body: str = "b",
+    author: WorkItemAuthor,
+    stated_priority: str | None = None,
+    at: datetime,
+) -> WorkItemRecord:
+    """Seed one hub-owned work item plus its resting chunk, mirroring production's own
+    two-step mint (``WorkItemEditService.create``, blizzard#359) — there is no chunkless
+    filing path to seed around. Callers still seed ``graph_id``'s own row first
+    (``seed_graph``); this only seeds the item and its chunk."""
+    ref = store.allocate_ref(source)
+    pointer = WorkRef(source=source, ref=ref)
+    chunk = Chunk(chunk_id=f"ch_{ref}", graph_id=graph_id, work_refs=[pointer], minted_at=at)
+    return store.create_with_chunk(
+        pointer=pointer, title=title, body=body, author=author, stated_priority=stated_priority, at=at, chunk=chunk
+    )

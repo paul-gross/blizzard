@@ -7,41 +7,34 @@ and its ``{source}/items``/``{source}/items/{ref}`` children."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import json
 from pathlib import Path
 
 import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from blizzard.hub.domain.work import WorkItemAuthor
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import FakeWorkSource, build_hub, seed_session, seed_user
+from blizzard.hub.events.broker import CHUNK_CHANGED
+from tests.support import FakeWorkSource, build_hub, emitted_events, seed_session, seed_user
 
 pytestmark = pytest.mark.component
 
-_T0 = datetime(2026, 1, 1, tzinfo=UTC)
-
 
 def test_a_hub_owned_pointer_ingests_and_renders_its_title_and_body(tmp_path: Path) -> None:
+    """Creation itself mints the item's chunk (blizzard#359) — no separate ingest call
+    needed to give ``GET /chunks/{id}/work-items`` a pointer to render."""
     hub = build_hub(tmp_path)
-    item = WorkItemStore(hub.engine).create(
-        source="hub",
-        title="widget is broken",
-        body="steps to repro",
-        author=WorkItemAuthor.fleet(),
-        stated_priority=None,
-        at=_T0,
-    )
-
-    chunk_id = hub.client.post("/api/chunks", json={"tokens": [f"hub:{item.ref}"]}).json()["chunk_id"]
+    created = hub.client.post(
+        "/api/work-sources/hub/items", json={"title": "widget is broken", "body": "steps to repro"}
+    ).json()
+    chunk_id = created["chunk_id"]
 
     entries = hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]
     assert len(entries) == 1
     entry = entries[0]
     assert entry["source"] == "hub"
-    assert entry["ref"] == item.ref
-    assert entry["label"] == f"hub:{item.ref}"
+    assert entry["ref"] == created["ref"]
+    assert entry["label"] == f"hub:{created['ref']}"
     assert entry["title"] == "widget is broken"
     assert entry["body"] == "steps to repro"
     assert entry["web_url"] == f"/board/chunk/{chunk_id}"
@@ -80,6 +73,9 @@ def test_create_get_list_patch_and_withdraw_round_trip(tmp_path: Path) -> None:
     assert body["title"] == "widget is broken"
     assert body["stated_priority"] == "normal"
     assert body["closure"] is None
+    chunk_id = body["chunk_id"]
+    assert body["web_url"] == f"/board/chunk/{chunk_id}"  # live from the moment create mints the holder
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "not_ready"
 
     listed = hub.client.get("/api/work-sources/hub/items").json()["items"]
     assert [item["ref"] for item in listed] == [ref]
@@ -87,16 +83,129 @@ def test_create_get_list_patch_and_withdraw_round_trip(tmp_path: Path) -> None:
     fetched = hub.client.get(f"/api/work-sources/hub/items/{ref}")
     assert fetched.status_code == 200
     assert fetched.json()["title"] == "widget is broken"
+    assert fetched.json()["web_url"] == f"/board/chunk/{chunk_id}"
 
     patched = hub.client.patch(f"/api/work-sources/hub/items/{ref}", json={"title": "widget is fixed"})
     assert patched.status_code == 200, patched.text
     assert patched.json()["title"] == "widget is fixed"
     assert patched.json()["body"] == "steps to repro"  # untouched field is preserved
 
+    # The minted chunk still lives — withdrawal refuses until it is stopped (blizzard#359).
+    assert hub.client.delete(f"/api/work-sources/hub/items/{ref}").status_code == 409
+    assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={}).status_code == 202
+
     withdrawn = hub.client.delete(f"/api/work-sources/hub/items/{ref}")
     assert withdrawn.status_code == 200, withdrawn.text
     assert withdrawn.json()["closure"] == "withdrawn"
     assert withdrawn.json()["closed_at"] is not None
+    assert withdrawn.json()["web_url"] is None  # the chunk reached a terminal status (stopped)
+
+
+# --------------------------------------------------------------------------- #
+# blizzard#359 — create mints its resting chunk, one transaction, no promotion
+
+
+def test_create_mints_exactly_one_chunk_on_the_default_graph_holding_the_new_pointer(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    default = hub.services.graph_mint.ensure_default(
+        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+    )
+
+    created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
+
+    chunks = hub.client.get("/api/chunks").json()
+    assert [chunk["chunk_id"] for chunk in chunks] == [created["chunk_id"]]
+    assert chunks[0]["graph_id"] == default.graph_id
+    assert [(ref["source"], ref["ref"]) for ref in chunks[0]["work_refs"]] == [("hub", created["ref"])]
+
+
+def test_create_publishes_a_minted_chunk_changed_frame(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+
+    created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
+
+    frames = [json.loads(e["data"]) for e in emitted_events(hub) if e["event"] == CHUNK_CHANGED]
+    assert len(frames) == 1
+    assert frames[0]["chunk_id"] == created["chunk_id"]
+    assert frames[0]["cause"] == "minted"
+    assert frames[0]["status"] == "not_ready"
+
+
+def test_a_second_post_chunks_against_the_minted_pointer_is_409(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
+
+    conflict = hub.client.post("/api/chunks", json={"tokens": [f"hub:{created['ref']}"]})
+
+    assert conflict.status_code == 409
+    assert conflict.json()["existing_chunk_id"] == created["chunk_id"]
+
+
+def test_create_is_409_when_an_out_of_band_ingest_already_holds_the_allocated_ref(tmp_path: Path) -> None:
+    """``HubWorkSource.parse``/``fetch`` admit any digit-string ref, allocated or not, so an
+    out-of-band ``POST /chunks`` can pre-empt the very ref allocation mints next — without
+    the guard, create mints a second live chunk holding the pointer the ingest already holds."""
+    hub = build_hub(tmp_path)
+    pre_ingested = hub.client.post("/api/chunks", json={"tokens": ["hub:1"]})
+    assert pre_ingested.status_code == 201, pre_ingested.text
+    existing_chunk_id = pre_ingested.json()["chunk_id"]
+
+    conflict = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"})
+
+    assert conflict.status_code == 409, conflict.text
+    assert conflict.json()["existing_chunk_id"] == existing_chunk_id
+    assert hub.client.get("/api/work-sources/hub/items").json()["items"] == []
+
+
+def test_create_does_not_promote_and_priority_never_writes_a_queue_position(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+
+    created = hub.client.post(
+        "/api/work-sources/hub/items", json={"title": "t", "body": "b", "stated_priority": "high"}
+    ).json()
+
+    assert created["chunk_id"] not in hub.services.chunks.queue_positions()
+    assert hub.client.get("/api/queue").json()["entries"] == []
+
+    promote = hub.client.post(f"/api/chunks/{created['chunk_id']}/promote")
+    assert promote.status_code == 202
+    positions = hub.services.chunks.queue_positions()
+    assert created["chunk_id"] in positions  # the tail stamp promotion always writes
+    assert [e["chunk_id"] for e in hub.client.get("/api/queue").json()["entries"]] == [created["chunk_id"]]
+
+
+def test_create_against_a_retired_default_graph_is_503_and_writes_no_item(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    doc = hub.services.default_graph_doc
+    graph = hub.services.graph_mint.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
+    hub.services.graph_lifecycle.retire(graph, by="operator")
+
+    resp = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"})
+
+    assert resp.status_code == 503, resp.text
+    assert doc.name in resp.json()["detail"]
+    assert hub.client.get("/api/work-sources/hub/items").json()["items"] == []
+
+
+def test_a_blank_title_rejects_before_the_default_graph_is_resolved(tmp_path: Path) -> None:
+    """Resolving the graph is a durable write, so a rejected request must not perform it:
+    the blank title is 422 with no graph minted, and stays 422 rather than becoming the
+    retired graph's 503 once one has been minted and retired."""
+    hub = build_hub(tmp_path)
+
+    blank = hub.client.post("/api/work-sources/hub/items", json={"title": "  ", "body": "b"})
+
+    assert blank.status_code == 422, blank.text
+    assert hub.client.get("/api/graphs").json() == []
+
+    graph = hub.services.graph_mint.ensure_default(
+        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+    )
+    hub.services.graph_lifecycle.retire(graph, by="operator")
+
+    retired = hub.client.post("/api/work-sources/hub/items", json={"title": "  ", "body": "b"})
+
+    assert retired.status_code == 422, retired.text
 
 
 # --------------------------------------------------------------------------- #
@@ -141,7 +250,9 @@ def test_an_unallocated_ref_is_404_on_get_patch_and_delete(tmp_path: Path) -> No
 
 def test_patch_and_delete_of_an_already_withdrawn_item_are_409(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    ref = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["ref"]
+    body = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
+    ref = body["ref"]
+    hub.client.post(f"/api/chunks/{body['chunk_id']}/stop", json={})
     hub.client.delete(f"/api/work-sources/hub/items/{ref}")
 
     assert hub.client.patch(f"/api/work-sources/hub/items/{ref}", json={"title": "t2"}).status_code == 409
@@ -162,14 +273,18 @@ def test_the_listing_route_threads_its_limit_and_refuses_one_out_of_range(tmp_pa
     assert hub.client.get("/api/work-sources/hub/items", params={"limit": 1001}).status_code == 422
 
 
-def test_delete_is_409_while_a_live_chunk_holds_the_item(tmp_path: Path) -> None:
+def test_delete_is_409_while_a_live_chunk_holds_the_item_and_200_once_it_is_stopped(tmp_path: Path) -> None:
+    """Its own post-stop complement, not 409 alone — an unconditional-409 `DELETE`
+    would also satisfy that. Creation itself mints the live holder (blizzard#359)."""
     hub = build_hub(tmp_path)
-    ref = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["ref"]
-    hub.client.post("/api/chunks", json={"tokens": [f"hub:{ref}"]})
+    created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
+    ref, chunk_id = created["ref"], created["chunk_id"]
 
-    resp = hub.client.delete(f"/api/work-sources/hub/items/{ref}")
+    assert hub.client.delete(f"/api/work-sources/hub/items/{ref}").status_code == 409
 
-    assert resp.status_code == 409
+    assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={}).status_code == 202
+
+    assert hub.client.delete(f"/api/work-sources/hub/items/{ref}").status_code == 200
 
 
 # --------------------------------------------------------------------------- #

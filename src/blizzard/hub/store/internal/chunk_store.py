@@ -158,6 +158,25 @@ DEFAULT_MODEL = ModelColumn()
 QUESTIONS = QuestionQuery()
 
 
+def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:
+    """Insert one chunk's ``chunks`` row and its ``chunk_work_refs`` rows on a
+    caller-supplied ``conn`` — the caller owns the transaction boundary, so a composite
+    write can fold this into its own transaction."""
+    conn.execute(
+        insert(s.chunks).values(
+            chunk_id=chunk.chunk_id,
+            graph_id=chunk.graph_id,
+            minted_at=chunk.minted_at,
+            # `chunks.model` is deliberately omitted (issue #144) — the insert
+            # leans on its `server_default`.
+            default_model=DEFAULT_MODEL.encode(chunk.default_model),
+            default_effort=chunk.default_effort,
+        )
+    )
+    for pointer in chunk.work_refs:
+        conn.execute(insert(s.chunk_work_refs).values(chunk_id=chunk.chunk_id, source=pointer.source, ref=pointer.ref))
+
+
 class ChunkStore:
     """Read-write chunk-facts adapter over the hub store engine."""
 
@@ -1095,21 +1114,7 @@ class ChunkStore:
 
     def mint(self, chunk: Chunk) -> None:
         with self._engine.begin() as conn:
-            conn.execute(
-                insert(s.chunks).values(
-                    chunk_id=chunk.chunk_id,
-                    graph_id=chunk.graph_id,
-                    minted_at=chunk.minted_at,
-                    # `chunks.model` is deliberately omitted (issue #144) — the insert
-                    # leans on its `server_default`.
-                    default_model=DEFAULT_MODEL.encode(chunk.default_model),
-                    default_effort=chunk.default_effort,
-                )
-            )
-            for pointer in chunk.work_refs:
-                conn.execute(
-                    insert(s.chunk_work_refs).values(chunk_id=chunk.chunk_id, source=pointer.source, ref=pointer.ref)
-                )
+            insert_chunk_rows(conn, chunk)
 
     def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
         # Idempotent by chunk_id: a chunk already promoted keeps its first row, so a

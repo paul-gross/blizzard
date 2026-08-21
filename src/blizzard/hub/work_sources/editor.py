@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import WorkItemAuthor, WorkItemPriority, WorkItemRecord, WorkRef
-from blizzard.hub.domain.work_items import WorkItemEdit
+from blizzard.hub.domain.work_items import CreatedWorkItem, WorkItemEdit
 
 
 class WorkItemRefUnknownError(Exception):
@@ -35,9 +36,11 @@ class IWorkEditor(Protocol):
         ...
 
     def create(
-        self, *, title: str, body: str, author: WorkItemAuthor, stated_priority: WorkItemPriority | None
-    ) -> WorkItemRecord:
-        """Allocate a fresh item at this source, open."""
+        self, *, title: str, body: str, author: WorkItemAuthor, stated_priority: WorkItemPriority | None, graph: Graph
+    ) -> CreatedWorkItem:
+        """Allocate a fresh item at this source, open, and mint its resting chunk pinned
+        to ``graph`` in the same transaction (blizzard#359). Raises
+        :class:`~blizzard.hub.domain.ingest.IngestConflict` on an out-of-band pre-empt."""
         ...
 
     def edit(self, pointer: WorkRef, edit: WorkItemEdit) -> WorkItemRecord:

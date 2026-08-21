@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.edit import UNSET, UnsetType
+from blizzard.hub.domain.graph import Graph
+from blizzard.hub.domain.ingest import require_no_live_holder
 from blizzard.hub.domain.work import (
     IReadChunkRepository,
     IWriteWorkItemRepository,
@@ -19,6 +21,7 @@ from blizzard.hub.domain.work import (
     WorkItemPriority,
     WorkItemRecord,
     WorkRef,
+    mint_chunk,
 )
 
 
@@ -43,6 +46,15 @@ class WorkItemEdit:
     stated_priority: WorkItemPriority | None | UnsetType = field(default=UNSET)
 
 
+@dataclass(frozen=True)
+class CreatedWorkItem:
+    """The result of filing a hub-owned work item (blizzard#359) — the item plus the
+    id of the ``not_ready`` chunk its creation mints in the same transaction."""
+
+    item: WorkItemRecord
+    chunk_id: str
+
+
 class WorkItemHeldByLiveChunk(Exception):
     """A withdrawal targeted a pointer a live (non-terminal) chunk still holds — mirrors
     ``IngestConflict`` (``hub/domain/ingest.py``): withdrawing under a running chunk would
@@ -65,16 +77,35 @@ class WorkItemEditService:
         self._clock = clock
 
     def create(
-        self, *, source: str, title: str, body: str, author: WorkItemAuthor, stated_priority: WorkItemPriority | None
-    ) -> WorkItemRecord:
-        return self._items.create(
-            source=source,
+        self,
+        *,
+        source: str,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        stated_priority: WorkItemPriority | None,
+        graph: Graph,
+    ) -> CreatedWorkItem:
+        """File the item and mint its resting chunk in one transaction (blizzard#359),
+        pinned to ``graph``, holding the pointer this call itself allocates. Checks the
+        allocated pointer for a live holder before minting: an out-of-band ingest of the
+        same ref can pre-empt it, raising :class:`~blizzard.hub.domain.ingest.IngestConflict`
+        and burning the ref."""
+        ref = self._items.allocate_ref(source)
+        pointer = WorkRef(source=source, ref=ref)
+        require_no_live_holder(self._chunks, pointer)
+        at = self._clock.now()
+        chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=at)
+        item = self._items.create_with_chunk(
+            pointer=pointer,
             title=title,
             body=body,
             author=author,
             stated_priority=stated_priority.value if stated_priority is not None else None,
-            at=self._clock.now(),
+            at=at,
+            chunk=chunk,
         )
+        return CreatedWorkItem(item=item, chunk_id=chunk.chunk_id)
 
     def edit(self, item: WorkItemRecord, edit: WorkItemEdit) -> WorkItemRecord:
         """Resolve ``edit``'s sentinel-tagged fields against ``item`` — the record this

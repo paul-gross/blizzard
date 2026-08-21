@@ -1,16 +1,15 @@
 """Chunk ingest — wrap ``{source, ref}`` pointers into a chunk pinned to a graph, storing the pointer
 and never the contents.
 
-**Ingest mints neither model nor effort default** (issue #144): both start empty, *expressing no
-preference*, so nothing here outranks a later declaration. **Batch = one chunk.** A pointer already held
-by a non-terminal chunk rejects the whole ingest ``409``; re-ingest is legal once its holder is done."""
+The empty-preference default policy is :func:`~blizzard.hub.domain.work.mint_chunk`'s own (issue #144).
+**Batch = one chunk.** A pointer already held by a non-terminal chunk rejects the whole ingest ``409``;
+re-ingest is legal once its holder is done."""
 
 from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.work import Chunk, IWriteChunkRepository, WorkRef
+from blizzard.hub.domain.work import IReadChunkRepository, IWriteChunkRepository, WorkRef, mint_chunk
 
 
 class IngestConflict(Exception):
@@ -22,6 +21,14 @@ class IngestConflict(Exception):
         self.pointer = pointer
 
 
+def require_no_live_holder(chunks: IReadChunkRepository, pointer: WorkRef) -> None:
+    """Raise :class:`IngestConflict` when ``pointer`` is already held by a live chunk —
+    the at-most-one-live-holder guard every pointer-minting call site shares."""
+    holder = chunks.find_live_holder(pointer)
+    if holder is not None:
+        raise IngestConflict(existing_chunk_id=holder, pointer=pointer)
+
+
 class IngestService:
     """Mint a chunk from work refs, pinned to the default graph."""
 
@@ -31,14 +38,7 @@ class IngestService:
 
     def ingest(self, pointers: list[WorkRef], *, graph: Graph) -> str:
         for pointer in pointers:
-            holder = self._chunks.find_live_holder(pointer)
-            if holder is not None:
-                raise IngestConflict(existing_chunk_id=holder, pointer=pointer)
-        chunk = Chunk(
-            chunk_id=Id.mint(CHUNK_PREFIX, self._clock).value,
-            graph_id=graph.graph_id,
-            work_refs=list(pointers),
-            minted_at=self._clock.now(),
-        )
+            require_no_live_holder(self._chunks, pointer)
+        chunk = mint_chunk(pointers, graph_id=graph.graph_id, at=self._clock.now())
         self._chunks.mint(chunk)
         return chunk.chunk_id

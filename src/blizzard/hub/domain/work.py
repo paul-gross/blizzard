@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
 
+from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor, Graph
@@ -181,6 +182,19 @@ class Chunk:
     # The chunk's standing intent to migrate onto another graph at its next transition
     # (issue #124) — ``None`` while no intent is set.
     intended_migration: IntendedMigration | None = None
+
+
+def mint_chunk(work_refs: Sequence[WorkRef], *, graph_id: str, at: datetime) -> Chunk:
+    """Mint a resting chunk pinned to ``graph_id`` holding ``work_refs``, timestamped at
+    the caller's own already-stamped ``at`` (``bzh:injected-clock``) — neither model nor
+    effort default (issue #144), the empty-preference policy every chunk-minting call
+    site shares, given one home here."""
+    return Chunk(
+        chunk_id=Id.mint_at(CHUNK_PREFIX, at).value,
+        graph_id=graph_id,
+        work_refs=list(work_refs),
+        minted_at=at,
+    )
 
 
 # --- Facts that feed the derivations ---------------------------------------
@@ -1738,20 +1752,33 @@ class IReadWorkItemRepository(Protocol):
 
 
 class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
-    """Read-write variant — ``create``, ``edit`` and ``close`` (blizzard#358)."""
+    """Read-write variant — ``allocate_ref``, ``create_with_chunk``, ``edit`` and
+    ``close`` (blizzard#358, blizzard#359). Every hub item's creation mints its resting
+    chunk in the same transaction; there is no chunkless filing path."""
 
-    def create(
+    def allocate_ref(self, source: str) -> str:
+        """Allocate a fresh, monotonic, never-reused ``ref`` for ``source``, in its own
+        transaction (blizzard#359) — split out from the insert so a caller can hold the
+        ``ref`` before the row it feeds exists, and mint a chunk against that pointer.
+        May skip one on a crash between this call and the insert it feeds — a
+        gap-tolerant contract, the same one a DB sequence carries."""
+        ...
+
+    def create_with_chunk(
         self,
         *,
-        source: str,
+        pointer: WorkRef,
         title: str,
         body: str,
         author: WorkItemAuthor,
         stated_priority: str | None,
         at: datetime,
+        chunk: Chunk,
     ) -> WorkItemRecord:
-        """Allocate a fresh, monotonic, never-reused ``ref`` for ``source`` and insert
-        the item open."""
+        """Insert the item row keyed by ``pointer`` — the ref :meth:`allocate_ref`
+        already minted for it, taken as its own explicit parameter — and ``chunk``'s own
+        rows, atomically in one transaction (blizzard#359): a store failure leaves
+        neither durable."""
         ...
 
     def edit(

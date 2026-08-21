@@ -96,6 +96,25 @@ def test_ingest_frame_carries_graph_id_and_omits_runner_id(tmp_path: Path) -> No
     assert frame["key"] == f"chunks:{chunk_id}"
 
 
+def test_hub_item_create_frame_carries_graph_id_and_omits_runner_id(tmp_path: Path) -> None:
+    """The item-creation mint (blizzard#359) publishes the same enrichment shape as a
+    bare ``POST /chunks`` ingest — the structurally identical emit site this test's
+    sibling above already pins."""
+    hub = build_hub(tmp_path)
+    chunk_id = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["chunk_id"]
+    frames = _chunk_changed_frames(hub)
+    assert len(frames) == 1
+    frame = frames[0]
+    assert frame["chunk_id"] == chunk_id
+    assert frame["status"] == "not_ready"
+    assert frame["cause"] == "minted"
+    assert "runner_id" not in frame
+    assert "prev_status" not in frame
+    assert "prev_node" not in frame
+    assert "graph_id" in frame
+    assert frame["key"] == f"chunks:{chunk_id}"
+
+
 def test_claim_carries_cause_claimed_and_runner_id(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201

@@ -10,6 +10,7 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import (
     IReadChunkRepository,
     IReadWorkItemRepository,
@@ -19,7 +20,7 @@ from blizzard.hub.domain.work import (
     WorkItemRecord,
     WorkRef,
 )
-from blizzard.hub.domain.work_items import WorkItemEdit, WorkItemEditService
+from blizzard.hub.domain.work_items import CreatedWorkItem, WorkItemEdit, WorkItemEditService
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkItemGoneError
@@ -61,8 +62,10 @@ class HubWorkSource:
 
     def web_url(self, pointer: WorkRef) -> str | None:
         """The board's own chunk deep link — relative, since the hub declares no public
-        origin. ``None`` while no live chunk holds the pointer (chunk-minting-on-create
-        is a later issue)."""
+        origin. Non-``None`` exactly while a live (non-terminal) chunk holds the pointer
+        — from the moment create mints the item's resting chunk (blizzard#359) until
+        that chunk reaches a terminal status (``stopped`` or ``done``); ``None`` before
+        and after."""
         chunk_id = self._chunks.find_live_holder(pointer)
         return f"/board/chunk/{chunk_id}" if chunk_id is not None else None
 
@@ -91,10 +94,15 @@ class HubWorkSource:
         return self._resolve(pointer)
 
     def create(
-        self, *, title: str, body: str, author: WorkItemAuthor, stated_priority: WorkItemPriority | None
-    ) -> WorkItemRecord:
+        self, *, title: str, body: str, author: WorkItemAuthor, stated_priority: WorkItemPriority | None, graph: Graph
+    ) -> CreatedWorkItem:
         return self._edits.create(
-            source=RESERVED_HUB_SOURCE_NAME, title=title, body=body, author=author, stated_priority=stated_priority
+            source=RESERVED_HUB_SOURCE_NAME,
+            title=title,
+            body=body,
+            author=author,
+            stated_priority=stated_priority,
+            graph=graph,
         )
 
     def edit(self, pointer: WorkRef, edit: WorkItemEdit) -> WorkItemRecord:
