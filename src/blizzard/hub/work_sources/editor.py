@@ -39,7 +39,8 @@ class IWorkEditor(Protocol):
         self, *, title: str, body: str, author: WorkItemAuthor, stated_priority: WorkItemPriority | None, graph: Graph
     ) -> CreatedWorkItem:
         """Allocate a fresh item at this source, open, and mint its resting chunk pinned
-        to ``graph`` in the same transaction (blizzard#359)."""
+        to ``graph`` in the same transaction (blizzard#359). Raises
+        :class:`~blizzard.hub.domain.ingest.IngestConflict` on an out-of-band pre-empt."""
         ...
 
     def edit(self, pointer: WorkRef, edit: WorkItemEdit) -> WorkItemRecord:

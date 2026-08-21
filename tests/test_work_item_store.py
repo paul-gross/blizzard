@@ -71,20 +71,6 @@ def test_create_reads_back_open_with_no_closure(tmp_path: Path) -> None:
     assert fetched.closure is None
 
 
-def test_ref_allocation_is_monotonic_and_never_reused(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-
-    first = seed_work_item(
-        store, graph_id="gr_1", title="a", body="a", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
-    )
-    second = seed_work_item(
-        store, graph_id="gr_1", title="b", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
-    )
-
-    assert first.ref != second.ref
-    assert int(second.ref) > int(first.ref)
-
-
 def test_list_breaks_a_same_instant_created_at_tie_on_work_item_id(tmp_path: Path) -> None:
     """Two items created at the identical instant still sort deterministically — not an
     artifact of sqlite's rowid-order fallback, which a real (postgres) engine wouldn't

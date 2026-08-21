@@ -1,9 +1,9 @@
 """Chunk ingest — wrap ``{source, ref}`` pointers into a chunk pinned to a graph, storing the pointer
 and never the contents.
 
-**Ingest mints neither model nor effort default** (issue #144): both start empty, *expressing no
-preference*, so nothing here outranks a later declaration. **Batch = one chunk.** A pointer already held
-by a non-terminal chunk rejects the whole ingest ``409``; re-ingest is legal once its holder is done."""
+The empty-preference default policy is :func:`~blizzard.hub.domain.work.mint_chunk`'s own (issue #144).
+**Batch = one chunk.** A pointer already held by a non-terminal chunk rejects the whole ingest ``409``;
+re-ingest is legal once its holder is done."""
 
 from __future__ import annotations
 

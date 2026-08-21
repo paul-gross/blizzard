@@ -188,7 +188,7 @@ def mint_chunk(work_refs: Sequence[WorkRef], *, graph_id: str, at: datetime) -> 
     """Mint a resting chunk pinned to ``graph_id`` holding ``work_refs``, timestamped at
     the caller's own already-stamped ``at`` (``bzh:injected-clock``) — neither model nor
     effort default (issue #144), the empty-preference policy every chunk-minting call
-    site shares, given one home here rather than each re-listing ``Chunk(...)``."""
+    site shares, given one home here."""
     return Chunk(
         chunk_id=Id.mint_at(CHUNK_PREFIX, at).value,
         graph_id=graph_id,
@@ -1776,9 +1776,9 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         chunk: Chunk,
     ) -> WorkItemRecord:
         """Insert the item row keyed by ``pointer`` — the ref :meth:`allocate_ref`
-        already minted for it, taken as its own parameter rather than positionally off
-        ``chunk.work_refs`` — and ``chunk``'s own rows, atomically in one transaction
-        (blizzard#359): a store failure leaves neither durable."""
+        already minted for it, taken as its own explicit parameter — and ``chunk``'s own
+        rows, atomically in one transaction (blizzard#359): a store failure leaves
+        neither durable."""
         ...
 
     def edit(

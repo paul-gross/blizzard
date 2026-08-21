@@ -161,8 +161,7 @@ QUESTIONS = QuestionQuery()
 def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:
     """Insert one chunk's ``chunks`` row and its ``chunk_work_refs`` rows on a
     caller-supplied ``conn`` — the caller owns the transaction boundary, so a composite
-    write can fold this into its own transaction rather than copying the insert
-    sequence."""
+    write can fold this into its own transaction."""
     conn.execute(
         insert(s.chunks).values(
             chunk_id=chunk.chunk_id,
