@@ -1,160 +1,95 @@
-# Installing the colocated hub and runner
+# Installation
 
-## Install
+## First install
 
-Install the wheel into a self-contained, node-free virtualenv, seed each daemon's runtime directory once, drop the
-units, and enable them:
+1. Create a system service account named `blizzard` with home `/var/lib/blizzard`, the shared state root the units
+   declare as `StateDirectory`.
+2. Install the single blizzard wheel into a dedicated node-free virtualenv at `/opt/blizzard/venv`, the path the
+   packaged units' `ExecStart` expects. If the wheel lives anywhere else, edit the units' `ExecStart` and `ExecStartPre`
+   to the real binary path — systemd requires an absolute path there.
+3. Seed each daemon's runtime directory once, as the service account: `blizzard-hub init /var/lib/blizzard/hub` and
+   `blizzard-runner init /var/lib/blizzard/runner`; `init` writes the config scaffold, the data directory, and a store
+   migrated to head, and is idempotent.
+4. Install the units by copying [packaging/systemd/blizzard-hub.service](../../packaging/systemd/blizzard-hub.service)
+   and [blizzard-runner.service](../../packaging/systemd/blizzard-runner.service) into `/etc/systemd/system`, then
+   `systemctl daemon-reload` and `systemctl enable --now` on both; `enable` is what starts them at boot.
 
-```bash
-# 1. Install the one wheel into a dedicated venv (the path the units' ExecStart use).
-python3 -m venv /opt/blizzard/venv
-/opt/blizzard/venv/bin/pip install blizzard-<version>-py3-none-any.whl
+## Configuration and credentials
 
-# 2. A service account and the shared state root the units declare (StateDirectory).
-useradd --system --home-dir /var/lib/blizzard --shell /usr/sbin/nologin blizzard
+The hub's delivery credentials (`BZ_FORGE_URL`, `BZ_FORGE_TOKEN`) go in `/etc/blizzard/hub.env`; its work sources are
+`[[work_source]]` blocks in `blizzard-hub.toml`, owned by [work-sources.md](./work-sources.md); the runner's workspace
+and harness bindings live in its own `blizzard-runner.toml` and carry no credentials.
 
-# 3. Seed each runtime dir: config scaffold + data dir + a store migrated to head.
-#    Idempotent — safe to re-run.
-sudo -u blizzard /opt/blizzard/venv/bin/blizzard-hub    init /var/lib/blizzard/hub
-sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner init /var/lib/blizzard/runner
+The hub's deployment-varying values — db_url, host, port — also resolve from the environment at load, precedence CLI
+flag over env var over toml over default: `BZ_HUB_DB_URL` (no flag exists), `BZ_HUB_HOST`, `BZ_HUB_PORT`, with
+`--host`/`--port` on `hub host` only; `hub host` and `hub migrate` resolve identically through `HubConfig.load`. All
+override variables unset leaves the resolved config byte-identical to a toml-only load; a malformed `BZ_HUB_PORT` fails
+with a `ConfigError` naming the variable, from `hub init` and from every later load alike.
 
-# 4. Point the hub at the forge and the runner at its workspace. The hub's
-#    delivery credentials go in /etc/blizzard/hub.env (BZ_FORGE_URL, BZ_FORGE_TOKEN, …);
-#    its work sources are declared in blizzard-hub.toml's [[work_source]] blocks
-#    (init scaffolds a commented-out example — see deployment/work-sources.md);
-#    the runner's workspace/harness bindings live in its own blizzard-runner.toml,
-#    written by `init` and edited in place (no credentials).
+## Runtime directories
 
-# 5. Install and enable both units. `enable` is what starts them at boot; `--now`
-#    starts them immediately too.
-sudo cp packaging/systemd/blizzard-hub.service packaging/systemd/blizzard-runner.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now blizzard-hub.service blizzard-runner.service
-```
+Every verb that takes a runtime directory resolves it from three rungs, highest first: the explicit flag or argument,
+then the daemon's environment variable, then the current working directory. `BZ_HUB_DIR` names the hub runtime dir
+(`blizzard-hub.toml` plus `data/hub.db`); `BZ_RUNNER_DIR` names the runner runtime dir (`blizzard-runner.toml` plus
+`data/runner.db` and `runner.sock`). The packaged units pass `--dir` explicitly; the variables exist for callers that
+cannot write a flag per invocation. Which runtime-dir flags and positionals each verb takes is that verb's own `--help`
+contract.
 
-If the wheel is installed somewhere other than `/opt/blizzard/venv`, edit the `ExecStart`/`ExecStartPre` paths to match
-`command -v blizzard-hub` — systemd requires an absolute path there.
+Selectable is not shareable: the store is single-writer and each daemon migrates on boot, so aiming a second live daemon
+at a runtime dir a running instance holds risks lock contention and corruption — the variable chooses a root, it does
+not make one safe to share.
 
-**Reconcile the graphs after every deploy — `blizzard hub graph sync`.** Unlike the store, which self-heals on restart,
-a wheel's **graph** changes are inert until they are minted: graphs live in the hub's store, the hub resolves a *minted*
-graph per chunk, and it never re-reads the packaged YAML. So a deploy that ships a changed graph and stops at the
-restart leaves every new chunk running the previous definition — with no error, log line, or status output saying so.
+## Upgrades
 
-```bash
-# after the hub is back up, and before you consider the deploy done
-/opt/blizzard/venv/bin/blizzard hub graph sync
-```
+To adopt a new wheel, `pip install` it into the venv and `systemctl restart` both units — no manual migration step: each
+unit's `ExecStartPre` runs `migrate` before the daemon opens its store, and the daemon refuses to start on a revision
+mismatch, so a forgotten migration fails loudly instead of corrupting state. A graceful `systemctl restart` preserves
+in-flight work across an upgrade; [recovery.md](./recovery.md) owns that contract.
 
-It compares each packaged graph's **fully inlined** definition against the newest mint of its name and mints only what
-actually differs, so it is safe to run unconditionally: an unchanged wheel mints nothing and churns no lineage. Inlined
-is the operative word — a mint folds every file a graph references into the stored definition, so an edit confined to
-one of those files, never touching `graph.yaml` at all, is a real graph change that a `graph.yaml` diff would miss
-entirely. Which keys carry a file reference is enumerated by `blizzard hub graph mint --help`; diff all of them before
-you call a deploy complete. A graph that fails to load or validate is reported as `failed` and exits non-zero without
-stopping the others from reconciling.
+`migrate` reads `blizzard-hub.toml` before touching the store, so a config the new wheel rejects fails `ExecStartPre`
+and the unit never starts; make any required config edit in the same maintenance window as the wheel, before the
+restart. The migrate-on-start safety story covers additive or backfill schema revisions only — not a destructive
+revision whose `upgrade()` deletes rows, and not a config change the new wheel requires.
 
-Minting is **additive**: the new definition becomes `effective` and supersedes the prior one for future resolution,
-while every in-flight chunk stays pinned to the definition it started under (moving one deliberately is
-[`hub chunk migrate`](./chunk-operations.md#migrating-a-claimed-chunk-to-another-graph)). Confirm with
-`blizzard hub graph list` — the newest per name should read `effective`.
+### The one destructive migration
 
-**Upgrades self-heal the store — for an additive or backfill revision.** To adopt a new wheel, `pip install` it into the
-venv and `systemctl restart` the units — no manual migration step. Each unit's `ExecStartPre` runs `… migrate` before
-the daemon opens its store, so a wheel that ships a new schema revision reconciles the on-disk store to head on the next
-start; the daemon refuses to start on a revision mismatch, so a forgotten migration fails loudly rather than corrupting
-state. A graceful `systemctl
-restart` also preserves in-flight work across the upgrade — see the recovery contract
-below. That loud-failure guarantee is the whole safety story for a revision whose `upgrade()` only adds or backfills; it
-is not for a **destructive** one, whose `upgrade()` deletes rows outright — see "The pr-opened-idempotent upgrade note"
-below for the one revision so far that does. It also does not cover a **config** change the new wheel requires:
-`migrate` reads `blizzard-hub.toml` before it touches the store, so a config the new wheel rejects fails `ExecStartPre`
-and the unit never starts. One such rename ships today — see "The work-source key rename" immediately below, and make
-that edit *before* the restart.
+The `20260716_2206_hub_pr_opened_idempotent` migration is the first in either store whose `upgrade()` deletes rows: it
+deletes every `delivery_pr_opened` row but the earliest per (chunk_id, repo) before adding a unique constraint there;
+`downgrade()` only drops the constraint and never restores the rows. That delete removes only true duplicates of a
+forge-deduplicated `pr.opened` fact, but it is unconditional and irreversible — copy the hub's store file (sqlite
+`hub.db`, or the postgres equivalent) before restarting into a wheel carrying it; the revision-mismatch guard cannot
+catch it afterward.
 
-### The work-source key rename
+### The `[[work_source]]` rename
 
-**A hub whose `blizzard-hub.toml` still declares `[[pm_source]]` will not start on this wheel.** The key is now
-`[[work_source]]`; the block's contents are unchanged. Rename every occurrence:
+A hub whose `blizzard-hub.toml` still declares `[[pm_source]]` will not start on this wheel: the key is renamed
+`[[work_source]]` with the block's contents unchanged, and `HubConfig.load` raises naming the new key — under the
+systemd layout `ExecStartPre`'s migrate is what fails, so the daemon never comes up; edit the toml before the restart.
+The refusal is deliberate rather than a silent alias: an ignored `[[pm_source]]` block would parse as zero external work
+sources, booting the hub clean while every external pointer's board label renders null; the built-in hub source needs no
+entry and is unaffected. `token_env` values need no change: only the table key was renamed — the scaffold's example
+value changed, but the variable name is your own choice.
 
-```toml
-# before                # after
-[[pm_source]]           [[work_source]]
-```
+Response bodies carry no rename alias: `pm_pointers` is now `work_refs` on every chunk, queue, and envelope view; a
+client reading the old name gets an empty list, not an error, so client code must change whichever path it calls.
+`GET /chunks/{id}/pm-items` remains a deprecated alias for `/work-items` on both daemons — a courtesy for out-of-tree
+callers, not supported forever; move to `/work-items`.
 
-The failure is deliberate rather than a silent alias: a `[[pm_source]]` block on a wheel that no longer knows the key
-would parse as *zero* configured external work sources — a hub that boots clean while every board label for an external
-pointer renders null (the built-in `hub` source, issue #357, is unaffected either way — it needs no `[[work_source]]`
-entry at all). So `HubConfig.load` raises instead, naming the new key.
+## Graph sync after a deploy
 
-Two consequences worth planning around:
+Run `blizzard hub graph sync` after every deploy, once the hub is back up: the hub resolves a minted graph per chunk
+from its store and never re-reads packaged YAML, so a deploy shipping a changed graph and stopping at the restart leaves
+every new chunk on the previous definition, with nothing in errors, logs, or status saying so.
 
-- **It fails at `migrate`, not at first use.** `blizzard hub migrate` and `blizzard hub
-  host` both load the config, so
-  under the systemd layout above the unit's `ExecStartPre=… migrate` is what fails and the daemon never comes up. Edit
-  the toml in the same maintenance window as the wheel, before `systemctl restart`.
-- **`token_env` is yours and needs no change.** It names an environment variable you chose; only the *table key* was
-  renamed. A `token_env = "BZ_PM_TOKEN"` that works today keeps working — the scaffold's example value changed, your
-  value need not.
+`graph sync` compares each packaged graph's fully inlined definition against the newest mint of its name and mints only
+what differs, so it is safe to run unconditionally — an unchanged wheel mints nothing and churns no lineage. A mint
+folds every file a graph references into the stored definition, so an edit confined to a referenced file that never
+touches `graph.yaml` is a real graph change a `graph.yaml` diff misses; `blizzard hub graph mint --help` enumerates
+which keys carry file references — diff all of them before calling a deploy complete.
 
-**If you script against the API**, two related changes ride along:
+A packaged graph that fails to load or validate reports failed and exits `graph sync` non-zero without stopping the
+others from reconciling. Confirm a sync with `blizzard hub graph list` — the newest mint per name should read effective.
 
-- `GET /chunks/{id}/pm-items` still works on both daemons as a **deprecated alias** for `/work-items` (marked deprecated
-  in the OpenAPI spec). Move to `/work-items`; the alias is a courtesy for out-of-tree callers, not a supported path
-  forever.
-- **Response bodies carry no alias.** The field `pm_pointers` is now `work_refs` on every chunk, queue, and envelope
-  view. A client reading the old name gets an empty list, not an error — so this is the part that needs a code change,
-  whichever path you call.
-
-### The pr-opened-idempotent upgrade note
-
-**`20260716_2206_hub_pr_opened_idempotent` is the first migration in either store whose `upgrade()` deletes rows** (the
-escalation-takeover and graph-node-produces-checks revisions are the only other destructive revisions in either tree,
-and both only drop columns). Closing a coordinator read-then-write race (issue #10) with a unique constraint on
-`(chunk_id, repo)` first requires a store carrying the race's duplicate rows to no longer carry them, so `upgrade()`
-deletes every `delivery_pr_opened` row but the earliest per `(chunk_id, repo)` before adding the constraint.
-`downgrade()` only drops the constraint back — it does not restore the deleted rows; they are gone for good.
-
-In practice this only ever removes true duplicates (a redundant `pr.opened` fact for a PR the forge had already
-deduplicated to one), so no chunk loses a fact a human or the board ever relied on distinguishing. But because the
-delete is unconditional and irreversible, **copy the hub's store file before restarting into a wheel carrying this
-migration** — `cp <hub-dir>/data/hub.db <hub-dir>/data/hub.db.pre-pr-opened-idempotent` for the sqlite default, or the
-equivalent for a configured postgres `db_url` (`bzh:sql-portable`) — the same caution any one-way migration deserves,
-and not something `migrate`'s revision-mismatch guard can catch after the fact, since the delete is exactly what
-reaching that revision means.
-
-## Naming the runtime directory
-
-Every verb that takes a runtime dir resolves it from three rungs, highest to lowest: the explicit flag or argument, then
-an environment variable, then the current working directory. `init` and `host` accept a positional `DIRECTORY` as well
-as `--dir`; passing both requires they agree, and a genuine command-line conflict exits non-zero naming both values.
-`migrate`, `runner tick`, `runner pause`, and `runner start` take `--dir` only.
-
-| Daemon | Variable        | Names                                                                              |
-| ------ | --------------- | ---------------------------------------------------------------------------------- |
-| hub    | `BZ_HUB_DIR`    | the hub runtime dir (`blizzard-hub.toml` + `data/hub.db`)                          |
-| runner | `BZ_RUNNER_DIR` | the runner runtime dir (`blizzard-runner.toml` + `data/runner.db` + `runner.sock`) |
-
-The units above pass `--dir` explicitly, so they are unaffected. The variable is for callers that cannot hand-write a
-flag at every invocation — an operator shell aimed at a deployment, or winter's per-env band pointing one feature env at
-a store snapshot or at a shared runtime dir during an exclusive handoff.
-
-> **Selectable is not shareable.** The store is single-writer, and each daemon migrates on boot. Aiming a second live
-> daemon at a runtime dir a running instance already holds risks lock contention and corruption — this variable chooses
-> a root, it does not make one safe to share.
-
-### Overriding config values from the environment
-
-A container image cannot reasonably bake a `blizzard-hub.toml` per deployment, so the hub's deployment-varying config
-values — the store URL, the bind host and port — also resolve from the environment, at load time. Precedence, highest to
-lowest: **CLI flag > environment variable > toml value > built-in default**. `blizzard hub host` and
-`blizzard hub migrate` resolve identically, since both read through `HubConfig.load`.
-
-| Value    | Variable        | CLI flag                   |
-| -------- | --------------- | -------------------------- |
-| `db_url` | `BZ_HUB_DB_URL` | *(none)*                   |
-| `host`   | `BZ_HUB_HOST`   | `--host` (`hub host` only) |
-| `port`   | `BZ_HUB_PORT`   | `--port` (`hub host` only) |
-
-Every variable unset leaves a deployment's resolved config byte-identical to a toml-only load. A malformed `BZ_HUB_PORT`
-fails with a `ConfigError` naming the variable — from both `blizzard hub init` (which scaffolds a config on a fresh
-runtime dir) and every later `load`, so a container's very first boot fails the same named way as any later one.
+Minting is additive: the new definition becomes effective for future resolution while every in-flight chunk stays pinned
+to the definition it started under; moving one deliberately is `hub chunk migrate`, owned by
+[chunk-operations.md](./chunk-operations.md).

@@ -55,7 +55,7 @@
    "sites": [
     {
      "file": "docs/deployment/chunk-operations.md",
-     "symbol": "taking-over-a-parked-session--blizzard-runner-takeover",
+     "symbol": "taking-over-a-parked-session",
      "role": "allowed",
      "reason": "Operator-facing surface description. The component is the owner; this doc's reader is outside the workspace and cannot resolve a source path, so an operator doc states what the operator will see."
     },
@@ -97,7 +97,7 @@
     },
     {
      "file": "docs/deployment/work-sources.md",
-     "symbol": "ingest-tokens",
+     "symbol": "ingesting-work-items",
      "role": "allowed",
      "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment/ survivor: an operator ingesting work reads this section from outside the workspace and cannot resolve a source path, and the section's next paragraph reasons about `<source>:<ref>` refs it must first introduce. Reducing it is also a public-doc registry copy, which blizzard#274 owns."
     }
@@ -150,23 +150,23 @@
   {
    "id": "federation-origin-declared-not-derived",
    "statement": "A runner's federation redirect_uri is selected from the origins it declared in public_url and registered with the hub, never derived from the request; the browser follows it, so a loopback-only declaration is reachable from the runner's own host alone.",
-   "owner": "docs/deployment/human-auth.md#runner-side-federation",
+   "owner": "docs/deployment/human-auth.md#federating-a-runners-web-surface",
    "owner_kind": "doc-section",
    "owner_assert": {
-    "quote": "followed by the browser rather than the runner"
+    "quote": "the browser not the runner posts the federation token"
    },
    "markers": [
-    "followed by the browser rather than the runner"
+    "the browser not the runner posts the federation token"
    ],
    "sites": [
     {
      "file": "docs/deployment/human-auth.md",
-     "symbol": "runner-side-federation",
+     "symbol": "federating-a-runners-web-surface",
      "role": "owner"
     }
    ],
    "marker_acknowledgments": {
-    "followed by the browser rather than the runner": "R1: 8 words, chosen because the fact's other phrasings all carry an apostrophe and so cannot normalize to themselves as a marker. The runner's generated blizzard-runner.toml scaffold comment (src/blizzard/runner/config.py's to_toml) is a fourth, sanctioned restatement under bzh:one-prose-home's published-surface clause, but it is not carried as a site: it lives inside string literals, which prose_spans.py does not extract, so a site entry for it is unobservable and reads as stale. Named here instead of dropped."
+    "the browser not the runner posts the federation token": "R1: 9 words, chosen because the fact's other phrasings all carry an apostrophe and so cannot normalize to themselves as a marker. The runner's generated blizzard-runner.toml scaffold comment (src/blizzard/runner/config.py's to_toml) is a fourth, sanctioned restatement under bzh:one-prose-home's published-surface clause, but it is not carried as a site: it lives inside string literals, which prose_spans.py does not extract, so a site entry for it is unobservable and reads as stale. Named here instead of dropped."
    }
   },
   {

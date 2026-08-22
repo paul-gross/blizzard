@@ -40,8 +40,8 @@ def test_hub_backstop_leaves_headroom_for_the_runner_cap() -> None:
 @pytest.mark.parametrize(
     ("pattern", "expected_mb", "what"),
     [
-        (r"its own (\d+) MB per-record cap", TRANSCRIPT_RECORD_MAX_BYTES // (1024 * 1024), "runner"),
-        (r"rogue case — (\d+) MB/record", RECORD_MAX_BYTES // (1024 * 1024), "hub"),
+        (r"the (\d+) MB record cap", TRANSCRIPT_RECORD_MAX_BYTES // (1024 * 1024), "runner"),
+        (r"rogue case — (\d+) MB per record", RECORD_MAX_BYTES // (1024 * 1024), "hub"),
     ],
 )
 def test_the_operator_doc_states_the_cap_magnitude_the_code_enforces(pattern: str, expected_mb: int, what: str) -> None:

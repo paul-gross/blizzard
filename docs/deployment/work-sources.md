@@ -1,177 +1,109 @@
-# Configuring work sources
+# Work sources
 
-The hub's work-item pass-through reads every chunk's work item through a **configured work source** — a named,
-credentialed binding to one forge repo, declared as an `[[work_source]]` table in `blizzard-hub.toml`. This is a
-separate seam from the [delivery forge](./install.md): `BZ_FORGE_URL`/`BZ_FORGE_TOKEN` in the hub's env file control
-where a chunk's PR is opened and landed; `[[work_source]]` controls where its work item is *read from*, and each source
-carries its own credential rather than sharing the delivery forge's.
+The hub reads every chunk's work item through a configured work source: a named, credentialed binding to one forge repo,
+declared as an `[[work_source]]` table in `blizzard-hub.toml`. Work sources are a separate seam from the delivery forge:
+`BZ_FORGE_URL`/`BZ_FORGE_TOKEN` control where a chunk's PR is opened and landed, `[[work_source]]` controls where its
+work item is read from, and each source carries its own credential rather than sharing the delivery forge's.
 
-A bare hub with zero `[[work_source]]` blocks is a legal, fully-operable deployment: the built-in `hub` source is always
-seated, needs no configuration and no credential, and is what a hub-authored work item (`hub:<n>`) resolves through.
-`[[work_source]]` blocks are for **external** forge repos only — configure one per repo you want the hub to ingest work
-items from.
+A hub with zero `[[work_source]]` blocks is fully operable: the built-in hub source is always seated, needs no
+configuration or credential, and resolves hub-authored work items (`hub:<n>`); `[[work_source]]` blocks are for external
+forge repos only, one per repo to ingest from.
 
-`blizzard hub init` scaffolds a commented-out example block — uncomment it and fill in your own repo to configure a
-source:
+## Declaring a source
 
-```toml
-[[work_source]]
-name = "blizzard"                                  # source id — ingest tokens and board labels key on it
-provider = "github"                                # the only adapter grammar today
-repo = "paul-gross/blizzard"                       # the "owner/repo" this source is pinned to
-token_env = "BZ_WORK_SOURCE_TOKEN"                          # names an env var — see credentials below
-annotate = false                                   # opt into the forge-status label sweep — see below
-close = false                                      # opt into the delivery closure sweep — see below
-# api_base = "https://ghe.example.internal/api/v3" # optional: override the provider's API origin
-# web_base = "https://ghe.example.internal"         # optional: override the web origin
-```
+`blizzard hub init` scaffolds a commented-out example `[[work_source]]` block with every field annotated — uncomment and
+fill it in to configure a source; the scaffold is the field-by-field reference.
 
-Every field:
+- `name` is the source's identity: ingest tokens (`name:ref`, `name#ref`) and board pointer labels (`{source}#{ref}`)
+  key on it; it must not contain a colon (the token grammar splits on the first one), must be unique across blocks, and
+  `hub` is reserved for the built-in source. For a repo that already has chunks in this hub, `name` is not a free choice
+  — it must be the repo's own tail, the part after the last slash: an earlier release's migration backfilled every
+  existing pointer's source to its repo tail, so a mismatched name strands those pointers — nothing 503s and the hub
+  boots clean, but every pre-existing chunk for that repo degrades silently, label null and its work-items entry
+  carrying `error="no configured work source named '<repo-tail>'"`. A repo with no chunks minted against it yet carries
+  no repo-tail constraint; any name is safe.
+- `repo` is the owner/name coordinate the source is pinned to; each (provider, repo) pair may appear under only one
+  name, since two names for one repo would let an item be ingested twice under two identities.
+- `provider` names the adapter grammar; only `github` exists, and an unknown provider fails at config load, not first
+  use.
+- `api_base` overrides the provider's API origin (needed for a self-hosted forge such as GitHub Enterprise); `web_base`
+  overrides the web origin for the item's browsable URL and derives from `api_base` when omitted, so a GHE source needs
+  only `api_base`.
+- `token_env` names an environment variable, never the secret itself; the secret goes in the hub's env file
+  (`/etc/blizzard/hub.env` under the systemd layout in [install.md](./install.md)), and an unset `token_env` fails at
+  boot naming the missing variable rather than silently ingesting unauthenticated.
 
-| Field       | Required            | Meaning                                                                                                                                                                                                                                                                                                                                                  |
-| ----------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`      | yes                 | The source's identity. Ingest tokens (`name:ref`, `name#ref`) and board pointer labels (`{source}#{ref}`) key on it. Must not contain `:` (the ingest token grammar splits on the first one). Must be unique across all `[[work_source]]` blocks. `hub` is reserved for the built-in, always-seated hub work source (see below) — no block may claim it. |
-| `provider`  | yes                 | The adapter grammar this source speaks. Only `"github"` exists today; an unknown provider fails at config load, not at first use.                                                                                                                                                                                                                        |
-| `repo`      | yes                 | The `owner/name` coordinate this source is pinned to. Each `(provider, repo)` pair may appear under only one `name` — two names for the same repo would let one item be ingested twice under two identities.                                                                                                                                             |
-| `token_env` | yes                 | Names an environment variable — **not the secret itself**. See "Credential indirection" below.                                                                                                                                                                                                                                                           |
-| `annotate`  | no, default `false` | Opts this source into the forge-status label sweep. See "The forge-status label projection" below — **do not set this on more than one hub against the same forge repo.**                                                                                                                                                                                |
-| `close`     | no, default `false` | Opts this source into the delivery closure sweep. See "Closing delivered work items" below — **do not set this on more than one hub against the same forge repo.**                                                                                                                                                                                       |
-| `api_base`  | no                  | Overrides the provider's default API origin. Required to reach a self-hosted forge (e.g. GitHub Enterprise).                                                                                                                                                                                                                                             |
-| `web_base`  | no                  | Overrides the provider's default web origin, used for the item's browsable URL. Derived from `api_base` when omitted, so a self-hosted GHE source only needs to set `api_base`.                                                                                                                                                                          |
+## Ingesting work items
 
-Unlike `annotate`/`close`, item mutation (`GET`/`POST`/`PATCH`/`DELETE` under `/api/work-sources/{source}/items`) has no
-`[[work_source]]` knob to opt a configured source into: it is served only by the built-in `hub` source, whose own store
-is a hub-owned item's system of record. An operator request against a configured forge source refuses with a 409 naming
-it, on all four verbs — by design, not by a missing flag a future block could set. Creating a hub item mints its resting
-chunk in the same write: `POST .../hub/items` pins a fresh `not_ready` chunk to the default graph, holding the new
-item's pointer, and returns the chunk's id alongside the item — the fleet already has something to promote the moment
-the item exists, with no separate ingest call. Withdrawing that item (`DELETE`) refuses with a 409 while the chunk is
-still live — the same guard that refuses a re-ingest of a pointer a live chunk already holds; stop the chunk first.
+`blizzard hub chunk ingest` takes one or more source-native tokens and mints a chunk; each token is `<source>:<ref>`,
+`<source>#<ref>`, or a pasted work-item URL. The CLI parses nothing; the hub resolves each token against every
+configured source's own parse.
 
-**A self-hosted GitHub Enterprise example** — an internal repo behind a company GHE instance, alongside the public
-`blizzard` source:
+The configured source list is also the hub's allowlist of ingestable repos: a token naming a repo no `[[work_source]]`
+covers is rejected 422, naming the token and the sources that are configured — adding a repo to the fleet means adding
+its block first, with no separate allowlist to sync. For the github provider, `ref` must be numeric (the issue number);
+a non-numeric ref matches no configured source's parse and surfaces as the same 422 an unconfigured repo gets, so a
+malformed ref misdiagnoses as a missing `[[work_source]]`.
 
-```toml
-[[work_source]]
-name = "internal"
-provider = "github"
-repo = "acme/internal-tool"
-token_env = "BZ_INTERNAL_TOKEN"
-api_base = "https://git.corp.internal/api/v3"
-web_base = "https://git.corp.internal"        # explicit override illustration only —
-                                               # api_base alone is enough (web_base derives
-                                               # from it); shown here so the override syntax
-                                               # is visible somewhere in this doc.
-```
+The legacy `github:<rest>` token prefix is deprecated: it still resolves — warning on stderr, then passing the rest on
+its own merits — but carries no provider selection anymore, since a token resolves against whichever configured source
+claims it.
 
-`name = "internal"` is a free choice **only** because `acme/internal-tool` is a brand-new source with no chunks minted
-against it yet. That freedom does not extend to a repo that already has chunks in this hub — see the repo-tail rule in
-the upgrade note below, which this example is not an illustration of.
+## Hub-owned items
 
-## Credential indirection
+Creating a hub item mints its resting chunk in the same write: POST to the hub source's items pins a fresh `not_ready`
+chunk to the default graph holding the new item's pointer and returns the chunk id alongside the item, so nothing
+separate needs ingesting.
 
-`token_env` names an environment variable; the secret itself goes in the hub's env file (`/etc/blizzard/hub.env` under
-the [systemd layout](./install.md)), never in `blizzard-hub.toml` — the same separation the delivery forge's
-`BZ_FORGE_TOKEN` already follows. An unset `token_env` fails at boot, naming the missing variable rather than silently
-ingesting unauthenticated.
+Item mutation (the four verbs under `/api/work-sources/{source}/items`) is served only by the built-in hub source, whose
+own store is a hub-owned item's system of record; a request against a configured forge source refuses with a 409 naming
+it on all four verbs, by design rather than a missing opt-in knob. Withdrawing a hub item (DELETE) refuses with a 409
+while its chunk is still live — the same guard that refuses re-ingesting a pointer a live chunk holds; stop the chunk
+first.
 
-## The forge-status label projection
+## Forge-status labels (`annotate`)
 
-Per source with `annotate = true`, the hub runs a periodic background sweep that projects every live chunk's status onto
-its forge issue as one of two labels:
+`annotate` (default false) opts a source into the forge-status label sweep: a periodic hub background sweep projects
+every live chunk's status onto its forge issue as `blizzard:ingested` (minted but unclaimed — not_ready/ready) or
+`blizzard:in-progress` (running, paused, waiting_on_human, needs_human, delivering); a chunk with no live holder or one
+that reached stopped/done carries neither.
 
-- `blizzard:ingested` — the chunk is minted but not yet claimed (`not_ready`/`ready`).
-- `blizzard:in-progress` — a runner or the hub is actively working it (`running`, `paused`, `waiting_on_human`,
-  `needs_human`, `delivering`).
+The label sweep runs every `annotation_interval_seconds` (a top-level `blizzard-hub.toml` key, default 120, consulted
+only when a source opts in) and holds no state: each pass discovers the forge's actual labels afresh and writes only the
+difference from desired state, so hand-removed labels, mid-sweep crashes, and forge outages all self-heal on the next
+pass. A forge that is down, slow, or rate-limiting degrades the label sweep to a logged skip; it never blocks a chunk
+transition, an ingest, or any other hub request.
 
-A chunk with no live holder, or one that has reached `stopped`/`done`, carries neither label. The sweep runs every
-`annotation_interval_seconds` seconds — a top-level `blizzard-hub.toml` key, default `120`, consulted only when at least
-one source opts in — and holds **no state of its own**: each pass discovers the forge's actual labels afresh (listing
-issues per label, not reading back what a prior sweep wrote) and writes only the difference from desired state. That
-statelessness is what makes the projection self-healing: a label removed by hand, a crash mid-sweep, or a forge outage
-all resolve themselves on the next pass, with no hub-side record to repair. A forge that is down, slow, or rate-limiting
-degrades to a logged skip — it never blocks a chunk transition, an ingest, or any other hub request.
+Set `annotate = true` on at most one hub per forge repo: two sweeps against one repo fight over the same labels with no
+coordination — only the canonical instance opts in; every dev, staging, or snapshot hub pointed at the repo leaves it
+false.
 
-**Set `annotate = true` on at most one hub per forge repo.** Two writers sweeping the same repo will fight over the same
-labels — each pass "correcting" what the other just wrote — with no coordination between them. Only the canonical
-instance for a given forge repo should opt in; every dev/staging/snapshot hub pointed at that same repo must leave it
-`false`.
+## Delivery closure (`close`)
 
-## Closing delivered work items
+`close` (default false) opts a source into the delivery closure sweep: the hub periodically closes every landed,
+non-grouped chunk's still-open work refs through that source's binding — the guarantee half of closing delivered work,
+where a worker's own commit metadata is only an opportunistic hint that may beat the sweep on a fast-forward landing.
+The same `annotation_interval_seconds` paces the closure sweep; there is no second interval knob. Set `close = true` on
+at most one hub per forge repo, for the same uncoordinated-writers race as `annotate`.
 
-Per source with `close = true`, the hub runs a periodic background sweep that closes every landed, non-grouped chunk's
-still-open work refs through that source's own binding — the guarantee half of closing delivered work (issue #216); a
-worker's own commit metadata, when the source honors it, is only an opportunistic hint that may beat this sweep to it on
-a fast-forward landing.
+A stopped chunk that never landed closes nothing; a chunk that landed and was later stopped still closes — landing, not
+chunk status, is what the closure sweep gates on. Closing is best-effort and non-atomic: each ref is attempted
+independently, one failure never blocks another, and a failed attempt retries on the next pass — no bound on how many
+passes a transient forge outage costs, only eventual convergence.
 
-Closing is **best effort and non-atomic**: each ref is attempted independently, one ref's failure never blocks
-another's, and a failed attempt is retried on the sweep's next pass — there is no bound on how many passes a transient
-forge outage costs, only that it eventually converges. Each ref's outcome (`closed`, `gone`, or `failed`) is recorded as
-a durable fact and, the first time that outcome is recorded, one chunk-visible event (`work-item-closed` at `info`, or
-`work-item-close-failed` at `warning` — covering both a retried `failed` attempt and a terminal `gone` one). The same
-`annotation_interval_seconds` paces this sweep too — there is no second interval knob to configure.
+Each ref's outcome (closed, gone, or failed) is recorded as a durable fact and, the first time recorded, one
+chunk-visible event: work-item-closed at info, or work-item-close-failed at warning, the latter covering both a retried
+failed attempt and a terminal gone one.
 
-**Set `close = true` on at most one hub per forge repo**, for the same reason as `annotate` above: two writers issuing
-the same closing `PATCH` race each other with no coordination between them. A `STOPPED` chunk that never landed closes
-nothing; a chunk that landed and was *later* stopped still closes — landing, not chunk status, is what this sweep gates
-on.
+## Upgrading a hub with existing external chunks
 
-## The upgrade note
+An existing hub with chunks pointing at external forge issues must add a matching `[[work_source]]` block or their board
+pointer labels render null on the next deploy: `{source}#{ref}` needs a configured source by that name, and the built-in
+hub source covers only hub-authored items — `GET /chunks/{id}/work-items` never 503s, but an external chunk's entry
+degrades to a null label and an error until its source is configured. There is no backward-compatible default, because
+the source list also bounds which repos the hub will ingest from; add the block in the same maintenance window as the
+wheel, before migrate and restart ([install.md](./install.md) owns the sequence).
 
-**An existing hub with chunks pointing at external forge issues must add a matching `[[work_source]]` block, or their
-board pointer labels go null on the next deploy:** rendering `{source}#{ref}` needs a configured source by that name,
-and there is none to render against until one exists. The built-in `hub` source (issue #357) covers only hub-authored
-work items (`hub:<n>`) — it does not stand in for an external repo's binding, so `GET /chunks/{id}/work-items` never
-503s outright regardless, but an external chunk's entry still degrades to a null label and an `error` until its source
-is configured.
-
-This is not optional for a hub that already ingests external work items; there is no backward-compatible default,
-because the work source list also bounds which repos the hub is willing to ingest from (see below). Add the
-`[[work_source]]` block to `blizzard-hub.toml` as part of the same maintenance window as the wheel upgrade, before
-running `migrate`/restarting the daemon (see the [install/upgrade steps](./install.md)).
-
-**For a repo that already has chunks in this hub, `name` is not a free choice — it must be the repo's own tail** (the
-part after the last `/`; e.g. `blizzard` for `paul-gross/blizzard`). An earlier release's migration
-(`20260716_1512_hub_pm_pointer_source_ref`, which predates the `[[work_source]]` key and ran under its old name)
-backfilled every existing pointer's `source` to its repo tail, so a `name` that does not match strands those pointers:
-nothing 503s (the hub sees a non-empty source list and boots clean), but every pre-existing chunk for that repo silently
-degrades — `label` goes `null` and its `work-items` entry carries
-`error="no configured work source named '<repo-tail>'"`, because the pointer's `source` and the configured `name` no
-longer agree. A repo with no chunks minted against it yet has no such constraint — any `name` is safe (the GHE example
-above is exactly that case, not an illustration of the repo-tail rule).
-
-**Verify you got it right** after the upgrade: for any chunk that existed before this release, read its work items and
-confirm no entry carries an `error`:
-
-```text
-curl -s http://<hub>/api/chunks/<chunk_id>/work-items | jq '.items[].error'
-```
-
-Every value printed should be `null`. A non-null `error` naming a work source means the configured `name` does not match
-the backfilled repo tail for that chunk's pointer — fix the `name` (or add a second `[[work_source]]` under the correct
-tail) and restart.
-
-## Ingest tokens
-
-`blizzard hub chunk ingest` takes one or more source-native tokens and mints a chunk. Each token is one of:
-
-- `<source>:<ref>` — e.g. `blizzard:26`
-- `<source>#<ref>` — e.g. `blizzard#26`
-- a pasted work item URL (e.g. the GitHub issue's own URL)
-
-For the `github` provider, `<ref>` must be numeric (the issue number) — a `<source>:<ref>` or `<source>#<ref>` token
-with a non-numeric `ref` (e.g. `blizzard:v2`) matches no configured source's `parse` and surfaces as the same 422 an
-unconfigured repo gets ("not claimed by any configured work source"), which misdiagnoses as a missing `[[work_source]]`
-rather than a malformed ref.
-
-The CLI carries no parsing of its own: it hands the token to the hub, which resolves it against every configured
-source's own `parse`. The legacy `github:<rest>` prefix is deprecated — it still resolves (warns on stderr, then passes
-`rest` on its own merits) but carries no provider selection of its own anymore, since a token now resolves against
-whichever configured source claims it.
-
-## Unconfigured repos are a 422 at the front door
-
-The configured source list is also the hub's allowlist of ingestable repos: a token that names a repo (via URL or an
-unresolvable source name) that no `[[work_source]]` covers gets rejected with `422 Unprocessable Entity`, naming the
-token and the sources that *are* configured. Adding a repo to the fleet means adding its `[[work_source]]` block first —
-there is no separate allowlist to keep in sync.
+Verify after the upgrade by reading a pre-existing chunk's work items (`GET /api/chunks/<id>/work-items`) and confirming
+every entry's `error` is null; a non-null error naming a source means the name does not match the backfilled repo tail —
+fix it, or add a second block under the correct tail, and restart.

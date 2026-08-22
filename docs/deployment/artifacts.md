@@ -1,80 +1,53 @@
-# Artifacts — produces enforcement and graph-scoped files
+# Artifacts
 
-## Produces-artifact enforcement
+## Graph-scope artifacts
 
-`produces_mode` is a third rollout flag, scaffolded into `blizzard-hub.toml` by `blizzard hub init` alongside
-[`runner_auth_mode`/`route_token_mode`](./runner-auth.md) and defaulting to `warn` the same way — but it guards a
-different concern: not runner identity or route capability, a node's own `produces:` declaration. Each `produces:` entry
-carries a **kind**: a bare string (`review-findings`) is an `asset`; a `{name, kind: git_commit}` entry (a build node's
-own commit) is met by kind, not by name — any `git_commit` artifact the node's attempt carries covers it. A `git_commit`
-entry is met when the worker has **pushed** its branch to the forge and then **declared** that push — the worker pushes,
-never the runner, and an undeclared push does not count. A name backed only by the worker's judgement-assessment
-fallback is not proof the worker produced the thing the graph asked for.
+A graph's top-level `artifacts:` map — a sibling of `nodes:` and `sessions:` — declares reference content the graph
+itself carries, readable by every node of every chunk on it; each value is a path to a file beside `graph.yaml`. An
+`artifacts:` file's text folds into the definition at mint like a prompt reference — [install.md](./install.md)'s graph
+sync note owns the deploy consequence, `blizzard hub graph mint --help` the inlining rules.
 
-| Flag            | Guards                                                                                                                    | `warn` (default)                                                                  | `enforce`                                    |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------- |
-| `produces_mode` | every `produces:` entry has an explicit declaration matching its kind (an asset attachment by name, a git commit by kind) | logs the missing names and lets the completion proceed on the assessment fallback | rejects the completion as a semantic failure |
+The folding rules differ from prompts, and the difference decides authoring: a prompt value inlines only when it reads
+as a path (literal prose stays literal), but every `artifacts:` value is read as a filename — inline text in a
+disk-loaded `graph.yaml` fails the load naming the entry. Inline artifact text is authorable only where no directory
+exists to resolve against — a definition piped through `blizzard hub graph mint -` or posted to `POST /api/graphs`;
+there a value that still reads as a file path (a whitespace-free token with a slash or extension) is rejected as a
+validation error rather than baked in — though a bare extension-less token like `notes` knowingly mints as content.
 
-The worker declares each kind through its own `blizzard runner artifact` verb: `artifact
-create --name <name>` (content
-on stdin) for an `asset`; `artifact commit --repo <repo>
---branch <branch> --commit <sha>` for a `git_commit`, run after
-the branch is pushed. The origin is not a flag on that verb: it comes from the environment's repo manifest. Both verbs
-are pure clients of the runner's local API, authorized by the lease identity the runner injects at spawn — see
-[`openapi/runner.openapi.json`](../../openapi/runner.openapi.json) for the endpoints
-(`POST /api/leases/{lease_id}/attachments` and `POST /api/leases/{lease_id}/git-commits`) rather than this doc
-hard-copying their request shape.
+Because content is baked at mint, editing the referenced file changes nothing for running chunks — they stay on their
+mint until `graph sync` mints a new one. Authored order is fixed at the mint that first carried an entry: a pure reorder
+of `artifacts:` (or `sessions:`) entries is not a definitional difference, so `graph sync` reports up-to-date while
+workers keep the original order; to move an entry, pair the reorder with a substantive edit.
+`blizzard hub graph show <graph_id> --json` lists a mint's artifact names in their baked order; the default human
+rendering shows nodes and edges only.
 
-It is independent of `runner_auth_mode`/`route_token_mode` — flipping it does not depend on either of them, and vice
-versa — so it is not part of the runner-auth rollout sequence. A fresh deploy or an upgraded hub keeps accepting
-assessment-fallback completions until an operator deliberately flips it to `enforce` in `blizzard-hub.toml` and restarts
-the hub.
+The graph scope is read-only to workers: `artifact get <name> --scope graph` reads an entry (`--content` for raw text)
+and `artifact list` shows graph entries beside the node's own; `create`, `commit`, and `staged` refuse `--scope graph`.
+A name colliding with any node's `produces:` name is rejected: workers reach both scopes through one `artifact` CLI, so
+a shared name would be ambiguous rather than a legal shadow.
 
-## Graph-scoped artifacts
+## Declaring produced artifacts
 
-Where `produces:` declares what a *node* must hand back, a graph's top-level `artifacts:` map declares content the
-**graph itself** carries — reference material every node of every chunk on that graph can read, authored once beside the
-definition. It is a sibling of `nodes:` and `sessions:`, and each value is a path to a file next to `graph.yaml`:
+Each `produces:` entry carries a kind: a bare string is an asset, while a `{name, kind: git_commit}` entry is met by
+kind rather than name — any `git_commit` artifact on the node's attempt covers it.
 
-```yaml
-artifacts:
-  docket: ./docket.md
-```
+Workers declare through `blizzard runner artifact`: `create --name` with content on stdin for an asset;
+`commit --repo --branch --commit`, after the push, for a `git_commit` — the origin comes from the environment's repo
+manifest, not a flag. A `git_commit` entry is met only when the worker pushed its branch to the forge and then declared
+the push — the worker pushes, never the runner, an undeclared push does not count, and a name backed only by the
+assessment fallback is not proof the thing was produced.
 
-The file's text is folded into the definition at mint, the way a `prompt` reference is — see the `graph sync` paragraph
-under [Install](./install.md) for what that means for a deploy, and `blizzard hub graph mint --help` for the inlining
-rules themselves. A `prompt` and an `artifacts:` value are not folded by the same rule, though, and the difference
-decides how you author: a `prompt` value is inlined only when it *reads* as a path, so literal prompt prose stays
-literal, while **every** `artifacts:` value is read as a filename. In a `graph.yaml` loaded from disk, an artifact value
-carrying inline text is therefore not accepted at all — the loader tries to open a file named by that text, and fails
-the load naming the entry.
+The artifact verbs are pure clients of the runner's local API, authorized by the spawn-injected lease identity;
+[openapi/runner.openapi.json](../../openapi/runner.openapi.json) owns the endpoint shapes.
 
-That leaves inline text authorable on exactly one path: a definition arriving with **no directory to resolve against**,
-piped through `blizzard hub graph mint -` or posted straight to `POST /api/graphs`. Nothing is inlined there, so the
-text has to arrive in the definition itself — and a value that still reads as a file path is rejected as a validation
-error rather than baked in as the artifact's content. That guard fires on a single whitespace-free token carrying either
-a `/` or a filename extension; real content is prose, which carries whitespace, so it cannot collide with it. One shape
-slips through knowingly: a bare extension-less token like `notes` is as plausible a one-word artifact as it is a
-filename, and mints as content.
+An artifact name is alphanumerics with internal `-`, `_`, or `.` separators — no leading, trailing, or doubled
+separator, and no slash, since it is percent-encoded into a URL path segment.
 
-And because the content is baked, editing the referenced file changes nothing for the chunks already running: they stay
-on the mint they started under until a `graph sync` mints a new one.
+## The `produces_mode` rollout flag
 
-Each name must be alphanumerics with internal `-`, `_`, or `.` separators — non-empty, no leading or trailing separator,
-no two separators in a row (`a--b` and `a._b` are both rejected), and no `/`, since the name is percent-encoded into a
-URL path segment on the way to a worker. A name that collides with any node's `produces:` name is rejected too: a worker
-reaches both scopes through the one artifact CLI, so a shared name would be genuinely ambiguous rather than a legal
-shadow.
-
-**The graph scope is read-only to workers.** A worker reads an entry with
-`blizzard runner artifact get <name> --scope graph` (add `--content` for the raw text), and `artifact list` includes the
-graph's entries alongside the node's own. The writing verbs refuse the scope outright — `artifact create`,
-`artifact commit`, and `artifact staged` all reject `--scope graph`, since a mint-time declaration is not something an
-attempt produces.
-
-**Authored order is fixed at the mint that first carried an entry.** Reconciliation mints only when a packaged graph's
-parsed definition differs, and reordering two `artifacts:` entries without changing either name or either file is not
-such a difference — `graph sync` reports the graph `up-to-date` while workers keep seeing the original order. The same
-holds for `sessions:`. To move an entry, pair the reorder with a substantive edit to the graph or one of its referenced
-files. To read back what a mint actually carries, `blizzard hub graph show <graph_id> --json` lists the artifact names
-in their baked order — the default human rendering is nodes and edges only, so `--json` is the one that shows them.
+`produces_mode` is a third warn-default rollout flag scaffolded into `blizzard-hub.toml` by `hub init`, beside
+`runner_auth_mode` and `route_token_mode` ([runner-auth.md](./runner-auth.md)), guarding whether every `produces:` entry
+on a node has an explicit declaration matching its kind. `warn` logs the missing names and lets a completion proceed on
+the judgement-assessment fallback; `enforce` rejects the completion as a semantic failure. It is independent of the auth
+flags and no part of that rollout; a hub accepts assessment-fallback completions until an operator sets `enforce` and
+restarts it.
