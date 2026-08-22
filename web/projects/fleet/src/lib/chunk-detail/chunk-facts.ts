@@ -99,7 +99,7 @@ export class ChunkFacts {
    * half alone: unclaimed **and** never moved. A chunk detached mid-graph derives
    * `ready` again while standing on a node of its old graph, and re-pinning it there is
    * a migration's job, so the facts column withholds the row rather than offer an edit
-   * that always 409s (`blizzard-context:/domain/work.md` `bzh:migration-not-transition`). */
+   * that always 409s (`blizzard-context:/domain/work/migration.md` `bzh:migration-not-transition`). */
   protected readonly editable = computed<boolean>(() => {
     const detail = this.detail();
     const unclaimed = detail.status === 'not_ready' || detail.status === 'ready';
