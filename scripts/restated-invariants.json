@@ -54,7 +54,7 @@
    },
    "sites": [
     {
-     "file": "docs/deployment.md",
+     "file": "docs/deployment/chunk-operations.md",
      "symbol": "taking-over-a-parked-session--blizzard-runner-takeover",
      "role": "allowed",
      "reason": "Operator-facing surface description. The component is the owner; this doc's reader is outside the workspace and cannot resolve a source path, so an operator doc states what the operator will see."
@@ -93,13 +93,13 @@
      "file": "src/blizzard/hub/cli.py",
      "symbol": "chunk_ingest",
      "role": "allowed",
-     "reason": "This docstring IS the `blizzard hub chunk ingest --help` text \u2014 an operator-facing published surface with no source tree to point at, the same structural cause as this fact's docs/deployment.md survivor below."
+     "reason": "This docstring IS the `blizzard hub chunk ingest --help` text \u2014 an operator-facing published surface with no source tree to point at, the same structural cause as this fact's docs/deployment/ survivor below."
     },
     {
-     "file": "docs/deployment.md",
+     "file": "docs/deployment/work-sources.md",
      "symbol": "ingest-tokens",
      "role": "allowed",
-     "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment.md survivor: an operator ingesting work reads this section from outside the workspace and cannot resolve a source path, and the section's next paragraph reasons about `<source>:<ref>` refs it must first introduce. Reducing it is also a public-doc registry copy, which blizzard#274 owns."
+     "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment/ survivor: an operator ingesting work reads this section from outside the workspace and cannot resolve a source path, and the section's next paragraph reasons about `<source>:<ref>` refs it must first introduce. Reducing it is also a public-doc registry copy, which blizzard#274 owns."
     }
    ]
   },
@@ -150,7 +150,7 @@
   {
    "id": "federation-origin-declared-not-derived",
    "statement": "A runner's federation redirect_uri is selected from the origins it declared in public_url and registered with the hub, never derived from the request; the browser follows it, so a loopback-only declaration is reachable from the runner's own host alone.",
-   "owner": "docs/deployment.md#runner-side-federation",
+   "owner": "docs/deployment/human-auth.md#runner-side-federation",
    "owner_kind": "doc-section",
    "owner_assert": {
     "quote": "followed by the browser rather than the runner"
@@ -160,7 +160,7 @@
    ],
    "sites": [
     {
-     "file": "docs/deployment.md",
+     "file": "docs/deployment/human-auth.md",
      "symbol": "runner-side-federation",
      "role": "owner"
     }

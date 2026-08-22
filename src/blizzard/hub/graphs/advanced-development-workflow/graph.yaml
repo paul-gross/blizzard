@@ -119,7 +119,7 @@ sessions:
 # travels with it.
 #
 # On the `artifacts:` key itself, see
-# https://github.com/paul-gross/blizzard/blob/master/docs/deployment.md#graph-scoped-artifacts
+# https://github.com/paul-gross/blizzard/blob/master/docs/deployment/artifacts.md#graph-scoped-artifacts
 artifacts:
   docket: ./docket.md
 

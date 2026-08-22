@@ -85,8 +85,8 @@ loses nothing:
 `blizzard-hub.toml` (bind-mounted read-only from `packaging/docker/`) is declarative, not scaffolded — it is what makes
 `trusted_proxies` trust exactly this compose network's subnet, so Caddy's forwarded headers (cookie `Secure` flag,
 login-throttle key, auth-fact actor IP) are honored. See `packaging/docker/README.md` for the full mount and environment
-variable reference, and `docs/deployment.md`'s "Overriding config values from the environment" for the override
-precedence `BZ_HUB_DB_URL`/`BZ_HUB_HOST`/`BZ_HUB_PORT` resolve under.
+variable reference, and [`docs/deployment/install.md`](./deployment/install.md)'s "Overriding config values from the
+environment" for the override precedence `BZ_HUB_DB_URL`/`BZ_HUB_HOST`/`BZ_HUB_PORT` resolve under.
 
 ## Next
 

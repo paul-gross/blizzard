@@ -361,7 +361,7 @@ def test_case13_chunk_escalation_leading_block_attributes_to_class() -> None:
 
 
 def test_case13_deployment_doc_heading_slug() -> None:
-    path = _REPO_ROOT / "docs/deployment.md"
+    path = _REPO_ROOT / "docs/deployment/chunk-operations.md"
     expected_slug = "taking-over-a-parked-session--blizzard-runner-takeover"
     spans = prose_spans.extract_spans(path)
     matching = [s for s in spans if s.symbol == expected_slug]

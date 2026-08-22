@@ -460,7 +460,7 @@
         "type": "object"
       },
       "AnalyticsOutcomeView": {
-        "description": "One node's judged-choice distribution and attempt-failure count (blizzard#256 D4),\nnever blended \u2014 a judged failure consumes no retry budget, an ended (superseded by a\nstrictly newer lease) attempt does; a still-open final attempt counts as neither, nor\ndoes a kick-back. The two counts' differing time windows are in ``docs/deployment.md``.",
+        "description": "One node's judged-choice distribution and attempt-failure count (blizzard#256 D4),\nnever blended \u2014 a judged failure consumes no retry budget, an ended (superseded by a\nstrictly newer lease) attempt does; a still-open final attempt counts as neither, nor\ndoes a kick-back. The two counts' differing time windows are in ``docs/deployment/analytics.md``.",
         "properties": {
           "attempt_failures": {
             "title": "Attempt Failures",

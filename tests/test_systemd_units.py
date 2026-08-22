@@ -81,7 +81,7 @@ def test_schema_is_reconciled_before_the_daemon_opens_the_store(name: str) -> No
 
 @pytest.mark.parametrize("name", sorted(_UNITS))
 def test_restart_and_boot_enable_directives_are_present(name: str) -> None:
-    """The two mechanisms the reboot-recovery contract depends on (docs/deployment.md)."""
+    """The two mechanisms the reboot-recovery contract depends on (docs/deployment/recovery.md)."""
     parser = _parse_unit(name)
     # Restart on crash — the "came back under systemd" mechanism for a kill -9.
     restart = parser.get("Service", "Restart")

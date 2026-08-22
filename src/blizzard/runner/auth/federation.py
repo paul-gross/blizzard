@@ -187,7 +187,7 @@ def require_human_api(request: Request) -> RunnerSession:
 def _callback_url(request: Request, config: RunnerConfig) -> str:
     """The callback this bounce presents: the declared origin the browser actually reached, so the hub's
     cross-site ``form_post`` lands where the bounce cookies live. Selection is membership in the declared
-    set, never construction from the request; `docs/deployment.md` §Runner-side federation owns why."""
+    set, never construction from the request; `docs/deployment/human-auth.md` §Runner-side federation owns why."""
     origins = config.public_origins
     arrived = request.headers.get("host")
     chosen = origins.select(arrived)

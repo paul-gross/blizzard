@@ -40,8 +40,8 @@ Everything durable lives under a single documented path: **`/var/lib/blizzard/hu
 
 ## Environment variables
 
-The container image is configured by its runtime environment (issue #187) — see `docs/deployment.md`'s "Overriding
-config values from the environment" for the full precedence rule (CLI flag > environment > toml > default).
+The container image is configured by its runtime environment (issue #187) — see `docs/deployment/install.md`'s
+"Overriding config values from the environment" for the full precedence rule (CLI flag > environment > toml > default).
 
 | Variable                          | Image default                           | Purpose                                                                                                    |
 | --------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -50,7 +50,7 @@ config values from the environment" for the full precedence rule (CLI flag > env
 | `BZ_HUB_PORT`                     | *(unset — toml/built-in default, 8421)* | Bind port.                                                                                                 |
 | `BZ_HUB_DB_URL`                   | *(unset — sqlite under `data/`)*        | Point at a postgres URL (see the `postgres` extra below) to run the store off-volume.                      |
 | `BZ_LOG_FORMAT`                   | `json`                                  | Structured JSON logs, the shape a container log collector expects.                                         |
-| `BZ_FORGE_URL` / `BZ_FORGE_TOKEN` | *(unset)*                               | The delivery forge a hub command node's `run:` script talks to — see `docs/deployment.md`.                 |
+| `BZ_FORGE_URL` / `BZ_FORGE_TOKEN` | *(unset)*                               | The delivery forge a hub command node's `run:` script talks to — see `docs/deployment/install.md`.         |
 
 ## The `postgres` extra
 

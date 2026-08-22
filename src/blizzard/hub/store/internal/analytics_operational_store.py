@@ -203,7 +203,7 @@ def _judged_distribution_stmt(criteria: OperationalCriteria) -> Select[Any]:
     ``choice_name``, anti-joined against ``chunk_bounces`` on ``(chunk_id, epoch)`` so a
     kick-back's own same-epoch routing transition is excluded too (``hub_node.py``
     records both). A migration-completed step is not counted here either — a documented
-    gap, see ``docs/deployment.md``."""
+    gap, see ``docs/deployment/analytics.md``."""
     t, b = s.transitions, s.chunk_bounces
     stmt = select(t.c.from_node_id, t.c.choice_name, func.count().label("occurrences"))
     stmt = stmt.select_from(t.outerjoin(b, (b.c.chunk_id == t.c.chunk_id) & (b.c.epoch == t.c.epoch)))

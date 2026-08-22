@@ -3,7 +3,7 @@
 A ``redirect_uri`` instructs the hub to POST an identity token to an address, so the acceptable set is
 declared and registered up front, never derived from a request. Placed here to mirror
 :mod:`blizzard.foundation.forwarded`'s ``TrustedProxies`` — a config value object validated at load and
-carried verbatim; `blizzard/docs/deployment.md` §Runner-side federation owns the operator procedure."""
+carried verbatim; `blizzard/docs/deployment/human-auth.md` §Runner-side federation owns the operator procedure."""
 
 from __future__ import annotations
 

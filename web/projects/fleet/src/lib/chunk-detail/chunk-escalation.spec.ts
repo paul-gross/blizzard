@@ -110,7 +110,7 @@ describe('ChunkEscalation', () => {
       'blizzard runner takeover ch_01esc00000000000000000000000 --dir /var/lib/blizzard/runner',
     );
     // The wrapped branch's own hint text — the socket/service-account warning
-    // `docs/deployment.md` calls load-bearing — was never asserted by any spec case.
+    // `docs/deployment/chunk-operations.md` calls load-bearing — was never asserted by any spec case.
     expect(el.querySelector('.esc-hint')?.textContent).toContain("Run as the runner's service account");
     const fallback = el.querySelector<HTMLDetailsElement>('[data-testid="takeover-command-raw-fallback"]');
     expect(fallback).not.toBeNull();

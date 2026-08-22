@@ -20,7 +20,7 @@ from blizzard.runner.transcripts.caps import TRANSCRIPT_RECORD_MAX_BYTES
 
 pytestmark = pytest.mark.unit
 
-_DEPLOYMENT_DOC = Path(__file__).resolve().parents[1] / "docs" / "deployment.md"
+_DEPLOYMENT_DOC = Path(__file__).resolve().parents[1] / "docs" / "deployment" / "transcripts.md"
 
 
 def test_runner_record_cap_stays_below_the_hub_backstop() -> None:
@@ -50,9 +50,9 @@ def test_the_operator_doc_states_the_cap_magnitude_the_code_enforces(pattern: st
     first time the caps moved, and the sweep cannot see it: it matches phrases, not values."""
     found = re.findall(pattern, _DEPLOYMENT_DOC.read_text(encoding="utf-8"))
 
-    assert found, f"docs/deployment.md no longer states the {what} per-record cap as /{pattern}/"
+    assert found, f"docs/deployment/transcripts.md no longer states the {what} per-record cap as /{pattern}/"
     assert [int(mb) for mb in found] == [expected_mb] * len(found), (
-        f"docs/deployment.md states {found} MB for the {what} per-record cap; the code enforces {expected_mb} MB"
+        f"docs/deployment/transcripts.md states {found} MB for the {what} per-record cap; the code enforces {expected_mb} MB"
     )
 
 
