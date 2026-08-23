@@ -657,7 +657,7 @@ class ArtifactEntry:
 def _refuse_graph_scope(verb: str, scope: str | None) -> None:
     """``create``/``commit``/``staged`` are node-scope only: a graph's declarations are baked at
     mint and read-only. Refusing here states that domain fact to a worker parsing stderr mid-turn
-    (which scopes each verb serves: ``blizzard-context:/standards/worker-nodes.md``)."""
+    (which scopes each verb serves: ``blizzard-context:/standards/worker-nodes/declarations.md``)."""
     if scope == ArtifactScope.GRAPH.value:
         raise click.ClickException(
             f"artifact {verb}: graph scope is read-only — a graph's declarations are baked at mint"
