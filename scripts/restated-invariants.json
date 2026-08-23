@@ -55,7 +55,7 @@
    "sites": [
     {
      "file": "docs/deployment/chunk-operations/takeover.md",
-     "symbol": "taking-over-a-parked-session",
+     "symbol": "the-verb-versus-the-raw-resume-string",
      "role": "allowed",
      "reason": "Operator-facing surface description. The component is the owner; this doc's reader is outside the workspace and cannot resolve a source path, so an operator doc states what the operator will see."
     },
