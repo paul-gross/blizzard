@@ -1,88 +1,62 @@
-# Versioning policy
+# Versioning
 
-Blizzard follows [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`, pre-1.0 with `MAJOR` pinned at `0` — a
-`MINOR` bump may carry a breaking change until the project reaches 1.0, per semver's own pre-release carve-out.
-Prerelease candidates are tagged `vX.Y.Z-rc.N` and publish only their exact version (never `latest`, never move the
-`X.Y` line — see the tag fan-out below).
-
-This document is the single owner of the versioning scheme — the `blizzard-context` repo's
-[`workflows/release.md`](https://github.com/paul-gross/blizzard-context/blob/master/workflows/release.md)
-(`bzh:release`) routes here rather than restating it.
+Blizzard follows [Semantic Versioning](https://semver.org/) as `MAJOR.MINOR.PATCH`, with `MAJOR` pinned at `0` until the
+project reaches 1.0 — so under semver's own pre-1.0 carve-out a `MINOR` bump may carry a breaking change.
 
 ## What counts as breaking
 
-A public container image invites strangers to upgrade on trust, and a cloud hub updates while home runners lag behind —
-both need "breaking" to mean something concrete, not a feeling. A change is breaking when it changes any of:
+| Surface         | A release breaks it when it…                                                                                                                                    |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP API        | removes a route, adds a required field to a request, or removes a response field or changes its meaning                                                         |
+| hub↔runner wire | is not wire-compatible with the previous minor — an `/api/fleet/...` route, or a field the runner's `IHubClient` (`src/blizzard/runner/loop/hub.py`) depends on |
+| Configuration   | renames or removes a `blizzard-hub.toml` or `blizzard-runner.toml` key, or moves or removes a durable path under the runtime root                               |
+| Store schema    | ships a revision that cannot be walked back — breaking regardless of what else the release changed                                                              |
 
-- **The HTTP API** — a route removed, a required field added to a request, a response field removed or its meaning
-  changed. Adding an optional field or a new route is not breaking.
-- **Config keys and volume layout** — a `blizzard-hub.toml` / `blizzard-runner.toml` key renamed or removed (issue #55's
-  `[[work_source]]` rename is the precedent: the old key fails loud rather than silently dropping config), or a durable
-  path under the runtime root moving or being removed (`docs/backup.md` enumerates the current layout).
-- **A migration that cannot walk back** — every shipped revision keeps a working `downgrade()`
-  (`tests/test_store_migrations.py::test_migrate_up_and_down`); a revision that cannot be reversed is a breaking release
-  regardless of what else changed in it.
-- **The hub↔runner wire protocol** — anything a runner sends the hub or reads back that isn't wire-compatible with the
-  previous minor: a `/api/fleet/...` route, a `_drive/*`-shaped verb, or a field the runner's `IHubClient` depends on
-  (`bzh:wire-change-extends-mock` governs the mock-fleet side of this same surface).
+[`docs/backup.md`](./backup.md) owns the current durable layout. Every schema revision blizzard has ever shipped keeps a
+working `downgrade()`, held mechanically for every revision in the tree by
+`tests/test_store_migrations.py::test_migrate_up_and_down`.
 
-Adding a new optional config key, a new route, a new event type, or a new migration that walks back cleanly is **not**
-breaking.
+Adding an optional config key, a new route, a new event type, or a migration that walks back cleanly is not breaking.
 
-## Closed wire vocabularies
+Mark a breaking commit with a `!` before the colon of its Conventional Commit subject: `feat!: ...`,
+`feat(scope)!: ...`.
 
-Most string-valued wire fields stay open strings, so an unrecognized value round-trips rather than failing. One does
-not: `TurnSegmentView.kind` (`src/blizzard/wire/transcript_segment.py`) is typed as a closed `TurnKind` literal, because
-a transcript viewer branches its rendering on it turn by turn — where the sibling `link` and `input_shape` each gate at
-most one tolerant check and stay open.
+## The hub↔runner skew window
 
-Closing it has a price, paid on both directions of that model's use: a runner shipping a kind an older hub doesn't know
-422s the **whole ingest batch** rather than storing it opaquely, and a stored segment carrying an out-of-vocabulary kind
-raises on read instead of round-tripping. Adding a value to the vocabulary is therefore breaking on the skew window
-above, not additive.
+A runner may lag its hub by one minor version, and a hub never requires a runner newer than itself: hub `0.5.x` works
+with runners at `0.4.x` or `0.5.x`, but not `0.3.x`.
 
-Nothing pays that price today — no runner ships a transcript segment yet (blizzard#246) — which is what makes the closed
-vocabulary affordable. Revisit before one does: either reopen the field to `str` with a rendering fallback, or carry the
-vocabulary behind a negotiated wire version.
+That window is policy, not enforcement — nothing checks it at runtime, so there is no version negotiation and no
+minimum-runner rejection to catch a runner that has fallen outside it.
 
-## Supported skew — hub and runner versions
+Most string-valued wire fields stay open strings, so a value the receiver does not recognize round-trips instead of
+failing. `TurnSegmentView.kind` (`src/blizzard/wire/transcript_segment.py`) is the exception: it is typed as a closed
+`TurnKind` literal because a transcript viewer branches its rendering on it turn by turn. Closing it costs on both
+directions — a runner shipping a kind an older hub does not know 422s the whole ingest batch rather than storing it
+opaquely, and a stored segment carrying an out-of-vocabulary kind raises on read instead of round-tripping. Adding a
+value to the `TurnKind` vocabulary is therefore breaking against the skew window, not additive.
 
-**A runner may lag its hub by one minor version; a hub never requires a runner newer than itself.** Concretely: hub
-`0.5.x` works with runners at `0.4.x` or `0.5.x`, but not `0.3.x`; a runner is never required to be ahead of its hub.
+## What a tag publishes
 
-This is stated as **policy**, not yet enforced at runtime — no version negotiation or minimum-runner check exists today.
-Runtime enforcement (the hub rejecting a too-old runner's connection, or surfacing the skew on the board) is future work
-this policy statement enables, not something this release covers.
+Every image below is `ghcr.io/paul-gross/blizzard-hub`.
 
-## Release notes and the tag fan-out
+| Cut                          | Tags published                                                                                                                |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| A stable release, `vX.Y.Z`   | the exact version, its `X.Y` minor line, and `latest`                                                                         |
+| A prerelease, `vX.Y.Z-rc.N`  | the exact version alone — never `latest`, never the `X.Y` minor line                                                          |
+| Every green push to `master` | `edge`, a mutable pointer at the newest proven `master` commit, and `sha-<full-git-sha>`, immutable and pinned to that commit |
 
-Every release publishes commit-type-grouped notes generated by [`scripts/release-notes.sh`](../scripts/release-notes.sh)
-from the Conventional Commits since the previous tag, with any `!`-marked breaking change surfaced at the top and a
-placeholder **Upgrade notes** section leading every release — hand-written whenever the release asks something of the
-operator (a required config change, a mount that moved, a skew-window shift).
+`latest` never follows `master`; it moves only on a stable release tag.
+[`scripts/image-tags.sh`](../scripts/image-tags.sh) computes the stable fan-out.
 
-The published container image fans a stable tag out to three GHCR tags — the exact version, its `X.Y` minor line, and
-`latest` — so `latest` only ever tracks a stable release; a prerelease (`vX.Y.Z-rc.N`) publishes its exact version
-alone. [`scripts/image-tags.sh`](../scripts/image-tags.sh) is the pure function implementing this fan-out
-(`tests/test_image_tags.py`).
+`pyproject.toml`'s `[project] version` must equal the tag being cut — `v1.2.3` pairs with `version = "1.2.3"` — and
+[`scripts/check-version-tag.sh`](../scripts/check-version-tag.sh) asserts it before the release builds anything, so a
+forgotten bump fails the release instead of shipping a wheel that misreports its own version.
 
-## The dev channel — `edge` and `sha-<sha>`
+Release notes are generated from the Conventional Commits since the previous tag by
+[`scripts/release-notes.sh`](../scripts/release-notes.sh). A `!`-marked commit surfaces at the top of the notes under
+**Breaking changes**. An **Upgrade notes** section is always emitted — directly beneath that section when the release
+has one, at the very top when it does not — as a placeholder when the release asks nothing of the operator, and
+hand-written prose whenever it asks for something.
 
-Alongside the tag-triggered release channel above, every green push to `master` publishes the same
-`ghcr.io/paul-gross/blizzard-hub` image under two development tags: `edge`, a mutable pointer that always names the
-newest proven `master` commit, and `sha-<full-git-sha>`, an immutable tag pinned to that exact commit. **`latest` never
-follows `master`** — it moves only on a stable release tag, per the fan-out above, so a stable pull and a dogfood pull
-never collide on the same tag meaning two different things. See `docs/ci.md`'s dev image publish section for the
-workflow contract (`tests/test_push_workflow.py`).
-
-## Version ⇄ tag agreement
-
-`pyproject.toml`'s `[project] version` must equal the tag being cut (`v1.2.3` ⇔ `version = "1.2.3"`) — the release
-workflow asserts this early, before building anything (`scripts/check-version-tag.sh`), so a forgotten version bump
-fails the release rather than shipping a wheel that misreports its own version.
-
-## See also
-
-- [`docs/upgrade.md`](./upgrade.md), [`docs/rollback.md`](./rollback.md), [`docs/backup.md`](./backup.md) — the
-  operator-facing consequences of a release, once you're already running one.
-- [`docs/ci.md`](./ci.md) — the release workflow itself.
+[`docs/ci.md`](./ci.md) owns the release and dev-publish workflow contracts.

@@ -1,98 +1,50 @@
-# Install — the reference compose deployment
+# Install
 
-The quickstart for running blizzard from the published container image: the hub, postgres, and a Caddy front terminating
-TLS, via `docker compose`. This is also the shape this project runs off-machine — walked here end to end, one owner for
-the whole quickstart (`docs/upgrade.md`, `docs/rollback.md`, and `docs/backup.md` all route back here rather than
-restating it).
+This is the quickstart for running blizzard from the published container image via `docker compose` — the hub, postgres,
+and a Caddy front terminating TLS. The one prerequisite is Docker with the `compose` plugin.
 
-The alternative colocated wheel + systemd install (hub and runner side by side, no containers) is
-[`docs/deployment.md`](./deployment.md) — pick that path instead if you are running the runner too; this compose file
-ships the hub only.
+The stack is three services — postgres, hub, and caddy — with the hub gated on postgres reporting healthy, so it never
+runs its migrations against a database that is not up. It ships the hub only; an operator who wants the runner on the
+same machine takes the colocated wheel + systemd path in [`docs/deployment.md`](./deployment.md) instead.
 
-## Prerequisites
+## Configure
 
-- Docker with the `compose` plugin (`docker compose version`).
-- A DNS name pointed at this host, for real TLS — or skip that and use the localhost evaluation profile below.
-
-## Walkthrough
-
-All commands run from `packaging/docker/`.
+Configuration starts from the shipped example, and the `cd` below establishes the directory every remaining command in
+this quickstart runs from:
 
 ```bash
-cd packaging/docker
-cp .env.example .env
+cd packaging/docker && cp .env.example .env
 ```
 
-Edit `.env`:
+`POSTGRES_PASSWORD` must be changed before any use beyond local evaluation.
 
-- **`BLIZZARD_SITE_ADDRESS`** — the DNS name Caddy requests a certificate for (e.g. `blizzard.example.com`). Leave at
-  the default `:80` for the localhost evaluation profile below — no TLS, no domain needed.
-- **`POSTGRES_PASSWORD`** — change it before anything but evaluation.
-- **`BLIZZARD_HUB_IMAGE`** — defaults to the published GHCR tag. Until the first publish (or to try a local change),
-  build and point at a local tag instead:
+`BLIZZARD_SITE_ADDRESS` decides the serving mode. A DNS name already pointed at this host — say `blizzard.example.com` —
+gets real TLS that Caddy mints and renews unprompted. The default `:80` gets a localhost evaluation profile over plain
+HTTP, with no domain needed.
 
-  ```bash
-  cd ../..                      # repo root
-  mise run build                 # populates dist/blizzard-*.whl
-  docker build -f packaging/docker/Dockerfile -t blizzard-hub:local .
-  cd packaging/docker
-  # then set BLIZZARD_HUB_IMAGE=blizzard-hub:local in .env
-  ```
+`.env.example`'s own inline comments are the per-key reference for every variable, including the `BLIZZARD_HUB_IMAGE`
+override that points the deployment at a locally built image instead of the published GHCR tag. The image's full mount
+and environment-variable reference lives in [`packaging/docker/README.md`](../packaging/docker/README.md).
 
-Bring the stack up:
+`blizzard-hub.toml` is bind-mounted read-only from `packaging/docker/` and is declarative rather than scaffolded. Its
+`trusted_proxies` names this compose network's subnet, which is what makes Caddy's forwarded headers trusted.
+
+## Bring it up
 
 ```bash
 docker compose up -d
 ```
 
-Three services start, in dependency order: **postgres** (health-gated on `pg_isready`), then **hub** (waits on
-postgres's health before it migrates — never migrates against a database that isn't up), then **caddy**, fronting the
-hub. Watch it come up:
+The hub container publishes no host port and is reachable only through Caddy, so everything is checked at the site
+address. `/` serves the board, and `/api/ready` reports `"ready":true` — on the evaluation profile,
+`curl http://localhost/api/ready`. It and `/api/health` are the endpoints to script liveness and readiness against.
 
-```bash
-docker compose logs -f hub
-```
+## Durable state
 
-## Serving
+Every path that has to survive a restart lives on a named docker volume, so `docker compose down` without `-v` followed
+by `up` loses nothing. [`docs/backup.md`](./backup.md) owns the inventory of which state is durable, which is
+reclaimable, and how each is snapshotted and restored.
 
-- **With a real domain** (`BLIZZARD_SITE_ADDRESS` set to a DNS name pointed at this host): Caddy mints and renews a TLS
-  certificate automatically. Visit `https://<your-domain>/` for the board; `https://<your-domain>/api/ready` should
-  report `"ready":true`.
-- **Localhost evaluation** (`BLIZZARD_SITE_ADDRESS=:80`, the default): plain HTTP, no domain needed.
+## Adding a runner
 
-  ```bash
-  curl http://localhost/api/ready
-  ```
-
-  should report `"ready":true`, and `http://localhost/` serves the board.
-
-The hub itself publishes no ports — it is reachable only through Caddy (`packaging/docker/compose.yaml`), so
-`https://<domain>/api/health` and `/api/ready` are the liveness/readiness checks to script against, not a direct hub
-port.
-
-## What's durable
-
-Every path that must survive a restart is a named docker volume — `docker compose
-down` (without `-v`) followed by `up`
-loses nothing:
-
-| Volume                        | Holds                                                                                                                         |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `postgres-data`               | The hub's store (chunks, facts, questions, everything the board reads).                                                       |
-| `hub-data`                    | Signing keys (if OAuth login is later configured) and hub-command-node scratch workdirs (reclaimable — see `docs/backup.md`). |
-| `caddy-data` / `caddy-config` | The minted TLS certificate and Caddy's own state, so a restart doesn't re-request one.                                        |
-
-`blizzard-hub.toml` (bind-mounted read-only from `packaging/docker/`) is declarative, not scaffolded — it is what makes
-`trusted_proxies` trust exactly this compose network's subnet, so Caddy's forwarded headers (cookie `Secure` flag,
-login-throttle key, auth-fact actor IP) are honored. See `packaging/docker/README.md` for the full mount and environment
-variable reference, and [`docs/deployment/install.md`](./deployment/install.md)'s "Overriding config values from the
-environment" for the override precedence `BZ_HUB_DB_URL`/`BZ_HUB_HOST`/`BZ_HUB_PORT` resolve under.
-
-## Next
-
-- **Adding a runner** against this hub, from any machine: [`docs/remote-runner.md`](./remote-runner.md).
-- **Upgrading**: [`docs/upgrade.md`](./upgrade.md).
-- **Rolling back**: [`docs/rollback.md`](./rollback.md).
-- **Backing up**: [`docs/backup.md`](./backup.md).
-- **Configuring a work source**, **authentication**, and other operator topics not specific to this deployment shape:
-  [`docs/deployment.md`](./deployment.md).
+Adding a runner against this hub, from any machine, is [`docs/remote-runner.md`](./remote-runner.md).

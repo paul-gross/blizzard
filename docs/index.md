@@ -1,25 +1,19 @@
-# Docs
+# Operator and release documentation
 
-The operator- and release-facing prose docs under `docs/` — route from here. Each file below is a single owner; a fact
-stated in one is linked from the others, never restated. (`designs/` and `identity/` are visual-asset directories, not
-prose documentation, and aren't routed here.)
+`docs/` holds blizzard's operator- and release-facing prose; the table below is the way in, routing each topic to the
+one file that owns it.
 
-| File                                     | Read when…                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`install.md`](./install.md)             | …standing up blizzard for the first time — the reference `docker compose` deployment: hub, postgres, Caddy. Start here.                                                                                                                                                                                                                                                                                                                                              |
-| [`deployment.md`](./deployment.md)       | …installing the colocated wheel + systemd alternative instead (hub and runner side by side, no containers), authoring a graph's own keys (`sessions:`, `produces:`, `artifacts:`), or configuring anything not specific to one deployment shape — work sources, runner authentication, human auth, cost caps, the kiosk demo mode, the recovery contract. It is a hub: the topology, then a routing table into [`deployment/`](./deployment/), one file per concern. |
-| [`remote-runner.md`](./remote-runner.md) | …adding a runner on a machine that is not the hub's — pointing `hub_url` across the network, choosing a `runner_id`, enrolling the newcomer, and what HTTPS and distance change.                                                                                                                                                                                                                                                                                     |
-| [`upgrade.md`](./upgrade.md)             | …pulling a new image tag — the restart-based contract and the runner ride-out guarantee that makes it safe.                                                                                                                                                                                                                                                                                                                                                          |
-| [`rollback.md`](./rollback.md)           | …a release needs reversing — the previous image tag plus a `migrate --down`, walked end to end.                                                                                                                                                                                                                                                                                                                                                                      |
-| [`backup.md`](./backup.md)               | …snapshotting or restoring durable state — the full inventory of what's durable, what's reclaimable, and the commands for both store backends.                                                                                                                                                                                                                                                                                                                       |
-| [`versioning.md`](./versioning.md)       | …you need to know what a version number promises: the semver scheme, what counts as breaking, and the supported hub↔runner skew.                                                                                                                                                                                                                                                                                                                                     |
-| [`ci.md`](./ci.md)                       | …touching a GitHub Actions workflow, or reproducing the merge gate locally.                                                                                                                                                                                                                                                                                                                                                                                          |
+| File                                                          | When to read                                                                                                                 |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| [`install.md`](./install.md)                                  | You are standing blizzard up for the first time — the reference `docker compose` deployment of hub, postgres, and Caddy      |
+| [`upgrade.md`](./upgrade.md)                                  | You are pulling a new image tag                                                                                              |
+| [`rollback.md`](./rollback.md)                                | You are reversing a release                                                                                                  |
+| [`versioning.md`](./versioning.md)                            | You need to know what a version number promises                                                                              |
+| [`backup.md`](./backup.md)                                    | You are snapshotting or restoring durable state                                                                              |
+| [`remote-runner.md`](./remote-runner.md)                      | You are adding a runner on a machine that is not the hub's                                                                   |
+| [`deployment.md`](./deployment.md)                            | You want the colocated wheel + systemd install instead, or any operator concern that is not specific to one deployment shape |
+| [`ci.md`](./ci.md)                                            | You are touching a GitHub Actions workflow, or reproducing the merge gate locally                                            |
+| [`packaging/docker/README.md`](../packaging/docker/README.md) | You need the container image's own mount and environment-variable reference                                                  |
 
-## See also
-
-- [`packaging/docker/README.md`](../packaging/docker/README.md) — the container image's own mount and
-  environment-variable reference.
-- The `blizzard-context` repo's
-  [verification matrix](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard.md) and
-  [`bzh:release`](https://github.com/paul-gross/blizzard-context/blob/master/workflows/release.md) — how a change is
-  proven, and the release-cut sequence these documents are the operator-facing half of.
+These documents are the deployed-side half of the release cut; the cut sequence itself is owned by
+[`blizzard-context/workflows/release.md`](https://github.com/paul-gross/blizzard-context/blob/master/workflows/release.md).
