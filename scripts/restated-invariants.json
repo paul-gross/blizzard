@@ -203,7 +203,7 @@
   {
    "id": "crash-sweep-whole-process-case",
    "statement": "A whole-process case is a crash-sweep case that signals a whole daemon process or process group rather than arming a single registry crash point; a graceful SIGTERM qualifies as readily as a kill -9.",
-   "owner": "blizzard-context:/verification/blizzard/commands/test-tiers.md#blizzardcrash-sweep",
+   "owner": "blizzard-context:/verification/blizzard/commands/test-tiers/crash-sweep.md#blizzardcrash-sweep",
    "owner_kind": "doc-section",
    "owner_assert": {
     "quote": "signal a whole daemon process or process group"
