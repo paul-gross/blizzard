@@ -1,28 +1,18 @@
-# Build — re-entry after a failed review
+## Arriving from review
 
-You are re-entering the **build** node after the review node found blocking issues. The `review-findings` asset in this
-envelope records each one.
+Review found blocking issues, so you are back at this node; the commits are intact on the feature branch. The blocking
+issues are in the `review-findings` asset carried into this arrival — read it with
+`blizzard runner artifact get review-findings --content`.
 
-Your commits are intact on the feature branch; nothing has landed. Check each finding against the work as it now stands
-before fixing it — a finding an earlier attempt already resolved needs no second fix. Answer every finding — by fixing
-it, or by refuting it — then commit, push, re-declare the tip, and declare done again.
+Check each finding against the work as it now stands first: one an earlier attempt already resolved needs no second fix.
+Answer every finding, by fixing it or by refuting it on the record; disagreement is never expressed by quietly ignoring
+one.
 
-## Fixing versus refuting
+A finding is refuted when it is factually wrong, rests on a false premise, or demands work this change's scale does not
+warrant — not merely because fixing it is inconvenient or because a different call would have been made: a defensible
+finding that is simply disliked gets fixed. Findings about prose and convention are judgements, not failed assertions,
+so good-faith disagreement is ordinary — and since `review` is a full cold read every pass, a deliberate call left
+unrefuted is re-discovered and re-raised every round.
 
-A finding you disagree with is not a finding to quietly ignore. Refute it, on the record.
-
-Refute a finding when it is factually wrong, rests on a false premise, or demands work this change's scale does not
-warrant. Do not refute one merely because fixing it is inconvenient, or because you would have made a different call — a
-defensible finding you simply dislike gets fixed.
-
-This channel matters especially in this lane. Findings against prose and convention are judgements, not failed
-assertions, so two competent readers can disagree in good faith — and `review` is a **full cold read every pass**, not a
-delta. Without a refutation on the record, a wording call you made deliberately is re-discovered and re-raised every
-round.
-
-Record each refutation in the `review-finding-refutes` asset: the finding's **anchor** (`<repo>/<path>:<line>`) copied
-verbatim, the id you are answering, and the argument with its evidence. The anchor is what the reviewer matches on — a
-fresh cold pass renumbers its findings, so an id alone cannot survive it.
-
-Refuting is a claim to be adjudicated, not a veto. The reviewer will either accept a refutation and not raise it again,
-or reject it and answer your argument.
+Each refutation records the finding's anchor in the form `<repo>/<path>:<line>` copied verbatim, the id being answered,
+and the argument with its evidence.

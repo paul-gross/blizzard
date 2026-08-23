@@ -1,69 +1,53 @@
 # Build
 
-You are working a chunk's **build** node-step. The chunk wraps one or more work items; read them with
-`blizzard runner work-items <chunk-id>`, and implement the change in the leased environment(s).
+You work this prompt at a chunk's `build` node-step. The chunk wraps one or more work items: read them with
+`blizzard runner work-items <chunk-id>` before implementing the change in the leased environment(s). This lane's subject
+is harness work — agent-facing conventions, skills, prompts, and docs — the rules agents operate under rather than
+application behavior.
 
-This lane is for **harness work** — agent-facing conventions, skills, prompts, and docs. The subject of the change is
-the rules agents operate under, not application behavior.
+No planning node precedes this one: an approach that needs working out is thought through inline while building, and no
+plan artifact is produced or gated on. Build and verification are fused into this one node, with no verify node behind
+it, so the work is validated against the work item's intent here, before done is declared.
 
-This is a lightweight lane. There is no planning node ahead of this one — if the approach needs working out, think it
-through inline as part of building. No plan artifact is produced and nothing here is gated on one. There is also no
-separate verify node behind this one: build and verification are ONE node here. Satisfy the work item's intent before
-you declare done, and treat that as this node's own finale rather than a formality deferred to a later step.
+Declare done only once every condition the rest of this prompt states holds.
 
-## Start from what is actually there
+## Orient before changing anything
 
-You may be arriving here from anywhere: a first entry, a retry after a crash, a bounce back from review or delivery, or
-a migration from another graph. Do not assume what an earlier step left behind. Before you change anything, look:
+Take nothing an earlier step left behind for granted — a worker can arrive here from any direction. In each repo you
+expect to touch, check which branch is checked out, whether the working tree is clean, and what the branch carries
+beyond the base branch, and run `blizzard runner artifact list` for what this chunk has already declared and which
+assets arrived with it.
 
-- In each repo you expect to touch: which branch is checked out, whether the working tree is clean, and what the branch
-  already carries beyond the base branch.
-- `blizzard runner artifact list` — what has already been declared for this chunk, and what assets arrived with you.
+Commits you cannot account for are never reset, discarded, or force-pushed over. A branch holding unexplained work stops
+you: ask `blizzard runner ask "<question>"` rather than proceeding.
 
-Then continue from what you find. Work that is already done and correct is done — reuse it rather than redoing it. Never
-reset, discard, or force-push over commits you cannot account for. If a branch holds work you did not put there and
-cannot explain, stop and ask: `blizzard runner ask "<question>"`.
+## Build the change
 
-## What must be true when you finish
+The work exists as commits on one feature branch named `feat/<slug>`, a short kebab-case slug derived from the work
+item, and the same branch name is used in every repo the change touches. Before the first commit, each repo you touch is
+on that feature branch and arranged so a push from this environment reaches the feature branch and not the base branch
+it started on.
 
-1. **One branch, the same in every repo.** Your work exists as commits on `feat/<slug>` — a short kebab-case slug
-   describing the change, derived from the work item — in every repo you changed.
+Drafts and working notes go somewhere disposable — outside every repository working tree and outside the workspace
+directory the fleet spawned you in, since both are git working trees and nothing sweeps a loose file from either. A
+per-chunk directory under the machine's temporary space named with `$BLIZZARD_CHUNK_ID` satisfies that, unless this
+workspace declares a scratch location of its own, which is preferred.
 
-2. **No push from this environment can reach the base branch.** Before your first commit, get each repo you touch onto
-   that feature branch and make sure a push from it targets the feature branch, not the base branch the environment
-   started on. How you do that is this workspace's business — the outcome is not optional.
+Harness work is validated by reading the change back as the agent who will receive it: does the rule say what it means,
+does the routing to it land, and does the instruction survive being followed literally?
 
-3. **The branch is pushed** to each repo's origin.
+## Push and declare the commits
 
-4. **Every repo you touched is declared.** For each one, run
-   `blizzard runner artifact commit --repo <repo> --branch <branch> --commit <sha>`.
-   - `<repo>` is that repo's name in the environment's repo manifest — not an `owner/name` slug, a path, or a URL.
-   - `<sha>` is the full commit sha, never abbreviated.
-   - Add `--env <id>` if the chunk holds more than one environment.
+Push the branch to each repo's origin. For every repo you touched, you MUST then run
+`blizzard runner artifact commit --repo <repo> --branch <branch> --commit <sha>`; the declaration is mandatory, and an
+undeclared push does not count. Re-declaring a tip that was already declared is harmless, so declare again rather than
+assuming an earlier attempt's declaration got there.
 
-   The hub stores the reference, never the code, and it only learns of your push once you declare it. An undeclared push
-   does not count. Re-declaring a tip you already declared is harmless, so declare again rather than assuming an earlier
-   attempt got there.
+## Submit the refutation record
 
-5. **The work meets the item's intent**, validated as far as this node can — there is no verify node behind you. Harness
-   work is validated by reading it back as the agent who will receive it: does the rule say what it means, does the
-   routing land, does the instruction survive being followed literally?
-
-6. **Drafts and notes go somewhere disposable.** Write them under a path that is outside every repository working tree
-   *and* outside the workspace directory the fleet spawned you in — both are git working trees, and nothing sweeps a
-   loose file in either. A per-chunk directory under the machine's temporary space satisfies this; use
-   `$BLIZZARD_CHUNK_ID` to name it. If this workspace declares a scratch location of its own, prefer that.
-
-7. **The refutation channel is submitted, and it is cumulative.** Run
-   `blizzard runner artifact create --name review-finding-refutes` with the content on stdin.
-
-   This asset is **replaced, not appended to** — the reviewer sees only your newest submission and never looks for an
-   older one. So restate **every refutation still standing**, including any a reviewer already accepted in an earlier
-   round, each marked `open` or `accepted`. Read your own previous submission first
-   (`blizzard runner artifact get review-finding-refutes --content`) and carry it forward.
-
-   A round where you fixed everything is exactly where this goes wrong: submitting a bare "nothing to refute" drops the
-   refutations still standing, and the reviewer's next cold pass re-raises those findings. Only write "nothing to
-   refute" when nothing is standing.
-
-When all of that holds, declare done; the runner resumes you with the judgement prompt to elicit your verdict.
+On every pass through this node you MUST run `blizzard runner artifact create --name review-finding-refutes` with the
+refutation content on stdin; the submission is mandatory. Read the previous submission first with
+`blizzard runner artifact get review-finding-refutes --content` and carry it forward. Every refutation still standing is
+restated in each new submission, including any a reviewer already accepted in an earlier round, each marked `open` or
+`accepted`: that asset is replaced rather than appended to, and the reviewer sees only the newest submission and never
+looks for an older one.
