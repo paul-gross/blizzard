@@ -1270,7 +1270,7 @@ def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -
     assert detail2["status"] == "needs_human"
     assert len(detail2["bounces"]) == 2
     # A hub-authored escalation composes no wrapped command — the hub has no runner
-    # runtime dir to draw one from (`blizzard-context:/domain/humans.md` §Escalation).
+    # runtime dir to draw one from (`blizzard-context:/domain/humans/escalation.md` §Escalation).
     assert detail2["escalation"]["wrapped_takeover_command"] == ""
 
 

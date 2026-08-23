@@ -274,7 +274,7 @@ class TransitionFact:
 class EscalationFact:
     """An ``escalation.recorded`` fact — the system ran out of moves on this chunk.
     Carries the takeover command and its wrapped equivalent. Wrapped-vs-raw rules:
-    `blizzard-context:/domain/humans.md` §Escalation. The status derivation keys only
+    `blizzard-context:/domain/humans/escalation.md` §Escalation. The status derivation keys only
     on ``(epoch, recorded_at)`` supersession."""
 
     epoch: int
@@ -523,7 +523,7 @@ class EventFeed:
             lease_id=None,
             node_name=None,
             # `esc.takeover_command` is not always a resume command, so this promises a
-            # way to proceed only when one exists (`blizzard-context:/domain/humans.md`).
+            # way to proceed only when one exists (`blizzard-context:/domain/humans/escalation.md`).
             message=(
                 f"chunk {esc.chunk_id} needs a human — see the chunk's escalation for how to proceed"
                 if esc.takeover_command
@@ -1452,7 +1452,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
     ) -> int:
         """Record an ``escalation.recorded`` fact — the chunk derives ``needs_human``
         until something supersedes it. The takeover command rides along so the
-        parked session is resumable (`blizzard-context:/domain/humans.md`). ``decision_id``,
+        parked session is resumable (`blizzard-context:/domain/humans/escalation.md`). ``decision_id``,
         when set, closes a gate decision no transition or migration will (issue #110)."""
         ...
 

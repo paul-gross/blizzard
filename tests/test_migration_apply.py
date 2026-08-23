@@ -277,7 +277,7 @@ def test_an_unresolvable_cross_graph_target_escalates_to_needs_human(tmp_path: P
     # than crashing or silently dropping the completion.
     assert detail["status"] == "needs_human"
     # The hub has no runner runtime to compose a wrapped command from, so it stays
-    # empty; see `blizzard-context:/domain/humans.md` §Escalation.
+    # empty; see `blizzard-context:/domain/humans/escalation.md` §Escalation.
     escalation = detail["escalation"]
     assert escalation["wrapped_takeover_command"] == ""
     assert "mint a graph named `ghost`" in escalation["takeover_command"]

@@ -146,8 +146,8 @@ identity env: pasted into a bare terminal it runs at the harness's interactive p
 ## Resolving an escalation
 
 Which commands a given escalation carries, and whether its session is still reachable through takeover at all, is a
-domain fact owned by the Escalation section of blizzard-context's
-[domain/humans.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/humans.md). Only when no runner can
+domain fact owned by blizzard-context's
+[domain/humans/escalation.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/humans/escalation.md). Only when no runner can
 enter the session does resolving an escalation mean acting on the chunk directly — reading its bounce history or
 migration guidance — and requeuing; when the work was finished outside the fleet entirely, stop the chunk instead, which
 closes the escalation with it ([control-verbs.md](./control-verbs.md)).

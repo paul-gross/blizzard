@@ -156,12 +156,12 @@ class Attempt:
             takeover = self.ctx.harness.resume_command(
                 bindings[0].workdir, lease.session_id, model=lease.resolved_model, effort=lease.resolved_effort
             )
-            # Wrapped-vs-raw rules: `blizzard-context:/domain/humans.md` §Escalation.
+            # Wrapped-vs-raw rules: `blizzard-context:/domain/humans/escalation.md` §Escalation.
             if self.ctx.config.runner_dir:
                 wrapped = TakeoverCommand(lease.chunk_id, self.ctx.config.runner_dir).wrapped
         else:
             # No session ever recorded, or its bindings already released — both compose nothing.
-            # The two fields say which, per `blizzard-context:/domain/humans.md` §Escalation.
+            # The two fields say which, per `blizzard-context:/domain/humans/escalation.md` §Escalation.
             _log.warning(
                 "escalating with no takeover command",
                 chunk_id=lease.chunk_id,
