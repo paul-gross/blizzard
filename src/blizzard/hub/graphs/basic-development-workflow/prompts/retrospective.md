@@ -1,67 +1,51 @@
-# Retrospective (basic-development-workflow)
+# Retrospective
 
-You are working a chunk's **retrospective** node-step. Deliver *reported* that the work landed — every repo's base
-branch fast-forwarded to this chunk's commit. This node re-derives that report rather than taking it on faith, then
-writes the closing reflection.
+Deliver reported every repo's base branch fast-forwarded to the chunk's commit; this node re-derives that report rather
+than trusting it, then writes the closing reflection. This node never repairs or routes backward a discrepancy — record
+one plainly as a finding for a human to resolve — and it does not change the delivered code; name files and findings,
+not vibes.
 
-## Start from what is actually there
+## Gather the record
 
-Read `blizzard runner chunk history` — the chunk's transitions and bounces, oldest-first, including any bounced attempt
-that produced no artifact. Then read its asset trail: the work item(s) the chunk wraps, the review findings, and the
-pre-push summary. This is the lightweight lane, so there is no per-node `retrospective` diary to synthesize.
+Read the asset trail — the chunk's work item(s), the review findings, and the pre-push summary — and read
+`blizzard runner chunk history`, which lists transitions and bounces oldest-first, including bounced attempts that
+produced no artifact. This lane keeps no per-node retrospective diary to synthesize.
 
-## Verify the landing before writing anything
+## Verify the landing
 
-Fetch in each repo's own worktree first. The worktree's view of the base branch was last refreshed when the environment
-was acquired and never since, while the fast-forward itself happened on the forge, not in this worktree.
+`blizzard runner artifact list` shows one `git_commit` entry per repo per node that declared one. Verify the newest
+`epoch` entry per repo — an older declaration is expected to be unreachable after a rewrite, and is no discrepancy.
 
-Then, per repo:
+Fetch in each repo's worktree before verifying — its base-branch view dates from environment acquisition; the
+fast-forward happened on the forge. Test each landed sha's reachability with
+`git merge-base --is-ancestor <sha> origin/<base>` — `origin/master` unless the repo records another — using that
+predicate specifically, not branch-tip comparison or log reading. This lane fast-forwards base refs directly, so there
+is no PR-merge leg to check.
 
-1. **The landed sha is reachable from base.** `blizzard runner artifact list` returns one `git_commit` entry per repo
-   per node that declared one — `build`, plus `pre-push` again if it rewrote the branch. Take the **newest `epoch`**
-   entry per repo; an older, superseded declaration is expected to be unreachable after a rewrite and is not a
-   discrepancy. Test reachability with `git merge-base --is-ancestor <sha> origin/<base>` — `origin/master` unless the
-   repo records another — where exit 0 means reachable. Use that predicate specifically; comparing branch tips or
-   reading log output answers a different question.
-2. **The chunk's originating work item is closed.** `blizzard runner work-items <chunk-id>` gives you each work ref's
-   `web_url`. The work item carries no closed/open field, so ask the forge directly for the issue's `state`. A
-   forge-side "closes on merge" convention is opportunistic, never guaranteed, so treat an open item as a finding to
-   record, not as evidence the landing failed.
+Check whether the landing turned the base branch's gate red, querying by the fast-forwarded commit per repo — not by
+branch; this lane makes no separate merge commit. A completed red gate run is a real finding: raise it in the asset with
+its disposition and leave it there for the routine cross-chunk analysis pass to route onward.
 
-This lane fast-forwards a base ref directly rather than merging a PR, so there is no PR-merge leg to check.
+Verify the originating work item closed: `blizzard runner work-items <chunk-id>` gives each work ref's `web_url`; the
+item has no open/closed field — ask the forge for the issue's `state`. Closes-on-merge is opportunistic, never
+guaranteed — an open item is a finding to record, not evidence the landing failed.
 
-Record the result in the retrospective asset's **Landing Verification** section whatever the outcome. A clean landing
-states that it checked out clean, not just that it landed.
+## Write and submit the asset
 
-This lane has **no `resolve` node** — its deliver failure path already returns to `pre-push`. So a discrepancy this
-check finds is never something retrospective repairs or routes backward for itself. Record what you found as a finding
-and report it plainly; a human resolves it from there.
+The asset's sections are:
 
-Separately, check whether the landing turned the base branch's own gate red. Query the gate **by the fast-forwarded
-commit itself**, per repo — not by branch — since there is no separate merge commit in this lane. A completed red run is
-a real finding: raise it in this asset as its disposition and leave it there — the routine analysis pass that reads
-retrospectives across chunks gathers what they raise and routes each one onward.
-
-## Submit
-
-Submit the retrospective as this node's `retrospective` asset: run
-`blizzard runner artifact create --name retrospective` with the content on stdin, with these sections:
-
-- **Landing Verification** — the checks above, on every landing, clean or not.
+- **Landing Verification** — record the verification outcome whatever it is; a clean landing states that it checked out
+  clean, not just that it landed.
 - **What Went Well**
 - **What Didn't Go Well**
-- **Harness / Context Improvements** — concrete, actionable changes to the harness, tooling, agent docs, or conventions
-  that would make the next run faster, more accurate, or more autonomous. This section is the point of the
-  retrospective.
+- **Harness / Context Improvements** — concrete, actionable changes to harness, tooling, agent docs, or conventions
+  making the next run faster, more accurate, or more autonomous. This section is the point of the retrospective.
 - **What We Skipped** — untested paths, deferred work, known gaps.
 
-Keep it honest and specific. Name files and findings, not vibes. Do not change the delivered code from this node.
+Submit the reflection with `blizzard runner artifact create --name retrospective`, content on stdin. The asset goes
+first so the recorded reflection survives whatever the post-delivery work costs.
 
 ## Post-delivery
 
-**After the asset is submitted**, carry out whatever **post-delivery** work this workspace asks of the node. Read the
-workspace's own agent context for a post-delivery convention. A workspace that declares one — redeploying the landed
-build, publishing an artifact, notifying something downstream — expects this node to honor it. A workspace that declares
-none leaves this node at the reflection above. The asset goes first so a reflection already recorded survives whatever
-the post-delivery work costs. Follow the workspace's convention for the rest, including any warning it gives about how
-that work behaves.
+After submitting the asset, do whatever post-delivery work the workspace's own agent context declares for this node —
+redeploy, publish, notify — honoring its warnings; none declared leaves the node at the reflection.

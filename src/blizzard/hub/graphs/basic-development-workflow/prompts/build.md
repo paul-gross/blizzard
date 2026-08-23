@@ -1,64 +1,47 @@
 # Build
 
-You are working a chunk's **build** node-step. The chunk wraps one or more work items; read them with
-`blizzard runner work-items <chunk-id>`, and implement the change in the leased environment(s).
+This is a chunk's build node-step: the chunk wraps one or more work items — read them with
+`blizzard runner work-items <chunk-id>` — and you implement the change in the leased environment(s). No planning node
+precedes build in this lane: plan inline while building; no plan artifact exists and nothing gates on one. No verify
+node follows either — build and verification are one node, and the work must meet the item's intent, verified as far as
+this node can verify it, before you declare done.
 
-This is the lightweight lane. There is no planning node ahead of this one — if the approach needs working out, think it
-through inline as part of building. No plan artifact is produced and nothing here is gated on one. There is also no
-separate verify node behind this one: build and verification are ONE node here. Satisfy the work item's intent before
-you declare done, and treat that as this node's own finale rather than a formality deferred to a later step.
+## Orient first
 
-## Start from what is actually there
+Entry may be fresh, a retry, or a bounce back from a later node — never assume what an earlier step left; inspect first.
+Run `blizzard runner artifact list` to see what is already declared for the chunk and which assets arrived with you. Per
+repo you expect to touch, check the checked-out branch, working-tree cleanliness, and what the branch carries beyond the
+base branch. Reuse existing correct work rather than redoing it. Never reset, discard, or force-push over commits you
+cannot account for; on finding branch work you cannot explain, stop and ask with `blizzard runner ask "<question>"`.
 
-You may be arriving here from anywhere: a first entry, a retry after a crash, a bounce back from review or pre-push, or
-a migration from another graph. Do not assume what an earlier step left behind. Before you change anything, look:
+## Branch and commit
 
-- In each repo you expect to touch: which branch is checked out, whether the working tree is clean, and what the branch
-  already carries beyond the base branch.
-- `blizzard runner artifact list` — what has already been declared for this chunk, and what assets arrived with you.
+Finished work is commits on one branch, `feat/<slug>` — a short kebab-case slug derived from the work item — the same in
+every repo changed. Before the first commit, put each touched repo on the feature branch so no push from this
+environment can reach the base branch; how you arrange that is the workspace's business, the outcome is mandatory.
 
-Then continue from what you find. Work that is already done and correct is done — reuse it rather than redoing it. Never
-reset, discard, or force-push over commits you cannot account for. If a branch holds work you did not put there and
-cannot explain, stop and ask: `blizzard runner ask "<question>"`.
+Keep drafts and notes outside every repo working tree and outside the spawn workspace directory — both are unswept git
+worktrees. Use a temp per-chunk directory named with `$BLIZZARD_CHUNK_ID`, preferring a workspace-declared scratch
+location if one exists.
 
-## What must be true when you finish
+## Push and declare
 
-1. **One branch, the same in every repo.** Your work exists as commits on `feat/<slug>` — a short kebab-case slug
-   describing the change, derived from the work item — in every repo you changed.
+Push the branch to each changed repo's origin, then declare every touched repo with
+`blizzard runner artifact commit --repo <repo> --branch <branch> --commit <sha>`. `<repo>` is the repo's name in the
+environment's repo manifest — never an `owner/name` slug, a path, or a URL; `<sha>` is the full sha, never abbreviated.
+Add `--env <id>` when the chunk holds more than one environment. The hub stores only the declared reference and learns
+of a push only via declaration — an undeclared push does not count. Re-declaring a declared tip is harmless; declare
+again rather than trusting an earlier attempt.
 
-2. **No push from this environment can reach the base branch.** Before your first commit, get each repo you touch onto
-   that feature branch and make sure a push from it targets the feature branch, not the base branch the environment
-   started on. How you do that is this workspace's business — the outcome is not optional.
+## Refutations
 
-3. **The branch is pushed** to each repo's origin.
+Read the previous refutes submission with `blizzard runner artifact get review-finding-refutes --content` and carry it
+forward. Before declaring done, submit the refutation channel:
+`blizzard runner artifact create --name review-finding-refutes`, content on stdin. That asset is replaced, not appended
+— the reviewer reads only the newest submission — so restate every refutation still standing, previously accepted ones
+included, each marked `open` or `accepted`. A bare "nothing to refute" while refutations stand drops them, and the next
+cold pass re-raises those findings — write it only when nothing stands.
 
-4. **Every repo you touched is declared.** For each one, run
-   `blizzard runner artifact commit --repo <repo> --branch <branch> --commit <sha>`.
-   - `<repo>` is that repo's name in the environment's repo manifest — not an `owner/name` slug, a path, or a URL.
-   - `<sha>` is the full commit sha, never abbreviated.
-   - Add `--env <id>` if the chunk holds more than one environment.
+## Done
 
-   The hub stores the reference, never the code, and it only learns of your push once you declare it. An undeclared push
-   does not count. Re-declaring a tip you already declared is harmless, so declare again rather than assuming an earlier
-   attempt got there.
-
-5. **The work meets the item's intent**, verified as far as this node can — there is no verify node behind you.
-
-6. **Drafts and notes go somewhere disposable.** Write them under a path that is outside every repository working tree
-   *and* outside the workspace directory the fleet spawned you in — both are git working trees, and nothing sweeps a
-   loose file in either. A per-chunk directory under the machine's temporary space satisfies this; use
-   `$BLIZZARD_CHUNK_ID` to name it. If this workspace declares a scratch location of its own, prefer that.
-
-7. **The refutation channel is submitted, and it is cumulative.** Run
-   `blizzard runner artifact create --name review-finding-refutes` with the content on stdin.
-
-   This asset is **replaced, not appended to** — the reviewer sees only your newest submission and never looks for an
-   older one. So restate **every refutation still standing**, including any a reviewer already accepted in an earlier
-   round, each marked `open` or `accepted`. Read your own previous submission first
-   (`blizzard runner artifact get review-finding-refutes --content`) and carry it forward.
-
-   A round where you fixed everything is exactly where this goes wrong: submitting a bare "nothing to refute" drops the
-   refutations still standing, and the reviewer's next cold pass re-raises those findings. Only write "nothing to
-   refute" when nothing is standing.
-
-When all of that holds, declare done; the runner resumes you with the judgement prompt to elicit your verdict.
+Declare done once every condition above holds; the runner then resumes you with the judgement prompt.
