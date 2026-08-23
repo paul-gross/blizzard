@@ -221,7 +221,7 @@ function main() {
     for (const v of lineViolations) console.error(`  ${v.file}: ${v.lines} lines`);
     console.error(
       '\nDecompose into container + presentational siblings built from the kit, ' +
-        'per blizzard-context:/architecture/frontend-structure.md bzh:frontend-container-presentational.',
+        'per blizzard-context:/architecture/frontend-structure/containers.md bzh:frontend-container-presentational.',
     );
     process.exitCode = 1;
     return;

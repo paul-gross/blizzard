@@ -10,7 +10,7 @@
  * owns its own `index.ts` sub-barrel — including the domain view types it re-exports
  * from the generated hub client — and is re-exported here one line each, so two
  * features landing in parallel touch different sub-barrels instead of colliding on
- * this file (`architecture/frontend-structure.md`'s disjoint-diffs mechanism). Only
+ * this file (`architecture/frontend-structure/disjoint-diffs.md`). Only
  * what has no single feature owner — the query-key registry and the generated-client
  * surface itself — stays exported directly at root.
  */
