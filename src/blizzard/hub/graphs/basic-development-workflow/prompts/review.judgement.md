@@ -1,10 +1,13 @@
 # Review — judgement
 
-Render your review verdict on the submitted work. Your findings ride forward as the `review-findings` asset — if you
-have not yet run `blizzard runner artifact create --name review-findings` with your findings on stdin, do that now,
-before you record this verdict. That asset must record how you adjudicated every entry in `review-finding-refutes`,
-accepted and rejected alike; a finding whose refutation you accepted is resolved and does not block `pass`.
+You are closing a review node-step: record the review verdict.
 
-Select `pass` if the work meets the work item's intent, the end-to-end flows are clean, and you found no blocking issue
-— the chunk proceeds to the pre-push integration step. Select `fail` if any blocking issue remains; the attached
-`review-findings` asset is carried back into the build node's envelope, so the next build attempt can address each one.
+Submit your findings as the `review-findings` asset with `blizzard runner artifact create --name review-findings`,
+content on stdin, before you record the verdict. Record in that asset how you adjudicated every entry in
+`review-finding-refutes`, accepted and rejected alike. A finding whose refutation you accepted is resolved, and does not
+block `pass`.
+
+| Outcome | Record it when                                                                                        |
+| ------- | ----------------------------------------------------------------------------------------------------- |
+| `pass`  | The work meets the work item's intent, the end-to-end flows are clean, and no blocking issue remains. |
+| `fail`  | Any blocking issue remains.                                                                           |

@@ -1,7 +1,9 @@
 # Retrospective — judgement
 
-Confirm the retrospective is written as the `retrospective` asset, honest and specific, with all required sections —
-above all the **Landing Verification** section. Confirm too that this workspace's post-delivery convention, if it
-declares one, was carried out, or that its failure is reported plainly.
+You are closing a retrospective node-step. Before recording, confirm both:
 
-Select `recorded` — the work is complete and the chunk closes.
+- The retrospective was written as the `retrospective` asset — honest and specific, carrying every required section,
+  above all Landing Verification.
+- The workspace's post-delivery convention, if any, was carried out, or its failure plainly reported.
+
+`recorded` is the only outcome, and it closes the chunk.

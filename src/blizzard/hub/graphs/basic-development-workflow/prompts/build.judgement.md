@@ -1,17 +1,13 @@
 # Build — judgement
 
-Assess the build against this node's criteria: the change implements the work item's intent, and your work is committed,
-pushed, and declared — `blizzard runner artifact commit` for each repo you touched. This node fuses build and
-verification; there is no separate verify node downstream to catch what slips through, so hold the bar here.
+You are closing a build node-step. Judge the work as it now stands rather than only what this turn produced: an
+increment an earlier attempt finished still counts.
 
-Judge the **work** as it now stands, not only what you did this turn: an increment an earlier attempt completed still
-counts, and you do not redo it.
+Coverage is checked per attempt under a fresh lease, so a declaration does not carry over — an earlier attempt's
+declared tip does not satisfy this one. Where this attempt has not yet declared every repo the chunk touches, declare
+them before you record a verdict.
 
-The **declaration** is different, and does not carry over. Coverage is checked per attempt, and a re-attempt runs under
-a fresh lease — so a tip declared by an earlier attempt does not satisfy this one. If you did not run
-`blizzard runner artifact commit` on this attempt for every repo the chunk touches, do that before recording your
-verdict; re-declaring an unchanged tip is harmless, omitting it is not.
-
-Select `pass` only if all of that holds — the work then hands to the review node for a cold-eyes pass. Select `fail` if
-the work does not yet meet the item's intent, or is not committed, pushed, and declared. The failure output is attached
-when the build node is re-entered.
+| Outcome | Record it when                                                                                                                                  |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pass`  | The change implements the work item's intent, and every touched repo is committed, pushed, and declared with `blizzard runner artifact commit`. |
+| `fail`  | Any of those conditions does not hold.                                                                                                          |
