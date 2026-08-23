@@ -1,7 +1,2 @@
-# Build — re-entry after a failed attempt
-
-You are re-entering the **build** node after the previous attempt did not pass: the work did not yet meet the item's
-intent. The failure output is attached below.
-
-Check what that attempt actually left behind before you act — some of it may already be committed. Address every point,
-commit the fix, and declare done again.
+You are re-entering this node after a build attempt judged `fail` — the work did not yet meet the item's intent. That
+attempt's own failure output rides along with this re-entry. Address every point in it before declaring done again.
