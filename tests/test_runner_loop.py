@@ -1755,7 +1755,7 @@ def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_comm
 def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path):  # type: ignore[no-untyped-def]
     """The doubted state built the way the funnel reaches it (blizzard#280): a binding recorded
     and then *released*, as `abandon` releases it. It escalates anyway — the chunk still needs a
-    human — and warns which of `humans/escalation.md`'s reasons produced a command-less escalation."""
+    human — and warns which of `humans/escalation.md`'s origins produced a command-less escalation."""
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -1799,7 +1799,7 @@ def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path): 
     assert payload["takeover_command"] == ""
     assert payload["wrapped_takeover_command"] == ""
     # The fields, not the prose, are what tell a released binding apart from a lease that
-    # never had a session — the two reasons `humans/escalation.md` §Escalation keeps distinct.
+    # never had a session — the two origins `humans/escalation.md` §What each origin carries keeps distinct.
     warned = [entry for entry in logs if entry["event"] == "escalating with no takeover command"]
     assert len(warned) == 1
     assert warned[0]["log_level"] == "warning"

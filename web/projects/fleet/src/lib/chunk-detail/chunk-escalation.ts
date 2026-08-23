@@ -16,9 +16,8 @@ import { KitButton } from '../kit/kit-button';
  * no discriminator between a runner-composed resume command and the hub-authored
  * guidance prose that occupies the same field.
  * Wrapped-vs-raw rules and the wire field's own optionality:
- * `blizzard-context:/domain/humans/escalation.md` §Escalation and
- * `ChunkEscalationView` in
- * `src/blizzard/wire/chunk.py`.
+ * `blizzard-context:/domain/humans/escalation.md` §The commands an escalation carries,
+ * and `ChunkEscalationView` in `src/blizzard/wire/chunk.py`.
  */
 @Component({
   selector: 'fleet-chunk-detail-escalation',

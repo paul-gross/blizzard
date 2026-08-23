@@ -4,10 +4,10 @@
   {
    "id": "escalation-wrapped-implies-raw",
    "statement": "A present wrapped takeover verb implies a present raw one; the reverse never holds, and either may be absent.",
-   "owner": "blizzard-context:/domain/humans/escalation.md#escalation",
+   "owner": "blizzard-context:/domain/humans/escalation.md#the-commands-an-escalation-carries",
    "owner_kind": "domain",
    "owner_assert": {
-    "quote": "always means the raw resume command is present too, but not the other way around"
+    "quote": "guarantees the raw resume command is present as well"
    },
    "markers": [
     "wrapped implies raw",

@@ -274,7 +274,7 @@ class TransitionFact:
 class EscalationFact:
     """An ``escalation.recorded`` fact — the system ran out of moves on this chunk.
     Carries the takeover command and its wrapped equivalent. Wrapped-vs-raw rules:
-    `blizzard-context:/domain/humans/escalation.md` §Escalation. The status derivation keys only
+    `blizzard-context:/domain/humans/escalation.md` §The commands an escalation carries. The status derivation keys only
     on ``(epoch, recorded_at)`` supersession."""
 
     epoch: int

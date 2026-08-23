@@ -26,7 +26,7 @@ const WRAPPED_DETAIL: ChunkDetail = {
 /** An escalation carrying only the raw field, populated with a runnable resume
  * command — the shape of a row stored before the wrapped column existed, or written
  * by a runner that could not compose the wrapped form
- * (`blizzard-context:/domain/humans/escalation.md` §Escalation). */
+ * (`blizzard-context:/domain/humans/escalation.md` §What each origin carries). */
 const RAW_ONLY_DETAIL: ChunkDetail = {
   ...WRAPPED_DETAIL,
   escalation: {
@@ -38,7 +38,7 @@ const RAW_ONLY_DETAIL: ChunkDetail = {
 
 /** An escalation carrying only the raw field, populated with operator guidance prose
  * rather than a runnable command — the hub-authored, cross-graph-unresolvable shape
- * (`blizzard-context:/domain/humans/escalation.md` §Escalation). The hub never composes a
+ * (`blizzard-context:/domain/humans/escalation.md` §What each origin carries). The hub never composes a
  * wrapped form. */
 const PROSE_ONLY_DETAIL: ChunkDetail = {
   ...WRAPPED_DETAIL,
