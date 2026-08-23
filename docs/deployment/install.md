@@ -92,4 +92,4 @@ others from reconciling. Confirm a sync with `blizzard hub graph list` — the n
 
 Minting is additive: the new definition becomes effective for future resolution while every in-flight chunk stays pinned
 to the definition it started under; moving one deliberately is `hub chunk migrate`, owned by
-[chunk-operations.md](./chunk-operations.md).
+[chunk-operations/migration.md](./chunk-operations/migration.md).

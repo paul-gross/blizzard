@@ -79,11 +79,11 @@ lands on the entry, since it stands on nowhere. A restart target that is unknown
 retired reads unknown), retired-and-named-by-id (409), or equal to the chunk's current pin (409 — use plain restart) is
 refused, and every refusal writes nothing.
 
-restart is not migrate: `chunk migrate` ([chunk-operations.md](./chunk-operations.md)) records a standing intent —
-inspectable in `chunk show`, overwritable, cancelable, consulted only at the chunk's next transition, interrupting
-nothing in flight — while `chunk restart` performs an event already done when the call returns; both cross graphs, they
-differ in when, and `restart --to-graph` is the one that does not wait for a transition the operator would have to
-manufacture.
+restart is not migrate: `chunk migrate` ([chunk-operations/migration.md](./chunk-operations/migration.md)) records a
+standing intent — inspectable in `chunk show`, overwritable, cancelable, consulted only at the chunk's next transition,
+interrupting nothing in flight — while `chunk restart` performs an event already done when the call returns; both cross
+graphs, they differ in when, and `restart --to-graph` is the one that does not wait for a transition the operator would
+have to manufacture.
 
 A restart into a standing `chunk pause` does not resume it: the runner checks the pause fact ahead of the restart-resume
 path ([recovery.md](./recovery.md)), so a chunk still paused when the runner comes back is re-parked, not respawned —

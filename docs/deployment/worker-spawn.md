@@ -104,4 +104,4 @@ never to be added through `env_passthrough`; the guarantee covers daemon-spawned
 
 An operator takeover session inverts this: your shell is the base with only a bounded daemon-side set on top — the
 lease's `BLIZZARD_*` identity vars plus the daemon's `PATH` and `HOME`; `env_passthrough` is not forwarded and no
-allowlist filters your shell ([chunk-operations.md](./chunk-operations.md) owns the verb).
+allowlist filters your shell ([chunk-operations/takeover.md](./chunk-operations/takeover.md) owns the verb).
