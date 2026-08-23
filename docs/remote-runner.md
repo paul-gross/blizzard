@@ -1,88 +1,79 @@
-# Remote runner — a runner on a machine that is not the hub's
+# Remote runner
 
-How to add a runner machine to a fleet whose hub it reaches over the network — the
-[reference compose deployment](./install.md), the colocated systemd install in [`docs/deployment.md`](./deployment.md),
-or any hub you can `curl`. This page owns the runner-side pointing: the `hub_url`, the runner's identity, and what the
-distance changes. The enrollment mechanics and auth rollout modes it leans on are owned by
-[`deployment/runner-auth.md`](./deployment/runner-auth.md)'s "Runner authentication"; the outage ride-out contract by
-[`docs/upgrade.md`](./upgrade.md).
+This document owns the runner-side pointing at a hub on another machine — the `hub_url`, the runner's identity, and what
+network distance changes. It works against any reachable hub: the reference compose deployment
+([`docs/install.md`](./install.md)), the colocated systemd install ([`docs/deployment.md`](./deployment.md)), or any hub
+you can `curl`.
 
-## What the distance changes — and what it doesn't
+Nothing dials into the runner — it reaches the hub outbound-only and introduces itself, so a machine behind NAT or with
+no inbound firewall rule is fine: no port to open, no address the hub needs to know.
 
-- **Nothing dials into the runner.** The runner reaches the hub outbound-only, so a laptop behind NAT, a home server
-  behind a router, or a box with no inbound firewall rule at all are equally fine. There is no port to open and no
-  address the hub needs to know — the runner introduces itself.
-- **Reach the hub over HTTPS.** The reference deployments terminate TLS in front of the hub; give the runner that front
-  door (`hub_url = "https://hub.example.net"`), not a bare container port. The runner's enrolled bearer token rides
-  every call, and it deserves transport encryption.
-- **Version skew becomes possible.** Two machines upgrade at two times; the supported window is
-  [`docs/versioning.md`](./versioning.md)'s.
-- **An unreachable hub is routine, not an incident.** The runner is built to ride out a hub that stops answering; what
-  buffers and what keeps running is [`docs/upgrade.md`](./upgrade.md)'s contract.
+## Install
 
-## Point the runner at the hub
+On a runner-only machine, follow [`docs/deployment/install.md`](./deployment/install.md)'s "First install" for the
+service account, the wheel venv, and the runtime-dir seeding — but skip `blizzard-hub init` (a runner machine hosts no
+hub) and install only the `blizzard-runner.service` unit. Workspace and harness bindings are configured exactly as in
+the colocated install; distance changes none of that.
 
-Install the wheel and seed the runtime directory as in [`deployment/install.md`](./deployment/install.md)'s "Install" —
-steps 1–3 (venv, service account, `blizzard-runner init`; skip the `blizzard-hub init` line, a runner machine hosts no
-hub) and step 5 for the `blizzard-runner.service` unit alone. Only the config differs from the colocated case. Two keys
-in `blizzard-runner.toml` do the pointing:
+## Point it at the hub
 
-```toml
-# blizzard-runner.toml on the runner machine
-hub_url   = "https://hub.example.net"   # the hub's front door, not localhost
-runner_id = "anna-laptop"               # unique per runner in the fleet
+Only the config differs from the colocated case — in `blizzard-runner.toml`, two keys do the pointing:
+
+- `hub_url = "https://hub.example.net"` — the hub's front door, not localhost. Give the runner the hub's TLS front door,
+  not a bare container port: the enrolled bearer token rides every call and deserves transport encryption.
+- `runner_id = "anna-laptop"` — unique per runner in the fleet.
+
+Choose the final `runner_id` before the first start: it defaults to `runner-local`, every runner on a multi-runner hub
+needs its own, and enrollment binds the bearer token to the exact id — under `runner_auth_mode = "enforce"` a token
+presented for a different id is rejected.
+
+The toml's `hub_url` is authoritative: `BZ_HUB_URL` seeds it only at `blizzard-runner init` time, and a running daemon
+reads the toml alone — re-pointing a runner means editing the file and restarting, not exporting a variable. The same
+`BZ_HUB_URL` variable does live-target the operator's `blizzard hub …` client CLI — two consumers, two behaviors; the
+client obeying the variable does not mean the daemon does.
+
+## Enroll
+
+The enrollment sequence, the auth rollout modes, and where the token lives are owned by
+[`docs/deployment/runner-auth.md`](./deployment/runner-auth.md); the remote case changes only how each step reaches the
+hub. Enrollment presumes registration — the runner must have been started once so it registers at the hub, per that
+owner, or the enroll call 404s.
+
+Enroll from any operator machine:
+
+```bash
+blizzard hub runner enroll anna-laptop --hub-url https://hub.example.net
 ```
 
-- **`hub_url` lives in the toml, and the toml is authoritative.** `BZ_HUB_URL` seeds `hub_url` only at
-  `blizzard-runner init` time — a convenience for scaffolding, not a live override. A running daemon reads the toml
-  alone, so re-pointing a runner means editing the file and restarting, not exporting a variable. (The same `BZ_HUB_URL`
-  name *does* live-target the operator's `blizzard hub …` client CLI — two consumers, two behaviors; don't let the
-  client obeying the variable convince you the daemon does.)
-- **Choose `runner_id` before the first start.** The id defaults to `runner-local`; on a multi-runner hub every runner
-  needs its own. Enrollment binds the bearer token to this exact id — under `runner_auth_mode =
-  "enforce"` a token
-  presented for a different id is rejected — so pick the final name first and register under it.
-- The runner's workspace and harness bindings are configured the same as ever
-  ([`deployment/install.md`](./deployment/install.md), "Install" step 4); none of that changes with distance.
+Operator verbs take the hub by URL — `--hub-url` on each call, or `BZ_HUB_URL` in the shell — and on a hub with
+`auth.mode = "oauth"`, `blizzard hub login --hub-url …` comes first.
 
-## Register, enroll, authenticate
+Install the token on the runner machine in the environment variable its `token_env` key names
+([`docs/deployment/runner-auth.md`](./deployment/runner-auth.md)) — the unit's `EnvironmentFile` is the natural place —
+then restart the runner.
 
-The sequence, the auth modes, and where the token lives are [`deployment/runner-auth.md`](./deployment/runner-auth.md) —
-read it beside this list. What follows is only what the distance adds to each step:
+A brand-new runner cannot join a hub already at `runner_auth_mode = "enforce"` unaided: registration itself is
+authenticated under `enforce`, and enrollment requires a prior registration. The operator bridges an enforcing hub by
+hand: set it to `runner_auth_mode = "warn"` and restart, let the new runner register, enroll it, install the token, then
+re-enforce — keeping the window short, since it relaxes enforcement for the whole fleet, not just the newcomer.
 
-1. **Start the runner once so it registers** — same as colocated; the runner introduces itself on its own pull, just
-   over the network now.
-2. **Enroll it — against the remote hub.** From any operator machine:
+## Verify
 
-   ```bash
-   blizzard hub runner enroll anna-laptop --hub-url https://hub.example.net
-   ```
+```bash
+blizzard hub runner list --hub-url https://hub.example.net
+```
 
-   The operator verbs take the hub the same way the runner does — by URL: `--hub-url` on each call, or `BZ_HUB_URL` in
-   the shell. On a hub with `auth.mode = "oauth"`, `blizzard hub login --hub-url …` first.
-3. **Install the token on the runner machine**, in the variable `token_env` names (`deployment/runner-auth.md`, "The
-   runner's outbound token") — the unit's `EnvironmentFile` is the natural place. Restart the runner.
-4. **Verify**: `blizzard hub runner list --hub-url …` shows the runner `online` (`--json` carries `last_seen_at`), and
-   the board's fleet column agrees.
+The runner shows `online` (`--json` carries `last_seen_at`), and the board's fleet column agrees.
 
-**Joining a hub that already enforces runner auth.** Registration itself is authenticated once
-`runner_auth_mode = "enforce"`, and enrollment requires a prior registration — so a brand-new runner cannot join an
-enforcing hub unaided. Today the operator bridges it by hand: set the hub back to `runner_auth_mode = "warn"` and
-restart it, let the new runner register, enroll it, install the token, then re-enforce. Mind that the window relaxes
-enforcement for the whole fleet, not just the newcomer — keep it as short as those steps.
+## What distance changes
 
-## If humans will open this runner's panel
+An unreachable hub is routine, not an incident — the runner rides it out; what buffers and what keeps running is
+[`docs/upgrade.md`](./upgrade.md)'s contract.
 
-The runner's own machine panel is a separate, runner-local surface. Reaching it from a browser on another machine — and
-signing in through the hub's SSO — is [`docs/deployment/human-auth.md`](./deployment/human-auth.md) §Runner-side
-federation, which owns the whole procedure: which origins `public_url` must declare, why the browser rather than the hub
-is what follows them, and the two proxy settings an off-host origin needs. The distance-specific consequence this page
-owns is only that a runner reached from elsewhere needs that configuration at all — a runner driven purely by the fleet
-needs none of it, and neither does one whose panel is only ever opened on its own host.
+Two machines upgrade at two times, so version skew becomes possible; the supported window is
+[`docs/versioning.md`](./versioning.md)'s.
 
-## Next
-
-- **Enrollment modes, token rotation, rollout order**: [`docs/deployment/runner-auth.md`](./deployment/runner-auth.md).
-- **What survives an outage or an upgrade**: [`docs/upgrade.md`](./upgrade.md).
-- **The hub the runner is pointing at**: [`docs/install.md`](./install.md) for the compose shape,
-  [`docs/deployment.md`](./deployment.md) for colocated.
+A runner whose machine-local panel is opened from a browser on another machine needs the runner-side federation
+configuration owned by [`docs/deployment/human-auth.md`](./deployment/human-auth.md)'s "Federating a runner's web
+surface" — the origins `public_url` must declare, and the proxy settings an off-host origin needs. A runner driven
+purely by the fleet, or whose panel is only opened on its own host, needs none of it.

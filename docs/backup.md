@@ -1,86 +1,85 @@
 # Backup
 
-The durable-state inventory, read off the code, for the compose deployment ([`docs/install.md`](./install.md)) — what to
-snapshot, what to skip, and how to restore for both store backends.
+This is the durable-state inventory for the compose deployment ([`docs/install.md`](./install.md)) and its single owner
+— when a durable path moves, update it here first. [`packaging/docker/README.md`](../packaging/docker/README.md) carries
+only the one-mount summary.
+
+[`packaging/docker/compose.yaml`](../packaging/docker/compose.yaml) pins the compose project name (`name: blizzard`), so
+the volumes resolve to fixed names — `blizzard_hub-data`, `blizzard_postgres-data`, `blizzard_caddy-data`,
+`blizzard_caddy-config`. `-p`/`COMPOSE_PROJECT_NAME` overrides the pin; confirm with `docker volume ls` or
+`docker compose -f packaging/docker/compose.yaml config --volumes`.
 
 ## What is durable
 
-| Path                                                                                                                                                  | Volume                                                 | What it is                                                                                                                                                                                                                                                                                                   | Back up?                                                                                                                          |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| The store — the whole `postgres-data` volume (the compose deployment's default) *or* `data/hub.db` (only if you moved `BZ_HUB_DB_URL` back to sqlite) | `postgres-data` / `hub-data`                           | Every chunk, fact, question, graph, and stored transcript segment the board reads. The only irreplaceable state.                                                                                                                                                                                             | **Yes**                                                                                                                           |
-| `data/auth/signing-keys/`                                                                                                                             | `hub-data`                                             | The IdP RSA keypair(s) + `meta.json` (`src/blizzard/hub/auth/signing.py`) — only populated once `auth.mode = "oauth"` is configured. Losing it invalidates every live session and forces a re-login fleet-wide (a runner's JWKS cache re-fetches on an unknown `kid`, but the key itself doesn't come back). | **Yes**, once OAuth login is configured                                                                                           |
-| `blizzard-hub.toml`                                                                                                                                   | bind-mounted from `packaging/docker/blizzard-hub.toml` | The deployment's config. In the **compose** deployment this file is git-tracked source, not volume state — already "backed up" by being in version control. (The colocated wheel/systemd deployment writes it directly into the runtime dir instead — back it up there.)                                     | Already versioned (compose) / **Yes** (systemd)                                                                                   |
-| `data/hub_workdirs/`                                                                                                                                  | `hub-data`                                             | Scratch git clones a hub command node uses mid-delivery (`config.data_dir / "hub_workdirs"`, `src/blizzard/hub/app.py`).                                                                                                                                                                                     | **No — reclaimable.** Re-cloned from the delivery forge on next use; carries no state the store doesn't already have a record of. |
-| `caddy-data` / `caddy-config`                                                                                                                         | named volumes                                          | The minted TLS certificate + Caddy's own state.                                                                                                                                                                                                                                                              | Optional — losing it just costs one re-issuance from Let's Encrypt on next boot, not data loss.                                   |
+**The store** is the only irreplaceable state — every chunk, fact, question, graph, and stored transcript segment the
+board reads; always back it up. It is the whole `postgres-data` volume by default, or `data/hub.db` on the `hub-data`
+volume if `BZ_HUB_DB_URL` was moved back to sqlite.
 
-`packaging/docker/compose.yaml` pins the compose project name to `blizzard` (`name: blizzard`), so the volumes above
-resolve to fixed, documentable names: `blizzard_hub-data`, `blizzard_postgres-data`, `blizzard_caddy-data`,
-`blizzard_caddy-config` — confirm with `docker compose -f
-packaging/docker/compose.yaml config --volumes` or
-`docker volume ls` if you ever run compose with a `-p`/`COMPOSE_PROJECT_NAME` override, which takes precedence over the
-pinned name.
+**Signing keys.** `data/auth/signing-keys/` on the `hub-data` volume holds the IdP RSA keypair(s) plus `meta.json`
+(`src/blizzard/hub/auth/signing.py`), populated only once `auth.mode = "oauth"` is configured — back it up from then on.
+Losing the signing keys invalidates every live session and forces a fleet-wide re-login: a runner's JWKS cache
+re-fetches on an unknown `kid`, but the key itself never comes back.
 
-## Snapshot and restore — postgres (the compose deployment's default store)
+**Hub workdirs.** `data/hub_workdirs/` — scratch git clones a hub command node uses mid-delivery
+(`config.data_dir / "hub_workdirs"`) — is reclaimable: re-cloned from the delivery forge on next use, carrying no state
+the store lacks, so skip it.
 
-`pg_dump`/`pg_restore` on a live cluster, no stop required — postgres's own MVCC gives you a consistent snapshot without
-pausing the hub. Run the dump *inside* the postgres container via `sh -c` so `$POSTGRES_USER`/`$POSTGRES_DB` resolve
-against the container's own environment (compose injects them from `.env`) — they are not set in your shell:
+Signing keys and hub workdirs live on the `blizzard_hub-data` volume regardless of which store backend runs.
+
+**Caddy state.** The `caddy-data` and `caddy-config` volumes hold the minted TLS certificate and Caddy's own state;
+backing them up is optional — losing them costs one re-issuance from Let's Encrypt on next boot, not data.
+
+**Configuration.** The compose deployment bind-mounts `blizzard-hub.toml` from `packaging/docker/blizzard-hub.toml` —
+git-tracked source, already versioned. The colocated wheel/systemd deployment instead writes it into the runtime dir,
+where it does need backing up.
+
+## The postgres store
+
+The postgres store snapshots live, no stop required — postgres's MVCC yields a consistent dump while the hub keeps
+running. Run the dump inside the postgres container via `sh -c` so `$POSTGRES_USER`/`$POSTGRES_DB` resolve from the
+container's own environment (compose injects them from `.env`) — they are not set in your shell.
+
+Snapshot, from `packaging/docker`:
 
 ```bash
-cd packaging/docker
-docker compose exec -T postgres sh -c \
-  'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
-  > hub-postgres-backup.dump
+docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' > hub-postgres-backup.dump
 ```
 
+Restore into a fresh or emptied database, from `packaging/docker`:
+
 ```bash
-# Restore into a fresh (or emptied) database:
-cd packaging/docker
 docker compose stop hub
-docker compose exec -T postgres sh -c \
-  'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' \
-  < hub-postgres-backup.dump
+docker compose exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' < hub-postgres-backup.dump
 docker compose up -d hub
 ```
 
-## Snapshot and restore — the `hub-data` volume (signing keys, config-adjacent state)
+## The hub-data volume
 
-Signing keys and hub workdirs live outside the store regardless of which store backend you run, on the
-`blizzard_hub-data` volume:
+Stop the hub before tarring the `hub-data` volume — a live write mid-tar is not a safe copy. With the store on sqlite
+(`BZ_HUB_DB_URL` unset, `data/hub.db` on this same volume), the whole-volume tar already carries the store too — stop
+the hub first as always.
+
+Snapshot:
 
 ```bash
-cd packaging/docker
-
-# Snapshot: stop the hub first — a live write mid-tar is not a safe copy.
 docker compose stop hub
-docker run --rm -v blizzard_hub-data:/from -v "$(pwd)":/to alpine \
-  tar czf /to/hub-data-backup.tgz -C /from .
+docker run --rm -v blizzard_hub-data:/from -v "$(pwd)":/to alpine tar czf /to/hub-data-backup.tgz -C /from .
 docker compose start hub
 ```
 
+To snapshot only the signing keys, skipping the reclaimable workdirs — with the hub stopped, as for any hub-data tar:
+
 ```bash
-# Restore into a fresh volume:
-docker compose stop hub
-docker volume rm blizzard_hub-data   # only once you're sure — this is destructive
+docker run --rm -v blizzard_hub-data:/from -v "$(pwd)":/to alpine tar czf /to/signing-keys-backup.tgz -C /from data/auth/signing-keys
+```
+
+Restore into a fresh volume. The hub container is removed first, not merely stopped — Docker refuses to remove a volume
+any container still references, stopped ones included — and the closing `up -d` recreates it:
+
+```bash
+docker compose rm -sf hub
+docker volume rm blizzard_hub-data   # destructive — only once you're sure
 docker volume create blizzard_hub-data
-docker run --rm -v blizzard_hub-data:/to -v "$(pwd)":/from alpine \
-  tar xzf /from/hub-data-backup.tgz -C /to
+docker run --rm -v blizzard_hub-data:/to -v "$(pwd)":/from alpine tar xzf /from/hub-data-backup.tgz -C /to
 docker compose up -d hub
 ```
-
-To snapshot only the signing keys (skipping the reclaimable `hub_workdirs/`):
-
-```bash
-docker run --rm -v blizzard_hub-data:/from -v "$(pwd)":/to alpine \
-  tar czf /to/signing-keys-backup.tgz -C /from auth/signing-keys
-```
-
-If you moved the store back to sqlite (`BZ_HUB_DB_URL` unset — `data/hub.db` under this same volume), the tar above
-already carries it too; stop the hub first as shown, exactly as for the signing-keys-only case.
-
-## See also
-
-- [`docs/upgrade.md`](./upgrade.md), [`docs/rollback.md`](./rollback.md) — the other two operator documents this one
-  joins.
-- [`packaging/docker/README.md`](../packaging/docker/README.md) — the one-mount summary this table expands on; this file
-  is the durable-path inventory's single owner — update here first when a path moves.
