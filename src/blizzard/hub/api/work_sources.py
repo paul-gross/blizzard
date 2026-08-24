@@ -24,10 +24,10 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.edit import UNSET
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
-from blizzard.hub.domain.work import WorkItemAuthor, WorkItemAuthorKind, WorkItemPriority, WorkItemRecord, WorkRef
+from blizzard.hub.domain.work import WorkItemAuthor, WorkItemPriority, WorkItemRecord, WorkRef
 from blizzard.hub.domain.work_items import WorkItemEdit, WorkItemHeldByLiveChunk, WorkItemNotEditable
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
-from blizzard.hub.work_sources.source import IWorkSource
+from blizzard.hub.work_sources.source import IWorkSource, resolve_author_view
 from blizzard.wire.chunk import ChunkIngestConflict
 from blizzard.wire.work_source import (
     WorkItemAuthorView,
@@ -65,22 +65,9 @@ def _stripped(value: str, field_name: str) -> str:
     return text
 
 
-def _author_view(author: WorkItemAuthor, users: IReadUserRepository) -> WorkItemAuthorView:
-    """The author, legible for display — mirrors ``HubWorkSource._author_view``
-    (blizzard#362), the vocabulary this editor surface shares with the pass-through
-    read rather than resolving separately."""
-    if author.kind is WorkItemAuthorKind.USER:
-        user = users.get(author.user_id) if author.user_id is not None else None
-        return WorkItemAuthorView(
-            kind=author.kind.value, user_id=author.user_id, login=user.username if user is not None else None
-        )
-    return WorkItemAuthorView(
-        kind=author.kind.value, runner_id=author.runner_id, chunk_id=author.chunk_id, node_name=author.node_name
-    )
-
-
 def _view(item: WorkItemRecord, source_obj: IWorkSource, users: IReadUserRepository) -> WorkItemView:
     pointer = WorkRef(source=item.source, ref=item.ref)
+    author = resolve_author_view(item.author, users)
     return WorkItemView(
         source=item.source,
         ref=item.ref,
@@ -88,7 +75,14 @@ def _view(item: WorkItemRecord, source_obj: IWorkSource, users: IReadUserReposit
         web_url=source_obj.web_url(pointer),
         title=item.title,
         body=item.body,
-        author=_author_view(item.author, users),
+        author=WorkItemAuthorView(
+            kind=author.kind,
+            user_id=author.user_id,
+            login=author.login,
+            runner_id=author.runner_id,
+            chunk_id=author.chunk_id,
+            node_name=author.node_name,
+        ),
         stated_priority=WorkItemPriority(item.stated_priority) if item.stated_priority is not None else None,
         created_at=iso_utc(item.created_at),
         edited_at=iso_utc(item.edited_at),

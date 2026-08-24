@@ -16,7 +16,6 @@ from blizzard.hub.domain.work import (
     IReadChunkRepository,
     IReadWorkItemRepository,
     WorkItemAuthor,
-    WorkItemAuthorKind,
     WorkItemClosure,
     WorkItemPriority,
     WorkItemRecord,
@@ -27,7 +26,7 @@ from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
-from blizzard.hub.work_sources.source import AuthorView, IWorkSource, WorkItem, WorkSourceError
+from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError, resolve_author_view
 
 
 class HubWorkSource:
@@ -66,21 +65,8 @@ class HubWorkSource:
             body=item.body,
             title=item.title,
             comments=[],
-            author=self._author_view(item.author),
+            author=resolve_author_view(item.author, self._users),
             stated_priority=item.stated_priority,
-        )
-
-    def _author_view(self, author: WorkItemAuthor) -> AuthorView:
-        """The author, legible for display — a resolved login for a human author, or
-        the runner/chunk/node lineage for a fleet-authored one (blizzard#362). This is
-        the only place a ``WorkItemAuthor.user_id`` is ever resolved to a login."""
-        if author.kind is WorkItemAuthorKind.USER:
-            user = self._users.get(author.user_id) if author.user_id is not None else None
-            return AuthorView(
-                kind=author.kind.value, user_id=author.user_id, login=user.username if user is not None else None
-            )
-        return AuthorView(
-            kind=author.kind.value, runner_id=author.runner_id, chunk_id=author.chunk_id, node_name=author.node_name
         )
 
     def label(self, pointer: WorkRef) -> str | None:

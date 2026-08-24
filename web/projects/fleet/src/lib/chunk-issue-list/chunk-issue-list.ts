@@ -87,14 +87,14 @@ export class ChunkIssueList {
     return item.title?.trim() || '—';
   }
 
-  /** Which idiom an entry renders in (blizzard#362) — `web_url`'s own shape
-   * discriminates, never `source`: the hub's is always an in-app path (`hub_work_source.py`'s
-   * `web_url` never returns an absolute URL), a forge's is always absolute. Unlike
-   * `author`, `web_url` is resolved before a pointer's fetch is attempted, so an errored
-   * hub entry still renders its ref as an in-app route rather than falling through to the
-   * forge anchor's new-tab external link. */
+  /** Which idiom an entry renders in (blizzard#362) — carried fields discriminate, never
+   * `source`, but neither carried field alone suffices on its own: `author` is unset on
+   * an errored entry (the fetch never ran), and `web_url` is `null` for a successfully
+   * fetched hub item once its resting chunk goes terminal (`hub_work_source.py`'s
+   * `web_url` answers only a *live* holder). Either signal present is enough — a forge
+   * entry carries neither, ever. */
   protected isHubEntry(item: WorkItemEntry): boolean {
-    return item.web_url != null && item.web_url.startsWith('/');
+    return item.author != null || (item.web_url != null && item.web_url.startsWith('/'));
   }
 
   /** A stated priority's badge tone, or `null` for one this list does not recognize

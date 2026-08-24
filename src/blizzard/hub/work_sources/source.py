@@ -14,7 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.auth.users import IReadUserRepository
+from blizzard.hub.domain.work import WorkItemAuthor, WorkItemAuthorKind, WorkRef
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.closer import IWorkCloser
 from blizzard.hub.work_sources.editor import IWorkEditor
@@ -32,6 +33,20 @@ class AuthorView:
     runner_id: str | None = None
     chunk_id: str | None = None
     node_name: str | None = None
+
+
+def resolve_author_view(author: WorkItemAuthor, users: IReadUserRepository) -> AuthorView:
+    """A ``WorkItemAuthor`` resolved legible for display (blizzard#362) — the one place a
+    ``user_id`` is ever resolved to a login, shared by ``HubWorkSource``'s pass-through
+    read and the editor surface's own view alike."""
+    if author.kind is WorkItemAuthorKind.USER:
+        user = users.get(author.user_id) if author.user_id is not None else None
+        return AuthorView(
+            kind=author.kind.value, user_id=author.user_id, login=user.username if user is not None else None
+        )
+    return AuthorView(
+        kind=author.kind.value, runner_id=author.runner_id, chunk_id=author.chunk_id, node_name=author.node_name
+    )
 
 
 @dataclass(frozen=True)

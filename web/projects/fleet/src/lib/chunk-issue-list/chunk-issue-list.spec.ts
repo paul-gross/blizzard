@@ -179,6 +179,16 @@ describe('ChunkIssueList', () => {
     expect(chunkLink?.getAttribute('href')).toBe('/board/chunk/ch_proposer');
   });
 
+  it('a successfully fetched hub entry on a terminal chunk still renders the hub idiom — author alone is enough', async () => {
+    const { el } = await render([hubItem({ ref: '4', author: USER_AUTHOR, web_url: null })]);
+
+    expect(el.querySelector('[data-testid="issue-body"] h1')?.textContent?.trim()).toBe('heading');
+    expect(el.querySelector('[data-testid="issue-author"]')?.textContent).toContain('alice');
+    const ref = el.querySelector<HTMLAnchorElement>('[data-testid="issue-ref"]');
+    expect(ref?.getAttribute('target')).toBeNull();
+    expect(ref?.getAttribute('rel')).toBeNull();
+  });
+
   it('an errored hub entry still routes in-app — web_url discriminates the idiom, never author alone', async () => {
     const { el } = await render([
       item({
