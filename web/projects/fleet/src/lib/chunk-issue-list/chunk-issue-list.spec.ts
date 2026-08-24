@@ -207,6 +207,23 @@ describe('ChunkIssueList', () => {
     expect(ref?.getAttribute('rel')).toBeNull();
   });
 
+  it('an errored hub entry with no live chunk holder still renders the hub idiom — source discriminates, not author or web_url', async () => {
+    const { el } = await render([
+      item({
+        source: 'hub',
+        ref: '5',
+        web_url: null,
+        error: 'no open hub:5 work item exists',
+        title: null,
+        body: null,
+      }),
+    ]);
+
+    const ref = el.querySelector<HTMLAnchorElement>('[data-testid="issue-ref"]');
+    expect(ref?.getAttribute('target')).toBeNull();
+    expect(ref?.getAttribute('rel')).toBeNull();
+  });
+
   it('a forge entry renders unchanged — anchor included, no author line, no priority badge', async () => {
     const { el } = await render([item({ source: 'widget', ref: '42' })]);
 

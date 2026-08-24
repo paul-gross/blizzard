@@ -13,6 +13,12 @@ const PRIORITY_TONE: Record<string, Tone> = {
   low: 'idle',
 };
 
+/** The hub source's own reserved name (`RESERVED_HUB_SOURCE_NAME`, `hub/config.py`) —
+ * every other `source` a pointer can carry is an operator-configured forge. Unlike
+ * `author`/`web_url`, `source` is a required wire field, present on every entry
+ * regardless of fetch outcome or the pointer's holding chunk's own status. */
+const HUB_SOURCE_NAME = 'hub';
+
 /**
  * A chunk's resolved work items as a one-line-per-issue accordion — the
  * ticket name first (the thing worth reading, carrying the visual weight)
@@ -20,8 +26,9 @@ const PRIORITY_TONE: Record<string, Tone> = {
  * clickable address. Each row's own header is the accordion trigger;
  * expanding it reveals the item's own idiom (blizzard#362) — a forge
  * pointer's title/body/messages, or a hub pointer's markdown body,
- * authorship line, and stated priority, discriminated by whether the entry
- * carries an {@link WorkItemEntry.author author}, never by its `source`.
+ * authorship line, and stated priority, discriminated by
+ * {@link WorkItemEntry.source source} — the one field every entry carries
+ * regardless of fetch outcome.
  *
  * Daemon-agnostic ({@link ChunkTimeline}/{@link ChunkArtifactsPanel}'s own
  * shape): inputs off the shared `WorkItemEntry` wire type alone, no
@@ -87,14 +94,15 @@ export class ChunkIssueList {
     return item.title?.trim() || '—';
   }
 
-  /** Which idiom an entry renders in (blizzard#362) — carried fields discriminate, never
-   * `source`, but neither carried field alone suffices on its own: `author` is unset on
-   * an errored entry (the fetch never ran), and `web_url` is `null` for a successfully
-   * fetched hub item once its resting chunk goes terminal (`hub_work_source.py`'s
-   * `web_url` answers only a *live* holder). Either signal present is enough — a forge
-   * entry carries neither, ever. */
+  /** Which idiom an entry renders in (blizzard#362) — `source` discriminates, the one
+   * field every entry carries regardless of fetch outcome. `author` and `web_url` were
+   * each tried first and each has a combination where it goes absent for a genuine hub
+   * entry — `author` on any errored fetch, `web_url` once no live chunk holds the
+   * pointer, and *both at once* for an errored fetch with no live holder — so no
+   * optional-field combination is a safe discriminator; `source` is required on the
+   * wire and never null. */
   protected isHubEntry(item: WorkItemEntry): boolean {
-    return item.author != null || (item.web_url != null && item.web_url.startsWith('/'));
+    return item.source === HUB_SOURCE_NAME;
   }
 
   /** A stated priority's badge tone, or `null` for one this list does not recognize
