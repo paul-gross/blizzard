@@ -307,7 +307,7 @@ def test_create_stamps_the_caller_s_user_id_not_their_username(tmp_path: Path) -
     assert created.json()["author"] == {
         "kind": "user",
         "user_id": user.user_id,
-        "login": None,
+        "login": "alice",
         "runner_id": None,
         "chunk_id": None,
         "node_name": None,

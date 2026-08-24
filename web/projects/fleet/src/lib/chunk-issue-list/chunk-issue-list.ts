@@ -87,12 +87,14 @@ export class ChunkIssueList {
     return item.title?.trim() || '—';
   }
 
-  /** Which idiom an entry renders in (blizzard#362) — the carried fields discriminate,
-   * never `source`: an entry bearing an author is the hub's own, one bearing a
-   * `web_url` and no author is a forge's, matching `ChunkIssueList`'s no-injection,
-   * wire-type-only contract. */
+  /** Which idiom an entry renders in (blizzard#362) — `web_url`'s own shape
+   * discriminates, never `source`: the hub's is always an in-app path (`hub_work_source.py`'s
+   * `web_url` never returns an absolute URL), a forge's is always absolute. Unlike
+   * `author`, `web_url` is resolved before a pointer's fetch is attempted, so an errored
+   * hub entry still renders its ref as an in-app route rather than falling through to the
+   * forge anchor's new-tab external link. */
   protected isHubEntry(item: WorkItemEntry): boolean {
-    return item.author != null;
+    return item.web_url != null && item.web_url.startsWith('/');
   }
 
   /** A stated priority's badge tone, or `null` for one this list does not recognize

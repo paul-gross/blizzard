@@ -14,7 +14,7 @@
         @if (node.href) {
           <a [href]="node.href" target="_blank" rel="noreferrer">{{ node.text }}</a>
         } @else {
-          <span data-testid="md-inert-link">{{ node.text }}</span>
+          <span data-testid="markdown-inert-link">{{ node.text }}</span>
         }
       }
       @default {
@@ -52,7 +52,7 @@
       <p><ng-container *ngTemplateOutlet="inline; context: { $implicit: block.inline }" /></p>
     }
     @case ('code') {
-      <pre data-testid="md-code-block"><code>{{ block.text }}</code></pre>
+      <pre data-testid="markdown-code-block"><code>{{ block.text }}</code></pre>
     }
     @case ('list') {
       @if (block.ordered) {

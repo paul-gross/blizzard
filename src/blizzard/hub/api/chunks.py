@@ -481,7 +481,8 @@ def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_s
         web_url = source.web_url(pointer)
         try:
             item = source.fetch(pointer)
-        except WorkSourceError as exc:
+            stated_priority = WorkItemPriority(item.stated_priority) if item.stated_priority is not None else None
+        except (WorkSourceError, ValueError) as exc:
             entries.append(
                 WorkItemEntry(
                     source=pointer.source,
@@ -504,9 +505,7 @@ def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_s
                     body=item.body,
                     comments=item.comments,
                     author=_author_view(item.author) if item.author is not None else None,
-                    stated_priority=WorkItemPriority(item.stated_priority)
-                    if item.stated_priority is not None
-                    else None,
+                    stated_priority=stated_priority,
                 )
             )
     return WorkItemsView(items=entries)

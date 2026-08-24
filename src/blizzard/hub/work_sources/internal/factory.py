@@ -16,6 +16,7 @@ import httpx
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock
+from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import ConfigError, WorkSourceConfig
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.closer import IWorkCloser
@@ -41,12 +42,14 @@ class WorkSourceEntry:
         return kind(config)
 
     @classmethod
-    def registry(cls, sources: Sequence[WorkSourceConfig], engine: Engine, clock: IClock) -> WorkSourceRegistry:
+    def registry(
+        cls, sources: Sequence[WorkSourceConfig], engine: Engine, clock: IClock, *, users: IReadUserRepository
+    ) -> WorkSourceRegistry:
         """One credentialed client + binding per configured source, plus the built-in
-        ``hub`` source (issue #357) — always seated, and always both an editor
-        (blizzard#358) and a closer (issue #360), neither needing an opt-in flag. A
-        source's ``token_env`` naming an unset variable fails here, at boot; only an
-        opted-in *configured* source otherwise gets an annotator/closer entry."""
+        ``hub`` source (issue #357) — always seated, both an editor (blizzard#358) and a
+        closer (issue #360), neither opt-in. A source's ``token_env`` naming an unset
+        variable fails here, at boot. ``users`` is the composition root's own repository
+        (blizzard#362)."""
         built: dict[str, IWorkSource] = {}
         annotators: dict[str, IWorkAnnotator] = {}
         closers: dict[str, IWorkCloser] = {}
@@ -58,7 +61,7 @@ class WorkSourceEntry:
                 annotators[config.name] = cast(IWorkAnnotator, adapter)
             if config.close:
                 closers[config.name] = cast(IWorkCloser, adapter)
-        seat_hub_work_source(built, editors, closers, engine=engine, clock=clock)
+        seat_hub_work_source(built, editors, closers, engine=engine, clock=clock, users=users)
         return WorkSourceRegistry(built, annotators, closers, editors)
 
     @property

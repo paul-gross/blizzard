@@ -9,9 +9,6 @@ from __future__ import annotations
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.logging import get_logger
-from blizzard.hub.auth.errors import RepoErrorFactory
-from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.graph import Graph
@@ -156,15 +153,15 @@ def seat_hub_work_source(
     *,
     engine: Engine,
     clock: IClock,
+    users: IReadUserRepository,
 ) -> None:
     """Seats the built-in ``hub`` binding into ``sources``/``editors``/``closers`` in
     place — reached from both
     :meth:`~blizzard.hub.work_sources.internal.factory.WorkSourceEntry.registry` and
-    ``tests/support.py::build_hub`` so the built-in is present in production and under
-    test alike: never absent, never configured."""
+    ``tests/support.py::build_hub``: never absent, never configured. ``users`` is the
+    composition root's own repository, not a second instance (blizzard#362)."""
     items = WorkItemStore(engine)
     chunks = ChunkStore(engine, clock)
-    users = UserRepository(engine, RepoErrorFactory(get_logger("blizzard.hub.work_sources")))
     hub_source = HubWorkSource(items, chunks, WorkItemEditService(items=items, chunks=chunks, clock=clock), users)
     sources[RESERVED_HUB_SOURCE_NAME] = hub_source
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source

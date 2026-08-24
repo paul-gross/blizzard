@@ -147,3 +147,44 @@ def test_work_items_carries_a_hub_pointer_s_author_and_priority_beside_a_forge_p
     assert forge_entry["title"] == "flaky test"
     assert forge_entry["author"] is None
     assert forge_entry["stated_priority"] is None
+
+
+def test_work_items_isolates_an_unrecognized_stated_priority_to_that_entry(tmp_path: Path) -> None:
+    """A source answering a ``stated_priority`` outside ``WorkItemPriority`` degrades that
+    one entry to an ``error`` (blizzard#362) rather than 500ing the whole read — a non-hub
+    ``IWorkSource`` is free to return any seam-legal string, valid or not."""
+    source = FakeWorkSource(
+        name="widget",
+        by_ref={
+            "42": WorkItem(title="reachable issue", body="reachable", comments=[]),
+            "43": WorkItem(title="bad priority", body="b", comments=[], stated_priority="urgent"),
+        },
+    )
+    hub = build_hub(tmp_path, work_sources={"widget": source})
+    chunk_id = hub.client.post(
+        "/api/chunks", json={"tokens": [pointer_token(_POINTER), pointer_token(_POINTER_2)]}
+    ).json()["chunk_id"]
+
+    resp = hub.client.get(f"/api/chunks/{chunk_id}/work-items")
+    assert resp.status_code == 200
+    ok, bad = resp.json()["items"]
+    assert ok["title"] == "reachable issue" and ok["error"] is None
+    assert bad["title"] is None and bad["body"] is None
+    assert bad["error"] and "urgent" in bad["error"]
+
+
+def test_work_items_an_unresolvable_hub_pointer_still_carries_an_in_app_web_url(tmp_path: Path) -> None:
+    """A hub pointer with no matching item row still resolves ``web_url`` — computed
+    before ``fetch`` is attempted — while degrading to an ``error`` entry, same as any
+    other pointer (blizzard#362)."""
+    hub = build_hub(tmp_path, work_sources={"widget": FakeWorkSource(name="widget")})
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    chunks = ChunkStore(hub.engine, hub.clock)
+    chunks.add_work_refs(chunk_id, [WorkRef(source="hub", ref="999")], at=hub.clock.now())
+
+    entries = {e["source"]: e for e in hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]}
+
+    hub_entry = entries["hub"]
+    assert hub_entry["error"] and "999" in hub_entry["error"]
+    assert hub_entry["author"] is None
+    assert hub_entry["web_url"] == f"/board/chunk/{chunk_id}"

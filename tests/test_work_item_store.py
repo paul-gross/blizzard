@@ -68,6 +68,7 @@ def test_create_reads_back_open_with_no_closure(tmp_path: Path) -> None:
     assert fetched.author == WorkItemAuthor.user("usr_1")
     assert fetched.stated_priority == "high"
     assert fetched.closed_at is None
+    assert fetched.closure is None
 
 
 def test_create_reads_back_a_fleet_authored_item_s_lineage(tmp_path: Path) -> None:
@@ -82,7 +83,6 @@ def test_create_reads_back_a_fleet_authored_item_s_lineage(tmp_path: Path) -> No
     fetched = reader.get("hub", created.ref)
     assert fetched is not None
     assert fetched.author == author
-    assert fetched.closure is None
 
 
 def test_list_breaks_a_same_instant_created_at_tie_on_work_item_id(tmp_path: Path) -> None:

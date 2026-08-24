@@ -179,6 +179,24 @@ describe('ChunkIssueList', () => {
     expect(chunkLink?.getAttribute('href')).toBe('/board/chunk/ch_proposer');
   });
 
+  it('an errored hub entry still routes in-app — web_url discriminates the idiom, never author alone', async () => {
+    const { el } = await render([
+      item({
+        source: 'hub',
+        ref: '3',
+        web_url: '/board/chunk/ch_3',
+        error: 'no open hub:3 work item exists',
+        title: null,
+        body: null,
+      }),
+    ]);
+
+    const ref = el.querySelector<HTMLAnchorElement>('[data-testid="issue-ref"]');
+    expect(ref?.getAttribute('href')).toBe('/board/chunk/ch_3');
+    expect(ref?.getAttribute('target')).toBeNull();
+    expect(ref?.getAttribute('rel')).toBeNull();
+  });
+
   it('a forge entry renders unchanged — anchor included, no author line, no priority badge', async () => {
     const { el } = await render([item({ source: 'widget', ref: '42' })]);
 

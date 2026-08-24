@@ -40,7 +40,7 @@ describe('KitMarkdown', () => {
 
   it('renders a fenced code block as <pre><code>, verbatim', async () => {
     const el = await render('```\nline one\nline two\n```');
-    const block = el.querySelector('[data-testid="md-code-block"] code');
+    const block = el.querySelector('[data-testid="markdown-code-block"] code');
     expect(block?.textContent).toBe('line one\nline two');
   });
 
@@ -78,14 +78,14 @@ describe('KitMarkdown', () => {
   it('renders a non-allowlisted-scheme link inert — visible text, no anchor', async () => {
     const el = await render('[click me](javascript:alert(1))');
     expect(el.querySelector('a')).toBeNull();
-    const inert = el.querySelector('[data-testid="md-inert-link"]');
+    const inert = el.querySelector('[data-testid="markdown-inert-link"]');
     expect(inert?.textContent).toBe('click me');
   });
 
   it('renders a relative link inert too — the scheme allowlist is exact, not host-based', async () => {
     const el = await render('[relative](/board/chunk/ch_1)');
     expect(el.querySelector('a')).toBeNull();
-    expect(el.querySelector('[data-testid="md-inert-link"]')?.textContent).toBe('relative');
+    expect(el.querySelector('[data-testid="markdown-inert-link"]')?.textContent).toBe('relative');
   });
 
   it('renders raw HTML in the body as visible literal text, never parsed', async () => {
