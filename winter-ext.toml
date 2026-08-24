@@ -14,3 +14,10 @@ requires = ["blizzard-context", "winter-canon"]
 # markdown-lint stays live everywhere else.
 [lint.ignore.checks]
 markdown-lint = ["README.md"]
+
+# The same README is also over the file-size check's reference threshold. That
+# threshold stands in for an agent's context budget, and nothing in the injected
+# `@import` graph reaches this file — it is the repo's rendered front door on
+# GitHub, sized by what a newcomer arriving cold needs to see. Scoped to the one
+# file and the one check, like the rule above it.
+file-size = ["README.md"]
