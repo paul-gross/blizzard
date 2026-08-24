@@ -1,14 +1,15 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
-import type { WorkItemEntry } from '../api/hub';
+import type { WorkItemAuthorView, WorkItemEntry } from '../api/hub';
 import { ChunkIssueList } from './chunk-issue-list';
 
 describe('ChunkIssueList', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ChunkIssueList],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
   });
 
@@ -21,9 +22,38 @@ describe('ChunkIssueList', () => {
       body: 'the body',
       comments: [],
       error: null,
+      author: null,
+      stated_priority: null,
       ...overrides,
     };
   }
+
+  function hubItem(overrides: Partial<WorkItemEntry> & { ref: string; author: WorkItemAuthorView }): WorkItemEntry {
+    return item({
+      source: 'hub',
+      web_url: `/board/chunk/ch_${overrides.ref}`,
+      body: '# heading\n\nplain body',
+      ...overrides,
+    });
+  }
+
+  const USER_AUTHOR: WorkItemAuthorView = {
+    kind: 'user',
+    user_id: 'usr_1',
+    login: 'alice',
+    runner_id: null,
+    chunk_id: null,
+    node_name: null,
+  };
+
+  const FLEET_AUTHOR: WorkItemAuthorView = {
+    kind: 'fleet',
+    user_id: null,
+    login: null,
+    runner_id: 'runner-local',
+    chunk_id: 'ch_proposer',
+    node_name: 'triage',
+  };
 
   async function render(items: readonly WorkItemEntry[]) {
     const fixture = TestBed.createComponent(ChunkIssueList);
@@ -123,5 +153,57 @@ describe('ChunkIssueList', () => {
     const { el } = await render([item({ source: 'widget', ref: '42', comments: ['seen it too', 'repro attached'] })]);
     const messages = [...el.querySelectorAll('[data-testid="issue-message"]')].map((m) => m.textContent?.trim());
     expect(messages).toEqual(['seen it too', 'repro attached']);
+  });
+
+  // --- The hub idiom (blizzard#362) ------------------------------------------
+
+  it('a hub entry renders its markdown body, a user authorship line, stated priority, and no forge anchor', async () => {
+    const { el } = await render([hubItem({ ref: '1', author: USER_AUTHOR, stated_priority: 'high' })]);
+
+    expect(el.querySelector('[data-testid="issue-body"] h1')?.textContent?.trim()).toBe('heading');
+    expect(el.querySelector('[data-testid="issue-author"]')?.textContent).toContain('alice');
+    expect(el.querySelector('[data-testid="issue-priority"]')?.textContent?.trim()).toBe('high');
+    const ref = el.querySelector<HTMLAnchorElement>('[data-testid="issue-ref"]');
+    expect(ref?.getAttribute('target')).toBeNull();
+    expect(ref?.getAttribute('rel')).toBeNull();
+  });
+
+  it('a fleet-authored entry names the runner, chunk, and node, the chunk a routerLink through linkBase()', async () => {
+    const { el } = await render([hubItem({ ref: '2', author: FLEET_AUTHOR })]);
+
+    const author = el.querySelector('[data-testid="issue-author"]');
+    expect(author?.textContent).toContain('runner-local');
+    expect(author?.textContent).toContain('triage');
+    const chunkLink = el.querySelector<HTMLAnchorElement>('[data-testid="issue-author-chunk"]');
+    expect(chunkLink?.textContent?.trim()).toBe('ch_proposer');
+    expect(chunkLink?.getAttribute('href')).toBe('/board/chunk/ch_proposer');
+  });
+
+  it('a forge entry renders unchanged — anchor included, no author line, no priority badge', async () => {
+    const { el } = await render([item({ source: 'widget', ref: '42' })]);
+
+    expect(el.querySelector('[data-testid="issue-ref"]')?.getAttribute('target')).toBe('_blank');
+    expect(el.querySelector('[data-testid="issue-body"] h1')).toBeNull();
+    expect(el.querySelector('[data-testid="issue-author"]')).toBeNull();
+    expect(el.querySelector('[data-testid="issue-priority"]')).toBeNull();
+  });
+
+  it('a mixed chunk renders both idioms in pointer order, one entry error suppressing neither the other nor the pane', async () => {
+    const { fixture, el } = await render([
+      hubItem({ ref: '3', author: USER_AUTHOR, title: 'hub-authored', error: 'no open hub:3 work item exists' }),
+      item({ source: 'widget', ref: '42', title: 'forge-tracked' }),
+    ]);
+
+    const names = [...el.querySelectorAll('[data-testid="issue-name"]')].map((n) => n.textContent);
+    expect(names).toEqual(['hub-authored', 'forge-tracked']);
+    // Two entries: each starts collapsed, so expand both to check their bodies.
+    const heads = el.querySelectorAll<HTMLButtonElement>('[data-testid="accordion-section-head"]');
+    heads[0].click();
+    heads[1].click();
+    await fixture.whenStable();
+    const errors = el.querySelectorAll('[data-testid="issue-item-error"]');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].textContent).toContain('no open hub:3 work item exists');
+    expect(el.querySelector('[data-testid="issue-body"]')?.textContent).toContain('the body');
   });
 });
