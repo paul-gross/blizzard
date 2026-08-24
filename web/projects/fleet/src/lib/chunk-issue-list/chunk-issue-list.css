@@ -80,6 +80,26 @@
   color: var(--text);
   font-size: var(--fs-sm);
 }
+/* `fleet-kit-markdown` owns its own block spacing and `<pre>`/`<code>` styling
+   (`kit-markdown.css`) — resets `.i-body`'s verbatim-`<pre>` box so a hub entry's
+   markdown body doesn't render doubly-boxed. */
+.md-body {
+  padding: 0;
+  white-space: normal;
+  background: none;
+}
+.i-author {
+  margin-bottom: 8px;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}
+.i-author a {
+  color: var(--cyan);
+  text-decoration: none;
+}
+.i-author a:hover {
+  text-decoration: underline;
+}
 .i-messages {
   margin-top: 0;
 }

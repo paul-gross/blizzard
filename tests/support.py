@@ -25,9 +25,12 @@ from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.ids import USER_PREFIX, Id
+from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.app import create_app
+from blizzard.hub.auth.errors import RepoErrorFactory
+from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.oauth.provider import IOAuthProvider
 from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
@@ -524,11 +527,12 @@ def build_hub(
         work_sources if work_sources is not None else {"default": FakeWorkSource()}
     )
     clock = FixedClock(datetime(2026, 7, 13, tzinfo=UTC))
+    user_store = UserRepository(engine, RepoErrorFactory(get_logger("blizzard.hub.auth")))
     editors: dict[str, IWorkEditor] = {}
     # The built-in `hub` source is seated as a closer unconditionally (issue #360),
     # mirroring `WorkSourceEntry.registry`'s production wiring.
     closers: dict[str, IWorkCloser] = {}
-    seat_hub_work_source(built_sources, editors, closers, engine=engine, clock=clock)
+    seat_hub_work_source(built_sources, editors, closers, engine=engine, clock=clock, users=user_store)
     work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)
     events = EventBroker()
     services = build_services(
@@ -536,6 +540,7 @@ def build_hub(
         events=events,
         work_sources=work_source_registry,
         clock=clock,
+        users=user_store,
         base_branch=base_branch,
         hub_command_runner=hub_command_runner,
         hub_workdir=hub_workdir,

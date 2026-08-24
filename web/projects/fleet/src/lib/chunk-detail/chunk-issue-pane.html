@@ -2,11 +2,11 @@
   <fleet-kit-async-state
     [state]="triadState()"
     [placement]="placement()"
-    loadingText="Loading issue…"
+    loadingText="Loading work items…"
     loadingTestid="issue-loading"
-    errorText="Could not reach the forge — issue content is unavailable."
+    errorText="Could not read the work items — content is unavailable."
     errorTestid="issue-error"
-    emptyText="This chunk has no linked issue."
+    emptyText="This chunk has no linked work items."
     emptyTestid="issue-empty"
   >
     <fleet-chunk-issue-list [items]="workItems().items" />

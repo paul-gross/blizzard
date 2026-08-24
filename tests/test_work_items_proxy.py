@@ -32,6 +32,8 @@ _ITEMS: dict[str, object] = {
             "body": "please fix the flake",
             "comments": ["seen it too", "repro attached"],
             "error": None,
+            "author": None,
+            "stated_priority": None,
         }
     ]
 }

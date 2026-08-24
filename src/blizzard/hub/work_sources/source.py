@@ -14,19 +14,52 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.auth.users import IReadUserRepository
+from blizzard.hub.domain.work import WorkItemAuthor, WorkItemAuthorKind, WorkRef
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.closer import IWorkCloser
 from blizzard.hub.work_sources.editor import IWorkEditor
 
 
 @dataclass(frozen=True)
+class AuthorView:
+    """A work item's author, resolved legible for display (blizzard#362) — a login for
+    a human author, or the runner/chunk/node lineage for a fleet-authored one. ``kind``
+    mirrors :class:`~blizzard.hub.domain.work.WorkItemAuthorKind`'s value."""
+
+    kind: str
+    user_id: str | None = None
+    login: str | None = None
+    runner_id: str | None = None
+    chunk_id: str | None = None
+    node_name: str | None = None
+
+
+def resolve_author_view(author: WorkItemAuthor, users: IReadUserRepository) -> AuthorView:
+    """A ``WorkItemAuthor`` resolved legible for display (blizzard#362) — the one place a
+    ``user_id`` is ever resolved to a login, shared by ``HubWorkSource``'s pass-through
+    read and the editor surface's own view alike."""
+    if author.kind is WorkItemAuthorKind.USER:
+        user = users.get(author.user_id) if author.user_id is not None else None
+        return AuthorView(
+            kind=author.kind.value, user_id=author.user_id, login=user.username if user is not None else None
+        )
+    return AuthorView(
+        kind=author.kind.value, runner_id=author.runner_id, chunk_id=author.chunk_id, node_name=author.node_name
+    )
+
+
+@dataclass(frozen=True)
 class WorkItem:
-    """A pass-through work item — title, body, and comment bodies, vendor-native."""
+    """A pass-through work item — title, body, and comment bodies, vendor-native, plus
+    the display-resolved author and stated priority (blizzard#362), present only when
+    the binding has them to give — the built-in ``hub`` source alone fills them today."""
 
     body: str
     title: str = ""
     comments: list[str] = field(default_factory=list)
+    author: AuthorView | None = None
+    stated_priority: str | None = None
 
 
 class WorkSourceError(Exception):

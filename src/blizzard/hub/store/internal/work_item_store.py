@@ -105,7 +105,11 @@ class WorkItemStore:
     ) -> str:
         """Insert one ``work_items`` row on ``conn``, open, and return its minted id."""
         work_item_id = Id.mint_at(WORK_ITEM_PREFIX, at).value
-        author_payload = {"user_id": author.user_id} if author.kind is WorkItemAuthorKind.USER else {}
+        author_payload = (
+            {"user_id": author.user_id}
+            if author.kind is WorkItemAuthorKind.USER
+            else {"runner_id": author.runner_id, "chunk_id": author.chunk_id, "node_name": author.node_name}
+        )
         conn.execute(
             insert(s.work_items).values(
                 work_item_id=work_item_id,
@@ -183,7 +187,9 @@ class WorkItemStore:
         author = (
             WorkItemAuthor.user(payload["user_id"])
             if author_kind is WorkItemAuthorKind.USER
-            else WorkItemAuthor.fleet()
+            else WorkItemAuthor.fleet(
+                runner_id=payload["runner_id"], chunk_id=payload["chunk_id"], node_name=payload["node_name"]
+            )
         )
         return WorkItemRecord(
             work_item_id=row.work_item_id,

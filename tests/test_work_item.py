@@ -6,8 +6,11 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.domain.work import WorkItemAuthor, WorkRef
+from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.source import WorkItem
-from tests.support import FakeWorkSource, build_hub, pointer_token
+from tests.support import FakeWorkSource, build_hub, pointer_token, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -98,3 +101,90 @@ def test_work_items_with_no_pointers_is_an_empty_list(tmp_path: Path) -> None:
 def test_work_items_on_unknown_chunk_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     assert hub.client.get("/api/chunks/ch_missing/work-items").status_code == 404
+
+
+def test_work_items_carries_a_hub_pointer_s_author_and_priority_beside_a_forge_pointer(tmp_path: Path) -> None:
+    """A mixed chunk: the hub pointer's entry carries author + stated priority; the forge
+    pointer's entry carries neither, and its existing fields are unchanged (blizzard#362)."""
+    forge = FakeWorkSource(name="widget", title="flaky test", body="please fix the flake")
+    hub = build_hub(tmp_path, work_sources={"widget": forge})
+    graph = hub.services.graph_mint.ensure_default(
+        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+    )
+    items = WorkItemStore(hub.engine)
+    chunks = ChunkStore(hub.engine, hub.clock)
+    author = WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_proposer", node_name="triage")
+    hub_item = seed_work_item(
+        items,
+        graph_id=graph.graph_id,
+        title="proposed by the fleet",
+        body="please add a widget",
+        author=author,
+        stated_priority="high",
+        at=hub.clock.now(),
+    )
+    # `seed_work_item` mints its own resting chunk holding the hub pointer alone
+    # (blizzard#359) — grow *that* chunk with the forge pointer to avoid re-holding it.
+    chunk_id = chunks.find_live_holder(WorkRef(source="hub", ref=hub_item.ref))
+    assert chunk_id is not None
+    chunks.add_work_refs(chunk_id, [WorkRef(source="widget", ref="42")], at=hub.clock.now())
+
+    entries = {e["source"]: e for e in hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]}
+
+    hub_entry = entries["hub"]
+    assert hub_entry["title"] == "proposed by the fleet"
+    assert hub_entry["author"] == {
+        "kind": "fleet",
+        "user_id": None,
+        "login": None,
+        "runner_id": "runner-local",
+        "chunk_id": "ch_proposer",
+        "node_name": "triage",
+    }
+    assert hub_entry["stated_priority"] == "high"
+
+    forge_entry = entries["widget"]
+    assert forge_entry["title"] == "flaky test"
+    assert forge_entry["author"] is None
+    assert forge_entry["stated_priority"] is None
+
+
+def test_work_items_isolates_an_unrecognized_stated_priority_to_that_entry(tmp_path: Path) -> None:
+    """A source answering a ``stated_priority`` outside ``WorkItemPriority`` degrades that
+    one entry to an ``error`` (blizzard#362) rather than 500ing the whole read — a non-hub
+    ``IWorkSource`` is free to return any seam-legal string, valid or not."""
+    source = FakeWorkSource(
+        name="widget",
+        by_ref={
+            "42": WorkItem(title="reachable issue", body="reachable", comments=[]),
+            "43": WorkItem(title="bad priority", body="b", comments=[], stated_priority="urgent"),
+        },
+    )
+    hub = build_hub(tmp_path, work_sources={"widget": source})
+    chunk_id = hub.client.post(
+        "/api/chunks", json={"tokens": [pointer_token(_POINTER), pointer_token(_POINTER_2)]}
+    ).json()["chunk_id"]
+
+    resp = hub.client.get(f"/api/chunks/{chunk_id}/work-items")
+    assert resp.status_code == 200
+    ok, bad = resp.json()["items"]
+    assert ok["title"] == "reachable issue" and ok["error"] is None
+    assert bad["title"] is None and bad["body"] is None
+    assert bad["error"] and "urgent" in bad["error"]
+
+
+def test_work_items_an_unresolvable_hub_pointer_still_carries_an_in_app_web_url(tmp_path: Path) -> None:
+    """A hub pointer with no matching item row still resolves ``web_url`` — computed
+    before ``fetch`` is attempted — while degrading to an ``error`` entry, same as any
+    other pointer (blizzard#362)."""
+    hub = build_hub(tmp_path, work_sources={"widget": FakeWorkSource(name="widget")})
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    chunks = ChunkStore(hub.engine, hub.clock)
+    chunks.add_work_refs(chunk_id, [WorkRef(source="hub", ref="999")], at=hub.clock.now())
+
+    entries = {e["source"]: e for e in hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]}
+
+    hub_entry = entries["hub"]
+    assert hub_entry["error"] and "999" in hub_entry["error"]
+    assert hub_entry["author"] is None
+    assert hub_entry["web_url"] == f"/board/chunk/{chunk_id}"

@@ -19,6 +19,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
+from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.edit import UNSET
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
@@ -26,7 +27,7 @@ from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.work import WorkItemAuthor, WorkItemPriority, WorkItemRecord, WorkRef
 from blizzard.hub.domain.work_items import WorkItemEdit, WorkItemHeldByLiveChunk, WorkItemNotEditable
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
-from blizzard.hub.work_sources.source import IWorkSource
+from blizzard.hub.work_sources.source import IWorkSource, resolve_author_view
 from blizzard.wire.chunk import ChunkIngestConflict
 from blizzard.wire.work_source import (
     WorkItemAuthorView,
@@ -64,8 +65,9 @@ def _stripped(value: str, field_name: str) -> str:
     return text
 
 
-def _view(item: WorkItemRecord, source_obj: IWorkSource) -> WorkItemView:
+def _view(item: WorkItemRecord, source_obj: IWorkSource, users: IReadUserRepository) -> WorkItemView:
     pointer = WorkRef(source=item.source, ref=item.ref)
+    author = resolve_author_view(item.author, users)
     return WorkItemView(
         source=item.source,
         ref=item.ref,
@@ -73,7 +75,14 @@ def _view(item: WorkItemRecord, source_obj: IWorkSource) -> WorkItemView:
         web_url=source_obj.web_url(pointer),
         title=item.title,
         body=item.body,
-        author=WorkItemAuthorView(kind=item.author.kind.value, user_id=item.author.user_id),
+        author=WorkItemAuthorView(
+            kind=author.kind,
+            user_id=author.user_id,
+            login=author.login,
+            runner_id=author.runner_id,
+            chunk_id=author.chunk_id,
+            node_name=author.node_name,
+        ),
         stated_priority=WorkItemPriority(item.stated_priority) if item.stated_priority is not None else None,
         created_at=iso_utc(item.created_at),
         edited_at=iso_utc(item.edited_at),
@@ -109,7 +118,7 @@ def list_work_items(
 ) -> WorkItemsListView:
     """Up to LIMIT items at SOURCE, newest first, open and closed alike. 404/409 per D4."""
     source_obj, editor = _require_editor(source, services)
-    return WorkItemsListView(items=[_view(item, source_obj) for item in editor.list(limit=limit)])
+    return WorkItemsListView(items=[_view(item, source_obj, services.users) for item in editor.list(limit=limit)])
 
 
 @router.post(
@@ -156,7 +165,9 @@ def create_work_item(
     chunk_events.ChunkChanged.of(services, created.chunk_id, prev_status=None).publish(
         cause="minted", key=f"chunks:{created.chunk_id}"
     )
-    return WorkItemCreateResponse(**_view(created.item, source_obj).model_dump(), chunk_id=created.chunk_id)
+    return WorkItemCreateResponse(
+        **_view(created.item, source_obj, services.users).model_dump(), chunk_id=created.chunk_id
+    )
 
 
 @router.get(
@@ -172,7 +183,7 @@ def get_work_item(source: str, ref: str, services: Annotated[HubServices, Depend
         item = editor.get(WorkRef(source=source, ref=ref))
     except WorkItemRefUnknownError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return _view(item, source_obj)
+    return _view(item, source_obj, services.users)
 
 
 @router.patch(
@@ -204,7 +215,7 @@ def patch_work_item(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except WorkItemNotEditable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return _view(updated, source_obj)
+    return _view(updated, source_obj, services.users)
 
 
 @router.delete(
@@ -228,4 +239,4 @@ def withdraw_work_item(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except (WorkItemNotEditable, WorkItemHeldByLiveChunk) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return _view(withdrawn, source_obj)
+    return _view(withdrawn, source_obj, services.users)

@@ -9,6 +9,7 @@ from __future__ import annotations
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock
+from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import (
@@ -25,7 +26,7 @@ from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
-from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError
+from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError, resolve_author_view
 
 
 class HubWorkSource:
@@ -35,11 +36,16 @@ class HubWorkSource:
     both delegating their writes to ``edits``, the domain-layer write half."""
 
     def __init__(
-        self, items: IReadWorkItemRepository, chunks: IReadChunkRepository, edits: WorkItemEditService
+        self,
+        items: IReadWorkItemRepository,
+        chunks: IReadChunkRepository,
+        edits: WorkItemEditService,
+        users: IReadUserRepository,
     ) -> None:
         self._items = items
         self._chunks = chunks
         self._edits = edits
+        self._users = users
 
     def parse(self, token: str) -> WorkRef | None:
         """``hub:<n>`` only — the reserved name admits no ``#`` form and no URL form,
@@ -55,7 +61,13 @@ class HubWorkSource:
         item = self._items.get(pointer.source, pointer.ref)
         if item is None or item.closure is WorkItemClosure.WITHDRAWN:
             raise WorkSourceError(f"no open {RESERVED_HUB_SOURCE_NAME}:{pointer.ref} work item exists")
-        return WorkItem(body=item.body, title=item.title, comments=[])
+        return WorkItem(
+            body=item.body,
+            title=item.title,
+            comments=[],
+            author=resolve_author_view(item.author, self._users),
+            stated_priority=item.stated_priority,
+        )
 
     def label(self, pointer: WorkRef) -> str | None:
         return f"{RESERVED_HUB_SOURCE_NAME}:{pointer.ref}"
@@ -127,15 +139,16 @@ def seat_hub_work_source(
     *,
     engine: Engine,
     clock: IClock,
+    users: IReadUserRepository,
 ) -> None:
     """Seats the built-in ``hub`` binding into ``sources``/``editors``/``closers`` in
     place — reached from both
     :meth:`~blizzard.hub.work_sources.internal.factory.WorkSourceEntry.registry` and
-    ``tests/support.py::build_hub`` so the built-in is present in production and under
-    test alike: never absent, never configured."""
+    ``tests/support.py::build_hub``: never absent, never configured. ``users`` is the
+    composition root's own repository, not a second instance (blizzard#362)."""
     items = WorkItemStore(engine)
     chunks = ChunkStore(engine, clock)
-    hub_source = HubWorkSource(items, chunks, WorkItemEditService(items=items, chunks=chunks, clock=clock))
+    hub_source = HubWorkSource(items, chunks, WorkItemEditService(items=items, chunks=chunks, clock=clock), users)
     sources[RESERVED_HUB_SOURCE_NAME] = hub_source
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source
     closers[RESERVED_HUB_SOURCE_NAME] = hub_source

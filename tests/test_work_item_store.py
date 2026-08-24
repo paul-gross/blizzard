@@ -71,16 +71,42 @@ def test_create_reads_back_open_with_no_closure(tmp_path: Path) -> None:
     assert fetched.closure is None
 
 
+def test_create_reads_back_a_fleet_authored_item_s_lineage(tmp_path: Path) -> None:
+    """A fleet author's runner/chunk/node lineage round-trips through the JSON
+    ``author_payload`` (blizzard#362), same as a user author's ``user_id`` does."""
+    store = _store(tmp_path)
+    author = WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_source", node_name="triage")
+
+    created = seed_work_item(store, graph_id="gr_1", author=author, at=_NOW)
+
+    reader: IReadWorkItemRepository = store
+    fetched = reader.get("hub", created.ref)
+    assert fetched is not None
+    assert fetched.author == author
+
+
 def test_list_breaks_a_same_instant_created_at_tie_on_work_item_id(tmp_path: Path) -> None:
     """Two items created at the identical instant still sort deterministically — not an
     artifact of sqlite's rowid-order fallback, which a real (postgres) engine wouldn't
     give a bare ``created_at`` ordering."""
     store = _store(tmp_path)
     first = seed_work_item(
-        store, graph_id="gr_1", title="a", body="a", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
+        store,
+        graph_id="gr_1",
+        title="a",
+        body="a",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=None,
+        at=_NOW,
     )
     second = seed_work_item(
-        store, graph_id="gr_1", title="b", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
+        store,
+        graph_id="gr_1",
+        title="b",
+        body="b",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=None,
+        at=_NOW,
     )
 
     expected_order = sorted([first.work_item_id, second.work_item_id], reverse=True)
@@ -92,7 +118,13 @@ def test_list_respects_the_limit(tmp_path: Path) -> None:
     store = _store(tmp_path)
     for i in range(3):
         seed_work_item(
-            store, graph_id="gr_1", title=str(i), body="b", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
+            store,
+            graph_id="gr_1",
+            title=str(i),
+            body="b",
+            author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+            stated_priority=None,
+            at=_NOW,
         )
 
     assert len(store.list("hub", limit=2)) == 2
@@ -101,7 +133,13 @@ def test_list_respects_the_limit(tmp_path: Path) -> None:
 def test_close_is_unset_until_recorded(tmp_path: Path) -> None:
     store = _store(tmp_path)
     created = seed_work_item(
-        store, graph_id="gr_1", title="a", body="a", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
+        store,
+        graph_id="gr_1",
+        title="a",
+        body="a",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=None,
+        at=_NOW,
     )
     assert store.get("hub", created.ref).closed_at is None  # type: ignore[union-attr]
 
@@ -121,7 +159,13 @@ def test_edit_of_a_closed_item_is_a_no_op_and_returns_none(tmp_path: Path) -> No
     write racing a closure matches zero rows rather than landing on a closed item."""
     store = _store(tmp_path)
     created = seed_work_item(
-        store, graph_id="gr_1", title="a", body="a", author=WorkItemAuthor.fleet(), stated_priority=None, at=_NOW
+        store,
+        graph_id="gr_1",
+        title="a",
+        body="a",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=None,
+        at=_NOW,
     )
     store.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_NOW)
 
@@ -146,7 +190,7 @@ def test_create_with_chunk_inserts_the_item_and_the_chunk_rows_together(tmp_path
         pointer=pointer,
         title="widget is broken",
         body="steps to repro",
-        author=WorkItemAuthor.fleet(),
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         stated_priority=None,
         at=_NOW,
         chunk=chunk,
@@ -181,7 +225,7 @@ def test_create_with_chunk_rolls_back_the_item_and_the_chunk_rows_on_a_failing_c
             pointer=pointer,
             title="t",
             body="b",
-            author=WorkItemAuthor.fleet(),
+            author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
             stated_priority=None,
             at=_NOW,
             chunk=chunk,

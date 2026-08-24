@@ -35,7 +35,7 @@ from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import IpThrottle
-from blizzard.hub.auth.users import IReadUserRepository
+from blizzard.hub.auth.users import IReadUserRepository, IWriteUserRepository
 from blizzard.hub.config import OAuthProviderConfig
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
@@ -166,6 +166,7 @@ def build_services(
     events: EventBroker,
     work_sources: IWorkSourceRegistry,
     clock: IClock | None = None,
+    users: IWriteUserRepository | None = None,
     base_branch: str = "main",
     hub_command_runner: IHubCommandRunner | None = None,
     hub_workdir: IHubWorkdir | None = None,
@@ -218,7 +219,7 @@ def build_services(
     # The identity spine (issue #91) — one error factory shared by the SQLAlchemy
     # adapters, so the same instances back both the Write Protocols and the reads.
     auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
-    user_store = UserRepository(engine, auth_errors)
+    user_store = users or UserRepository(engine, auth_errors)
     identity_store = IdentityRepository(engine, auth_errors)
     session_store = SessionRepository(engine, auth_errors)
     auth_state_store: IWriteAuthStateRepository = AuthStateRepository(engine, auth_errors)

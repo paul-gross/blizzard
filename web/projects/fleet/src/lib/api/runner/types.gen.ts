@@ -1855,14 +1855,49 @@ export type ValidationError = {
 };
 
 /**
+ * WorkItemAuthorView
+ *
+ * Who filed a hub-owned work item, legible for display (blizzard#362) — ``user_id``
+ * and ``login`` set only for ``kind == "user"``; ``runner_id``/``chunk_id``/``node_name``
+ * — the proposing runner, chunk, and node — set only for ``kind == "fleet"``.
+ */
+export type WorkItemAuthorView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id?: string | null;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Login
+     */
+    login?: string | null;
+    /**
+     * Node Name
+     */
+    node_name?: string | null;
+    /**
+     * Runner Id
+     */
+    runner_id?: string | null;
+    /**
+     * User Id
+     */
+    user_id?: string | null;
+};
+
+/**
  * WorkItemEntry
  *
- * One pointer's pass-through work item — title, body, and comment thread, vendor-native.
- * ``label``/``web_url`` are the legible pointer label and its browser address, both null when no
- * configured source names ``source``. A per-pointer failure degrades here rather than failing the
- * whole read: ``error`` carries the reason and ``title``/``body`` are null.
+ * One pointer's pass-through work item, vendor-native — title, body, comments, and,
+ * only when the source has them to give (blizzard#362), ``author``/``stated_priority``.
+ * ``label``/``web_url`` are the legible pointer label and browser address, both null when no
+ * configured source names ``source``; a per-pointer failure nulls ``title``/``body`` into ``error``.
  */
 export type WorkItemEntry = {
+    author?: WorkItemAuthorView | null;
     /**
      * Body
      */
@@ -1891,6 +1926,7 @@ export type WorkItemEntry = {
      * Source
      */
     source: string;
+    stated_priority?: WorkItemPriority | null;
     /**
      * Title
      */
@@ -1900,6 +1936,13 @@ export type WorkItemEntry = {
      */
     web_url?: string | null;
 };
+
+/**
+ * WorkItemPriority
+ *
+ * The three stated-priority values a create or edit may set (blizzard#358).
+ */
+export type WorkItemPriority = 'low' | 'normal' | 'high';
 
 /**
  * WorkItemsView

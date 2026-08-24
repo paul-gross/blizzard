@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from blizzard.hub.domain.work import ChunkStatus, MigrationMode
+from blizzard.hub.domain.work import ChunkStatus, MigrationMode, WorkItemPriority
 from blizzard.wire.decision import DecisionView
 from blizzard.wire.question import QuestionView
+from blizzard.wire.work_source import WorkItemAuthorView
 
 
 class WorkRefModel(BaseModel):
@@ -418,10 +419,10 @@ class ChunkDetail(BaseModel):
 
 
 class WorkItemEntry(BaseModel):
-    """One pointer's pass-through work item — title, body, and comment thread, vendor-native.
-    ``label``/``web_url`` are the legible pointer label and its browser address, both null when no
-    configured source names ``source``. A per-pointer failure degrades here rather than failing the
-    whole read: ``error`` carries the reason and ``title``/``body`` are null."""
+    """One pointer's pass-through work item, vendor-native — title, body, comments, and,
+    only when the source has them to give (blizzard#362), ``author``/``stated_priority``.
+    ``label``/``web_url`` are the legible pointer label and browser address, both null when no
+    configured source names ``source``; a per-pointer failure nulls ``title``/``body`` into ``error``."""
 
     source: str
     ref: str
@@ -432,6 +433,8 @@ class WorkItemEntry(BaseModel):
     body: str | None = None
     comments: list[str] = []
     error: str | None = None
+    author: WorkItemAuthorView | None = None
+    stated_priority: WorkItemPriority | None = None
 
 
 class WorkItemsView(BaseModel):

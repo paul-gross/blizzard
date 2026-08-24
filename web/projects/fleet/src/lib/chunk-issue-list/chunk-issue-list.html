@@ -15,17 +15,26 @@
            click two conflicting targets. This is a real, independently navigable
            link, so it stays outside the toggle entirely, unlike
            `chunk-timeline.html`'s nested graph link — that row's toggle is a
-           `role="button"` `<div>`, not a real `<button>`, a different case. -->
-      <a
-        accordionAside
-        class="i-ref"
-        data-testid="issue-ref"
-        [href]="item.web_url"
-        target="_blank"
-        rel="noreferrer"
-        [attr.title]="item.web_url"
-        >- {{ refText(item) }}</a
-      >
+           `role="button"` `<div>`, not a real `<button>`, a different case.
+           Two idioms (blizzard#362): a forge pointer's address is an external
+           `target="_blank"` anchor; a hub pointer's is its own in-app route, so it
+           navigates through the router rather than a full page load. -->
+      @if (isHubEntry(item)) {
+        <a accordionAside class="i-ref" data-testid="issue-ref" [routerLink]="item.web_url" [attr.title]="item.web_url"
+          >- {{ refText(item) }}</a
+        >
+      } @else {
+        <a
+          accordionAside
+          class="i-ref"
+          data-testid="issue-ref"
+          [href]="item.web_url"
+          target="_blank"
+          rel="noreferrer"
+          [attr.title]="item.web_url"
+          >- {{ refText(item) }}</a
+        >
+      }
       <!-- `.acc-body` is zero-padded (`kit-accordion-section.css`) for a
            full-bleed row list projected into it — this detail is prose, not
            rows, so it pads itself the way that component's own doc comment
@@ -36,7 +45,33 @@
             Could not load this issue — {{ item.error }}
           </p>
         } @else {
-          <pre class="i-body" data-testid="issue-body">{{ item.body }}</pre>
+          @if (isHubEntry(item)) {
+            @if (item.author; as author) {
+              <div class="i-author" data-testid="issue-author">
+                @switch (author.kind) {
+                  @case ('user') {
+                    <span>Filed by {{ userLabel(author) }}</span>
+                  }
+                  @case ('fleet') {
+                    <span
+                      >Proposed by runner {{ author.runner_id }}, chunk
+                      <a [routerLink]="[...linkBase(), author.chunk_id]" data-testid="issue-author-chunk">{{
+                        author.chunk_id
+                      }}</a>, node {{ author.node_name }}</span
+                    >
+                  }
+                }
+              </div>
+            }
+            @if (priorityTone(item); as tone) {
+              <fleet-kit-badge [tone]="tone" variant="pill" data-testid="issue-priority">{{
+                item.stated_priority
+              }}</fleet-kit-badge>
+            }
+            <fleet-kit-markdown [text]="item.body ?? ''" class="i-body md-body" data-testid="issue-body" />
+          } @else {
+            <pre class="i-body" data-testid="issue-body">{{ item.body }}</pre>
+          }
           <div class="i-messages">
             <div class="s-head"><span class="tag">Messages · {{ (item.comments ?? []).length }}</span></div>
             @if ((item.comments ?? []).length === 0) {
