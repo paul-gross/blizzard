@@ -36,7 +36,12 @@ def _store(tmp_path: Path) -> WorkItemStore:
 def test_create_round_trips_its_own_written_instant(tmp_path: Path) -> None:
     store = _store(tmp_path)
 
-    item = seed_work_item(store, graph_id="gr_1", author=WorkItemAuthor.fleet(), at=_NOW)
+    item = seed_work_item(
+        store,
+        graph_id="gr_1",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        at=_NOW,
+    )
 
     fetched = store.get("hub", item.ref)
     assert fetched is not None
@@ -48,7 +53,12 @@ def test_create_round_trips_its_own_written_instant(tmp_path: Path) -> None:
 
 def test_close_round_trips_a_later_instant(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    item = seed_work_item(store, graph_id="gr_1", author=WorkItemAuthor.fleet(), at=_NOW)
+    item = seed_work_item(
+        store,
+        graph_id="gr_1",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        at=_NOW,
+    )
     later = datetime(2026, 7, 16, 12, 5, 0, tzinfo=UTC)
 
     store.close("hub", item.ref, closure=WorkItemClosure.DELIVERED, at=later)

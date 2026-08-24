@@ -41,9 +41,10 @@ from blizzard.hub.domain.stop import ChunkNotStoppable
 from blizzard.hub.domain.work import (
     ChunkFacts,
     FleetSummary,
+    WorkItemPriority,
     WorkRef,
 )
-from blizzard.hub.work_sources.source import WorkSourceError
+from blizzard.hub.work_sources.source import AuthorView, WorkSourceError
 from blizzard.wire.chunk import (
     ChunkCompleteRequest,
     ChunkDetail,
@@ -62,6 +63,7 @@ from blizzard.wire.chunk import (
     WorkItemsView,
 )
 from blizzard.wire.fleet import FleetSummaryView
+from blizzard.wire.work_source import WorkItemAuthorView
 
 router = APIRouter(prefix="/api", tags=["chunks"], dependencies=[Depends(reject_runner_principal)])
 
@@ -435,6 +437,19 @@ def patch_chunk(
     )
 
 
+def _author_view(author: AuthorView) -> WorkItemAuthorView:
+    """A seam-level :class:`AuthorView` onto the wire — no vocabulary resolved here
+    (blizzard#362): the source already resolved it, this only reshapes the fields."""
+    return WorkItemAuthorView(
+        kind=author.kind,
+        user_id=author.user_id,
+        login=author.login,
+        runner_id=author.runner_id,
+        chunk_id=author.chunk_id,
+        node_name=author.node_name,
+    )
+
+
 @router.get("/chunks/{chunk_id}/work-items", response_model=WorkItemsView, dependencies=[Depends(require(FLEET_VIEW))])
 def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkItemsView:
     """Pass-through work items read — one entry per pointer, contents never stored.
@@ -488,6 +503,10 @@ def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_s
                     title=item.title,
                     body=item.body,
                     comments=item.comments,
+                    author=_author_view(item.author) if item.author is not None else None,
+                    stated_priority=WorkItemPriority(item.stated_priority)
+                    if item.stated_priority is not None
+                    else None,
                 )
             )
     return WorkItemsView(items=entries)

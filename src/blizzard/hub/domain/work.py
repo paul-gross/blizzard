@@ -70,18 +70,23 @@ class WorkItemAuthorKind(StrEnum):
 @dataclass(frozen=True)
 class WorkItemAuthor:
     """One hub-owned work item's author — the variant :class:`WorkItemAuthorKind`
-    discriminates. ``user_id`` is set only for :attr:`WorkItemAuthorKind.USER`."""
+    discriminates. ``user_id`` is set only for :attr:`WorkItemAuthorKind.USER`;
+    ``runner_id``/``chunk_id``/``node_name`` — the proposing runner, chunk, and node —
+    are set only for :attr:`WorkItemAuthorKind.FLEET` (blizzard#362)."""
 
     kind: WorkItemAuthorKind
     user_id: str | None = None
+    runner_id: str | None = None
+    chunk_id: str | None = None
+    node_name: str | None = None
 
     @classmethod
     def user(cls, user_id: str) -> WorkItemAuthor:
         return cls(kind=WorkItemAuthorKind.USER, user_id=user_id)
 
     @classmethod
-    def fleet(cls) -> WorkItemAuthor:
-        return cls(kind=WorkItemAuthorKind.FLEET)
+    def fleet(cls, *, runner_id: str, chunk_id: str, node_name: str) -> WorkItemAuthor:
+        return cls(kind=WorkItemAuthorKind.FLEET, runner_id=runner_id, chunk_id=chunk_id, node_name=node_name)
 
 
 class WorkItemClosure(StrEnum):

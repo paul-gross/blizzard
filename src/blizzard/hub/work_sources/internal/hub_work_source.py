@@ -9,12 +9,17 @@ from __future__ import annotations
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.logging import get_logger
+from blizzard.hub.auth.errors import RepoErrorFactory
+from blizzard.hub.auth.internal.user_repository import UserRepository
+from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import (
     IReadChunkRepository,
     IReadWorkItemRepository,
     WorkItemAuthor,
+    WorkItemAuthorKind,
     WorkItemClosure,
     WorkItemPriority,
     WorkItemRecord,
@@ -25,7 +30,7 @@ from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
-from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError
+from blizzard.hub.work_sources.source import AuthorView, IWorkSource, WorkItem, WorkSourceError
 
 
 class HubWorkSource:
@@ -35,11 +40,16 @@ class HubWorkSource:
     both delegating their writes to ``edits``, the domain-layer write half."""
 
     def __init__(
-        self, items: IReadWorkItemRepository, chunks: IReadChunkRepository, edits: WorkItemEditService
+        self,
+        items: IReadWorkItemRepository,
+        chunks: IReadChunkRepository,
+        edits: WorkItemEditService,
+        users: IReadUserRepository,
     ) -> None:
         self._items = items
         self._chunks = chunks
         self._edits = edits
+        self._users = users
 
     def parse(self, token: str) -> WorkRef | None:
         """``hub:<n>`` only — the reserved name admits no ``#`` form and no URL form,
@@ -55,7 +65,26 @@ class HubWorkSource:
         item = self._items.get(pointer.source, pointer.ref)
         if item is None or item.closure is WorkItemClosure.WITHDRAWN:
             raise WorkSourceError(f"no open {RESERVED_HUB_SOURCE_NAME}:{pointer.ref} work item exists")
-        return WorkItem(body=item.body, title=item.title, comments=[])
+        return WorkItem(
+            body=item.body,
+            title=item.title,
+            comments=[],
+            author=self._author_view(item.author),
+            stated_priority=item.stated_priority,
+        )
+
+    def _author_view(self, author: WorkItemAuthor) -> AuthorView:
+        """The author, legible for display — a resolved login for a human author, or
+        the runner/chunk/node lineage for a fleet-authored one (blizzard#362). This is
+        the only place a ``WorkItemAuthor.user_id`` is ever resolved to a login."""
+        if author.kind is WorkItemAuthorKind.USER:
+            user = self._users.get(author.user_id) if author.user_id is not None else None
+            return AuthorView(
+                kind=author.kind.value, user_id=author.user_id, login=user.username if user is not None else None
+            )
+        return AuthorView(
+            kind=author.kind.value, runner_id=author.runner_id, chunk_id=author.chunk_id, node_name=author.node_name
+        )
 
     def label(self, pointer: WorkRef) -> str | None:
         return f"{RESERVED_HUB_SOURCE_NAME}:{pointer.ref}"
@@ -135,7 +164,8 @@ def seat_hub_work_source(
     test alike: never absent, never configured."""
     items = WorkItemStore(engine)
     chunks = ChunkStore(engine, clock)
-    hub_source = HubWorkSource(items, chunks, WorkItemEditService(items=items, chunks=chunks, clock=clock))
+    users = UserRepository(engine, RepoErrorFactory(get_logger("blizzard.hub.work_sources")))
+    hub_source = HubWorkSource(items, chunks, WorkItemEditService(items=items, chunks=chunks, clock=clock), users)
     sources[RESERVED_HUB_SOURCE_NAME] = hub_source
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source
     closers[RESERVED_HUB_SOURCE_NAME] = hub_source

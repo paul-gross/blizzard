@@ -32,10 +32,16 @@ class WorkSourcesListView(BaseModel):
 
 
 class WorkItemAuthorView(BaseModel):
-    """Who filed a hub-owned work item — ``user_id`` set only for ``kind == "user"``."""
+    """Who filed a hub-owned work item, legible for display (blizzard#362) — ``user_id``
+    and ``login`` set only for ``kind == "user"``; ``runner_id``/``chunk_id``/``node_name``
+    — the proposing runner, chunk, and node — set only for ``kind == "fleet"``."""
 
     kind: str
     user_id: str | None = None
+    login: str | None = None
+    runner_id: str | None = None
+    chunk_id: str | None = None
+    node_name: str | None = None
 
 
 class WorkItemView(BaseModel):

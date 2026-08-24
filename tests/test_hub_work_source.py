@@ -11,7 +11,13 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Engine
 
+from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.ids import USER_PREFIX, Id
+from blizzard.foundation.logging import get_logger
+from blizzard.hub.auth.errors import RepoErrorFactory
+from blizzard.hub.auth.internal.user_repository import UserRepository
+from blizzard.hub.auth.models import User
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import WorkItemAuthor, WorkItemClosure, WorkItemPriority, WorkRef
 from blizzard.hub.domain.work_items import (
@@ -33,13 +39,27 @@ pytestmark = pytest.mark.component
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStore, Engine, FixedClock]:
+def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStore, UserRepository, Engine, FixedClock]:
     _, engine = migrate_to(tmp_path, "head")
     items = WorkItemStore(engine)
     clock = FixedClock(_T0)
     chunks = ChunkStore(engine, clock)
     edits = WorkItemEditService(items=items, chunks=chunks, clock=clock)
-    return HubWorkSource(items, chunks, edits), items, chunks, engine, clock
+    users = UserRepository(engine, RepoErrorFactory(get_logger("tests.test_hub_work_source")))
+    return HubWorkSource(items, chunks, edits, users), items, chunks, users, engine, clock
+
+
+def _user(users: UserRepository, *, username: str) -> User:
+    user = User(
+        user_id=Id.mint_at(USER_PREFIX, _T0).value,
+        username=username,
+        display_name=username,
+        email=None,
+        role=Role.CONTRIBUTOR,
+        created_at=_T0,
+    )
+    users.create(user)
+    return user
 
 
 def _graph(engine: Engine) -> Graph:
@@ -51,37 +71,37 @@ def _graph(engine: Engine) -> Graph:
 
 
 def test_parse_claims_the_reserved_colon_token_form(tmp_path: Path) -> None:
-    source, _, _, _, _ = _source(tmp_path)
+    source, _, _, _, _, _ = _source(tmp_path)
     pointer = source.parse("hub:42")
     assert pointer == WorkRef(source="hub", ref="42")
 
 
 def test_parse_rejects_a_token_shaped_for_another_source(tmp_path: Path) -> None:
-    source, _, _, _, _ = _source(tmp_path)
+    source, _, _, _, _, _ = _source(tmp_path)
     assert source.parse("widget:42") is None
     assert source.parse("hub#42") is None
     assert source.parse("no-separator") is None
 
 
 def test_label_renders_the_reserved_name_colon_ref(tmp_path: Path) -> None:
-    source, _, _, _, _ = _source(tmp_path)
+    source, _, _, _, _, _ = _source(tmp_path)
     assert source.label(WorkRef(source="hub", ref="42")) == "hub:42"
 
 
 def test_branch_url_is_always_none(tmp_path: Path) -> None:
-    source, _, _, _, _ = _source(tmp_path)
+    source, _, _, _, _, _ = _source(tmp_path)
     assert source.branch_url("acme/widget", "feat/x") is None
 
 
 def test_fetch_reads_an_open_item_s_title_and_body(tmp_path: Path) -> None:
-    source, items, _, engine, _ = _source(tmp_path)
+    source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
         items,
         graph_id=graph.graph_id,
         title="widget is broken",
         body="steps to repro",
-        author=WorkItemAuthor.fleet(),
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
 
@@ -92,19 +112,84 @@ def test_fetch_reads_an_open_item_s_title_and_body(tmp_path: Path) -> None:
     assert item.comments == []
 
 
+def test_fetch_resolves_a_user_author_s_login(tmp_path: Path) -> None:
+    """The one place a bare ``user_id`` is ever resolved to a login (blizzard#362)."""
+    source, items, _, users, engine, _ = _source(tmp_path)
+    graph = _graph(engine)
+    user = _user(users, username="alice")
+    created = seed_work_item(items, graph_id=graph.graph_id, author=WorkItemAuthor.user(user.user_id), at=_T0)
+
+    item = source.fetch(WorkRef(source="hub", ref=created.ref))
+
+    assert item.author is not None
+    assert item.author.kind == "user"
+    assert item.author.user_id == user.user_id
+    assert item.author.login == "alice"
+
+
+def test_fetch_names_a_fleet_author_s_runner_chunk_and_node(tmp_path: Path) -> None:
+    """No route mints a fleet author — proven from a directly-seeded store row."""
+    source, items, _, _, engine, _ = _source(tmp_path)
+    graph = _graph(engine)
+    author = WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_proposer", node_name="triage")
+    created = seed_work_item(items, graph_id=graph.graph_id, author=author, at=_T0)
+
+    item = source.fetch(WorkRef(source="hub", ref=created.ref))
+
+    assert item.author is not None
+    assert item.author.kind == "fleet"
+    assert item.author.runner_id == "runner-local"
+    assert item.author.chunk_id == "ch_proposer"
+    assert item.author.node_name == "triage"
+    assert item.author.user_id is None
+    assert item.author.login is None
+
+
+def test_fetch_carries_an_absent_stated_priority_through(tmp_path: Path) -> None:
+    source, items, _, _, engine, _ = _source(tmp_path)
+    graph = _graph(engine)
+    created = seed_work_item(
+        items,
+        graph_id=graph.graph_id,
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=None,
+        at=_T0,
+    )
+
+    item = source.fetch(WorkRef(source="hub", ref=created.ref))
+
+    assert item.stated_priority is None
+
+
+def test_fetch_carries_a_set_stated_priority_through(tmp_path: Path) -> None:
+    source, items, _, _, engine, _ = _source(tmp_path)
+    graph = _graph(engine)
+    created = seed_work_item(
+        items,
+        graph_id=graph.graph_id,
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=WorkItemPriority.HIGH.value,
+        at=_T0,
+    )
+
+    item = source.fetch(WorkRef(source="hub", ref=created.ref))
+
+    assert item.stated_priority == "high"
+
+
 def test_fetch_an_unknown_ref_raises(tmp_path: Path) -> None:
-    source, _, _, _, _ = _source(tmp_path)
+    source, _, _, _, _, _ = _source(tmp_path)
     with pytest.raises(WorkSourceError):
         source.fetch(WorkRef(source="hub", ref="999"))
 
 
 def test_fetch_a_withdrawn_ref_raises(tmp_path: Path) -> None:
-    source, items, _, engine, _ = _source(tmp_path)
+    source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
         items,
         graph_id=graph.graph_id,
-        author=WorkItemAuthor.fleet(),
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
     items.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
@@ -115,12 +200,12 @@ def test_fetch_a_withdrawn_ref_raises(tmp_path: Path) -> None:
 
 def test_fetch_a_delivered_ref_still_resolves(tmp_path: Path) -> None:
     """A closed-by-delivery item stays fetchable — only ``withdrawn`` is unresolvable."""
-    source, items, _, engine, _ = _source(tmp_path)
+    source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
         items,
         graph_id=graph.graph_id,
-        author=WorkItemAuthor.fleet(),
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
     items.close("hub", created.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
@@ -131,7 +216,7 @@ def test_fetch_a_delivered_ref_still_resolves(tmp_path: Path) -> None:
 
 def test_web_url_resolves_to_the_live_holder_s_board_chunk_link(tmp_path: Path) -> None:
     """``web_url`` reads only ``find_live_holder`` — no item row is needed to prove it."""
-    source, _, chunks, engine, _ = _source(tmp_path)
+    source, _, chunks, _, engine, _ = _source(tmp_path)
     pointer = WorkRef(source="hub", ref="1")
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
@@ -142,7 +227,7 @@ def test_web_url_resolves_to_the_live_holder_s_board_chunk_link(tmp_path: Path) 
 
 
 def test_web_url_is_none_when_no_live_chunk_holds_the_pointer(tmp_path: Path) -> None:
-    source, _, _, _, _ = _source(tmp_path)
+    source, _, _, _, _, _ = _source(tmp_path)
     assert source.web_url(WorkRef(source="hub", ref="1")) is None
 
 
@@ -151,20 +236,20 @@ def test_web_url_is_none_when_no_live_chunk_holds_the_pointer(tmp_path: Path) ->
 
 
 def test_list_and_get_answer_the_full_record_for_open_and_withdrawn_items(tmp_path: Path) -> None:
-    source, items, _, engine, _ = _source(tmp_path)
+    source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     open_item = seed_work_item(
         items,
         graph_id=graph.graph_id,
         title="open",
-        author=WorkItemAuthor.fleet(),
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
     withdrawn = seed_work_item(
         items,
         graph_id=graph.graph_id,
         title="withdrawn",
-        author=WorkItemAuthor.fleet(),
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
     items.close("hub", withdrawn.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
@@ -177,7 +262,7 @@ def test_list_and_get_answer_the_full_record_for_open_and_withdrawn_items(tmp_pa
 
 
 def test_get_edit_and_withdraw_of_an_unallocated_ref_raise_not_found(tmp_path: Path) -> None:
-    source, _, _, _, _ = _source(tmp_path)
+    source, _, _, _, _, _ = _source(tmp_path)
     pointer = WorkRef(source="hub", ref="999")
 
     with pytest.raises(WorkItemRefUnknownError):
@@ -189,10 +274,14 @@ def test_get_edit_and_withdraw_of_an_unallocated_ref_raise_not_found(tmp_path: P
 
 
 def test_create_allocates_an_open_item(tmp_path: Path) -> None:
-    source, _, _, engine, _ = _source(tmp_path)
+    source, _, _, _, engine, _ = _source(tmp_path)
 
     created = source.create(
-        title="t", body="b", author=WorkItemAuthor.fleet(), stated_priority=WorkItemPriority.HIGH, graph=_graph(engine)
+        title="t",
+        body="b",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=WorkItemPriority.HIGH,
+        graph=_graph(engine),
     )
 
     assert created.item.title == "t"
@@ -203,10 +292,16 @@ def test_create_allocates_an_open_item(tmp_path: Path) -> None:
 def test_create_mints_a_not_ready_chunk_pinned_to_the_graph_and_holding_the_ref(tmp_path: Path) -> None:
     """The composite write's own claim (blizzard#359): one chunk, on the passed graph,
     holding exactly the pointer creation just allocated."""
-    source, _, chunks, engine, _ = _source(tmp_path)
+    source, _, chunks, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
 
-    created = source.create(title="t", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, graph=graph)
+    created = source.create(
+        title="t",
+        body="b",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=None,
+        graph=graph,
+    )
 
     chunk = chunks.get(created.chunk_id)
     assert chunk is not None
@@ -218,9 +313,13 @@ def test_create_mints_a_not_ready_chunk_pinned_to_the_graph_and_holding_the_ref(
 
 
 def test_edit_replaces_fields_and_stamps_edited_at_leaving_created_at_and_ref(tmp_path: Path) -> None:
-    source, _, _, engine, clock = _source(tmp_path)
+    source, _, _, _, engine, clock = _source(tmp_path)
     created = source.create(
-        title="before", body="before", author=WorkItemAuthor.fleet(), stated_priority=None, graph=_graph(engine)
+        title="before",
+        body="before",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=None,
+        graph=_graph(engine),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     clock.advance(timedelta(days=1))
@@ -236,9 +335,13 @@ def test_edit_replaces_fields_and_stamps_edited_at_leaving_created_at_and_ref(tm
 
 
 def test_withdraw_sets_the_withdrawn_closure(tmp_path: Path) -> None:
-    source, _, chunks, engine, clock = _source(tmp_path)
+    source, _, chunks, _, engine, clock = _source(tmp_path)
     created = source.create(
-        title="t", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, graph=_graph(engine)
+        title="t",
+        body="b",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=None,
+        graph=_graph(engine),
     )
     chunks.record_stop(created.chunk_id, by="operator", at=clock.instant)
 
@@ -249,9 +352,13 @@ def test_withdraw_sets_the_withdrawn_closure(tmp_path: Path) -> None:
 
 
 def test_edit_and_withdraw_of_a_closed_item_are_refused(tmp_path: Path) -> None:
-    source, _, chunks, engine, clock = _source(tmp_path)
+    source, _, chunks, _, engine, clock = _source(tmp_path)
     created = source.create(
-        title="t", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, graph=_graph(engine)
+        title="t",
+        body="b",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=None,
+        graph=_graph(engine),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     chunks.record_stop(created.chunk_id, by="operator", at=clock.instant)
@@ -265,9 +372,13 @@ def test_edit_and_withdraw_of_a_closed_item_are_refused(tmp_path: Path) -> None:
 
 def test_withdraw_is_refused_while_a_live_chunk_holds_the_ref(tmp_path: Path) -> None:
     """Creation itself mints the live holder (blizzard#359) — no separate chunk to seed."""
-    source, _, _, engine, _ = _source(tmp_path)
+    source, _, _, _, engine, _ = _source(tmp_path)
     created = source.create(
-        title="t", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, graph=_graph(engine)
+        title="t",
+        body="b",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=None,
+        graph=_graph(engine),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
 
@@ -277,9 +388,13 @@ def test_withdraw_is_refused_while_a_live_chunk_holds_the_ref(tmp_path: Path) ->
 
 
 def test_withdraw_succeeds_once_the_holding_chunk_is_no_longer_live(tmp_path: Path) -> None:
-    source, _, chunks, engine, clock = _source(tmp_path)
+    source, _, chunks, _, engine, clock = _source(tmp_path)
     created = source.create(
-        title="t", body="b", author=WorkItemAuthor.fleet(), stated_priority=None, graph=_graph(engine)
+        title="t",
+        body="b",
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        stated_priority=None,
+        graph=_graph(engine),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     chunks.record_stop(created.chunk_id, by="operator", at=clock.instant)
@@ -294,12 +409,12 @@ def test_withdraw_succeeds_once_the_holding_chunk_is_no_longer_live(tmp_path: Pa
 
 
 def test_close_marks_an_open_item_delivered(tmp_path: Path) -> None:
-    source, items, _, engine, _ = _source(tmp_path)
+    source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
         items,
         graph_id=graph.graph_id,
-        author=WorkItemAuthor.fleet(),
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
     pointer = WorkRef(source="hub", ref=created.ref)
@@ -313,12 +428,12 @@ def test_close_marks_an_open_item_delivered(tmp_path: Path) -> None:
 
 
 def test_close_is_idempotent_on_an_already_delivered_item(tmp_path: Path) -> None:
-    source, items, _, engine, _ = _source(tmp_path)
+    source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
         items,
         graph_id=graph.graph_id,
-        author=WorkItemAuthor.fleet(),
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
     pointer = WorkRef(source="hub", ref=created.ref)
@@ -332,7 +447,7 @@ def test_close_is_idempotent_on_an_already_delivered_item(tmp_path: Path) -> Non
 
 
 def test_close_a_missing_ref_raises_work_item_gone(tmp_path: Path) -> None:
-    source, _, _, _, _ = _source(tmp_path)
+    source, _, _, _, _, _ = _source(tmp_path)
 
     with pytest.raises(WorkItemGoneError):
         source.close(WorkRef(source="hub", ref="999"))
@@ -341,12 +456,12 @@ def test_close_a_missing_ref_raises_work_item_gone(tmp_path: Path) -> None:
 def test_close_leaves_a_withdrawn_item_withdrawn(tmp_path: Path) -> None:
     """A withdrawn item is never overwritten to ``delivered`` — the store's own
     ``closed_at IS NULL`` guard, not a branch in :meth:`HubWorkSource.close`."""
-    source, items, _, engine, _ = _source(tmp_path)
+    source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
         items,
         graph_id=graph.graph_id,
-        author=WorkItemAuthor.fleet(),
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
     items.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)

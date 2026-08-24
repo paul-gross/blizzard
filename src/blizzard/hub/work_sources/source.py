@@ -21,12 +21,30 @@ from blizzard.hub.work_sources.editor import IWorkEditor
 
 
 @dataclass(frozen=True)
+class AuthorView:
+    """A work item's author, resolved legible for display (blizzard#362) — a login for
+    a human author, or the runner/chunk/node lineage for a fleet-authored one. ``kind``
+    mirrors :class:`~blizzard.hub.domain.work.WorkItemAuthorKind`'s value."""
+
+    kind: str
+    user_id: str | None = None
+    login: str | None = None
+    runner_id: str | None = None
+    chunk_id: str | None = None
+    node_name: str | None = None
+
+
+@dataclass(frozen=True)
 class WorkItem:
-    """A pass-through work item — title, body, and comment bodies, vendor-native."""
+    """A pass-through work item — title, body, and comment bodies, vendor-native, plus
+    the display-resolved author and stated priority (blizzard#362), present only when
+    the binding has them to give — the built-in ``hub`` source alone fills them today."""
 
     body: str
     title: str = ""
     comments: list[str] = field(default_factory=list)
+    author: AuthorView | None = None
+    stated_priority: str | None = None
 
 
 class WorkSourceError(Exception):

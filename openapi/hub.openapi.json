@@ -5365,11 +5365,55 @@
         "type": "object"
       },
       "WorkItemAuthorView": {
-        "description": "Who filed a hub-owned work item \u2014 ``user_id`` set only for ``kind == \"user\"``.",
+        "description": "Who filed a hub-owned work item, legible for display (blizzard#362) \u2014 ``user_id``\nand ``login`` set only for ``kind == \"user\"``; ``runner_id``/``chunk_id``/``node_name``\n\u2014 the proposing runner, chunk, and node \u2014 set only for ``kind == \"fleet\"``.",
         "properties": {
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
           "kind": {
             "title": "Kind",
             "type": "string"
+          },
+          "login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Login"
+          },
+          "node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Name"
+          },
+          "runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Id"
           },
           "user_id": {
             "anyOf": [
@@ -5529,8 +5573,18 @@
         "type": "object"
       },
       "WorkItemEntry": {
-        "description": "One pointer's pass-through work item \u2014 title, body, and comment thread, vendor-native.\n``label``/``web_url`` are the legible pointer label and its browser address, both null when no\nconfigured source names ``source``. A per-pointer failure degrades here rather than failing the\nwhole read: ``error`` carries the reason and ``title``/``body`` are null.",
+        "description": "One pointer's pass-through work item \u2014 title, body, and comment thread, vendor-native.\n``label``/``web_url`` are the legible pointer label and its browser address, both null when no\nconfigured source names ``source``. A per-pointer failure degrades here rather than failing the\nwhole read: ``error`` carries the reason and ``title``/``body`` are null. ``author``/\n``stated_priority`` (blizzard#362) are present only when the pointer's source has them to\ngive \u2014 the built-in ``hub`` source alone fills them today; a forge pointer carries neither.",
         "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkItemAuthorView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "body": {
             "anyOf": [
               {
@@ -5583,6 +5637,16 @@
           "source": {
             "title": "Source",
             "type": "string"
+          },
+          "stated_priority": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkItemPriority"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "title": {
             "anyOf": [

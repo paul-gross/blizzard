@@ -304,7 +304,14 @@ def test_create_stamps_the_caller_s_user_id_not_their_username(tmp_path: Path) -
     )
 
     assert created.status_code == 201, created.text
-    assert created.json()["author"] == {"kind": "user", "user_id": user.user_id}
+    assert created.json()["author"] == {
+        "kind": "user",
+        "user_id": user.user_id,
+        "login": None,
+        "runner_id": None,
+        "chunk_id": None,
+        "node_name": None,
+    }
 
 
 def test_create_carrying_a_client_supplied_author_is_422(tmp_path: Path) -> None:
