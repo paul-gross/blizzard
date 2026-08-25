@@ -287,6 +287,7 @@ def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_n
         epoch=1,
         at=hub.clock.now(),
         artifacts=[],
+        proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
     )
     report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed node — never completed
@@ -317,6 +318,7 @@ def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(
         epoch=1,
         at=hub.clock.now(),
         artifacts=[],
+        proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
     )
     report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed (entry) node
@@ -348,6 +350,7 @@ def test_a_pre_migration_no_movement_failure_resolves_via_the_graph_it_ran_in(tm
         epoch=2,
         at=hub.clock.now(),
         artifacts=[],
+        proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
     )
 

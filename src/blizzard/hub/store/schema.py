@@ -70,6 +70,9 @@ graph_nodes = Table(
     # (``hub_node.DEFAULT_POLL_INTERVAL`` / ``DEFAULT_POLL_TIMEOUT``).
     Column("poll_interval_seconds", Integer, nullable=True),
     Column("poll_timeout_seconds", Integer, nullable=True),
+    # Whether this node's completion may carry proposed work items (D4) — null/false is
+    # off, the default for every node predating the policy.
+    Column("proposes_work_items", Boolean, nullable=True),
 )
 
 graph_choices = Table(
@@ -244,6 +247,24 @@ artifacts = Table(
     Column("repo", String, nullable=True),  # git_commit only
     Column("forge", String, nullable=True),  # git_commit only (issue #143, Phase 4); null = legacy row
     Column("produced_at", UtcDateTime, nullable=False),
+)
+
+# --- Proposed work items (ride a node-step's completion, inert until materialized) ----
+
+work_item_proposals = Table(
+    "work_item_proposals",
+    metadata,
+    Column("proposal_id", String, primary_key=True),  # wip_<ulid>
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("node_id", String, nullable=False),  # exact provenance
+    Column("node_name", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("ordinal", Integer, nullable=False),  # authored-submission order, `graph_artifacts`-shaped
+    Column("kind", String, nullable=False),  # create | update
+    Column("data", Text, nullable=False),  # JSON object, kind-shaped
+    Column("proposed_at", UtcDateTime, nullable=False),
+    # No unique constraint narrower than the primary key — a proposal list is multi-row per
+    # (chunk, node, epoch); the caller-side replay probe already denies a partial rewrite.
 )
 
 # --- Lease facts (lease.minted, runner-reported) -------------------------------

@@ -489,6 +489,7 @@ def test_a_migrated_chunks_post_migration_graph_never_leaks_into_a_pre_migration
         epoch=2,
         at=hub.clock.now(),
         artifacts=[],
+        proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
     )
     report_lease(hub, chunk_id, epoch=3, seq=2)

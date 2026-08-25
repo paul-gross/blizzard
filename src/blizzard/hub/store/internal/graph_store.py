@@ -218,6 +218,7 @@ class NodeRow:
             "run": RUN.encode(node.run) if node.run else None,
             "poll_interval_seconds": node.poll_interval_seconds,
             "poll_timeout_seconds": node.poll_timeout_seconds,
+            "proposes_work_items": node.proposes_work_items,
         }
 
     def of(self, row: Any, *, choices: list[Choice]) -> Node:
@@ -242,6 +243,7 @@ class NodeRow:
             run=RUN.decode(row.run),
             poll_interval_seconds=row.poll_interval_seconds,
             poll_timeout_seconds=row.poll_timeout_seconds,
+            proposes_work_items=bool(row.proposes_work_items),
             choices=choices,
         )
 

@@ -1151,6 +1151,10 @@ export type CompletionSubmission = {
      */
     from_node_id: string;
     /**
+     * Proposals
+     */
+    proposals?: Array<CreateWorkItemProposal | UpdateWorkItemProposal>;
+    /**
      * Route Token
      */
     route_token?: string | null;
@@ -1158,6 +1162,27 @@ export type CompletionSubmission = {
      * Runner Id
      */
     runner_id: string;
+};
+
+/**
+ * CreateWorkItemProposal
+ *
+ * A proposed new work item — a title, a markdown body, and a stated priority.
+ */
+export type CreateWorkItemProposal = {
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Kind
+     */
+    kind?: 'create';
+    stated_priority?: WorkItemPriority;
+    /**
+     * Title
+     */
+    title: string;
 };
 
 /**
@@ -1219,10 +1244,9 @@ export type DecisionResolutionResponse = {
 /**
  * DecisionSubmission
  *
- * A runner-config gate: submit a decision in place of a transition.
- *
- * Carries the gated step's artifacts and its fencing epoch as one atomic write; the
- * node's choice set is resolved from the pinned graph, not sent here.
+ * A runner-config gate: submit a decision in place of a transition, carrying the
+ * gated step's artifacts, proposed work items, and fencing epoch as one atomic write.
+ * ``proposals`` is legal only from a node declaring ``proposes_work_items`` (D4, D6).
  */
 export type DecisionSubmission = {
     /**
@@ -1237,6 +1261,10 @@ export type DecisionSubmission = {
      * From Node Id
      */
     from_node_id: string;
+    /**
+     * Proposals
+     */
+    proposals?: Array<CreateWorkItemProposal | UpdateWorkItemProposal>;
     /**
      * Route Token
      */
@@ -1712,6 +1740,10 @@ export type GraphNodeView = {
      * Prompt
      */
     prompt?: string | null;
+    /**
+     * Proposes Work Items
+     */
+    proposes_work_items?: boolean;
     /**
      * Retries Exhausted
      */
@@ -2225,6 +2257,10 @@ export type NodeConfig = {
      * Produces
      */
     produces?: Array<ProducesEntry>;
+    /**
+     * Proposes Work Items
+     */
+    proposes_work_items?: boolean;
     /**
      * Retries Max
      */
@@ -3516,6 +3552,32 @@ export type TurnSegmentViewOutput = {
      * Truncated
      */
     truncated: boolean;
+};
+
+/**
+ * UpdateWorkItemProposal
+ *
+ * A proposed update to an existing work item — its ``{source, ref}`` pointer plus
+ * evidence to append. Unresolvable at apply time (a closed, withdrawn, or nonexistent
+ * item) is recorded, not refused (D5) — resolving the pointer is left to materialization.
+ */
+export type UpdateWorkItemProposal = {
+    /**
+     * Evidence
+     */
+    evidence: string;
+    /**
+     * Kind
+     */
+    kind?: 'update';
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Source
+     */
+    source: string;
 };
 
 /**

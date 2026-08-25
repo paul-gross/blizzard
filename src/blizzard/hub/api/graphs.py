@@ -58,6 +58,7 @@ def _node_view(node: Node) -> GraphNodeView:
         checks_cwd=node.checks_cwd,
         checks_timeout=node.checks_timeout,
         produces=[ProducesEntry(name=p.name, kind=p.kind) for p in node.produces],
+        proposes_work_items=node.proposes_work_items,
         judgement_prompt=node.judgement_prompt,
         choices=[
             GraphChoiceView(

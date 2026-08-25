@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from blizzard.wire.completion import SubmittedArtifact
+from blizzard.wire.completion import SubmittedArtifact, WorkItemProposal
 
 
 class DecisionChoiceModel(BaseModel):
@@ -19,15 +19,15 @@ class DecisionChoiceModel(BaseModel):
 
 
 class DecisionSubmission(BaseModel):
-    """A runner-config gate: submit a decision in place of a transition.
-
-    Carries the gated step's artifacts and its fencing epoch as one atomic write; the
-    node's choice set is resolved from the pinned graph, not sent here."""
+    """A runner-config gate: submit a decision in place of a transition, carrying the
+    gated step's artifacts, proposed work items, and fencing epoch as one atomic write.
+    ``proposals`` is legal only from a node declaring ``proposes_work_items`` (D4, D6)."""
 
     from_node_id: str  # the gated node — its choices become the decision's
     epoch: int  # the step's lease fence, checked against the chunk's latest
     runner_id: str
     artifacts: list[SubmittedArtifact] = []
+    proposals: list[WorkItemProposal] = []
     # The route capability token stamped at enqueue (issue #84a) — see
     # `wire.completion.CompletionSubmission.route_token`; present-only in this phase.
     route_token: str | None = None

@@ -17,6 +17,7 @@ from blizzard.foundation.ids import CHUNK_PREFIX, Id
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor, Graph
+from blizzard.hub.domain.proposals import WorkItemProposalRow
 
 
 class ChunkStatus(StrEnum):
@@ -1405,9 +1406,10 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         runner_id: str,
         at: datetime,
         artifacts: list[ArtifactRow],
+        proposals: list[WorkItemProposalRow],
         decision_id: str | None = None,
     ) -> None:
-        """One node-step's transition and its artifacts, written atomically.
+        """One node-step's transition and its artifacts and proposals, written atomically.
 
         ``decision_id`` is set only on a gate-resolving transition — the Decision this
         transition resolves; ordinary transitions leave it ``None``."""
@@ -1562,12 +1564,13 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         choices: list[DecisionChoice],
         at: datetime,
         artifacts: list[ArtifactRow],
+        proposals: list[WorkItemProposalRow],
     ) -> None:
-        """Open a gate decision, committing any step artifacts atomically.
+        """Open a gate decision, committing any step artifacts and proposals atomically.
 
-        A graph gate passes no artifacts (they landed with the arriving transition); a
-        runner-config gate carries the gated step's artifacts here, exactly where the
-        step's transition would have written them."""
+        A graph gate passes neither (they landed with the arriving transition); a
+        runner-config gate carries the gated step's artifacts and proposals here, exactly
+        where the step's transition would have written them."""
         ...
 
     def record_decision_resolution(self, decision_id: str, *, choice: str, resolved_by: str, at: datetime) -> bool:
@@ -1615,16 +1618,17 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         epoch: int,
         at: datetime,
         artifacts: list[ArtifactRow],
+        proposals: list[WorkItemProposalRow],
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
         migration_id: str | None = None,
     ) -> str | None:
         """Record a cross-graph migration atomically and idempotently (issue #90). One
-        transaction: the ``chunk_migrations`` fact, the ``chunks.graph_id`` re-pin, the
-        route release (unless ``release_route`` is ``False``), the submitting step's
-        ``artifacts``, and — when ``clear_intent`` — the intent clear, so a durable fact
-        implies a durably-cleared intent. Returns the ``migration_id``, ``None`` on replay."""
+        transaction: the ``chunk_migrations`` fact, the ``chunks.graph_id`` re-pin, the route
+        release (unless ``release_route`` is ``False``), the submitting step's ``artifacts``
+        and ``proposals``, and — when ``clear_intent`` — the intent clear. Returns the
+        ``migration_id``, ``None`` on replay."""
         ...
 
     def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:

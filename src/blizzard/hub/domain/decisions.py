@@ -10,10 +10,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, Id
+from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, PROPOSAL_PREFIX, Id
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.graph import Graph, Node
+from blizzard.hub.domain.proposal_auth import ProposalPolicy
+from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.route_auth import RouteToken
 from blizzard.hub.domain.work import (
     TERMINAL_STATUSES,
@@ -21,7 +23,7 @@ from blizzard.hub.domain.work import (
     DecisionChoice,
     IWriteChunkRepository,
 )
-from blizzard.wire.completion import SubmittedArtifact
+from blizzard.wire.completion import SubmittedArtifact, WorkItemProposal
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 
@@ -94,6 +96,12 @@ class DecisionService:
                 response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`")
             )
 
+        # Proposed-work-item policy refusal (D6) — the same unconditional check
+        # ``ApplyService.apply`` runs, since a runner-config gate is the fourth dispatch fork.
+        policy_rejection = ProposalPolicy(node, submission.proposals).rejection()
+        if policy_rejection is not None:
+            return DecisionSubmitResult.failure(policy_rejection)
+
         if facts.status() in TERMINAL_STATUSES:
             return DecisionSubmitResult.failure("chunk is terminal")
         latest = facts.latest_epoch()
@@ -110,6 +118,7 @@ class DecisionService:
             choices=[DecisionChoice(name=c.name, description=c.description) for c in node.choices],
             at=self._clock.now(),
             artifacts=[self._row(chunk, node, submission.epoch, a) for a in submission.artifacts],
+            proposals=self._proposal_rows(chunk, node, submission.epoch, submission.proposals),
         )
         return DecisionSubmitResult(
             response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`"),
@@ -133,6 +142,23 @@ class DecisionService:
             node_name=from_node.name,
             epoch=epoch,
         )
+
+    def _proposal_rows(
+        self, chunk: Chunk, node: Node, epoch: int, proposals: list[WorkItemProposal]
+    ) -> list[WorkItemProposalRow]:
+        """Twin of :meth:`~blizzard.hub.domain.apply.ApplyService._proposal_rows`."""
+        return [
+            WorkItemProposalRow.of(
+                p,
+                proposal_id=Id.mint(PROPOSAL_PREFIX, self._clock).value,
+                chunk_id=chunk.chunk_id,
+                node_id=node.node_id,
+                node_name=node.name,
+                epoch=epoch,
+                ordinal=ordinal,
+            )
+            for ordinal, p in enumerate(proposals)
+        ]
 
     def resolve(self, decision_id: str, *, choice: str, resolved_by: str) -> ResolutionResult | None:
         """Record a person's choice, first-write-wins. ``None`` if no such decision."""

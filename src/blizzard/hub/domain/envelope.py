@@ -197,6 +197,7 @@ class Envelope:
             checks_cwd=node.checks_cwd,
             checks_timeout=node.checks_timeout,
             produces=[ProducesEntry(name=p.name, kind=p.kind) for p in node.produces],
+            proposes_work_items=node.proposes_work_items,
             retries_max=node.retries_max,
             mode=node.mode,
             choices=[

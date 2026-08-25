@@ -1,19 +1,20 @@
 """The completion submission — a node-step's atomic, fenced write.
 
 ``POST /chunks/{id}/completions`` submits one node-step's completion: the judgement
-choice, the check results, and the step's artifacts — **one atomic, epoch-fenced
-write**. A stale epoch is rejected and the artifacts never enter the store.
+choice, the check results, the step's artifacts, and its proposed work items — **one
+atomic, epoch-fenced write**. A stale epoch is rejected before either enters the store.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Annotated, Literal, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.hub.domain.artifacts import ArtifactKind
+from blizzard.hub.domain.work import WorkItemPriority
 
 
 class SubmittedArtifact(BaseModel):
@@ -32,6 +33,33 @@ class SubmittedArtifact(BaseModel):
     # True when this asset's content came from an explicit attach (issue #113) rather
     # than the judgement assessment fallback.
     attached: bool = False
+
+
+class CreateWorkItemProposal(BaseModel):
+    """A proposed new work item — a title, a markdown body, and a stated priority."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["create"] = "create"
+    title: str
+    body: str
+    stated_priority: WorkItemPriority = WorkItemPriority.NORMAL
+
+
+class UpdateWorkItemProposal(BaseModel):
+    """A proposed update to an existing work item — its ``{source, ref}`` pointer plus
+    evidence to append. Unresolvable at apply time (a closed, withdrawn, or nonexistent
+    item) is recorded, not refused (D5) — resolving the pointer is left to materialization."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["update"] = "update"
+    source: str
+    ref: str
+    evidence: str
+
+
+WorkItemProposal = Annotated[CreateWorkItemProposal | UpdateWorkItemProposal, Field(discriminator="kind")]
 
 
 class _ProducesLike(Protocol):
@@ -116,6 +144,9 @@ class CompletionSubmission(BaseModel):
     # empty for a node with no ``checks:``.
     check_results: list[CheckResult] = []
     artifacts: list[SubmittedArtifact] = []
+    # Proposed work items (`create` or `update`, discriminated on `kind`) riding this
+    # completion — legal only from a node declaring `proposes_work_items` (D4, D6).
+    proposals: list[WorkItemProposal] = []
     # Set only on a gate-resolving transition. Its presence is what makes a transition
     # out of a human-judged node legal; without it the transition is rejected.
     decision_id: str | None = None
