@@ -445,8 +445,7 @@ chunk_completed = Table(
 )
 
 # The fact that makes an unacquired chunk ephemeral by deletion (issue #364) — a
-# ``chunk_grouped``-shaped sibling. ``deleted_by`` is non-null: unlike
-# ``chunk_stopped.stopped_by``, there is no legacy row predating this column.
+# ``chunk_grouped``-shaped sibling; ``deleted_by`` is non-null, with no legacy row predating it.
 chunk_deleted = Table(
     "chunk_deleted",
     metadata,

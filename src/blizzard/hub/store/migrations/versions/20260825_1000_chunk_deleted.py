@@ -1,6 +1,5 @@
-"""chunk_deleted — the fact that makes an unacquired chunk ephemeral by deletion
-(issue #364, hub store tree). One new table, ``checkfirst`` so a fresh ``base -> head``
-and an upgrade converge.
+"""chunk_deleted — the fact that makes an unacquired chunk ephemeral by deletion (issue
+#364). One new table, ``checkfirst`` so a fresh ``base -> head`` and an upgrade converge.
 
 Revision ID: 20260825_1000_chunk_deleted
 Revises: 20260819_2200_chunk_restart_from_graph

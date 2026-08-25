@@ -28,8 +28,7 @@ from blizzard.hub.domain.work import (
 )
 
 # The system actor recorded as `chunk_deleted.deleted_by` for a withdrawal-triggered
-# delete (D3) — `withdraw` carries no operator identity of its own to attribute it to
-# (issue #364).
+# delete (D3, issue #364) — `withdraw` carries no operator identity to attribute it to.
 _WITHDRAWAL_DELETE_BY = "withdrawal"
 
 
@@ -145,15 +144,11 @@ class WorkItemEditService:
         return updated
 
     def withdraw(self, item: WorkItemRecord) -> WorkItemRecord:
-        """Close ``item`` as withdrawn; raises :class:`WorkItemNotEditable` when it
-        already carries a closure. A holder in
-        :data:`~blizzard.hub.domain.queue.GROUPABLE_STATUSES` (issue #364, D3) is
-        unacquired, not genuinely live: rather than refuse, this deletes it through
-        :class:`~blizzard.hub.domain.delete.DeleteService` — the same pairing a direct
-        chunk delete drives, which withdraws ``item`` itself as part of that write, so
-        the record is re-read afterward. :class:`WorkItemHeldByLiveChunk` is still
-        raised for a genuinely acquired (or otherwise non-groupable, non-terminal)
-        holder."""
+        """Close ``item`` as withdrawn; raises :class:`WorkItemNotEditable` when
+        already closed. A :data:`~blizzard.hub.domain.queue.GROUPABLE_STATUSES` holder
+        (issue #364, D3) is unacquired, not live: deletes it via
+        :class:`~blizzard.hub.domain.delete.DeleteService` instead of refusing, then
+        re-reads ``item``; :class:`WorkItemHeldByLiveChunk` still raises otherwise."""
         self._require_open(item)
         holder = self._chunks.find_live_holder(item.pointer)
         if holder is None:

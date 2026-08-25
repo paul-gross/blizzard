@@ -2,9 +2,8 @@
 the chunk itself (issue #364). A hub item and its chunk live and die together: deleting
 the chunk withdraws every open ``hub:``-source pointer it holds, one composite store
 write (D1/D4) — reached from both a direct chunk delete and an unacquired holder's
-withdrawal (``WorkItemEditService.withdraw``, D3). Gated on
-:data:`~blizzard.hub.domain.queue.GROUPABLE_STATUSES` exactly as grouping is: a paused
-or human-held chunk is refused too, not only a runner-held one."""
+withdrawal (D3). Gated on :data:`~blizzard.hub.domain.queue.GROUPABLE_STATUSES` exactly
+as grouping is: a paused or human-held chunk is refused too, not only a runner-held one."""
 
 from __future__ import annotations
 

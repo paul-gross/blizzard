@@ -1822,8 +1822,7 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
     def delete_chunk_and_withdraw_hub_items(self, chunk: Chunk, *, by: str, at: datetime) -> int:
         """Delete ``chunk`` — the ``chunk_deleted`` fact that makes it ephemeral — and
         withdraw every open ``hub:``-source item it holds, atomically in one transaction
-        (issue #364): the composite write behind
-        :class:`~blizzard.hub.domain.delete.DeleteService`. A ``forge:``-sourced pointer
-        on the same chunk is left untouched. Returns the freshly-written
+        (issue #364, :class:`~blizzard.hub.domain.delete.DeleteService`). A ``forge:``
+        pointer on the same chunk is left untouched. Returns the freshly-written
         ``chunk_deleted.id``."""
         ...

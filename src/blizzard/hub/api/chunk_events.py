@@ -40,13 +40,11 @@ class ChunkChanged:
         by: str | None = None,
         key: str | None = None,
     ) -> None:
-        """Publish the fully enriched frame, loading the post-write facts, chunk, and pinned graph
-        itself; status derives from those unless ``status`` overrides it. ``key`` (issue #213) names
-        the durable fact just written, in :class:`~blizzard.hub.domain.work.ActivityRow`'s key format,
-        or ``None``. ``by`` (issue #364) is the deleting operator, only ever supplied by the delete
-        route. Degrades to a bare ``{chunk_id, status}`` frame, still carrying ``cause``/``prev_status``/
-        ``by``, rather than raising — a delete's read-back is always this branch, since the chunk is
-        gone (``bzh:facts-not-status`` has nothing left to derive from)."""
+        """Publish the fully enriched frame, loading the post-write facts, chunk, and pinned graph;
+        status derives from those unless ``status`` overrides it. ``key`` (issue #213) names the
+        durable fact just written, :class:`~blizzard.hub.domain.work.ActivityRow`'s key format, or
+        ``None``. ``by`` (issue #364, delete-route-only) still degrades to a bare ``{chunk_id, status}``
+        frame carrying ``cause``/``prev_status``/``by`` rather than raising, since the chunk is gone."""
         facts = self.services.chunks.load_facts(self.chunk_id) or ChunkFacts(minted=True)
         resolved_status = status if status is not None else facts.status().value
         chunk = self.services.chunks.get(self.chunk_id)

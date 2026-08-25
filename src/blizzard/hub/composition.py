@@ -100,9 +100,8 @@ class HubServices:
     stop: StopService
     complete: CompleteService
     edit: EditService
-    #: The unacquired-chunk delete/withdraw service (issue #364) — shares the same
-    #: composite write ``WorkItemEditService.withdraw`` reaches through for an
-    #: unacquired holder (D3).
+    #: The unacquired-chunk delete/withdraw service (issue #364) — the composite write
+    #: ``WorkItemEditService.withdraw`` also reaches through for an unacquired holder (D3).
     delete: DeleteService
     facts: FactIngestService
     #: The transcript lane's ingest policy (blizzard#247) — the write side; ``transcripts``
