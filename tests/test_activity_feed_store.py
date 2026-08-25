@@ -113,6 +113,7 @@ def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Pat
         runner_id="runner-a",
         at=_at(1),
         artifacts=[],
+        proposals=[],
     )
     row = _row_for(store, "node-completed")
     assert row.chunk_id == "ch_1"
@@ -133,6 +134,7 @@ def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_
         runner_id="hub",
         at=_at(1),
         artifacts=[],
+        proposals=[],
     )
     row = _row_for(store, "hub-advanced")
     assert row.chunk_id == "ch_1"
@@ -154,6 +156,7 @@ def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
         epoch=1,
         at=_at(1),
         artifacts=[],
+        proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
     )
     row = _row_for(store, "migrated")

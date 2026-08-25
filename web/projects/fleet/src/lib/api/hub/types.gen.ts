@@ -1151,6 +1151,10 @@ export type CompletionSubmission = {
      */
     from_node_id: string;
     /**
+     * Proposals
+     */
+    proposals?: Array<CreateWorkItemProposal | UpdateWorkItemProposal>;
+    /**
      * Route Token
      */
     route_token?: string | null;
@@ -1158,6 +1162,27 @@ export type CompletionSubmission = {
      * Runner Id
      */
     runner_id: string;
+};
+
+/**
+ * CreateWorkItemProposal
+ *
+ * A proposed new work item — a title, a markdown body, and a stated priority.
+ */
+export type CreateWorkItemProposal = {
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Kind
+     */
+    kind?: 'create';
+    stated_priority?: WorkItemPriority;
+    /**
+     * Title
+     */
+    title: string;
 };
 
 /**
@@ -3516,6 +3541,32 @@ export type TurnSegmentViewOutput = {
      * Truncated
      */
     truncated: boolean;
+};
+
+/**
+ * UpdateWorkItemProposal
+ *
+ * A proposed update to an existing work item — its ``{source, ref}`` pointer plus
+ * evidence to append. Unresolvable at apply time (a closed, withdrawn, or nonexistent
+ * item) is recorded, not refused (D5) — resolving the pointer is left to materialization.
+ */
+export type UpdateWorkItemProposal = {
+    /**
+     * Evidence
+     */
+    evidence: string;
+    /**
+     * Kind
+     */
+    kind?: 'update';
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Source
+     */
+    source: string;
 };
 
 /**

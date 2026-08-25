@@ -56,6 +56,7 @@ from blizzard.hub.domain.work import (
     TransitionFact,
     UsageFact,
     WorkItemCloseOutcome,
+    WorkItemProposalRow,
     WorkRef,
 )
 from blizzard.hub.store import schema as s
@@ -1285,6 +1286,7 @@ class ChunkStore:
         runner_id: str,
         at: datetime,
         artifacts: list[ArtifactRow],
+        proposals: list[WorkItemProposalRow],
         decision_id: str | None = None,
     ) -> None:
         with self._engine.begin() as conn:
@@ -1318,6 +1320,24 @@ class ChunkStore:
                         produced_at=at,
                     )
                 )
+            self._insert_proposals(conn, proposals, at=at)
+
+    @staticmethod
+    def _insert_proposals(conn: Connection, proposals: list[WorkItemProposalRow], *, at: datetime) -> None:
+        for row in proposals:
+            conn.execute(
+                insert(s.work_item_proposals).values(
+                    proposal_id=row.proposal_id,
+                    chunk_id=row.chunk_id,
+                    node_id=row.node_id,
+                    node_name=row.node_name,
+                    epoch=row.epoch,
+                    ordinal=row.ordinal,
+                    kind=row.kind,
+                    data=row.data,
+                    proposed_at=at,
+                )
+            )
 
     def record_delivery_repo_landed(self, chunk_id: str, *, repo: str, commit_hash: str, at: datetime) -> None:
         with self._engine.begin() as conn:
@@ -1793,6 +1813,7 @@ class ChunkStore:
         epoch: int,
         at: datetime,
         artifacts: list[ArtifactRow],
+        proposals: list[WorkItemProposalRow],
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
@@ -1801,8 +1822,8 @@ class ChunkStore:
         """Record a cross-graph migration **atomically and idempotently** (#90).
 
         One transaction: the fact, the ``chunks.graph_id`` re-pin, the route release
-        (unless ``release_route``, #111), this step's artifacts, and the intent clear
-        (``clear_intent``, #124). Keyed ``(chunk_id, from_node_id, epoch)``."""
+        (unless ``release_route``, #111), this step's artifacts and proposals, and the
+        intent clear (``clear_intent``, #124). Keyed ``(chunk_id, from_node_id, epoch)``."""
         with self._engine.begin() as conn:
             if self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch):
                 return None
@@ -1855,6 +1876,7 @@ class ChunkStore:
                         produced_at=at,
                     )
                 )
+            self._insert_proposals(conn, proposals, at=at)
             return resolved_migration_id
 
     @staticmethod

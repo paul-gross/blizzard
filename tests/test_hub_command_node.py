@@ -1001,6 +1001,7 @@ def test_serialization_barrier_two_chunks_never_run_hub_commands_concurrently(tm
             runner_id="r1",
             at=hub.clock.now(),
             artifacts=[],
+            proposals=[],
         )
         return chunk, graph, merge_node
 

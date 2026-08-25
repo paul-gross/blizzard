@@ -132,6 +132,7 @@ class Reification:
             poll_timeout_seconds=nd.poll_timeout_seconds,
             checks_cwd=nd.checks_cwd,
             checks_timeout=nd.checks_timeout,
+            proposes_work_items=nd.proposes_work_items,
         )
 
     def _edges(self, index: int, nd: NodeDoc) -> list[Edge]:

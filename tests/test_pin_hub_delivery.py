@@ -173,6 +173,7 @@ def _seed_at_deliver_with_two_branches_for_one_repo(hub: HubHarness, chunk_id: s
         runner_id="r1",
         at=hub.clock.now(),
         artifacts=rows,
+        proposals=[],
     )
 
 

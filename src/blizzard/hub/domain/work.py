@@ -337,6 +337,24 @@ class HubNodePollFact:
     polled_at: datetime
 
 
+@dataclass(frozen=True)
+class WorkItemProposalRow:
+    """One proposed work item's flat storage row — riding a node-step's completion
+    (``create`` or ``update``, D1), inert until a materializing consumer this change
+    does not build. ``data`` is the kind-shaped payload as JSON: ``create`` carries
+    ``{title, body, stated_priority}``, ``update`` carries ``{source, ref, evidence}``.
+    ``ordinal`` is the authored-submission position (``graph_artifacts``-shaped)."""
+
+    proposal_id: str
+    chunk_id: str
+    node_id: str
+    node_name: str
+    epoch: int
+    ordinal: int
+    kind: str
+    data: str
+
+
 class MigrationSource(StrEnum):
     """What moved a chunk onto another graph — a migration's attribution (issue #164).
 
@@ -1405,9 +1423,10 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         runner_id: str,
         at: datetime,
         artifacts: list[ArtifactRow],
+        proposals: list[WorkItemProposalRow],
         decision_id: str | None = None,
     ) -> None:
-        """One node-step's transition and its artifacts, written atomically.
+        """One node-step's transition and its artifacts and proposals, written atomically.
 
         ``decision_id`` is set only on a gate-resolving transition — the Decision this
         transition resolves; ordinary transitions leave it ``None``."""
@@ -1615,6 +1634,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         epoch: int,
         at: datetime,
         artifacts: list[ArtifactRow],
+        proposals: list[WorkItemProposalRow],
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
@@ -1623,8 +1643,9 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         """Record a cross-graph migration atomically and idempotently (issue #90). One
         transaction: the ``chunk_migrations`` fact, the ``chunks.graph_id`` re-pin, the
         route release (unless ``release_route`` is ``False``), the submitting step's
-        ``artifacts``, and — when ``clear_intent`` — the intent clear, so a durable fact
-        implies a durably-cleared intent. Returns the ``migration_id``, ``None`` on replay."""
+        ``artifacts`` and ``proposals``, and — when ``clear_intent`` — the intent clear, so a
+        durable fact implies a durably-cleared intent. Returns the ``migration_id``, ``None``
+        on replay."""
         ...
 
     def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:

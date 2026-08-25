@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import create_engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.artifacts import ArtifactKind
@@ -19,6 +20,8 @@ from blizzard.hub.domain.graph import (
 from blizzard.hub.domain.graph_authoring import Reification
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.graphs.scripts import land_pr_ci
+from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.schema import metadata
 
 pytestmark = pytest.mark.unit
 
@@ -284,3 +287,84 @@ def test_reify_carries_checks_gating_fields() -> None:
     by_name = {c.name: c for c in build.choices}
     assert by_name["pass"].requires_checks is True
     assert by_name["fail"].requires_checks is False
+
+
+def test_reify_carries_proposes_work_items() -> None:
+    doc = GraphDoc.of(
+        {
+            "name": "t",
+            "entry": "build",
+            "nodes": {
+                "build": {
+                    "executor": "runner",
+                    "prompt": "p",
+                    "proposes_work_items": True,
+                    "judgement": {
+                        "prompt": "j",
+                        "choices": {"pass": {"description": "ok", "to": "done"}},
+                    },
+                }
+            },
+        }
+    )
+    graph = Reification.of(doc, _clock()).graph
+    build = graph.node_by_name("build")
+    assert build is not None
+    assert build.proposes_work_items is True
+
+
+def test_reify_defaults_proposes_work_items_to_false() -> None:
+    doc = GraphDoc.of(
+        {
+            "name": "t",
+            "entry": "build",
+            "nodes": {
+                "build": {
+                    "executor": "runner",
+                    "prompt": "p",
+                    "judgement": {
+                        "prompt": "j",
+                        "choices": {"pass": {"description": "ok", "to": "done"}},
+                    },
+                }
+            },
+        }
+    )
+    graph = Reification.of(doc, _clock()).graph
+    build = graph.node_by_name("build")
+    assert build is not None
+    assert build.proposes_work_items is False
+
+
+def test_proposes_work_items_round_trips_through_the_store() -> None:
+    """The reified value must survive a mint + load — a graph is always re-read from the
+    store at apply time, never served from the in-memory :class:`Reification` result."""
+    doc = GraphDoc.of(
+        {
+            "name": "t",
+            "entry": "build",
+            "nodes": {
+                "build": {
+                    "executor": "runner",
+                    "prompt": "p",
+                    "proposes_work_items": True,
+                    "judgement": {
+                        "prompt": "j",
+                        "choices": {"pass": {"description": "ok", "to": "done"}},
+                    },
+                }
+            },
+        }
+    )
+    graph = Reification.of(doc, _clock()).graph
+    engine = create_engine("sqlite://")
+    metadata.create_all(engine)
+    store = GraphStore(engine)
+    store.mint(graph, definition_yaml="t", at=_clock().now())
+
+    loaded = store.get(graph.graph_id)
+
+    assert loaded is not None
+    build = loaded.node_by_name("build")
+    assert build is not None
+    assert build.proposes_work_items is True

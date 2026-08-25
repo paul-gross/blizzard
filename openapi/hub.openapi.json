@@ -1753,6 +1753,28 @@
             "title": "From Node Id",
             "type": "string"
           },
+          "proposals": {
+            "default": [],
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "create": "#/components/schemas/CreateWorkItemProposal",
+                  "update": "#/components/schemas/UpdateWorkItemProposal"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/CreateWorkItemProposal"
+                },
+                {
+                  "$ref": "#/components/schemas/UpdateWorkItemProposal"
+                }
+              ]
+            },
+            "title": "Proposals",
+            "type": "array"
+          },
           "route_token": {
             "anyOf": [
               {
@@ -1776,6 +1798,36 @@
           "from_node_id"
         ],
         "title": "CompletionSubmission",
+        "type": "object"
+      },
+      "CreateWorkItemProposal": {
+        "additionalProperties": false,
+        "description": "A proposed new work item \u2014 a title, a markdown body, and a stated priority.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "kind": {
+            "const": "create",
+            "default": "create",
+            "title": "Kind",
+            "type": "string"
+          },
+          "stated_priority": {
+            "$ref": "#/components/schemas/WorkItemPriority",
+            "default": "normal"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ],
+        "title": "CreateWorkItemProposal",
         "type": "object"
       },
       "DecisionChoiceModel": {
@@ -5365,6 +5417,37 @@
           "truncated"
         ],
         "title": "TurnSegmentView",
+        "type": "object"
+      },
+      "UpdateWorkItemProposal": {
+        "additionalProperties": false,
+        "description": "A proposed update to an existing work item \u2014 its ``{source, ref}`` pointer plus\nevidence to append. Unresolvable at apply time (a closed, withdrawn, or nonexistent\nitem) is recorded, not refused (D5) \u2014 resolving the pointer is left to materialization.",
+        "properties": {
+          "evidence": {
+            "title": "Evidence",
+            "type": "string"
+          },
+          "kind": {
+            "const": "update",
+            "default": "update",
+            "title": "Kind",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "ref",
+          "evidence"
+        ],
+        "title": "UpdateWorkItemProposal",
         "type": "object"
       },
       "UserIdentityView": {

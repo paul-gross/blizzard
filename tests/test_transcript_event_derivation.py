@@ -97,6 +97,7 @@ class _Fixture:
             runner_id="r1",
             at=_NOW,
             artifacts=[],
+            proposals=[],
         )
         self.service = EventDerivationService(events=self.events, chunks=self.chunks, clock=self.clock)
         self.reconciler = EventDerivationReconciler(service=self.service, events=self.events)
@@ -113,6 +114,7 @@ class _Fixture:
             runner_id="r1",
             at=_NOW,
             artifacts=[],
+            proposals=[],
         )
 
     def stored_events(self) -> list[Any]:

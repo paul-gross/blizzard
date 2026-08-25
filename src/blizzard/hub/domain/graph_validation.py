@@ -166,6 +166,7 @@ class NodeCheck:
         self._check_choice_targets()
         self._check_session_ref()
         self._check_retries()
+        self._check_proposes_work_items()
 
     def _check_run(self) -> None:
         # `run:` is legal ONLY on a hub command node (#65): a worker node's step is an agent
@@ -298,6 +299,18 @@ class NodeCheck:
             self.errors.append(
                 f"node `{node.name}`: retries.exhausted must be `{RetriesExhausted.ESCALATE.value}`, "
                 f"got `{node.retries_exhausted}`"
+            )
+
+    def _check_proposes_work_items(self) -> None:
+        """D4 — a hub-executed node has no worker to author a proposal, and a human-judged
+        node's completion is the resolving transition, which carries no payload channel at
+        all — so the policy is legal only on a worker-judged runner node."""
+        node = self.node
+        if not node.proposes_work_items:
+            return
+        if node.executor is not Executor.RUNNER or node.judgement is None or node.judgement.by is not JudgedBy.WORKER:
+            self.errors.append(
+                f"node `{node.name}`: `proposes_work_items` is only legal on a worker-judged runner node"
             )
 
 

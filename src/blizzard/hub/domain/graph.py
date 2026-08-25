@@ -321,6 +321,9 @@ class NodeDoc(NodeShape[RunStepDoc]):
     checks_cwd: str | None = None
     # The per-check timeout (issue #114), in seconds; a timeout is a red check.
     checks_timeout: int | None = None
+    # Whether this node's completion may carry proposed work items — legal only on a
+    # worker-judged runner node (D4); ``False`` is the default, off.
+    proposes_work_items: bool = False
 
     @classmethod
     def of(cls, key: object, raw: object) -> NodeDoc:
@@ -356,6 +359,7 @@ class NodeDoc(NodeShape[RunStepDoc]):
             session_malformed=session.malformed,
             checks_cwd=checks_cwd,
             checks_timeout=checks_timeout,
+            proposes_work_items=bool(body.get("proposes_work_items", False)),
         )
 
     @staticmethod
@@ -549,6 +553,8 @@ class Node(NodeShape[RunStep]):
     # See ``NodeDoc.checks_cwd`` / ``NodeDoc.checks_timeout`` (issue #114).
     checks_cwd: str | None = None
     checks_timeout: int | None = None
+    # See ``NodeDoc.proposes_work_items``.
+    proposes_work_items: bool = False
 
 
 @dataclass(frozen=True)

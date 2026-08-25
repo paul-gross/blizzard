@@ -7,17 +7,26 @@ only as the resolving transition."""
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
-from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, MIGRATION_PREFIX, TRANSITION_PREFIX, Id
+from blizzard.foundation.ids import (
+    ARTIFACT_PREFIX,
+    DECISION_PREFIX,
+    MIGRATION_PREFIX,
+    PROPOSAL_PREFIX,
+    TRANSITION_PREFIX,
+    Id,
+)
 from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Edge, Executor, Graph, JudgedBy, Node
 from blizzard.hub.domain.produces_auth import Produces
+from blizzard.hub.domain.proposal_auth import ProposalPolicy
 from blizzard.hub.domain.route_auth import RouteToken
 from blizzard.hub.domain.work import (
     TERMINAL_STATUSES,
@@ -28,8 +37,15 @@ from blizzard.hub.domain.work import (
     MigrationFact,
     MigrationMode,
     MigrationSource,
+    WorkItemProposalRow,
 )
-from blizzard.wire.completion import ChecksGate, CompletionSubmission, SubmittedArtifact
+from blizzard.wire.completion import (
+    ChecksGate,
+    CompletionSubmission,
+    CreateWorkItemProposal,
+    SubmittedArtifact,
+    WorkItemProposal,
+)
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 
 # The cross-graph migration crash window (issue #90, ``bzh:crash-point-registry``): the whole
@@ -226,6 +242,15 @@ class ApplyService:
         if replayed is not None:
             return self._respond(chunk, graph, from_node, submission, to_node_id=replayed, is_fresh_apply=False)
 
+        # Proposed-work-item policy refusal (D6) — unconditional, ordered ahead of every
+        # dispatch fork below (gate resolution, the human-signoff guard, and the authored
+        # cross-graph edge) so none of the three lanes carries a proposal past a node that
+        # never declared the policy. A replay above already returned; this never re-fires
+        # on one.
+        policy_rejection = ProposalPolicy(from_node, submission.proposals).rejection()
+        if policy_rejection is not None:
+            return ApplyResult.failure(policy_rejection)
+
         # A completion carrying a decision id is a gate-resolving transition — a graph gate
         # (human node) or a runner-config gate (worker node).
         if submission.decision_id is not None:
@@ -285,6 +310,7 @@ class ApplyService:
             runner_id=submission.runner_id,
             at=self._clock.now(),
             artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in submission.artifacts],
+            proposals=self._proposal_rows(chunk, from_node, submission.epoch, submission.proposals),
         )
         return self._respond(
             chunk,
@@ -337,7 +363,7 @@ class ApplyService:
         # A resolved choice may itself target another graph (issue #90) — threading
         # ``decision_id`` through is what keeps the gate's decision from staying live.
         if edge.target_graph is not None:
-            return self._apply_migration(chunk, gate_node, submission, edge, target_graph, artifacts=[])
+            return self._apply_migration(chunk, gate_node, submission, edge, target_graph, artifacts=[], proposals=[])
         to_node_id = Destination.of(graph, edge).node_id
         if to_node_id is None:
             return ApplyResult.failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
@@ -361,6 +387,7 @@ class ApplyService:
             runner_id=submission.runner_id,
             at=self._clock.now(),
             artifacts=[],  # the decision's artifacts already landed
+            proposals=[],  # ...and so, for the same reason, are its proposals (D2)
             decision_id=submission.decision_id,
         )
         return self._respond(
@@ -383,6 +410,7 @@ class ApplyService:
         target_graph: Graph | None,
         *,
         artifacts: list[SubmittedArtifact] | None = None,
+        proposals: list[WorkItemProposal] | None = None,
     ) -> ApplyResult:
         """Take a cross-graph migration edge (issue #90) — re-pin + re-queue, or escalate.
 
@@ -407,6 +435,7 @@ class ApplyService:
                 )
             return ApplyResult.escalated(edge.target_graph)
         submitted = submission.artifacts if artifacts is None else artifacts
+        submitted_proposals = submission.proposals if proposals is None else proposals
         landed_node_id = MigrationFact.landing_node(target_graph, from_node.name)
         return self._land_migration(
             chunk,
@@ -418,6 +447,7 @@ class ApplyService:
             decision_id=submission.decision_id,
             model=edge.model,
             artifacts=submitted,
+            proposals=submitted_proposals,
             clear_intent=False,
             source=MigrationSource.AUTHORED_EDGE,
         )
@@ -463,6 +493,7 @@ class ApplyService:
             decision_id=submission.decision_id,
             model=None,
             artifacts=submission.artifacts,
+            proposals=submission.proposals,
             clear_intent=True,
             source=MigrationSource.INTENT,
         )
@@ -492,6 +523,7 @@ class ApplyService:
             decision_id=submission.decision_id,
             model=None,
             artifacts=submission.artifacts,
+            proposals=submission.proposals,
             clear_intent=False,
             source=MigrationSource.FOLLOW_LATEST,
         )
@@ -508,14 +540,16 @@ class ApplyService:
         decision_id: str | None,
         model: str | None,
         artifacts: list[SubmittedArtifact],
+        proposals: list[WorkItemProposal],
         clear_intent: bool,
         source: MigrationSource,
     ) -> ApplyResult:
         """The landing tail shared by every migration path.
 
-        Records the migration atomically (fact + re-pin + artifacts + route release/retain +
-        intent clear), then governs by the landed node's executor as a transition into it
-        would (issue #111). ``migration_id`` is the fresh fact this call wrote (issue #213)."""
+        Records the migration atomically (fact + re-pin + artifacts + proposals + route
+        release/retain + intent clear), then governs by the landed node's executor as a
+        transition into it would (issue #111). ``migration_id`` is the fresh fact this call
+        wrote (issue #213)."""
         landed_node = target_graph.node_by_id(landed_node_id)
         lands_on_hub = landed_node is not None and landed_node.executor is Executor.HUB
         migration_id = self._chunks.record_migration(
@@ -531,6 +565,7 @@ class ApplyService:
             epoch=submission.epoch,
             at=self._clock.now(),
             artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in artifacts],
+            proposals=self._proposal_rows(chunk, from_node, submission.epoch, proposals),
             release_route=not lands_on_hub,
             clear_intent=clear_intent,
             migration_id=Id.mint(MIGRATION_PREFIX, self._clock).value,
@@ -631,4 +666,29 @@ class ApplyService:
             node_id=from_node.node_id,
             node_name=from_node.name,
             epoch=epoch,
+        )
+
+    def _proposal_rows(
+        self, chunk: Chunk, from_node: Node, epoch: int, proposals: list[WorkItemProposal]
+    ) -> list[WorkItemProposalRow]:
+        return [self._proposal_row(chunk, from_node, epoch, ordinal, p) for ordinal, p in enumerate(proposals)]
+
+    def _proposal_row(
+        self, chunk: Chunk, from_node: Node, epoch: int, ordinal: int, proposal: WorkItemProposal
+    ) -> WorkItemProposalRow:
+        if isinstance(proposal, CreateWorkItemProposal):
+            data = json.dumps(
+                {"title": proposal.title, "body": proposal.body, "stated_priority": proposal.stated_priority.value}
+            )
+        else:
+            data = json.dumps({"source": proposal.source, "ref": proposal.ref, "evidence": proposal.evidence})
+        return WorkItemProposalRow(
+            proposal_id=Id.mint(PROPOSAL_PREFIX, self._clock).value,
+            chunk_id=chunk.chunk_id,
+            node_id=from_node.node_id,
+            node_name=from_node.name,
+            epoch=epoch,
+            ordinal=ordinal,
+            kind=proposal.kind,
+            data=data,
         )
