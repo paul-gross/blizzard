@@ -18,7 +18,7 @@
  *
  *   npm run shell-sweep   (from web/)
  *
- * The twelve specs:
+ * The thirteen specs:
  *   - projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts — the hub
  *     board shell (BoardHeader + AppNavMenu), swept over width only (no
  *     username is ever shown there): never lets the profile menu drift
@@ -83,6 +83,10 @@
  *     `--kv-label-col`/`--chunk-facts-pad`): their value columns genuinely land
  *     at the same horizontal position under a long runner identity that wraps
  *     — a real CSS grid layout claim jsdom cannot make.
+ *   - projects/fleet/src/lib/board-card/board-card-control-row.shell-sweep.spec.ts —
+ *     `BoardCardComponent`'s control row (D8, issue #364): PROMOTE and DELETE
+ *     genuinely sit side by side with no overlap or overflow at the board right
+ *     rail's narrow widths — a real CSS flex-row layout claim jsdom cannot make.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -100,6 +104,7 @@ const SWEEPS = [
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk/chunk-detail-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/design/hover-tint.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-control-row.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {
@@ -122,7 +127,7 @@ function main() {
     return;
   }
 
-  console.log('\nshell-sweep: all twelve specs clean.\n');
+  console.log('\nshell-sweep: all thirteen specs clean.\n');
 }
 
 main();
