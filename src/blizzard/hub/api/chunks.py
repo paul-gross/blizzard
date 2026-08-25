@@ -25,6 +25,7 @@ from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.decisions import NotEscalated
+from blizzard.hub.domain.delete import ChunkNotDeletable
 from blizzard.hub.domain.detach import NotRouted
 from blizzard.hub.domain.edit import (
     ChunkAlreadyMoved,
@@ -47,6 +48,7 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.work_sources.source import AuthorView, WorkSourceError
 from blizzard.wire.chunk import (
     ChunkCompleteRequest,
+    ChunkDeleteResponse,
     ChunkDetail,
     ChunkIngestConflict,
     ChunkIngestRequest,
@@ -434,6 +436,36 @@ def patch_chunk(
         default_effort=updated.default_effort,
         intended_migration=ChunkView.of(services, updated).intended_migration(),
     )
+
+
+@router.delete(
+    "/chunks/{chunk_id}",
+    response_model=ChunkDeleteResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(CHUNK_CONTROL))],
+)
+def delete_chunk(
+    chunk_id: str, services: Annotated[HubServices, Depends(get_services)], by: str = "operator"
+) -> ChunkDeleteResponse:
+    """Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds
+    in the same write (issue #364).
+
+    404 for an unknown chunk; 409 for one a runner or a human holds, or one terminal —
+    deletion needs a chunk at
+    :data:`~blizzard.hub.domain.queue.GROUPABLE_STATUSES`, exactly as grouping does.
+    Irreversible: CHUNK is gone from every read the instant this returns, so the
+    response carries nothing richer than the id deleted."""
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    try:
+        deleted_id = services.delete.delete(chunk, by=by)
+    except ChunkNotDeletable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    change.publish(cause="deleted", key=f"chunk_deleted:{deleted_id}", by=by)
+    services.events.publish_queue_changed()  # a deleted chunk is never offered for claim again
+    return ChunkDeleteResponse(chunk_id=chunk_id)
 
 
 def _author_view(author: AuthorView) -> WorkItemAuthorView:

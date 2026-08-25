@@ -66,8 +66,15 @@ class CliContext:
     ) -> httpx.Response:
         return self._verb("put", path, operation, json_body=json_body, on_status=on_status)
 
-    def delete(self, path: str, operation: str, *, on_status: dict[int, str] | None = None) -> httpx.Response:
-        return self._verb("delete", path, operation, on_status=on_status)
+    def delete(
+        self,
+        path: str,
+        operation: str,
+        *,
+        params: dict[str, str] | None = None,
+        on_status: dict[int, str] | None = None,
+    ) -> httpx.Response:
+        return self._verb("delete", path, operation, params=params, on_status=on_status)
 
     def stream(
         self,

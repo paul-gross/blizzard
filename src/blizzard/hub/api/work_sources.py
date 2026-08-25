@@ -231,7 +231,8 @@ def withdraw_work_item(
 ) -> WorkItemView:
     """Withdraw the item at SOURCE/REF. 404 for an unknown source or an unallocated ref
     (D9); 409 for a known source with no editor (D4), an item that already carries a
-    closure, or one a live chunk still holds (D5, D10)."""
+    closure, or one an *acquired* live chunk still holds (D5, D10) — an unacquired
+    holder deletes instead of refusing (issue #364, D3)."""
     source_obj, editor = _require_editor(source, services)
     pointer = WorkRef(source=source, ref=ref)
     try:

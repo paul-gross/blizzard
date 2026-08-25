@@ -486,6 +486,85 @@ def test_resume_chunk_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 # --------------------------------------------------------------------------- #
+# `blizzard hub chunk delete` (issue #364)
+
+
+@pytest.mark.unit
+def test_chunk_delete_confirms_and_sends_the_delete_with_by(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    def fake_delete(url: str, *, params: object, timeout: float) -> _FakeResponse:
+        calls.append((url, params))
+        return _FakeResponse(202, {"chunk_id": "ch_42"})
+
+    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    result = CliRunner().invoke(
+        hub_group,
+        ["chunk", "delete", "ch_42", "--by", "alice"],
+        input="y\n",
+        env={"BZ_HUB_URL": "http://hub.local:8421"},
+    )
+
+    assert result.exit_code == 0, result.output
+    url, params = calls[0]
+    assert url == "http://hub.local:8421/api/chunks/ch_42"
+    assert params == {"by": "alice"}
+    assert "deleted ch_42" in result.output
+
+
+@pytest.mark.unit
+def test_chunk_delete_aborts_when_confirmation_is_declined(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_delete(url: str, *, params: object, timeout: float) -> _FakeResponse:
+        raise AssertionError("must not call the API when the user declines")
+
+    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_42"], input="n\n")
+
+    assert result.exit_code != 0
+
+
+@pytest.mark.unit
+def test_chunk_delete_yes_skips_the_prompt_and_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    def fake_delete(url: str, *, params: object, timeout: float) -> _FakeResponse:
+        calls.append((url, params))
+        return _FakeResponse(202, {"chunk_id": "ch_42"})
+
+    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_42", "--yes"])
+
+    assert result.exit_code == 0, result.output
+    url, params = calls[0]
+    assert url == "http://127.0.0.1:8421/api/chunks/ch_42"
+    assert params == {"by": "operator"}
+
+
+@pytest.mark.unit
+def test_chunk_delete_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_delete(url: str, *, params: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(409, {"detail": "chunk ch_42 is running — deletion needs an unacquired chunk"})
+
+    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_42", "--yes"])
+
+    assert result.exit_code != 0
+    assert "chunk ch_42 is running — deletion needs an unacquired chunk" in result.output
+
+
+@pytest.mark.unit
+def test_chunk_delete_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_delete(url: str, *, params: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(404)
+
+    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_nope", "--yes"])
+
+    assert result.exit_code != 0
+    assert "ch_nope" in result.output
+
+
+# --------------------------------------------------------------------------- #
 # `blizzard runner pause`
 
 

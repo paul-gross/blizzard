@@ -50,6 +50,7 @@ from blizzard.hub.domain.apply import ApplyService
 from blizzard.hub.domain.claim import ClaimService
 from blizzard.hub.domain.complete import CompleteService
 from blizzard.hub.domain.decisions import DecisionService, RequeueService
+from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.edit import EditService
 from blizzard.hub.domain.enrollment import RunnerEnrollmentService
@@ -77,6 +78,7 @@ from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 
@@ -98,6 +100,10 @@ class HubServices:
     stop: StopService
     complete: CompleteService
     edit: EditService
+    #: The unacquired-chunk delete/withdraw service (issue #364) — shares the same
+    #: composite write ``WorkItemEditService.withdraw`` reaches through for an
+    #: unacquired holder (D3).
+    delete: DeleteService
     facts: FactIngestService
     #: The transcript lane's ingest policy (blizzard#247) — the write side; ``transcripts``
     #: above is the same store's read Protocol.
@@ -246,6 +252,7 @@ def build_services(
     # Shared between ClaimService and EditService (issue #120) — one in-process lock, so a
     # claim and an edit racing the same chunk can't interleave (tests/test_edit_claim_race.py).
     claim_lock = threading.Lock()
+    work_item_store = WorkItemStore(engine)
     return HubServices(
         chunks=chunk_store,
         graphs=graph_store,
@@ -263,6 +270,7 @@ def build_services(
         stop=StopService(chunks=chunk_store, clock=clock),
         complete=CompleteService(chunks=chunk_store, clock=clock),
         edit=EditService(chunks=chunk_store, graphs=graph_store, claim_lock=claim_lock),
+        delete=DeleteService(chunks=chunk_store, items=work_item_store, clock=clock),
         facts=FactIngestService(chunks=chunk_store, fleet=fleet, clock=clock),
         transcript_ingest=TranscriptIngestService(store=transcript_store, clock=clock, caps=transcript_caps),
         graph_mint=GraphMintService(graphs=graph_store, clock=clock),

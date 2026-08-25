@@ -13,5 +13,12 @@
     "cause": "node-completed",
     "graph_id": "adv-dwf",
     "key": "transitions:tr_01J"
+  },
+  "deleted": {
+    "chunk_id": "ch_1",
+    "status": "not_ready",
+    "cause": "deleted",
+    "by": "operator",
+    "key": "chunk_deleted:1"
   }
 }

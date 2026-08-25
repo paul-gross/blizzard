@@ -32,17 +32,29 @@ class ChunkChanged:
         """A frame whose "before" the caller already holds — a mint, or facts already loaded."""
         return cls(services, chunk_id, prev_status)
 
-    def publish(self, *, cause: ChunkChangeCause | None, status: str | None = None, key: str | None = None) -> None:
+    def publish(
+        self,
+        *,
+        cause: ChunkChangeCause | None,
+        status: str | None = None,
+        by: str | None = None,
+        key: str | None = None,
+    ) -> None:
         """Publish the fully enriched frame, loading the post-write facts, chunk, and pinned graph
         itself; status derives from those unless ``status`` overrides it. ``key`` (issue #213) names
         the durable fact just written, in :class:`~blizzard.hub.domain.work.ActivityRow`'s key format,
-        or ``None``. Degrades to a bare ``{chunk_id, status}`` frame rather than raising."""
+        or ``None``. ``by`` (issue #364) is the deleting operator, only ever supplied by the delete
+        route. Degrades to a bare ``{chunk_id, status}`` frame, still carrying ``cause``/``prev_status``/
+        ``by``, rather than raising — a delete's read-back is always this branch, since the chunk is
+        gone (``bzh:facts-not-status`` has nothing left to derive from)."""
         facts = self.services.chunks.load_facts(self.chunk_id) or ChunkFacts(minted=True)
         resolved_status = status if status is not None else facts.status().value
         chunk = self.services.chunks.get(self.chunk_id)
         graph = self.services.graphs.get(chunk.graph_id) if chunk is not None else None
         if chunk is None or graph is None:
-            self.services.events.publish_chunk_changed(self.chunk_id, resolved_status, key=key)
+            self.services.events.publish_chunk_changed(
+                self.chunk_id, resolved_status, prev_status=self.prev_status, cause=cause, by=by, key=key
+            )
             return
 
         from_graph = None
@@ -72,5 +84,6 @@ class ChunkChanged:
             cause=cause,  # change.cause is a widened `str | None` (`bzh:domain-core` — the
             # domain stays events-layer-free); this module already holds the typed value.
             graph_id=change.graph_id,
+            by=by,
             key=key,
         )

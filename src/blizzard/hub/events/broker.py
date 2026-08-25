@@ -60,13 +60,15 @@ class EventBroker(_EventBroker):
         runner_id: str | None = None,
         cause: ChunkChangeCause | None = None,
         graph_id: str | None = None,
+        by: str | None = None,
         key: str | None = None,
     ) -> int:
         """A chunk's derived status changed.
 
         Optionals are added to the payload only when supplied, never serialized as
         ``null`` (issue #212). ``key`` (issue #213) is the table-qualified natural key of
-        the fact this frame describes, absent when there is no such fact."""
+        the fact this frame describes, absent when there is no such fact. ``by`` (issue
+        #364) rides the ``deleted`` cause, mirroring :meth:`publish_runner_changed`."""
         payload = ChunkChangedPayload(
             chunk_id=chunk_id,
             status=status,
@@ -76,6 +78,7 @@ class EventBroker(_EventBroker):
             runner_id=runner_id,
             cause=cause,
             graph_id=graph_id,
+            by=by,
             key=key,
         ).to_payload()
         return self.publish(CHUNK_CHANGED, payload)

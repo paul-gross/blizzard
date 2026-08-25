@@ -47,7 +47,8 @@ export const HUB_EVENT_TYPES = [
  * declared optional rather than required-but-sometimes-absent. `graph_id` rides the
  * wire but is never rendered — the Event log's block row stops at the transition and
  * runner lines. Exported (issue #235) so the SSE contract spec's `FRAME_FIELD_SPECS`
- * can key its required/optional descriptor off this interface directly. */
+ * can key its required/optional descriptor off this interface directly. `by` (issue
+ * #364) rides the `deleted` cause, mirroring {@link RunnerEvent.by}. */
 export interface ChunkChanged {
   chunk_id: string;
   status: string;
@@ -57,6 +58,7 @@ export interface ChunkChanged {
   runner_id?: string;
   cause?: string;
   graph_id?: string;
+  by?: string;
 }
 /** A `question-asked`/`question-answered` frame's payload. Exported (issue #235) —
  * see {@link ChunkChanged}. */

@@ -34,6 +34,7 @@ ChunkChangeCause = Literal[
     "stopped",
     "completed",
     "hub-advanced",
+    "deleted",
 ]
 
 #: What a ``runner-changed`` frame reports (issue #151) — see
@@ -71,6 +72,9 @@ class ChunkChangedPayload(SseFramePayload):
     runner_id: str | None = None
     cause: ChunkChangeCause | None = None
     graph_id: str | None = None
+    #: Who deleted the chunk (issue #364) — rides the ``deleted`` cause, mirroring
+    #: :attr:`RunnerChangedPayload.by`; omitted on every other cause.
+    by: str | None = None
     key: str | None = None
 
 

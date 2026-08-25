@@ -48,6 +48,14 @@ class ChunkIngestResponse(BaseModel):
     chunk_id: str
 
 
+class ChunkDeleteResponse(BaseModel):
+    """The result of one ``DELETE /chunks/{id}`` (issue #364) — the deleted chunk's own
+    id, echoed back. Nothing richer: the chunk is gone from every read the instant this
+    returns (``bzh:facts-not-status`` has nothing left to derive a fresh summary from)."""
+
+    chunk_id: str
+
+
 class ChunkIngestConflict(BaseModel):
     """The 409 body: the pointer is already held by a live chunk."""
 

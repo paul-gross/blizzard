@@ -644,6 +644,20 @@ export type ChunkCompleteRequest = {
 };
 
 /**
+ * ChunkDeleteResponse
+ *
+ * The result of one ``DELETE /chunks/{id}`` (issue #364) — the deleted chunk's own
+ * id, echoed back. Nothing richer: the chunk is gone from every read the instant this
+ * returns (``bzh:facts-not-status`` has nothing left to derive a fresh summary from).
+ */
+export type ChunkDeleteResponse = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+};
+
+/**
  * ChunkDetail
  *
  * The whole chunk aggregate — one response model behind both the hub's own detail read and the
@@ -5005,6 +5019,41 @@ export type IngestChunkApiChunksPostResponses = {
 };
 
 export type IngestChunkApiChunksPostResponse = IngestChunkApiChunksPostResponses[keyof IngestChunkApiChunksPostResponses];
+
+export type DeleteChunkApiChunksChunkIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: {
+        /**
+         * By
+         */
+        by?: string;
+    };
+    url: '/api/chunks/{chunk_id}';
+};
+
+export type DeleteChunkApiChunksChunkIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteChunkApiChunksChunkIdDeleteError = DeleteChunkApiChunksChunkIdDeleteErrors[keyof DeleteChunkApiChunksChunkIdDeleteErrors];
+
+export type DeleteChunkApiChunksChunkIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkDeleteResponse;
+};
+
+export type DeleteChunkApiChunksChunkIdDeleteResponse = DeleteChunkApiChunksChunkIdDeleteResponses[keyof DeleteChunkApiChunksChunkIdDeleteResponses];
 
 export type GetChunkApiChunksChunkIdGetData = {
     body?: never;

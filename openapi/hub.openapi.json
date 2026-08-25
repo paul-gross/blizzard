@@ -923,6 +923,20 @@
         "title": "ChunkCompleteRequest",
         "type": "object"
       },
+      "ChunkDeleteResponse": {
+        "description": "The result of one ``DELETE /chunks/{id}`` (issue #364) \u2014 the deleted chunk's own\nid, echoed back. Nothing richer: the chunk is gone from every read the instant this\nreturns (``bzh:facts-not-status`` has nothing left to derive a fresh summary from).",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id"
+        ],
+        "title": "ChunkDeleteResponse",
+        "type": "object"
+      },
       "ChunkDetail": {
         "description": "The whole chunk aggregate \u2014 one response model behind both the hub's own detail read and the\nrunner's pass-through proxy of it (issue #314): transition history, inline artifact store, and the\nopen escalation. Declared once, never re-typed per route, so a field reaches both specs at once.",
         "properties": {
@@ -8521,6 +8535,57 @@
       }
     },
     "/api/chunks/{chunk_id}": {
+      "delete": {
+        "description": "Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds\nin the same write (issue #364).\n\n404 for an unknown chunk; 409 for one a runner or a human holds, or one terminal \u2014\ndeletion needs a chunk at\n:data:`~blizzard.hub.domain.queue.GROUPABLE_STATUSES`, exactly as grouping does.\nIrreversible: CHUNK is gone from every read the instant this returns, so the\nresponse carries nothing richer than the id deleted.",
+        "operationId": "delete_chunk_api_chunks__chunk_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "by",
+            "required": false,
+            "schema": {
+              "default": "operator",
+              "title": "By",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkDeleteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Chunk",
+        "tags": [
+          "chunks"
+        ]
+      },
       "get": {
         "description": "One chunk aggregate in full \u2014 derived status, current node, route.",
         "operationId": "get_chunk_api_chunks__chunk_id__get",
@@ -11527,7 +11592,7 @@
     },
     "/api/work-sources/{source}/items/{ref}": {
       "delete": {
-        "description": "Withdraw the item at SOURCE/REF. 404 for an unknown source or an unallocated ref\n(D9); 409 for a known source with no editor (D4), an item that already carries a\nclosure, or one a live chunk still holds (D5, D10).",
+        "description": "Withdraw the item at SOURCE/REF. 404 for an unknown source or an unallocated ref\n(D9); 409 for a known source with no editor (D4), an item that already carries a\nclosure, or one an *acquired* live chunk still holds (D5, D10) \u2014 an unacquired\nholder deletes instead of refusing (issue #364, D3).",
         "operationId": "withdraw_work_item_api_work_sources__source__items__ref__delete",
         "parameters": [
           {
