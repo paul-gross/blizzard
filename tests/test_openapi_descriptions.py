@@ -22,7 +22,7 @@ _SPECS = sorted((Path(__file__).resolve().parents[1] / "openapi").glob("*.openap
 _FORBIDDEN = {
     "client-surface claim": re.compile(r"\bboards?\b|\bthe UI\b|\bfrontend\b|\bdocks?\b|\bkiosk\b", re.IGNORECASE),
     "internal identifier": re.compile(
-        r":(?:class|mod|func|meth|attr):|(?:src|tests)/|\.py\b|::test_|``[A-Z]\w+\.\w+``|``\w+\.\w+\(\)``"
+        r":(?:class|mod|func|meth|attr|data):|(?:src|tests)/|\.py\b|::test_|``[A-Z]\w+\.\w+``|``\w+\.\w+\(\)``|\bbzh:\S+"
     ),
     "workspace path notation": re.compile(r"\b(?:blizzard-context|blizzard-mock|blizzard-product|winter-\w+):"),
 }

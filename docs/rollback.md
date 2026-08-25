@@ -70,3 +70,6 @@ for does not come back.
 
 It also leaves everything outside the store untouched — signing keys, hub workdirs — so a rollback is not a restore. If
 a bad release also corrupted state outside the store, restore from backup ([`docs/backup.md`](./backup.md)).
+
+A rollback past the `chunk_deleted` migration resurrects every chunk deleted after it into the claimable queue — its
+`hub:` items stay withdrawn, so a runner picking it back up runs against dead pointers.

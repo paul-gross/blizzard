@@ -50,6 +50,7 @@ from blizzard.hub.domain.apply import ApplyService
 from blizzard.hub.domain.claim import ClaimService
 from blizzard.hub.domain.complete import CompleteService
 from blizzard.hub.domain.decisions import DecisionService, RequeueService
+from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.edit import EditService
 from blizzard.hub.domain.enrollment import RunnerEnrollmentService
@@ -77,6 +78,7 @@ from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 
@@ -98,6 +100,9 @@ class HubServices:
     stop: StopService
     complete: CompleteService
     edit: EditService
+    #: The unacquired-chunk delete/withdraw service (issue #364) — the composite write
+    #: ``WorkItemEditService.withdraw`` also reaches through for an unacquired holder.
+    delete: DeleteService
     facts: FactIngestService
     #: The transcript lane's ingest policy (blizzard#247) — the write side; ``transcripts``
     #: above is the same store's read Protocol.
@@ -165,6 +170,9 @@ def build_services(
     *,
     events: EventBroker,
     work_sources: IWorkSourceRegistry,
+    claim_lock: threading.Lock,
+    work_item_store: WorkItemStore,
+    delete: DeleteService,
     clock: IClock | None = None,
     users: IWriteUserRepository | None = None,
     base_branch: str = "main",
@@ -183,10 +191,10 @@ def build_services(
     transcript_caps: TranscriptCaps | None = None,
 ) -> HubServices:
     """Construct and wire every fleet service over a migrated store engine.
-
-    ``hub_command_runner`` / ``hub_workdir`` are the hub command node's mechanism seams
-    (#65), left ``None`` for the real subprocess/filesystem adapters. An explicit
-    ``oauth_registry`` wins over ``oauth_providers`` when both are given."""
+    ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams
+    (#65), left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
+    ``oauth_providers``. ``claim_lock``/``work_item_store``/``delete`` are required, not
+    built here, so the built-in hub binding shares the same three (issue #364)."""
     clock = clock or SystemClock()
     chunk_store = ChunkStore(engine, clock)
     graph_store = GraphStore(engine)
@@ -243,9 +251,6 @@ def build_services(
     # directory is passed; `None` otherwise.
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     auth_throttle = IpThrottle(clock=clock)
-    # Shared between ClaimService and EditService (issue #120) — one in-process lock, so a
-    # claim and an edit racing the same chunk can't interleave (tests/test_edit_claim_race.py).
-    claim_lock = threading.Lock()
     return HubServices(
         chunks=chunk_store,
         graphs=graph_store,
@@ -263,6 +268,7 @@ def build_services(
         stop=StopService(chunks=chunk_store, clock=clock),
         complete=CompleteService(chunks=chunk_store, clock=clock),
         edit=EditService(chunks=chunk_store, graphs=graph_store, claim_lock=claim_lock),
+        delete=delete,
         facts=FactIngestService(chunks=chunk_store, fleet=fleet, clock=clock),
         transcript_ingest=TranscriptIngestService(store=transcript_store, clock=clock, caps=transcript_caps),
         graph_mint=GraphMintService(graphs=graph_store, clock=clock),

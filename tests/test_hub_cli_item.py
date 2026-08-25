@@ -264,3 +264,22 @@ def test_delete_surfaces_the_hubs_capability_refusal_verbatim(monkeypatch: pytes
 
     assert result.exit_code != 0
     assert "work source 'blizzard' has no editor" in result.output
+
+
+@pytest.mark.unit
+def test_delete_of_a_live_held_item_surfaces_the_held_chunk_detail_not_the_canned_no_editor_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A held-chunk 409 (issue #364) is a different refusal than the capability gate the
+    route's ``on_status`` canned message names — ``CliContext.detail()`` prefers the
+    server's own ``detail`` over that fallback, so the real reason surfaces."""
+
+    def fake_delete(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(409, {"detail": "hub:42 is held by live chunk ch_1"})
+
+    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    result = CliRunner().invoke(hub_group, ["item", "delete", "hub:42", "--yes"])
+
+    assert result.exit_code != 0
+    assert "hub:42 is held by live chunk ch_1" in result.output
+    assert "has no editor" not in result.output

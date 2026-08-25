@@ -10,10 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from blizzard.foundation.clock import IClock
+from blizzard.hub.domain.delete import ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.edit import UNSET, UnsetType
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.ingest import require_no_live_holder
+from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.work import (
+    ChunkFacts,
     IReadChunkRepository,
     IWriteWorkItemRepository,
     WorkItemAuthor,
@@ -55,6 +58,19 @@ class CreatedWorkItem:
     chunk_id: str
 
 
+@dataclass(frozen=True)
+class WithdrawnWorkItem:
+    """The result of withdrawing a hub-owned work item (issue #364) — the item itself,
+    plus the cascade-deleted holder chunk's id, its pre-delete status, and the fresh
+    ``chunk_deleted.id`` when withdrawal cascaded into deleting an unacquired holder;
+    all three ``None`` when it did not."""
+
+    item: WorkItemRecord
+    deleted_chunk_id: str | None = None
+    deleted_chunk_status: str | None = None
+    deleted_chunk_fact_id: int | None = None
+
+
 class WorkItemHeldByLiveChunk(Exception):
     """A withdrawal targeted a pointer a live (non-terminal) chunk still holds — mirrors
     ``IngestConflict`` (``hub/domain/ingest.py``): withdrawing under a running chunk would
@@ -71,10 +87,18 @@ class WorkItemEditService:
     work-source binding's editor/closer delegates to once it has resolved a pointer
     to a loaded record."""
 
-    def __init__(self, *, items: IWriteWorkItemRepository, chunks: IReadChunkRepository, clock: IClock) -> None:
+    def __init__(
+        self,
+        *,
+        items: IWriteWorkItemRepository,
+        chunks: IReadChunkRepository,
+        clock: IClock,
+        delete: DeleteService,
+    ) -> None:
         self._items = items
         self._chunks = chunks
         self._clock = clock
+        self._delete = delete
 
     def create(
         self,
@@ -128,15 +152,31 @@ class WorkItemEditService:
             raise WorkItemNotEditable(current.work_item_id, current.closure)
         return updated
 
-    def withdraw(self, item: WorkItemRecord) -> WorkItemRecord:
-        """Close ``item`` as withdrawn; raises :class:`WorkItemNotEditable` when it
-        already carries a closure, :class:`WorkItemHeldByLiveChunk` while a live chunk
-        still holds it."""
+    def withdraw(self, item: WorkItemRecord, *, by: str) -> WithdrawnWorkItem:
+        """Close ``item`` as withdrawn; raises :class:`WorkItemNotEditable` when already
+        closed. An unacquired holder is deleted via
+        :class:`~blizzard.hub.domain.delete.DeleteService` instead of refusing (issue
+        #364); :class:`WorkItemHeldByLiveChunk` still raises for a runner- or human-held
+        one. Names the cascade-deleted chunk, if any, for the caller's own delete frame."""
         self._require_open(item)
         holder = self._chunks.find_live_holder(item.pointer)
-        if holder is not None:
-            raise WorkItemHeldByLiveChunk(item.pointer, holder)
-        return self._items.close(item.source, item.ref, closure=WorkItemClosure.WITHDRAWN, at=self._clock.now())
+        if holder is None:
+            closed = self._items.close(item.source, item.ref, closure=WorkItemClosure.WITHDRAWN, at=self._clock.now())
+            return WithdrawnWorkItem(item=closed)
+        chunk = self._chunks.get(holder)
+        if chunk is None:
+            raise ChunkNotFound(holder)
+        facts = self._chunks.load_facts(holder)
+        prev_status = (facts if facts is not None else ChunkFacts(minted=True)).status().value
+        try:
+            deleted_id = self._delete.delete(chunk, by=by)
+        except ChunkNotDeletable as exc:
+            raise WorkItemHeldByLiveChunk(item.pointer, holder) from exc
+        updated = self._items.get(item.source, item.ref)
+        assert updated is not None
+        return WithdrawnWorkItem(
+            item=updated, deleted_chunk_id=holder, deleted_chunk_status=prev_status, deleted_chunk_fact_id=deleted_id
+        )
 
     def deliver(self, item: WorkItemRecord) -> WorkItemRecord:
         """Close ``item`` as delivered (issue #360) — the delivery-closure sweep's own

@@ -3,7 +3,14 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import type { ChunkStatus } from '../api/hub';
 import { STATUS_LANE } from '../chunk-lanes';
 import { formatCost } from '../cost-format';
+import { KitButton } from '../kit/kit-button';
 import { FleetWhen } from '../when-display';
+
+/** Statuses with no acquiring runner — the only ones Delete reaches (D8, issue #364):
+ * a `not_ready`/`ready` chunk has no live route to release, unlike every status
+ * Detach guards. Mirrors {@link ChunkDetailHeader}'s `NOT_PAUSABLE`/`NOT_COMPLETABLE`
+ * shape — a status set owned right beside the control it gates. */
+const UNACQUIRED_STATUSES = new Set<ChunkStatus>(['not_ready', 'ready']);
 
 /** One rendered board card — the derived-status view of a chunk. */
 export interface BoardCard {
@@ -45,10 +52,12 @@ export interface BoardCard {
  * card rather than inside it, so this stays the one card the whole board is
  * built from.
  *
- * Presentational only: {@link card} and {@link selected} are plain inputs, and
- * both outputs forward the chunk id verbatim to whatever container composes
- * this — no query or mutation injected here
- * (`bzh:frontend-container-presentational`).
+ * Presentational only: {@link card} and {@link selected} are plain inputs; every
+ * output forwards the chunk id to whatever container composes this — no query or
+ * mutation injected here (`bzh:frontend-container-presentational`). {@link delete}
+ * alone is gated by a `globalThis.confirm()` guard first ({@link onDelete}, D8,
+ * issue #364), the same idiom `ChunkDetailHeader`'s route-releasing/terminal verbs
+ * use — not a bespoke dialog, so the board keeps one confirmation idiom.
  *
  * Named `BoardCardComponent` rather than this directory's usual bare-name
  * convention (`BoardShell`, `BoardHeader`, …): {@link BoardCard} — the
@@ -59,7 +68,7 @@ export interface BoardCard {
 @Component({
   selector: 'fleet-board-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen],
+  imports: [FleetWhen, KitButton],
   templateUrl: './board-card.html',
   styleUrl: './board-card.css',
 })
@@ -84,6 +93,10 @@ export class BoardCardComponent {
   /** Emitted with the chunk id when a not-ready card's Promote is clicked. */
   readonly promote = output<string>();
 
+  /** Emitted with the chunk id when an unacquired card's Delete is confirmed
+   * (D8, issue #364). */
+  readonly delete = output<string>();
+
   /** Whether `status` belongs to the DONE column — the completion stamp's render
    * gate. Checked against the lane rather than {@link BoardCard.completedAt}'s own
    * null-ness alone, so a card outside the done lane never renders a stamp even if
@@ -99,5 +112,21 @@ export class BoardCardComponent {
    * so it's replaced rather than shown alongside. */
   protected nodeLabel(card: BoardCard): string {
     return card.status === 'stopped' ? 'stopped' : card.node;
+  }
+
+  /** Whether `status` is unacquired ({@link UNACQUIRED_STATUSES}) — Delete's own
+   * render gate (D8, issue #364). */
+  protected isUnacquired(status: ChunkStatus): boolean {
+    return UNACQUIRED_STATUSES.has(status);
+  }
+
+  /** Confirm, then emit `delete` for the container's mutation to fire (D8, issue
+   * #364). Withdraws the chunk's hub item(s); there is no undo. */
+  protected onDelete(card: BoardCard): void {
+    const confirmed = globalThis.confirm(
+      `Delete chunk ${card.chunkId}? This withdraws its hub item(s); there is no undo.`,
+    );
+    if (!confirmed) return;
+    this.delete.emit(card.chunkId);
   }
 }

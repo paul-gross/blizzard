@@ -633,6 +633,27 @@ def chunk_group_cmd(cli: CliContext, chunk_id: str, merge_ids: tuple[str, ...]) 
     cli.show_lines(body, f"grouped into {body['chunk_id']} (merged: {merged})")
 
 
+@chunk_group.command("delete", cls=FleetCommand)
+@click.argument("chunk_id")
+@click.option("--by", "by", default="operator", help="Who is deleting (recorded on the fact).")
+@click.option("--yes", is_flag=True, default=False, help="Skip the confirmation prompt.")
+def chunk_delete(cli: CliContext, chunk_id: str, by: str, yes: bool) -> None:
+    """Delete unacquired CHUNK, withdrawing every open hub item it holds (issue #364).
+
+    A pure client of ``DELETE /api/chunks/{id}``. Irreversible, so confirms first unless
+    ``--yes``. 409 when a runner or a human holds CHUNK, or it is terminal — deletion
+    needs CHUNK at the same statuses ``group`` does; 404 only when CHUNK is unknown."""
+    if not yes and not click.confirm(f"delete {chunk_id}? this withdraws its hub item(s) too"):
+        raise click.Abort()
+    resp = cli.delete(
+        f"/api/chunks/{chunk_id}",
+        "DELETE /chunks/{id}",
+        json_body={"by": by},
+        on_status={409: "chunk is not deletable", 404: f"no such chunk {chunk_id}"},
+    )
+    cli.finish(resp, f"deleted {chunk_id} — its hub item(s), if any, withdrawn")
+
+
 @dataclass(frozen=True)
 class WorkItems:
     """One chunk's work items, read and rendered — the body ``work-items`` and its deprecated

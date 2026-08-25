@@ -90,15 +90,14 @@ def test_create_get_list_patch_and_withdraw_round_trip(tmp_path: Path) -> None:
     assert patched.json()["title"] == "widget is fixed"
     assert patched.json()["body"] == "steps to repro"  # untouched field is preserved
 
-    # The minted chunk still lives — withdrawal refuses until it is stopped (blizzard#359).
-    assert hub.client.delete(f"/api/work-sources/hub/items/{ref}").status_code == 409
-    assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={}).status_code == 202
-
+    # The minted chunk is still not_ready — unacquired, not genuinely live — so
+    # withdrawal deletes it rather than refusing (issue #364, D3).
     withdrawn = hub.client.delete(f"/api/work-sources/hub/items/{ref}")
     assert withdrawn.status_code == 200, withdrawn.text
     assert withdrawn.json()["closure"] == "withdrawn"
     assert withdrawn.json()["closed_at"] is not None
-    assert withdrawn.json()["web_url"] is None  # the chunk reached a terminal status (stopped)
+    assert withdrawn.json()["web_url"] is None  # its holding chunk is gone
+    assert hub.client.get(f"/api/chunks/{chunk_id}").status_code == 404
 
 
 # --------------------------------------------------------------------------- #
@@ -284,18 +283,51 @@ def test_the_listing_route_threads_its_limit_and_refuses_one_out_of_range(tmp_pa
     assert hub.client.get("/api/work-sources/hub/items", params={"limit": 1001}).status_code == 422
 
 
-def test_delete_is_409_while_a_live_chunk_holds_the_item_and_200_once_it_is_stopped(tmp_path: Path) -> None:
-    """Its own post-stop complement, not 409 alone — an unconditional-409 `DELETE`
-    would also satisfy that. Creation itself mints the live holder (blizzard#359)."""
+def test_delete_deletes_an_unacquired_holder_and_returns_200(tmp_path: Path) -> None:
+    """D3 (issue #364): the freshly-minted holder is not_ready — unacquired, not
+    genuinely live — so DELETE succeeds immediately, publishing the same
+    chunk-changed/queue-changed pair a direct chunk delete does (blizzard#359)."""
     hub = build_hub(tmp_path)
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
     ref, chunk_id = created["ref"], created["chunk_id"]
+    since = hub.events.latest_id()
+
+    assert hub.client.delete(f"/api/work-sources/hub/items/{ref}").status_code == 200
+    assert hub.client.get(f"/api/chunks/{chunk_id}").status_code == 404
+
+    events = emitted_events(hub, since=since)
+    types = [e["event"] for e in events]
+    assert CHUNK_CHANGED in types
+    assert QUEUE_CHANGED in types
+    frames = [json.loads(e["data"]) for e in events if e["event"] == CHUNK_CHANGED]
+    assert len(frames) == 1
+    frame = frames[0]
+    assert frame["chunk_id"] == chunk_id
+    assert frame["cause"] == "deleted"
+    assert frame["status"] == "not_ready"
+    assert frame["by"] == "operator"  # AUTH_MODE_NONE's implicit identity (issue #364)
+    assert frame["key"].startswith("chunk_deleted:")
+
+
+def test_delete_is_409_while_an_acquired_chunk_holds_the_item_and_200_once_it_is_stopped(tmp_path: Path) -> None:
+    """A claimed (running) holder is genuinely acquired — outside
+    ``GROUPABLE_STATUSES`` — so DELETE still refuses it, exactly as before (D3). A
+    terminal holder's own withdrawal is unaffected either way, deleting nothing."""
+    hub = build_hub(tmp_path)
+    created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
+    ref, chunk_id = created["ref"], created["chunk_id"]
+    claimed = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    )
+    assert claimed.status_code == 201, claimed.text
 
     assert hub.client.delete(f"/api/work-sources/hub/items/{ref}").status_code == 409
 
     assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={}).status_code == 202
 
     assert hub.client.delete(f"/api/work-sources/hub/items/{ref}").status_code == 200
+    assert hub.client.get(f"/api/chunks/{chunk_id}").status_code == 200  # a terminal holder survives (D3)
 
 
 # --------------------------------------------------------------------------- #

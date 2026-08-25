@@ -136,9 +136,9 @@ def replace_queue(
 ) -> QueuePeekResponse:
     """Idempotent whole-order replacement of the ready queue.
 
-    Resolves every named id against the current ready set (``bzh:domain-takes-objects``):
-    ``409`` names the first id that is not ready, ``422`` a duplicate id. An unnamed
-    ready chunk keeps its relative order, appended after the named ones."""
+    Resolves every named id against the current ready set: ``409`` names the first id
+    that is not ready, ``422`` a duplicate id. An unnamed ready chunk keeps its relative
+    order, appended after the named ones."""
     _replace(QueueList.READY, request.chunk_ids, services)
     return ReadyQueue.of(services).view
 
@@ -149,9 +149,9 @@ def reposition_queue(
 ) -> QueuePeekResponse:
     """Single-chunk fractional reorder (issue #137).
 
-    Resolves both ids against the current ready set (``bzh:domain-takes-objects``):
-    ``409`` names either one if it is not ready, ``422`` rejects a self-anchor.
-    ``after_chunk_id=null`` moves the chunk to the top of the queue."""
+    Resolves both ids against the current ready set: ``409`` names either one if it is
+    not ready, ``422`` rejects a self-anchor. ``after_chunk_id=null`` moves the chunk to
+    the top of the queue."""
     _reposition(QueueList.READY, request.chunk_id, request.after_chunk_id, services)
     return ReadyQueue.of(services).view
 
@@ -208,9 +208,9 @@ def reposition_backlog(
 ) -> BacklogPeekResponse:
     """Single-chunk fractional reorder within the backlog.
 
-    Resolves both ids against the current ``not_ready`` set (``bzh:domain-takes-objects``):
-    ``409`` names either one if it is not ``not_ready``, ``422`` rejects a self-anchor.
-    ``after_chunk_id=null`` moves the chunk to the top of the backlog."""
+    Resolves both ids against the current ``not_ready`` set: ``409`` names either one if
+    it is not ``not_ready``, ``422`` rejects a self-anchor. ``after_chunk_id=null`` moves
+    the chunk to the top of the backlog."""
     _reposition(QueueList.NOT_READY, request.chunk_id, request.after_chunk_id, services)
     return Backlog.of(services).view
 

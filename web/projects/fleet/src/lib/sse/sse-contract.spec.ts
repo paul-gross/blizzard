@@ -138,7 +138,16 @@ interface HubFrameFieldSpecs {
 const HUB_FRAME_FIELD_SPECS: HubFrameFieldSpecs = {
   'chunk-changed': {
     required: { chunk_id: true, status: true },
-    optional: { prev_status: true, prev_node: true, node: true, runner_id: true, cause: true, graph_id: true, key: true },
+    optional: {
+      prev_status: true,
+      prev_node: true,
+      node: true,
+      runner_id: true,
+      cause: true,
+      graph_id: true,
+      by: true,
+      key: true,
+    },
   },
   'question-asked': {
     required: { chunk_id: true, question_id: true },

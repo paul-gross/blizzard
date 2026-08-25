@@ -54,6 +54,7 @@
           [canControl]="canControl()"
           (selectChunk)="selectChunk.emit($event)"
           (promote)="promote.emit($event)"
+          (delete)="delete.emit($event)"
         />
       </div>
     }
@@ -67,6 +68,7 @@
         [canControl]="canControl()"
         (selectChunk)="selectChunk.emit($event)"
         (promote)="promote.emit($event)"
+        (delete)="delete.emit($event)"
       />
     }
   </div>

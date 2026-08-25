@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { vi } from 'vitest';
 
 import type { BoardCard } from './board-card';
 import { BoardCardComponent } from './board-card';
@@ -112,5 +113,101 @@ describe('BoardCardComponent work-ref chips (issue #176)', () => {
     const el = await render({ ...BASE, pointerLabels: [] });
 
     expect(el.querySelectorAll('[data-testid="work-ref-chip"]')).toHaveLength(0);
+  });
+});
+
+describe('BoardCardComponent Delete (D8, issue #364)', () => {
+  /** Render with an explicit `canControl`, returning the fixture itself (not just its
+   * element) — the confirm-gating cases below need {@link BoardCardComponent.delete}'s
+   * subscription, which the module-level `render` above does not expose. */
+  async function renderWithControl(card: BoardCard, canControl: boolean | null) {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [BoardCardComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(BoardCardComponent);
+    fixture.componentRef.setInput('card', card);
+    // `null`/pending resolves to `false` (hidden until confirmed) — the same convention
+    // every other board control follows; a `null` input here stands in for "pending".
+    if (canControl !== null) fixture.componentRef.setInput('canControl', canControl);
+    await fixture.whenStable();
+    return fixture;
+  }
+
+  it('renders Delete for an unacquired card (not_ready, ready) with chunk:control', async () => {
+    for (const status of ['not_ready', 'ready'] as const) {
+      const fixture = await renderWithControl({ ...BASE, status }, true);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="delete-chunk"]'), status).not.toBeNull();
+    }
+  });
+
+  it('renders no Delete for an acquired or terminal status, even with chunk:control', async () => {
+    for (const status of [
+      'running',
+      'delivering',
+      'waiting_on_human',
+      'needs_human',
+      'paused',
+      'stopped',
+      'done',
+    ] as const) {
+      const fixture = await renderWithControl({ ...BASE, status }, true);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="delete-chunk"]'), status).toBeNull();
+    }
+  });
+
+  it('withholds Delete without chunk:control on an otherwise-eligible card', async () => {
+    const fixture = await renderWithControl({ ...BASE, status: 'not_ready' }, false);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="delete-chunk"]')).toBeNull();
+  });
+
+  it('withholds Delete while chunk:control is still pending (null resolves to false)', async () => {
+    const fixture = await renderWithControl({ ...BASE, status: 'ready' }, null);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="delete-chunk"]')).toBeNull();
+  });
+
+  it('emits nothing when the operator declines the delete confirm', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    const fixture = await renderWithControl({ ...BASE, status: 'not_ready' }, true);
+    let emitted = false;
+    fixture.componentInstance.delete.subscribe(() => (emitted = true));
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(emitted).toBe(false);
+    confirmSpy.mockRestore();
+  });
+
+  it('emits delete with the card chunk id once the operator confirms', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = await renderWithControl({ ...BASE, status: 'ready' }, true);
+    let emitted: string | undefined;
+    fixture.componentInstance.delete.subscribe((chunkId) => (emitted = chunkId));
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="delete-chunk"]')?.click();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(emitted).toBe(BASE.chunkId);
+    confirmSpy.mockRestore();
+  });
+
+  it('renders Promote and Delete side by side on a not_ready card, both controls reachable', async () => {
+    const fixture = await renderWithControl({ ...BASE, status: 'not_ready' }, true);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="promote-chunk"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="delete-chunk"]')).not.toBeNull();
   });
 });

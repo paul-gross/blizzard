@@ -90,8 +90,8 @@ class WorkItemAuthor:
 
 
 class WorkItemClosure(StrEnum):
-    """How a hub-owned work item closed (issue #357) — recorded on the row itself
-    (``bzh:facts-not-status``, Recorded position), never derived."""
+    """How a hub-owned work item closed (issue #357) — recorded on the row itself when
+    it closes, never derived from anything else."""
 
     DELIVERED = "delivered"
     WITHDRAWN = "withdrawn"
@@ -1817,4 +1817,12 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
 
     def close(self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> WorkItemRecord:
         """Record ``closed_at``/``closure`` on an open item, once."""
+        ...
+
+    def delete_chunk_and_withdraw_hub_items(self, chunk: Chunk, *, by: str, at: datetime) -> int:
+        """Delete ``chunk`` — the ``chunk_deleted`` fact that makes it ephemeral — and
+        withdraw every open ``hub:``-source item it holds, atomically in one transaction
+        (issue #364, :class:`~blizzard.hub.domain.delete.DeleteService`). A ``forge:``
+        pointer on the same chunk is left untouched. Returns the freshly-written
+        ``chunk_deleted.id``."""
         ...

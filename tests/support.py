@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import tempfile
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
@@ -47,6 +48,7 @@ from blizzard.hub.config import (
 )
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
+from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.graph import Edge, Graph, Node
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.domain.work import (
@@ -59,6 +61,8 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
+from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor
@@ -532,13 +536,32 @@ def build_hub(
     # The built-in `hub` source is seated as a closer unconditionally (issue #360),
     # mirroring `WorkSourceEntry.registry`'s production wiring.
     closers: dict[str, IWorkCloser] = {}
-    seat_hub_work_source(built_sources, editors, closers, engine=engine, clock=clock, users=user_store)
+    # Constructed once here, ahead of both the work-source registry and `build_services`
+    # below — mirrors `build_hosted_app`'s own wiring (issue #364).
+    claim_lock = threading.Lock()
+    work_item_store = WorkItemStore(engine)
+    delete_service = DeleteService(
+        chunks=ChunkStore(engine, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
+    )
+    seat_hub_work_source(
+        built_sources,
+        editors,
+        closers,
+        engine=engine,
+        clock=clock,
+        users=user_store,
+        items=work_item_store,
+        delete=delete_service,
+    )
     work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)
     events = EventBroker()
     services = build_services(
         engine,
         events=events,
         work_sources=work_source_registry,
+        claim_lock=claim_lock,
+        work_item_store=work_item_store,
+        delete=delete_service,
         clock=clock,
         users=user_store,
         base_branch=base_branch,

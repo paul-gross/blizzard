@@ -328,7 +328,7 @@
         "type": "object"
       },
       "AnalyticsEventView": {
-        "description": "One derived event, wire-shaped (blizzard#255) \u2014 ``payload`` is parsed from its\nstored JSON-text form (``bzh:sql-portable`` binds the store, not the wire) into a\nplain object, so a consumer never double-decodes a JSON string within JSON.",
+        "description": "One derived event, wire-shaped (blizzard#255) \u2014 ``payload`` is parsed from its\nstored JSON-text form into a plain object, so a consumer never double-decodes a JSON\nstring within JSON.",
         "properties": {
           "agent_type": {
             "anyOf": [
@@ -921,6 +921,32 @@
           }
         },
         "title": "ChunkCompleteRequest",
+        "type": "object"
+      },
+      "ChunkDeleteRequest": {
+        "description": "Delete a chunk \u2014 records who deleted it (issue #364).",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          }
+        },
+        "title": "ChunkDeleteRequest",
+        "type": "object"
+      },
+      "ChunkDeleteResponse": {
+        "description": "The result of one ``DELETE /chunks/{id}`` (issue #364) \u2014 the deleted chunk's own\nid, echoed back. Nothing richer: the chunk is gone from every read the instant this\nreturns, with no fresh status left to derive a summary from.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id"
+        ],
+        "title": "ChunkDeleteResponse",
         "type": "object"
       },
       "ChunkDetail": {
@@ -3130,7 +3156,7 @@
         "type": "string"
       },
       "MigrationView": {
-        "description": "One cross-graph migration step (issue #90): the chunk was re-pinned from ``from_graph`` onto\n``landed_node`` in ``to_graph`` \u2014 its own step, never a transition (``bzh:migration-not-transition``).\nA transition-borne source ends the attempt and re-queues; ``restart`` preempts it and keeps the route\n(#371). ``model`` is the re-pinned model, null when the chunk kept its own. ``source`` attributes it.",
+        "description": "One cross-graph migration step (issue #90): the chunk was re-pinned from ``from_graph`` onto\n``landed_node`` in ``to_graph`` \u2014 its own step, never a transition. A transition-borne source ends\nthe attempt and re-queues; ``restart`` preempts it and keeps the route (#371). ``model`` is the\nre-pinned model, null when the chunk kept its own. ``source`` attributes it.",
         "properties": {
           "choice_name": {
             "anyOf": [
@@ -5524,7 +5550,7 @@
         "type": "object"
       },
       "WorkItemClosure": {
-        "description": "How a hub-owned work item closed (issue #357) \u2014 recorded on the row itself\n(``bzh:facts-not-status``, Recorded position), never derived.",
+        "description": "How a hub-owned work item closed (issue #357) \u2014 recorded on the row itself when\nit closes, never derived from anything else.",
         "enum": [
           "delivered",
           "withdrawn"
@@ -8414,7 +8440,7 @@
     },
     "/api/backlog/position": {
       "post": {
-        "description": "Single-chunk fractional reorder within the backlog.\n\nResolves both ids against the current ``not_ready`` set (``bzh:domain-takes-objects``):\n``409`` names either one if it is not ``not_ready``, ``422`` rejects a self-anchor.\n``after_chunk_id=null`` moves the chunk to the top of the backlog.",
+        "description": "Single-chunk fractional reorder within the backlog.\n\nResolves both ids against the current ``not_ready`` set: ``409`` names either one if\nit is not ``not_ready``, ``422`` rejects a self-anchor. ``after_chunk_id=null`` moves\nthe chunk to the top of the backlog.",
         "operationId": "reposition_backlog_api_backlog_position_post",
         "requestBody": {
           "content": {
@@ -8521,6 +8547,57 @@
       }
     },
     "/api/chunks/{chunk_id}": {
+      "delete": {
+        "description": "Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds\nin the same write (issue #364). 404 for an unknown chunk, or one a race deletes\nbetween resolving it and this write; 409 for one a runner or a human holds, or one\nterminal \u2014 deletion needs a chunk at the same statuses grouping does. Irreversible:\nCHUNK is gone from every read the instant this returns.",
+        "operationId": "delete_chunk_api_chunks__chunk_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkDeleteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Chunk",
+        "tags": [
+          "chunks"
+        ]
+      },
       "get": {
         "description": "One chunk aggregate in full \u2014 derived status, current node, route.",
         "operationId": "get_chunk_api_chunks__chunk_id__get",
@@ -10942,7 +11019,7 @@
         ]
       },
       "put": {
-        "description": "Idempotent whole-order replacement of the ready queue.\n\nResolves every named id against the current ready set (``bzh:domain-takes-objects``):\n``409`` names the first id that is not ready, ``422`` a duplicate id. An unnamed\nready chunk keeps its relative order, appended after the named ones.",
+        "description": "Idempotent whole-order replacement of the ready queue.\n\nResolves every named id against the current ready set: ``409`` names the first id\nthat is not ready, ``422`` a duplicate id. An unnamed ready chunk keeps its relative\norder, appended after the named ones.",
         "operationId": "replace_queue_api_queue_put",
         "requestBody": {
           "content": {
@@ -10984,7 +11061,7 @@
     },
     "/api/queue/position": {
       "post": {
-        "description": "Single-chunk fractional reorder (issue #137).\n\nResolves both ids against the current ready set (``bzh:domain-takes-objects``):\n``409`` names either one if it is not ready, ``422`` rejects a self-anchor.\n``after_chunk_id=null`` moves the chunk to the top of the queue.",
+        "description": "Single-chunk fractional reorder (issue #137).\n\nResolves both ids against the current ready set: ``409`` names either one if it is\nnot ready, ``422`` rejects a self-anchor. ``after_chunk_id=null`` moves the chunk to\nthe top of the queue.",
         "operationId": "reposition_queue_api_queue_position_post",
         "requestBody": {
           "content": {
@@ -11527,7 +11604,7 @@
     },
     "/api/work-sources/{source}/items/{ref}": {
       "delete": {
-        "description": "Withdraw the item at SOURCE/REF. 404 for an unknown source or an unallocated ref\n(D9); 409 for a known source with no editor (D4), an item that already carries a\nclosure, or one a live chunk still holds (D5, D10).",
+        "description": "Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref\n(D9), or a chunk a race deletes between resolving it and this write; 409 for a known\nsource with no editor (D4), an item that already carries a closure, or one an\n*acquired* live chunk still holds (D5, D10) \u2014 an unacquired holder deletes instead,\npublishing the same ``chunk-changed``/``queue-changed`` pair a direct delete does.",
         "operationId": "withdraw_work_item_api_work_sources__source__items__ref__delete",
         "parameters": [
           {

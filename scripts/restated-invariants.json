@@ -212,6 +212,27 @@
     "signals a whole daemon process or process group"
    ],
    "sites": []
+  },
+  {
+   "id": "chunk-delete-hub-item-pairing",
+   "statement": "A hub item and its chunk live and die together: deleting a chunk withdraws every open hub:-source pointer it holds (a forge:-source pointer on the same chunk survives untouched), and withdrawing a hub item deletes its unacquired holder chunk in the same stroke rather than refusing the withdrawal — a genuinely acquired, still-live holder still refuses it, and a terminal holder's withdrawal is unaffected either way.",
+   "owner": "blizzard-context:/domain/work/chunk.md#deletion",
+   "owner_kind": "domain",
+   "owner_assert": {
+    "quote": "hub item and its chunk live and die together"
+   },
+   "markers": [
+    "any source pointer on the same chunk survives untouched",
+    "deletes its unacquired holder chunk in the same stroke"
+   ],
+   "sites": [
+    {
+     "file": "docs/deployment/control-verbs.md",
+     "symbol": "delete",
+     "role": "allowed",
+     "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment/ survivors: an operator deleting a chunk reads this section from outside the workspace and cannot resolve a source path, so the delete/withdraw pairing is restated plainly here rather than left as a bare pointer."
+    }
+   ]
   }
  ]
 }

@@ -141,10 +141,10 @@ class FactListResponse(BaseModel):
 
 
 class DashboardView(BaseModel):
-    """``GET /api/dashboard`` — the panel's seven status reads composed into one response
-    (``bzh:controller-read-only``). ``fleet_summary`` alone is a hub pass-through and
-    the only nullable section — ``None`` on a hub failure or an unwired runner, while
-    the six local sections still populate."""
+    """``GET /api/dashboard`` — the panel's seven status reads composed into one
+    response. ``fleet_summary`` alone is a hub pass-through and the only nullable
+    section — ``None`` on a hub failure or an unwired runner, while the six local
+    sections still populate."""
 
     runner: RunnerStatusView
     environments: EnvironmentListResponse

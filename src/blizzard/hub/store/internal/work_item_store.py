@@ -12,6 +12,7 @@ from sqlalchemy import Connection, Engine, desc, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.ids import WORK_ITEM_PREFIX, Id
+from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.work import (
     Chunk,
     IWriteWorkItemRepository,
@@ -22,7 +23,7 @@ from blizzard.hub.domain.work import (
     WorkRef,
 )
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_store import insert_chunk_rows
+from blizzard.hub.store.internal.chunk_store import insert_chunk_rows, record_deleted_row
 
 
 class WorkItemStore:
@@ -146,15 +147,37 @@ class WorkItemStore:
 
     def close(self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> WorkItemRecord:
         with self._engine.begin() as conn:
-            conn.execute(
-                update(s.work_items)
-                .where(s.work_items.c.source == source, s.work_items.c.ref == ref, s.work_items.c.closed_at.is_(None))
-                .values(closed_at=at, closure=closure.value)
-            )
+            self._close_conn(conn, source, ref, closure=closure, at=at)
             row = conn.execute(
                 select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
             ).one()
         return self._record(row)
+
+    def delete_chunk_and_withdraw_hub_items(self, chunk: Chunk, *, by: str, at: datetime) -> int:
+        """Insert ``chunk``'s ``chunk_deleted`` row and close every open ``hub:``-source
+        item it holds as withdrawn, on one ``engine.begin()`` connection (issue #364)
+        — mirrors :meth:`create_with_chunk`'s own atomicity shape. A ``forge:``-sourced
+        pointer on the same chunk is left untouched. Returns the freshly-written
+        ``chunk_deleted.id``."""
+        with self._engine.begin() as conn:
+            deleted_id = record_deleted_row(conn, chunk.chunk_id, by=by, at=at)
+            for pointer in chunk.work_refs:
+                if pointer.source == RESERVED_HUB_SOURCE_NAME:
+                    self._close_conn(conn, pointer.source, pointer.ref, closure=WorkItemClosure.WITHDRAWN, at=at)
+        return deleted_id
+
+    @staticmethod
+    def _close_conn(conn: Connection, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> None:
+        """Close an open item on a caller-supplied ``conn`` — extracted from :meth:`close`
+        so :meth:`delete_chunk_and_withdraw_hub_items` can fold the same write into its
+        own transaction (issue #364). No rowcount check: closing an item already closed,
+        or one that never existed, is a silent no-op here, exactly as :meth:`close` was
+        before this extraction."""
+        conn.execute(
+            update(s.work_items)
+            .where(s.work_items.c.source == source, s.work_items.c.ref == ref, s.work_items.c.closed_at.is_(None))
+            .values(closed_at=at, closure=closure.value)
+        )
 
     def allocate_ref(self, source: str) -> str:
         """The next ``ref`` for ``source``, from its ``work_item_sequence`` counter row.

@@ -9,6 +9,8 @@ export { injectCompleteChunkMutation } from './complete.mutations';
 export type { CompleteVars } from './complete.mutations';
 export { injectPromoteChunkMutation } from './promote.mutations';
 export type { PromoteVars } from './promote.mutations';
+export { injectDeleteChunkMutation } from './delete.mutations';
+export type { DeleteVars } from './delete.mutations';
 export { injectChunkPauseMutation } from './pause.mutations';
 export type { ChunkPauseVars } from './pause.mutations';
 export { injectSetChunkGraphMutation } from './edit.mutations';

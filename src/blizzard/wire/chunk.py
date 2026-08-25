@@ -48,6 +48,20 @@ class ChunkIngestResponse(BaseModel):
     chunk_id: str
 
 
+class ChunkDeleteRequest(BaseModel):
+    """Delete a chunk — records who deleted it (issue #364)."""
+
+    by: str = "operator"
+
+
+class ChunkDeleteResponse(BaseModel):
+    """The result of one ``DELETE /chunks/{id}`` (issue #364) — the deleted chunk's own
+    id, echoed back. Nothing richer: the chunk is gone from every read the instant this
+    returns, with no fresh status left to derive a summary from."""
+
+    chunk_id: str
+
+
 class ChunkIngestConflict(BaseModel):
     """The 409 body: the pointer is already held by a live chunk."""
 
@@ -162,9 +176,9 @@ class TransitionView(BaseModel):
 
 class MigrationView(BaseModel):
     """One cross-graph migration step (issue #90): the chunk was re-pinned from ``from_graph`` onto
-    ``landed_node`` in ``to_graph`` — its own step, never a transition (``bzh:migration-not-transition``).
-    A transition-borne source ends the attempt and re-queues; ``restart`` preempts it and keeps the route
-    (#371). ``model`` is the re-pinned model, null when the chunk kept its own. ``source`` attributes it."""
+    ``landed_node`` in ``to_graph`` — its own step, never a transition. A transition-borne source ends
+    the attempt and re-queues; ``restart`` preempts it and keeps the route (#371). ``model`` is the
+    re-pinned model, null when the chunk kept its own. ``source`` attributes it."""
 
     from_node_id: str | None
     from_node_name: str | None = None

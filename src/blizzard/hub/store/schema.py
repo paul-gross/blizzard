@@ -444,6 +444,17 @@ chunk_completed = Table(
     Column("completed_by", String, nullable=False),
 )
 
+# The fact that makes an unacquired chunk ephemeral by deletion (issue #364) — a
+# ``chunk_grouped``-shaped sibling; ``deleted_by`` is non-null, with no legacy row predating it.
+chunk_deleted = Table(
+    "chunk_deleted",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("deleted_at", UtcDateTime, nullable=False),
+    Column("deleted_by", String, nullable=False),
+)
+
 escalations = Table(
     "escalations",
     metadata,

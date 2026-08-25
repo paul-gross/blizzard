@@ -77,6 +77,10 @@ export class BoardShell {
   /** Emitted with a chunk id when a backlog card's Promote is clicked. */
   readonly promote = output<string>();
 
+  /** Emitted with a chunk id when an unacquired card's Delete is confirmed
+   * (D8, issue #364) — forwarded as-is from {@link BoardColumn}. */
+  readonly delete = output<string>();
+
   /** Emitted when a READY or BACKLOG card is dragged somewhere new — the chunk,
    * the anchor it now sits after (`null` = the very top of that list), and which
    * list it belongs to (forwarded as-is from {@link BoardColumn}). */

@@ -50,15 +50,30 @@
       </span>
     </span>
   </button>
-  @if (card().status === 'not_ready' && canControl()) {
-    <button
-      type="button"
-      class="card-promote"
-      data-testid="promote-chunk"
-      [attr.aria-label]="'Promote chunk ' + card().shortId + ' to ready'"
-      (click)="promote.emit(card().chunkId)"
-    >
-      PROMOTE
-    </button>
-  }
+  <!-- The card's control row: Promote (not_ready only) and Delete (not_ready and
+       ready alike, D8) render side by side when both apply, rather than each
+       claiming its own stacked row. -->
+  <div class="card-controls">
+    @if (card().status === 'not_ready' && canControl()) {
+      <button
+        type="button"
+        class="card-promote"
+        data-testid="promote-chunk"
+        [attr.aria-label]="'Promote chunk ' + card().shortId + ' to ready'"
+        (click)="promote.emit(card().chunkId)"
+      >
+        PROMOTE
+      </button>
+    }
+    @if (isUnacquired(card().status) && canControl()) {
+      <fleet-kit-button
+        variant="danger"
+        testid="delete-chunk"
+        [ariaLabel]="'Delete chunk ' + card().shortId"
+        (click)="onDelete(card())"
+      >
+        DELETE
+      </fleet-kit-button>
+    }
+  </div>
 </div>

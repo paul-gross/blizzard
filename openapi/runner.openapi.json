@@ -823,7 +823,7 @@
         "type": "object"
       },
       "DashboardView": {
-        "description": "``GET /api/dashboard`` \u2014 the panel's seven status reads composed into one response\n(``bzh:controller-read-only``). ``fleet_summary`` alone is a hub pass-through and\nthe only nullable section \u2014 ``None`` on a hub failure or an unwired runner, while\nthe six local sections still populate.",
+        "description": "``GET /api/dashboard`` \u2014 the panel's seven status reads composed into one\nresponse. ``fleet_summary`` alone is a hub pass-through and the only nullable\nsection \u2014 ``None`` on a hub failure or an unwired runner, while the six local\nsections still populate.",
         "properties": {
           "asks": {
             "$ref": "#/components/schemas/AskListResponse"
@@ -1665,7 +1665,7 @@
         "type": "string"
       },
       "MigrationView": {
-        "description": "One cross-graph migration step (issue #90): the chunk was re-pinned from ``from_graph`` onto\n``landed_node`` in ``to_graph`` \u2014 its own step, never a transition (``bzh:migration-not-transition``).\nA transition-borne source ends the attempt and re-queues; ``restart`` preempts it and keeps the route\n(#371). ``model`` is the re-pinned model, null when the chunk kept its own. ``source`` attributes it.",
+        "description": "One cross-graph migration step (issue #90): the chunk was re-pinned from ``from_graph`` onto\n``landed_node`` in ``to_graph`` \u2014 its own step, never a transition. A transition-borne source ends\nthe attempt and re-queues; ``restart`` preempts it and keeps the route (#371). ``model`` is the\nre-pinned model, null when the chunk kept its own. ``source`` attributes it.",
         "properties": {
           "choice_name": {
             "anyOf": [

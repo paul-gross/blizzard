@@ -5,7 +5,12 @@ import type { LoggedEvent } from '../sse/fleet-live';
 export interface ChunkChangeSummary {
   /** Line 1 — the chunk shortname and its transition, e.g. `C-1RJ1 review → failed → build`. */
   readonly transition: string;
-  /** Line 2 — the runner shortname, e.g. `runner-local`. Omitted on an unclaimed transition. */
+  /** Line 2 — the runner shortname, e.g. `runner-local`, when the frame names one.
+   * Falls back to the deleting actor (`data.by`) when the frame carries no runner and
+   * its `cause` is `'deleted'` (D7a, issue #364): an unacquired chunk has no runner to
+   * name, but who deleted it is still worth the same line. Omitted on every other
+   * unclaimed transition (a promote, a stop past the point the route released) — `by`
+   * rides only the `deleted` cause today ({@link ChunkChanged.by}'s own docstring). */
   readonly runner?: string;
 }
 
@@ -25,6 +30,11 @@ export interface ChunkChangeSummary {
  *
  * `graph_id` is deliberately never read here — it rides the wire (AC 4) but is not
  * part of the rendered row.
+ *
+ * `runner` prefers `runner_id` when the frame names one; failing that, a `deleted`-cause
+ * frame's `by` fills the same line (D7a, issue #364) — Delete's actor, not a runner, but
+ * the same "who did this" line 2 the block already renders for a claimed transition.
+ * Every other unclaimed transition still omits line 2 entirely, unchanged from before.
  */
 export function summarizeChunkChange(data: LoggedEvent['data']): ChunkChangeSummary {
   const segments: string[] = [compactRef(data.chunk_id ?? '—')];
@@ -32,5 +42,7 @@ export function summarizeChunkChange(data: LoggedEvent['data']): ChunkChangeSumm
   if (data.status) segments.push('→', data.status);
   if (data.node) segments.push('→', data.node);
   const summary: ChunkChangeSummary = { transition: segments.join(' ') };
-  return data.runner_id ? { ...summary, runner: compactRef(data.runner_id) } : summary;
+  if (data.runner_id) return { ...summary, runner: compactRef(data.runner_id) };
+  if (data.cause === 'deleted' && data.by) return { ...summary, runner: data.by };
+  return summary;
 }

@@ -218,8 +218,8 @@ export type AnalyticsDurationsResponse = {
  * AnalyticsEventView
  *
  * One derived event, wire-shaped (blizzard#255) — ``payload`` is parsed from its
- * stored JSON-text form (``bzh:sql-portable`` binds the store, not the wire) into a
- * plain object, so a consumer never double-decodes a JSON string within JSON.
+ * stored JSON-text form into a plain object, so a consumer never double-decodes a JSON
+ * string within JSON.
  */
 export type AnalyticsEventView = {
     /**
@@ -641,6 +641,32 @@ export type ChunkCompleteRequest = {
      * By
      */
     by?: string;
+};
+
+/**
+ * ChunkDeleteRequest
+ *
+ * Delete a chunk — records who deleted it (issue #364).
+ */
+export type ChunkDeleteRequest = {
+    /**
+     * By
+     */
+    by?: string;
+};
+
+/**
+ * ChunkDeleteResponse
+ *
+ * The result of one ``DELETE /chunks/{id}`` (issue #364) — the deleted chunk's own
+ * id, echoed back. Nothing richer: the chunk is gone from every read the instant this
+ * returns, with no fresh status left to derive a summary from.
+ */
+export type ChunkDeleteResponse = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
 };
 
 /**
@@ -2104,9 +2130,9 @@ export type MigrationMode = 'auto' | 'forced';
  * MigrationView
  *
  * One cross-graph migration step (issue #90): the chunk was re-pinned from ``from_graph`` onto
- * ``landed_node`` in ``to_graph`` — its own step, never a transition (``bzh:migration-not-transition``).
- * A transition-borne source ends the attempt and re-queues; ``restart`` preempts it and keeps the route
- * (#371). ``model`` is the re-pinned model, null when the chunk kept its own. ``source`` attributes it.
+ * ``landed_node`` in ``to_graph`` — its own step, never a transition. A transition-borne source ends
+ * the attempt and re-queues; ``restart`` preempts it and keeps the route (#371). ``model`` is the
+ * re-pinned model, null when the chunk kept its own. ``source`` attributes it.
  */
 export type MigrationView = {
     /**
@@ -3609,8 +3635,8 @@ export type WorkItemAuthorView = {
 /**
  * WorkItemClosure
  *
- * How a hub-owned work item closed (issue #357) — recorded on the row itself
- * (``bzh:facts-not-status``, Recorded position), never derived.
+ * How a hub-owned work item closed (issue #357) — recorded on the row itself when
+ * it closes, never derived from anything else.
  */
 export type WorkItemClosure = 'delivered' | 'withdrawn';
 
@@ -5005,6 +5031,36 @@ export type IngestChunkApiChunksPostResponses = {
 };
 
 export type IngestChunkApiChunksPostResponse = IngestChunkApiChunksPostResponses[keyof IngestChunkApiChunksPostResponses];
+
+export type DeleteChunkApiChunksChunkIdDeleteData = {
+    body: ChunkDeleteRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}';
+};
+
+export type DeleteChunkApiChunksChunkIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteChunkApiChunksChunkIdDeleteError = DeleteChunkApiChunksChunkIdDeleteErrors[keyof DeleteChunkApiChunksChunkIdDeleteErrors];
+
+export type DeleteChunkApiChunksChunkIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkDeleteResponse;
+};
+
+export type DeleteChunkApiChunksChunkIdDeleteResponse = DeleteChunkApiChunksChunkIdDeleteResponses[keyof DeleteChunkApiChunksChunkIdDeleteResponses];
 
 export type GetChunkApiChunksChunkIdGetData = {
     body?: never;
