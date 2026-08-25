@@ -11,6 +11,7 @@ from sqlalchemy import Engine
 from blizzard.foundation.clock import IClock
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import (
     IReadChunkRepository,
@@ -148,7 +149,9 @@ def seat_hub_work_source(
     composition root's own repository, not a second instance (blizzard#362)."""
     items = WorkItemStore(engine)
     chunks = ChunkStore(engine, clock)
-    hub_source = HubWorkSource(items, chunks, WorkItemEditService(items=items, chunks=chunks, clock=clock), users)
+    delete = DeleteService(chunks=chunks, items=items, clock=clock)
+    edits = WorkItemEditService(items=items, chunks=chunks, clock=clock, delete=delete)
+    hub_source = HubWorkSource(items, chunks, edits, users)
     sources[RESERVED_HUB_SOURCE_NAME] = hub_source
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source
     closers[RESERVED_HUB_SOURCE_NAME] = hub_source

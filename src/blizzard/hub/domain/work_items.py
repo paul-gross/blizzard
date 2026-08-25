@@ -10,11 +10,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from blizzard.foundation.clock import IClock
+from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.edit import UNSET, UnsetType
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.ingest import require_no_live_holder
+from blizzard.hub.domain.queue import GROUPABLE_STATUSES
 from blizzard.hub.domain.work import (
-    IReadChunkRepository,
+    ChunkFacts,
+    IWriteChunkRepository,
     IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkItemClosure,
@@ -23,6 +26,11 @@ from blizzard.hub.domain.work import (
     WorkRef,
     mint_chunk,
 )
+
+# The system actor recorded as `chunk_deleted.deleted_by` for a withdrawal-triggered
+# delete (D3) — `withdraw` carries no operator identity of its own to attribute it to
+# (issue #364).
+_WITHDRAWAL_DELETE_BY = "withdrawal"
 
 
 class WorkItemNotEditable(Exception):
@@ -71,10 +79,18 @@ class WorkItemEditService:
     work-source binding's editor/closer delegates to once it has resolved a pointer
     to a loaded record."""
 
-    def __init__(self, *, items: IWriteWorkItemRepository, chunks: IReadChunkRepository, clock: IClock) -> None:
+    def __init__(
+        self,
+        *,
+        items: IWriteWorkItemRepository,
+        chunks: IWriteChunkRepository,
+        clock: IClock,
+        delete: DeleteService,
+    ) -> None:
         self._items = items
         self._chunks = chunks
         self._clock = clock
+        self._delete = delete
 
     def create(
         self,
@@ -130,13 +146,27 @@ class WorkItemEditService:
 
     def withdraw(self, item: WorkItemRecord) -> WorkItemRecord:
         """Close ``item`` as withdrawn; raises :class:`WorkItemNotEditable` when it
-        already carries a closure, :class:`WorkItemHeldByLiveChunk` while a live chunk
-        still holds it."""
+        already carries a closure. A holder in
+        :data:`~blizzard.hub.domain.queue.GROUPABLE_STATUSES` (issue #364, D3) is
+        unacquired, not genuinely live: rather than refuse, this deletes it through
+        :class:`~blizzard.hub.domain.delete.DeleteService` — the same pairing a direct
+        chunk delete drives, which withdraws ``item`` itself as part of that write, so
+        the record is re-read afterward. :class:`WorkItemHeldByLiveChunk` is still
+        raised for a genuinely acquired (or otherwise non-groupable, non-terminal)
+        holder."""
         self._require_open(item)
         holder = self._chunks.find_live_holder(item.pointer)
-        if holder is not None:
-            raise WorkItemHeldByLiveChunk(item.pointer, holder)
-        return self._items.close(item.source, item.ref, closure=WorkItemClosure.WITHDRAWN, at=self._clock.now())
+        if holder is None:
+            return self._items.close(item.source, item.ref, closure=WorkItemClosure.WITHDRAWN, at=self._clock.now())
+        chunk = self._chunks.get(holder)
+        facts = self._chunks.load_facts(holder)
+        status = (facts if facts is not None else ChunkFacts(minted=True)).status()
+        if chunk is not None and status in GROUPABLE_STATUSES:
+            self._delete.delete(chunk, by=_WITHDRAWAL_DELETE_BY)
+            updated = self._items.get(item.source, item.ref)
+            assert updated is not None
+            return updated
+        raise WorkItemHeldByLiveChunk(item.pointer, holder)
 
     def deliver(self, item: WorkItemRecord) -> WorkItemRecord:
         """Close ``item`` as delivered (issue #360) — the delivery-closure sweep's own

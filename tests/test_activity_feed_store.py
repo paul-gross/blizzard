@@ -19,7 +19,7 @@ from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.registry import IReadRunnerRegistry
 from blizzard.hub.domain.work import ActivityRow, DecisionChoice, IReadChunkRepository, MigrationSource
 from blizzard.hub.runtime import migration_runner
-from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.chunk_store import ChunkStore, record_deleted_row
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from tests.support import migrate_to, seed_chunk, seed_graph
 
@@ -310,6 +310,43 @@ def test_restarted_reads_off_chunk_restarts(tmp_path: Path) -> None:
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
     assert row.key.startswith("chunk_restarts:")
+
+
+def test_deleted_reads_off_chunk_deleted(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    with engine.begin() as conn:
+        record_deleted_row(conn, "ch_1", by="alice", at=_at(1))
+    row = _row_for(store, "deleted")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.key.startswith("chunk_deleted:")
+    assert row.by == "alice"
+
+
+def test_deleted_chunk_shows_only_its_own_deletion_row(tmp_path: Path) -> None:
+    """D6: ``activity_facts_since`` excludes a deleted chunk's history from every OTHER
+    block — only the ``chunk_deleted`` row itself survives the filter."""
+    store, engine = _store(tmp_path)
+    store.record_promote("ch_1", at=_at(1))
+    with engine.begin() as conn:
+        record_deleted_row(conn, "ch_1", by="alice", at=_at(2))
+
+    causes = {r.cause for r in store.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_1"}
+
+    assert causes == {"deleted"}
+
+
+def test_grouped_chunks_history_is_unaffected_by_the_deleted_exclusion(tmp_path: Path) -> None:
+    """D6: grouping's own feed behavior is unchanged — only a *deleted* chunk's history
+    drops away, a *grouped* one's still shows."""
+    store, engine = _store(tmp_path)
+    _seed_second_chunk(engine, "ch_2")
+    store.record_promote("ch_1", at=_at(1))
+    store.record_grouped("ch_1", grouped_into="ch_2", at=_at(2))
+
+    causes = {r.cause for r in store.activity_facts_since(_T0, limit=50) if r.chunk_id == "ch_1"}
+
+    assert causes == {"minted", "promoted", "grouped"}
 
 
 def test_edited_produces_no_activity_row(tmp_path: Path) -> None:
