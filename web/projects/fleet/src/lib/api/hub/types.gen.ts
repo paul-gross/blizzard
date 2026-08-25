@@ -521,6 +521,76 @@ export type ArtifactView = {
 };
 
 /**
+ * BacklogPeekEntry
+ *
+ * One ``not_ready`` chunk, in backlog order.
+ */
+export type BacklogPeekEntry = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Position
+     */
+    position: number;
+    /**
+     * Work Refs
+     */
+    work_refs?: Array<WorkRefModel>;
+};
+
+/**
+ * BacklogPeekResponse
+ *
+ * The ``not_ready`` list, in the hub's explicit order.
+ */
+export type BacklogPeekResponse = {
+    /**
+     * Entries
+     */
+    entries?: Array<BacklogPeekEntry>;
+};
+
+/**
+ * BacklogPositionRequest
+ *
+ * Single-chunk fractional reposition — ``POST /api/backlog/position``.
+ *
+ * ``after_chunk_id=null`` moves ``chunk_id`` to the top, otherwise immediately after
+ * the named chunk. Both must be ``not_ready`` (``409``); a self-anchor is ``422``.
+ */
+export type BacklogPositionRequest = {
+    /**
+     * After Chunk Id
+     */
+    after_chunk_id: string | null;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+};
+
+/**
+ * BacklogReplaceRequest
+ *
+ * Idempotent whole-order replacement of the backlog — ``PUT /api/backlog``.
+ *
+ * ``chunk_ids`` is the desired order, front to back; each must name a ``not_ready``
+ * chunk (``409``) and not repeat (``422``). An unnamed chunk is appended, order kept.
+ */
+export type BacklogReplaceRequest = {
+    /**
+     * Chunk Ids
+     */
+    chunk_ids: Array<string>;
+};
+
+/**
  * BounceView
  *
  * One recorded delivery kick-back (#64) — contention, not failure, and never itself a status.
@@ -4826,6 +4896,72 @@ export type CallbackApiAuthNameCallbackGetResponses = {
      */
     200: unknown;
 };
+
+export type GetBacklogApiBacklogGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/backlog';
+};
+
+export type GetBacklogApiBacklogGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: BacklogPeekResponse;
+};
+
+export type GetBacklogApiBacklogGetResponse = GetBacklogApiBacklogGetResponses[keyof GetBacklogApiBacklogGetResponses];
+
+export type ReplaceBacklogApiBacklogPutData = {
+    body: BacklogReplaceRequest;
+    path?: never;
+    query?: never;
+    url: '/api/backlog';
+};
+
+export type ReplaceBacklogApiBacklogPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReplaceBacklogApiBacklogPutError = ReplaceBacklogApiBacklogPutErrors[keyof ReplaceBacklogApiBacklogPutErrors];
+
+export type ReplaceBacklogApiBacklogPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: BacklogPeekResponse;
+};
+
+export type ReplaceBacklogApiBacklogPutResponse = ReplaceBacklogApiBacklogPutResponses[keyof ReplaceBacklogApiBacklogPutResponses];
+
+export type RepositionBacklogApiBacklogPositionPostData = {
+    body: BacklogPositionRequest;
+    path?: never;
+    query?: never;
+    url: '/api/backlog/position';
+};
+
+export type RepositionBacklogApiBacklogPositionPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RepositionBacklogApiBacklogPositionPostError = RepositionBacklogApiBacklogPositionPostErrors[keyof RepositionBacklogApiBacklogPositionPostErrors];
+
+export type RepositionBacklogApiBacklogPositionPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: BacklogPeekResponse;
+};
+
+export type RepositionBacklogApiBacklogPositionPostResponse = RepositionBacklogApiBacklogPositionPostResponses[keyof RepositionBacklogApiBacklogPositionPostResponses];
 
 export type ListChunksApiChunksGetData = {
     body?: never;

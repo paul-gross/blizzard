@@ -472,6 +472,9 @@ class ChunkStore:
     def list_ready(self) -> list[Chunk]:
         return [c for c in self.list_all() if self._status(c.chunk_id) is ChunkStatus.READY]
 
+    def list_not_ready(self) -> list[Chunk]:
+        return [c for c in self.list_all() if self._status(c.chunk_id) is ChunkStatus.NOT_READY]
+
     def queue_positions(self) -> dict[str, float]:
         """The newest explicit queue position per chunk — the ordering the peek honours."""
         with self._engine.connect() as conn:
@@ -1123,6 +1126,17 @@ class ChunkStore:
             if self._exists(conn, s.chunk_promoted, chunk_id):
                 return None
             result = conn.execute(insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else None
+
+    def record_promote_with_tail_position(self, chunk_id: str, *, position: float, at: datetime) -> int | None:
+        # One transaction: a crash between the two writes would otherwise let a stale
+        # backlog position outrank the tail stamp on restart.
+        with self._engine.begin() as conn:
+            if self._exists(conn, s.chunk_promoted, chunk_id):
+                return None
+            result = conn.execute(insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
+            conn.execute(insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else None
 
@@ -1801,6 +1815,12 @@ class ChunkStore:
     def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
         """Append the moved chunk's new ready-queue position; order derives."""
         with self._engine.begin() as conn:
+            conn.execute(insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
+
+    def record_backlog_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
+        with self._engine.begin() as conn:
+            if self._exists(conn, s.chunk_promoted, chunk_id):
+                return  # promoted since the caller resolved backlog candidates — not this write's chunk anymore
             conn.execute(insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
 
     def add_work_refs(self, chunk_id: str, pointers: list[WorkRef], *, at: datetime) -> None:

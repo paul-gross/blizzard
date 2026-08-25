@@ -117,8 +117,9 @@ describe('FleetLiveUpdates', () => {
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(['hub', 'queue']);
+    expect(keys).toContainEqual(['hub', 'backlog']);
     expect(keys).toContainEqual(['hub', 'runners']);
-    expect(keys).toHaveLength(2);
+    expect(keys).toHaveLength(3);
   });
 
   it('flushes a lone event within the coalesce window bound on an otherwise quiet stream (issue #310)', () => {
@@ -133,7 +134,9 @@ describe('FleetLiveUpdates', () => {
     expect(invalidate).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(1);
-    expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toContainEqual(['hub', 'queue']);
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toContainEqual(['hub', 'queue']);
+    expect(keys).toContainEqual(['hub', 'backlog']);
   });
 
   it('refetches the transcript-segment index but not an already-fetched final segment’s content on chunk-changed (review:F6)', () => {
@@ -215,19 +218,22 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
   });
 
-  it('re-reads the registry on a runner-changed event and the queue on queue-changed', () => {
+  it('re-reads the registry on a runner-changed event and both order reads on queue-changed', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
     source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'paused', by: 'alice' }));
+    // A backlog reorder fires the same event as a ready-queue one — no distinct
+    // payload key (bzh:ranking-is-per-list) — so both cached orders invalidate.
     source.emitNamed('queue-changed', JSON.stringify({}));
     vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(['hub', 'runners']);
     expect(keys).toContainEqual(['hub', 'queue']);
+    expect(keys).toContainEqual(['hub', 'backlog']);
   });
 
   it('re-reads the registry on every runner-changed kind, including the muted ones', () => {

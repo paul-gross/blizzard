@@ -7,6 +7,10 @@
 export const hubHealthKey = ['hub', 'health'] as const;
 export const hubChunksKey = ['hub', 'chunks'] as const;
 export const hubQueueKey = ['hub', 'queue'] as const;
+/** The backlog's (`not_ready` list's) hub-ordered read (`GET /api/backlog`) — ranked
+ * independently of the ready queue (`bzh:ranking-is-per-list`), so it gets its own
+ * key rather than sharing {@link hubQueueKey}. */
+export const hubBacklogKey = ['hub', 'backlog'] as const;
 export const hubRunnersKey = ['hub', 'runners'] as const;
 export const hubQuestionsKey = ['hub', 'questions'] as const;
 /** The operational event feed's key prefix (`GET /api/events`, Phase 4) — a query

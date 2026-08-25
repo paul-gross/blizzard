@@ -1,15 +1,17 @@
-"""Queue-shaping domain — ready-queue reordering and grouping.
+"""Queue-shaping domain — ``ready``/``not_ready`` reordering and grouping.
 
 Order derives from appended position facts; grouping folds work refs into the survivor
 and discards the rest as ephemeral. Neither touches an acquired chunk, but their scopes
-differ (issue #141): reordering is ready-only, grouping needs only an unheld chunk.
-"""
+differ (issue #141): grouping needs only an unheld chunk, while reordering ranks the
+``ready`` queue and ``not_ready`` list independently (``bzh:ranking-is-per-list``)."""
 
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
@@ -21,6 +23,14 @@ from blizzard.hub.domain.work import (
 )
 
 _log = get_logger("blizzard.hub.queue")
+
+
+class QueueList(Enum):
+    """Which of the two independently-ranked lists a queue op targets
+    (``bzh:ranking-is-per-list``) — never mixed into one order."""
+
+    READY = "ready"
+    NOT_READY = "not_ready"
 
 
 class ChunkNotFound(LookupError):
@@ -50,39 +60,51 @@ class ChunkNotGroupable(ValueError):
 
 
 class QueueService:
-    """Reorder the ready queue as an explicit hub-side property."""
+    """Reorder the ``ready`` queue and the ``not_ready`` list, each as its own explicit
+    hub-side property, ranked independently (``bzh:ranking-is-per-list``)."""
 
     def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
         self._chunks = chunks
         self._clock = clock
 
+    def ordered(self, list_: QueueList) -> list[Chunk]:
+        """``list_``'s chunks in order — ascending by effective position."""
+        positions = self._chunks.queue_positions()
+        promoted_ats = self._chunks.promoted_ats()
+        candidates = self._candidates(list_)
+        return sorted(candidates, key=lambda c: self._effective_position(c, positions, promoted_ats))
+
     def ordered_ready(self) -> list[Chunk]:
         """Ready chunks in queue order — ascending by effective position."""
-        positions = self._chunks.queue_positions()
-        promoted_ats = self._chunks.promoted_ats()
-        ready = self._chunks.list_ready()
-        return sorted(ready, key=lambda c: self._effective_position(c, positions, promoted_ats))
+        return self.ordered(QueueList.READY)
 
-    def replace_order(self, ordered: list[Chunk]) -> None:
+    def ordered_not_ready(self) -> list[Chunk]:
+        """``not_ready`` chunks in backlog order — ascending by effective position."""
+        return self.ordered(QueueList.NOT_READY)
+
+    def replace_order(self, list_: QueueList, ordered: list[Chunk]) -> None:
         """Idempotent whole-order replacement: one ascending explicit position fact per
         chunk in ``ordered``, front to back. Takes already-resolved ``Chunk`` objects,
-        never ids (``bzh:domain-takes-objects``); ranking every chunk keeps the result
-        deterministic regardless of positions left over from an earlier reorder."""
+        never ids (``bzh:domain-takes-objects``). ``list_`` only selects which store
+        write routes the position (guarded for ``not_ready``, see :meth:`_write_fn`) —
+        the list itself is never read here."""
+        write = self._write_fn(list_)
         at = self._clock.now()
         for position, chunk in enumerate(ordered):
-            self._chunks.record_queue_position(chunk.chunk_id, position=float(position), at=at)
-        _log.info("ready queue replaced", chunk_ids=[c.chunk_id for c in ordered])
+            write(chunk.chunk_id, position=float(position), at=at)
+        _log.info("queue order replaced", list=list_.value, chunk_ids=[c.chunk_id for c in ordered])
 
-    def reposition(self, chunk: Chunk, after: Chunk | None) -> None:
-        """Single-chunk fractional reorder: stamp ``chunk`` a new explicit position
-        immediately after ``after`` (top when ``after is None``), without restamping
-        every other ready chunk (issue #137). Repeated midpoint bisection eventually
-        exhausts the representable doubles between two neighbours; that case
-        renormalizes via :meth:`replace_order` and recomputes the midpoint."""
+    def reposition(self, list_: QueueList, chunk: Chunk, after: Chunk | None) -> None:
+        """Single-chunk fractional reorder within ``list_``: stamp ``chunk`` a new
+        explicit position immediately after ``after`` (top when ``after is None``),
+        without restamping every other chunk in the list (issue #137). Repeated midpoint
+        bisection eventually exhausts the representable doubles between two neighbours;
+        that case renormalizes via :meth:`replace_order` and recomputes the midpoint."""
+        write = self._write_fn(list_)
         positions = self._chunks.queue_positions()
         promoted_ats = self._chunks.promoted_ats()
-        ready = [c for c in self._chunks.list_ready() if c.chunk_id != chunk.chunk_id]
-        ordered = sorted(ready, key=lambda c: self._effective_position(c, positions, promoted_ats))
+        candidates = [c for c in self._candidates(list_) if c.chunk_id != chunk.chunk_id]
+        ordered = sorted(candidates, key=lambda c: self._effective_position(c, positions, promoted_ats))
 
         if after is None:
             new_position = self._effective_position(ordered[0], positions, promoted_ats) - 1.0 if ordered else 0.0
@@ -96,20 +118,36 @@ class QueueService:
                 next_pos = self._effective_position(next_chunk, positions, promoted_ats)
                 if math.nextafter(after_pos, next_pos) >= next_pos:
                     renormalized = [*ordered[: after_index + 1], chunk, *ordered[after_index + 1 :]]
-                    self.replace_order(renormalized)
+                    self.replace_order(list_, renormalized)
                     positions = self._chunks.queue_positions()
                     promoted_ats = self._chunks.promoted_ats()
                     after_pos = self._effective_position(after, positions, promoted_ats)
                     next_pos = self._effective_position(next_chunk, positions, promoted_ats)
                 new_position = (after_pos + next_pos) / 2
 
-        self._chunks.record_queue_position(chunk.chunk_id, position=new_position, at=self._clock.now())
+        write(chunk.chunk_id, position=new_position, at=self._clock.now())
         _log.info(
-            "ready queue chunk repositioned",
+            "queue chunk repositioned",
+            list=list_.value,
             chunk_id=chunk.chunk_id,
             after_chunk_id=after.chunk_id if after is not None else None,
             position=new_position,
         )
+
+    def _write_fn(self, list_: QueueList) -> Callable[..., None]:
+        """The one place :meth:`replace_order`/:meth:`reposition` pick which store write
+        routes a position — ``not_ready`` through the promoted-guarded
+        :meth:`~blizzard.hub.domain.work.IWriteChunkRepository.record_backlog_position`,
+        ``ready`` through :meth:`~blizzard.hub.domain.work.IWriteChunkRepository.record_queue_position`."""
+        if list_ is QueueList.NOT_READY:
+            return self._chunks.record_backlog_position
+        return self._chunks.record_queue_position
+
+    def _candidates(self, list_: QueueList) -> list[Chunk]:
+        """``list_``'s repository read — the one place :meth:`ordered`/:meth:`reposition`
+        pick which of the two independently-ranked lists (``bzh:ranking-is-per-list``)
+        they read candidates from."""
+        return self._chunks.list_ready() if list_ is QueueList.READY else self._chunks.list_not_ready()
 
     @staticmethod
     def _effective_position(chunk: Chunk, positions: dict[str, float], promoted_ats: dict[str, datetime]) -> float:

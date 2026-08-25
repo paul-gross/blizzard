@@ -17,6 +17,14 @@ const READY = (suffix: string): ChunkSummary => ({
   work_refs: [],
 });
 
+const BACKLOG = (suffix: string): ChunkSummary => ({
+  chunk_id: `ch_01backlog${suffix}`,
+  graph_id: 'gr_1',
+  status: 'not_ready',
+  current_node_id: 'nd_build',
+  work_refs: [],
+});
+
 describe('BoardShell', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -35,10 +43,12 @@ describe('BoardShell', () => {
     readyOrder: string[] = [],
     state: KitAsyncStateValue = 'ready',
     permissions: { canControl?: boolean; canReorder?: boolean } = {},
+    backlogOrder: string[] = [],
   ) => {
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
     fixture.componentRef.setInput('readyOrder', readyOrder);
+    fixture.componentRef.setInput('backlogOrder', backlogOrder);
     fixture.componentRef.setInput('state', state);
     fixture.componentRef.setInput('canControl', permissions.canControl ?? true);
     fixture.componentRef.setInput('canReorder', permissions.canReorder ?? true);
@@ -380,13 +390,13 @@ describe('BoardShell', () => {
       ({ previousIndex, currentIndex }) as CdkDragDrop<unknown>;
 
     /** Fire a drop on the READY lane's drop list through its real
-     * `(cdkDropListDropped)` binding. */
+     * `(cdkDropListDropped)` binding — BACKLOG is reorderable too, so this picks
+     * READY's out by its `[data-col]`, not by assuming it is the only one. */
     const dropOnReady = (fixture: ComponentFixture<BoardShell>, event: CdkDragDrop<unknown>): void => {
       const lists = fixture.debugElement.queryAll(By.directive(CdkDropList));
-      // Exactly one, and it is READY's: no other lane is reorderable.
-      expect(lists).toHaveLength(1);
-      expect(lists[0].nativeElement.closest('[data-col]').getAttribute('data-col')).toBe('ready');
-      lists[0].injector.get(CdkDropList).dropped.emit(event);
+      const ready = lists.find((list) => list.nativeElement.closest('[data-col]').getAttribute('data-col') === 'ready');
+      expect(ready).toBeTruthy();
+      ready!.injector.get(CdkDropList).dropped.emit(event);
     };
 
     it('orders its cards by the hub dispatch order, not the fleet list order', async () => {
@@ -415,17 +425,17 @@ describe('BoardShell', () => {
       expect(selected).toBe(A.chunk_id);
     });
 
-    it('emits moveToTop from a card\'s Top button, disabled for the one already there', async () => {
+    it('emits moveToTop tagged \'ready\' from a card\'s Top button, disabled for the one already there', async () => {
       const fixture = await render([A, B], [A.chunk_id, B.chunk_id]);
-      let emitted: string | undefined;
-      fixture.componentInstance.moveToTop.subscribe((id) => (emitted = id));
+      let emitted: { chunkId: string; list: string } | undefined;
+      fixture.componentInstance.moveToTop.subscribe((move) => (emitted = move));
       const el = fixture.nativeElement as HTMLElement;
 
       const tops = el.querySelectorAll<HTMLButtonElement>('[data-testid="queue-move-top"]');
       expect(tops).toHaveLength(2);
       expect(tops[0].disabled).toBe(true);
       tops[1].click();
-      expect(emitted).toBe(B.chunk_id);
+      expect(emitted).toEqual({ chunkId: B.chunk_id, list: 'ready' });
     });
 
     it('emits group with the checked ids in lane order, and only from two up', async () => {
@@ -473,9 +483,9 @@ describe('BoardShell', () => {
       expect(laneIds(el, 'ready')).toEqual([A.chunk_id, B.chunk_id]);
     });
 
-    it('resolves a drop to the anchor it landed after — null at the top', async () => {
+    it('resolves a drop to the anchor it landed after — null at the top — tagged \'ready\'', async () => {
       const fixture = await render([A, B, C], [A.chunk_id, B.chunk_id, C.chunk_id]);
-      const moves: { chunkId: string; afterChunkId: string | null }[] = [];
+      const moves: { chunkId: string; afterChunkId: string | null; list: string }[] = [];
       fixture.componentInstance.reposition.subscribe((move) => moves.push(move));
 
       // C dragged to the very top: no chunk above it.
@@ -486,9 +496,9 @@ describe('BoardShell', () => {
       dropOnReady(fixture, drop(0, 2));
 
       expect(moves).toEqual([
-        { chunkId: C.chunk_id, afterChunkId: null },
-        { chunkId: A.chunk_id, afterChunkId: B.chunk_id },
-        { chunkId: A.chunk_id, afterChunkId: C.chunk_id },
+        { chunkId: C.chunk_id, afterChunkId: null, list: 'ready' },
+        { chunkId: A.chunk_id, afterChunkId: B.chunk_id, list: 'ready' },
+        { chunkId: A.chunk_id, afterChunkId: C.chunk_id, list: 'ready' },
       ]);
     });
 
@@ -500,6 +510,113 @@ describe('BoardShell', () => {
       dropOnReady(fixture, drop(1, 1));
 
       expect(moves).toEqual([]);
+    });
+  });
+
+  /*
+   * The BACKLOG lane's own reorder affordances (the backlog ranking work that
+   * followed issue #137) — drag-and-drop and a Top button, exactly like READY's,
+   * but tagged 'notready' so a container routes the write to the backlog's own
+   * mutation rather than the ready queue's. Grouping stays READY-only
+   * (out of scope to extend): BACKLOG never renders the checkbox or Group
+   * button, permission or not.
+   */
+  describe('the BACKLOG lane', () => {
+    const P = BACKLOG('pppppppppppppppppppp');
+    const Q = BACKLOG('qqqqqqqqqqqqqqqqqqqq');
+
+    const drop = (previousIndex: number, currentIndex: number) =>
+      ({ previousIndex, currentIndex }) as CdkDragDrop<unknown>;
+
+    /** Fire a drop on the BACKLOG lane's drop list through its real
+     * `(cdkDropListDropped)` binding — picked out by `[data-col="notready"]`. */
+    const dropOnBacklog = (fixture: ComponentFixture<BoardShell>, event: CdkDragDrop<unknown>): void => {
+      const lists = fixture.debugElement.queryAll(By.directive(CdkDropList));
+      const backlog = lists.find(
+        (list) => list.nativeElement.closest('[data-col]').getAttribute('data-col') === 'notready',
+      );
+      expect(backlog).toBeTruthy();
+      backlog!.injector.get(CdkDropList).dropped.emit(event);
+    };
+
+    it('orders its cards by the hub backlog order, not the fleet list order', async () => {
+      const fixture = await render([P, Q], [], 'ready', {}, [Q.chunk_id, P.chunk_id]);
+
+      expect(laneIds(fixture.nativeElement as HTMLElement, 'notready')).toEqual([Q.chunk_id, P.chunk_id]);
+    });
+
+    it('arms the drag list and renders a Top button with its own testid, with queue:reorder', async () => {
+      const fixture = await render([P, Q], [], 'ready', { canReorder: true }, [P.chunk_id, Q.chunk_id]);
+      const el = fixture.nativeElement as HTMLElement;
+
+      const lists = fixture.debugElement.queryAll(By.directive(CdkDropList));
+      expect(lists.some((l) => l.nativeElement.closest('[data-col]').getAttribute('data-col') === 'notready')).toBe(
+        true,
+      );
+      const tops = el.querySelectorAll<HTMLButtonElement>('[data-col="notready"] [data-testid="backlog-move-top"]');
+      expect(tops).toHaveLength(2);
+      expect(tops[0].disabled).toBe(true);
+      // READY's own testid never leaks onto the BACKLOG lane.
+      expect(el.querySelector('[data-col="notready"] [data-testid="queue-move-top"]')).toBeNull();
+    });
+
+    it('withholds the drag list and the Top button without queue:reorder — cards still render', async () => {
+      const fixture = await render([P, Q], [], 'ready', { canReorder: false }, [P.chunk_id, Q.chunk_id]);
+      const el = fixture.nativeElement as HTMLElement;
+
+      const lists = fixture.debugElement.queryAll(By.directive(CdkDropList));
+      expect(lists.some((l) => l.nativeElement.closest('[data-col]').getAttribute('data-col') === 'notready')).toBe(
+        false,
+      );
+      expect(el.querySelector('[data-col="notready"] [data-testid="backlog-move-top"]')).toBeNull();
+      expect(laneIds(el, 'notready')).toEqual([P.chunk_id, Q.chunk_id]);
+    });
+
+    it('renders no grouping affordance — no checkbox, no Group button — with or without queue:reorder', async () => {
+      for (const canReorder of [true, false]) {
+        const fixture = await render([P, Q], [], 'ready', { canReorder }, [P.chunk_id, Q.chunk_id]);
+        const el = fixture.nativeElement as HTMLElement;
+
+        expect(el.querySelector('[data-col="notready"] [data-testid="queue-select"]')).toBeNull();
+        expect(el.querySelector('[data-col="notready"] [data-testid="group-selected"]')).toBeNull();
+      }
+    });
+
+    it("emits moveToTop tagged 'notready' from a card's Top button", async () => {
+      const fixture = await render([P, Q], [], 'ready', {}, [P.chunk_id, Q.chunk_id]);
+      let emitted: { chunkId: string; list: string } | undefined;
+      fixture.componentInstance.moveToTop.subscribe((move) => (emitted = move));
+      const el = fixture.nativeElement as HTMLElement;
+
+      const tops = el.querySelectorAll<HTMLButtonElement>('[data-col="notready"] [data-testid="backlog-move-top"]');
+      tops[1].click();
+
+      expect(emitted).toEqual({ chunkId: Q.chunk_id, list: 'notready' });
+    });
+
+    it("resolves a drop to the anchor it landed after, tagged 'notready'", async () => {
+      const fixture = await render([P, Q], [], 'ready', {}, [P.chunk_id, Q.chunk_id]);
+      const moves: { chunkId: string; afterChunkId: string | null; list: string }[] = [];
+      fixture.componentInstance.reposition.subscribe((move) => moves.push(move));
+
+      // Q dragged to the very top: no chunk above it.
+      dropOnBacklog(fixture, drop(1, 0));
+
+      expect(moves).toEqual([{ chunkId: Q.chunk_id, afterChunkId: null, list: 'notready' }]);
+    });
+
+    it('does not disturb READY drops or vice versa — the two lists are independent drop targets', async () => {
+      const A = READY('aaaaaaaaaaaaaaaaaaaa');
+      const B = READY('bbbbbbbbbbbbbbbbbbbb');
+      const fixture = await render([A, B, P, Q], [A.chunk_id, B.chunk_id], 'ready', {}, [P.chunk_id, Q.chunk_id]);
+      const moves: { chunkId: string; afterChunkId: string | null; list: string }[] = [];
+      fixture.componentInstance.reposition.subscribe((move) => moves.push(move));
+
+      dropOnBacklog(fixture, drop(1, 0));
+
+      expect(moves).toEqual([{ chunkId: Q.chunk_id, afterChunkId: null, list: 'notready' }]);
+      // READY's own order is untouched by a BACKLOG-only drop.
+      expect(laneIds(fixture.nativeElement as HTMLElement, 'ready')).toEqual([A.chunk_id, B.chunk_id]);
     });
   });
 

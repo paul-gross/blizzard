@@ -160,7 +160,8 @@ def test_route_emission_lands_in_the_replay_buffer(tmp_path: Path) -> None:
     )
     events = emitted_events(hub)
     assert [e["event"] for e in events] == [
-        "chunk-changed",  # ingest -> not_ready (no queue-changed: not in the ready queue)
+        "chunk-changed",  # ingest -> not_ready
+        "queue-changed",  # ingest adds it to the backlog list
         "chunk-changed",  # claim -> running
         "queue-changed",  # claim removed it from the queue
     ]

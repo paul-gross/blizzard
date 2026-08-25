@@ -122,9 +122,8 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
             existing_chunk_id=exc.existing_chunk_id, source=exc.pointer.source, ref=exc.pointer.ref
         )
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
-    # A freshly ingested chunk rests ``not_ready`` — visible on the board but not
-    # in the ready queue, so no ``queue-changed`` fires until it is promoted.
     chunk_events.ChunkChanged.of(services, chunk_id, prev_status=None).publish(cause="minted", key=f"chunks:{chunk_id}")
+    services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
     return ChunkIngestResponse(chunk_id=chunk_id)
 
 

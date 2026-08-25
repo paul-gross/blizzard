@@ -778,6 +778,96 @@
         "title": "ArtifactView",
         "type": "object"
       },
+      "BacklogPeekEntry": {
+        "description": "One ``not_ready`` chunk, in backlog order.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "work_refs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkRefModel"
+            },
+            "title": "Work Refs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "graph_id",
+          "position"
+        ],
+        "title": "BacklogPeekEntry",
+        "type": "object"
+      },
+      "BacklogPeekResponse": {
+        "description": "The ``not_ready`` list, in the hub's explicit order.",
+        "properties": {
+          "entries": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BacklogPeekEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          }
+        },
+        "title": "BacklogPeekResponse",
+        "type": "object"
+      },
+      "BacklogPositionRequest": {
+        "description": "Single-chunk fractional reposition \u2014 ``POST /api/backlog/position``.\n\n``after_chunk_id=null`` moves ``chunk_id`` to the top, otherwise immediately after\nthe named chunk. Both must be ``not_ready`` (``409``); a self-anchor is ``422``.",
+        "properties": {
+          "after_chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Chunk Id"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "after_chunk_id"
+        ],
+        "title": "BacklogPositionRequest",
+        "type": "object"
+      },
+      "BacklogReplaceRequest": {
+        "description": "Idempotent whole-order replacement of the backlog \u2014 ``PUT /api/backlog``.\n\n``chunk_ids`` is the desired order, front to back; each must name a ``not_ready``\nchunk (``409``) and not repeat (``422``). An unnamed chunk is appended, order kept.",
+        "properties": {
+          "chunk_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Chunk Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chunk_ids"
+        ],
+        "title": "BacklogReplaceRequest",
+        "type": "object"
+      },
       "BounceView": {
         "description": "One recorded delivery kick-back (#64) \u2014 contention, not failure, and never itself a status.\n``envelope`` is the raw JSON kick-back payload verbatim.",
         "properties": {
@@ -8257,6 +8347,110 @@
         "summary": "Callback",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/backlog": {
+      "get": {
+        "description": "The hub-ordered ``not_ready`` list, read-only \u2014 an operator triage surface, so it\nrequires ``QUEUE_REORDER`` rather than the ready queue's ``FLEET_VIEW``.",
+        "operationId": "get_backlog_api_backlog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacklogPeekResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Backlog",
+        "tags": [
+          "queue"
+        ]
+      },
+      "put": {
+        "description": "Idempotent whole-order replacement of the backlog.\n\nResolves every named id against the current ``not_ready`` set: ``409`` names the\nfirst id that is not ``not_ready``, ``422`` a duplicate id. An unnamed chunk keeps\nits relative order, appended after the named ones.",
+        "operationId": "replace_backlog_api_backlog_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BacklogReplaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacklogPeekResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace Backlog",
+        "tags": [
+          "queue"
+        ]
+      }
+    },
+    "/api/backlog/position": {
+      "post": {
+        "description": "Single-chunk fractional reorder within the backlog.\n\nResolves both ids against the current ``not_ready`` set (``bzh:domain-takes-objects``):\n``409`` names either one if it is not ``not_ready``, ``422`` rejects a self-anchor.\n``after_chunk_id=null`` moves the chunk to the top of the backlog.",
+        "operationId": "reposition_backlog_api_backlog_position_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BacklogPositionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacklogPeekResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reposition Backlog",
+        "tags": [
+          "queue"
         ]
       }
     },

@@ -2,6 +2,7 @@ import { DestroyRef, EnvironmentInjector, Injectable, type Signal, inject, signa
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
 import {
+  hubBacklogKey,
   hubChunkKey,
   hubChunksKey,
   hubEventsKey,
@@ -191,7 +192,9 @@ const EVENT_INVALIDATION_REGISTRY: Record<HubEventType, (data: HubEventPayload) 
   'question-answered': chunkQuestionKeys,
   'decision-opened': chunkDecisionKeys,
   'decision-resolved': chunkDecisionKeys,
-  'queue-changed': () => [hubQueueKey],
+  // A backlog reorder fires the same event as a ready-queue one (no distinct
+  // payload key, `bzh:ranking-is-per-list`), so both cached orders invalidate.
+  'queue-changed': () => [hubQueueKey, hubBacklogKey],
   'runner-changed': () => [hubRunnersKey],
   'event-logged': (data) => [hubEventsKey, ...(data.chunk_id ? [hubChunkKey(data.chunk_id)] : [])],
 };
