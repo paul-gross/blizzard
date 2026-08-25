@@ -8,6 +8,7 @@
           [cards]="cardsFor(col.key)"
           [selectedChunkId]="selectedChunkId()"
           [queueControls]="col.key === 'ready'"
+          [reorderControls]="col.key === 'ready' || col.key === 'notready'"
           [canControl]="canControl()"
           [canReorder]="canReorder()"
           (selectChunk)="selectChunk.emit($event)"

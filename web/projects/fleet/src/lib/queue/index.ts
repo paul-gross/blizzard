@@ -1,4 +1,8 @@
-export { injectHubQueueQuery } from './queue.query';
-export { injectRepositionQueueMutation, injectGroupChunksMutation } from './queue.mutations';
+export { injectHubQueueQuery, injectHubBacklogQuery } from './queue.query';
+export {
+  injectRepositionQueueMutation,
+  injectRepositionBacklogMutation,
+  injectGroupChunksMutation,
+} from './queue.mutations';
 export type { RepositionVars, GroupVars } from './queue.mutations';
-export type { QueuePeekEntry } from '../api/hub';
+export type { QueuePeekEntry, BacklogPeekEntry } from '../api/hub';

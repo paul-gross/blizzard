@@ -48,6 +48,7 @@ export {
   hubHealthKey,
   hubChunksKey,
   hubQueueKey,
+  hubBacklogKey,
   hubRunnersKey,
   hubQuestionsKey,
   hubChunkKey,

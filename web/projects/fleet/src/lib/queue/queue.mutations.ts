@@ -2,15 +2,20 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
 import {
+  type BacklogPeekResponse,
   type ChunkGroupResponse,
   type QueuePeekResponse,
   groupChunksApiChunksChunkIdGroupPost,
+  repositionBacklogApiBacklogPositionPost,
   repositionQueueApiQueuePositionPost,
 } from '../api/hub';
-import { hubChunksKey, hubQueueKey } from '../query-keys';
+import { hubBacklogKey, hubChunksKey, hubQueueKey } from '../query-keys';
 
-/** Move a ready chunk to sit immediately after `afterChunkId` — `null` is the very
- * top of the queue. The board's READY-lane drag-and-drop and its Top button. */
+/** Move a chunk to sit immediately after `afterChunkId` — `null` is the very top
+ * of the list. Shared by both {@link injectRepositionQueueMutation} (the ready
+ * queue) and {@link injectRepositionBacklogMutation} (the backlog): the two
+ * routes take the same shape (`bzh:ranking-is-per-list`), so one interface
+ * serves the READY lane's drag-and-drop and Top button, and BACKLOG's own. */
 export interface RepositionVars {
   readonly chunkId: string;
   readonly afterChunkId: string | null;
@@ -40,6 +45,34 @@ export function injectRepositionQueueMutation() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: hubQueueKey });
+      void queryClient.invalidateQueries({ queryKey: hubChunksKey });
+    },
+  }));
+}
+
+/**
+ * `POST /api/backlog/position` — the backlog's own single-chunk reposition
+ * against an anchor, the `not_ready`-list counterpart of
+ * {@link injectRepositionQueueMutation} (`bzh:ranking-is-per-list`). Reuses
+ * {@link RepositionVars} rather than a duplicate interface: both routes take the
+ * same `{chunkId, afterChunkId}` shape. Serves the BACKLOG lane's drag-and-drop
+ * and its Top button alike, exactly as the ready queue's single mutation serves
+ * both of its own. On success invalidates the backlog read and the fleet list;
+ * the live stream also fires `queue-changed`, so this is belt-and-braces.
+ */
+export function injectRepositionBacklogMutation() {
+  const queryClient = inject(QueryClient);
+  return injectMutation(() => ({
+    mutationFn: async (vars: RepositionVars): Promise<BacklogPeekResponse> => {
+      const { data, error } = await repositionBacklogApiBacklogPositionPost({
+        body: { chunk_id: vars.chunkId, after_chunk_id: vars.afterChunkId },
+        throwOnError: false,
+      });
+      if (error) throw error;
+      return data!;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: hubBacklogKey });
       void queryClient.invalidateQueries({ queryKey: hubChunksKey });
     },
   }));

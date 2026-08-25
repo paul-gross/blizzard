@@ -22,26 +22,30 @@
 </div>
 <!-- The drag-and-drop drop list is only *armed* when the identity actually holds
      queue:reorder — a read-only board must not offer a drag it would then
-     refuse, not merely hide a button (issue #210). A guest on the READY lane
-     falls to the plain, undraggable branch below, same as every non-READY lane. -->
-@if (queueControls() && canReorder()) {
+     refuse, not merely hide a button (issue #210). A guest on a reorderable lane
+     falls to the plain, undraggable branch below, same as every non-reorderable lane. -->
+@if (reorderControls() && canReorder()) {
   <div class="b-col-body" cdkDropList (cdkDropListDropped)="dropped($event)">
     @for (card of cards(); track card.chunkId; let i = $index) {
       <div class="q-card" cdkDrag>
         <div class="q-ctl">
-          <input
-            type="checkbox"
-            class="sel"
-            data-testid="queue-select"
-            [attr.aria-label]="'Select ' + card.chunkId + ' for grouping'"
-            [checked]="isSelected(card.chunkId)"
-            (change)="toggle(card.chunkId)"
-          />
+          <!-- Grouping stays READY-only: the checkbox only renders alongside
+               reorderControls when queueControls is also armed for this lane. -->
+          @if (queueControls()) {
+            <input
+              type="checkbox"
+              class="sel"
+              data-testid="queue-select"
+              [attr.aria-label]="'Select ' + card.chunkId + ' for grouping'"
+              [checked]="isSelected(card.chunkId)"
+              (change)="toggle(card.chunkId)"
+            />
+          }
           <fleet-kit-button
-            testid="queue-move-top"
+            [testid]="moveTopTestId()"
             [ariaLabel]="'Move ' + card.chunkId + ' to top'"
             [disabled]="i === 0"
-            (click)="moveToTop.emit(card.chunkId)"
+            (click)="topClicked(card.chunkId)"
           >
             Top
           </fleet-kit-button>

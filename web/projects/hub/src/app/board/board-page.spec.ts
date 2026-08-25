@@ -27,6 +27,8 @@ const ASKED = 'ch_01KXKVVF1J3D6H6VYZ3XYNBBBB';
 const READY = 'ch_01KXKVVF1J3D6H6VYZ3XYNRDY1';
 const READY_NEXT = 'ch_01KXKVVF1J3D6H6VYZ3XYNRDY2';
 const GONE = 'ch_01KXKVVF1J3D6H6VYZ3XYNGONE';
+const BACKLOG = 'ch_01KXKVVF1J3D6H6VYZ3XYNBLG1';
+const BACKLOG_NEXT = 'ch_01KXKVVF1J3D6H6VYZ3XYNBLG2';
 
 const CHUNK = (chunkId: string, status: string) => ({
   chunk_id: chunkId,
@@ -55,48 +57,64 @@ const DETAIL = (chunkId: string) => ({
  * chunks above. Everything unnamed falls through to `{}` — the envelope reads
  * (`/api/runners`, `/api/events`) unwrap that to their empty list, so the rail
  * renders as an idle fleet rather than an error.
+ *
+ * `me` is a parameter (defaulting to the full-permission fixture) rather than
+ * baked in, so a spec asserting the withheld-`queue:reorder` case can answer
+ * `/api/me` with a narrower identity without duplicating every other route.
  */
-function hubRoutes(method: string, path: string): unknown {
-  if (method !== 'GET') return {};
-  if (path === '/api/me') return OPERATOR_ME_RESPONSE;
-  if (path === '/api/queue') {
-    return {
-      entries: [
-        { chunk_id: READY, graph_id: 'gr_1', position: 0, work_refs: [] },
-        { chunk_id: READY_NEXT, graph_id: 'gr_1', position: 1, work_refs: [] },
-      ],
-    };
-  }
-  if (path === '/api/chunks') {
-    return [
-      CHUNK(RUNNING, 'running'),
-      CHUNK(ASKED, 'waiting_on_human'),
-      CHUNK(READY, 'ready'),
-      CHUNK(READY_NEXT, 'ready'),
-    ];
-  }
-  if (path === '/api/questions') {
-    return [
-      {
-        chunk_id: ASKED,
-        runner_id: 'runner-local',
-        lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
-        question: 'Which branch?',
-        asked_at: '2026-07-16T11:30:00.000Z',
-      },
-    ];
-  }
-  if (path.endsWith('/work-items')) return { items: [] };
-  const detail = /^\/api\/chunks\/([^/]+)$/.exec(path);
-  if (detail !== null) return DETAIL(detail[1]);
-  return {};
+function hubRoutes(me: object = OPERATOR_ME_RESPONSE) {
+  return (method: string, path: string): unknown => {
+    if (method !== 'GET') return {};
+    if (path === '/api/me') return me;
+    if (path === '/api/queue') {
+      return {
+        entries: [
+          { chunk_id: READY, graph_id: 'gr_1', position: 0, work_refs: [] },
+          { chunk_id: READY_NEXT, graph_id: 'gr_1', position: 1, work_refs: [] },
+        ],
+      };
+    }
+    if (path === '/api/backlog') {
+      return {
+        entries: [
+          { chunk_id: BACKLOG, graph_id: 'gr_1', position: 0, work_refs: [] },
+          { chunk_id: BACKLOG_NEXT, graph_id: 'gr_1', position: 1, work_refs: [] },
+        ],
+      };
+    }
+    if (path === '/api/chunks') {
+      return [
+        CHUNK(RUNNING, 'running'),
+        CHUNK(ASKED, 'waiting_on_human'),
+        CHUNK(READY, 'ready'),
+        CHUNK(READY_NEXT, 'ready'),
+        CHUNK(BACKLOG, 'not_ready'),
+        CHUNK(BACKLOG_NEXT, 'not_ready'),
+      ];
+    }
+    if (path === '/api/questions') {
+      return [
+        {
+          chunk_id: ASKED,
+          runner_id: 'runner-local',
+          lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
+          question: 'Which branch?',
+          asked_at: '2026-07-16T11:30:00.000Z',
+        },
+      ];
+    }
+    if (path.endsWith('/work-items')) return { items: [] };
+    const detail = /^\/api\/chunks\/([^/]+)$/.exec(path);
+    if (detail !== null) return DETAIL(detail[1]);
+    return {};
+  };
 }
 
 describe('BoardPage', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, hubRoutes);
+    stub = stubRequestClient(hubClient, hubRoutes());
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -214,6 +232,70 @@ describe('BoardPage', () => {
     const calls = stub.forRoute('/api/queue/position', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ chunk_id: READY_NEXT, after_chunk_id: null });
+  });
+
+  /*
+   * The BACKLOG lane's reorder affordances — the same drag-and-drop/Top wiring
+   * as READY's, but reading `GET /api/backlog` and writing
+   * `POST /api/backlog/position` instead of the queue's own routes
+   * (`bzh:ranking-is-per-list`), and gated on `queue:reorder` even to read.
+   */
+  describe('the BACKLOG lane', () => {
+    it('renders the backlog in its own hub order, in the notready column', async () => {
+      const { el } = await open();
+
+      expect(el.querySelectorAll(`[data-chunk="${BACKLOG}"]`)).toHaveLength(1);
+      expect(card(el, BACKLOG).closest('[data-col]')?.getAttribute('data-col')).toBe('notready');
+      const ids = [...el.querySelectorAll('[data-col="notready"] [data-testid="chunk-id"]')].map((n) =>
+        n.textContent?.trim(),
+      );
+      expect(ids).toEqual([compactRef(BACKLOG), compactRef(BACKLOG_NEXT)]);
+    });
+
+    it("repositions a backlog chunk with no anchor when its Top control is used — the backlog's own route, not the queue's", async () => {
+      const { el, harness } = await open();
+
+      const tops = el.querySelectorAll<HTMLButtonElement>('[data-testid="backlog-move-top"]');
+      expect(tops[0].disabled).toBe(true);
+      tops[1].click();
+      await settle(harness.fixture);
+
+      const backlogCalls = stub.forRoute('/api/backlog/position', 'POST');
+      expect(backlogCalls).toHaveLength(1);
+      expect(backlogCalls[0].body).toEqual({ chunk_id: BACKLOG_NEXT, after_chunk_id: null });
+      // Never the ready queue's route.
+      expect(stub.forRoute('/api/queue/position', 'POST')).toHaveLength(0);
+    });
+
+    it('renders no grouping affordance on the backlog lane', async () => {
+      const { el } = await open();
+
+      expect(el.querySelector('[data-col="notready"] [data-testid="queue-select"]')).toBeNull();
+      expect(el.querySelector('[data-col="notready"] [data-testid="group-selected"]')).toBeNull();
+    });
+
+    it('never reads the backlog, and withholds its drag list and Top button, without queue:reorder', async () => {
+      // A narrower identity than OPERATOR_ME_RESPONSE: everything queue:reorder
+      // gates is missing, everything else stays so the rest of the board still
+      // renders normally.
+      const restrictedMe = {
+        ...OPERATOR_ME_RESPONSE,
+        permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'queue:reorder'),
+      };
+      stub.restore();
+      stub = stubRequestClient(hubClient, hubRoutes(restrictedMe));
+
+      const { el } = await open();
+
+      // The read itself never fires — not a fired-then-discarded 403.
+      expect(stub.forRoute('/api/backlog', 'GET')).toHaveLength(0);
+      expect(el.querySelector('[data-testid="backlog-move-top"]')).toBeNull();
+      // The backlog chunk still renders as a card — a withheld read only
+      // withholds the order and the reorder controls, not the chunk itself.
+      expect(el.querySelectorAll(`[data-chunk="${BACKLOG}"]`)).toHaveLength(1);
+      // No error surfaces anywhere on the board from the withheld read.
+      expect(el.querySelector('[data-testid="board-error"]')).toBeNull();
+    });
   });
 
   it('docks chunk detail beside the rails, so selecting never resizes the board (issue #21)', async () => {

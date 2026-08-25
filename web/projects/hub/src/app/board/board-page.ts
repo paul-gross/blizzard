@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import {
   BoardShell,
   type BoardReposition,
+  type BoardTopMove,
   ChunkDetail,
   EventLogPanel,
   QuestionsPanel,
@@ -10,10 +11,12 @@ import {
   hasPermission,
   type KitAsyncStateValue,
   injectGroupChunksMutation,
+  injectHubBacklogQuery,
   injectHubChunksQuery,
   injectHubQueueQuery,
   injectMeQuery,
   injectPromoteChunkMutation,
+  injectRepositionBacklogMutation,
   injectRepositionQueueMutation,
 } from 'fleet';
 
@@ -23,10 +26,11 @@ import { injectBoardSelection } from './board-selection';
  * The board route — the two-column mission-control surface:
  *
  * - the **centre** stacks {@link BoardShell} — every chunk in its derived-status
- *   column, the ready queue among them as the READY lane — over the
- *   {@link ChunkDetail} dock. The dock is always mounted: selecting a card fills
- *   it (the work item, node history, artifacts, and the human-loop actions) and
- *   deselecting clears it to a rest state, so the board never resizes or reflows;
+ *   column, the ready queue and the backlog among them as the READY and BACKLOG
+ *   lanes — over the {@link ChunkDetail} dock. The dock is always mounted:
+ *   selecting a card fills it (the work item, node history, artifacts, and the
+ *   human-loop actions) and deselecting clears it to a rest state, so the board
+ *   never resizes or reflows;
  * - the **right rail** holds {@link RunnerPanel}, the registry with pause/resume
  *   (MVP criterion 11), then {@link QuestionsPanel}, the fleet's open agent asks —
  *   clicking one opens its chunk in the dock, where it is answered — then
@@ -35,10 +39,13 @@ import { injectBoardSelection } from './board-selection';
  * The left rail that used to hold the ready queue over the event log is gone
  * (issue #137): queue shaping — prioritize and
  * group — happens on the READY lane itself, so a ready chunk is a board card
- * like every other chunk instead of a row in a second surface. This page owns
- * the writes those affordances imply, since {@link BoardShell} is
- * presentational: the queue read feeds the lane's order, and its three outputs
- * drive `POST /api/queue/position` (drag and Top alike) and the group merge.
+ * like every other chunk instead of a row in a second surface. BACKLOG reorders
+ * the same way (its own follow-up work), minus grouping — that stays READY-only.
+ * This page owns the writes those affordances imply, since {@link BoardShell} is
+ * presentational: the queue and backlog reads feed each lane's order, and the
+ * lane-tagged reposition/Top events route to `POST /api/queue/position` or
+ * `POST /api/backlog/position` (`bzh:ranking-is-per-list`); the group merge is
+ * READY's alone.
  *
  * The titlebar, the {@link FleetLiveUpdates} spine, and the TanStack `QueryClient`
  * stay at the app root — none of them move here, so navigating away from and back
@@ -62,12 +69,10 @@ export class BoardPage {
   private readonly chunksQuery = injectHubChunksQuery();
   private readonly queueQuery = injectHubQueueQuery();
   private readonly repositionQueue = injectRepositionQueueMutation();
+  private readonly repositionBacklog = injectRepositionBacklogMutation();
   private readonly groupChunks = injectGroupChunksMutation();
   private readonly selection = injectBoardSelection();
   private readonly meQuery = injectMeQuery();
-
-  /** Promote a backlog chunk to ready from its board card. */
-  protected readonly promoteChunk = injectPromoteChunkMutation();
 
   /** Whether the current identity may promote a backlog chunk (`chunk:control` —
    * issue #210). Withholds the board card's Promote control when `false`; `null`/pending
@@ -75,11 +80,23 @@ export class BoardPage {
    * `canPause` set. */
   protected readonly canControl = computed(() => hasPermission(this.meQuery.data(), 'chunk:control'));
 
-  /** Whether the current identity may reorder or group the ready queue
-   * (`queue:reorder` — issue #210). Withholds the READY lane's drag-and-drop, Top
-   * button, checkbox, and Group control when `false` — a read-only board must not
-   * *arm* a drag it would then refuse, not merely hide a button. */
+  /** Whether the current identity may reorder the ready queue or backlog, or
+   * group the ready queue (`queue:reorder` — issue #210). Withholds the READY
+   * lane's drag-and-drop, Top button, checkbox, and Group control, and the
+   * BACKLOG lane's drag-and-drop and Top button, when `false` — a read-only
+   * board must not *arm* a drag it would then refuse, not merely hide a button.
+   * Declared before {@link backlogQuery} (field initialization order), since
+   * that query's `enabled` gate reads it directly. */
   protected readonly canReorder = computed(() => hasPermission(this.meQuery.data(), 'queue:reorder'));
+
+  /** The backlog's own hub-ordered read (`GET /api/backlog`) — the BACKLOG
+   * lane's ranking. Gated on {@link canReorder} itself, not merely rendered
+   * conditionally: a board without `queue:reorder` must never even attempt this
+   * read (`bzh:ranking-is-per-list`'s narrower backlog permission). */
+  private readonly backlogQuery = injectHubBacklogQuery(this.canReorder);
+
+  /** Promote a backlog chunk to ready from its board card. */
+  protected readonly promoteChunk = injectPromoteChunkMutation();
 
   /** The live fleet chunk list; empty until the first read resolves. */
   protected readonly chunks = computed(() => this.chunksQuery.data() ?? []);
@@ -100,15 +117,28 @@ export class BoardPage {
     (this.queueQuery.data() ?? []).map((entry) => entry.chunk_id),
   );
 
-  /** A READY card dropped somewhere new — placed after the anchor it landed on
-   * (`null` = the very top), which is what the hub route takes. */
+  /**
+   * The backlog in the hub's own order, as bare ids — the BACKLOG lane's
+   * ordering, ranked independently of {@link readyOrder}
+   * (`bzh:ranking-is-per-list`). Empty (never fetched) without `queue:reorder` —
+   * {@link backlogQuery}'s own `enabled` gate, not a fallback here.
+   */
+  protected readonly backlogOrder = computed<readonly string[]>(() =>
+    (this.backlogQuery.data() ?? []).map((entry) => entry.chunk_id),
+  );
+
+  /** A READY or BACKLOG card dropped somewhere new — placed after the anchor it
+   * landed on (`null` = the very top), routed to the matching list's mutation. */
   protected reposition(move: BoardReposition): void {
-    this.repositionQueue.mutate({ chunkId: move.chunkId, afterChunkId: move.afterChunkId });
+    const mutation = move.list === 'notready' ? this.repositionBacklog : this.repositionQueue;
+    mutation.mutate({ chunkId: move.chunkId, afterChunkId: move.afterChunkId });
   }
 
-  /** A READY card's Top button — the same reposition with no anchor. */
-  protected moveToTop(chunkId: string): void {
-    this.repositionQueue.mutate({ chunkId, afterChunkId: null });
+  /** A READY or BACKLOG card's Top button — the same reposition with no anchor,
+   * routed to the matching list's mutation. */
+  protected moveToTop(move: BoardTopMove): void {
+    const mutation = move.list === 'notready' ? this.repositionBacklog : this.repositionQueue;
+    mutation.mutate({ chunkId: move.chunkId, afterChunkId: null });
   }
 
   /** `ids` is the READY lane's multi-selection in lane order (the top-most is
