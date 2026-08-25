@@ -1,6 +1,5 @@
 """work_item_proposals — a node completion's proposed work items, riding its transition
-or migration fact. One new table, ``checkfirst`` so a fresh ``base -> head`` and an
-upgrade converge.
+or migration fact. One new table.
 
 Revision ID: 20260825_1100_work_item_proposals
 Revises: 20260825_1050_graph_node_proposes_work_items

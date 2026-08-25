@@ -20,6 +20,7 @@ from blizzard.foundation.ids import ARTIFACT_PREFIX, HUB_EXEC_SLOT_PREFIX, MIGRA
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Executor
+from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import (
     DEFAULT_EVENT_LIST_LIMIT,
     TERMINAL_STATUSES,
@@ -56,7 +57,6 @@ from blizzard.hub.domain.work import (
     TransitionFact,
     UsageFact,
     WorkItemCloseOutcome,
-    WorkItemProposalRow,
     WorkRef,
 )
 from blizzard.hub.store import schema as s
@@ -1642,6 +1642,7 @@ class ChunkStore:
         choices: list[DecisionChoice],
         at: datetime,
         artifacts: list[ArtifactRow],
+        proposals: list[WorkItemProposalRow],
     ) -> None:
         payload = json.dumps([{"name": c.name, "description": c.description} for c in choices])
         with self._engine.begin() as conn:
@@ -1672,6 +1673,7 @@ class ChunkStore:
                         produced_at=at,
                     )
                 )
+            self._insert_proposals(conn, proposals, at=at)
 
     def record_decision_resolution(self, decision_id: str, *, choice: str, resolved_by: str, at: datetime) -> bool:
         with self._engine.begin() as conn:

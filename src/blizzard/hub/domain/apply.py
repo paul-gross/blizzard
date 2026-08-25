@@ -7,7 +7,6 @@ only as the resolving transition."""
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
@@ -27,6 +26,7 @@ from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Edge, Executor, Graph, JudgedBy, Node
 from blizzard.hub.domain.produces_auth import Produces
 from blizzard.hub.domain.proposal_auth import ProposalPolicy
+from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.route_auth import RouteToken
 from blizzard.hub.domain.work import (
     TERMINAL_STATUSES,
@@ -37,15 +37,8 @@ from blizzard.hub.domain.work import (
     MigrationFact,
     MigrationMode,
     MigrationSource,
-    WorkItemProposalRow,
 )
-from blizzard.wire.completion import (
-    ChecksGate,
-    CompletionSubmission,
-    CreateWorkItemProposal,
-    SubmittedArtifact,
-    WorkItemProposal,
-)
+from blizzard.wire.completion import ChecksGate, CompletionSubmission, SubmittedArtifact, WorkItemProposal
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 
 # The cross-graph migration crash window (issue #90, ``bzh:crash-point-registry``): the whole
@@ -243,10 +236,7 @@ class ApplyService:
             return self._respond(chunk, graph, from_node, submission, to_node_id=replayed, is_fresh_apply=False)
 
         # Proposed-work-item policy refusal (D6) — unconditional, ordered ahead of every
-        # dispatch fork below (gate resolution, the human-signoff guard, and the authored
-        # cross-graph edge) so none of the three lanes carries a proposal past a node that
-        # never declared the policy. A replay above already returned; this never re-fires
-        # on one.
+        # dispatch fork below, so none of them carries a proposal past a node that never declared the policy.
         policy_rejection = ProposalPolicy(from_node, submission.proposals).rejection()
         if policy_rejection is not None:
             return ApplyResult.failure(policy_rejection)
@@ -333,10 +323,10 @@ class ApplyService:
         intended_target_graph: Graph | None = None,
         follow_latest_graph: Graph | None = None,
     ) -> ApplyResult:
-        """Advance a chunk past a resolved gate — the resolving transition.
-
-        Records the transition along the chosen edge, referencing the decision, whose own
-        artifacts already landed — so this transition carries none."""
+        """Advance a chunk past a resolved gate — the resolving transition. Its artifacts
+        and proposals already landed at submission time (D2), so every dispatch fork
+        below — the authored cross-graph edge, the migration consult, and the plain
+        transition alike — carries none of either."""
         assert submission.decision_id is not None  # the caller dispatches only when set
         decision = self._chunks.get_decision(submission.decision_id)
         if decision is None or decision.chunk_id != chunk.chunk_id or decision.node_id != gate_node.node_id:
@@ -368,10 +358,10 @@ class ApplyService:
         if to_node_id is None:
             return ApplyResult.failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
 
-        # The transition-time consult (issue #124) — see the sibling call in ``apply``;
-        # ``decision_id`` threads through so the resolved decision derives closed.
+        # The transition-time consult (issue #124) — see the sibling call in ``apply``; the
+        # override keeps the decision's already-landed proposals off the migration lane too (D2).
         migrated = self._consult_intended_migration(
-            chunk, gate_node, submission, edge, intended_target_graph, follow_latest_graph
+            chunk, gate_node, submission, edge, intended_target_graph, follow_latest_graph, proposals=[]
         )
         if migrated is not None:
             return migrated
@@ -460,15 +450,20 @@ class ApplyService:
         edge: Edge,
         intended_target_graph: Graph | None,
         follow_latest_graph: Graph | None,
+        *,
+        proposals: list[WorkItemProposal] | None = None,
     ) -> ApplyResult | None:
         """The transition-time consult (issue #124) — the shared helper both transition sites
-        call once their destination resolves and before their own ``record_transition``.
-
-        ``forced`` fires unconditionally on the intent's own named node; ``auto`` fires only
-        on a destination-name match. Anything else returns ``None`` and falls through."""
+        call once their destination resolves, before their own ``record_transition``. ``forced``
+        fires unconditionally on the intent's own named node; ``auto`` fires only on a
+        destination-name match; anything else falls through. ``proposals`` defaults to the
+        submission's own list, overridden to ``[]`` by the gate-resolution caller (D2)."""
+        submitted_proposals = submission.proposals if proposals is None else proposals
         intent = chunk.intended_migration
         if intent is None:
-            return self._consult_follow_latest(chunk, from_node, submission, edge, follow_latest_graph)
+            return self._consult_follow_latest(
+                chunk, from_node, submission, edge, follow_latest_graph, proposals=submitted_proposals
+            )
         if intended_target_graph is None:
             return None
         if intent.mode is MigrationMode.FORCED:
@@ -493,7 +488,7 @@ class ApplyService:
             decision_id=submission.decision_id,
             model=None,
             artifacts=submission.artifacts,
-            proposals=submission.proposals,
+            proposals=submitted_proposals,
             clear_intent=True,
             source=MigrationSource.INTENT,
         )
@@ -505,12 +500,14 @@ class ApplyService:
         submission: CompletionSubmission,
         edge: Edge,
         follow_latest_graph: Graph | None,
+        *,
+        proposals: list[WorkItemProposal] | None = None,
     ) -> ApplyResult | None:
-        """The standing follow-latest policy's own consult (issue #164).
-
-        Reached only when the chunk carries **no** explicit intent. A transition to the
-        reserved terminal is the load-bearing no-op: it names no node, so it would land on
-        the target's **entry** and restart the workflow (tests/test_follow_latest_policy.py)."""
+        """The standing follow-latest policy's own consult (issue #164), reached only when
+        the chunk carries **no** explicit intent. A transition to the reserved terminal is
+        the load-bearing no-op: it names no node, so it would land on the target's
+        **entry** and restart the workflow (tests/test_follow_latest_policy.py). ``proposals``
+        defaults to the submission's own list, per :meth:`_consult_intended_migration`."""
         if follow_latest_graph is None or edge.to_node_name == RESERVED_TERMINAL:
             return None
         return self._land_migration(
@@ -523,7 +520,7 @@ class ApplyService:
             decision_id=submission.decision_id,
             model=None,
             artifacts=submission.artifacts,
-            proposals=submission.proposals,
+            proposals=submission.proposals if proposals is None else proposals,
             clear_intent=False,
             source=MigrationSource.FOLLOW_LATEST,
         )
@@ -544,12 +541,10 @@ class ApplyService:
         clear_intent: bool,
         source: MigrationSource,
     ) -> ApplyResult:
-        """The landing tail shared by every migration path.
-
-        Records the migration atomically (fact + re-pin + artifacts + proposals + route
-        release/retain + intent clear), then governs by the landed node's executor as a
-        transition into it would (issue #111). ``migration_id`` is the fresh fact this call
-        wrote (issue #213)."""
+        """The landing tail shared by every migration path. Records the migration atomically
+        (fact + re-pin + artifacts + proposals + route release/retain + intent clear), then
+        governs by the landed node's executor as a transition into it would (issue #111).
+        ``migration_id`` is the fresh fact this call wrote (issue #213)."""
         landed_node = target_graph.node_by_id(landed_node_id)
         lands_on_hub = landed_node is not None and landed_node.executor is Executor.HUB
         migration_id = self._chunks.record_migration(
@@ -638,6 +633,7 @@ class ApplyService:
             choices=[DecisionChoice(name=c.name, description=c.description) for c in gate_node.choices],
             at=self._clock.now(),
             artifacts=[],
+            proposals=[],
         )
 
     def _check_route_token(
@@ -671,24 +667,15 @@ class ApplyService:
     def _proposal_rows(
         self, chunk: Chunk, from_node: Node, epoch: int, proposals: list[WorkItemProposal]
     ) -> list[WorkItemProposalRow]:
-        return [self._proposal_row(chunk, from_node, epoch, ordinal, p) for ordinal, p in enumerate(proposals)]
-
-    def _proposal_row(
-        self, chunk: Chunk, from_node: Node, epoch: int, ordinal: int, proposal: WorkItemProposal
-    ) -> WorkItemProposalRow:
-        if isinstance(proposal, CreateWorkItemProposal):
-            data = json.dumps(
-                {"title": proposal.title, "body": proposal.body, "stated_priority": proposal.stated_priority.value}
+        return [
+            WorkItemProposalRow.of(
+                p,
+                proposal_id=Id.mint(PROPOSAL_PREFIX, self._clock).value,
+                chunk_id=chunk.chunk_id,
+                node_id=from_node.node_id,
+                node_name=from_node.name,
+                epoch=epoch,
+                ordinal=ordinal,
             )
-        else:
-            data = json.dumps({"source": proposal.source, "ref": proposal.ref, "evidence": proposal.evidence})
-        return WorkItemProposalRow(
-            proposal_id=Id.mint(PROPOSAL_PREFIX, self._clock).value,
-            chunk_id=chunk.chunk_id,
-            node_id=from_node.node_id,
-            node_name=from_node.name,
-            epoch=epoch,
-            ordinal=ordinal,
-            kind=proposal.kind,
-            data=data,
-        )
+            for ordinal, p in enumerate(proposals)
+        ]

@@ -1,11 +1,8 @@
-"""Proposed work items through the apply path (component tier).
-
-A node-step's completion may carry proposed work items alongside its artifacts,
-gated by the node's own ``proposes_work_items`` policy (D4, D6). Proposals ride
-exactly where artifacts are written — the ordinary transition and the migration
-lane alike (D2) — are inert (no ``work_items`` row, no envelope/view surface), and a
-policy violation is refused unconditionally, on every dispatch lane.
-"""
+"""Proposed work items through the apply path (component tier). A node-step's completion
+may carry proposed work items alongside its artifacts, gated by the node's own
+``proposes_work_items`` policy (D4, D6). Proposals ride exactly where artifacts are
+written — the ordinary transition and the migration lane alike (D2) — and are inert
+(no ``work_items`` row, no envelope/view surface)."""
 
 from __future__ import annotations
 
@@ -99,6 +96,36 @@ nodes:
           to: build
 """
 
+_TARGET_WITH_DELIVER_YAML = """
+name: triage
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: Triage.
+    judgement:
+      prompt: Assess.
+      choices:
+        pass:
+          description: Done.
+          to: done
+        fail:
+          description: Retry.
+          to: build
+  deliver:
+    executor: runner
+    prompt: Triage deliver.
+    judgement:
+      prompt: Assess.
+      choices:
+        pass:
+          description: Done.
+          to: done
+        fail:
+          description: Retry.
+          to: deliver
+"""
+
 _GATE_YAML = """
 name: default-delivery
 entry: build
@@ -189,6 +216,28 @@ def _complete(
     if decision_id is not None:
         body["decision_id"] = decision_id
     return hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=body)
+
+
+def _submit_decision(
+    hub,  # type: ignore[no-untyped-def]
+    chunk_id: str,
+    node_id: str,
+    *,
+    epoch: int = 1,
+    artifacts: list[dict] | None = None,
+    proposals: list[dict] | None = None,
+) -> httpx.Response:
+    """A runner-config gate: park ``node_id`` on a decision instead of transitioning."""
+    return hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/decisions",
+        json={
+            "from_node_id": node_id,
+            "epoch": epoch,
+            "runner_id": "r1",
+            "artifacts": artifacts if artifacts is not None else [],
+            "proposals": proposals if proposals is not None else [],
+        },
+    )
 
 
 def _stored_proposals(hub, chunk_id: str) -> list:  # type: ignore[no-untyped-def]
@@ -303,6 +352,27 @@ def test_the_refusal_holds_on_an_authored_cross_graph_edge(tmp_path: Path) -> No
     assert _stored_proposals(hub, chunk_id) == []
 
 
+def test_the_refusal_holds_on_a_runner_config_gate_submission(tmp_path: Path) -> None:
+    """The fourth dispatch fork: a runner-config gate's own wire body never reaches
+    ``ApplyService.apply`` at all, so ``DecisionService.submit`` must run the same check."""
+    hub = build_hub(tmp_path)
+    chunk_id, nodes = _ingest(hub, _NO_POLICY_YAML)
+
+    resp = _submit_decision(hub, chunk_id, nodes["build"], artifacts=[_BUILD_ARTIFACT], proposals=[_create_proposal()])
+
+    assert resp.status_code == 200, resp.text  # ApplyResponse — a semantic failure
+    assert resp.json()["outcome"] == "failure"
+    assert "`build`" in resp.json()["detail"]
+    assert "proposes_work_items" in resp.json()["detail"]
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"] is None
+    assert _stored_proposals(hub, chunk_id) == []
+
+    # A follow-up decision submission at the same epoch, with no proposals, still parks —
+    # the rejection left the fence and any open decision untouched.
+    retried = _submit_decision(hub, chunk_id, nodes["build"], artifacts=[_BUILD_ARTIFACT])
+    assert retried.json()["outcome"] == "parked_at_gate", retried.text
+
+
 def test_the_refusal_holds_on_a_decision_id_resolving_completion(tmp_path: Path) -> None:
     """A gate node can never declare ``proposes_work_items`` (D4) — so a resolving
     transition out of it carrying proposals is refused before the gate-resolution
@@ -331,6 +401,68 @@ def test_the_refusal_holds_on_a_decision_id_resolving_completion(tmp_path: Path)
     # proposals still closes it.
     retried = _complete(hub, chunk_id, nodes["approve-gate"], choice="approve", decision_id=decision_id)
     assert retried.json()["outcome"] == "hub_node_taken", retried.text
+
+
+def test_a_runner_config_gates_proposals_land_with_the_decision_not_its_resolution(tmp_path: Path) -> None:
+    """Unlike the graph gate above, this parks a *worker-judged* node the policy is legal
+    on (D4), so the resolving completion isn't refused — but its proposals still don't
+    land: the decision's own submission is where they belong, same as its artifacts (D2)."""
+    hub = build_hub(tmp_path)
+    chunk_id, nodes = _ingest(hub, _POLICY_YAML)
+
+    parked = _submit_decision(hub, chunk_id, nodes["build"], proposals=[_create_proposal(title="landed-with-decision")])
+    assert parked.json()["outcome"] == "parked_at_gate", parked.text
+    assert [r.data for r in _stored_proposals(hub, chunk_id) if "landed-with-decision" in r.data]
+    decision_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["decision_id"]
+    assert hub.client.post(f"/api/decisions/{decision_id}/resolutions", json={"choice": "pass"}).status_code == 200
+
+    resolving = _complete(
+        hub,
+        chunk_id,
+        nodes["build"],
+        choice="pass",
+        decision_id=decision_id,
+        proposals=[_create_proposal(title="must-not-land")],
+    )
+
+    assert resolving.json()["outcome"] != "failure", resolving.text
+    rows = _stored_proposals(hub, chunk_id)
+    assert len(rows) == 1
+    assert "landed-with-decision" in rows[0].data
+
+
+def test_the_gate_resolutions_migration_consult_also_drops_the_resolving_completions_proposals(
+    tmp_path: Path,
+) -> None:
+    """The migration-time consult fires from inside gate resolution too (issue #124) — its
+    own dispatch fork must drop the resolving completion's proposals exactly like the
+    plain transition beside it, not just persist whatever it was handed (D2)."""
+    hub = build_hub(tmp_path)
+    chunk_id, nodes = _ingest(hub, _POLICY_YAML)
+    triage = hub.client.post("/api/graphs", json={"definition_yaml": _TARGET_WITH_DELIVER_YAML})
+    assert triage.status_code == 201, triage.text
+    triage_id = triage.json()["graph_id"]
+    intent = hub.client.patch(f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": triage_id}})
+    assert intent.status_code == 202, intent.text
+
+    parked = _submit_decision(hub, chunk_id, nodes["build"], proposals=[_create_proposal(title="landed-with-decision")])
+    assert parked.json()["outcome"] == "parked_at_gate", parked.text
+    decision_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["decision_id"]
+    assert hub.client.post(f"/api/decisions/{decision_id}/resolutions", json={"choice": "pass"}).status_code == 200
+
+    resolving = _complete(
+        hub,
+        chunk_id,
+        nodes["build"],
+        choice="pass",
+        decision_id=decision_id,
+        proposals=[_create_proposal(title="must-not-land")],
+    )
+
+    assert resolving.json()["outcome"] == "migrated", resolving.text
+    rows = _stored_proposals(hub, chunk_id)
+    assert len(rows) == 1
+    assert "landed-with-decision" in rows[0].data
 
 
 def test_a_malformed_proposal_payload_is_refused_at_the_wired_hubs_edge(tmp_path: Path) -> None:

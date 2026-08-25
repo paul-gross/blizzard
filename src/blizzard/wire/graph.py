@@ -113,6 +113,7 @@ class GraphNodeView(BaseModel):
     checks_cwd: str | None = None
     checks_timeout: int | None = None
     produces: list[ProducesEntry] = []
+    proposes_work_items: bool = False
     judgement_prompt: str | None = None
     choices: list[GraphChoiceView] = []
 

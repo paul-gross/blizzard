@@ -107,6 +107,8 @@ class NodeConfig(BaseModel):
     checks_cwd: str | None = None
     checks_timeout: int | None = None
     produces: list[ProducesEntry] = []
+    # Whether this node-step's completion may carry proposed work items (D4, D6).
+    proposes_work_items: bool = False
     retries_max: int | None = None
     mode: str | None = None
     choices: list[EnvelopeChoice] = []

@@ -1898,7 +1898,7 @@
         "type": "object"
       },
       "DecisionSubmission": {
-        "description": "A runner-config gate: submit a decision in place of a transition.\n\nCarries the gated step's artifacts and its fencing epoch as one atomic write; the\nnode's choice set is resolved from the pinned graph, not sent here.",
+        "description": "A runner-config gate: submit a decision in place of a transition, carrying the\ngated step's artifacts, proposed work items, and fencing epoch as one atomic write.\n``proposals`` is legal only from a node declaring ``proposes_work_items`` (D4, D6).",
         "properties": {
           "artifacts": {
             "default": [],
@@ -1915,6 +1915,28 @@
           "from_node_id": {
             "title": "From Node Id",
             "type": "string"
+          },
+          "proposals": {
+            "default": [],
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "create": "#/components/schemas/CreateWorkItemProposal",
+                  "update": "#/components/schemas/UpdateWorkItemProposal"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/CreateWorkItemProposal"
+                },
+                {
+                  "$ref": "#/components/schemas/UpdateWorkItemProposal"
+                }
+              ]
+            },
+            "title": "Proposals",
+            "type": "array"
           },
           "route_token": {
             "anyOf": [
@@ -2609,6 +2631,11 @@
               }
             ],
             "title": "Prompt"
+          },
+          "proposes_work_items": {
+            "default": false,
+            "title": "Proposes Work Items",
+            "type": "boolean"
           },
           "retries_exhausted": {
             "anyOf": [
@@ -3404,6 +3431,11 @@
             },
             "title": "Produces",
             "type": "array"
+          },
+          "proposes_work_items": {
+            "default": false,
+            "title": "Proposes Work Items",
+            "type": "boolean"
           },
           "retries_max": {
             "anyOf": [

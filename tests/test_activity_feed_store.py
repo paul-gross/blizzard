@@ -176,6 +176,7 @@ def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
         choices=[DecisionChoice(name="go", description="go")],
         at=_at(1),
         artifacts=[],
+        proposals=[],
     )
     row = _row_for(store, "decision-submitted")
     assert row.chunk_id == "ch_1"
@@ -194,6 +195,7 @@ def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> Non
         choices=[DecisionChoice(name="go", description="go")],
         at=_at(1),
         artifacts=[],
+        proposals=[],
     )
     store.record_decision_resolution("dec_1", choice="go", resolved_by="alice", at=_at(2))
     row = _row_for(store, "decision-resolved")

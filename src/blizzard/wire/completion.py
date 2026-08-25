@@ -2,8 +2,7 @@
 
 ``POST /chunks/{id}/completions`` submits one node-step's completion: the judgement
 choice, the check results, the step's artifacts, and its proposed work items — **one
-atomic, epoch-fenced write**. A stale epoch is rejected and neither the artifacts nor
-the proposals ever enter the store.
+atomic, epoch-fenced write**. A stale epoch is rejected before either enters the store.
 """
 
 from __future__ import annotations

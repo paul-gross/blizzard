@@ -289,48 +289,26 @@ def test_reify_carries_checks_gating_fields() -> None:
     assert by_name["fail"].requires_checks is False
 
 
+def _proposes_doc(proposes_work_items: bool | None = None) -> dict[str, object]:
+    node: dict[str, object] = {
+        "executor": "runner",
+        "prompt": "p",
+        "judgement": {"prompt": "j", "choices": {"pass": {"description": "ok", "to": "done"}}},
+    }
+    if proposes_work_items is not None:
+        node["proposes_work_items"] = proposes_work_items
+    return {"name": "t", "entry": "build", "nodes": {"build": node}}
+
+
 def test_reify_carries_proposes_work_items() -> None:
-    doc = GraphDoc.of(
-        {
-            "name": "t",
-            "entry": "build",
-            "nodes": {
-                "build": {
-                    "executor": "runner",
-                    "prompt": "p",
-                    "proposes_work_items": True,
-                    "judgement": {
-                        "prompt": "j",
-                        "choices": {"pass": {"description": "ok", "to": "done"}},
-                    },
-                }
-            },
-        }
-    )
-    graph = Reification.of(doc, _clock()).graph
+    graph = Reification.of(GraphDoc.of(_proposes_doc(True)), _clock()).graph
     build = graph.node_by_name("build")
     assert build is not None
     assert build.proposes_work_items is True
 
 
 def test_reify_defaults_proposes_work_items_to_false() -> None:
-    doc = GraphDoc.of(
-        {
-            "name": "t",
-            "entry": "build",
-            "nodes": {
-                "build": {
-                    "executor": "runner",
-                    "prompt": "p",
-                    "judgement": {
-                        "prompt": "j",
-                        "choices": {"pass": {"description": "ok", "to": "done"}},
-                    },
-                }
-            },
-        }
-    )
-    graph = Reification.of(doc, _clock()).graph
+    graph = Reification.of(GraphDoc.of(_proposes_doc()), _clock()).graph
     build = graph.node_by_name("build")
     assert build is not None
     assert build.proposes_work_items is False
@@ -339,24 +317,7 @@ def test_reify_defaults_proposes_work_items_to_false() -> None:
 def test_proposes_work_items_round_trips_through_the_store() -> None:
     """The reified value must survive a mint + load — a graph is always re-read from the
     store at apply time, never served from the in-memory :class:`Reification` result."""
-    doc = GraphDoc.of(
-        {
-            "name": "t",
-            "entry": "build",
-            "nodes": {
-                "build": {
-                    "executor": "runner",
-                    "prompt": "p",
-                    "proposes_work_items": True,
-                    "judgement": {
-                        "prompt": "j",
-                        "choices": {"pass": {"description": "ok", "to": "done"}},
-                    },
-                }
-            },
-        }
-    )
-    graph = Reification.of(doc, _clock()).graph
+    graph = Reification.of(GraphDoc.of(_proposes_doc(True)), _clock()).graph
     engine = create_engine("sqlite://")
     metadata.create_all(engine)
     store = GraphStore(engine)

@@ -1244,10 +1244,9 @@ export type DecisionResolutionResponse = {
 /**
  * DecisionSubmission
  *
- * A runner-config gate: submit a decision in place of a transition.
- *
- * Carries the gated step's artifacts and its fencing epoch as one atomic write; the
- * node's choice set is resolved from the pinned graph, not sent here.
+ * A runner-config gate: submit a decision in place of a transition, carrying the
+ * gated step's artifacts, proposed work items, and fencing epoch as one atomic write.
+ * ``proposals`` is legal only from a node declaring ``proposes_work_items`` (D4, D6).
  */
 export type DecisionSubmission = {
     /**
@@ -1262,6 +1261,10 @@ export type DecisionSubmission = {
      * From Node Id
      */
     from_node_id: string;
+    /**
+     * Proposals
+     */
+    proposals?: Array<CreateWorkItemProposal | UpdateWorkItemProposal>;
     /**
      * Route Token
      */
@@ -1737,6 +1740,10 @@ export type GraphNodeView = {
      * Prompt
      */
     prompt?: string | null;
+    /**
+     * Proposes Work Items
+     */
+    proposes_work_items?: boolean;
     /**
      * Retries Exhausted
      */
@@ -2250,6 +2257,10 @@ export type NodeConfig = {
      * Produces
      */
     produces?: Array<ProducesEntry>;
+    /**
+     * Proposes Work Items
+     */
+    proposes_work_items?: boolean;
     /**
      * Retries Max
      */

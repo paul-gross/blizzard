@@ -250,11 +250,7 @@ artifacts = Table(
 )
 
 # --- Proposed work items (ride a node-step's completion, inert until materialized) ----
-# Written in the same transaction as the completion's transition or migration fact, never
-# on its own — a `graph_artifacts`-shaped ordinal carries authored order, and no unique
-# constraint narrower than the primary key: a proposal list is multi-row per
-# `(chunk, node, epoch)`, and the caller-side idempotent-replay probe already denies a
-# partial rewrite of that triple.
+
 work_item_proposals = Table(
     "work_item_proposals",
     metadata,
@@ -263,10 +259,12 @@ work_item_proposals = Table(
     Column("node_id", String, nullable=False),  # exact provenance
     Column("node_name", String, nullable=False),
     Column("epoch", Integer, nullable=False),
-    Column("ordinal", Integer, nullable=False),  # authored-submission order
+    Column("ordinal", Integer, nullable=False),  # authored-submission order, `graph_artifacts`-shaped
     Column("kind", String, nullable=False),  # create | update
     Column("data", Text, nullable=False),  # JSON object, kind-shaped
     Column("proposed_at", UtcDateTime, nullable=False),
+    # No unique constraint narrower than the primary key — a proposal list is multi-row per
+    # (chunk, node, epoch); the caller-side replay probe already denies a partial rewrite.
 )
 
 # --- Lease facts (lease.minted, runner-reported) -------------------------------
