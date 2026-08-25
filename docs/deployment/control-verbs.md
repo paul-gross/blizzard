@@ -1,9 +1,11 @@
 # Chunk control verbs
 
-The five chunk-level control verbs split by what they do to the claim: `chunk pause` and `chunk restart` keep it,
-`detach` gives it away, and `stop` and `chunk done` end it for good — `stop` as an abandonment, `chunk done` as a
+The chunk-level control verbs split by what they do to the claim: `chunk pause` and `chunk restart` keep it, `detach`
+gives it away, and `stop` and `chunk done` end it for good — `stop` as an abandonment, `chunk done` as a
 hand-completion. `detach`, `stop`, and `chunk done` all give the claim away or end it, differing in whether the chunk
-can be reclaimed afterward and whether it ends `stopped` or `done`.
+can be reclaimed afterward and whether it ends `stopped` or `done`. `chunk delete` sits on none of the three: it is
+gated by the chunk's status rather than by what happens to a claim, reachable only at `not_ready` or unclaimed `ready` —
+a chunk in that unacquired set holds no claim to keep, give away, or end in the first place.
 
 Every chunk control verb's full CLI contract lives in its own `blizzard hub chunk <verb> --help`; the facts here are the
 cross-verb distinctions the help text does not draw.
@@ -135,6 +137,26 @@ still complete the chunk afterward, and the derived status then reads `done`. Be
 completion — so a chunk stopped and then hand-completed reads `done`. Work landed by hand outside the fleet no longer
 has to end at `stopped`: stop the chunk, confirm the work landed, then `chunk done` marks it done — but there is no
 un-stop and no un-complete, so a chunk reading `done` by either path stays there.
+
+## Delete
+
+`chunk delete <chunk_id>` (`blizzard hub chunk delete <chunk_id> [--by] [--yes]`), the board's confirmed Delete control
+beside Promote on any `not_ready` or `ready` chunk's card, or `DELETE /api/chunks/{chunk_id}` (gated by `CHUNK_CONTROL`
+like every control verb here) — deletes a chunk gated on the same unacquired predicate `chunk group` requires of every
+chunk it folds away: `not_ready` or unclaimed `ready`.
+
+Delete is refused (409) at every other status, `paused` included. This is a status gate, not a claim-liveness one, so it
+differs from pause or stop's own guards: delete never asks whether a runner holds the chunk, only whether the chunk's
+own status sits in that unacquired set — a still-unclaimed chunk that has been paused is refused all the same, on status
+alone.
+
+A hub item and its chunk live and die together: deleting a chunk withdraws every open `hub:`-source pointer it holds —
+any `forge:`-source pointer on the same chunk survives untouched — and withdrawing a hub item deletes its unacquired
+holder chunk in the same stroke rather than refusing the withdrawal ([work-sources.md](./work-sources.md) owns the
+withdrawal route's own guard). A chunk a runner still holds still refuses the withdrawal exactly as before.
+
+Delete is irreversible — there is no un-delete — and, like stop, needs no live route: an unclaimed `not_ready` or
+`ready` chunk has none to release.
 
 ## Runner-level brakes
 

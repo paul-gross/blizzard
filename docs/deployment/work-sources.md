@@ -58,8 +58,9 @@ separate needs ingesting.
 Item mutation (the four verbs under `/api/work-sources/{source}/items`) is served only by the built-in hub source, whose
 own store is a hub-owned item's system of record; a request against a configured forge source refuses with a 409 naming
 it on all four verbs, by design rather than a missing opt-in knob. Withdrawing a hub item (DELETE) refuses with a 409
-while its chunk is still live — the same guard that refuses re-ingesting a pointer a live chunk holds; stop the chunk
-first.
+only while its chunk is genuinely acquired and still live — stop the chunk first; an unacquired holder (never claimed,
+`not_ready` or `ready`) is deleted along with the withdrawal instead of blocking it
+([control-verbs.md](./control-verbs.md#delete) owns the pairing's own mechanics).
 
 ## Forge-status labels (`annotate`)
 
