@@ -19,11 +19,12 @@ from blizzard.hub.domain.work import (
     WorkItemAuthor,
     WorkItemAuthorKind,
     WorkItemClosure,
+    WorkItemMaterializationOutcome,
     WorkItemRecord,
     WorkRef,
 )
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_store import insert_chunk_rows, record_deleted_row
+from blizzard.hub.store.internal.chunk_store import insert_chunk_rows, insert_materialization_row, record_deleted_row
 
 
 class WorkItemStore:
@@ -165,6 +166,90 @@ class WorkItemStore:
                 if pointer.source == RESERVED_HUB_SOURCE_NAME:
                     self._close_conn(conn, pointer.source, pointer.ref, closure=WorkItemClosure.WITHDRAWN, at=at)
         return deleted_id
+
+    def materialize_create(
+        self,
+        *,
+        proposal_id: str,
+        pointer: WorkRef,
+        title: str,
+        body: str,
+        author: WorkItemAuthor,
+        stated_priority: str | None,
+        at: datetime,
+        chunk: Chunk,
+    ) -> WorkItemRecord | None:
+        """Mint the item, ``chunk``'s own rows, and ``proposal_id``'s ``created`` outcome
+        fact on one ``engine.begin()`` connection (D8) — :meth:`create_with_chunk` plus
+        the outcome row, checked first so an already-judged proposal mints nothing."""
+        with self._engine.begin() as conn:
+            if not insert_materialization_row(
+                conn,
+                proposal_id=proposal_id,
+                outcome=WorkItemMaterializationOutcome.CREATED,
+                pointer=pointer,
+                reason=None,
+                at=at,
+            ):
+                return None
+            work_item_id = self._insert_item(
+                conn,
+                source=pointer.source,
+                ref=pointer.ref,
+                title=title,
+                body=body,
+                author=author,
+                stated_priority=stated_priority,
+                at=at,
+            )
+            insert_chunk_rows(conn, chunk)
+        return WorkItemRecord(
+            work_item_id=work_item_id,
+            source=pointer.source,
+            ref=pointer.ref,
+            title=title,
+            body=body,
+            author=author,
+            stated_priority=stated_priority,
+            created_at=at,
+            edited_at=at,
+        )
+
+    def materialize_update(
+        self, *, proposal_id: str, source: str, ref: str, evidence: str, at: datetime
+    ) -> WorkItemRecord | None:
+        """Append ``evidence`` to an open item's body, stamp ``edited_at``, and record
+        ``proposal_id``'s ``updated`` outcome fact on one ``engine.begin()`` connection
+        (D8). Returns ``None`` and writes nothing when already judged, or when the item
+        is no longer open — the append is one SQL-level concatenation so no read-then-write
+        gap can lose a concurrent edit."""
+        with self._engine.begin() as conn:
+            already = conn.execute(
+                select(s.work_item_materializations.c.id).where(
+                    s.work_item_materializations.c.proposal_id == proposal_id
+                )
+            ).first()
+            if already is not None:
+                return None
+            result = conn.execute(
+                update(s.work_items)
+                .where(s.work_items.c.source == source, s.work_items.c.ref == ref, s.work_items.c.closed_at.is_(None))
+                .values(body=s.work_items.c.body + "\n\n" + evidence, edited_at=at)
+            )
+            if result.rowcount == 0:
+                return None
+            insert_materialization_row(
+                conn,
+                proposal_id=proposal_id,
+                outcome=WorkItemMaterializationOutcome.UPDATED,
+                pointer=WorkRef(source=source, ref=ref),
+                reason=None,
+                at=at,
+            )
+            row = conn.execute(
+                select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
+            ).one()
+        return self._record(row)
 
     @staticmethod
     def _close_conn(conn: Connection, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> None:

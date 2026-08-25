@@ -249,7 +249,7 @@ artifacts = Table(
     Column("produced_at", UtcDateTime, nullable=False),
 )
 
-# --- Proposed work items (ride a node-step's completion, inert until materialized) ----
+# --- Proposed work items (ride a node-step's completion, materialized at delivery) ----
 
 work_item_proposals = Table(
     "work_item_proposals",
@@ -263,8 +263,28 @@ work_item_proposals = Table(
     Column("kind", String, nullable=False),  # create | update
     Column("data", Text, nullable=False),  # JSON object, kind-shaped
     Column("proposed_at", UtcDateTime, nullable=False),
+    # The proposing runner (blizzard#366) — nullable, no backfill: a row written before
+    # this column existed carries no proposer, and materializes as unresolved for it.
+    Column("runner_id", String, nullable=True),
     # No unique constraint narrower than the primary key — a proposal list is multi-row per
     # (chunk, node, epoch); the caller-side replay probe already denies a partial rewrite.
+)
+
+# --- Proposal materialization outcomes (blizzard#366) -------------------------
+# One row per proposal's terminal judgment — created / updated / unresolved — recorded
+# once and never re-judged; a transient failure records nothing and is retried.
+
+work_item_materializations = Table(
+    "work_item_materializations",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("proposal_id", String, ForeignKey("work_item_proposals.proposal_id"), nullable=False),
+    Column("outcome", String, nullable=False),  # created | updated | unresolved
+    Column("source", String, nullable=True),  # the resulting/targeted item's pointer; null when unresolved names none
+    Column("ref", String, nullable=True),
+    Column("reason", String, nullable=True),
+    Column("recorded_at", UtcDateTime, nullable=False),
+    UniqueConstraint("proposal_id", name="uq_work_item_materializations_proposal_id"),
 )
 
 # --- Lease facts (lease.minted, runner-reported) -------------------------------

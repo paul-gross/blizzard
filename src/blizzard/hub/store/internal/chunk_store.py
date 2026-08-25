@@ -19,7 +19,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, HUB_EXEC_SLOT_PREFIX, MIGRATION_PREFIX, Id
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.graph import Executor
+from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import (
     DEFAULT_EVENT_LIST_LIMIT,
@@ -57,6 +57,7 @@ from blizzard.hub.domain.work import (
     TransitionFact,
     UsageFact,
     WorkItemCloseOutcome,
+    WorkItemMaterializationOutcome,
     WorkRef,
 )
 from blizzard.hub.store import schema as s
@@ -186,6 +187,38 @@ def record_deleted_row(conn: Connection, chunk_id: str, *, by: str, at: datetime
     result = conn.execute(insert(s.chunk_deleted).values(chunk_id=chunk_id, deleted_at=at, deleted_by=by))
     key = result.inserted_primary_key
     return int(key[0]) if key is not None else 0
+
+
+def insert_materialization_row(
+    conn: Connection,
+    *,
+    proposal_id: str,
+    outcome: WorkItemMaterializationOutcome,
+    pointer: WorkRef | None,
+    reason: str | None,
+    at: datetime,
+) -> bool:
+    """Insert one ``work_item_materializations`` row on a caller-supplied ``conn`` (D5) —
+    mirrors :func:`insert_chunk_rows`/:func:`record_deleted_row`'s shared-connection
+    shape, so the mint/append composites can fold this into their own transaction.
+    Idempotent per ``proposal_id``: returns False and writes nothing when a judgment
+    already exists."""
+    already = conn.execute(
+        select(s.work_item_materializations.c.id).where(s.work_item_materializations.c.proposal_id == proposal_id)
+    ).first()
+    if already is not None:
+        return False
+    conn.execute(
+        insert(s.work_item_materializations).values(
+            proposal_id=proposal_id,
+            outcome=outcome.value,
+            source=pointer.source if pointer is not None else None,
+            ref=pointer.ref if pointer is not None else None,
+            reason=reason,
+            recorded_at=at,
+        )
+    )
+    return True
 
 
 class ChunkStore:
@@ -568,6 +601,33 @@ class ChunkStore:
                 continue  # landed, or hand-completed by an operator (issue #294) — never chunk status
             result.append(ClosableWorkRef(chunk_id=row.chunk_id, ref=WorkRef(source=row.source, ref=row.ref)))
         return result
+
+    def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:
+        with self._engine.connect() as conn:
+            ephemeral = self._ephemeral_ids(conn)
+            delivered = {
+                r.chunk_id
+                for r in conn.execute(
+                    select(s.transitions.c.chunk_id).where(s.transitions.c.to_node_id == RESERVED_TERMINAL).distinct()
+                ).all()
+            }
+            judged = {r.proposal_id for r in conn.execute(select(s.work_item_materializations.c.proposal_id)).all()}
+            rows = conn.execute(select(s.work_item_proposals)).all()
+        return [
+            WorkItemProposalRow(
+                proposal_id=row.proposal_id,
+                chunk_id=row.chunk_id,
+                node_id=row.node_id,
+                node_name=row.node_name,
+                epoch=row.epoch,
+                ordinal=row.ordinal,
+                kind=row.kind,
+                data=row.data,
+                runner_id=row.runner_id,
+            )
+            for row in rows
+            if row.chunk_id in delivered and row.chunk_id not in ephemeral and row.proposal_id not in judged
+        ]
 
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
         with self._engine.connect() as conn:
@@ -1336,6 +1396,7 @@ class ChunkStore:
                     kind=row.kind,
                     data=row.data,
                     proposed_at=at,
+                    runner_id=row.runner_id,
                 )
             )
 
@@ -1378,6 +1439,20 @@ class ChunkStore:
                 )
             )
             return True
+
+    def record_work_item_materialization(
+        self,
+        proposal_id: str,
+        *,
+        outcome: WorkItemMaterializationOutcome,
+        pointer: WorkRef | None,
+        reason: str | None,
+        at: datetime,
+    ) -> bool:
+        with self._engine.begin() as conn:
+            return insert_materialization_row(
+                conn, proposal_id=proposal_id, outcome=outcome, pointer=pointer, reason=reason, at=at
+            )
 
     def finalize_delivery(
         self,

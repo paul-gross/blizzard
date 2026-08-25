@@ -100,8 +100,9 @@ class _FakeWorkSources:
 class _FakeServices:
     """A minimal stand-in for ``HubServices`` — only the attributes ``_lifespan``
     reads: ``work_sources`` (the start-condition), ``delivery_closure`` (the
-    already-built reconciler it starts or not, mirroring the composition root), and
-    ``event_derivation`` (blizzard#254 — started unconditionally, no source gate)."""
+    already-built reconciler it starts or not, mirroring the composition root),
+    ``event_derivation`` (blizzard#254 — started unconditionally, no source gate), and
+    ``work_item_materialization`` (blizzard#366 D9 — started unconditionally too)."""
 
     def __init__(
         self,
@@ -109,10 +110,12 @@ class _FakeServices:
         work_sources: _FakeWorkSources,
         delivery_closure: _CountingReconciler,
         event_derivation: _CountingReconciler | None = None,
+        work_item_materialization: _CountingReconciler | None = None,
     ) -> None:
         self.work_sources = work_sources
         self.delivery_closure = delivery_closure
         self.event_derivation = event_derivation or _CountingReconciler()
+        self.work_item_materialization = work_item_materialization or _CountingReconciler()
         self.chunks = None  # unread unless annotating_names() is non-empty, which these tests never set
 
 
@@ -165,3 +168,18 @@ async def test_lifespan_starts_the_event_derivation_loop_unconditionally(tmp_pat
         await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
 
     assert event_derivation.calls == 1
+
+
+async def test_lifespan_starts_the_work_item_materialization_loop_unconditionally(tmp_path: Path) -> None:
+    """blizzard#366 D9: materialization is idempotent inside one transaction against one
+    store, so there is nothing a work-source opt-in would protect — the sweep is yielded
+    and started regardless, the same ground ``event_derivation`` stands on."""
+    materialization = _CountingReconciler()
+    services = _FakeServices(work_sources=_FakeWorkSources(), delivery_closure=_CountingReconciler())
+    services.work_item_materialization = materialization
+    app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
+
+    async with _lifespan(app):  # type: ignore[arg-type]
+        await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
+
+    assert materialization.calls == 1

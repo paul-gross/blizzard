@@ -233,6 +233,27 @@
      "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment/ survivors: an operator deleting a chunk reads this section from outside the workspace and cannot resolve a source path, so the delete/withdraw pairing is restated plainly here rather than left as a bare pointer."
     }
    ]
+  },
+  {
+   "id": "work-item-proposal-materializes-at-delivery",
+   "statement": "A node-step's proposed work items ride its completion inertly through the graph; once the chunk actually delivers, the hub materializes every accumulated proposal of that chunk, best-effort and eventually convergent, never blocking the delivery itself — a create mints a fleet-authored hub item resting on its own fresh not_ready chunk, an update appends its evidence to an open item and stamps its last-edit instant, and an unresolvable proposal (its target closed, withdrawn, gone, or sourced somewhere with no editor) is recorded with its reason rather than retried forever.",
+   "owner": "blizzard-context:/domain/work/chunk.md#materialization",
+   "owner_kind": "domain",
+   "owner_assert": {
+    "quote": "best-effort, eventually convergent, and not atomic with the landing"
+   },
+   "markers": [
+    "materializes every accumulated proposal of a chunk",
+    "recorded with its reason rather than retried forever"
+   ],
+   "sites": [
+    {
+     "file": "docs/deployment/work-sources.md",
+     "symbol": "hub-owned-items",
+     "role": "allowed",
+     "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment/ survivors: an operator reading this section from outside the workspace cannot resolve a domain-doc path, so what a proposed work item becomes at delivery is restated plainly here rather than left as a bare pointer."
+    }
+   ]
   }
  ]
 }

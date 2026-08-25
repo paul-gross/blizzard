@@ -69,6 +69,8 @@ from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.transcripts import IReadTranscriptSegments, TranscriptCaps, TranscriptIngestService
 from blizzard.hub.domain.work import IReadChunkRepository
 from blizzard.hub.domain.work_closure import DeliveryClosureReconciler
+from blizzard.hub.domain.work_item_materialization import WorkItemMaterializationReconciler
+from blizzard.hub.domain.work_items import WorkItemEditService
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
@@ -129,6 +131,9 @@ class HubServices:
     #: The delivery closure reconciler (issue #216) — built here because it needs the
     #: write-capable chunk repository, which only the composition root holds.
     delivery_closure: DeliveryClosureReconciler
+    #: The delivery-materialization reconciler (blizzard#366) — built here for the same
+    #: reason: it needs the write-capable chunk and work-item repositories.
+    work_item_materialization: WorkItemMaterializationReconciler
     #: The session read repository (issue #91) — reads only (``bzh:controller-read-only``).
     sessions: IReadSessionRepository
     #: The identity-link read repository (issue #92) — a plain read, no domain service.
@@ -251,6 +256,7 @@ def build_services(
     # directory is passed; `None` otherwise.
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     auth_throttle = IpThrottle(clock=clock)
+    materialization_edits = WorkItemEditService(items=work_item_store, chunks=chunk_store, clock=clock, delete=delete)
     return HubServices(
         chunks=chunk_store,
         graphs=graph_store,
@@ -288,6 +294,16 @@ def build_services(
         default_graph_yaml=PACKAGED.default.text,
         work_sources=work_sources,
         delivery_closure=DeliveryClosureReconciler(chunks=chunk_store, work_sources=work_sources, clock=clock),
+        work_item_materialization=WorkItemMaterializationReconciler(
+            chunks=chunk_store,
+            items=work_item_store,
+            edits=materialization_edits,
+            work_sources=work_sources,
+            graph_mint=GraphMintService(graphs=graph_store, clock=clock),
+            default_graph_doc=PACKAGED.default.doc,
+            default_graph_yaml=PACKAGED.default.text,
+            clock=clock,
+        ),
         sessions=session_store,
         identities=identity_store,
         users=user_store,
