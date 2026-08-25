@@ -322,7 +322,7 @@ def test_post_queue_position_naming_a_not_ready_after_chunk_id_is_409(tmp_path: 
 
 
 # --- Backlog permission — QUEUE_REORDER even to read, an operator triage surface,
-# unlike the ready queue's FLEET_VIEW read (``bzh:ranking-is-per-list``) ----------------
+# unlike the ready queue's FLEET_VIEW read ---------------------------------------------
 
 
 def test_a_fleet_view_only_principal_is_refused_the_backlog_read(tmp_path: Path) -> None:

@@ -31,11 +31,11 @@ export function injectHubQueueQuery() {
  * Hub `GET /api/backlog` read — the `not_ready` list in the hub's explicit
  * reorder order, through TanStack Query and the generated hub client
  * (bzh:generated-client). Unlike the ready queue's read, the backlog's requires
- * `queue:reorder` (`bzh:ranking-is-per-list`): it is an operator triage surface,
- * not fleet-wide visibility, so `canReorder` gates this query's `enabled` — the
- * read must never fire and then discard a 403, it must not fire at all without the
- * permission. Pass the identity's `queue:reorder` check as a reactive accessor, the
- * same shape {@link injectHubChunkWorkItemsQuery} takes its selected chunk id.
+ * `queue:reorder`: an operator triage surface, not fleet-wide visibility, so
+ * `canReorder` gates this query's `enabled` — the read must never fire and then
+ * discard a 403, it must not fire at all without the permission. Pass the
+ * identity's `queue:reorder` check as a reactive accessor, the same shape
+ * {@link injectHubChunkWorkItemsQuery} takes its selected chunk id.
  * Each entry carries its `position`, `graph_id`, and work refs so the board can
  * render and reshape the backlog. The live-update service re-reads this on
  * `queue-changed`; the poll is a backstop (issue #316), not the primary

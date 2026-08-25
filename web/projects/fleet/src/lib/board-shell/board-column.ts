@@ -44,7 +44,7 @@ export interface BoardTopMove {
  *
  * Two independent conditionals arm this component's affordances: {@link reorderControls}
  * arms the drag-and-drop drop list and the per-card move-to-top control, and
- * {@link queueControls} arms the per-card multi-select checkbox and the head's Group
+ * {@link groupingControls} arms the per-card multi-select checkbox and the head's Group
  * button. READY sets both; BACKLOG sets {@link reorderControls} alone — it reorders
  * like READY does, but grouping stays READY-only. Every other lane renders a plain,
  * undraggable list, so `cdkDropList`/`cdkDrag` never reach markup that has no reorder
@@ -80,10 +80,10 @@ export class BoardColumn {
   /** Whether this lane carries the grouping affordances — the multi-select
    * checkbox and the Group button — set only for READY (grouping stays
    * READY-only, out of scope to extend). */
-  readonly queueControls = input(false);
+  readonly groupingControls = input(false);
 
   /** Whether this lane carries the reorder affordances — drag-and-drop and the
-   * Top button — set for READY and BACKLOG alike, independently of {@link queueControls}:
+   * Top button — set for READY and BACKLOG alike, independently of {@link groupingControls}:
    * both lists rank independently (`bzh:ranking-is-per-list`) and both are
    * operator-reshapeable, but only READY groups. */
   readonly reorderControls = input(false);
@@ -142,7 +142,8 @@ export class BoardColumn {
    * than defaulted, since a lane with no reorder never reads this. */
   private get list(): BoardReorderList {
     const key = this.column().key;
-    return key === 'notready' ? 'notready' : 'ready';
+    if (key === 'ready' || key === 'notready') return key;
+    throw new Error(`board column ${key} has no reorder list`);
   }
 
   /** The Top button's testid, lane-scoped so it resolves to exactly one

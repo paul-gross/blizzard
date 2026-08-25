@@ -48,6 +48,57 @@ def _refusal_detail(chunk_id: str, *, expected: QueueList, other_ids: set[str]) 
     return f"chunk {chunk_id} is not in the {expected.value} list"
 
 
+def _other_list(list_: QueueList) -> QueueList:
+    return QueueList.NOT_READY if list_ is QueueList.READY else QueueList.READY
+
+
+def _refuse(chunk_id: str, *, expected: QueueList, services: HubServices) -> HTTPException:
+    other_ids = {c.chunk_id for c in services.queue.ordered(_other_list(expected))}
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT, detail=_refusal_detail(chunk_id, expected=expected, other_ids=other_ids)
+    )
+
+
+def _replace(list_: QueueList, chunk_ids: list[str], services: HubServices) -> list[Chunk]:
+    """Resolve ``chunk_ids`` against ``list_``'s current order and replace it — the body
+    ``PUT /api/queue`` and ``PUT /api/backlog`` share, differing only in which list they
+    rank (``bzh:ranking-is-per-list``)."""
+    if len(set(chunk_ids)) != len(chunk_ids):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="chunk_ids must not repeat")
+    current = services.queue.ordered(list_)
+    by_id = {chunk.chunk_id: chunk for chunk in current}
+    for chunk_id in chunk_ids:
+        if chunk_id not in by_id:
+            raise _refuse(chunk_id, expected=list_, services=services)
+    named_ids = set(chunk_ids)
+    ordered = [by_id[chunk_id] for chunk_id in chunk_ids]
+    ordered.extend(chunk for chunk in current if chunk.chunk_id not in named_ids)
+    services.queue.replace_order(list_, ordered)
+    services.events.publish_queue_changed()
+    return ordered
+
+
+def _reposition(list_: QueueList, chunk_id: str, after_chunk_id: str | None, services: HubServices) -> None:
+    """Resolve ``chunk_id``/``after_chunk_id`` against ``list_``'s current order and
+    reposition — the body ``POST /api/queue/position`` and ``POST /api/backlog/position``
+    share, differing only in which list they rank (``bzh:ranking-is-per-list``)."""
+    if after_chunk_id == chunk_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="after_chunk_id must not equal chunk_id"
+        )
+    by_id = {chunk.chunk_id: chunk for chunk in services.queue.ordered(list_)}
+    chunk = by_id.get(chunk_id)
+    if chunk is None:
+        raise _refuse(chunk_id, expected=list_, services=services)
+    after: Chunk | None = None
+    if after_chunk_id is not None:
+        after = by_id.get(after_chunk_id)
+        if after is None:
+            raise _refuse(after_chunk_id, expected=list_, services=services)
+    services.queue.reposition(list_, chunk, after)
+    services.events.publish_queue_changed()
+
+
 @dataclass(frozen=True)
 class ReadyQueue:
     """The hub-ordered ready queue as every peek renders it — position is the order itself."""
@@ -88,22 +139,7 @@ def replace_queue(
     Resolves every named id against the current ready set (``bzh:domain-takes-objects``):
     ``409`` names the first id that is not ready, ``422`` a duplicate id. An unnamed
     ready chunk keeps its relative order, appended after the named ones."""
-    if len(set(request.chunk_ids)) != len(request.chunk_ids):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="chunk_ids must not repeat")
-    ready = services.queue.ordered_ready()
-    ready_by_id = {chunk.chunk_id: chunk for chunk in ready}
-    for chunk_id in request.chunk_ids:
-        if chunk_id not in ready_by_id:
-            other_ids = {c.chunk_id for c in services.queue.ordered_not_ready()}
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=_refusal_detail(chunk_id, expected=QueueList.READY, other_ids=other_ids),
-            )
-    named_ids = set(request.chunk_ids)
-    ordered = [ready_by_id[chunk_id] for chunk_id in request.chunk_ids]
-    ordered.extend(chunk for chunk in ready if chunk.chunk_id not in named_ids)
-    services.queue.replace_order(ordered)
-    services.events.publish_queue_changed()
+    _replace(QueueList.READY, request.chunk_ids, services)
     return ReadyQueue.of(services).view
 
 
@@ -116,29 +152,7 @@ def reposition_queue(
     Resolves both ids against the current ready set (``bzh:domain-takes-objects``):
     ``409`` names either one if it is not ready, ``422`` rejects a self-anchor.
     ``after_chunk_id=null`` moves the chunk to the top of the queue."""
-    if request.after_chunk_id == request.chunk_id:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="after_chunk_id must not equal chunk_id"
-        )
-    ready_by_id = {chunk.chunk_id: chunk for chunk in services.queue.ordered_ready()}
-    chunk = ready_by_id.get(request.chunk_id)
-    if chunk is None:
-        other_ids = {c.chunk_id for c in services.queue.ordered_not_ready()}
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_refusal_detail(request.chunk_id, expected=QueueList.READY, other_ids=other_ids),
-        )
-    after: Chunk | None = None
-    if request.after_chunk_id is not None:
-        after = ready_by_id.get(request.after_chunk_id)
-        if after is None:
-            other_ids = {c.chunk_id for c in services.queue.ordered_not_ready()}
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=_refusal_detail(request.after_chunk_id, expected=QueueList.READY, other_ids=other_ids),
-            )
-    services.queue.reposition(QueueList.READY, chunk, after)
-    services.events.publish_queue_changed()
+    _reposition(QueueList.READY, request.chunk_id, request.after_chunk_id, services)
     return ReadyQueue.of(services).view
 
 
@@ -184,22 +198,7 @@ def replace_backlog(
     Resolves every named id against the current ``not_ready`` set: ``409`` names the
     first id that is not ``not_ready``, ``422`` a duplicate id. An unnamed chunk keeps
     its relative order, appended after the named ones."""
-    if len(set(request.chunk_ids)) != len(request.chunk_ids):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="chunk_ids must not repeat")
-    backlog = services.queue.ordered_not_ready()
-    backlog_by_id = {chunk.chunk_id: chunk for chunk in backlog}
-    for chunk_id in request.chunk_ids:
-        if chunk_id not in backlog_by_id:
-            other_ids = {c.chunk_id for c in services.queue.ordered_ready()}
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=_refusal_detail(chunk_id, expected=QueueList.NOT_READY, other_ids=other_ids),
-            )
-    named_ids = set(request.chunk_ids)
-    ordered = [backlog_by_id[chunk_id] for chunk_id in request.chunk_ids]
-    ordered.extend(chunk for chunk in backlog if chunk.chunk_id not in named_ids)
-    services.queue.replace_order(ordered)
-    services.events.publish_queue_changed()
+    _replace(QueueList.NOT_READY, request.chunk_ids, services)
     return Backlog.of(services).view
 
 
@@ -212,29 +211,7 @@ def reposition_backlog(
     Resolves both ids against the current ``not_ready`` set (``bzh:domain-takes-objects``):
     ``409`` names either one if it is not ``not_ready``, ``422`` rejects a self-anchor.
     ``after_chunk_id=null`` moves the chunk to the top of the backlog."""
-    if request.after_chunk_id == request.chunk_id:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="after_chunk_id must not equal chunk_id"
-        )
-    backlog_by_id = {chunk.chunk_id: chunk for chunk in services.queue.ordered_not_ready()}
-    chunk = backlog_by_id.get(request.chunk_id)
-    if chunk is None:
-        other_ids = {c.chunk_id for c in services.queue.ordered_ready()}
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_refusal_detail(request.chunk_id, expected=QueueList.NOT_READY, other_ids=other_ids),
-        )
-    after: Chunk | None = None
-    if request.after_chunk_id is not None:
-        after = backlog_by_id.get(request.after_chunk_id)
-        if after is None:
-            other_ids = {c.chunk_id for c in services.queue.ordered_ready()}
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=_refusal_detail(request.after_chunk_id, expected=QueueList.NOT_READY, other_ids=other_ids),
-            )
-    services.queue.reposition(QueueList.NOT_READY, chunk, after)
-    services.events.publish_queue_changed()
+    _reposition(QueueList.NOT_READY, request.chunk_id, request.after_chunk_id, services)
     return Backlog.of(services).view
 
 

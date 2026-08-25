@@ -37,6 +37,7 @@ class _FakeChunkRepo:
     promoted_ats_by_chunk: dict[str, datetime] = field(default_factory=dict)
     promoted: list[tuple[str, datetime]] = field(default_factory=list)
     stamped: list[tuple[str, float, datetime]] = field(default_factory=list)
+    promoted_return: int | None = 1
 
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.facts
@@ -50,11 +51,10 @@ class _FakeChunkRepo:
     def promoted_ats(self) -> dict[str, datetime]:
         return self.promoted_ats_by_chunk
 
-    def record_promote(self, chunk_id: str, *, at: datetime) -> None:
+    def record_promote_with_tail_position(self, chunk_id: str, *, position: float, at: datetime) -> int | None:
         self.promoted.append((chunk_id, at))
-
-    def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
         self.stamped.append((chunk_id, position, at))
+        return self.promoted_return
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"PromoteService should not touch {name!r}")

@@ -87,8 +87,8 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/queue"): FLEET_VIEW,
     ("PUT", "/api/queue"): QUEUE_REORDER,
     ("POST", "/api/queue/position"): QUEUE_REORDER,
-    # Backlog (``not_ready``) reorder — QUEUE_REORDER even to read, narrower than the
-    # ready queue's FLEET_VIEW (``bzh:ranking-is-per-list``).
+    # Backlog (``not_ready``) reorder — QUEUE_REORDER even to read, an operator
+    # triage surface, narrower than the ready queue's FLEET_VIEW.
     ("GET", "/api/backlog"): QUEUE_REORDER,
     ("PUT", "/api/backlog"): QUEUE_REORDER,
     ("POST", "/api/backlog/position"): QUEUE_REORDER,

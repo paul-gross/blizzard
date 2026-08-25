@@ -8,6 +8,7 @@ differ (issue #141): grouping needs only an unheld chunk, while reordering ranks
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -81,16 +82,17 @@ class QueueService:
         """``not_ready`` chunks in backlog order — ascending by effective position."""
         return self.ordered(QueueList.NOT_READY)
 
-    def replace_order(self, ordered: list[Chunk]) -> None:
+    def replace_order(self, list_: QueueList, ordered: list[Chunk]) -> None:
         """Idempotent whole-order replacement: one ascending explicit position fact per
         chunk in ``ordered``, front to back. Takes already-resolved ``Chunk`` objects,
-        never ids (``bzh:domain-takes-objects``); ranking every chunk keeps the result
-        deterministic regardless of positions left over from an earlier reorder. Works
-        the same over either list's chunks — the list itself is never read here."""
+        never ids (``bzh:domain-takes-objects``). ``list_`` only selects which store
+        write routes the position (guarded for ``not_ready``, see :meth:`_write_fn`) —
+        the list itself is never read here."""
+        write = self._write_fn(list_)
         at = self._clock.now()
         for position, chunk in enumerate(ordered):
-            self._chunks.record_queue_position(chunk.chunk_id, position=float(position), at=at)
-        _log.info("queue order replaced", chunk_ids=[c.chunk_id for c in ordered])
+            write(chunk.chunk_id, position=float(position), at=at)
+        _log.info("queue order replaced", list=list_.value, chunk_ids=[c.chunk_id for c in ordered])
 
     def reposition(self, list_: QueueList, chunk: Chunk, after: Chunk | None) -> None:
         """Single-chunk fractional reorder within ``list_``: stamp ``chunk`` a new
@@ -98,6 +100,7 @@ class QueueService:
         without restamping every other chunk in the list (issue #137). Repeated midpoint
         bisection eventually exhausts the representable doubles between two neighbours;
         that case renormalizes via :meth:`replace_order` and recomputes the midpoint."""
+        write = self._write_fn(list_)
         positions = self._chunks.queue_positions()
         promoted_ats = self._chunks.promoted_ats()
         candidates = [c for c in self._candidates(list_) if c.chunk_id != chunk.chunk_id]
@@ -115,14 +118,14 @@ class QueueService:
                 next_pos = self._effective_position(next_chunk, positions, promoted_ats)
                 if math.nextafter(after_pos, next_pos) >= next_pos:
                     renormalized = [*ordered[: after_index + 1], chunk, *ordered[after_index + 1 :]]
-                    self.replace_order(renormalized)
+                    self.replace_order(list_, renormalized)
                     positions = self._chunks.queue_positions()
                     promoted_ats = self._chunks.promoted_ats()
                     after_pos = self._effective_position(after, positions, promoted_ats)
                     next_pos = self._effective_position(next_chunk, positions, promoted_ats)
                 new_position = (after_pos + next_pos) / 2
 
-        self._chunks.record_queue_position(chunk.chunk_id, position=new_position, at=self._clock.now())
+        write(chunk.chunk_id, position=new_position, at=self._clock.now())
         _log.info(
             "queue chunk repositioned",
             list=list_.value,
@@ -130,6 +133,15 @@ class QueueService:
             after_chunk_id=after.chunk_id if after is not None else None,
             position=new_position,
         )
+
+    def _write_fn(self, list_: QueueList) -> Callable[..., None]:
+        """The one place :meth:`replace_order`/:meth:`reposition` pick which store write
+        routes a position — ``not_ready`` through the promoted-guarded
+        :meth:`~blizzard.hub.domain.work.IWriteChunkRepository.record_backlog_position`,
+        ``ready`` through :meth:`~blizzard.hub.domain.work.IWriteChunkRepository.record_queue_position`."""
+        if list_ is QueueList.NOT_READY:
+            return self._chunks.record_backlog_position
+        return self._chunks.record_queue_position
 
     def _candidates(self, list_: QueueList) -> list[Chunk]:
         """``list_``'s repository read — the one place :meth:`ordered`/:meth:`reposition`

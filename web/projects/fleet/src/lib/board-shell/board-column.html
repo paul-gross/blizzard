@@ -1,6 +1,6 @@
 <div class="b-col-head">
   <span class="col-lbl">{{ column().label }}</span>
-  @if (queueControls() && canReorder()) {
+  @if (groupingControls() && canReorder()) {
     <fleet-kit-button
       variant="primary"
       testid="group-selected"
@@ -29,9 +29,7 @@
     @for (card of cards(); track card.chunkId; let i = $index) {
       <div class="q-card" cdkDrag>
         <div class="q-ctl">
-          <!-- Grouping stays READY-only: the checkbox only renders alongside
-               reorderControls when queueControls is also armed for this lane. -->
-          @if (queueControls()) {
+          @if (groupingControls()) {
             <input
               type="checkbox"
               class="sel"

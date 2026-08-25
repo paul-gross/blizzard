@@ -92,7 +92,8 @@ export class BoardPage {
   /** The backlog's own hub-ordered read (`GET /api/backlog`) — the BACKLOG
    * lane's ranking. Gated on {@link canReorder} itself, not merely rendered
    * conditionally: a board without `queue:reorder` must never even attempt this
-   * read (`bzh:ranking-is-per-list`'s narrower backlog permission). */
+   * read — the backlog is an operator triage surface, gated narrower than the
+   * ready queue's `FLEET_VIEW`. */
   private readonly backlogQuery = injectHubBacklogQuery(this.canReorder);
 
   /** Promote a backlog chunk to ready from its board card. */
