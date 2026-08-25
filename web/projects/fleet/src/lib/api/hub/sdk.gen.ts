@@ -1083,9 +1083,8 @@ export const createWorkItemApiWorkSourcesSourceItemsPost = <ThrowOnError extends
  * Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref
  * (D9), or a chunk a race deletes between resolving it and this write; 409 for a known
  * source with no editor (D4), an item that already carries a closure, or one an
- * *acquired* live chunk still holds (D5, D10) — an unacquired holder deletes instead
- * of refusing, publishing the same ``chunk-changed``/``queue-changed`` pair a direct
- * chunk delete does (issue #364).
+ * *acquired* live chunk still holds (D5, D10) — an unacquired holder deletes instead,
+ * publishing the same ``chunk-changed``/``queue-changed`` pair a direct delete does.
  */
 export const withdrawWorkItemApiWorkSourcesSourceItemsRefDelete = <ThrowOnError extends boolean = false>(options: Options<WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteData, ThrowOnError>): RequestResult<WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteResponses, WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteErrors, ThrowOnError> => (options.client ?? client).delete<WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteResponses, WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteErrors, ThrowOnError>({ url: '/api/work-sources/{source}/items/{ref}', ...options });
 

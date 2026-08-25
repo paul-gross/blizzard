@@ -11604,7 +11604,7 @@
     },
     "/api/work-sources/{source}/items/{ref}": {
       "delete": {
-        "description": "Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref\n(D9), or a chunk a race deletes between resolving it and this write; 409 for a known\nsource with no editor (D4), an item that already carries a closure, or one an\n*acquired* live chunk still holds (D5, D10) \u2014 an unacquired holder deletes instead\nof refusing, publishing the same ``chunk-changed``/``queue-changed`` pair a direct\nchunk delete does (issue #364).",
+        "description": "Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref\n(D9), or a chunk a race deletes between resolving it and this write; 409 for a known\nsource with no editor (D4), an item that already carries a closure, or one an\n*acquired* live chunk still holds (D5, D10) \u2014 an unacquired holder deletes instead,\npublishing the same ``chunk-changed``/``queue-changed`` pair a direct delete does.",
         "operationId": "withdraw_work_item_api_work_sources__source__items__ref__delete",
         "parameters": [
           {
