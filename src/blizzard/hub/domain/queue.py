@@ -34,7 +34,7 @@ class QueueList(Enum):
 
 
 class ChunkNotFound(LookupError):
-    """A named chunk does not exist (or was grouped/discarded away)."""
+    """A named chunk does not exist (or was grouped or deleted away)."""
 
     def __init__(self, chunk_id: str) -> None:
         super().__init__(f"unknown chunk {chunk_id}")
