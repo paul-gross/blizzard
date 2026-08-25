@@ -57,9 +57,8 @@ class WorkSourceEntry:
         """One credentialed client + binding per configured source, plus the built-in
         ``hub`` source (issue #357) — always seated, both an editor (blizzard#358) and a
         closer (issue #360), neither opt-in. A source's ``token_env`` naming an unset
-        variable fails here, at boot. ``users`` is the composition root's own repository
-        (blizzard#362); ``work_item_store``/``delete`` are too (issue #364), threaded
-        through so the built-in binding shares them rather than building its own."""
+        variable fails here, at boot. ``users``/``work_item_store``/``delete`` are the
+        composition root's own instances, threaded through rather than rebuilt (#362, #364)."""
         built: dict[str, IWorkSource] = {}
         annotators: dict[str, IWorkAnnotator] = {}
         closers: dict[str, IWorkCloser] = {}

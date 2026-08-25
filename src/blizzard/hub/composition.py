@@ -191,12 +191,10 @@ def build_services(
     transcript_caps: TranscriptCaps | None = None,
 ) -> HubServices:
     """Construct and wire every fleet service over a migrated store engine.
-
-    ``hub_command_runner`` / ``hub_workdir`` are the hub command node's mechanism seams
-    (#65), left ``None`` for the real subprocess/filesystem adapters. An explicit
-    ``oauth_registry`` wins over ``oauth_providers`` when both are given. ``claim_lock``/
-    ``work_item_store``/``delete`` are required rather than built here (issue #364), so
-    the work-source registry's built-in hub binding shares the same three, not copies."""
+    ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams
+    (#65), left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
+    ``oauth_providers``. ``claim_lock``/``work_item_store``/``delete`` are required, not
+    built here, so the built-in hub binding shares the same three (issue #364)."""
     clock = clock or SystemClock()
     chunk_store = ChunkStore(engine, clock)
     graph_store = GraphStore(engine)

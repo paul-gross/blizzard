@@ -287,12 +287,10 @@ export const ingestChunkApiChunksPost = <ThrowOnError extends boolean = false>(o
  * Delete Chunk
  *
  * Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds
- * in the same write (issue #364).
- *
- * 404 for an unknown chunk, or one a race deletes between resolving it and this write;
- * 409 for one a runner or a human holds, or one terminal — deletion needs a chunk at
- * the same statuses grouping does. Irreversible: CHUNK is gone from every read the
- * instant this returns, so the response carries nothing richer than the id deleted.
+ * in the same write (issue #364). 404 for an unknown chunk, or one a race deletes
+ * between resolving it and this write; 409 for one a runner or a human holds, or one
+ * terminal — deletion needs a chunk at the same statuses grouping does. Irreversible:
+ * CHUNK is gone from every read the instant this returns.
  */
 export const deleteChunkApiChunksChunkIdDelete = <ThrowOnError extends boolean = false>(options: Options<DeleteChunkApiChunksChunkIdDeleteData, ThrowOnError>): RequestResult<DeleteChunkApiChunksChunkIdDeleteResponses, DeleteChunkApiChunksChunkIdDeleteErrors, ThrowOnError> => (options.client ?? client).delete<DeleteChunkApiChunksChunkIdDeleteResponses, DeleteChunkApiChunksChunkIdDeleteErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}',

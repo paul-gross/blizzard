@@ -144,13 +144,11 @@ def seat_hub_work_source(
     items: IWriteWorkItemRepository,
     delete: DeleteService,
 ) -> None:
-    """Seats the built-in ``hub`` binding into ``sources``/``editors``/``closers`` in
-    place — reached from both
+    """Seats the built-in ``hub`` binding in place — reached from both
     :meth:`~blizzard.hub.work_sources.internal.factory.WorkSourceEntry.registry` and
     ``tests/support.py::build_hub``: never absent, never configured. ``users``/``items``/
-    ``delete`` are the composition root's own instances, not fresh ones (blizzard#362,
-    issue #364) — the same ``WorkItemStore`` and the same ``DeleteService``, carrying its
-    shared claim lock, back every write path regardless of which door reaches them."""
+    ``delete`` are the composition root's own instances (#362, #364), so the same
+    claim-locked ``DeleteService`` backs every write path regardless of the door reaching it."""
     chunks = ChunkStore(engine, clock)
     edits = WorkItemEditService(items=items, chunks=chunks, clock=clock, delete=delete)
     hub_source = HubWorkSource(items, chunks, edits, users)

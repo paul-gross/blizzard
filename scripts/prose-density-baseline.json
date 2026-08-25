@@ -879,8 +879,8 @@
   },
   "blizzard/hub/api/chunks.py": {
    "comments": 15,
-   "docstrings": 65,
-   "total": 563
+   "docstrings": 63,
+   "total": 561
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
@@ -1149,8 +1149,8 @@
   },
   "blizzard/hub/composition.py": {
    "comments": 39,
-   "docstrings": 14,
-   "total": 307
+   "docstrings": 12,
+   "total": 305
   },
   "blizzard/hub/config.py": {
    "comments": 42,
@@ -1389,8 +1389,8 @@
   },
   "blizzard/hub/domain/work_items.py": {
    "comments": 0,
-   "docstrings": 41,
-   "total": 190
+   "docstrings": 40,
+   "total": 189
   },
   "blizzard/hub/events/__init__.py": {
    "comments": 0,
@@ -1844,8 +1844,8 @@
   },
   "blizzard/hub/work_sources/editor.py": {
    "comments": 0,
-   "docstrings": 26,
-   "total": 61
+   "docstrings": 25,
+   "total": 60
   },
   "blizzard/hub/work_sources/internal/__init__.py": {
    "comments": 0,
@@ -1854,8 +1854,8 @@
   },
   "blizzard/hub/work_sources/internal/factory.py": {
    "comments": 0,
-   "docstrings": 17,
-   "total": 122
+   "docstrings": 16,
+   "total": 121
   },
   "blizzard/hub/work_sources/internal/github_work_source.py": {
    "comments": 6,
@@ -1864,8 +1864,8 @@
   },
   "blizzard/hub/work_sources/internal/hub_work_source.py": {
    "comments": 2,
-   "docstrings": 30,
-   "total": 171
+   "docstrings": 28,
+   "total": 169
   },
   "blizzard/hub/work_sources/registry.py": {
    "comments": 0,
@@ -3326,8 +3326,8 @@
   },
   "test_chunk_delete_route.py": {
    "comments": 3,
-   "docstrings": 19,
-   "total": 190
+   "docstrings": 17,
+   "total": 188
   },
   "test_chunk_deleted_migration.py": {
    "comments": 6,
@@ -3836,8 +3836,8 @@
   },
   "test_hub_work_source_api.py": {
    "comments": 29,
-   "docstrings": 27,
-   "total": 454
+   "docstrings": 26,
+   "total": 453
   },
   "test_idp_authorize.py": {
    "comments": 6,

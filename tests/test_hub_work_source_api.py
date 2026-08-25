@@ -285,9 +285,8 @@ def test_the_listing_route_threads_its_limit_and_refuses_one_out_of_range(tmp_pa
 
 def test_delete_deletes_an_unacquired_holder_and_returns_200(tmp_path: Path) -> None:
     """D3 (issue #364): the freshly-minted holder is not_ready — unacquired, not
-    genuinely live — so DELETE succeeds immediately, deleting it along the way.
-    Creation itself mints the holder (blizzard#359); the cascade publishes the same
-    chunk-changed/queue-changed pair a direct chunk delete does."""
+    genuinely live — so DELETE succeeds immediately, publishing the same
+    chunk-changed/queue-changed pair a direct chunk delete does (blizzard#359)."""
     hub = build_hub(tmp_path)
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
     ref, chunk_id = created["ref"], created["chunk_id"]

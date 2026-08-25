@@ -156,9 +156,8 @@ class WorkItemEditService:
         """Close ``item`` as withdrawn; raises :class:`WorkItemNotEditable` when already
         closed. An unacquired holder is deleted via
         :class:`~blizzard.hub.domain.delete.DeleteService` instead of refusing (issue
-        #364); :class:`WorkItemHeldByLiveChunk` still raises for one a runner or a human
-        holds. The result names the cascade-deleted chunk, if any, so the caller can
-        publish its own delete frame without a second store round-trip."""
+        #364); :class:`WorkItemHeldByLiveChunk` still raises for a runner- or human-held
+        one. Names the cascade-deleted chunk, if any, for the caller's own delete frame."""
         self._require_open(item)
         holder = self._chunks.find_live_holder(item.pointer)
         if holder is None:

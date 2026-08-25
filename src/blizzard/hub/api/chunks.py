@@ -450,12 +450,10 @@ def delete_chunk(
     chunk_id: str, request: ChunkDeleteRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkDeleteResponse:
     """Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds
-    in the same write (issue #364).
-
-    404 for an unknown chunk, or one a race deletes between resolving it and this write;
-    409 for one a runner or a human holds, or one terminal — deletion needs a chunk at
-    the same statuses grouping does. Irreversible: CHUNK is gone from every read the
-    instant this returns, so the response carries nothing richer than the id deleted."""
+    in the same write (issue #364). 404 for an unknown chunk, or one a race deletes
+    between resolving it and this write; 409 for one a runner or a human holds, or one
+    terminal — deletion needs a chunk at the same statuses grouping does. Irreversible:
+    CHUNK is gone from every read the instant this returns."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")

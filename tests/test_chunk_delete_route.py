@@ -1,10 +1,8 @@
-"""The ``DELETE /chunks/{id}`` route over the HTTP surface (issue #364, Phase 2).
-
-Proves the controller wires ``DeleteService`` correctly end to end: 202/404/409, the
-chunk gone from every read, its open hub item(s) withdrawn in the same write, and both
+"""The ``DELETE /chunks/{id}`` route over the HTTP surface (issue #364, Phase 2). Proves
+the controller wires ``DeleteService`` correctly end to end: 202/404/409, the chunk gone
+from every read, its open hub item(s) withdrawn in the same write, and both
 ``chunk-changed``/``queue-changed`` published — the response shape and the degraded
-``chunk-changed`` frame the delete route is the first (and, per the plan, only) caller
-to exercise, alongside every other mutating chunk route's own frame staying unchanged."""
+``chunk-changed`` frame the delete route is the first (and only) caller to exercise."""
 
 from __future__ import annotations
 

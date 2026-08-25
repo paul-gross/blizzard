@@ -52,10 +52,9 @@ class IWorkEditor(Protocol):
         ...
 
     def withdraw(self, pointer: WorkRef, *, by: str) -> WithdrawnWorkItem:
-        """Close ``pointer`` as withdrawn, attributed to ``by``.
-
-        Raises :class:`WorkItemRefUnknownError` for an unallocated ``ref``, the service's
+        """Close ``pointer`` as withdrawn, attributed to ``by``. Raises
+        :class:`WorkItemRefUnknownError` for an unallocated ``ref``, the service's
         closure-guard error for an already-closed item, and its live-holder refusal while
-        a live chunk still holds the pointer. Names the cascade-deleted holder chunk, if
-        an unacquired one was deleted along the way."""
+        a live chunk still holds the pointer — else names the unacquired holder chunk
+        deleted along the way, if any."""
         ...
