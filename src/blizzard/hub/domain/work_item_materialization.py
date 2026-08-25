@@ -82,9 +82,7 @@ class WorkItemMaterializationReconciler:
             skipped=skipped,
         )
 
-    def _materialize_create(
-        self, row: WorkItemProposalRow, data: dict
-    ) -> WorkItemMaterializationOutcome | None:
+    def _materialize_create(self, row: WorkItemProposalRow, data: dict) -> WorkItemMaterializationOutcome | None:
         """D7: always the reserved hub source. ``None`` means a transient failure
         (assumption 8) — left unjudged for the next pass, not recorded terminal."""
         if row.runner_id is None:
@@ -108,9 +106,7 @@ class WorkItemMaterializationReconciler:
             return None
         return WorkItemMaterializationOutcome.CREATED if result is not None else None
 
-    def _materialize_update(
-        self, row: WorkItemProposalRow, data: dict
-    ) -> WorkItemMaterializationOutcome | None:
+    def _materialize_update(self, row: WorkItemProposalRow, data: dict) -> WorkItemMaterializationOutcome | None:
         """D6: resolves only through a source that implements the editor capability —
         today the hub source alone. Every other unresolvable case (nonexistent, closed,
         withdrawn) is the work item's own three named cases."""
