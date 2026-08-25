@@ -1,11 +1,8 @@
-"""``GET``/``PUT /api/queue`` and ``GET``/``PUT /api/backlog`` — the ready-queue and
-``not_ready``-list reads and whole-order replaces (#104, ``bzh:ranking-is-per-list``).
+"""``GET``/``PUT /api/queue`` and ``GET``/``PUT /api/backlog`` (#104, ``bzh:ranking-is-per-list``).
 
-``GET /api/queue`` is the hub-ordered ready-queue view; ``PUT /api/queue`` is the
-idempotent whole-order replacement (``bzh:domain-takes-objects``): the controller
-resolves every id before the domain ever sees a ``Chunk``. ``GET``/``PUT /api/backlog``
-are the ``not_ready`` list's own counterparts, ranked independently — never mixed with
-the ready queue's order. A runner bearer token is rejected on every route."""
+The controller resolves every id before the domain ever sees a ``Chunk``
+(``bzh:domain-takes-objects``). Backlog is the ``not_ready`` list's own counterpart,
+ranked independently — never mixed with the ready queue's order."""
 
 from __future__ import annotations
 
@@ -220,9 +217,8 @@ def test_post_queue_position_self_anchor_is_422(tmp_path: Path) -> None:
     assert resp.status_code == 422
 
 
-# --- GET/PUT /api/backlog, POST /api/backlog/position — the not_ready list's own
-# reordering surface, ranked independently of the ready queue (``bzh:ranking-is-per-list``)
-# ------------------------------------------------------------------------------------
+# --- GET/PUT /api/backlog, POST /api/backlog/position — the not_ready list's own reorder
+# surface, ranked independently of the ready queue (``bzh:ranking-is-per-list``) ---------
 
 
 def test_get_backlog_returns_the_ordered_not_ready_view(tmp_path: Path) -> None:
@@ -273,8 +269,8 @@ def test_post_backlog_position_self_anchor_is_422(tmp_path: Path) -> None:
     assert resp.status_code == 422
 
 
-# --- Cross-list refusal — each route resolves candidates against its own list only
-# (``bzh:ranking-is-per-list``); the refusal message names both lists -----------------
+# --- Cross-list refusal — each route resolves candidates against its own list only,
+# naming both lists in the refusal (``bzh:ranking-is-per-list``) ------------------------
 
 
 def test_put_queue_naming_a_not_ready_chunk_is_409_naming_both_lists(tmp_path: Path) -> None:
@@ -325,9 +321,8 @@ def test_post_queue_position_naming_a_not_ready_after_chunk_id_is_409(tmp_path: 
     assert "not_ready" in detail
 
 
-# --- Backlog permission — QUEUE_REORDER even to read, unlike the ready queue's
-# FLEET_VIEW read (``bzh:ranking-is-per-list``: the backlog rank is an operator triage
-# surface, not fleet-wide visibility) --------------------------------------------------
+# --- Backlog permission — QUEUE_REORDER even to read, an operator triage surface,
+# unlike the ready queue's FLEET_VIEW read (``bzh:ranking-is-per-list``) ----------------
 
 
 def test_a_fleet_view_only_principal_is_refused_the_backlog_read(tmp_path: Path) -> None:

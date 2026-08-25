@@ -1014,9 +1014,8 @@ def queue_set(cli: CliContext, chunk_ids: tuple[str, ...]) -> None:
     """Replace the whole ready-queue order with CHUNK_IDS, front to back.
 
     A pure client of ``PUT /api/queue`` — an idempotent whole-order replacement
-    (issue #104). Every id must be in the ready list, not the not_ready backlog (409),
-    and must not repeat (422); a ready chunk not named keeps its relative order,
-    appended after the named ones."""
+    (issue #104). Every id must be in the ready list, not the backlog (409), and must
+    not repeat (422); a chunk not named keeps its relative order, appended last."""
     resp = cli.put(
         "/api/queue",
         "PUT /queue",
@@ -1038,8 +1037,7 @@ def queue_move(cli: CliContext, chunk_id: str, position: int) -> None:
 
     A client of the single-chunk fractional ``POST /api/queue/position`` (issue #137):
     reads the current order, drops CHUNK_ID out of it, clamps POSITION into what's left,
-    and sends one anchor. 409 when CHUNK_ID is not in the ready list (it may be in the
-    not_ready backlog instead)."""
+    and sends one anchor. 409 when CHUNK_ID is not in the ready list, not the backlog."""
     peek = cli.get("/api/queue", "GET /queue")
     rest = [entry["chunk_id"] for entry in peek.json().get("entries", []) if entry["chunk_id"] != chunk_id]
     index = min(max(position, 0), len(rest))

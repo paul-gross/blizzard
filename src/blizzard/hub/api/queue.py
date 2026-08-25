@@ -1,16 +1,9 @@
-"""Queue and backlog routes — read, replace, and group — the operator surface
-(issues #87, #104).
+"""Queue and backlog routes — read, replace, and group (issues #87, #104).
 
-Ready is a **derived** status (a minted chunk with no live route) and each of the
-``ready`` queue and the ``not_ready`` list's orders is an explicit hub-side property,
-ranked independently (``bzh:ranking-is-per-list``). Controllers stay read-only over the
-store and delegate the writes to the queue-shaping domain services
-(``bzh:controller-read-only``); a runner's bearer token is rejected rather than treated
-as anonymous-plus-credential.
-
-The backlog routes require ``QUEUE_REORDER`` even to read — deliberately narrower than
-the ready queue's ``FLEET_VIEW`` read, since the backlog rank is an operator triage
-surface, not fleet-wide visibility."""
+The ``ready`` queue and ``not_ready`` list each rank independently
+(``bzh:ranking-is-per-list``); controllers stay read-only and delegate writes to the
+queue-shaping domain (``bzh:controller-read-only``). Backlog routes require
+``QUEUE_REORDER`` even to read — an operator triage surface, not fleet-wide visibility."""
 
 from __future__ import annotations
 
@@ -188,10 +181,9 @@ def replace_backlog(
 ) -> BacklogPeekResponse:
     """Idempotent whole-order replacement of the backlog.
 
-    Resolves every named id against the current ``not_ready`` set
-    (``bzh:domain-takes-objects``): ``409`` names the first id that is not ``not_ready``,
-    ``422`` a duplicate id. An unnamed ``not_ready`` chunk keeps its relative order,
-    appended after the named ones."""
+    Resolves every named id against the current ``not_ready`` set: ``409`` names the
+    first id that is not ``not_ready``, ``422`` a duplicate id. An unnamed chunk keeps
+    its relative order, appended after the named ones."""
     if len(set(request.chunk_ids)) != len(request.chunk_ids):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="chunk_ids must not repeat")
     backlog = services.queue.ordered_not_ready()

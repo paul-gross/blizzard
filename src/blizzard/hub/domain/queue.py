@@ -3,8 +3,7 @@
 Order derives from appended position facts; grouping folds work refs into the survivor
 and discards the rest as ephemeral. Neither touches an acquired chunk, but their scopes
 differ (issue #141): grouping needs only an unheld chunk, while reordering ranks the
-``ready`` queue and the ``not_ready`` list, each independently — never as one interleaved
-order (blizzard-context:/domain/work/ranking.md, ``bzh:ranking-is-per-list``)."""
+``ready`` queue and ``not_ready`` list independently (``bzh:ranking-is-per-list``)."""
 
 from __future__ import annotations
 

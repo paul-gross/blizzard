@@ -110,9 +110,8 @@ def test_queue_move_reports_409_when_chunk_is_not_ready(monkeypatch: pytest.Monk
 def test_queue_move_falls_back_to_the_updated_both_lists_refusal_when_the_body_names_no_detail(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # ``check()`` prefers the response body's own ``detail``; when a 409 carries none,
-    # the CLI's own ``on_status`` message is what the operator sees — proven here to
-    # name both lists (``bzh:ranking-is-per-list``), independent of the body text.
+    # When a 409 body carries no ``detail``, the CLI's own ``on_status`` fallback is
+    # what the operator sees — proven here to name both lists, independent of the body.
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _queue_response(["ch_a", "ch_b"])
 

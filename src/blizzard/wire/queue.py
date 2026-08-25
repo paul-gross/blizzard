@@ -1,11 +1,9 @@
 """The ready-queue peek and the backlog's own reordering surface.
 
 ``GET /api/queue`` (and the runner's fleet-side ``GET /api/fleet/queue/peek``) returns
-the hub-ordered ready queue (chunks with no live route), read-only. ``GET /api/backlog``
-is its ``not_ready``-list counterpart, an operator triage surface rather than a runner
-read. The two lists rank independently (``bzh:ranking-is-per-list``), so their wire
-models are kept separate rather than shared. Order derives from appended facts.
-"""
+the hub-ordered ready queue, read-only. ``GET /api/backlog`` is its ``not_ready``-list
+counterpart, ranked independently (``bzh:ranking-is-per-list``); their wire models are
+kept separate rather than shared. Order derives from appended facts."""
 
 from __future__ import annotations
 
@@ -67,8 +65,7 @@ class BacklogReplaceRequest(BaseModel):
     """Idempotent whole-order replacement of the backlog — ``PUT /api/backlog``.
 
     ``chunk_ids`` is the desired order, front to back; each must name a ``not_ready``
-    chunk (``409``) and not repeat (``422``). An unnamed ``not_ready`` chunk is appended,
-    order kept."""
+    chunk (``409``) and not repeat (``422``). An unnamed chunk is appended, order kept."""
 
     chunk_ids: list[str]
 

@@ -1,12 +1,9 @@
 """QueueService (unit tier) — the ready-queue/backlog sort key, facts only (issue #137,
 ``bzh:ranking-is-per-list``).
 
-:meth:`QueueService._effective_position` is a pure function over already-loaded dicts
-(``bzh:domain-takes-objects``), unit-tested with zero store. :meth:`QueueService.ordered`
-and :meth:`QueueService.reposition` share that one sort key across both lists — proven
-here by driving each through :data:`QueueList.READY` and :data:`QueueList.NOT_READY`
-alike. :meth:`reposition` writes through a fake chunk repository (``bzh:repository-split``)
-whose ``record_queue_position`` mutates ``positions`` in place for the retry path."""
+:meth:`QueueService.ordered` and :meth:`reposition` share one sort key across both lists
+— proven by driving each through :data:`QueueList.READY` and :data:`.NOT_READY` alike,
+against a fake chunk repository (``bzh:repository-split``), zero store."""
 
 from __future__ import annotations
 
