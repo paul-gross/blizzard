@@ -155,6 +155,74 @@ describe('EventLogPanel', () => {
     expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe('C-1RJ1 review → build');
   });
 
+  // --- Delete's actor (D7a, issue #364) -------------------------------------
+
+  it('renders a deleted-cause backfill row with its actor as line 2, in place of a runner', async () => {
+    const fixture = await render([
+      {
+        type: 'chunk-changed',
+        key: 'k-del',
+        at: '2020-01-01T00:00:00Z',
+        chunk_id: 'ch_del',
+        status: 'not_ready',
+        cause: 'deleted',
+        by: 'operator',
+      },
+    ]);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe('C-del → not_ready');
+    expect(el.querySelector('[data-testid="event-log-detail"]')?.textContent?.trim()).toBe('operator');
+  });
+
+  it('renders a deleted-cause frame from the live tee, watched in real time, with its actor as line 2', async () => {
+    const fixture = await render([]);
+    log.set([
+      {
+        seq: 1,
+        type: 'chunk-changed',
+        data: { chunk_id: 'ch_del', status: 'not_ready', cause: 'deleted', by: 'operator', key: 'k-del-live' },
+        at: 5_000,
+        key: 'k-del-live',
+      },
+    ]);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe('C-del → not_ready');
+    expect(el.querySelector('[data-testid="event-log-detail"]')?.textContent?.trim()).toBe('operator');
+  });
+
+  it('still renders the deleting actor from the live frame alone once it dedupes a same-key backfill row', async () => {
+    const fixture = await render([
+      {
+        type: 'chunk-changed',
+        key: 'k-del-both',
+        at: '2020-01-01T00:00:00Z',
+        chunk_id: 'ch_del',
+        status: 'not_ready',
+        cause: 'deleted',
+        by: 'operator',
+      },
+    ]);
+    log.set([
+      {
+        seq: 1,
+        type: 'chunk-changed',
+        data: { chunk_id: 'ch_del', status: 'not_ready', cause: 'deleted', by: 'operator', key: 'k-del-both' },
+        at: 5_000,
+        key: 'k-del-both',
+      },
+    ]);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // Exactly one row (the live copy wins the dedup), and it still carries the actor —
+    // proving the live ChunkChanged.by wiring alone, not just the backfill's, renders it.
+    expect(el.querySelectorAll('[data-testid="event-log-row"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="event-log-detail"]')?.textContent?.trim()).toBe('operator');
+  });
+
   it('renders a runner-changed frame from the live tee as what actually changed', async () => {
     const fixture = await render([]);
     log.set([{ seq: 1, type: 'runner-changed', data: { runner_id: 'runner-local', kind: 'paused', by: 'operator' }, at: 0 }]);

@@ -13,6 +13,7 @@
           [canReorder]="canReorder()"
           (selectChunk)="selectChunk.emit($event)"
           (promote)="promote.emit($event)"
+          (delete)="delete.emit($event)"
           (reposition)="reposition.emit($event)"
           (moveToTop)="moveToTop.emit($event)"
           (group)="group.emit($event)"

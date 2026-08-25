@@ -159,6 +159,15 @@
   font-size: var(--fs-xs);
   white-space: nowrap;
 }
+/* The control row (issue #364): Promote and Delete sit side by side here rather
+   than each stacking its own full-width row — empty (no control renders) when
+   canControl is false or the status is outside both controls' reach, so it never
+   adds a visible gap on a read-only or non-unacquired card. */
+.card-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .card-promote {
   align-self: flex-start;
   border: 1px solid var(--amber-dim);
