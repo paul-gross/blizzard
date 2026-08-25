@@ -9,10 +9,16 @@ import { BoardCardComponent } from './board-card';
  * The board card's control row genuinely stays a row (D8, issue #364) — a real
  * layout claim jsdom cannot make: it never actually lays out the flex row
  * `board-card.css`'s `.card-controls` declares, so `web:unit-test` cannot see
- * PROMOTE and DELETE collapse into an overlapping or overflowing pair at the
- * board right rail's own narrow width. Mounts a `not_ready` card with
- * `canControl` true — the one status both controls render on together, and so
- * the denser, more-likely-to-overflow case than `ready`'s DELETE-alone row.
+ * PROMOTE and DELETE collapse into an overlapping or overflowing pair. Mounts
+ * a bare `<fleet-board-card>` directly on `document.body` at the full
+ * 390px/320px viewport width, not a board column's own narrower fractional
+ * share of it — the board lays its six lanes out as equal grid tracks, and the
+ * hub's own chrome (rails, padding) eats further into whatever's left, so a
+ * real column runs narrower still. That's a real, if generous, upper bound on
+ * the row's available width — wide enough that a genuine collapse there would
+ * still show. Mounts a `not_ready` card with `canControl` true — the one
+ * status both controls render on together, and so the denser,
+ * more-likely-to-overflow case than `ready`'s DELETE-alone row.
  *
  * Follows `local-panel-mobile.shell-sweep.spec.ts`'s own multi-width shape (a
  * plain `for` loop over {@link WIDTHS}, one `it` per width) rather than a
@@ -40,9 +46,9 @@ const CARD: BoardCard = {
   completedAt: null,
 };
 
-// 390 (a typical phone) and 320 (the narrowest common phone) — the board right
-// rail's own narrow-width ceiling, the same pair `local-panel-mobile.shell-sweep.spec.ts`
-// sweeps for the runner's mobile chunk list.
+// 390 (a typical phone) and 320 (the narrowest common phone) — viewport widths, not
+// a board column's own narrower fractional share of one; the same pair
+// `local-panel-mobile.shell-sweep.spec.ts` sweeps for the runner's mobile chunk list.
 const WIDTHS = [390, 320];
 
 async function renderCard(width: number): Promise<HTMLElement> {

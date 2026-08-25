@@ -246,9 +246,9 @@ export const replaceBacklogApiBacklogPut = <ThrowOnError extends boolean = false
  *
  * Single-chunk fractional reorder within the backlog.
  *
- * Resolves both ids against the current ``not_ready`` set (``bzh:domain-takes-objects``):
- * ``409`` names either one if it is not ``not_ready``, ``422`` rejects a self-anchor.
- * ``after_chunk_id=null`` moves the chunk to the top of the backlog.
+ * Resolves both ids against the current ``not_ready`` set: ``409`` names either one if
+ * it is not ``not_ready``, ``422`` rejects a self-anchor. ``after_chunk_id=null`` moves
+ * the chunk to the top of the backlog.
  */
 export const repositionBacklogApiBacklogPositionPost = <ThrowOnError extends boolean = false>(options: Options<RepositionBacklogApiBacklogPositionPostData, ThrowOnError>): RequestResult<RepositionBacklogApiBacklogPositionPostResponses, RepositionBacklogApiBacklogPositionPostErrors, ThrowOnError> => (options.client ?? client).post<RepositionBacklogApiBacklogPositionPostResponses, RepositionBacklogApiBacklogPositionPostErrors, ThrowOnError>({
     url: '/api/backlog/position',
@@ -289,13 +289,19 @@ export const ingestChunkApiChunksPost = <ThrowOnError extends boolean = false>(o
  * Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds
  * in the same write (issue #364).
  *
- * 404 for an unknown chunk; 409 for one a runner or a human holds, or one terminal —
- * deletion needs a chunk at
- * :data:`~blizzard.hub.domain.queue.GROUPABLE_STATUSES`, exactly as grouping does.
- * Irreversible: CHUNK is gone from every read the instant this returns, so the
- * response carries nothing richer than the id deleted.
+ * 404 for an unknown chunk, or one a race deletes between resolving it and this write;
+ * 409 for one a runner or a human holds, or one terminal — deletion needs a chunk at
+ * the same statuses grouping does. Irreversible: CHUNK is gone from every read the
+ * instant this returns, so the response carries nothing richer than the id deleted.
  */
-export const deleteChunkApiChunksChunkIdDelete = <ThrowOnError extends boolean = false>(options: Options<DeleteChunkApiChunksChunkIdDeleteData, ThrowOnError>): RequestResult<DeleteChunkApiChunksChunkIdDeleteResponses, DeleteChunkApiChunksChunkIdDeleteErrors, ThrowOnError> => (options.client ?? client).delete<DeleteChunkApiChunksChunkIdDeleteResponses, DeleteChunkApiChunksChunkIdDeleteErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}', ...options });
+export const deleteChunkApiChunksChunkIdDelete = <ThrowOnError extends boolean = false>(options: Options<DeleteChunkApiChunksChunkIdDeleteData, ThrowOnError>): RequestResult<DeleteChunkApiChunksChunkIdDeleteResponses, DeleteChunkApiChunksChunkIdDeleteErrors, ThrowOnError> => (options.client ?? client).delete<DeleteChunkApiChunksChunkIdDeleteResponses, DeleteChunkApiChunksChunkIdDeleteErrors, ThrowOnError>({
+    url: '/api/chunks/{chunk_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get Chunk
@@ -914,9 +920,9 @@ export const getQueueApiQueueGet = <ThrowOnError extends boolean = false>(option
  *
  * Idempotent whole-order replacement of the ready queue.
  *
- * Resolves every named id against the current ready set (``bzh:domain-takes-objects``):
- * ``409`` names the first id that is not ready, ``422`` a duplicate id. An unnamed
- * ready chunk keeps its relative order, appended after the named ones.
+ * Resolves every named id against the current ready set: ``409`` names the first id
+ * that is not ready, ``422`` a duplicate id. An unnamed ready chunk keeps its relative
+ * order, appended after the named ones.
  */
 export const replaceQueueApiQueuePut = <ThrowOnError extends boolean = false>(options: Options<ReplaceQueueApiQueuePutData, ThrowOnError>): RequestResult<ReplaceQueueApiQueuePutResponses, ReplaceQueueApiQueuePutErrors, ThrowOnError> => (options.client ?? client).put<ReplaceQueueApiQueuePutResponses, ReplaceQueueApiQueuePutErrors, ThrowOnError>({
     url: '/api/queue',
@@ -932,9 +938,9 @@ export const replaceQueueApiQueuePut = <ThrowOnError extends boolean = false>(op
  *
  * Single-chunk fractional reorder (issue #137).
  *
- * Resolves both ids against the current ready set (``bzh:domain-takes-objects``):
- * ``409`` names either one if it is not ready, ``422`` rejects a self-anchor.
- * ``after_chunk_id=null`` moves the chunk to the top of the queue.
+ * Resolves both ids against the current ready set: ``409`` names either one if it is
+ * not ready, ``422`` rejects a self-anchor. ``after_chunk_id=null`` moves the chunk to
+ * the top of the queue.
  */
 export const repositionQueueApiQueuePositionPost = <ThrowOnError extends boolean = false>(options: Options<RepositionQueueApiQueuePositionPostData, ThrowOnError>): RequestResult<RepositionQueueApiQueuePositionPostResponses, RepositionQueueApiQueuePositionPostErrors, ThrowOnError> => (options.client ?? client).post<RepositionQueueApiQueuePositionPostResponses, RepositionQueueApiQueuePositionPostErrors, ThrowOnError>({
     url: '/api/queue/position',
@@ -1074,10 +1080,12 @@ export const createWorkItemApiWorkSourcesSourceItemsPost = <ThrowOnError extends
 /**
  * Withdraw Work Item
  *
- * Withdraw the item at SOURCE/REF. 404 for an unknown source or an unallocated ref
- * (D9); 409 for a known source with no editor (D4), an item that already carries a
- * closure, or one an *acquired* live chunk still holds (D5, D10) — an unacquired
- * holder deletes instead of refusing (issue #364, D3).
+ * Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref
+ * (D9), or a chunk a race deletes between resolving it and this write; 409 for a known
+ * source with no editor (D4), an item that already carries a closure, or one an
+ * *acquired* live chunk still holds (D5, D10) — an unacquired holder deletes instead
+ * of refusing, publishing the same ``chunk-changed``/``queue-changed`` pair a direct
+ * chunk delete does (issue #364).
  */
 export const withdrawWorkItemApiWorkSourcesSourceItemsRefDelete = <ThrowOnError extends boolean = false>(options: Options<WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteData, ThrowOnError>): RequestResult<WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteResponses, WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteErrors, ThrowOnError> => (options.client ?? client).delete<WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteResponses, WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteErrors, ThrowOnError>({ url: '/api/work-sources/{source}/items/{ref}', ...options });
 

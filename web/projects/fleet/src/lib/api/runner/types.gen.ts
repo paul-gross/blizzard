@@ -507,10 +507,10 @@ export type ChunkUsageView = {
 /**
  * DashboardView
  *
- * ``GET /api/dashboard`` — the panel's seven status reads composed into one response
- * (``bzh:controller-read-only``). ``fleet_summary`` alone is a hub pass-through and
- * the only nullable section — ``None`` on a hub failure or an unwired runner, while
- * the six local sections still populate.
+ * ``GET /api/dashboard`` — the panel's seven status reads composed into one
+ * response. ``fleet_summary`` alone is a hub pass-through and the only nullable
+ * section — ``None`` on a hub failure or an unwired runner, while the six local
+ * sections still populate.
  */
 export type DashboardView = {
     asks: AskListResponse;
@@ -1037,9 +1037,9 @@ export type MigrationMode = 'auto' | 'forced';
  * MigrationView
  *
  * One cross-graph migration step (issue #90): the chunk was re-pinned from ``from_graph`` onto
- * ``landed_node`` in ``to_graph`` — its own step, never a transition (``bzh:migration-not-transition``).
- * A transition-borne source ends the attempt and re-queues; ``restart`` preempts it and keeps the route
- * (#371). ``model`` is the re-pinned model, null when the chunk kept its own. ``source`` attributes it.
+ * ``landed_node`` in ``to_graph`` — its own step, never a transition. A transition-borne source ends
+ * the attempt and re-queues; ``restart`` preempts it and keeps the route (#371). ``model`` is the
+ * re-pinned model, null when the chunk kept its own. ``source`` attributes it.
  */
 export type MigrationView = {
     /**

@@ -4,8 +4,8 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 import { deleteChunkApiChunksChunkIdDelete } from '../api/hub';
 import { hubBacklogKey, hubChunkKey, hubChunksKey, hubQueueKey } from '../query-keys';
 
-/** Delete an unacquired chunk (D8, issue #364) — the board's counterpart of
- * `blizzard hub delete`. Withdraws the chunk's hub item(s); there is no undo.
+/** Delete an unacquired chunk (issue #364) — the board's counterpart of
+ * `blizzard hub chunk delete`. Withdraws the chunk's hub item(s); there is no undo.
  * Reachable only from `not_ready`/`ready`, mirroring Detach's own live-route
  * guard: an unacquired chunk has no route to release, so it has no runner to
  * protect from an in-flight delete either. */
@@ -16,14 +16,14 @@ export interface DeleteVars {
 /**
  * `DELETE /api/chunks/{id}` — withdraw an unacquired chunk's hub item(s), through the
  * generated client (bzh:generated-client). No operator identity is threaded through
- * the route's `by` query param here — the route defaults it server-side, the same
+ * the request body's `by` field here — the route defaults it server-side, the same
  * convention {@link injectPromoteChunkMutation}/{@link injectDetachChunkMutation}
  * follow for their own writes. 404 for an unknown chunk and 409 for an already-acquired
  * one both surface as a thrown error — the caller reports it, nothing here swallows it.
  * On success it re-reads the fleet list, the ready queue, and the backlog — the deleted
  * chunk leaves whichever of the two lists it sat in, `not_ready` or `ready`, unlike
  * Detach/Promote which each touch only the one list their own write can affect — plus
- * the chunk detail; the endpoint's `chunk_changed` SSE frame corroborates for every
+ * the chunk detail; the endpoint's `chunk-changed` SSE frame corroborates for every
  * other open view (no polling, no new hub surface).
  */
 export function injectDeleteChunkMutation() {
@@ -32,6 +32,7 @@ export function injectDeleteChunkMutation() {
     mutationFn: async (vars: DeleteVars): Promise<void> => {
       const { error } = await deleteChunkApiChunksChunkIdDelete({
         path: { chunk_id: vars.chunkId },
+        body: {},
         throwOnError: false,
       });
       if (error) throw error;
