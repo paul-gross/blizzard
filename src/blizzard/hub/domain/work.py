@@ -1240,9 +1240,15 @@ class IReadChunkRepository(Protocol):
         ...
 
     def list_ready(self) -> list[Chunk]: ...
+    def list_not_ready(self) -> list[Chunk]:
+        """Every ``not_ready`` chunk — the backlog list's own candidate set, ranked
+        independently of :meth:`list_ready` (``bzh:ranking-is-per-list``)."""
+        ...
+
     def list_all(self) -> list[Chunk]: ...
     def queue_positions(self) -> dict[str, float]:
-        """The newest explicit ready-queue position per chunk — the order peek honours."""
+        """The newest explicit position per chunk, across both the ``ready`` queue and
+        the ``not_ready`` list — the order each list's peek honours."""
         ...
 
     def promoted_ats(self) -> dict[str, datetime]:

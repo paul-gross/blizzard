@@ -87,6 +87,12 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/queue"): FLEET_VIEW,
     ("PUT", "/api/queue"): QUEUE_REORDER,
     ("POST", "/api/queue/position"): QUEUE_REORDER,
+    # The backlog (``not_ready`` list) reorder surface (``bzh:ranking-is-per-list``) —
+    # QUEUE_REORDER even to read, deliberately narrower than the ready queue's
+    # FLEET_VIEW read: the backlog rank is an operator triage surface.
+    ("GET", "/api/backlog"): QUEUE_REORDER,
+    ("PUT", "/api/backlog"): QUEUE_REORDER,
+    ("POST", "/api/backlog/position"): QUEUE_REORDER,
     ("POST", "/api/chunks/{chunk_id}/group"): QUEUE_REORDER,
     ("POST", "/api/questions"): QUESTION_ANSWER,
     ("POST", "/api/questions/{question_id}/answers"): QUESTION_ANSWER,

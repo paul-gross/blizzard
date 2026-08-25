@@ -1,9 +1,12 @@
-"""QueueService (unit tier) — the ready-queue sort key, facts only (issue #137).
+"""QueueService (unit tier) — the ready-queue/backlog sort key, facts only (issue #137,
+``bzh:ranking-is-per-list``).
 
 :meth:`QueueService._effective_position` is a pure function over already-loaded dicts
-(``bzh:domain-takes-objects``), unit-tested with zero store. :meth:`reposition` writes
-through a fake chunk repository (``bzh:repository-split``) whose ``record_queue_position``
-mutates ``positions`` in place for the retry path."""
+(``bzh:domain-takes-objects``), unit-tested with zero store. :meth:`QueueService.ordered`
+and :meth:`QueueService.reposition` share that one sort key across both lists — proven
+here by driving each through :data:`QueueList.READY` and :data:`QueueList.NOT_READY`
+alike. :meth:`reposition` writes through a fake chunk repository (``bzh:repository-split``)
+whose ``record_queue_position`` mutates ``positions`` in place for the retry path."""
 
 from __future__ import annotations
 
@@ -15,7 +18,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.queue import QueueService
+from blizzard.hub.domain.queue import QueueList, QueueService
 from blizzard.hub.domain.work import Chunk, IWriteChunkRepository
 
 pytestmark = pytest.mark.unit
@@ -62,21 +65,28 @@ def test_ordering_by_effective_position_places_a_late_promoted_old_mint_chunk_la
     assert [c.chunk_id for c in ordered] == ["chk_b", "chk_a"]
 
 
-# --- QueueService.reposition — single-chunk fractional write (issue #137) --------
+# --- QueueService.ordered/reposition — the shared implementation path over either list
+# ------------------------------------------------------------------------------------
 
 
 @dataclass
 class _FakeChunkRepo:
-    """Only the members :meth:`QueueService.reposition` (and the :meth:`replace_order`
-    it may fall through to) touch are live; anything else is a bug."""
+    """Only the members :meth:`QueueService.ordered`/:meth:`reposition` (and the
+    :meth:`replace_order` it may fall through to) touch are live; anything else is a
+    bug. ``ready``/``not_ready`` are independent candidate sets — never merged — mirroring
+    the two lists :class:`QueueList` names (``bzh:ranking-is-per-list``)."""
 
     ready: list[Chunk] = field(default_factory=list)
+    not_ready: list[Chunk] = field(default_factory=list)
     positions: dict[str, float] = field(default_factory=dict)
     promoted_ats_by_chunk: dict[str, datetime] = field(default_factory=dict)
     stamped: list[tuple[str, float, datetime]] = field(default_factory=list)
 
     def list_ready(self) -> list[Chunk]:
         return self.ready
+
+    def list_not_ready(self) -> list[Chunk]:
+        return self.not_ready
 
     def queue_positions(self) -> dict[str, float]:
         return dict(self.positions)
@@ -97,12 +107,36 @@ def _as_write_repo(repo: _FakeChunkRepo) -> IWriteChunkRepository:
     return cast(IWriteChunkRepository, repo)
 
 
+def test_ordered_not_ready_sorts_by_newest_explicit_position_else_mint_instant() -> None:
+    # The backlog's own fallback is the mint instant (never promoted_at — a not_ready
+    # chunk has none), through the same _effective_position path as the ready queue.
+    a = _chunk("chk_a", minted_at=datetime(2025, 6, 1, tzinfo=UTC))
+    b = _chunk("chk_b", minted_at=datetime(2025, 1, 1, tzinfo=UTC))  # minted first, unordered
+    c = _chunk("chk_c", minted_at=datetime(2025, 9, 1, tzinfo=UTC))
+    repo = _FakeChunkRepo(not_ready=[a, b, c], positions={"chk_c": -1.0})  # c explicitly pinned to the top
+    service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+
+    ordered = service.ordered_not_ready()
+
+    assert [chunk.chunk_id for chunk in ordered] == ["chk_c", "chk_b", "chk_a"]
+    assert service.ordered(QueueList.NOT_READY) == ordered
+
+
+def test_ordered_not_ready_never_reads_the_ready_candidate_set() -> None:
+    ready_only = _chunk("chk_ready")
+    repo = _FakeChunkRepo(ready=[ready_only], not_ready=[])
+    service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+
+    assert service.ordered_not_ready() == []
+    assert service.ordered_ready() == [ready_only]
+
+
 def test_reposition_between_two_neighbours_lands_on_their_midpoint() -> None:
     a, b, c, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_c"), _chunk("chk_m")
     repo = _FakeChunkRepo(ready=[a, b, c, m], positions={"chk_a": 0.0, "chk_b": 1.0, "chk_c": 2.0, "chk_m": 5.0})
     service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
 
-    service.reposition(m, after=a)
+    service.reposition(QueueList.READY, m, after=a)
 
     assert repo.stamped[-1] == ("chk_m", 0.5, _T0)
 
@@ -112,7 +146,7 @@ def test_reposition_to_the_top_lands_below_the_current_lowest() -> None:
     repo = _FakeChunkRepo(ready=[a, b, m], positions={"chk_a": 1.0, "chk_b": 2.0, "chk_m": 5.0})
     service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
 
-    service.reposition(m, after=None)
+    service.reposition(QueueList.READY, m, after=None)
 
     assert repo.stamped[-1] == ("chk_m", 0.0, _T0)
 
@@ -122,7 +156,7 @@ def test_reposition_to_the_top_of_an_otherwise_empty_ready_set_is_zero() -> None
     repo = _FakeChunkRepo(ready=[m], positions={"chk_m": 5.0})
     service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
 
-    service.reposition(m, after=None)
+    service.reposition(QueueList.READY, m, after=None)
 
     assert repo.stamped[-1] == ("chk_m", 0.0, _T0)
 
@@ -132,7 +166,7 @@ def test_reposition_after_the_last_chunk_lands_one_past_it() -> None:
     repo = _FakeChunkRepo(ready=[a, b, m], positions={"chk_a": 0.0, "chk_b": 1.0, "chk_m": 5.0})
     service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
 
-    service.reposition(m, after=b)
+    service.reposition(QueueList.READY, m, after=b)
 
     assert repo.stamped[-1] == ("chk_m", 2.0, _T0)
 
@@ -148,8 +182,35 @@ def test_reposition_between_adjacent_doubles_renormalizes_then_succeeds() -> Non
     repo = _FakeChunkRepo(ready=[a, b], positions={"chk_a": a_pos, "chk_b": b_pos})
     service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
 
-    service.reposition(m, after=a)
+    service.reposition(QueueList.READY, m, after=a)
 
     # Renormalize restamped a/b (and m, inserted between them) with dense ascending
     # floats; the final write lands strictly between the freshly-spread neighbours.
+    assert repo.positions["chk_a"] < repo.positions["chk_m"] < repo.positions["chk_b"]
+
+
+# --- Same shared path, driven over the backlog (``bzh:ranking-is-per-list``) -------
+
+
+def test_reposition_between_two_backlog_neighbours_lands_on_their_midpoint() -> None:
+    a, b, c, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_c"), _chunk("chk_m")
+    repo = _FakeChunkRepo(not_ready=[a, b, c, m], positions={"chk_a": 0.0, "chk_b": 1.0, "chk_c": 2.0, "chk_m": 5.0})
+    service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+
+    service.reposition(QueueList.NOT_READY, m, after=a)
+
+    assert repo.stamped[-1] == ("chk_m", 0.5, _T0)
+
+
+def test_reposition_between_adjacent_backlog_doubles_renormalizes_then_succeeds() -> None:
+    a_pos = 1.0
+    b_pos = math.nextafter(a_pos, math.inf)
+    assert math.nextafter(a_pos, b_pos) >= b_pos  # the exhaustion condition this guards
+
+    a, b, m = _chunk("chk_a"), _chunk("chk_b"), _chunk("chk_m")
+    repo = _FakeChunkRepo(not_ready=[a, b], positions={"chk_a": a_pos, "chk_b": b_pos})
+    service = QueueService(chunks=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+
+    service.reposition(QueueList.NOT_READY, m, after=a)
+
     assert repo.positions["chk_a"] < repo.positions["chk_m"] < repo.positions["chk_b"]

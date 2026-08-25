@@ -1,9 +1,16 @@
-"""Queue routes — read, replace, and group — the operator surface (issues #87, #104).
+"""Queue and backlog routes — read, replace, and group — the operator surface
+(issues #87, #104).
 
-Ready is a **derived** status (a minted chunk with no live route) and the queue's order
-is an explicit hub-side property. Controllers stay read-only over the store and delegate
-the writes to the queue-shaping domain services (``bzh:controller-read-only``); a
-runner's bearer token is rejected rather than treated as anonymous-plus-credential."""
+Ready is a **derived** status (a minted chunk with no live route) and each of the
+``ready`` queue and the ``not_ready`` list's orders is an explicit hub-side property,
+ranked independently (``bzh:ranking-is-per-list``). Controllers stay read-only over the
+store and delegate the writes to the queue-shaping domain services
+(``bzh:controller-read-only``); a runner's bearer token is rejected rather than treated
+as anonymous-plus-credential.
+
+The backlog routes require ``QUEUE_REORDER`` even to read — deliberately narrower than
+the ready queue's ``FLEET_VIEW`` read, since the backlog rank is an operator triage
+surface, not fleet-wide visibility."""
 
 from __future__ import annotations
 
@@ -19,10 +26,14 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.queue import ChunkNotFound, ChunkNotGroupable
+from blizzard.hub.domain.queue import ChunkNotFound, ChunkNotGroupable, QueueList
 from blizzard.hub.domain.work import Chunk
 from blizzard.wire.chunk import WorkRefModel
 from blizzard.wire.queue import (
+    BacklogPeekEntry,
+    BacklogPeekResponse,
+    BacklogPositionRequest,
+    BacklogReplaceRequest,
     ChunkGroupRequest,
     ChunkGroupResponse,
     QueuePeekEntry,
@@ -32,6 +43,16 @@ from blizzard.wire.queue import (
 )
 
 router = APIRouter(prefix="/api", tags=["queue"], dependencies=[Depends(reject_runner_principal)])
+
+
+def _refusal_detail(chunk_id: str, *, expected: QueueList, other_ids: set[str]) -> str:
+    """The 409 detail for a chunk resolved against the wrong list — names both lists
+    (``bzh:ranking-is-per-list``) rather than assuming the reader knows which one this
+    route serves."""
+    other = QueueList.NOT_READY if expected is QueueList.READY else QueueList.READY
+    if chunk_id in other_ids:
+        return f"chunk {chunk_id} is not in the {expected.value} list (it is {other.value})"
+    return f"chunk {chunk_id} is not in the {expected.value} list"
 
 
 @dataclass(frozen=True)
@@ -80,7 +101,11 @@ def replace_queue(
     ready_by_id = {chunk.chunk_id: chunk for chunk in ready}
     for chunk_id in request.chunk_ids:
         if chunk_id not in ready_by_id:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"chunk {chunk_id} is not a ready chunk")
+            other_ids = {c.chunk_id for c in services.queue.ordered_not_ready()}
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=_refusal_detail(chunk_id, expected=QueueList.READY, other_ids=other_ids),
+            )
     named_ids = set(request.chunk_ids)
     ordered = [ready_by_id[chunk_id] for chunk_id in request.chunk_ids]
     ordered.extend(chunk for chunk in ready if chunk.chunk_id not in named_ids)
@@ -105,19 +130,120 @@ def reposition_queue(
     ready_by_id = {chunk.chunk_id: chunk for chunk in services.queue.ordered_ready()}
     chunk = ready_by_id.get(request.chunk_id)
     if chunk is None:
+        other_ids = {c.chunk_id for c in services.queue.ordered_not_ready()}
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail=f"chunk {request.chunk_id} is not a ready chunk"
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_refusal_detail(request.chunk_id, expected=QueueList.READY, other_ids=other_ids),
         )
     after: Chunk | None = None
     if request.after_chunk_id is not None:
         after = ready_by_id.get(request.after_chunk_id)
         if after is None:
+            other_ids = {c.chunk_id for c in services.queue.ordered_not_ready()}
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail=f"chunk {request.after_chunk_id} is not a ready chunk"
+                status_code=status.HTTP_409_CONFLICT,
+                detail=_refusal_detail(request.after_chunk_id, expected=QueueList.READY, other_ids=other_ids),
             )
-    services.queue.reposition(chunk, after)
+    services.queue.reposition(QueueList.READY, chunk, after)
     services.events.publish_queue_changed()
     return ReadyQueue.of(services).view
+
+
+@dataclass(frozen=True)
+class Backlog:
+    """The hub-ordered ``not_ready`` list as every peek renders it — position is the
+    order itself."""
+
+    chunks: list[Chunk]
+
+    @classmethod
+    def of(cls, services: HubServices) -> Backlog:
+        return cls(services.queue.ordered_not_ready())
+
+    @property
+    def view(self) -> BacklogPeekResponse:
+        return BacklogPeekResponse(
+            entries=[
+                BacklogPeekEntry(
+                    chunk_id=chunk.chunk_id,
+                    graph_id=chunk.graph_id,
+                    position=position,
+                    work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in chunk.work_refs],
+                )
+                for position, chunk in enumerate(self.chunks)
+            ]
+        )
+
+
+@router.get("/backlog", response_model=BacklogPeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])
+def get_backlog(services: Annotated[HubServices, Depends(get_services)]) -> BacklogPeekResponse:
+    """The hub-ordered ``not_ready`` list, read-only — an operator triage surface, so it
+    requires ``QUEUE_REORDER`` rather than the ready queue's ``FLEET_VIEW``."""
+    return Backlog.of(services).view
+
+
+@router.put("/backlog", response_model=BacklogPeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])
+def replace_backlog(
+    request: BacklogReplaceRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> BacklogPeekResponse:
+    """Idempotent whole-order replacement of the backlog.
+
+    Resolves every named id against the current ``not_ready`` set
+    (``bzh:domain-takes-objects``): ``409`` names the first id that is not ``not_ready``,
+    ``422`` a duplicate id. An unnamed ``not_ready`` chunk keeps its relative order,
+    appended after the named ones."""
+    if len(set(request.chunk_ids)) != len(request.chunk_ids):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="chunk_ids must not repeat")
+    backlog = services.queue.ordered_not_ready()
+    backlog_by_id = {chunk.chunk_id: chunk for chunk in backlog}
+    for chunk_id in request.chunk_ids:
+        if chunk_id not in backlog_by_id:
+            other_ids = {c.chunk_id for c in services.queue.ordered_ready()}
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=_refusal_detail(chunk_id, expected=QueueList.NOT_READY, other_ids=other_ids),
+            )
+    named_ids = set(request.chunk_ids)
+    ordered = [backlog_by_id[chunk_id] for chunk_id in request.chunk_ids]
+    ordered.extend(chunk for chunk in backlog if chunk.chunk_id not in named_ids)
+    services.queue.replace_order(ordered)
+    services.events.publish_queue_changed()
+    return Backlog.of(services).view
+
+
+@router.post("/backlog/position", response_model=BacklogPeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])
+def reposition_backlog(
+    request: BacklogPositionRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> BacklogPeekResponse:
+    """Single-chunk fractional reorder within the backlog.
+
+    Resolves both ids against the current ``not_ready`` set (``bzh:domain-takes-objects``):
+    ``409`` names either one if it is not ``not_ready``, ``422`` rejects a self-anchor.
+    ``after_chunk_id=null`` moves the chunk to the top of the backlog."""
+    if request.after_chunk_id == request.chunk_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="after_chunk_id must not equal chunk_id"
+        )
+    backlog_by_id = {chunk.chunk_id: chunk for chunk in services.queue.ordered_not_ready()}
+    chunk = backlog_by_id.get(request.chunk_id)
+    if chunk is None:
+        other_ids = {c.chunk_id for c in services.queue.ordered_ready()}
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_refusal_detail(request.chunk_id, expected=QueueList.NOT_READY, other_ids=other_ids),
+        )
+    after: Chunk | None = None
+    if request.after_chunk_id is not None:
+        after = backlog_by_id.get(request.after_chunk_id)
+        if after is None:
+            other_ids = {c.chunk_id for c in services.queue.ordered_ready()}
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=_refusal_detail(request.after_chunk_id, expected=QueueList.NOT_READY, other_ids=other_ids),
+            )
+    services.queue.reposition(QueueList.NOT_READY, chunk, after)
+    services.events.publish_queue_changed()
+    return Backlog.of(services).view
 
 
 @router.post(

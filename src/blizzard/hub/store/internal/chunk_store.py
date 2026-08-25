@@ -472,6 +472,9 @@ class ChunkStore:
     def list_ready(self) -> list[Chunk]:
         return [c for c in self.list_all() if self._status(c.chunk_id) is ChunkStatus.READY]
 
+    def list_not_ready(self) -> list[Chunk]:
+        return [c for c in self.list_all() if self._status(c.chunk_id) is ChunkStatus.NOT_READY]
+
     def queue_positions(self) -> dict[str, float]:
         """The newest explicit queue position per chunk — the ordering the peek honours."""
         with self._engine.connect() as conn:

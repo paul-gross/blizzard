@@ -1,8 +1,10 @@
-"""The ready-queue peek — the read a runner's FILL step does before a claim.
+"""The ready-queue peek and the backlog's own reordering surface.
 
 ``GET /api/queue`` (and the runner's fleet-side ``GET /api/fleet/queue/peek``) returns
-the hub-ordered ready queue (chunks with no live route), read-only. Order derives from
-appended facts.
+the hub-ordered ready queue (chunks with no live route), read-only. ``GET /api/backlog``
+is its ``not_ready``-list counterpart, an operator triage surface rather than a runner
+read. The two lists rank independently (``bzh:ranking-is-per-list``), so their wire
+models are kept separate rather than shared. Order derives from appended facts.
 """
 
 from __future__ import annotations
@@ -41,6 +43,41 @@ class QueuePositionRequest(BaseModel):
 
     ``after_chunk_id=null`` moves ``chunk_id`` to the top, otherwise immediately after
     the named chunk. Both must be ready (``409``); a self-anchor is ``422``."""
+
+    chunk_id: str
+    after_chunk_id: str | None
+
+
+class BacklogPeekEntry(BaseModel):
+    """One ``not_ready`` chunk, in backlog order."""
+
+    chunk_id: str
+    graph_id: str
+    position: int
+    work_refs: list[WorkRefModel] = []
+
+
+class BacklogPeekResponse(BaseModel):
+    """The ``not_ready`` list, in the hub's explicit order."""
+
+    entries: list[BacklogPeekEntry] = []
+
+
+class BacklogReplaceRequest(BaseModel):
+    """Idempotent whole-order replacement of the backlog — ``PUT /api/backlog``.
+
+    ``chunk_ids`` is the desired order, front to back; each must name a ``not_ready``
+    chunk (``409``) and not repeat (``422``). An unnamed ``not_ready`` chunk is appended,
+    order kept."""
+
+    chunk_ids: list[str]
+
+
+class BacklogPositionRequest(BaseModel):
+    """Single-chunk fractional reposition — ``POST /api/backlog/position``.
+
+    ``after_chunk_id=null`` moves ``chunk_id`` to the top, otherwise immediately after
+    the named chunk. Both must be ``not_ready`` (``409``); a self-anchor is ``422``."""
 
     chunk_id: str
     after_chunk_id: str | None
