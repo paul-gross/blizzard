@@ -286,18 +286,34 @@ def test_the_listing_route_threads_its_limit_and_refuses_one_out_of_range(tmp_pa
 def test_delete_deletes_an_unacquired_holder_and_returns_200(tmp_path: Path) -> None:
     """D3 (issue #364): the freshly-minted holder is not_ready — unacquired, not
     genuinely live — so DELETE succeeds immediately, deleting it along the way.
-    Creation itself mints the holder (blizzard#359)."""
+    Creation itself mints the holder (blizzard#359); the cascade publishes the same
+    chunk-changed/queue-changed pair a direct chunk delete does."""
     hub = build_hub(tmp_path)
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
     ref, chunk_id = created["ref"], created["chunk_id"]
+    since = hub.events.latest_id()
 
     assert hub.client.delete(f"/api/work-sources/hub/items/{ref}").status_code == 200
     assert hub.client.get(f"/api/chunks/{chunk_id}").status_code == 404
 
+    events = emitted_events(hub, since=since)
+    types = [e["event"] for e in events]
+    assert CHUNK_CHANGED in types
+    assert QUEUE_CHANGED in types
+    frames = [json.loads(e["data"]) for e in events if e["event"] == CHUNK_CHANGED]
+    assert len(frames) == 1
+    frame = frames[0]
+    assert frame["chunk_id"] == chunk_id
+    assert frame["cause"] == "deleted"
+    assert frame["status"] == "not_ready"
+    assert frame["by"] == "operator"  # AUTH_MODE_NONE's implicit identity (issue #364)
+    assert frame["key"].startswith("chunk_deleted:")
+
 
 def test_delete_is_409_while_an_acquired_chunk_holds_the_item_and_200_once_it_is_stopped(tmp_path: Path) -> None:
     """A claimed (running) holder is genuinely acquired — outside
-    ``GROUPABLE_STATUSES`` — so DELETE still refuses it, exactly as before (D3)."""
+    ``GROUPABLE_STATUSES`` — so DELETE still refuses it, exactly as before (D3). A
+    terminal holder's own withdrawal is unaffected either way, deleting nothing."""
     hub = build_hub(tmp_path)
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
     ref, chunk_id = created["ref"], created["chunk_id"]
@@ -312,6 +328,7 @@ def test_delete_is_409_while_an_acquired_chunk_holds_the_item_and_200_once_it_is
     assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={}).status_code == 202
 
     assert hub.client.delete(f"/api/work-sources/hub/items/{ref}").status_code == 200
+    assert hub.client.get(f"/api/chunks/{chunk_id}").status_code == 200  # a terminal holder survives (D3)
 
 
 # --------------------------------------------------------------------------- #

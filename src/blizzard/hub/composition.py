@@ -101,7 +101,7 @@ class HubServices:
     complete: CompleteService
     edit: EditService
     #: The unacquired-chunk delete/withdraw service (issue #364) — the composite write
-    #: ``WorkItemEditService.withdraw`` also reaches through for an unacquired holder (D3).
+    #: ``WorkItemEditService.withdraw`` also reaches through for an unacquired holder.
     delete: DeleteService
     facts: FactIngestService
     #: The transcript lane's ingest policy (blizzard#247) — the write side; ``transcripts``
@@ -170,6 +170,9 @@ def build_services(
     *,
     events: EventBroker,
     work_sources: IWorkSourceRegistry,
+    claim_lock: threading.Lock,
+    work_item_store: WorkItemStore,
+    delete: DeleteService,
     clock: IClock | None = None,
     users: IWriteUserRepository | None = None,
     base_branch: str = "main",
@@ -191,7 +194,9 @@ def build_services(
 
     ``hub_command_runner`` / ``hub_workdir`` are the hub command node's mechanism seams
     (#65), left ``None`` for the real subprocess/filesystem adapters. An explicit
-    ``oauth_registry`` wins over ``oauth_providers`` when both are given."""
+    ``oauth_registry`` wins over ``oauth_providers`` when both are given. ``claim_lock``/
+    ``work_item_store``/``delete`` are required rather than built here (issue #364), so
+    the work-source registry's built-in hub binding shares the same three, not copies."""
     clock = clock or SystemClock()
     chunk_store = ChunkStore(engine, clock)
     graph_store = GraphStore(engine)
@@ -248,10 +253,6 @@ def build_services(
     # directory is passed; `None` otherwise.
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     auth_throttle = IpThrottle(clock=clock)
-    # Shared between ClaimService and EditService (issue #120) — one in-process lock, so a
-    # claim and an edit racing the same chunk can't interleave (tests/test_edit_claim_race.py).
-    claim_lock = threading.Lock()
-    work_item_store = WorkItemStore(engine)
     return HubServices(
         chunks=chunk_store,
         graphs=graph_store,
@@ -269,7 +270,7 @@ def build_services(
         stop=StopService(chunks=chunk_store, clock=clock),
         complete=CompleteService(chunks=chunk_store, clock=clock),
         edit=EditService(chunks=chunk_store, graphs=graph_store, claim_lock=claim_lock),
-        delete=DeleteService(chunks=chunk_store, items=work_item_store, clock=clock),
+        delete=delete,
         facts=FactIngestService(chunks=chunk_store, fleet=fleet, clock=clock),
         transcript_ingest=TranscriptIngestService(store=transcript_store, clock=clock, caps=transcript_caps),
         graph_mint=GraphMintService(graphs=graph_store, clock=clock),

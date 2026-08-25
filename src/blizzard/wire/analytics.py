@@ -11,8 +11,8 @@ from pydantic import BaseModel, Field
 
 class AnalyticsEventView(BaseModel):
     """One derived event, wire-shaped (blizzard#255) — ``payload`` is parsed from its
-    stored JSON-text form (``bzh:sql-portable`` binds the store, not the wire) into a
-    plain object, so a consumer never double-decodes a JSON string within JSON."""
+    stored JSON-text form into a plain object, so a consumer never double-decodes a JSON
+    string within JSON."""
 
     id: int
     kind: str

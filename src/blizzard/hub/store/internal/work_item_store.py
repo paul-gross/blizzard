@@ -155,9 +155,9 @@ class WorkItemStore:
 
     def delete_chunk_and_withdraw_hub_items(self, chunk: Chunk, *, by: str, at: datetime) -> int:
         """Insert ``chunk``'s ``chunk_deleted`` row and close every open ``hub:``-source
-        item it holds as withdrawn, on one ``engine.begin()`` connection (issue #364, D1)
+        item it holds as withdrawn, on one ``engine.begin()`` connection (issue #364)
         — mirrors :meth:`create_with_chunk`'s own atomicity shape. A ``forge:``-sourced
-        pointer on the same chunk is left untouched (D4). Returns the freshly-written
+        pointer on the same chunk is left untouched. Returns the freshly-written
         ``chunk_deleted.id``."""
         with self._engine.begin() as conn:
             deleted_id = record_deleted_row(conn, chunk.chunk_id, by=by, at=at)

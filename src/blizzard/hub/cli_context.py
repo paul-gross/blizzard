@@ -6,7 +6,7 @@ import json
 import os
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 import click
 import httpx
@@ -71,10 +71,11 @@ class CliContext:
         path: str,
         operation: str,
         *,
+        json_body: object | None = None,
         params: dict[str, str] | None = None,
         on_status: dict[int, str] | None = None,
     ) -> httpx.Response:
-        return self._verb("delete", path, operation, params=params, on_status=on_status)
+        return self._verb("delete", path, operation, json_body=json_body, params=params, on_status=on_status)
 
     def stream(
         self,
@@ -107,9 +108,11 @@ class CliContext:
     ) -> httpx.Response:
         """The call itself, unchecked — for a verb that reads a status code of its own first.
         Dispatches through ``httpx``'s module-level verb function so a test's
-        ``monkeypatch.setattr`` still intercepts it."""
+        ``monkeypatch.setattr`` still intercepts it — except a DELETE carrying a JSON
+        body, which ``httpx.delete`` refuses a ``json`` keyword for: that case goes
+        through ``httpx.request`` instead."""
         full_url = f"{self.hub_url.rstrip('/')}{path}"
-        kwargs: dict[str, object] = {"timeout": CLIENT_TIMEOUT}
+        kwargs: dict[str, Any] = {"timeout": CLIENT_TIMEOUT}
         if json_body is not None:
             kwargs["json"] = json_body
         if params is not None:
@@ -118,6 +121,8 @@ class CliContext:
         if headers:
             kwargs["headers"] = headers
         try:
+            if method == "delete" and json_body is not None:
+                return httpx.request("delete", full_url, **kwargs)
             return getattr(httpx, method)(full_url, **kwargs)
         except httpx.HTTPError as exc:
             raise self.failed(f"{method.upper()} {path}", exc) from exc

@@ -758,10 +758,13 @@ class ChunkStore:
         ``transitions``/``chunk_migrations``, which carry their own column."""
         with self._engine.connect() as conn:
             rows: list[ActivityRow] = []
+            # Resolved once (issue #364): every fact-source block below excludes a
+            # deleted chunk by referencing this same subquery, rather than repeating it.
+            deleted = select(s.chunk_deleted.c.chunk_id)
             rows += self._bounded(
                 conn,
                 select(s.chunks.c.chunk_id, s.chunks.c.graph_id, s.chunks.c.minted_at).where(
-                    s.chunks.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))
+                    s.chunks.c.chunk_id.not_in(deleted)
                 ),
                 ts_col=s.chunks.c.minted_at,
                 pk_col=s.chunks.c.chunk_id,
@@ -785,7 +788,7 @@ class ChunkStore:
                     s.chunks.c.graph_id,
                 )
                 .select_from(s.chunk_promoted.join(s.chunks, s.chunks.c.chunk_id == s.chunk_promoted.c.chunk_id))
-                .where(s.chunk_promoted.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))),
+                .where(s.chunk_promoted.c.chunk_id.not_in(deleted)),
                 ts_col=s.chunk_promoted.c.promoted_at,
                 pk_col=s.chunk_promoted.c.id,
                 since=since,
@@ -827,7 +830,7 @@ class ChunkStore:
                     s.chunks.c.graph_id,
                 )
                 .select_from(s.route_created.join(s.chunks, s.chunks.c.chunk_id == s.route_created.c.chunk_id))
-                .where(s.route_created.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))),
+                .where(s.route_created.c.chunk_id.not_in(deleted)),
                 ts_col=s.route_created.c.created_at,
                 pk_col=s.route_created.c.route_id,
                 since=since,
@@ -850,7 +853,7 @@ class ChunkStore:
                     s.transitions.c.runner_id,
                     s.transitions.c.graph_id,
                     s.transitions.c.recorded_at,
-                ).where(s.transitions.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))),
+                ).where(s.transitions.c.chunk_id.not_in(deleted)),
                 ts_col=s.transitions.c.recorded_at,
                 pk_col=s.transitions.c.transition_id,
                 since=since,
@@ -872,7 +875,7 @@ class ChunkStore:
                     s.chunk_migrations.c.chunk_id,
                     s.chunk_migrations.c.to_graph_id,
                     s.chunk_migrations.c.recorded_at,
-                ).where(s.chunk_migrations.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))),
+                ).where(s.chunk_migrations.c.chunk_id.not_in(deleted)),
                 ts_col=s.chunk_migrations.c.recorded_at,
                 pk_col=s.chunk_migrations.c.migration_id,
                 since=since,
@@ -895,7 +898,7 @@ class ChunkStore:
                     s.chunks.c.graph_id,
                 )
                 .select_from(s.chunk_restarts.join(s.chunks, s.chunks.c.chunk_id == s.chunk_restarts.c.chunk_id))
-                .where(s.chunk_restarts.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))),
+                .where(s.chunk_restarts.c.chunk_id.not_in(deleted)),
                 ts_col=s.chunk_restarts.c.recorded_at,
                 pk_col=s.chunk_restarts.c.id,
                 since=since,
@@ -915,7 +918,7 @@ class ChunkStore:
                     s.decisions.c.decision_id, s.decisions.c.chunk_id, s.decisions.c.submitted_at, s.chunks.c.graph_id
                 )
                 .select_from(s.decisions.join(s.chunks, s.chunks.c.chunk_id == s.decisions.c.chunk_id))
-                .where(s.decisions.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))),
+                .where(s.decisions.c.chunk_id.not_in(deleted)),
                 ts_col=s.decisions.c.submitted_at,
                 pk_col=s.decisions.c.decision_id,
                 since=since,
@@ -942,7 +945,7 @@ class ChunkStore:
                         s.decisions, s.decisions.c.decision_id == s.decision_resolutions.c.decision_id
                     ).join(s.chunks, s.chunks.c.chunk_id == s.decisions.c.chunk_id)
                 )
-                .where(s.decisions.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))),
+                .where(s.decisions.c.chunk_id.not_in(deleted)),
                 ts_col=s.decision_resolutions.c.resolved_at,
                 pk_col=s.decision_resolutions.c.decision_id,
                 since=since,
@@ -966,7 +969,7 @@ class ChunkStore:
                     s.chunks.c.graph_id,
                 )
                 .select_from(s.questions.join(s.chunks, s.chunks.c.chunk_id == s.questions.c.chunk_id))
-                .where(s.questions.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))),
+                .where(s.questions.c.chunk_id.not_in(deleted)),
                 ts_col=s.questions.c.asked_at,
                 pk_col=s.questions.c.question_id,
                 since=since,
@@ -994,7 +997,7 @@ class ChunkStore:
                         s.questions, s.questions.c.question_id == s.question_answers.c.question_id
                     ).join(s.chunks, s.chunks.c.chunk_id == s.questions.c.chunk_id)
                 )
-                .where(s.questions.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))),
+                .where(s.questions.c.chunk_id.not_in(deleted)),
                 ts_col=s.question_answers.c.answered_at,
                 pk_col=s.question_answers.c.question_id,
                 since=since,
@@ -1012,7 +1015,7 @@ class ChunkStore:
                 conn,
                 select(s.escalations.c.id, s.escalations.c.chunk_id, s.escalations.c.recorded_at, s.chunks.c.graph_id)
                 .select_from(s.escalations.join(s.chunks, s.chunks.c.chunk_id == s.escalations.c.chunk_id))
-                .where(s.escalations.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))),
+                .where(s.escalations.c.chunk_id.not_in(deleted)),
                 ts_col=s.escalations.c.recorded_at,
                 pk_col=s.escalations.c.id,
                 since=since,
@@ -1030,7 +1033,7 @@ class ChunkStore:
                 conn,
                 select(s.requeues.c.id, s.requeues.c.chunk_id, s.requeues.c.requeued_at, s.chunks.c.graph_id)
                 .select_from(s.requeues.join(s.chunks, s.chunks.c.chunk_id == s.requeues.c.chunk_id))
-                .where(s.requeues.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))),
+                .where(s.requeues.c.chunk_id.not_in(deleted)),
                 ts_col=s.requeues.c.requeued_at,
                 pk_col=s.requeues.c.id,
                 since=since,
@@ -1053,7 +1056,7 @@ class ChunkStore:
                     s.chunks.c.graph_id,
                 )
                 .select_from(s.route_released.join(s.chunks, s.chunks.c.chunk_id == s.route_released.c.chunk_id))
-                .where(s.route_released.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))),
+                .where(s.route_released.c.chunk_id.not_in(deleted)),
                 ts_col=s.route_released.c.released_at,
                 pk_col=s.route_released.c.id,
                 since=since,
@@ -1077,7 +1080,7 @@ class ChunkStore:
                     s.chunks.c.graph_id,
                 )
                 .select_from(s.chunk_pause_facts.join(s.chunks, s.chunks.c.chunk_id == s.chunk_pause_facts.c.chunk_id))
-                .where(s.chunk_pause_facts.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))),
+                .where(s.chunk_pause_facts.c.chunk_id.not_in(deleted)),
                 ts_col=s.chunk_pause_facts.c.set_at,
                 pk_col=s.chunk_pause_facts.c.id,
                 since=since,
@@ -1097,7 +1100,7 @@ class ChunkStore:
                     s.chunk_stopped.c.id, s.chunk_stopped.c.chunk_id, s.chunk_stopped.c.stopped_at, s.chunks.c.graph_id
                 )
                 .select_from(s.chunk_stopped.join(s.chunks, s.chunks.c.chunk_id == s.chunk_stopped.c.chunk_id))
-                .where(s.chunk_stopped.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))),
+                .where(s.chunk_stopped.c.chunk_id.not_in(deleted)),
                 ts_col=s.chunk_stopped.c.stopped_at,
                 pk_col=s.chunk_stopped.c.id,
                 since=since,
@@ -1120,7 +1123,7 @@ class ChunkStore:
                     s.chunks.c.graph_id,
                 )
                 .select_from(s.chunk_completed.join(s.chunks, s.chunks.c.chunk_id == s.chunk_completed.c.chunk_id))
-                .where(s.chunk_completed.c.chunk_id.not_in(select(s.chunk_deleted.c.chunk_id))),
+                .where(s.chunk_completed.c.chunk_id.not_in(deleted)),
                 ts_col=s.chunk_completed.c.completed_at,
                 pk_col=s.chunk_completed.c.id,
                 since=since,

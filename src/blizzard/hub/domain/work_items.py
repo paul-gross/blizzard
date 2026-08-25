@@ -10,14 +10,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.delete import DeleteService
+from blizzard.hub.domain.delete import ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.edit import UNSET, UnsetType
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.ingest import require_no_live_holder
-from blizzard.hub.domain.queue import GROUPABLE_STATUSES
+from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.work import (
     ChunkFacts,
-    IWriteChunkRepository,
+    IReadChunkRepository,
     IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkItemClosure,
@@ -26,10 +26,6 @@ from blizzard.hub.domain.work import (
     WorkRef,
     mint_chunk,
 )
-
-# The system actor recorded as `chunk_deleted.deleted_by` for a withdrawal-triggered
-# delete (D3, issue #364) — `withdraw` carries no operator identity to attribute it to.
-_WITHDRAWAL_DELETE_BY = "withdrawal"
 
 
 class WorkItemNotEditable(Exception):
@@ -62,6 +58,19 @@ class CreatedWorkItem:
     chunk_id: str
 
 
+@dataclass(frozen=True)
+class WithdrawnWorkItem:
+    """The result of withdrawing a hub-owned work item (issue #364) — the item itself,
+    plus the cascade-deleted holder chunk's id, its pre-delete status, and the fresh
+    ``chunk_deleted.id`` when withdrawal cascaded into deleting an unacquired holder;
+    all three ``None`` when it did not."""
+
+    item: WorkItemRecord
+    deleted_chunk_id: str | None = None
+    deleted_chunk_status: str | None = None
+    deleted_chunk_fact_id: int | None = None
+
+
 class WorkItemHeldByLiveChunk(Exception):
     """A withdrawal targeted a pointer a live (non-terminal) chunk still holds — mirrors
     ``IngestConflict`` (``hub/domain/ingest.py``): withdrawing under a running chunk would
@@ -82,7 +91,7 @@ class WorkItemEditService:
         self,
         *,
         items: IWriteWorkItemRepository,
-        chunks: IWriteChunkRepository,
+        chunks: IReadChunkRepository,
         clock: IClock,
         delete: DeleteService,
     ) -> None:
@@ -143,25 +152,32 @@ class WorkItemEditService:
             raise WorkItemNotEditable(current.work_item_id, current.closure)
         return updated
 
-    def withdraw(self, item: WorkItemRecord) -> WorkItemRecord:
-        """Close ``item`` as withdrawn; raises :class:`WorkItemNotEditable` when
-        already closed. A :data:`~blizzard.hub.domain.queue.GROUPABLE_STATUSES` holder
-        (issue #364, D3) is unacquired, not live: deletes it via
-        :class:`~blizzard.hub.domain.delete.DeleteService` instead of refusing, then
-        re-reads ``item``; :class:`WorkItemHeldByLiveChunk` still raises otherwise."""
+    def withdraw(self, item: WorkItemRecord, *, by: str) -> WithdrawnWorkItem:
+        """Close ``item`` as withdrawn; raises :class:`WorkItemNotEditable` when already
+        closed. An unacquired holder is deleted via
+        :class:`~blizzard.hub.domain.delete.DeleteService` instead of refusing (issue
+        #364); :class:`WorkItemHeldByLiveChunk` still raises for one a runner or a human
+        holds. The result names the cascade-deleted chunk, if any, so the caller can
+        publish its own delete frame without a second store round-trip."""
         self._require_open(item)
         holder = self._chunks.find_live_holder(item.pointer)
         if holder is None:
-            return self._items.close(item.source, item.ref, closure=WorkItemClosure.WITHDRAWN, at=self._clock.now())
+            closed = self._items.close(item.source, item.ref, closure=WorkItemClosure.WITHDRAWN, at=self._clock.now())
+            return WithdrawnWorkItem(item=closed)
         chunk = self._chunks.get(holder)
+        if chunk is None:
+            raise ChunkNotFound(holder)
         facts = self._chunks.load_facts(holder)
-        status = (facts if facts is not None else ChunkFacts(minted=True)).status()
-        if chunk is not None and status in GROUPABLE_STATUSES:
-            self._delete.delete(chunk, by=_WITHDRAWAL_DELETE_BY)
-            updated = self._items.get(item.source, item.ref)
-            assert updated is not None
-            return updated
-        raise WorkItemHeldByLiveChunk(item.pointer, holder)
+        prev_status = (facts if facts is not None else ChunkFacts(minted=True)).status().value
+        try:
+            deleted_id = self._delete.delete(chunk, by=by)
+        except ChunkNotDeletable as exc:
+            raise WorkItemHeldByLiveChunk(item.pointer, holder) from exc
+        updated = self._items.get(item.source, item.ref)
+        assert updated is not None
+        return WithdrawnWorkItem(
+            item=updated, deleted_chunk_id=holder, deleted_chunk_status=prev_status, deleted_chunk_fact_id=deleted_id
+        )
 
     def deliver(self, item: WorkItemRecord) -> WorkItemRecord:
         """Close ``item`` as delivered (issue #360) — the delivery-closure sweep's own

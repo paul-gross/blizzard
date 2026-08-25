@@ -5,6 +5,7 @@ see ``tests/test_work_source.py`` for the pass-through (GitHub) binding's siblin
 
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -46,7 +47,7 @@ def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStore, U
     items = WorkItemStore(engine)
     clock = FixedClock(_T0)
     chunks = ChunkStore(engine, clock)
-    delete = DeleteService(chunks=chunks, items=items, clock=clock)
+    delete = DeleteService(chunks=chunks, items=items, clock=clock, claim_lock=threading.Lock())
     edits = WorkItemEditService(items=items, chunks=chunks, clock=clock, delete=delete)
     users = UserRepository(engine, RepoErrorFactory(get_logger("tests.test_hub_work_source")))
     return HubWorkSource(items, chunks, edits, users), items, chunks, users, engine, clock
@@ -273,7 +274,7 @@ def test_get_edit_and_withdraw_of_an_unallocated_ref_raise_not_found(tmp_path: P
     with pytest.raises(WorkItemRefUnknownError):
         source.edit(pointer, WorkItemEdit(title="t", body="b", stated_priority=None))
     with pytest.raises(WorkItemRefUnknownError):
-        source.withdraw(pointer)
+        source.withdraw(pointer, by="operator")
 
 
 def test_create_allocates_an_open_item(tmp_path: Path) -> None:
@@ -348,10 +349,11 @@ def test_withdraw_sets_the_withdrawn_closure(tmp_path: Path) -> None:
     )
     chunks.record_stop(created.chunk_id, by="operator", at=clock.instant)
 
-    withdrawn = source.withdraw(WorkRef(source="hub", ref=created.item.ref))
+    withdrawn = source.withdraw(WorkRef(source="hub", ref=created.item.ref), by="operator")
 
-    assert withdrawn.closure == WorkItemClosure.WITHDRAWN
-    assert withdrawn.closed_at is not None
+    assert withdrawn.item.closure == WorkItemClosure.WITHDRAWN
+    assert withdrawn.item.closed_at is not None
+    assert withdrawn.deleted_chunk_id is None  # a live-until-just-now holder is not deleted
 
 
 def test_edit_and_withdraw_of_a_closed_item_are_refused(tmp_path: Path) -> None:
@@ -365,17 +367,18 @@ def test_edit_and_withdraw_of_a_closed_item_are_refused(tmp_path: Path) -> None:
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     chunks.record_stop(created.chunk_id, by="operator", at=clock.instant)
-    source.withdraw(pointer)
+    source.withdraw(pointer, by="operator")
 
     with pytest.raises(WorkItemNotEditable):
         source.edit(pointer, WorkItemEdit(title="t2", body="b2", stated_priority=None))
     with pytest.raises(WorkItemNotEditable):
-        source.withdraw(pointer)
+        source.withdraw(pointer, by="operator")
 
 
 def test_withdraw_deletes_an_unacquired_holder_and_withdraws_the_item(tmp_path: Path) -> None:
     """D3 (issue #364): a not_ready holder is unacquired, not genuinely live — withdraw
-    deletes it rather than refusing. Creation itself mints the holder (blizzard#359)."""
+    deletes it rather than refusing. Creation itself mints the holder (blizzard#359).
+    The cascade attributes the delete to the same actor the withdrawal itself carries."""
     source, _, chunks, _, engine, _ = _source(tmp_path)
     created = source.create(
         title="t",
@@ -386,9 +389,12 @@ def test_withdraw_deletes_an_unacquired_holder_and_withdraws_the_item(tmp_path: 
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
 
-    withdrawn = source.withdraw(pointer)
+    withdrawn = source.withdraw(pointer, by="alice")
 
-    assert withdrawn.closure == WorkItemClosure.WITHDRAWN
+    assert withdrawn.item.closure == WorkItemClosure.WITHDRAWN
+    assert withdrawn.deleted_chunk_id == created.chunk_id
+    assert withdrawn.deleted_chunk_status == "not_ready"
+    assert withdrawn.deleted_chunk_fact_id is not None
     assert chunks.get(created.chunk_id) is None  # deleted along with the withdrawal
 
 
@@ -405,10 +411,10 @@ def test_withdraw_of_an_item_the_cascade_already_closed_is_refused(tmp_path: Pat
         graph=_graph(engine),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
-    source.withdraw(pointer)  # cascades: deletes the unacquired holder too
+    source.withdraw(pointer, by="operator")  # cascades: deletes the unacquired holder too
 
     with pytest.raises(WorkItemNotEditable):
-        source.withdraw(pointer)
+        source.withdraw(pointer, by="operator")
 
 
 def test_withdraw_is_refused_while_an_acquired_chunk_holds_the_ref(tmp_path: Path) -> None:
@@ -432,7 +438,7 @@ def test_withdraw_is_refused_while_an_acquired_chunk_holds_the_ref(tmp_path: Pat
     )
 
     with pytest.raises(WorkItemHeldByLiveChunk) as excinfo:
-        source.withdraw(pointer)
+        source.withdraw(pointer, by="operator")
     assert excinfo.value.chunk_id == created.chunk_id
 
 
@@ -448,9 +454,10 @@ def test_withdraw_succeeds_once_the_holding_chunk_is_no_longer_live(tmp_path: Pa
     pointer = WorkRef(source="hub", ref=created.item.ref)
     chunks.record_stop(created.chunk_id, by="operator", at=clock.instant)
 
-    withdrawn = source.withdraw(pointer)
+    withdrawn = source.withdraw(pointer, by="operator")
 
-    assert withdrawn.closure == WorkItemClosure.WITHDRAWN
+    assert withdrawn.item.closure == WorkItemClosure.WITHDRAWN
+    assert withdrawn.deleted_chunk_id is None  # a terminal holder is unaffected either way (D3)
 
 
 # --------------------------------------------------------------------------- #

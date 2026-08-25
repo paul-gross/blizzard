@@ -648,7 +648,7 @@ def chunk_delete(cli: CliContext, chunk_id: str, by: str, yes: bool) -> None:
     resp = cli.delete(
         f"/api/chunks/{chunk_id}",
         "DELETE /chunks/{id}",
-        params={"by": by},
+        json_body={"by": by},
         on_status={409: "chunk is not deletable", 404: f"no such chunk {chunk_id}"},
     )
     cli.finish(resp, f"deleted {chunk_id} — its hub item(s), if any, withdrawn")

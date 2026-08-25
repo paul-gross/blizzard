@@ -11,7 +11,7 @@ from typing import Protocol
 
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import WorkItemAuthor, WorkItemPriority, WorkItemRecord, WorkRef
-from blizzard.hub.domain.work_items import CreatedWorkItem, WorkItemEdit
+from blizzard.hub.domain.work_items import CreatedWorkItem, WithdrawnWorkItem, WorkItemEdit
 
 
 class WorkItemRefUnknownError(Exception):
@@ -51,10 +51,11 @@ class IWorkEditor(Protocol):
         service's closure-guard error for an item that already carries a closure."""
         ...
 
-    def withdraw(self, pointer: WorkRef) -> WorkItemRecord:
-        """Close ``pointer`` as withdrawn.
+    def withdraw(self, pointer: WorkRef, *, by: str) -> WithdrawnWorkItem:
+        """Close ``pointer`` as withdrawn, attributed to ``by``.
 
         Raises :class:`WorkItemRefUnknownError` for an unallocated ``ref``, the service's
         closure-guard error for an already-closed item, and its live-holder refusal while
-        a live chunk still holds the pointer."""
+        a live chunk still holds the pointer. Names the cascade-deleted holder chunk, if
+        an unacquired one was deleted along the way."""
         ...

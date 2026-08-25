@@ -7,6 +7,7 @@ calls are meaningfully implemented; every other seam raises loudly if called. Mi
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -21,7 +22,7 @@ from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
     EscalationFact,
-    IWriteChunkRepository,
+    IReadChunkRepository,
     IWriteWorkItemRepository,
     PauseFact,
     QuestionFact,
@@ -37,13 +38,14 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 
 @dataclass
 class _FakeChunkRepo:
-    """Only ``get``/``load_facts`` are live — see module docstring."""
+    """Only ``load_facts`` is live — see module docstring; ``DeleteService`` takes the
+    chunk it deletes as an already-resolved object, so it never calls ``get``."""
 
     chunk: Chunk | None
     facts: ChunkFacts | None
 
     def get(self, chunk_id: str) -> Chunk | None:
-        return self.chunk
+        raise NotImplementedError("DeleteService should not call chunks.get")
 
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.facts
@@ -73,9 +75,12 @@ def _service(
     chunk: Chunk | None, facts: ChunkFacts | None, *, clock: FixedClock | None = None
 ) -> tuple[DeleteService, _FakeItemsRepo]:
     items = _FakeItemsRepo()
-    chunks = cast(IWriteChunkRepository, _FakeChunkRepo(chunk=chunk, facts=facts))
+    chunks = cast(IReadChunkRepository, _FakeChunkRepo(chunk=chunk, facts=facts))
     service = DeleteService(
-        chunks=chunks, items=cast(IWriteWorkItemRepository, items), clock=clock or FixedClock(instant=_T0)
+        chunks=chunks,
+        items=cast(IWriteWorkItemRepository, items),
+        clock=clock or FixedClock(instant=_T0),
+        claim_lock=threading.Lock(),
     )
     return service, items
 

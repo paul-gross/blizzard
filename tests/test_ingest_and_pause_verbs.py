@@ -491,13 +491,13 @@ def test_resume_chunk_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.unit
 def test_chunk_delete_confirms_and_sends_the_delete_with_by(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, object]] = []
+    calls: list[tuple[str, str, object]] = []
 
-    def fake_delete(url: str, *, params: object, timeout: float) -> _FakeResponse:
-        calls.append((url, params))
+    def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((method, url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    monkeypatch.setattr(hub_cli.httpx, "request", fake_request)
     result = CliRunner().invoke(
         hub_group,
         ["chunk", "delete", "ch_42", "--by", "alice"],
@@ -506,18 +506,19 @@ def test_chunk_delete_confirms_and_sends_the_delete_with_by(monkeypatch: pytest.
     )
 
     assert result.exit_code == 0, result.output
-    url, params = calls[0]
+    method, url, json_body = calls[0]
+    assert method == "delete"
     assert url == "http://hub.local:8421/api/chunks/ch_42"
-    assert params == {"by": "alice"}
+    assert json_body == {"by": "alice"}
     assert "deleted ch_42" in result.output
 
 
 @pytest.mark.unit
 def test_chunk_delete_aborts_when_confirmation_is_declined(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_delete(url: str, *, params: object, timeout: float) -> _FakeResponse:
+    def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:
         raise AssertionError("must not call the API when the user declines")
 
-    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    monkeypatch.setattr(hub_cli.httpx, "request", fake_request)
     result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_42"], input="n\n")
 
     assert result.exit_code != 0
@@ -525,27 +526,28 @@ def test_chunk_delete_aborts_when_confirmation_is_declined(monkeypatch: pytest.M
 
 @pytest.mark.unit
 def test_chunk_delete_yes_skips_the_prompt_and_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, object]] = []
+    calls: list[tuple[str, str, object]] = []
 
-    def fake_delete(url: str, *, params: object, timeout: float) -> _FakeResponse:
-        calls.append((url, params))
+    def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((method, url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    monkeypatch.setattr(hub_cli.httpx, "request", fake_request)
     result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_42", "--yes"])
 
     assert result.exit_code == 0, result.output
-    url, params = calls[0]
+    method, url, json_body = calls[0]
+    assert method == "delete"
     assert url == "http://127.0.0.1:8421/api/chunks/ch_42"
-    assert params == {"by": "operator"}
+    assert json_body == {"by": "operator"}
 
 
 @pytest.mark.unit
 def test_chunk_delete_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_delete(url: str, *, params: object, timeout: float) -> _FakeResponse:
+    def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "chunk ch_42 is running — deletion needs an unacquired chunk"})
 
-    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    monkeypatch.setattr(hub_cli.httpx, "request", fake_request)
     result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_42", "--yes"])
 
     assert result.exit_code != 0
@@ -554,10 +556,10 @@ def test_chunk_delete_maps_a_conflict_with_the_servers_detail(monkeypatch: pytes
 
 @pytest.mark.unit
 def test_chunk_delete_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_delete(url: str, *, params: object, timeout: float) -> _FakeResponse:
+    def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(hub_cli.httpx, "delete", fake_delete)
+    monkeypatch.setattr(hub_cli.httpx, "request", fake_request)
     result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_nope", "--yes"])
 
     assert result.exit_code != 0

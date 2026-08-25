@@ -18,6 +18,8 @@ from sqlalchemy import Engine
 from blizzard.foundation.clock import IClock
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import ConfigError, WorkSourceConfig
+from blizzard.hub.domain.delete import DeleteService
+from blizzard.hub.domain.work import IWriteWorkItemRepository
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.closer import IWorkCloser
 from blizzard.hub.work_sources.editor import IWorkEditor
@@ -43,13 +45,21 @@ class WorkSourceEntry:
 
     @classmethod
     def registry(
-        cls, sources: Sequence[WorkSourceConfig], engine: Engine, clock: IClock, *, users: IReadUserRepository
+        cls,
+        sources: Sequence[WorkSourceConfig],
+        engine: Engine,
+        clock: IClock,
+        *,
+        users: IReadUserRepository,
+        work_item_store: IWriteWorkItemRepository,
+        delete: DeleteService,
     ) -> WorkSourceRegistry:
         """One credentialed client + binding per configured source, plus the built-in
         ``hub`` source (issue #357) — always seated, both an editor (blizzard#358) and a
         closer (issue #360), neither opt-in. A source's ``token_env`` naming an unset
         variable fails here, at boot. ``users`` is the composition root's own repository
-        (blizzard#362)."""
+        (blizzard#362); ``work_item_store``/``delete`` are too (issue #364), threaded
+        through so the built-in binding shares them rather than building its own."""
         built: dict[str, IWorkSource] = {}
         annotators: dict[str, IWorkAnnotator] = {}
         closers: dict[str, IWorkCloser] = {}
@@ -61,7 +71,9 @@ class WorkSourceEntry:
                 annotators[config.name] = cast(IWorkAnnotator, adapter)
             if config.close:
                 closers[config.name] = cast(IWorkCloser, adapter)
-        seat_hub_work_source(built, editors, closers, engine=engine, clock=clock, users=users)
+        seat_hub_work_source(
+            built, editors, closers, engine=engine, clock=clock, users=users, items=work_item_store, delete=delete
+        )
         return WorkSourceRegistry(built, annotators, closers, editors)
 
     @property

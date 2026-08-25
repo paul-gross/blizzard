@@ -7,6 +7,7 @@ way ``tests/test_hub_work_source.py`` drives ``WorkItemEditService`` directly â€
 
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -44,7 +45,7 @@ def _stores(tmp_path: Path) -> tuple[ChunkStore, WorkItemStore, DeleteService, E
     clock = FixedClock(_T0)
     chunks = ChunkStore(engine, clock)
     items = WorkItemStore(engine)
-    delete = DeleteService(chunks=chunks, items=items, clock=clock)
+    delete = DeleteService(chunks=chunks, items=items, clock=clock, claim_lock=threading.Lock())
     return chunks, items, delete, engine
 
 
@@ -238,7 +239,7 @@ def test_reingest_after_delete_a_forge_pointer_mints_a_fresh_chunk_reading_norma
     first = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]}).json()
     chunks = ChunkStore(hub.engine, hub.clock)
     items = WorkItemStore(hub.engine)
-    delete = DeleteService(chunks=chunks, items=items, clock=hub.clock)
+    delete = DeleteService(chunks=chunks, items=items, clock=hub.clock, claim_lock=threading.Lock())
     chunk = chunks.get(first["chunk_id"])
     assert chunk is not None
     delete.delete(chunk, by="operator")

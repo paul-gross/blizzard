@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import threading
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
 from typing import Protocol
@@ -47,10 +48,13 @@ from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
+from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.forge_status import AnnotationReconciler
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
+from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 
 ENV_FORGE_URL = "BZ_FORGE_URL"
@@ -205,7 +209,16 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     # one instance each, shared by every write path (blizzard#358) and auth path (blizzard#362).
     clock = SystemClock()
     user_store = UserRepository(engine, RepoErrorFactory(get_logger("blizzard.hub.auth")))
-    work_source_registry = WorkSourceEntry.registry(config.work_sources, engine, clock, users=user_store)
+    # Constructed once here too, so the built-in hub binding and `build_services` below
+    # share one `WorkItemStore`/`DeleteService`/lock rather than each building its own.
+    claim_lock = threading.Lock()
+    work_item_store = WorkItemStore(engine)
+    delete_service = DeleteService(
+        chunks=ChunkStore(engine, clock), items=work_item_store, clock=clock, claim_lock=claim_lock
+    )
+    work_source_registry = WorkSourceEntry.registry(
+        config.work_sources, engine, clock, users=user_store, work_item_store=work_item_store, delete=delete_service
+    )
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
 
     # The provider-login seam (issue #92) is built only under `oauth`: under `none`
@@ -219,6 +232,9 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         engine,
         events=EventBroker(),
         work_sources=work_source_registry,
+        claim_lock=claim_lock,
+        work_item_store=work_item_store,
+        delete=delete_service,
         clock=clock,
         users=user_store,
         base_branch=base_branch,

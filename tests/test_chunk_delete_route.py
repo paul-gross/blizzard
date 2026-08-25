@@ -30,11 +30,19 @@ def _claim(hub, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
 
+def _delete_chunk(hub, chunk_id: str, *, by: str | None = None):  # type: ignore[no-untyped-def]
+    """``DELETE /api/chunks/{id}`` with its (issue #364) JSON body — ``httpx``'s own
+    ``delete()`` refuses a ``json`` keyword, so this goes through ``request`` instead,
+    the way ``CliContext.send`` itself now has to for the same reason."""
+    body = {"by": by} if by is not None else {}
+    return hub.client.request("DELETE", f"/api/chunks/{chunk_id}", json=body)
+
+
 def test_delete_returns_202_and_the_chunk_id(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER])
 
-    resp = hub.client.delete(f"/api/chunks/{chunk_id}")
+    resp = _delete_chunk(hub, chunk_id)
 
     assert resp.status_code == 202, resp.text
     assert resp.json() == {"chunk_id": chunk_id}
@@ -44,7 +52,7 @@ def test_deleted_chunk_is_gone_from_every_read(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER])
 
-    assert hub.client.delete(f"/api/chunks/{chunk_id}").status_code == 202
+    assert _delete_chunk(hub, chunk_id).status_code == 202
 
     assert hub.client.get(f"/api/chunks/{chunk_id}").status_code == 404
     ids = [c["chunk_id"] for c in hub.client.get("/api/chunks").json()]
@@ -53,7 +61,7 @@ def test_deleted_chunk_is_gone_from_every_read(tmp_path: Path) -> None:
 
 def test_delete_unknown_chunk_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    resp = hub.client.delete("/api/chunks/ch_nope")
+    resp = _delete_chunk(hub, "ch_nope")
     assert resp.status_code == 404
 
 
@@ -62,7 +70,7 @@ def test_delete_refuses_a_claimed_chunk(tmp_path: Path) -> None:
     chunk_id = ingest(hub, [_POINTER])
     _claim(hub, chunk_id)
 
-    resp = hub.client.delete(f"/api/chunks/{chunk_id}")
+    resp = _delete_chunk(hub, chunk_id)
 
     assert resp.status_code == 409, resp.text
     assert "running" in resp.json()["detail"]
@@ -74,7 +82,7 @@ def test_delete_withdraws_the_chunks_open_hub_item(tmp_path: Path) -> None:
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
     ref, chunk_id = created["ref"], created["chunk_id"]
 
-    resp = hub.client.delete(f"/api/chunks/{chunk_id}")
+    resp = _delete_chunk(hub, chunk_id)
 
     assert resp.status_code == 202, resp.text
     item = hub.client.get(f"/api/work-sources/hub/items/{ref}").json()
@@ -85,13 +93,13 @@ def test_delete_defaults_by_to_operator_and_accepts_an_override(tmp_path: Path) 
     hub = build_hub(tmp_path)
     default_id = ingest(hub, [_POINTER])
     since = hub.events.latest_id()
-    assert hub.client.delete(f"/api/chunks/{default_id}").status_code == 202
+    assert _delete_chunk(hub, default_id).status_code == 202
     default_frame = json.loads(emitted_events(hub, since=since)[0]["data"])
     assert default_frame["by"] == "operator"
 
     named_id = ingest(hub, [{"source": "default", "ref": "364b"}])
     since = hub.events.latest_id()
-    resp = hub.client.delete(f"/api/chunks/{named_id}", params={"by": "alice"})
+    resp = _delete_chunk(hub, named_id, by="alice")
     assert resp.status_code == 202, resp.text
     named_frame = json.loads(emitted_events(hub, since=since)[0]["data"])
     assert named_frame["by"] == "alice"
@@ -102,7 +110,7 @@ def test_delete_publishes_both_chunk_changed_and_queue_changed(tmp_path: Path) -
     chunk_id = ingest(hub, [_POINTER])
     since = hub.events.latest_id()
 
-    resp = hub.client.delete(f"/api/chunks/{chunk_id}")
+    resp = _delete_chunk(hub, chunk_id)
 
     assert resp.status_code == 202, resp.text
     events = emitted_events(hub, since=since)
@@ -119,7 +127,7 @@ def test_delete_chunk_changed_frame_carries_cause_deleted_and_by_no_richer_shape
     chunk_id = ingest(hub, [_POINTER])
     since = hub.events.latest_id()
 
-    resp = hub.client.delete(f"/api/chunks/{chunk_id}", params={"by": "alice"})
+    resp = _delete_chunk(hub, chunk_id, by="alice")
     assert resp.status_code == 202, resp.text
 
     frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == CHUNK_CHANGED]
@@ -132,6 +140,32 @@ def test_delete_chunk_changed_frame_carries_cause_deleted_and_by_no_richer_shape
     assert "graph_id" not in frame
     assert "node" not in frame
     assert "runner_id" not in frame
+
+
+def test_delete_chunk_changed_frame_carries_the_chunks_pre_delete_status(tmp_path: Path) -> None:
+    """The frame's status is the chunk's own status right before the delete — not the
+    post-delete ``not_ready`` ``ChunkChanged.publish`` would otherwise always derive
+    once the chunk's facts read back empty, regardless of what the chunk really was."""
+    hub = build_hub(tmp_path)
+    ready_id = ingest(hub, [_POINTER])  # promote=True by default -> ready
+    since = hub.events.latest_id()
+
+    resp = _delete_chunk(hub, ready_id)
+    assert resp.status_code == 202, resp.text
+
+    frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == CHUNK_CHANGED]
+    assert len(frames) == 1
+    assert frames[0]["status"] == "ready"
+
+    not_ready_id = ingest(hub, [{"source": "default", "ref": "364c"}], promote=False)
+    since = hub.events.latest_id()
+
+    resp = _delete_chunk(hub, not_ready_id)
+    assert resp.status_code == 202, resp.text
+
+    frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == CHUNK_CHANGED]
+    assert len(frames) == 1
+    assert frames[0]["status"] == "not_ready"
 
 
 def test_every_other_mutating_chunk_route_frame_is_unchanged_by_the_widened_degraded_branch(

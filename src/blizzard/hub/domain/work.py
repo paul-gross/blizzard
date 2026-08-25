@@ -90,8 +90,8 @@ class WorkItemAuthor:
 
 
 class WorkItemClosure(StrEnum):
-    """How a hub-owned work item closed (issue #357) — recorded on the row itself
-    (``bzh:facts-not-status``, Recorded position), never derived."""
+    """How a hub-owned work item closed (issue #357) — recorded on the row itself when
+    it closes, never derived from anything else."""
 
     DELIVERED = "delivered"
     WITHDRAWN = "withdrawn"

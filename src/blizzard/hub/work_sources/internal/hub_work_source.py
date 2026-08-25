@@ -16,15 +16,15 @@ from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import (
     IReadChunkRepository,
     IReadWorkItemRepository,
+    IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkItemClosure,
     WorkItemPriority,
     WorkItemRecord,
     WorkRef,
 )
-from blizzard.hub.domain.work_items import CreatedWorkItem, WorkItemEdit, WorkItemEditService
+from blizzard.hub.domain.work_items import CreatedWorkItem, WithdrawnWorkItem, WorkItemEdit, WorkItemEditService
 from blizzard.hub.store.internal.chunk_store import ChunkStore
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError, resolve_author_view
@@ -122,9 +122,9 @@ class HubWorkSource:
         item = self._resolve(pointer)
         return self._edits.edit(item, edit)
 
-    def withdraw(self, pointer: WorkRef) -> WorkItemRecord:
+    def withdraw(self, pointer: WorkRef, *, by: str) -> WithdrawnWorkItem:
         item = self._resolve(pointer)
-        return self._edits.withdraw(item)
+        return self._edits.withdraw(item, by=by)
 
     def _resolve(self, pointer: WorkRef) -> WorkItemRecord:
         item = self._items.get(pointer.source, pointer.ref)
@@ -141,15 +141,17 @@ def seat_hub_work_source(
     engine: Engine,
     clock: IClock,
     users: IReadUserRepository,
+    items: IWriteWorkItemRepository,
+    delete: DeleteService,
 ) -> None:
     """Seats the built-in ``hub`` binding into ``sources``/``editors``/``closers`` in
     place — reached from both
     :meth:`~blizzard.hub.work_sources.internal.factory.WorkSourceEntry.registry` and
-    ``tests/support.py::build_hub``: never absent, never configured. ``users`` is the
-    composition root's own repository, not a second instance (blizzard#362)."""
-    items = WorkItemStore(engine)
+    ``tests/support.py::build_hub``: never absent, never configured. ``users``/``items``/
+    ``delete`` are the composition root's own instances, not fresh ones (blizzard#362,
+    issue #364) — the same ``WorkItemStore`` and the same ``DeleteService``, carrying its
+    shared claim lock, back every write path regardless of which door reaches them."""
     chunks = ChunkStore(engine, clock)
-    delete = DeleteService(chunks=chunks, items=items, clock=clock)
     edits = WorkItemEditService(items=items, chunks=chunks, clock=clock, delete=delete)
     hub_source = HubWorkSource(items, chunks, edits, users)
     sources[RESERVED_HUB_SOURCE_NAME] = hub_source
