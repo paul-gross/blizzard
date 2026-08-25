@@ -165,6 +165,7 @@ def create_work_item(
     chunk_events.ChunkChanged.of(services, created.chunk_id, prev_status=None).publish(
         cause="minted", key=f"chunks:{created.chunk_id}"
     )
+    services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
     return WorkItemCreateResponse(
         **_view(created.item, source_obj, services.users).model_dump(), chunk_id=created.chunk_id
     )

@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
-from blizzard.hub.events.broker import CHUNK_CHANGED
+from blizzard.hub.events.broker import CHUNK_CHANGED, QUEUE_CHANGED
 from tests.support import FakeWorkSource, build_hub, emitted_events, seed_session, seed_user
 
 pytestmark = pytest.mark.component
@@ -129,6 +129,17 @@ def test_create_publishes_a_minted_chunk_changed_frame(tmp_path: Path) -> None:
     assert frames[0]["chunk_id"] == created["chunk_id"]
     assert frames[0]["cause"] == "minted"
     assert frames[0]["status"] == "not_ready"
+
+
+def test_create_also_publishes_queue_changed_since_the_mint_joins_the_backlog_list(tmp_path: Path) -> None:
+    """Mirrors ``POST /chunks``: minting a chunk changes ``not_ready``-list membership,
+    so the board's backlog query must invalidate the same way an out-of-band ingest
+    does — a gap the editor path missed when ``POST /chunks`` was fixed for it."""
+    hub = build_hub(tmp_path)
+
+    hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"})
+
+    assert [e["event"] for e in emitted_events(hub)] == [CHUNK_CHANGED, QUEUE_CHANGED]
 
 
 def test_a_second_post_chunks_against_the_minted_pointer_is_409(tmp_path: Path) -> None:
