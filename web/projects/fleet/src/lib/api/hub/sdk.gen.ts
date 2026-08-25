@@ -228,10 +228,9 @@ export const getBacklogApiBacklogGet = <ThrowOnError extends boolean = false>(op
  *
  * Idempotent whole-order replacement of the backlog.
  *
- * Resolves every named id against the current ``not_ready`` set
- * (``bzh:domain-takes-objects``): ``409`` names the first id that is not ``not_ready``,
- * ``422`` a duplicate id. An unnamed ``not_ready`` chunk keeps its relative order,
- * appended after the named ones.
+ * Resolves every named id against the current ``not_ready`` set: ``409`` names the
+ * first id that is not ``not_ready``, ``422`` a duplicate id. An unnamed chunk keeps
+ * its relative order, appended after the named ones.
  */
 export const replaceBacklogApiBacklogPut = <ThrowOnError extends boolean = false>(options: Options<ReplaceBacklogApiBacklogPutData, ThrowOnError>): RequestResult<ReplaceBacklogApiBacklogPutResponses, ReplaceBacklogApiBacklogPutErrors, ThrowOnError> => (options.client ?? client).put<ReplaceBacklogApiBacklogPutResponses, ReplaceBacklogApiBacklogPutErrors, ThrowOnError>({
     url: '/api/backlog',

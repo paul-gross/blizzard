@@ -852,7 +852,7 @@
         "type": "object"
       },
       "BacklogReplaceRequest": {
-        "description": "Idempotent whole-order replacement of the backlog \u2014 ``PUT /api/backlog``.\n\n``chunk_ids`` is the desired order, front to back; each must name a ``not_ready``\nchunk (``409``) and not repeat (``422``). An unnamed ``not_ready`` chunk is appended,\norder kept.",
+        "description": "Idempotent whole-order replacement of the backlog \u2014 ``PUT /api/backlog``.\n\n``chunk_ids`` is the desired order, front to back; each must name a ``not_ready``\nchunk (``409``) and not repeat (``422``). An unnamed chunk is appended, order kept.",
         "properties": {
           "chunk_ids": {
             "items": {
@@ -8372,7 +8372,7 @@
         ]
       },
       "put": {
-        "description": "Idempotent whole-order replacement of the backlog.\n\nResolves every named id against the current ``not_ready`` set\n(``bzh:domain-takes-objects``): ``409`` names the first id that is not ``not_ready``,\n``422`` a duplicate id. An unnamed ``not_ready`` chunk keeps its relative order,\nappended after the named ones.",
+        "description": "Idempotent whole-order replacement of the backlog.\n\nResolves every named id against the current ``not_ready`` set: ``409`` names the\nfirst id that is not ``not_ready``, ``422`` a duplicate id. An unnamed chunk keeps\nits relative order, appended after the named ones.",
         "operationId": "replace_backlog_api_backlog_put",
         "requestBody": {
           "content": {

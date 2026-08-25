@@ -581,8 +581,7 @@ export type BacklogPositionRequest = {
  * Idempotent whole-order replacement of the backlog — ``PUT /api/backlog``.
  *
  * ``chunk_ids`` is the desired order, front to back; each must name a ``not_ready``
- * chunk (``409``) and not repeat (``422``). An unnamed ``not_ready`` chunk is appended,
- * order kept.
+ * chunk (``409``) and not repeat (``422``). An unnamed chunk is appended, order kept.
  */
 export type BacklogReplaceRequest = {
     /**
