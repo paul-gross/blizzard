@@ -356,6 +356,25 @@ describe('ChunkTimeline', () => {
     expect(emitted).toEqual([]);
   });
 
+  it('keeps the row link and a multi-graph row’s own graph-badge link both present and independently addressable, non-activatable', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', TWO_GRAPH_DETAIL);
+    fixture.componentRef.setInput('graphLinkBase', ['/graphs']);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const transition = el.querySelector('[data-testid="history-step"]') as HTMLElement;
+    const rowLink = transition.querySelector('a.step-link') as HTMLAnchorElement;
+    const graphBadge = transition.querySelector('a.gr') as HTMLAnchorElement;
+    expect(rowLink).not.toBeNull();
+    expect(graphBadge).not.toBeNull();
+    expect(rowLink).not.toBe(graphBadge);
+    expect(rowLink.getAttribute('href')).toBe(
+      `/board/chunk/${TWO_GRAPH_DETAIL.chunk_id}?tab=node-history&step=nd_s_build:1`,
+    );
+    expect(graphBadge.getAttribute('href')).toBe('/graphs/gr_src');
+  });
+
   it('builds the link under a custom linkBase, the same contract chunk-artifacts.ts establishes', async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
@@ -387,16 +406,28 @@ describe('ChunkTimeline', () => {
     expect(emitted).toEqual([]);
   });
 
-  it('renders a null-keyed row inert — no anchor, no tabindex, no hover-responsive class (a migration, or an active row with no epoch yet)', async () => {
-    const fixture = TestBed.createComponent(ChunkTimeline);
-    fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: 'ready' });
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+  it('renders a null-keyed row inert — no anchor, no tabindex, no hover-keyed class (a migration, or an active row with no epoch yet)', async () => {
+    const migrationFixture = TestBed.createComponent(ChunkTimeline);
+    migrationFixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: 'ready' });
+    await migrationFixture.whenStable();
+    const migrationEl = migrationFixture.nativeElement as HTMLElement;
 
-    const migration = el.querySelector('[data-testid="history-migration-step"]') as HTMLElement;
+    const migration = migrationEl.querySelector('[data-testid="history-migration-step"]') as HTMLElement;
     expect(migration.querySelector('a.step-link')).toBeNull();
     expect(migration.getAttribute('tabindex')).toBeNull();
-    expect(migration.classList.contains('responsive')).toBe(false);
+    expect(migration.classList.contains('keyed')).toBe(false);
+
+    // REVIEW_FAIL_DETAIL's own active row lands in the review:F11 lag window (below) —
+    // a landed transition already claims (nd_build, epoch 2), so its own key is null too.
+    const activeFixture = TestBed.createComponent(ChunkTimeline);
+    activeFixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    await activeFixture.whenStable();
+    const activeEl = activeFixture.nativeElement as HTMLElement;
+
+    const active = activeEl.querySelector('[data-testid="history-active"]') as HTMLElement;
+    expect(active.querySelector('a.step-link')).toBeNull();
+    expect(active.getAttribute('tabindex')).toBeNull();
+    expect(active.classList.contains('keyed')).toBe(false);
   });
 
   it('draws no link and no route change for the General tab’s own activatable rows — they still just emit pickStep', async () => {
@@ -412,7 +443,7 @@ describe('ChunkTimeline', () => {
 
     expect(el.querySelector('a.step-link')).toBeNull();
     const transition = el.querySelector('[data-testid="history-step"]') as HTMLElement;
-    expect(transition.classList.contains('responsive')).toBe(true);
+    expect(transition.classList.contains('keyed')).toBe(true);
     transition.click();
     expect(emitted).toEqual(['nd_build:1']);
     expect(router.url).toBe(startUrl);

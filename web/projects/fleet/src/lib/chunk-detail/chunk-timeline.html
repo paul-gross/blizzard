@@ -10,7 +10,7 @@
         <div
           class="step"
           [class.selected]="row.key !== null && row.key === selectedKey()"
-          [class.responsive]="row.key !== null"
+          [class.keyed]="row.key !== null"
           [attr.data-testid]="row.kind === 'migration' ? 'history-migration-step' : 'history-step'"
           [attr.data-choice]="row.kind === 'migration' ? 'migrated' : row.verdict"
           [attr.role]="activatable() && row.key !== null ? 'button' : null"
@@ -25,7 +25,7 @@
               data-testid="history-link"
               [routerLink]="[...linkBase(), chunkId()]"
               [queryParams]="{ tab: 'node-history', step: row.key }"
-              [attr.aria-label]="row.nodeName + ' — ' + (row.verdict ?? row.kind)"
+              [attr.aria-label]="'Open ' + row.nodeName + ', epoch ' + row.epoch"
             ></a>
           }
           <span class="att">{{ row.kind === 'migration' ? '⤳' : row.epoch }}</span>
@@ -86,7 +86,7 @@
           class="step"
           data-testid="history-active"
           [class.selected]="a.key !== null && a.key === selectedKey()"
-          [class.responsive]="a.key !== null"
+          [class.keyed]="a.key !== null"
           [attr.data-choice]="a.choice"
           [attr.role]="activatable() && a.key !== null ? 'button' : null"
           [attr.tabindex]="activatable() && a.key !== null ? 0 : null"
@@ -100,7 +100,7 @@
               data-testid="history-link"
               [routerLink]="[...linkBase(), chunkId()]"
               [queryParams]="{ tab: 'node-history', step: a.key }"
-              [attr.aria-label]="a.nodeName + ' — ' + a.label"
+              [attr.aria-label]="'Open ' + a.nodeName + ', epoch ' + (a.epoch ?? '·')"
             ></a>
           }
           <span class="att">{{ a.epoch ?? '·' }}</span>

@@ -39,10 +39,12 @@ import {
  * A non-activatable keyed row's own link is a `.step-link` anchor stretched over
  * the whole `.step` (`position: absolute; inset: 0`), not `.step` itself made an
  * anchor — a multi-graph row already nests its own graph-badge anchor inside
- * `.step`, and an anchor cannot itself nest one. The badge is raised above the
- * stretched link with its own `pointer-events: auto` (`chunk-timeline.css`), the
- * same pattern `glance-view.css`'s `.hit` establishes for a whole-row link over
- * plain content.
+ * `.step`, and an anchor cannot itself nest one. Every direct child rides above
+ * the stretched link and, but for the columns that carry their own `title`
+ * tooltip (the node name, the routed-to column, the recency stamp — each opts
+ * back into `pointer-events: auto`, `chunk-timeline.css`), hands its own click
+ * through to the link instead of claiming it — the same pattern
+ * `glance-view.css`'s `.hit` establishes for a whole-row link over plain content.
  */
 @Component({
   selector: 'fleet-chunk-detail-timeline',
@@ -69,7 +71,8 @@ export class ChunkTimeline {
    * focus/keyboard affordance — a keyless row (a migration, or an active row with no
    * epoch yet) draws neither, regardless of this input. `false` (the default) is the
    * board dock's own mode; the chunk detail page's own tabs, already on the route a
-   * link would point at, set this `true`. */
+   * link would point at, set this `true`. No third mode today for a keyed row that is
+   * neither — a consumer wanting one needs a new input, not a repurposing of this one. */
   readonly activatable = input(false);
 
   /** The currently selected row's own key, or `null` — visual only, drawn from the

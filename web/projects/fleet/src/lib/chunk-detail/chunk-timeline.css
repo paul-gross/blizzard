@@ -68,10 +68,10 @@
 /* Hover is a background step alone — no border of its own. The left-edge
    accent is reserved for `.selected` (below), the same split
    `chunk-artifacts-tab.css`'s `.art-item`/`.art-item.active` already draws.
-   Scoped to `.responsive` (a row carrying a real join key, drawn whether it
+   Scoped to `.keyed` (a row carrying a real join key, drawn whether it
    emits or links — `chunk-timeline.ts`'s own `activatable` doc) so a row that
    does nothing draws nothing. */
-.step.responsive:hover {
+.step.keyed:hover {
   background: var(--surface-hover);
 }
 .step[role='button'] {
@@ -98,13 +98,25 @@
   outline: 1px solid var(--cyan);
   outline-offset: -2px;
 }
-/* Every other direct child rides above the stretched link, visually, but
-   `pointer-events: none` (inherited by descendants) hands every click that
-   isn't otherwise claimed through to it — the graph badge below is the one
-   descendant that reclaims its own click. */
+/* Every other direct child rides above the stretched link, visually — needed
+   even for the two excluded below, or the link (a positioned z-index:0 sibling
+   painted after in-flow content) would sit over them for hit-testing too, and
+   neither would ever see a hover. */
 .step:has(.step-link) > *:not(.step-link) {
   position: relative;
   z-index: 1;
+}
+/* `pointer-events: none` (inherited by descendants) hands every click that
+   isn't otherwise claimed through to the stretched link below. `.nd`/`.ts`
+   are excluded: each carries its own native `title` tooltip
+   (`chunk-timeline.html`), and pointer-events:none would take hover — the
+   thing that tooltip needs — along with the click. A click landing exactly on
+   either no longer reaches the row's own link (it falls to `.step`'s own
+   no-op handler while non-activatable) — accepted, since most of the row's
+   surface (gaps, the other columns) still does. The graph badge and the
+   verdict-routed-to tooltip make the same trade the same way, just for a
+   nested descendant instead of a direct child — see `a.gr`/`.jg-to` below. */
+.step:has(.step-link) > *:not(.step-link):not(.nd):not(.ts) {
   pointer-events: none;
 }
 .step.selected {
@@ -131,6 +143,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 84px; /* the node column's floor — see the `.timeline` comment above */
+  /* Excluded from the stretched-link sweep above — keeps this element's own
+     `[title]="row.nodeId"` (`chunk-timeline.html`) reachable by hover. */
+  pointer-events: auto;
 }
 .step .jg {
   display: flex;
@@ -166,12 +181,10 @@
 }
 /* Only an `<a>` when `graphLinkBase` is set (a `<span>` otherwise) — the shared rule
    above already colors either; this just adds the link affordance the `<span>` case
-   never matches. `pointer-events: auto` reclaims the click a stretched `.step-link`
-   (above) would otherwise hand through — `.nd`'s own `pointer-events: none` inherits
-   to every descendant, this badge included, unless it opts back in. */
+   never matches. Its own click stays live for the same reason `.nd`'s does (above) —
+   it inherits that ancestor's `pointer-events: auto`, not a stretched-link sweep. */
 a.gr {
   text-decoration: none;
-  pointer-events: auto;
 }
 a.gr:hover,
 a.gr:focus-visible {
@@ -190,12 +203,19 @@ a.gr:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+  /* `.jg` (its own direct-child ancestor) is stretched-link-swept to
+     `pointer-events: none`; opt this one descendant back in the same way
+     `.nd`'s own `[title]` does, so its `[title]="row.toId"` stays reachable. */
+  pointer-events: auto;
 }
-/* When the judgement landed — recency at a glance, right-aligned and dim. */
+/* When the judgement landed — recency at a glance, right-aligned and dim.
+   Excluded from the stretched-link sweep above (like `.nd`) — keeps this
+   element's own `[title]="row.whenTitle"` reachable by hover. */
 .step .ts {
   color: var(--label-dim);
   font-size: var(--fs-label);
   white-space: nowrap;
+  pointer-events: auto;
 }
 /* A history step's own usage — its own full-width row under the step's main
    cells (issue #182), not squeezed onto the same line as the verdict/timestamp.
@@ -241,4 +261,8 @@ a.gr:focus-visible {
   font-size: var(--fs-label);
   letter-spacing: 0.1em;
   cursor: help;
+  /* `.step-usage` (its own direct-child ancestor) is stretched-link-swept to
+     `pointer-events: none`; opt this one descendant back in the same way
+     `.jg-to` does, so this badge's own `[title]` and `cursor: help` stay live. */
+  pointer-events: auto;
 }

@@ -212,7 +212,7 @@ describe('chunk-timeline row hover tint shell sweep (web:shell-sweep)', () => {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       imports: [ChunkTimeline],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', TIMELINE_DETAIL);
