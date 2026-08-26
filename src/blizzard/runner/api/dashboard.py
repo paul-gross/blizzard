@@ -56,7 +56,10 @@ def _maybe_fleet_summary(request: Request) -> FleetSummaryView | None:
         # Unwired to a hub — the same shape an unenrolled runner already reports.
         return None
     try:
-        return _fleet_summary(proxy, timeout=_DASHBOARD_HUB_TIMEOUT)
+        # A hub outage here is tolerated degradation, not an operational failure — the six
+        # local sections still stand, so this route's own unreachable-hub line logs below
+        # the module default (issue #374).
+        return _fleet_summary(proxy, timeout=_DASHBOARD_HUB_TIMEOUT, severity="warning")
     except HTTPException:
         # Hub unreachable, or answered with a non-200 — the local sections still stand.
         return None

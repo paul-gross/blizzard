@@ -41,7 +41,6 @@ from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.restart import ChunkNotRestartable, RestartCurrentNodeUnknown, RestartNodeUnknown
 from blizzard.hub.domain.stop import ChunkNotStoppable
 from blizzard.hub.domain.work import (
-    ChunkFacts,
     FleetSummary,
     WorkItemPriority,
     WorkRef,
@@ -147,11 +146,9 @@ class FleetPulse:
     def view(self) -> FleetSummaryView:
         """Not a route of its own here. Derives each chunk's status the same way
         :func:`list_chunks` does, but yields only the four bucket integers, so the payload
-        is a fixed four numbers regardless of fleet size."""
-        summary = FleetSummary.of(
-            (self.services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)).status()
-            for chunk in self.services.chunks.list_all()
-        )
+        is a fixed four numbers regardless of fleet size. Reads the fleet's facts with one
+        bulk query rather than fanning ``load_facts`` out per chunk (issue #374)."""
+        summary = FleetSummary.of(facts.status() for facts in self.services.chunks.load_all_facts().values())
         return FleetSummaryView(
             ready=summary.ready,
             running=summary.running,

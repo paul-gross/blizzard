@@ -13,6 +13,7 @@ from pathlib import Path
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from structlog.testing import capture_logs
 
 import blizzard.runner.api.hub_proxy as hub_proxy
 from blizzard.foundation.clock import FixedClock
@@ -207,3 +208,27 @@ def test_the_dashboards_own_hub_call_carries_the_bounded_timeout(
     assert seen_timeouts == [_DASHBOARD_HUB_TIMEOUT]
     assert _DASHBOARD_HUB_TIMEOUT < 5.0
     assert _DASHBOARD_HUB_TIMEOUT < _HUB_TIMEOUT
+
+
+@pytest.mark.component
+def test_the_dashboards_own_unreachable_hub_line_logs_below_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A hub outage here is tolerated degradation — the six local sections still stand
+    (issue #374) — so this route's own unreachable-hub line logs below the module
+    default ``error``, distinct from ``/api/fleet-summary``'s own call, which keeps it
+    (proven by ``test_fleet_summary_proxy.py``)."""
+    client, store = _app_with_status(tmp_path)
+    _seed_all_sections(store)
+
+    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
+    with capture_logs() as logs:
+        resp = client.get("/api/dashboard")
+
+    assert resp.status_code == 200, resp.text
+    unreachable = [entry for entry in logs if entry["event"] == "dashboard proxy could not reach the hub"]
+    assert len(unreachable) == 1
+    assert unreachable[0]["log_level"] == "warning"

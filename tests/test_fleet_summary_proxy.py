@@ -11,6 +11,7 @@ from pathlib import Path
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from structlog.testing import capture_logs
 
 import blizzard.runner.api.hub_proxy as hub_proxy
 from blizzard.runner.app import create_app
@@ -118,6 +119,24 @@ def test_proxy_502_when_the_hub_is_unreachable(tmp_path: Path, monkeypatch: pyte
 
     assert resp.status_code == 502
     assert "unreachable" in resp.json()["detail"]
+
+
+@pytest.mark.component
+def test_proxy_unreachable_hub_line_logs_at_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """This route's own forward keeps today's ``error`` severity (issue #374) — only the
+    dashboard's tolerated fleet-summary call lowers it (``test_dashboard_route.py``)."""
+
+    def fake_request(method: str, url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(hub_proxy.httpx, "request", fake_request)
+    with capture_logs() as logs:
+        resp = _runner_app(tmp_path).get("/api/fleet-summary")
+
+    assert resp.status_code == 502
+    unreachable = [entry for entry in logs if entry["event"] == "fleet-summary proxy could not reach the hub"]
+    assert len(unreachable) == 1
+    assert unreachable[0]["log_level"] == "error"
 
 
 @pytest.mark.component
