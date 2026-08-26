@@ -1246,6 +1246,14 @@ class IReadChunkRepository(Protocol):
 
     def get(self, chunk_id: str) -> Chunk | None: ...
     def load_facts(self, chunk_id: str) -> ChunkFacts | None: ...
+    def load_all_facts(self) -> dict[str, ChunkFacts]:
+        """Every non-ephemeral (non-grouped, non-deleted) chunk's complete
+        :class:`ChunkFacts`, keyed by chunk id — the fleet-summary bulk read (issue
+        #374). A bounded number of queries regardless of fleet size, unlike calling
+        :meth:`load_facts` once per chunk; each value is exactly what :meth:`load_facts`
+        would return for that chunk id."""
+        ...
+
     def get_question(self, question_id: str) -> QuestionRow | None:
         """One question row with its derived answer state, or None."""
         ...

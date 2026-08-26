@@ -8,6 +8,7 @@ derived. Timestamps arrive already stamped (``bzh:injected-clock``).
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -443,6 +444,244 @@ class ChunkStore:
                 bounces=bounces,
                 hub_node_polls=hub_node_polls,
             )
+
+    def load_all_facts(self) -> dict[str, ChunkFacts]:
+        """See :meth:`IReadChunkRepository.load_all_facts` (issue #374) — one bounded
+        query per fact table across the whole store, grouped by chunk id in Python,
+        rather than :meth:`load_facts`'s per-chunk fan-out. ``activity_facts_since`` is
+        this shape's precedent. Every family reproduces :meth:`load_facts`'s row
+        construction verbatim; only ``chunk_pause_facts`` is read in an explicit order,
+        since :meth:`ChunkFacts.open_pause` indexes its list's tail."""
+        with self._engine.connect() as conn:
+            ephemeral = self._ephemeral_ids(conn)
+            graph_id_of = {
+                r.chunk_id: r.graph_id
+                for r in conn.execute(select(s.chunks.c.chunk_id, s.chunks.c.graph_id)).all()
+                if r.chunk_id not in ephemeral
+            }
+            if not graph_id_of:
+                return {}
+
+            transition_rows = conn.execute(select(s.transitions)).all()
+            migration_rows = conn.execute(select(s.chunk_migrations)).all()
+            restart_rows = conn.execute(select(s.chunk_restarts)).all()
+
+            # The executor map spans every graph any chunk's movement facts touched, keyed
+            # by (graph_id, node_id) so a node id shared by two graphs never collides
+            # (issues #90, #111, #370) — the bulk counterpart of load_facts's per-chunk set.
+            graph_ids = (
+                set(graph_id_of.values())
+                | {t.graph_id for t in transition_rows}
+                | {m.to_graph_id for m in migration_rows}
+                | {r.graph_id for r in restart_rows}
+                | {r.from_graph_id for r in restart_rows if r.from_graph_id is not None}
+            )
+            executors = {
+                (r.graph_id, r.node_id): Executor(r.executor)
+                for r in conn.execute(
+                    select(s.graph_nodes.c.graph_id, s.graph_nodes.c.node_id, s.graph_nodes.c.executor).where(
+                        s.graph_nodes.c.graph_id.in_(graph_ids)
+                    )
+                ).all()
+            }
+
+            transitions: dict[str, list[TransitionFact]] = defaultdict(list)
+            for t in transition_rows:
+                transitions[t.chunk_id].append(
+                    TransitionFact(
+                        to_node_id=t.to_node_id,
+                        to_node_executor=executors.get((t.graph_id, t.to_node_id), Executor.RUNNER),
+                        epoch=t.epoch,
+                        recorded_at=t.recorded_at,
+                        from_node_id=t.from_node_id,
+                        choice_name=t.choice_name,
+                        graph_id=t.graph_id,
+                    )
+                )
+
+            leases: dict[str, list[LeaseFact]] = defaultdict(list)
+            for lease in conn.execute(select(s.lease_facts)).all():
+                leases[lease.chunk_id].append(LeaseFact(epoch=lease.epoch, minted_at=lease.minted_at))
+
+            escalations: dict[str, list[EscalationFact]] = defaultdict(list)
+            for e in conn.execute(select(s.escalations)).all():
+                escalations[e.chunk_id].append(
+                    EscalationFact(
+                        epoch=e.epoch,
+                        recorded_at=e.recorded_at,
+                        takeover_command=e.takeover_command or "",
+                        wrapped_takeover_command=e.wrapped_takeover_command or "",
+                    )
+                )
+
+            routes_created: dict[str, list[RouteCreatedFact]] = defaultdict(list)
+            for r in conn.execute(select(s.route_created)).all():
+                routes_created[r.chunk_id].append(RouteCreatedFact(created_at=r.created_at, seq=r.seq))
+
+            routes_released: dict[str, list[RouteReleasedFact]] = defaultdict(list)
+            for r in conn.execute(select(s.route_released)).all():
+                routes_released[r.chunk_id].append(RouteReleasedFact(released_at=r.released_at, seq=r.seq))
+
+            route_tokens_minted: dict[str, list[RouteTokenMintedFact]] = defaultdict(list)
+            for t in conn.execute(select(s.route_token_minted)).all():
+                route_tokens_minted[t.chunk_id].append(
+                    RouteTokenMintedFact(token_hash=t.token_hash, minted_at=t.minted_at, seq=t.seq)
+                )
+
+            answered = {
+                a.question_id
+                for a in conn.execute(
+                    select(s.question_answers.c.question_id).join(
+                        s.questions, s.questions.c.question_id == s.question_answers.c.question_id
+                    )
+                ).all()
+            }
+            questions: dict[str, list[QuestionFact]] = defaultdict(list)
+            for q in conn.execute(select(s.questions)).all():
+                questions[q.chunk_id].append(
+                    QuestionFact(question_id=q.question_id, asked_at=q.asked_at, answered=q.question_id in answered)
+                )
+
+            decision_rows = conn.execute(select(s.decisions)).all()
+            resolved_ids = {r.decision_id for r in conn.execute(select(s.decision_resolutions.c.decision_id)).all()} | {
+                r.decision_id for r in restart_rows if r.decision_id is not None
+            }
+            decisions: dict[str, list[DecisionFact]] = defaultdict(list)
+            for d in decision_rows:
+                decisions[d.chunk_id].append(
+                    DecisionFact(
+                        decision_id=d.decision_id, submitted_at=d.submitted_at, resolved=d.decision_id in resolved_ids
+                    )
+                )
+
+            requeues: dict[str, list[RequeueFact]] = defaultdict(list)
+            for r in conn.execute(select(s.requeues)).all():
+                requeues[r.chunk_id].append(RequeueFact(requeued_at=r.requeued_at))
+
+            migrations: dict[str, list[MigrationFact]] = defaultdict(list)
+            for m in migration_rows:
+                migrations[m.chunk_id].append(
+                    MigrationFact(
+                        from_node_id=m.from_node_id,
+                        from_graph_id=m.from_graph_id,
+                        to_graph_id=m.to_graph_id,
+                        landed_node_id=m.landed_node_id,
+                        choice_name=m.choice_name,
+                        model=m.model_after,
+                        epoch=m.epoch,
+                        recorded_at=m.recorded_at,
+                        landed_node_executor=executors.get((m.to_graph_id, m.landed_node_id), Executor.RUNNER),
+                        source=MigrationSource(m.source) if m.source else None,
+                    )
+                )
+
+            restarts: dict[str, list[RestartFact]] = defaultdict(list)
+            for r in restart_rows:
+                restarts[r.chunk_id].append(
+                    RestartFact(
+                        to_node_id=r.to_node_id,
+                        from_node_id=r.from_node_id,
+                        graph_id=r.graph_id,
+                        epoch=r.epoch,
+                        recorded_at=r.recorded_at,
+                        from_graph_id=r.from_graph_id,
+                        to_node_executor=executors.get((r.graph_id, r.to_node_id), Executor.RUNNER),
+                        restarted_by=r.restarted_by,
+                        decision_id=r.decision_id,
+                    )
+                )
+
+            pauses: dict[str, list[PauseFact]] = defaultdict(list)
+            for p in conn.execute(select(s.chunk_pause_facts).order_by(s.chunk_pause_facts.c.id)).all():
+                pauses[p.chunk_id].append(PauseFact(paused=p.paused, set_at=p.set_at, set_by=p.set_by))
+
+            pr_opened: dict[str, list[PrOpenedFact]] = defaultdict(list)
+            for p in conn.execute(select(s.delivery_pr_opened)).all():
+                pr_opened[p.chunk_id].append(
+                    PrOpenedFact(
+                        repo=p.repo, number=p.pr_number, url=p.pr_url, commit_hash=p.commit_hash, opened_at=p.opened_at
+                    )
+                )
+
+            usage: dict[str, list[UsageFact]] = defaultdict(list)
+            for u in conn.execute(select(s.usage_facts)).all():
+                usage[u.chunk_id].append(
+                    UsageFact(
+                        node_id=u.node_id,
+                        epoch=u.epoch,
+                        kind=u.kind,
+                        model=u.model,
+                        input_tokens=u.input_tokens,
+                        output_tokens=u.output_tokens,
+                        cache_read_tokens=u.cache_read_tokens,
+                        cache_create_tokens=u.cache_create_tokens,
+                        cost_usd=u.cost_usd,
+                        recorded_at=u.recorded_at,
+                    )
+                )
+
+            landed_repos: dict[str, set[str]] = defaultdict(set)
+            for r in conn.execute(select(s.delivery_repo_landed)).all():
+                landed_repos[r.chunk_id].add(r.repo)
+
+            bounces: dict[str, list[BounceFact]] = defaultdict(list)
+            for b in conn.execute(select(s.chunk_bounces)).all():
+                bounces[b.chunk_id].append(
+                    BounceFact(epoch=b.epoch, cause=b.cause, envelope=b.envelope, recorded_at=b.recorded_at)
+                )
+
+            hub_node_polls: dict[str, list[HubNodePollFact]] = defaultdict(list)
+            for p in conn.execute(select(s.hub_node_poll)).all():
+                hub_node_polls[p.chunk_id].append(
+                    HubNodePollFact(node_id=p.node_id, epoch=p.epoch, polled_at=p.polled_at)
+                )
+
+            stopped_ats: dict[str, list[datetime]] = defaultdict(list)
+            for r in conn.execute(select(s.chunk_stopped.c.chunk_id, s.chunk_stopped.c.stopped_at)).all():
+                stopped_ats[r.chunk_id].append(r.stopped_at)
+
+            completed_ats: dict[str, list[datetime]] = defaultdict(list)
+            for r in conn.execute(select(s.chunk_completed.c.chunk_id, s.chunk_completed.c.completed_at)).all():
+                completed_ats[r.chunk_id].append(r.completed_at)
+
+            pr_closed_ats: dict[str, list[datetime]] = defaultdict(list)
+            for r in conn.execute(select(s.delivery_pr_closed.c.chunk_id, s.delivery_pr_closed.c.closed_at)).all():
+                pr_closed_ats[r.chunk_id].append(r.closed_at)
+
+            promoted_ids = {r.chunk_id for r in conn.execute(select(s.chunk_promoted.c.chunk_id)).all()}
+            delivery_landed_ids = {r.chunk_id for r in conn.execute(select(s.delivery_landed.c.chunk_id)).all()}
+
+            return {
+                chunk_id: ChunkFacts(
+                    minted=True,
+                    promoted=chunk_id in promoted_ids,
+                    stopped=bool(stopped_ats[chunk_id]),
+                    stopped_at=max(stopped_ats[chunk_id], default=None),
+                    operator_completed=bool(completed_ats[chunk_id]),
+                    operator_completed_at=max(completed_ats[chunk_id], default=None),
+                    delivery_landed=chunk_id in delivery_landed_ids,
+                    landed_repos=frozenset(landed_repos[chunk_id]),
+                    pr_closed=bool(pr_closed_ats[chunk_id]),
+                    pr_closed_at=max(pr_closed_ats[chunk_id], default=None),
+                    escalations=escalations[chunk_id],
+                    leases=leases[chunk_id],
+                    transitions=transitions[chunk_id],
+                    routes_created=routes_created[chunk_id],
+                    routes_released=routes_released[chunk_id],
+                    route_tokens_minted=route_tokens_minted[chunk_id],
+                    questions=questions[chunk_id],
+                    decisions=decisions[chunk_id],
+                    requeues=requeues[chunk_id],
+                    migrations=migrations[chunk_id],
+                    restarts=restarts[chunk_id],
+                    pr_opened=pr_opened[chunk_id],
+                    pauses=pauses[chunk_id],
+                    usage=usage[chunk_id],
+                    bounces=bounces[chunk_id],
+                    hub_node_polls=hub_node_polls[chunk_id],
+                )
+                for chunk_id in graph_id_of
+            }
 
     def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
         with self._engine.connect() as conn:

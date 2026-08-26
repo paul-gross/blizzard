@@ -20,6 +20,6 @@ def get_fleet_summary(request: Request) -> FleetSummaryView:
     return _fleet_summary(HubProxy.of(request, "fleet-summary"))
 
 
-def _fleet_summary(proxy: HubProxy, *, timeout: float | None = None) -> FleetSummaryView:
-    upstream = proxy.get("/api/fleet/summary", timeout=timeout)
+def _fleet_summary(proxy: HubProxy, *, timeout: float | None = None, severity: str = "error") -> FleetSummaryView:
+    upstream = proxy.get("/api/fleet/summary", timeout=timeout, severity=severity)
     return FleetSummaryView.model_validate(upstream.json())
