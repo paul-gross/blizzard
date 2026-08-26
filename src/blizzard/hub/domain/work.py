@@ -1286,12 +1286,13 @@ class IReadChunkRepository(Protocol):
         ...
 
     def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:
-        """Every not-yet-judged proposal of a chunk that has delivered (D2) — a
-        ``transitions`` row at ``to_node_id == RESERVED_TERMINAL``, regardless of which
-        path wrote it (assumption 2), excluding the ephemeral (grouped/deleted) and any
-        proposal already carrying a ``work_item_materializations`` row. Reads status
-        nowhere: a hand-completed or later-stopped chunk is included or excluded purely
-        by whether it actually delivered."""
+        """Every not-yet-judged proposal of a chunk that has delivered — a
+        ``transitions`` row at ``to_node_id == RESERVED_TERMINAL``, regardless of whether
+        a runner-node's own transition or a hub-node's ``release_route`` transition wrote
+        it, excluding the ephemeral (grouped/deleted) and any proposal already carrying a
+        ``work_item_materializations`` row. Reads status nowhere: a hand-completed or
+        later-stopped chunk is included or excluded purely by whether it actually
+        delivered."""
         ...
 
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
@@ -1877,19 +1878,17 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         stated_priority: str | None,
         at: datetime,
         chunk: Chunk,
-    ) -> WorkItemRecord | None:
+    ) -> bool:
         """Mint the item, its resting ``not_ready`` chunk, and ``proposal_id``'s
         ``created`` outcome fact, atomically in one transaction (D8) — mirrors
-        :meth:`create_with_chunk`, plus the outcome row. Returns ``None`` and writes
+        :meth:`create_with_chunk`, plus the outcome row. Returns ``False`` and writes
         nothing when ``proposal_id`` was already judged (idempotent replay)."""
         ...
 
-    def materialize_update(
-        self, *, proposal_id: str, source: str, ref: str, evidence: str, at: datetime
-    ) -> WorkItemRecord | None:
+    def materialize_update(self, *, proposal_id: str, source: str, ref: str, evidence: str, at: datetime) -> bool:
         """Append ``evidence`` to an open item's body, stamp ``edited_at``, and record
         ``proposal_id``'s ``updated`` outcome fact, atomically in one transaction (D8).
-        Returns ``None`` and writes nothing when ``proposal_id`` was already judged, or
+        Returns ``False`` and writes nothing when ``proposal_id`` was already judged, or
         when the item is no longer open (closed since the caller resolved it — left for
         the next sweep to classify as unresolved)."""
         ...

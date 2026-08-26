@@ -139,15 +139,15 @@ class WorkItemEditService:
         author: WorkItemAuthor,
         stated_priority: str | None,
         graph: Graph,
-    ) -> CreatedWorkItem | None:
+    ) -> bool:
         """The materialization sweep's own ``create`` path (D1, D7, D8): :meth:`create`'s
         guard sequence, always into the reserved hub source, landing through
         :meth:`~blizzard.hub.domain.work.IWriteWorkItemRepository.materialize_create` so
         the mint and the outcome fact are one transaction. Raises
         :class:`~blizzard.hub.domain.ingest.IngestConflict` exactly as :meth:`create`
-        does; returns ``None`` when ``proposal_id`` was already judged."""
+        does; returns ``False`` when ``proposal_id`` was already judged."""
         pointer, chunk, at = self._prepare_mint(RESERVED_HUB_SOURCE_NAME, graph=graph)
-        item = self._items.materialize_create(
+        return self._items.materialize_create(
             proposal_id=proposal_id,
             pointer=pointer,
             title=title,
@@ -157,9 +157,6 @@ class WorkItemEditService:
             at=at,
             chunk=chunk,
         )
-        if item is None:
-            return None
-        return CreatedWorkItem(item=item, chunk_id=chunk.chunk_id)
 
     def _prepare_mint(self, source: str, *, graph: Graph) -> tuple[WorkRef, Chunk, datetime]:
         """The guard sequence every item-minting create path shares: allocate the ref,

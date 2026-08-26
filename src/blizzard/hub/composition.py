@@ -257,6 +257,7 @@ def build_services(
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     auth_throttle = IpThrottle(clock=clock)
     materialization_edits = WorkItemEditService(items=work_item_store, chunks=chunk_store, clock=clock, delete=delete)
+    graph_mint = GraphMintService(graphs=graph_store, clock=clock)
     return HubServices(
         chunks=chunk_store,
         graphs=graph_store,
@@ -277,7 +278,7 @@ def build_services(
         delete=delete,
         facts=FactIngestService(chunks=chunk_store, fleet=fleet, clock=clock),
         transcript_ingest=TranscriptIngestService(store=transcript_store, clock=clock, caps=transcript_caps),
-        graph_mint=GraphMintService(graphs=graph_store, clock=clock),
+        graph_mint=graph_mint,
         graph_lifecycle=GraphLifecycleService(graphs=graph_store, clock=clock),
         runner_facts=RunnerFactsService(chunks=chunk_store, clock=clock),
         questions=QuestionService(chunks=chunk_store, clock=clock),
@@ -299,7 +300,7 @@ def build_services(
             items=work_item_store,
             edits=materialization_edits,
             work_sources=work_sources,
-            graph_mint=GraphMintService(graphs=graph_store, clock=clock),
+            graph_mint=graph_mint,
             default_graph_doc=PACKAGED.default.doc,
             default_graph_yaml=PACKAGED.default.text,
             clock=clock,

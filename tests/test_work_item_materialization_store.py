@@ -278,6 +278,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
     stopped_after_delivery = _mint()
     never_delivered = _mint()
     hand_completed = _mint()
+    grouped_after_delivery = _mint()
 
     # A runner node routing straight to `done` via the ordinary `record_transition`.
     chunks.record_transition(
@@ -363,6 +364,21 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
     )
     chunks.record_completion(hand_completed, by="operator", at=_T0)
 
+    # Delivered, then grouped away — ephemeral now, excluded like a deleted chunk.
+    chunks.record_transition(
+        transition_id="tr_grouped",
+        chunk_id=grouped_after_delivery,
+        from_node_id="nd_1",
+        to_node_id="done",
+        choice_name="pass",
+        epoch=1,
+        runner_id="r1",
+        at=_T0,
+        artifacts=[],
+        proposals=[_proposal_row(grouped_after_delivery, "wip_grouped")],
+    )
+    chunks.record_grouped(grouped_after_delivery, grouped_into=runner_terminal, at=_T0)
+
     candidates = {row.proposal_id for row in chunks.unmaterialized_proposals()}
 
     assert candidates == {"wip_runner", "wip_hub", "wip_stopped_after"}
@@ -440,7 +456,7 @@ def test_materialize_create_mints_the_item_chunk_and_outcome_atomically_and_is_i
         at=_T0,
         chunk=chunk,
     )
-    assert first is not None
+    assert first is True
     assert items.get("hub", pointer.ref) is not None
     assert ChunkStore(engine, FixedClock(_T0)).get(chunk.chunk_id) is not None
 
@@ -454,7 +470,7 @@ def test_materialize_create_mints_the_item_chunk_and_outcome_atomically_and_is_i
         at=_T0,
         chunk=chunk,
     )
-    assert second is None  # already judged — nothing minted a second time
+    assert second is False  # already judged — nothing minted a second time
 
     with engine.connect() as conn:
         outcomes = conn.execute(
@@ -473,12 +489,14 @@ def test_materialize_update_appends_evidence_stamps_edited_at_and_is_idempotent(
     ref = created.json()["ref"]
 
     first = items.materialize_update(proposal_id="wip_update_1", source="hub", ref=ref, evidence="fixed it", at=_T0)
-    assert first is not None
-    assert first.body == "original\n\nfixed it"
-    assert first.edited_at == _T0
+    assert first is True
+    reread = items.get("hub", ref)
+    assert reread is not None
+    assert reread.body == "original\n\nfixed it"
+    assert reread.edited_at == _T0
 
     second = items.materialize_update(proposal_id="wip_update_1", source="hub", ref=ref, evidence="again", at=_T0)
-    assert second is None  # already judged — no double append
+    assert second is False  # already judged — no double append
 
     reread = items.get("hub", ref)
     assert reread is not None
@@ -495,7 +513,7 @@ def test_materialize_update_writes_nothing_when_the_item_is_no_longer_open(tmp_p
 
     result = items.materialize_update(proposal_id="wip_closed", source="hub", ref=ref, evidence="too late", at=_T0)
 
-    assert result is None
+    assert result is False
     with engine.connect() as conn:
         outcomes = conn.execute(
             select(s.work_item_materializations).where(s.work_item_materializations.c.proposal_id == "wip_closed")

@@ -1,8 +1,9 @@
 """Proposed work items through the apply path (component tier). A node-step's completion
 may carry proposed work items alongside its artifacts, gated by the node's own
 ``proposes_work_items`` policy (D4, D6). Proposals ride exactly where artifacts are
-written — the ordinary transition and the migration lane alike (D2) — and are inert
-(no ``work_items`` row, no envelope/view surface)."""
+written — the ordinary transition and the migration lane alike (D2) — and are inert at
+landing time (no ``work_items`` row, no envelope/view surface) until the delivery-
+materialization sweep reads one, once the chunk delivers (``tests/test_work_item_materialization.py``)."""
 
 from __future__ import annotations
 
@@ -484,7 +485,7 @@ def test_a_malformed_proposal_payload_is_refused_at_the_wired_hubs_edge(tmp_path
     assert resp.status_code == 422, resp.text
 
 
-def test_proposals_mint_no_work_item_and_appear_in_no_view(tmp_path: Path) -> None:
+def test_proposals_ride_the_completion_inertly_then_materialize_once_swept(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, nodes = _ingest(hub, _POLICY_YAML)
 
@@ -499,5 +500,12 @@ def test_proposals_mint_no_work_item_and_appear_in_no_view(tmp_path: Path) -> No
     assert all(a["name"] != "New idea" for a in detail["artifacts"])
     assert "proposal" not in str(detail).lower()
 
+    # The chunk's own `deliver` hub node already ran synchronously above, so it has
+    # delivered — but nothing materializes until the sweep itself runs.
+    assert hub.client.get("/api/work-sources/hub/items").json()["items"] == []
+
+    hub.services.work_item_materialization.sweep()
+
     items = hub.client.get("/api/work-sources/hub/items").json()["items"]
-    assert items == []
+    assert len(items) == 1
+    assert items[0]["title"] == "New idea"

@@ -2,17 +2,19 @@
 migrated store: a delivered chunk's proposals become real work items (``create``) or
 appended evidence (``update``), an unresolvable proposal is recorded with its reason,
 and a transient failure leaves the proposal for the next pass. Inverts
-``tests/test_work_item_proposals_apply.py::test_proposals_mint_no_work_item_and_appear_in_no_view``."""
+``tests/test_work_item_proposals_apply.py::test_proposals_ride_the_completion_inertly_then_materialize_once_swept``."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
+from sqlalchemy import select
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.domain.work import WorkItemAuthorKind, WorkItemClosure, WorkRef
+from blizzard.hub.domain.work import WorkItemAuthorKind, WorkItemClosure, WorkItemMaterializationOutcome, WorkRef
 from blizzard.hub.graphs import PACKAGED
+from blizzard.hub.store import schema as s
 from tests.support import HubHarness, build_hub
 
 pytestmark = pytest.mark.component
@@ -88,6 +90,14 @@ def _hub_items(hub: HubHarness) -> list[dict]:
     return hub.client.get("/api/work-sources/hub/items").json()["items"]
 
 
+def _materialization_rows(hub: HubHarness) -> dict:
+    """Every ``work_item_materializations`` row recorded so far, keyed by ``(source,
+    ref)`` to ``(outcome, reason)``."""
+    with hub.engine.connect() as conn:
+        rows = conn.execute(select(s.work_item_materializations)).all()
+    return {(r.source, r.ref): (r.outcome, r.reason) for r in rows}
+
+
 # --- `create` materialization ---------------------------------------------------
 
 
@@ -125,6 +135,7 @@ def test_a_second_sweep_mints_no_duplicate_item_and_records_no_second_outcome(tm
     hub.services.work_item_materialization.sweep()
 
     assert len(_hub_items(hub)) == 1
+    assert len(_materialization_rows(hub)) == 1
 
 
 def test_proposals_from_two_epochs_of_the_same_node_both_materialize(tmp_path: Path) -> None:
@@ -208,6 +219,21 @@ def test_unresolvable_update_cases_are_recorded_with_reason_and_siblings_still_m
     assert withdrawn_reread["body"] == "b"  # untouched
     assert withdrawn_reread["closure"] == WorkItemClosure.WITHDRAWN.value
 
+    rows = _materialization_rows(hub)
+    assert len(rows) == 4
+    outcome, reason = rows[("hub", withdrawn_item["ref"])]
+    assert outcome == WorkItemMaterializationOutcome.UNRESOLVED.value
+    assert reason == f"item is {WorkItemClosure.WITHDRAWN.value}"
+    outcome, reason = rows[("hub", "no-such-ref")]
+    assert outcome == WorkItemMaterializationOutcome.UNRESOLVED.value
+    assert reason == "item does not exist"
+    outcome, reason = rows[("default", "1")]
+    assert outcome == WorkItemMaterializationOutcome.UNRESOLVED.value
+    assert reason == "source 'default' has no editor"
+    outcome, reason = rows[("hub", open_item["ref"])]
+    assert outcome == WorkItemMaterializationOutcome.UPDATED.value
+    assert reason is None
+
 
 # --- transient failures leave the proposal unjudged -----------------------------
 
@@ -240,8 +266,9 @@ def test_a_retired_default_graph_leaves_the_create_proposal_unjudged_until_re_en
 
 
 def test_a_pre_empted_ref_leaves_the_create_proposal_unjudged(tmp_path: Path) -> None:
-    """``IngestConflict`` (assumption 8): an out-of-band ingest of ``hub:1`` — the exact
-    ref the reconciler's own ``allocate_ref`` would mint next — pre-empts it."""
+    """``IngestConflict``: an out-of-band ingest of ``hub:1`` — the ref the reconciler's
+    own ``allocate_ref`` would mint next — pre-empts it. The burned ref is never retried,
+    so the very next sweep succeeds under a fresh one instead of colliding forever."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _ingest(hub, ref="13")
     preempted = hub.client.post("/api/chunks", json={"tokens": ["hub:1"]})
@@ -252,3 +279,9 @@ def test_a_pre_empted_ref_leaves_the_create_proposal_unjudged(tmp_path: Path) ->
     hub.services.work_item_materialization.sweep()  # must not raise
 
     assert _hub_items(hub) == []
+    assert _materialization_rows(hub) == {}  # not recorded terminal — left for the next pass
+
+    hub.services.work_item_materialization.sweep()
+
+    titles = {item["title"] for item in _hub_items(hub)}
+    assert "loses the race" in titles

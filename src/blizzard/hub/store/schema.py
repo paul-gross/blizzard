@@ -209,6 +209,10 @@ transitions = Table(
 # one high-volume source among the feed's.
 Index("ix_transitions_recorded_at", transitions.c.recorded_at)
 
+# The delivery-materialization sweep's own candidate read (blizzard#366) — every pass
+# scans for `to_node_id == RESERVED_TERMINAL` across the whole table.
+Index("ix_transitions_to_node_id", transitions.c.to_node_id)
+
 # --- Cross-graph migration record (chunk_migrations — issue #90) ---------------
 # Its own fact, never a ``transitions`` row (``bzh:migration-not-transition``).
 

@@ -603,7 +603,7 @@ class ChunkStore:
         return result
 
     def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:
-        with self._engine.connect() as conn:
+        with self._engine.begin() as conn:
             ephemeral = self._ephemeral_ids(conn)
             delivered = {
                 r.chunk_id
