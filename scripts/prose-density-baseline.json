@@ -1259,8 +1259,8 @@
   },
   "blizzard/hub/domain/decisions.py": {
    "comments": 11,
-   "docstrings": 26,
-   "total": 214
+   "docstrings": 28,
+   "total": 217
   },
   "blizzard/hub/domain/delete.py": {
    "comments": 2,
@@ -1389,8 +1389,8 @@
   },
   "blizzard/hub/domain/work.py": {
    "comments": 54,
-   "docstrings": 562,
-   "total": 1923
+   "docstrings": 554,
+   "total": 1912
   },
   "blizzard/hub/domain/work_closure.py": {
    "comments": 4,
@@ -1483,9 +1483,9 @@
    "total": 397
   },
   "blizzard/hub/store/internal/chunk_store.py": {
-   "comments": 63,
+   "comments": 67,
    "docstrings": 153,
-   "total": 2454
+   "total": 2459
   },
   "blizzard/hub/store/internal/graph_store.py": {
    "comments": 9,
@@ -2804,8 +2804,8 @@
   },
   "blizzard/wire/decision.py": {
    "comments": 4,
-   "docstrings": 26,
-   "total": 105
+   "docstrings": 25,
+   "total": 104
   },
   "blizzard/wire/envelope.py": {
    "comments": 25,
@@ -3546,13 +3546,13 @@
   },
   "test_decision_strikes.py": {
    "comments": 0,
-   "docstrings": 4,
-   "total": 177
+   "docstrings": 8,
+   "total": 201
   },
   "test_decisions_api.py": {
-   "comments": 9,
+   "comments": 10,
    "docstrings": 16,
-   "total": 326
+   "total": 367
   },
   "test_default_graph.py": {
    "comments": 9,
