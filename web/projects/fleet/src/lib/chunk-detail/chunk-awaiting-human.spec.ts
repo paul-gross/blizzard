@@ -261,7 +261,7 @@ describe('ChunkAwaitingHuman', () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', WAITING_DECISION_DETAIL);
     fixture.componentRef.setInput('canResolve', true);
-    let emitted: { decisionId: string; choice: string; chunkId: string } | undefined;
+    let emitted: { decisionId: string; choice: string; chunkId: string; struck: readonly string[] } | undefined;
     fixture.componentInstance.resolveDecision.subscribe((event) => (emitted = event));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -273,7 +273,36 @@ describe('ChunkAwaitingHuman', () => {
       decisionId: 'de_01',
       choice: 'reject',
       chunkId: 'ch_01gate0000000000000000000000',
+      struck: [],
     });
+  });
+
+  it('carries the docket’s toggled proposal ids into resolveDecision (blizzard#367)', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', {
+      ...WAITING_DECISION_DETAIL,
+      decision: {
+        ...WAITING_DECISION_DETAIL.decision,
+        docket: [
+          {
+            proposal_id: 'wip_01',
+            node_name: 'build',
+            kind: 'create',
+            payload: { kind: 'create', title: 'fix it', body: 'do it', stated_priority: 'normal' },
+          },
+        ],
+      },
+    });
+    fixture.componentRef.setInput('canResolve', true);
+    let emitted: { struck: readonly string[] } | undefined;
+    fixture.componentInstance.resolveDecision.subscribe((event) => (emitted = event));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLInputElement>('[data-testid="docket-strike"]')?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="decision-choice"]')?.click(); // approve
+
+    expect(emitted?.struck).toEqual(['wip_01']);
   });
 
   it('keeps an answered question visible with its trail instead of dropping it (issue #165)', async () => {

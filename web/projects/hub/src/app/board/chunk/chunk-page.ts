@@ -227,7 +227,7 @@ export class ChunkPage {
   protected onResolve(event: ResolveDecisionEvent): void {
     this.beginAction();
     this.resolveMutation.mutate(
-      { decisionId: event.decisionId, choice: event.choice, chunkId: event.chunkId },
+      { decisionId: event.decisionId, choice: event.choice, chunkId: event.chunkId, struck: event.struck },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Resolve failed.')) },
     );
   }
